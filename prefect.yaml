@@ -1,0 +1,28 @@
+name: deploy-flows
+prefect-version: 3.4.3
+
+build:
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: gabrielmilan/prefect-flows
+      tag: 0.1.2
+      dockerfile: Dockerfile.smfp
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull: null
+
+deployments:
+  - name: example-flow
+    entrypoint: pipelines/example/flow.py:example
+    work_pool:
+      name: default
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image}}"
+        command: "uv run prefect flow-run execute"

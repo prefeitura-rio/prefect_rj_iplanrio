@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "iplanrio",
+    "pandas>=2.2.3",
     "prefect>=3.4.3",
 ]
 
@@ -13,4 +13,8 @@ dependencies = [
 py-modules = []
 
 [tool.uv.sources]
-iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "216d966828b98c04bb336717c3f1df12229d77ed" }
+
+[dependency-groups]
+dev = [
+    "prefect-docker>=0.6.5",
+]

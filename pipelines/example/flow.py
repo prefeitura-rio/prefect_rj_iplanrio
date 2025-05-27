@@ -1,5 +1,20 @@
-from prefect import flow, task
 import random
+from os import getenv
+
+import pandas as pd
+from prefect import flow, task
+
+
+@task
+def print_env():
+    env_name = "EXAMPLE"
+    print(f"Env {env_name} is set to \"{getenv(env_name)}\"")
+
+
+@task
+def use_pandas():
+    df = pd.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+    print(df)
 
 
 @task
@@ -16,6 +31,8 @@ def process_customer(customer_id: str) -> str:
 
 @flow(log_prints=True)
 def example() -> list[str]:
+    print_env()
+    use_pandas()
     customer_ids = get_customer_ids()
     # Map the process_customer task across all customer IDs
     results = process_customer.map(customer_ids)

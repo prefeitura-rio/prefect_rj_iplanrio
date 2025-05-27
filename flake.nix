@@ -27,15 +27,16 @@
             in [
               gcloud
               infisical
-              poetry
-              python310
+              uv
+              python312
             ];
 
             shellHook = ''
               VENV="./.venv/bin/activate"
 
               if [[ ! -f $VENV ]]; then
-                ${poetry}/bin/poetry install --with dev
+                uv venv
+                uv pip install -e ".[dev]"
               fi
 
               source "$VENV"

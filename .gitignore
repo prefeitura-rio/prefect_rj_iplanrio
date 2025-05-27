@@ -5,6 +5,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# direnv
+.direnv/  # Local direnv cache and state files
+
 # C extensions
 *.so
 
