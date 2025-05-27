@@ -1,9 +1,8 @@
+# -*- coding: utf-8 -*-
+from iplanrio.pipeline_utils.infisical import (
+    get_database_username_and_password_from_secret, inject_bd_credentials)
+from iplanrio.pipeline_utils.logging import log
 from prefect import flow, task
-from pipelines.utils.infisical import (
-    get_database_username_and_password_from_secret,
-    inject_bd_credentials,
-)
-from pipelines.utils.utils import log
 
 
 @task
@@ -20,10 +19,10 @@ def inject_bd_credentials_task(enviroment: str = "prod"):
 @flow(log_prints=True)
 def ergon(secret_path: str):
     inject_bd_credentials_task(enviroment="prod")
-
     secrets = get_database_username_and_password_from_secret_tastk(
         secret_path=secret_path
     )
+
     login = secrets[0]
     password = secrets[1]
     log(login)

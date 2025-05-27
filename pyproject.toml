@@ -1,16 +1,16 @@
 [project]
-name = "pipelines"
+name = "prefect_rj_iplanrio"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "basedosdados==2.0.0b23",
-    "cx-oracle>=8.3.0",
-    "infisical-python>=2.3.6",
+    "iplanrio",
     "prefect>=3.4.3",
-    "pyodbc>=5.2.0",
 ]
 
 [tool.setuptools]
 py-modules = []
+
+[tool.uv.sources]
+iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "60be868cd6277c92363fadaba2fbacd27d4a4ca7" }
