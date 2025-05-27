@@ -5,8 +5,8 @@ build:
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
       requires: prefect-docker>=0.6.5
-      image_name: gabrielmilan/prefect-flows
-      tag: 0.1.2
+      image_name: d116626/prefect-flows
+      tag: 0.1.1
       dockerfile: Dockerfile.smfp
 
 push:
@@ -20,6 +20,14 @@ pull: null
 deployments:
   - name: example-flow
     entrypoint: pipelines/example/flow.py:example
+    work_pool:
+      name: default
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image}}"
+        command: "uv run prefect flow-run execute"
+  - name: dump_db_ergon
+    entrypoint: pipelines/rj_smfp/dump_db_ergon/flow.py:dump_db_ergon
     work_pool:
       name: default
       work_queue_name: default

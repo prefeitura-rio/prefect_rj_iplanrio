@@ -1,35 +1,25 @@
 # -*- coding: utf-8 -*-
 from prefect import flow, task
 
-from iplanrio.pipeline_utils.infisical import (
-    get_database_username_and_password_from_secret,
-    inject_bd_credentials,
+from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.env import (
+    get_database_username_and_password_from_secret_env,
 )
-from iplanrio.pipeline_utils.logging import log
 
 
 @task
 def get_database_username_and_password_from_secret_tastk(secret_path: str):
-    secrets = get_database_username_and_password_from_secret(secret_path=secret_path)
-    return secrets
-
-
-@task
-def inject_bd_credentials_task(enviroment: str = "prod"):
-    inject_bd_credentials(enviroment=enviroment)
+    return get_database_username_and_password_from_secret_env(path=secret_path)
 
 
 @flow(log_prints=True)
-def ergon(secret_path: str):
-    inject_bd_credentials_task(enviroment="prod")
+def dump_db_ergon(secret_path: str):
     secrets = get_database_username_and_password_from_secret_tastk(
         secret_path=secret_path
     )
-
-    login = secrets[0]
-    password = secrets[1]
-    log(login)
+    log(secrets["DB_USERNAME"])
+    log(secrets["DB_USERNAME"])
 
 
 if __name__ == "__main__":
-    ergon(secret_path="")
+    dump_db_ergon(secret_path="db-ergon-prod")
