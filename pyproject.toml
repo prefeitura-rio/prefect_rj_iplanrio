@@ -14,7 +14,7 @@ dependencies = [
 py-modules = []
 
 [tool.uv.sources]
-iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "d904710d0d62176942f70716254b9ae3f1af5f22" }
+iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "6f2d8262f0e6ebf749401921fd1db104bade86fd" }
 
 [dependency-groups]
 dev = [
