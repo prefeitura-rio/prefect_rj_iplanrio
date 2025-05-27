@@ -6,7 +6,7 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: d116626/prefect-flows
-      tag: 0.1.1
+      tag: 0.1.3
       dockerfile: Dockerfile.smfp
 
 push:

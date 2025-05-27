@@ -8,7 +8,7 @@ from prefect import flow, task
 @task
 def print_env():
     env_name = "EXAMPLE"
-    print(f"Env {env_name} is set to \"{getenv(env_name)}\"")
+    print(f'Env {env_name} is set to "{getenv(env_name)}"')
 
 
 @task
