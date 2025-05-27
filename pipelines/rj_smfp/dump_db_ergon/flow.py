@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-from prefect import flow, task
-
-from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.constants import NOT_SET
 from iplanrio.pipelines_utils.env import (
     get_database_username_and_password_from_secret_env,
 )
+from iplanrio.pipelines_utils.logging import log
+from prefect import flow, task
+
 from pipelines.rj_smfp.dump_db_ergon.schedules import ergon_daily_schedule
-from iplanrio.pipelines_utils.constants import NOT_SET
 
 
 @task
@@ -71,4 +71,4 @@ def dump_db_ergon(
 
 
 if __name__ == "__main__":
-    dump_db_ergon.serve(name="dump_db_ergon", schedule=ergon_daily_schedule)
+    dump_db_ergon.serve(name="dump_db_ergon", schedules=ergon_daily_schedule)
