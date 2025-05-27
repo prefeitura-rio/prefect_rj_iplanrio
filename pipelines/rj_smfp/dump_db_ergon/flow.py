@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
-from iplanrio.pipeline_utils.infisical import (
-    get_database_username_and_password_from_secret, inject_bd_credentials)
-from iplanrio.pipeline_utils.logging import log
 from prefect import flow, task
+
+from iplanrio.pipeline_utils.infisical import (
+    get_database_username_and_password_from_secret,
+    inject_bd_credentials,
+)
+from iplanrio.pipeline_utils.logging import log
 
 
 @task
