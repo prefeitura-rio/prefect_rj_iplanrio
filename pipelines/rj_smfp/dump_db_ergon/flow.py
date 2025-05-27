@@ -1,26 +1,24 @@
 from prefect import flow, task
-import random
+from pipelines.utils.infisical import get_database_username_and_password_from_secret
+from pipelines.utils.utils import log
 
 
 @task
-def get_customer_ids() -> list[str]:
-    # Fetch customer IDs from a database or API
-    return [f"customer{n}" for n in random.choices(range(100), k=10)]
-
-
-@task
-def process_customer(customer_id: str) -> str:
-    # Process a single customer
-    return f"Processed {customer_id}"
+def get_database_username_and_password_from_secret_tastk(secret_path: str):
+    secrets = get_database_username_and_password_from_secret(secret_path=secret_path)
+    return secrets
 
 
 @flow(log_prints=True)
-def ergon() -> list[str]:
-    customer_ids = get_customer_ids()
-    # Map the process_customer task across all customer IDs
-    results = process_customer.map(customer_ids)
-    return results
+def ergon(secret_path: str):
+
+    secrets = get_database_username_and_password_from_secret_tastk(
+        secret_path=secret_path
+    )
+    login = secrets[0]
+    password = secrets[1]
+    log(login)
 
 
 if __name__ == "__main__":
-    ergon()
+    ergon(secret_path="")

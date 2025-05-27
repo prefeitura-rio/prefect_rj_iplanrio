@@ -1,11 +1,15 @@
 [project]
-name = "prefect_rj_iplanrio"
+name = "pipelines"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "basedosdados==2.0.0b23",
+    "cx-oracle>=8.3.0",
+    "infisical-python>=2.3.6",
     "prefect>=3.4.3",
+    "pyodbc>=5.2.0",
 ]
 
 [tool.setuptools]
