@@ -6,7 +6,7 @@ from iplanrio.pipelines_utils.env import (
 from iplanrio.pipelines_utils.logging import log
 from prefect import flow, task
 
-from pipelines.rj_smfp.dump_db_ergon.schedules import ergon_daily_schedule
+from pipelines.rj_smfp.dump_db_ergon.schedules import ergon_daily_schedules
 
 
 @task
@@ -23,7 +23,7 @@ def dump_db_ergon(
     db_port: str = None,
     db_type: str = None,
     db_charset: str = NOT_SET,
-    query: str = None,
+    execute_query: str = None,
     dataset_id: str = None,
     table_id: str = None,
     partition_date_format: str = None,
@@ -50,7 +50,7 @@ def dump_db_ergon(
             "db_port": db_port,
             "db_type": db_type,
             "db_charset": db_charset,
-            "query": query,
+            "execute_query": execute_query,
             "dataset_id": dataset_id,
             "table_id": table_id,
             "partition_date_format": partition_date_format,
@@ -71,4 +71,7 @@ def dump_db_ergon(
 
 
 if __name__ == "__main__":
-    dump_db_ergon.serve(name="dump_db_ergon", schedules=ergon_daily_schedule)
+    dump_db_ergon.deploy(
+        name="dump_db_ergon",
+        schedules=ergon_daily_schedules,
+    )

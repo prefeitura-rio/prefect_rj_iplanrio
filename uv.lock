@@ -1308,7 +1308,7 @@ wheels = [
 [[package]]
 name = "prefect-rj-iplanrio"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "iplanrio" },
     { name = "pandas" },

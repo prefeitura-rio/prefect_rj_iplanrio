@@ -6,7 +6,7 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: d116626/prefect-flows
-      tag: 0.1.3
+      tag: 0.1.4
       dockerfile: Dockerfile.smfp
 
 push:
@@ -34,3 +34,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image}}"
         command: "uv run prefect flow-run execute"
+    schedules:
+      - interval: 86400  # 24 hours in seconds
+        anchor_date: "2022-11-09T22:30:00"
+        timezone: "America/Sao_Paulo"

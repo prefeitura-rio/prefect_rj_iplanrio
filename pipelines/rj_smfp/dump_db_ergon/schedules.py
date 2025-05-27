@@ -1,17 +1,14 @@
+# -*- coding: utf-8 -*-
 from datetime import datetime, timedelta
 
-from prefect.schedules import Interval
-
-from iplanrio.pipelines_utils.prefect import generate_dump_db_schedules
+from iplanrio.pipelines_utils.constants import NOT_SET
 from iplanrio.pipelines_utils.io import untuple_clocks
-
+from iplanrio.pipelines_utils.prefect import generate_dump_db_schedules
 
 ergon_queries = [
     {
         "table_id": "fita_banco",
-        "materialize_after_dump": True,
         "biglake_table": True,
-        "materialization_mode": "prod",
         "partition_columns": "MES_ANO",
         "dump_mode": "append",
         "break_query_frequency": "month",
@@ -31,9 +28,7 @@ ergon_queries = [
     },
     {
         "table_id": "ficha_financeira",
-        "materialize_after_dump": True,
         "biglake_table": True,
-        "materialization_mode": "prod",
         "dump_mode": "append",
         "break_query_frequency": "month",
         "break_query_start": "current_month",
@@ -48,9 +43,7 @@ ergon_queries = [
     },
     {
         "table_id": "ficha_financeira_contabil",
-        "materialize_after_dump": True,
         "biglake_table": True,
-        "materialization_mode": "prod",
         "dump_mode": "append",
         "break_query_frequency": "month",
         "break_query_start": "current_month",
@@ -66,7 +59,7 @@ ergon_queries = [
     },
 ]
 
-
+# Generate schedules using the utility function
 ergon_clocks = generate_dump_db_schedules(
     interval=timedelta(days=1),
     start_date=datetime(2022, 11, 9, 22, 30),
@@ -74,10 +67,12 @@ ergon_clocks = generate_dump_db_schedules(
     db_host="10.70.6.21",
     db_port="1526",
     db_type="oracle",
+    db_charset=NOT_SET,
     dataset_id="recursos_humanos_ergon_prefect3",
     infisical_secret_path="db-ergon-prod",
     table_parameters=ergon_queries,
     timezone="America/Sao_Paulo",
 )
 
-ergon_daily_schedule = untuple_clocks(ergon_clocks)
+# # Convert the clocks to a format that can be used by Prefect
+ergon_daily_schedules = untuple_clocks(ergon_clocks)
