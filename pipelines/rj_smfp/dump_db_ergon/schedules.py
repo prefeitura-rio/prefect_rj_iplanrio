@@ -59,10 +59,11 @@ ergon_queries = [
     },
 ]
 
+
 # Generate schedules using the utility function
 ergon_clocks = generate_dump_db_schedules(
-    interval=timedelta(days=1),
-    start_date=datetime(2022, 11, 9, 22, 30),
+    interval=timedelta(minutes=5),
+    start_date=datetime(2025, 5, 27, 10, 30),
     db_database="P01.PCRJ",
     db_host="10.70.6.21",
     db_port="1526",
@@ -76,3 +77,29 @@ ergon_clocks = generate_dump_db_schedules(
 
 # # Convert the clocks to a format that can be used by Prefect
 ergon_daily_schedules = untuple_clocks(ergon_clocks)
+# print(ergon_daily_schedules)
+
+
+# {
+#     "batch_size": 50000,
+#     "infisical_secret_path": "db-ergon-prod",
+#     "db_database": "P01.PCRJ",
+#     "db_host": "10.70.6.21",
+#     "db_port": "1526",
+#     "db_type": "oracle",
+#     "dataset_id": "recursos_humanos_ergon_prefect3",
+#     "table_id": "ficha_financeira",
+#     "db_charset": "NOT_SET",
+#     "biglake_table": true,
+#     "dump_mode": "append",
+#     "execute_query": "\n            SELECT\n                MES_ANO_FOLHA,NUM_FOLHA,LANCAMENTO,NUMFUNC,NUMVINC,NUMPENS,MES_ANO_DIREITO,\n                RUBRICA,TIPO_RUBRICA,DESC_VANT,COMPLEMENTO,VALOR,CORRECAO,EXECUCAO,EMP_CODIGO\n            FROM ERGON.FICHAS_FINANCEIRAS\n        ",
+#     "break_query_frequency": "month",
+#     "break_query_start": "2000-01-01",
+#     "break_query_end": "current_month",
+#     "partition_columns": "MES_ANO_FOLHA",
+#     "retry_dump_upload_attempts": 1,
+#     "batch_data_type": "csv",
+#     "log_number_of_batches": 100,
+#     "partition_date_format": "%Y-%m-%d",
+#     "lower_bound_date": null,
+# }

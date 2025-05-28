@@ -1,21 +1,24 @@
 name: deploy-flows
 prefect-version: 3.4.3
 
-build:
-  - prefect_docker.deployments.steps.build_docker_image:
-      id: build-image
-      requires: prefect-docker>=0.6.5
-      image_name: d116626/prefect-flows
-      tag: 0.1.4
-      dockerfile: Dockerfile.smfp
+# build:
+#   - prefect_docker.deployments.steps.build_docker_image:
+#       id: build-image
+#       requires: prefect-docker>=0.6.5
+#       image_name: d116626/prefect-flows
+#       tag: 0.1.4
+#       dockerfile: Dockerfile.smfp
 
-push:
-  - prefect_docker.deployments.steps.push_docker_image:
-      requires: prefect-docker>=0.6.5
-      image_name: "{{ build-image.image_name }}"
-      tag: "{{ build-image.tag }}"
 
-pull: null
+# push:
+#   - prefect_docker.deployments.steps.push_docker_image:
+#       requires: prefect-docker>=0.6.5
+#       image_name: "{{ build-image.image_name }}"
+#       tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
   - name: example-flow
@@ -32,5 +35,21 @@ deployments:
       name: default
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image}}"
+        image: "d116626/prefect-flows:0.2.1"
+        command: "uv run prefect flow-run execute"
+
+  - name: load_test
+    entrypoint: pipelines/load_test/flow.py:load_test
+    schedules:
+    - cron: "* * * * *"
+      slug: "rows-100"
+      parameters:
+        number_rows : 100
+        dataset_id : "aa_load_test"
+        table_id : "metrics"
+    work_pool:
+      name: default
+      work_queue_name: default
+      job_variables:
+        image: "d116626/prefect-flows:0.2.1"
         command: "uv run prefect flow-run execute"
