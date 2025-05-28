@@ -111,6 +111,7 @@ def load_test(
     dataset_id="aa_load_test",
     table_id="metrics",
 ):
+    crd = inject_bd_credentials()
     data = get_metrics(number_rows=number_rows)
     savepath = to_partition_task(
         data=data, partition_date_column="updated_at", savepath="/tmp/data"
