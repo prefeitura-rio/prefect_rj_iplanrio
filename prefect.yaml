@@ -34,7 +34,3 @@ deployments:
       job_variables:
         image: "{{ build-image.image}}"
         command: "uv run prefect flow-run execute"
-    schedules:
-      - interval: 86400  # 24 hours in seconds
-        anchor_date: "2022-11-09T22:30:00"
-        timezone: "America/Sao_Paulo"

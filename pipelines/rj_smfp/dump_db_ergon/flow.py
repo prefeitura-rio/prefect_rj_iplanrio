@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from typing import Optional
 from iplanrio.pipelines_utils.constants import NOT_SET
 from iplanrio.pipelines_utils.env import (
     get_database_username_and_password_from_secret_env,
@@ -18,25 +19,25 @@ def get_database_username_and_password_from_secret_tastk(infisical_secret_path: 
 
 @flow(log_prints=True)
 def dump_db_ergon(
-    db_database: str = None,
-    db_host: str = None,
-    db_port: str = None,
-    db_type: str = None,
+    db_database: str,
+    db_host: str,
+    db_port: str,
+    db_type: str,
+    execute_query: str,
+    dataset_id: str,
+    table_id: str,
+    infisical_secret_path: str,
+    partition_date_format: Optional[str] = None,
+    partition_columns: Optional[str] = None,
+    lower_bound_date: Optional[str] = None,
+    break_query_frequency: Optional[str] = None,
+    break_query_start: Optional[str] = None,
+    break_query_end: Optional[str] = None,
     db_charset: str = NOT_SET,
-    execute_query: str = None,
-    dataset_id: str = None,
-    table_id: str = None,
-    partition_date_format: str = None,
-    partition_columns: str = None,
-    infisical_secret_path: str = None,
-    lower_bound_date: str = None,
-    break_query_frequency: str = None,
-    break_query_start: str = None,
-    break_query_end: str = None,
-    retry_dump_upload_attempts: str = 1,
-    batch_size: str = 50000,
+    retry_dump_upload_attempts: int = 1,
+    batch_size: int = 50000,
     batch_data_type: str = "csv",
-    biglake_table: str = True,
+    biglake_table: bool = True,
     log_number_of_batches: int = 100,
 ):
     secrets = get_database_username_and_password_from_secret_tastk(
@@ -71,7 +72,19 @@ def dump_db_ergon(
 
 
 if __name__ == "__main__":
-    dump_db_ergon.deploy(
+    dump_db_ergon.serve(
         name="dump_db_ergon",
         schedules=ergon_daily_schedules,
     )
+
+
+# dump_db_ergon.deploy(
+#     name="dump_db_ergon",
+#     schedules=ergon_daily_schedules,
+#     image="d116626/prefect-flows:0.1.4",
+#     work_pool_name="default",
+#     work_queue_name="default",
+#     job_variables={
+#         "command": "uv run prefect flow-run execute",
+#     },
+# )
