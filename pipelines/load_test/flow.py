@@ -29,8 +29,9 @@ def get_response_from_api(N: int = 3):
     return r.json()
 
 
-def get_dataframe(number_list, updated_at, run_number, seed):
+def get_dataframe(number_list, updated_at, run_number, seed, flow_id):
     params = {}
+    params["flow_id"] = flow_id
     params["run"] = run_number
     params["updated_at"] = updated_at
     params["seed"] = seed
@@ -65,7 +66,7 @@ def get_dataframe(number_list, updated_at, run_number, seed):
 
 
 @task
-def get_metrics(number_rows=10):
+def get_metrics(number_rows=10, flow_id=1):
     final_df = pd.DataFrame()
     seed = random.randint(10, 100)
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -74,7 +75,11 @@ def get_metrics(number_rows=10):
 
         number_list = get_response_from_api()
         dataframe = get_dataframe(
-            number_list=number_list, updated_at=updated_at, run_number=i, seed=seed
+            number_list=number_list,
+            updated_at=updated_at,
+            run_number=i,
+            seed=seed,
+            flow_id=flow_id,
         )
         final_df = pd.concat([final_df, dataframe])
 
@@ -107,12 +112,13 @@ def to_partition_task(data, partition_date_column, savepath):
 
 @flow
 def load_test(
+    flow_id=1,
     number_rows=100,
     dataset_id="aa_load_test",
     table_id="metrics",
 ):
     crd = inject_bd_credentials()
-    data = get_metrics(number_rows=number_rows)
+    data = get_metrics(number_rows=number_rows, flow_id=flow_id)
     savepath = to_partition_task(
         data=data, partition_date_column="updated_at", savepath="/tmp/data"
     )

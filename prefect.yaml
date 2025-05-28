@@ -35,7 +35,7 @@ deployments:
       name: default
       work_queue_name: default
       job_variables:
-        image: "d116626/prefect-flows:0.2.1"
+        image: "d116626/prefect-flows:0.2.3"
         command: "uv run prefect flow-run execute"
 
   - name: load_test
@@ -44,6 +44,7 @@ deployments:
     - cron: "* * * * *"
       slug: "rows-100"
       parameters:
+        flow_id : 123123
         number_rows : 100
         dataset_id : "aa_load_test"
         table_id : "metrics"
@@ -51,5 +52,5 @@ deployments:
       name: default
       work_queue_name: default
       job_variables:
-        image: "d116626/prefect-flows:0.2.1"
+        image: "d116626/prefect-flows:0.2.3"
         command: "uv run prefect flow-run execute"
