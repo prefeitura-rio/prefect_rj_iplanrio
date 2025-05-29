@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import requests
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
-from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.logging import log, log_mod
 from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
 from prefect import flow, task
 
@@ -71,7 +71,9 @@ def get_metrics(number_rows=10, flow_id=1):
     seed = random.randint(10, 100)
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for i in range(number_rows):
-        log(f"{i+1} - {100*(i+1)/number_rows}%")
+        log_mod(
+            msg=f"{i+1} - {100*(i+1)/number_rows}%", index=i, mod=int(number_rows / 10)
+        )
 
         number_list = get_response_from_api()
         dataframe = get_dataframe(

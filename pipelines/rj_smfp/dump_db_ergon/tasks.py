@@ -320,6 +320,7 @@ def dump_upload_batch(
                         for partition in partitions:
                             if partition not in cleared_partitions:
                                 blobs = list_blobs_with_prefix(
+                                    mode="staging",
                                     bucket_name=st.bucket_name,
                                     prefix=f"staging/{dataset_id}/{table_id}/{partition}",
                                 )
@@ -327,7 +328,9 @@ def dump_upload_batch(
                             cleared_partitions.add(partition)
                         if blobs_to_delete:
                             delete_blobs_list(
-                                bucket_name=st.bucket_name, blobs=blobs_to_delete
+                                mode="staging",
+                                bucket_name=st.bucket_name,
+                                blobs=blobs_to_delete,
                             )
                             log_mod(
                                 msg=f"Deleted {len(blobs_to_delete)} blobs from GCS: {blobs_to_delete}",  # noqa

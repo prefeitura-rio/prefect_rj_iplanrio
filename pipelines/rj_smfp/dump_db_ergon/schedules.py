@@ -101,5 +101,30 @@ ergon_daily_schedules = untuple_clocks(ergon_clocks)
 #     "batch_data_type": "csv",
 #     "log_number_of_batches": 100,
 #     "partition_date_format": "%Y-%m-%d",
-#     "lower_bound_date": null,
+#     "lower_bound_date": null
+# }
+
+
+# {
+#   "db_host": "10.70.6.21",
+#   "db_port": "1526",
+#   "db_type": "oracle",
+#   "table_id": "ficha_financeira",
+#   "dump_mode": "append",
+#   "batch_size": 50000,
+#   "dataset_id": "recursos_humanos_ergon_prefect3",
+#   "db_charset": "NOT_SET",
+#   "db_database": "P01.PCRJ",
+#   "biglake_table": true,
+#   "execute_query": "\n            SELECT\n                MES_ANO_FOLHA,NUM_FOLHA,LANCAMENTO,NUMFUNC,NUMVINC,NUMPENS,MES_ANO_DIREITO,\n                RUBRICA,TIPO_RUBRICA,DESC_VANT,COMPLEMENTO,VALOR,CORRECAO,EXECUCAO,EMP_CODIGO\n            FROM ERGON.FICHAS_FINANCEIRAS\n        ",
+#   "batch_data_type": "csv",
+#   "break_query_end": "current_month",
+#   "lower_bound_date": null,
+#   "break_query_start": "2000-01-01",
+#   "partition_columns": "MES_ANO_FOLHA",
+#   "break_query_frequency": "month",
+#   "infisical_secret_path": "db-ergon-prod",
+#   "log_number_of_batches": 100,
+#   "partition_date_format": "%Y-%m-%d",
+#   "retry_dump_upload_attempts": 1
 # }

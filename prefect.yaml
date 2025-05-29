@@ -29,13 +29,14 @@ deployments:
       job_variables:
         image: "{{ build-image.image}}"
         command: "uv run prefect flow-run execute"
+
   - name: dump_db_ergon
     entrypoint: pipelines/rj_smfp/dump_db_ergon/flow.py:dump_db_ergon
     work_pool:
-      name: default
+      name: datario2
       work_queue_name: default
       job_variables:
-        image: "d116626/prefect-flows:0.2.3"
+        image: "d116626/prefect-flows:0.2.6"
         command: "uv run prefect flow-run execute"
 
   - name: load_test
@@ -44,13 +45,13 @@ deployments:
     - cron: "* * * * *"
       slug: "rows-100"
       parameters:
-        flow_id : 123123
-        number_rows : 100
+        flow_id : 123
+        number_rows : 123
         dataset_id : "aa_load_test"
         table_id : "metrics"
     work_pool:
       name: default
       work_queue_name: default
       job_variables:
-        image: "d116626/prefect-flows:0.2.3"
+        image: "d116626/prefect-flows:0.2.4"
         command: "uv run prefect flow-run execute"
