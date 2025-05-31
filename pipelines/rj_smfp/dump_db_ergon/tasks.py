@@ -191,7 +191,7 @@ def dump_upload_batch(
             try:
                 log(f"Attempt: { retry_dump_upload_attempts - attempts}")
                 log(
-                    f"query {n_query+1} of {len(queries)} |{round(n_query+1 / len(queries) * 100, 2)}"
+                    f"query {n_query+1} of {len(queries)} |{ round(100 * (n_query+1) / len(queries), 2)}"
                 )
 
                 db_object = database_get_db(
