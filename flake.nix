@@ -6,30 +6,39 @@
     utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = {
-    utils,
-    nixpkgs,
-    ...
-  }:
+  outputs =
+    {
+      utils,
+      nixpkgs,
+      ...
+    }:
     utils.lib.eachDefaultSystem (
-      system: let
+      system:
+      let
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
         };
-      in {
-        devShells.default = with pkgs;
+      in
+      {
+        devShells.default =
+          with pkgs;
           mkShell {
-            packages = let
-              gcloud = google-cloud-sdk.withExtraComponents (with google-cloud-sdk.components; [
-                gke-gcloud-auth-plugin
-              ]);
-            in [
-              gcloud
-              infisical
-              uv
-              python312
-            ];
+            packages =
+              let
+                gcloud = google-cloud-sdk.withExtraComponents (
+                  with google-cloud-sdk.components;
+                  [
+                    gke-gcloud-auth-plugin
+                  ]
+                );
+              in
+              [
+                gcloud
+                infisical
+                uv
+                python313
+              ];
 
             shellHook = ''
               VENV="./.venv/bin/activate"
@@ -42,7 +51,10 @@
               source "$VENV"
             '';
 
-            LD_LIBRARY_PATH = lib.makeLibraryPath [stdenv.cc.cc];
+            LD_LIBRARY_PATH = lib.makeLibraryPath [
+              stdenv.cc.cc.lib
+              zlib
+            ];
           };
       }
     );

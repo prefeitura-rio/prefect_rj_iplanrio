@@ -4,22 +4,17 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-    "iplanrio",
-    "pandas>=2.2.3",
-    "prefect>=3.4.3",
-]
-
-[tool.setuptools]
-py-modules = []
+dependencies = ["iplanrio", "pandas>=2.2.3", "prefect>=3.4.3"]
 
 [tool.uv.sources]
+pipelines = { workspace = true }
 iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "a2001c8445ad0f17019bf9d179f38ffaa3603d2f" }
 
+[tool.uv.workspace]
+members = ["packages/*"]
+
 [dependency-groups]
-dev = [
-    "prefect-docker>=0.6.5",
-]
+dev = ["prefect-docker>=0.6.5"]
 
 [build-system]
 requires = ["setuptools>=61.0"]
