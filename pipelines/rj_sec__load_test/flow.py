@@ -37,7 +37,7 @@ def get_dataframe(number_list, updated_at, run_number, seed, flow_id):
     params["seed"] = seed
     s, sub, m, div = seed, seed, seed, seed
     for count, num in enumerate(number_list):
-        params[f"num_{count+1}"] = num
+        params[f"num_{count + 1}"] = num
         s += num
         sub -= num
         m *= num
@@ -72,7 +72,9 @@ def get_metrics(number_rows=10, flow_id=1):
     updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     for i in range(number_rows):
         log_mod(
-            msg=f"{i+1} - {100*(i+1)/number_rows}%", index=i, mod=int(number_rows / 10)
+            msg=f"{i + 1} - {100 * (i + 1) / number_rows}%",
+            index=i,
+            mod=int(number_rows / 10),
         )
 
         number_list = get_response_from_api()
