@@ -4,11 +4,10 @@ requires-python = ">=3.13"
 
 [manifest]
 members = [
-    "dump-db-ergon",
-    "example",
-    "load-test",
     "prefect-rj-iplanrio",
-    "test",
+    "rj-sec-example",
+    "rj-sec-load-test",
+    "rj-smfp-dump-db-ergon",
 ]
 
 [[package]]
@@ -360,16 +359,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/91/9b/4a2ea29aeba624712
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e3/26/57c6fb270950d476074c087527a558ccb6f4436657314bfb6cdf484114c4/docker-7.1.0-py3-none-any.whl", hash = "sha256:c96b93b7f0a746f9e77d325bcfb87422a3d8bd4f03136ae8a85b37f1898d5fc0", size = 147774, upload-time = "2024-05-23T11:13:55.01Z" },
 ]
-
-[[package]]
-name = "dump-db-ergon"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_smfp__dump_db_ergon" }
-
-[[package]]
-name = "example"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_sec__example" }
 
 [[package]]
 name = "exceptiongroup"
@@ -921,11 +910,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/bf/ce/46fbd9c8119cfc358
 wheels = [
     { url = "https://files.pythonhosted.org/packages/01/0e/b27cdbaccf30b890c40ed1da9fd4a3593a5cf94dae54fb34f8a4b74fcd3f/jsonschema_specifications-2025.4.1-py3-none-any.whl", hash = "sha256:4653bffbd6584f7de83a67e0d620ef16900b390ddc7939d56684d6c81e33f1af", size = 18437, upload-time = "2025-04-23T12:34:05.422Z" },
 ]
-
-[[package]]
-name = "load-test"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_sec__load_test" }
 
 [[package]]
 name = "loguru"
@@ -1761,6 +1745,21 @@ wheels = [
 ]
 
 [[package]]
+name = "rj-sec-example"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_sec__example" }
+
+[[package]]
+name = "rj-sec-load-test"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_sec__load_test" }
+
+[[package]]
+name = "rj-smfp-dump-db-ergon"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_smfp__dump_db_ergon" }
+
+[[package]]
 name = "rpds-py"
 version = "0.25.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1909,11 +1908,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/ce/20/08dfcd9c983f6a6f4
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/0c/9d30a4ebeb6db2b25a841afbb80f6ef9a854fc3b41be131d249a977b4959/starlette-0.46.2-py3-none-any.whl", hash = "sha256:595633ce89f8ffa71a015caed34a5b2dc1c0cdb3f0f1fbd1e69339cf2abeec35", size = 72037, upload-time = "2025-04-13T13:56:16.21Z" },
 ]
-
-[[package]]
-name = "test"
-version = "0.1.0"
-source = { virtual = "pipelines/test" }
 
 [[package]]
 name = "text-unidecode"
