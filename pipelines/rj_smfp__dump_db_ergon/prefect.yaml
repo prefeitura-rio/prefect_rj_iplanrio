@@ -1,4 +1,4 @@
-name: rj_sec__example
+name: rj_smfp__dump_db_ergon
 prefect-version: 3.4.3
 
 build:
@@ -9,7 +9,7 @@ build:
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
       requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_sec__example
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_smfp__dump_db_ergon
       tag: "{{ get-commit-hash.stdout }}"
       dockerfile: Dockerfile
 
@@ -24,9 +24,9 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj_sec__example
+  - name: rj_smfp__dump_db_ergon
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_sec__example/flow.py:example
+    entrypoint: pipelines/rj_smfp__dump_db_ergon/flow.py:example
     schedules:
       - cron: "* * * * *"
     work_pool:
@@ -34,4 +34,4 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build_image.image }}"
-        command: uv run --package rj_sec__example -- prefect flow-run execute
+        command: uv run --package rj_smfp__dump_db_ergon -- prefect flow-run execute
