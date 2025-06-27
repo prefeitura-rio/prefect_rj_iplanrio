@@ -5,6 +5,7 @@ on:
     paths:
       - Dockerfile
       - .github/workflows/build-and-push-root-dockerfile.yaml
+  workflow_dispatch:
 
 jobs:
   build-and-push:
