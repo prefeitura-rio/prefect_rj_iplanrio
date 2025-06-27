@@ -12,6 +12,7 @@ jobs:
   deploy:
     name: Deploy Prefect flows
     runs-on: ubuntu-latest
+    environment: cicd
 
     steps:
       - name: Tailscale
