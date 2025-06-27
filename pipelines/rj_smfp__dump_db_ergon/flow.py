@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 from typing import Optional
 
 from iplanrio.pipelines_utils.constants import NOT_SET
 from prefect import flow, serve
 
-from pipelines.rj_smfp.dump_db_ergon.schedules import ergon_daily_schedules
-from pipelines.rj_smfp.dump_db_ergon.tasks import (
+from schedules import ergon_daily_schedules
+from tasks import (
     dump_upload_batch,
     format_partitioned_query,
     get_database_username_and_password_from_secret_tastk,

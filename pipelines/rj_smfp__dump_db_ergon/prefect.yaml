@@ -1,0 +1,37 @@
+name: rj_smfp__dump_db_ergon
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_smfp__dump_db_ergon
+      tag: "{{ get-commit-hash.stdout }}"
+      dockerfile: Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj_smfp__dump_db_ergon
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smfp__dump_db_ergon/flow.py:example
+    schedules:
+      - cron: "* * * * *"
+    work_pool:
+      name: default
+      work_queue_name: default
+      job_variables:
+        image: "{{ build_image.image }}"
+        command: uv run --package rj_smfp__dump_db_ergon -- prefect flow-run execute
