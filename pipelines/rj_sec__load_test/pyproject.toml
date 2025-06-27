@@ -2,3 +2,4 @@
 name = "rj_sec__load_test"
 version = "0.1.0"
 description = "test"
+dependencies = ["requests>=2.32.3"]

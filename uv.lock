@@ -1753,6 +1753,12 @@ source = { virtual = "pipelines/rj_sec__example" }
 name = "rj-sec-load-test"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_sec__load_test" }
+dependencies = [
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "requests", specifier = ">=2.32.3" }]
 
 [[package]]
 name = "rj-smfp-dump-db-ergon"
