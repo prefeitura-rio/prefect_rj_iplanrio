@@ -1,9 +1,8 @@
 from typing import Optional
 
 from iplanrio.pipelines_utils.constants import NOT_SET
-from prefect import flow, serve
+from prefect import flow
 
-from schedules import ergon_daily_schedules
 from tasks import (
     dump_upload_batch,
     format_partitioned_query,
@@ -74,25 +73,3 @@ def dump_db_ergon(
         database=db_database,
         charset=db_charset,
     )
-
-
-if __name__ == "__main__":
-    # dump_db_ergon()
-
-    # dump_db_ergon.serve(
-    #     name="dump_db_ergon",
-    #     schedules=ergon_daily_schedules,
-    # )
-
-    dpl = dump_db_ergon.to_deployment(
-        name="dump_db_ergon",
-        schedules=ergon_daily_schedules,
-        # image="d116626/prefect-flows:0.1.4",
-        work_pool_name="default",
-        work_queue_name="default",
-        job_variables={
-            "command": "uv run prefect flow-run execute",
-        },
-        entrypoint_type="pipelines/rj_smfp/dump_db_ergon/flow.py:dump_db_ergon",
-    )
-    serve(dpl)

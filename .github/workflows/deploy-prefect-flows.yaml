@@ -8,6 +8,8 @@ on:
       - pipelines/*
   workflow_dispatch:
 
+permissions: write-all
+
 jobs:
   deploy:
     name: Deploy Prefect flows
@@ -40,12 +42,8 @@ jobs:
         with:
           python-version-file: pyproject.toml
 
-      - name: Install Prefect
+      - name: Deploy Prefect flows
         env:
-          PREFECT_API_URL: ${{ secrets.PREFECT_API_URL }}
-        run: |
-          for d in pipelines/*; do
-            if [ -f "$d/prefect.yaml" ]; then
-              (cd "$d" && uv run --with "prefect>=3.4.3" -- prefect deploy -n "$(basename "$d")")
-            fi
-          done
+          PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
+          PIPELINES_PATH: ${{ github.workspace }}/pipelines
+        run: uv run --no-project .github/scripts/deploy_prefect_flows.py

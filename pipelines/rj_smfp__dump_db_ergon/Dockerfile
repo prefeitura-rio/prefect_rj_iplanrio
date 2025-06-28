@@ -4,4 +4,4 @@ RUN mkdir /opt/prefect/prefect_rj_iplanrio/pipelines/rj_sec__dump_db_ergon
 
 COPY . /opt/prefect/prefect_rj_iplanrio/pipelines/rj_sec__dump_db_ergon
 
-RUN uv sync
+RUN uv sync --locked

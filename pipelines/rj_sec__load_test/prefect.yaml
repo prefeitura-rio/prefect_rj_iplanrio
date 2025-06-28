@@ -26,7 +26,7 @@ pull:
 deployments:
   - name: rj_sec__load_test
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_sec__load_test/flow.py:example
+    entrypoint: pipelines/rj_sec__load_test/flow.py:load_test
     schedules:
       - cron: "* * * * *"
     work_pool:
