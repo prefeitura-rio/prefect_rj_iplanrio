@@ -26,7 +26,7 @@ pull:
 deployments:
   - name: rj_smfp__dump_db_ergon
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_smfp__dump_db_ergon/flow.py:dump_db_ergon
+    entrypoint: pipelines/rj_smfp__dump_db_ergon/flow.py:rj_smfp__dump_db_ergon
     schedules:
       - cron: "0 0 * * *"
     work_pool:

@@ -30,7 +30,7 @@ def process_customer(customer_id: str) -> str:
 
 
 @flow(log_prints=True)
-def example() -> list[str]:
+def rj_sec__example() -> list[str]:
     print_env()
     use_pandas()
     customer_ids = get_customer_ids()

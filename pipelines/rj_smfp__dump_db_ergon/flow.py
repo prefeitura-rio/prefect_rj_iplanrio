@@ -2,7 +2,6 @@ from typing import Optional
 
 from iplanrio.pipelines_utils.constants import NOT_SET
 from prefect import flow
-
 from tasks import (
     dump_upload_batch,
     format_partitioned_query,
@@ -13,7 +12,7 @@ from tasks import (
 
 
 @flow(log_prints=True)
-def dump_db_ergon(
+def rj_smfp__dump_db_ergon(
     db_database: str = "db_database",
     db_host: str = "db_host",
     db_port: str = "db_port",
@@ -37,9 +36,7 @@ def dump_db_ergon(
     log_number_of_batches: int = 100,
 ):
     crd = inject_bd_credentials(environment="prod")
-    secrets = get_database_username_and_password_from_secret_tastk(
-        infisical_secret_path=infisical_secret_path
-    )
+    secrets = get_database_username_and_password_from_secret_tastk(infisical_secret_path=infisical_secret_path)
     partition_columns = parse_comma_separated_string_to_list(text=partition_columns)
 
     formated_query = format_partitioned_query(

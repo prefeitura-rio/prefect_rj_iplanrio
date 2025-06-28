@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - pipelines/*
+      - pipelines/**
   workflow_dispatch:
 
 jobs:

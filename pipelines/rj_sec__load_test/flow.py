@@ -97,11 +97,7 @@ def to_partition_task(data, partition_date_column, savepath):
         dataframe=data, partition_date_column=partition_date_column
     )
     suffix = (
-        dataframe_to_partition[partition_date_column]
-        .unique()[0]
-        .replace("-", "_")
-        .replace(" ", "__")
-        .replace(":", "_")
+        dataframe_to_partition[partition_date_column].unique()[0].replace("-", "_").replace(" ", "__").replace(":", "_")
     )
 
     to_partitions(
@@ -114,7 +110,7 @@ def to_partition_task(data, partition_date_column, savepath):
 
 
 @flow
-def load_test(
+def rj_sec__load_test(
     flow_id=1,
     number_rows=100,
     dataset_id="aa_load_test",
@@ -122,9 +118,7 @@ def load_test(
 ):
     crd = inject_bd_credentials()
     data = get_metrics(number_rows=number_rows, flow_id=flow_id)
-    savepath = to_partition_task(
-        data=data, partition_date_column="updated_at", savepath="/tmp/data"
-    )
+    savepath = to_partition_task(data=data, partition_date_column="updated_at", savepath="/tmp/data")
     data_path = create_table_and_upload_to_gcs(
         data_path=savepath,
         dataset_id=dataset_id,
