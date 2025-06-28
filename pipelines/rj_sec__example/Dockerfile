@@ -4,4 +4,4 @@ RUN mkdir /opt/prefect/prefect_rj_iplanrio/pipelines/rj_sec__example
 
 COPY . /opt/prefect/prefect_rj_iplanrio/pipelines/rj_sec__example
 
-RUN uv sync --locked
+WORKDIR /opt/prefect/prefect_rj_iplanrio/

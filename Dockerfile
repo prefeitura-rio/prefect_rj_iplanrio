@@ -8,6 +8,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY --from=get-instant-client-step /tmp/instantclient_21_18 /opt/oracle/instantclient
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+COPY ./openssl.cnf /etc/ssl/openssl.cnf
+
 RUN apt-get update && \
     apt-get install --no-install-recommends -y git curl gnupg2 libaio1 && \
     curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
@@ -19,14 +23,8 @@ RUN apt-get update && \
     sh -c "echo /opt/oracle/instantclient > /etc/ld.so.conf.d/oracle-instantclient.conf" && \
     ldconfig
 
-COPY ./openssl.cnf /etc/ssl/openssl.cnf
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
-
 WORKDIR /opt/prefect/prefect_rj_iplanrio/
 
-COPY ./pyproject.toml ./uv.lock ./
+COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 RUN mkdir pipelines
-
-RUN uv sync
