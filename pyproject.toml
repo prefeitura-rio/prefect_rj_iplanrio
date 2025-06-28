@@ -14,3 +14,8 @@ members = ["pipelines/*"]
 
 [dependency-groups]
 dev = ["prefect-docker>=0.6.5"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+indent-width = 4
