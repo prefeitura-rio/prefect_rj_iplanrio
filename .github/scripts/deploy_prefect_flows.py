@@ -2,15 +2,11 @@
 # dependencies = ["prefect>=3.4.3", "prefect-docker>=0.6.5"]
 # ///
 
+import asyncio
 import logging
 from os import environ
 from pathlib import Path
-from subprocess import CalledProcessError, TimeoutExpired, run
 from sys import exit, stdout
-
-path = environ.get("PIPELINES_PATH", "pipelines")
-pipelines = Path(path)
-failures: list[str] = []
 
 logging.basicConfig(
     stream=stdout,
@@ -18,18 +14,15 @@ logging.basicConfig(
     format="%(levelname)s: %(message)s",
 )
 
-yamls = (dir / "prefect.yaml" for dir in pipelines.iterdir() if dir.is_dir())
 
-logging.info("Starting deployment of Prefect flows...")
-logging.info(f"Using pipelines path: {pipelines}")
+async def deploy_flow(file: Path) -> tuple[str, bool]:
+    name = file.parent.name
 
-for file in yamls:
-    logging.info(f"Deploying `{file.parent.name}`...")
+    logging.info(f"Deploying `{name}`...")
 
     if not file.exists():
         logging.error(f"File `{file}` does not exist.")
-        failures.append(file.parent.name)
-        continue
+        return name, False
 
     command = [
         "uv",
@@ -46,22 +39,50 @@ for file in yamls:
     ]
 
     try:
-        result = run(command, check=True, capture_output=True, text=True, timeout=120)
-        logging.info(f"Successfully deployed `{file.parent.name}`.")
-        logging.info(f"Result:\n{result.stdout}")
-    except CalledProcessError as e:
-        logging.error(f"Failed to deploy `{file.parent.name}`: {e}")
-        logging.error(f"stderr:\n{e.stderr}")
-        failures.append(file.parent.name)
-    except TimeoutExpired:
-        logging.error(f"Deployment timed out for `{file.parent.name}`")
-        failures.append(file.parent.name)
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            _, stderr = await asyncio.wait_for(process.communicate(), timeout=600)
+        except asyncio.TimeoutError:
+            process.kill()
+            return_code = await process.wait()
+
+            logging.error(f"Deployment timed out for `{name}`. Return code: {return_code}")
+
+            return name, False
+
+        if process.returncode != 0:
+            logging.error(f"Failed to deploy `{name}`: exit code {process.returncode}. stderr:\n{stderr.decode()}")
+            return name, False
+
+        logging.info(f"Successfully deployed `{name}`.")
+        return name, True
     except Exception as e:
-        logging.error(f"Unexpected error deploying `{file.parent.name}`: {e}")
-        failures.append(file.parent.name)
+        logging.error(f"Unexpected error deploying `{name}`: {e}")
+        return name, False
 
-if failures:
-    logging.error(f"Deployments failed for: `{'`, `'.join(failures)}`")
-    exit(1)
 
-logging.info("All deployments completed successfully.")
+async def main():
+    logging.info("Starting deployment of Prefect flows...")
+
+    pipelines = Path(environ.get("PIPELINES_PATH", "pipelines"))
+
+    logging.info(f"Using pipelines path: {pipelines}")
+
+    yamls = [dir / "prefect.yaml" for dir in pipelines.iterdir() if dir.is_dir()]
+    tasks = [deploy_flow(file) for file in yamls]
+    results = await asyncio.gather(*tasks)
+    failures = [name for name, success in results if not success]
+
+    if failures:
+        logging.error(f"Deployments failed for: `{'`, `'.join(failures)}`")
+        exit(1)
+
+    logging.info("All deployments completed successfully.")
+
+
+asyncio.run(main())

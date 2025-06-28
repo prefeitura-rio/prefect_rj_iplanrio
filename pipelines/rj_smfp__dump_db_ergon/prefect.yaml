@@ -11,7 +11,7 @@ build:
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_smfp__dump_db_ergon
       tag: "{{ get-commit-hash.stdout }}"
-      dockerfile: Dockerfile
+      dockerfile: pipelines/rj_smfp__dump_db_ergon/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
