@@ -27,7 +27,8 @@ async def deploy_flow(file: Path) -> tuple[str, bool]:
     command = [
         "uv",
         "run",
-        "--active",
+        "--package",
+        str(file.parent.name),
         "--",
         "prefect",
         "--no-prompt",

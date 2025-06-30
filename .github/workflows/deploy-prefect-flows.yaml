@@ -44,4 +44,4 @@ jobs:
         env:
           PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
           PIPELINES_PATH: ${{ github.workspace }}/pipelines
-        run: uv run --no-project .github/scripts/deploy_prefect_flows.py
+        run: uv run .github/scripts/deploy_prefect_flows.py

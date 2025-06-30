@@ -1,5 +1,5 @@
 FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio/base:latest
 
-RUN mkdir /opt/prefect/prefect_rj_iplanrio/pipelines/rj_smfp__dump_db_ergon
+WORKDIR /opt/prefect/prefect_rj_iplanrio
 
-COPY ./pipelines/rj_smfp__dump_db_ergon /opt/prefect/prefect_rj_iplanrio/pipelines/
+COPY ./pipelines/rj_smfp__dump_db_ergon ./pipelines/rj_smfp__dump_db_ergon/
