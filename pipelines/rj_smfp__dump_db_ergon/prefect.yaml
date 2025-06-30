@@ -30,7 +30,7 @@ deployments:
     schedules:
       - cron: "0 0 * * *"
     work_pool:
-      name: default
+      name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build_image.image }}"
