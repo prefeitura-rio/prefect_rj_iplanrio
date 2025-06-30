@@ -33,5 +33,5 @@ deployments:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build_image.image }}"
+        image: "{{ build-image.image }}"
         command: uv run --package rj_smfp__dump_db_ergon -- prefect flow-run execute
