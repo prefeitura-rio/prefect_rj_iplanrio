@@ -1,0 +1,12 @@
+.direnv/
+.env
+.envrc
+.git/
+.github/
+.mergify.yml
+.venv/
+Dockerfile
+docs/
+flake.lock
+flake.nix
+README.md

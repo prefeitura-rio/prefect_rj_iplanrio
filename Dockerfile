@@ -23,8 +23,6 @@ RUN apt-get update && \
     sh -c "echo /opt/oracle/instantclient > /etc/ld.so.conf.d/oracle-instantclient.conf" && \
     ldconfig
 
-WORKDIR /opt/prefect/prefect_rj_iplanrio/
-
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 RUN mkdir pipelines
