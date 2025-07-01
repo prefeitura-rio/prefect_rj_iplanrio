@@ -30,7 +30,7 @@ async def deploy_flow(file: Path, environment: str) -> tuple[str, bool]:
         "uv",
         "run",
         "--package",
-        str(package),
+        package,
         "--",
         "prefect",
         "--no-prompt",
@@ -43,15 +43,11 @@ async def deploy_flow(file: Path, environment: str) -> tuple[str, bool]:
 
     logging.debug(f"Running command: {' '.join(command)}")
 
-    env = environ.copy()
-    env["ENVIRONMENT"] = environment
-
     try:
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env,
         )
 
         try:

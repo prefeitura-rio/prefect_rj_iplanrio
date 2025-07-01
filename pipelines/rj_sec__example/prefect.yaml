@@ -10,14 +10,14 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_sec__example
-      tag: "{{ $ENVIRIONMENT }}"
+      tag: "{{ $ENVIRONMENT }}"
       dockerfile: pipelines/rj_sec__example/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
       requires: prefect-docker>=0.6.5
       image_name: "{{ build-image.image_name }}"
-      tag: "{{ $ENVIRIONMENT }}"
+      tag: "{{ $ENVIRONMENT }}"
 
 pull:
   - prefect.deployments.steps.set_working_directory:
