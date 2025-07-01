@@ -3,7 +3,7 @@ name: Deploy Prefect flows
 on:
   push:
     branches:
-      - master
+      - staging/*
     paths:
       - pipelines/**
   workflow_dispatch:

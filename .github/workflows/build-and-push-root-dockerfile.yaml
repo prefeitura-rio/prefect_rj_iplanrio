@@ -2,9 +2,10 @@ name: Build and push root Dockerfile
 
 on:
   push:
+    branches:
+      - master
     paths:
       - Dockerfile
-      - .github/workflows/build-and-push-root-dockerfile.yaml
   workflow_dispatch:
 
 jobs:
