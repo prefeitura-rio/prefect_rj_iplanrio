@@ -19,3 +19,25 @@ dev = ["prefect-docker>=0.6.5"]
 target-version = "py313"
 line-length = 120
 indent-width = 4
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+select = [
+  "A",
+  "ARG",
+  "B",
+  "C4",
+  "DTZ",
+  "E",
+  "F",
+  "I",
+  "N",
+  "PL",
+  "PT",
+  "PTH",
+  "RUF",
+  "W",
+]
+
+[tool.ruff.format]
+quote-style = "double"
