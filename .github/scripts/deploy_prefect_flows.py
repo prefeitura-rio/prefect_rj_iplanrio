@@ -16,57 +16,66 @@ logging.basicConfig(
 
 
 async def deploy_flow(file: Path, environment: str) -> tuple[str, bool]:
-    name = file.parent.name
-
-    logging.info(f"Deploying `{name}`...")
+    package = file.parent.name
 
     if not file.exists():
         logging.error(f"File `{file}` does not exist.")
-        return name, False
+        return package, False
 
-    deployment = f"{file.parent.name}_{environment}" if environment == "staging" else file.parent.name
+    pipeline = f"{package}_{environment}" if environment == "staging" else file.parent.name
+
+    logging.info(f"Deploying `{pipeline}` pipeline...")
 
     command = [
         "uv",
         "run",
         "--package",
-        str(file.parent.name),
+        str(package),
         "--",
         "prefect",
         "--no-prompt",
         "deploy",
         "--name",
-        deployment,
+        pipeline,
         "--prefect-file",
         str(file),
     ]
+
+    logging.debug(f"Running command: {' '.join(command)}")
+
+    env = environ.copy()
+    env["ENVIRONMENT"] = environment
 
     try:
         process = await asyncio.create_subprocess_exec(
             *command,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
 
         try:
-            _, stderr = await asyncio.wait_for(process.communicate(), timeout=600)
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=600)
+
+            logging.debug(f"Process stdout for `{pipeline}`:\n{stdout.decode()}")
+            logging.debug(f"Process stderr for `{pipeline}`:\n{stderr.decode()}")
         except asyncio.TimeoutError:
             process.kill()
             return_code = await process.wait()
 
-            logging.error(f"Deployment timed out for `{name}`. Return code: {return_code}")
+            logging.error(f"Deployment timed out for `{pipeline}`. Return code: {return_code}")
 
-            return name, False
+            return pipeline, False
 
         if process.returncode != 0:
-            logging.error(f"Failed to deploy `{name}`: exit code {process.returncode}. stderr:\n{stderr.decode()}")
-            return name, False
+            logging.error(f"Failed to deploy `{pipeline}`: exit code {process.returncode}. stderr:\n{stderr.decode()}")
+            return pipeline, False
 
-        logging.info(f"Successfully deployed `{name}`.")
-        return name, True
+        logging.info(f"Successfully deployed `{pipeline}`.")
+        return pipeline, True
     except Exception as e:
-        logging.error(f"Unexpected error deploying `{name}`: {e}")
-        return name, False
+        logging.error(f"Unexpected error deploying `{pipeline}`: {e}")
+        return pipeline, False
 
 
 async def main():
@@ -79,6 +88,8 @@ async def main():
     logging.info(f"Using environment: `{environment}`")
 
     yamls = [dir / "prefect.yaml" for dir in pipelines.iterdir() if dir.is_dir()]
+    logging.info(f"Found {len(yamls)} pipeline(s) to deploy: {[str(y) for y in yamls]}")
+
     tasks = [deploy_flow(file, environment) for file in yamls]
     results = await asyncio.gather(*tasks)
     failures = [name for name, success in results if not success]
