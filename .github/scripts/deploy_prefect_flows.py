@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 
 
-async def deploy_flow(file: Path) -> tuple[str, bool]:
+async def deploy_flow(file: Path, environment: str) -> tuple[str, bool]:
     name = file.parent.name
 
     logging.info(f"Deploying `{name}`...")
@@ -23,6 +23,8 @@ async def deploy_flow(file: Path) -> tuple[str, bool]:
     if not file.exists():
         logging.error(f"File `{file}` does not exist.")
         return name, False
+
+    deployment = f"{file.parent.name}_{environment}" if environment == "staging" else file.parent.name
 
     command = [
         "uv",
@@ -34,7 +36,7 @@ async def deploy_flow(file: Path) -> tuple[str, bool]:
         "--no-prompt",
         "deploy",
         "--name",
-        str(file.parent.name),
+        deployment,
         "--prefect-file",
         str(file),
     ]
@@ -70,12 +72,14 @@ async def deploy_flow(file: Path) -> tuple[str, bool]:
 async def main():
     logging.info("Starting deployment of Prefect flows...")
 
+    environment = environ.get("ENVIRONMENT", "staging")
     pipelines = Path(environ.get("PIPELINES_PATH", "pipelines"))
 
-    logging.info(f"Using pipelines path: {pipelines}")
+    logging.info(f"Using pipelines path: `{pipelines}`")
+    logging.info(f"Using environment: `{environment}`")
 
     yamls = [dir / "prefect.yaml" for dir in pipelines.iterdir() if dir.is_dir()]
-    tasks = [deploy_flow(file) for file in yamls]
+    tasks = [deploy_flow(file, environment) for file in yamls]
     results = await asyncio.gather(*tasks)
     failures = [name for name, success in results if not success]
 

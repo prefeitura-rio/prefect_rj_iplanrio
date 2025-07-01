@@ -10,22 +10,31 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
-      tag: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+      tag: "{% raw %}{{ $ENVIRONMENT }}{% endraw %}"
       dockerfile: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
       requires: prefect-docker>=0.6.5
       image_name: "{% raw %}{{ build-image.image_name }}{% endraw %}"
-      tag: "{% raw %}{{ build-image.tag }}{% endraw %}"
+      tag: "{% raw %}{{ $ENVIRONMENT }}{% endraw %}"
 
 pull:
   - prefect.deployments.steps.set_working_directory:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
+  - name: rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}_staging
+    version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+    entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:staging"
+        command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
   - name: rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
-    version: "{% raw %}{{ build-image.tag }}{% endraw %}"
+    version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
     entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
     schedules:
       - cron: "0 0 * * *"
