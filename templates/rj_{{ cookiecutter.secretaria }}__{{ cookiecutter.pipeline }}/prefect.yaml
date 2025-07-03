@@ -31,7 +31,7 @@ deployments:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:staging"
+        image: "{% raw %}{{ build-image.image_name }}{% endraw %}:staging"
         command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
   - name: rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
     version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
