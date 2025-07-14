@@ -20,7 +20,6 @@ from iplanrio.pipelines_utils.database_sql import (
 )
 from iplanrio.pipelines_utils.env import (
     get_database_username_and_password_from_secret_env,
-    getenv_or_action,
 )
 from iplanrio.pipelines_utils.gcs import (
     delete_blobs_list,
@@ -48,9 +47,7 @@ from prefect import task
 
 @task
 def get_database_username_and_password_from_secret_tastk(infisical_secret_path: str):
-    return get_database_username_and_password_from_secret_env(
-        secret_path=infisical_secret_path
-    )
+    return get_database_username_and_password_from_secret_env(secret_path=infisical_secret_path)
 
 
 @task
@@ -189,10 +186,8 @@ def dump_upload_batch(
         attempts = retry_dump_upload_attempts
         while attempts >= 0:
             try:
-                log(f"Attempt: { retry_dump_upload_attempts - attempts}")
-                log(
-                    f"query {n_query+1} of {len(queries)} |{ round(100 * (n_query+1) / len(queries), 2)}"
-                )
+                log(f"Attempt: {retry_dump_upload_attempts - attempts}")
+                log(f"query {n_query + 1} of {len(queries)} |{round(100 * (n_query + 1) / len(queries), 2)}")
 
                 db_object = database_get_db(
                     database_type=database_type,
@@ -226,9 +221,7 @@ def dump_upload_batch(
                 if not partition_column:
                     log("NO partition column specified! Writing unique files")
                 else:
-                    log(
-                        f"Partition column: {partition_column} FOUND!! Write to partitioned files"
-                    )
+                    log(f"Partition column: {partition_column} FOUND!! Write to partitioned files")
 
                 # Now loop until we have no more data.
                 batch = db_object.fetch_batch(batch_size)
@@ -238,7 +231,7 @@ def dump_upload_batch(
                     prepath.mkdir(parents=True, exist_ok=True)
                     # Log progress each 100 batches.
                     log_mod(
-                        msg=f"Dumping batch {idx+1} with size {len(batch)}",
+                        msg=f"Dumping batch {idx + 1} with size {len(batch)}",
                         index=idx,
                         mod=log_number_of_batches,
                     )
@@ -248,18 +241,14 @@ def dump_upload_batch(
                     dataframe = batch_to_dataframe(batch, columns)
                     old_columns = dataframe.columns.tolist()
                     dataframe.columns = remove_columns_accents(dataframe)
-                    new_columns_dict = dict(
-                        zip(old_columns, dataframe.columns.tolist())
-                    )
+                    new_columns_dict = dict(zip(old_columns, dataframe.columns.tolist(), strict=False))
                     dataframe = clean_dataframe(dataframe)
                     saved_files = []
                     if partition_column:
                         dataframe, date_partition_columns = parse_date_columns(
                             dataframe, new_columns_dict[partition_column]
                         )
-                        partitions = date_partition_columns + [
-                            new_columns_dict[col] for col in partition_columns[1:]
-                        ]
+                        partitions = date_partition_columns + [new_columns_dict[col] for col in partition_columns[1:]]
                         saved_files = to_partitions(
                             data=dataframe,
                             partition_columns=partitions,
@@ -333,7 +322,7 @@ def dump_upload_batch(
                                 blobs=blobs_to_delete,
                             )
                             log_mod(
-                                msg=f"Deleted {len(blobs_to_delete)} blobs from GCS: {blobs_to_delete}",  # noqa
+                                msg=f"Deleted {len(blobs_to_delete)} blobs from GCS: {blobs_to_delete}",
                                 index=idx,
                                 mod=log_number_of_batches,
                             )
@@ -351,14 +340,13 @@ def dump_upload_batch(
                         else:
                             # the header is needed to create a table when dosen't exist
                             log_mod(
-                                msg="MODE APPEND: Table DOESN'T EXISTS\nStart to CREATE HEADER file",  # noqa
+                                msg="MODE APPEND: Table DOESN'T EXISTS\nStart to CREATE HEADER file",
                                 index=idx,
                                 mod=log_number_of_batches,
                             )
                             header_path = dump_header_to_file(data_path=saved_files[0])
                             log_mod(
-                                msg="MODE APPEND: Created HEADER file:\n"
-                                f"{header_path}",
+                                msg=f"MODE APPEND: Created HEADER file:\n{header_path}",
                                 index=idx,
                                 mod=log_number_of_batches,
                             )
@@ -389,7 +377,7 @@ def dump_upload_batch(
                                 )
                                 log_mod(
                                     msg=(
-                                        "MODE APPEND: Sucessfully REMOVED HEADER DATA from Storage:\n"  # noqa
+                                        "MODE APPEND: Sucessfully REMOVED HEADER DATA from Storage:\n"
                                         + f"{storage_path}\n"
                                         + f"{storage_path_link}"
                                     ),
@@ -425,10 +413,7 @@ def dump_upload_batch(
                             # delete only staging table and let DBT overwrite the prod table
                             tb.delete(mode="staging")
                             log_mod(
-                                msg=(
-                                    "MODE OVERWRITE: Sucessfully DELETED TABLE:\n"
-                                    + f"{table_staging}\n"
-                                ),
+                                msg=("MODE OVERWRITE: Sucessfully DELETED TABLE:\n" + f"{table_staging}\n"),
                                 index=idx,
                                 mod=log_number_of_batches,
                             )  # pylint: disable=C0301
@@ -452,14 +437,13 @@ def dump_upload_batch(
                             )  # pylint: disable=C0301
 
                             log_mod(
-                                msg="MODE OVERWRITE: Table DOSEN'T EXISTS\nStart to CREATE HEADER file",  # noqa
+                                msg="MODE OVERWRITE: Table DOSEN'T EXISTS\nStart to CREATE HEADER file",
                                 index=idx,
                                 mod=log_number_of_batches,
                             )
                             header_path = dump_header_to_file(data_path=saved_files[0])
                             log_mod(
-                                "MODE OVERWRITE: Created HEADER file:\n"
-                                f"{header_path}",
+                                f"MODE OVERWRITE: Created HEADER file:\n{header_path}",
                                 index=idx,
                                 mod=log_number_of_batches,
                             )
@@ -489,7 +473,7 @@ def dump_upload_batch(
                             )
                             log_mod(
                                 msg=(
-                                    "MODE OVERWRITE: Sucessfully REMOVED HEADER DATA from Storage\n:"  # noqa
+                                    "MODE OVERWRITE: Sucessfully REMOVED HEADER DATA from Storage\n:"
                                     + f"{storage_path}\n"
                                     + f"{storage_path_link}"
                                 ),
@@ -507,7 +491,7 @@ def dump_upload_batch(
                         # Upload them all at once
                         tb.append(filepath=prepath, if_exists="replace")
                         log_mod(
-                            msg=f"STEP UPLOAD: Sucessfully uploaded batch {idx +1} file with size {len(batch)} to Storage",
+                            msg=f"STEP UPLOAD: Sucessfully uploaded batch {idx + 1} file with size {len(batch)} to Storage",
                             index=idx,
                             mod=log_number_of_batches,
                         )
@@ -517,7 +501,7 @@ def dump_upload_batch(
                     else:
                         # pylint: disable=C0301
                         log_mod(
-                            msg="STEP UPLOAD: Table does not exist in STAGING, need to create first",  # noqa
+                            msg="STEP UPLOAD: Table does not exist in STAGING, need to create first",
                             index=idx,
                             mod=log_number_of_batches,
                         )
@@ -551,15 +535,13 @@ def dump_upload_batch(
             # end back while
 
         log(
-            msg=f"Successfully dumped {idx-1} batches, total of  {batchs_len} rows",  # noqa
+            msg=f"Successfully dumped {idx - 1} batches, total of  {batchs_len} rows",
         )
         # end of for queries
         total_idx += idx
         total_batchs_len += batchs_len
 
-    log(
-        msg=f"Successfully dumped {len(queries)} queries, {total_idx} batches, total of {total_batchs_len} rows"  # noqa
-    )
+    log(msg=f"Successfully dumped {len(queries)} queries, {total_idx} batches, total of {total_batchs_len} rows")
 
 
 @task
@@ -621,19 +603,13 @@ def format_partitioned_query(
     )
 
 
-def get_last_partition_date(
-    dataset_id: str, table_id: str, date_format: Optional[str]
-) -> Optional[str]:
+def get_last_partition_date(dataset_id: str, table_id: str, date_format: Optional[str]) -> Optional[str]:
     blobs = get_storage_blobs(dataset_id=dataset_id, table_id=table_id)
     storage_partitions_dict = parse_blobs_to_partition_dict(blobs=blobs)
-    return extract_last_partition_date(
-        partitions_dict=storage_partitions_dict, date_format=date_format
-    )
+    return extract_last_partition_date(partitions_dict=storage_partitions_dict, date_format=date_format)
 
 
-def get_last_date(
-    lower_bound_date: Optional[str], date_format: str, last_partition_date: str
-) -> str:
+def get_last_date(lower_bound_date: Optional[str], date_format: str, last_partition_date: str) -> str:
     now: datetime = datetime.now()
     if lower_bound_date == "current_year":
         return now.replace(month=1, day=1).strftime(date_format)
@@ -648,9 +624,7 @@ def get_last_date(
                 datetime.strptime(last_partition_date, date_format),
             ).strftime(date_format)
         else:
-            return datetime.strptime(lower_bound_date, date_format).strftime(
-                date_format
-            )
+            return datetime.strptime(lower_bound_date, date_format).strftime(date_format)
     return datetime.strptime(last_partition_date, date_format).strftime(date_format)
 
 
@@ -662,7 +636,6 @@ def build_single_partition_query(
     date_format: str,
     database_type: str,
 ) -> str:
-
     last_date = get_last_date(
         lower_bound_date=lower_bound_date,
         date_format=date_format,
@@ -670,9 +643,7 @@ def build_single_partition_query(
     )
     aux_name = f"a{uuid4().hex}"[:8]
 
-    log(
-        f"Partitioned DETECTED: {partition_column}, returning a NEW QUERY with partitioned columns and filters"  # noqa
-    )
+    log(f"Partitioned DETECTED: {partition_column}, returning a NEW QUERY with partitioned columns and filters")
 
     if database_type == "oracle":
         oracle_date_format = "YYYY-MM-DD" if date_format == "%Y-%m-%d" else date_format
@@ -700,7 +671,6 @@ def build_chunked_queries(
     lower_bound_date: Optional[str],
     last_partition_date: str,
 ) -> List[str]:
-
     start_date_str = get_last_date(
         lower_bound_date=break_query_start,
         date_format=date_format,
@@ -745,17 +715,13 @@ def build_chunked_queries(
                 current_end=current_end,
             )
         )
-        current_start = get_next_start_date(
-            current_start=current_start, break_query_frequency=break_query_frequency
-        )
+        current_start = get_next_start_date(current_start=current_start, break_query_frequency=break_query_frequency)
 
     log(f"Total queries created: {len(queries)}")
     return queries
 
 
-def calculate_end_date(
-    current_start: datetime, end_date: datetime, break_query_frequency: Optional[str]
-) -> datetime:
+def calculate_end_date(current_start: datetime, end_date: datetime, break_query_frequency: Optional[str]) -> datetime:
     if break_query_frequency.lower() == "month":
         return min(get_last_day_of_month(date=current_start), end_date)
     elif break_query_frequency.lower() == "year":
@@ -801,9 +767,7 @@ def build_chunk_query(
     aux_name = f"a{uuid4().hex}"[:8]
 
     if database_type == "oracle":
-        oracle_date_format: str = (
-            "YYYY-MM-DD" if date_format == "%Y-%m-%d" else date_format
-        )
+        oracle_date_format: str = "YYYY-MM-DD" if date_format == "%Y-%m-%d" else date_format
         return f"""
         with {aux_name} as ({query})
         select * from {aux_name}
@@ -815,13 +779,11 @@ def build_chunk_query(
     with {aux_name} as ({query})
     select * from {aux_name}
     where CONVERT(DATE, {partition_column}) >= '{current_start.strftime(date_format)}'
-        and CONVERT(DATE, {partition_column}) <= '{current_end .strftime(date_format)}'
+        and CONVERT(DATE, {partition_column}) <= '{current_end.strftime(date_format)}'
     """
 
 
-def get_next_start_date(
-    current_start: datetime, break_query_frequency: Optional[str]
-) -> datetime:
+def get_next_start_date(current_start: datetime, break_query_frequency: Optional[str]) -> datetime:
     if break_query_frequency.lower() == "month":
         return add_months(start_date=current_start, months=1)
     elif break_query_frequency.lower() == "year":

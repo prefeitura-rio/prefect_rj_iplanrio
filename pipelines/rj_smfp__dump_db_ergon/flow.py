@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from typing import Optional
 
 from iplanrio.pipelines_utils.constants import NOT_SET
