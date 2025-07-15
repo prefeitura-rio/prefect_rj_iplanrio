@@ -370,7 +370,7 @@ INFISICAL_SECRET_PATH = "/db-1746"
 # Work Pool Settings
 WORK_POOL_NAME = "default-pool"
 WORK_QUEUE_NAME = "default"
-JOB_IMAGE = "{{ build-image.image_name }}:staging"
+JOB_IMAGE = "{{ build-image.image_name }}"
 JOB_COMMAND = "uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute"
 
 

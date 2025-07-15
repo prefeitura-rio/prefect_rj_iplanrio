@@ -31,7 +31,7 @@ deployments:
     name: default-pool
     work_queue_name: default
     job_variables:
-      image: '{{ build-image.image_name }}:staging'
+      image: '{{ build-image.image_name }}'
       command: uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute
   schedules:
   - interval: 86400
