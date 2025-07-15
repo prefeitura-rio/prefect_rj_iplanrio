@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import yaml
 
-from pipelines.templates.dump_db.utils import create_dump_db_deployment
+from iplanrio.pipelines_utils.prefect import create_dump_db_deployment
 
 QUERY_CHAMADO_1746_DS = """
 select
@@ -351,7 +351,7 @@ ERGON_QUERIES_CONFIG = []
 # General Deployment Settings
 DEPLOYMENT_NAME = "SEGOVI: DUMP DB - 1746"
 VERSION = "{{ get-commit-hash.stdout }}"
-ENTRYPOINT = "pipelines/templates/dump_db/flow.py:rj_segovi_dump_db_1746"
+ENTRYPOINT = "pipelines/rj_segovi__dump_db_1746/flow.py:rj_segovi_dump_db_1746"
 
 # Schedule Settings
 BASE_ANCHOR_DATE = "2025-07-15T00:00:00"
