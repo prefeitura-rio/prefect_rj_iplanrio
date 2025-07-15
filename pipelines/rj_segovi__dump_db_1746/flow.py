@@ -10,7 +10,6 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
     inject_bd_credentials_task,
     parse_comma_separated_string_to_list_task,
 )
-from iplanrio.pipelines_utils.constants import NOT_SET
 
 
 @flow(log_prints=True)
@@ -19,6 +18,7 @@ def rj_segovi_dump_db_1746(
     db_host: str = "db_host",
     db_port: str = "db_port",
     db_type: str = "db_type",
+    db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
     dataset_id: str = "dataset_id",
     table_id: str = "table_id",
@@ -30,7 +30,6 @@ def rj_segovi_dump_db_1746(
     break_query_frequency: Optional[str] = None,
     break_query_start: Optional[str] = None,
     break_query_end: Optional[str] = None,
-    db_charset: str = NOT_SET,
     retry_dump_upload_attempts: int = 1,
     batch_size: int = 50000,
     batch_data_type: str = "csv",
