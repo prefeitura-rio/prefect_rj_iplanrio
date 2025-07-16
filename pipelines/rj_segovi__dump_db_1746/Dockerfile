@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio/base:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
 
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
