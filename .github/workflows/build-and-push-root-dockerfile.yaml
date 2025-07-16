@@ -10,7 +10,9 @@ on:
 
 jobs:
   build-and-push:
+    name: Build and push root Dockerfile
     runs-on: ubuntu-latest
+    environment: cicd
 
     steps:
       - name: Checkout repository
@@ -21,7 +23,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GH_TOKEN }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
