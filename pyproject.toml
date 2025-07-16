@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Prefect pipelines for the Rio de Janeiro City Hall"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["iplanrio", "pandas>=2.2.3", "prefect>=3.4.3"]
+dependencies = [
+    "idna>=3.10",
+    "iplanrio",
+    "pandas>=2.2.3",
+    "prefect==3.4.8",
+]
 
 [tool.uv.sources]
 iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
