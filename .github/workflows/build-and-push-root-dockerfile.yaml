@@ -11,6 +11,7 @@ on:
 jobs:
   build-and-push:
     name: Build and push root Dockerfile
+    permissions: write-all
     runs-on: ubuntu-latest
     environment: cicd
 

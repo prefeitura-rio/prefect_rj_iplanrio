@@ -6,7 +6,6 @@ requires-python = ">=3.13"
 members = [
     "prefect-rj-iplanrio",
     "rj-sec-example",
-    "rj-sec-load-test",
     "rj-segovi-dump-db-1746",
 ]
 
@@ -1742,17 +1741,6 @@ wheels = [
 name = "rj-sec-example"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_sec__example" }
-
-[[package]]
-name = "rj-sec-load-test"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_sec__load_test" }
-dependencies = [
-    { name = "requests" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "requests", specifier = ">=2.32.3" }]
 
 [[package]]
 name = "rj-segovi-dump-db-1746"

@@ -55,6 +55,13 @@ O arquivo `prefect.yaml` é responsável por definir as configurações de deplo
 
 Consulte a [documentação oficial do Prefect](https://docs.prefect.io/v3/how-to-guides/deployments/prefect-yaml) para detalhes sobre todas as opções disponíveis.
 
+### Convenções de nomenclatura
+
+- Os diretórios de pipelines seguem o padrão: `rj_<secretaria>__<pipeline>`, utilizando apenas letras minúsculas, números e underscores.
+- Os arquivos principais de cada pipeline (`Dockerfile`, `flow.py`, `prefect.yaml`, `pyproject.toml`) devem estar diretamente dentro do diretório da pipeline.
+- Os nomes de deployments Prefect seguem o padrão `rj-<secretaria>--<pipeline>--<ambiente>`, por exemplo: `rj-segovi--dump-db-1746--staging`.
+- Use sempre nomes descritivos e padronizados para facilitar a identificação e automação dos fluxos.
+
 ### Templates
 
 Este repositório utiliza [`cookiecutter`](https://cookiecutter.readthedocs.io/) para facilitar a criação de novas pipelines de forma padronizada. Os templates disponíveis em `templates/` permitem gerar rapidamente a estrutura de diretórios e arquivos necessários para uma nova pipeline Prefect, incluindo `Dockerfile`, `flow.py`, `prefect.yaml` e `pyproject.toml`.
@@ -65,7 +72,7 @@ Para criar uma nova pipeline, instale `uv` e rode:
 uvx cookiecutter templates --output-dir=pipelines
 ```
 
-Você será solicitado a informar valores como `secretaria` e `pipeline`, que serão utilizados para preencher os nomes dos diretórios, arquivos e variáveis nos templates.
+Você será solicitado a informar valores como `secretaria` e `pipeline`, que serão utilizados para preencher os nomes dos diretórios, arquivos e variáveis nos templates. O template gerado já segue o padrão de nomenclatura definido anteriormente.
 
 ## CI/CD
 
