@@ -5,7 +5,6 @@ requires-python = ">=3.13"
 [manifest]
 members = [
     "prefect-rj-iplanrio",
-    "rj-sec-example",
     "rj-segovi-dump-db-1746",
 ]
 
@@ -1736,11 +1735,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/a1/53/830aa4c3066a8ab0a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0d/9b/63f4c7ebc259242c89b3acafdb37b41d1185c07ff0011164674e9076b491/rich-14.0.0-py3-none-any.whl", hash = "sha256:1c9491e1951aac09caffd42f448ee3d04e58923ffe14993f6e83068dc395d7e0", size = 243229, upload-time = "2025-03-30T14:15:12.283Z" },
 ]
-
-[[package]]
-name = "rj-sec-example"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_sec__example" }
 
 [[package]]
 name = "rj-segovi-dump-db-1746"
