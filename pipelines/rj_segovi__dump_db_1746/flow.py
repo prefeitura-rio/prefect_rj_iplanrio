@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY.
+This flow is used to dump the database from the 1746 server to the BIGQUERY..
 """
 
 from typing import Optional
@@ -40,8 +40,12 @@ def rj_segovi__dump_db_1746(
     log_number_of_batches: int = 100,
 ):
     crd = inject_bd_credentials_task(environment="prod")  # noqa
-    secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
-    partition_columns = parse_comma_separated_string_to_list_task(text=partition_columns)
+    secrets = get_database_username_and_password_from_secret_task(
+        infisical_secret_path=infisical_secret_path
+    )
+    partition_columns = parse_comma_separated_string_to_list_task(
+        text=partition_columns
+    )
 
     formated_query = format_partitioned_query_task(
         query=execute_query,
