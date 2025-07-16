@@ -1,7 +1,12 @@
+# -*- coding: utf-8 -*-
+"""
+This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY.
+"""
+
 from prefect import flow
 from tasks import (
-    download_equipamentos_from_datario,
     create_table_and_upload_to_gcs_task,
+    download_equipamentos_from_datario,
 )
 
 
