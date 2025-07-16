@@ -1,5 +1,4 @@
 {
   "secretaria": "sec",
-  "pipeline": "example",
-  "name": "Example"
+  "pipeline": "example"
 }
