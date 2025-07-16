@@ -16,9 +16,8 @@ logging.basicConfig(
 
 
 async def package_was_changed(package_dir: Path) -> bool:
-    """
-    Returns True if the package directory has changes in git compared to HEAD.
-    """
+    """Returns True if the package directory has changes in git compared to HEAD."""
+
     try:
         process = await asyncio.create_subprocess_exec(
             "git",
@@ -37,6 +36,8 @@ async def package_was_changed(package_dir: Path) -> bool:
 
 
 async def deploy_flow(file: Path, environment: str, force: bool) -> tuple[Path, int]:
+    """Deploy a Prefect flow defined in the given file to the specified environment."""
+
     package = file.parent.name
 
     if not file.exists():
