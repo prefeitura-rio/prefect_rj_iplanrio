@@ -10,7 +10,7 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_segovi__dump_db_1746
-      tag: "{{ get-commit-hash.stdout }}"
+      tag: "rj_segovi__dump_db_1746-{{ get-commit-hash.stdout }}"
       dockerfile: pipelines/rj_segovi__dump_db_1746/Dockerfile
 
 push:
@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: 'rj-segovi-dump-db-1746-prod'
+  - name: rj-segovi-dump-db-1746--prod
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_segovi__dump_db_1746/flow.py:rj_segovi__dump_db_1746
     work_pool:

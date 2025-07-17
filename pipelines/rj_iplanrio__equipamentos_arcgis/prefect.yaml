@@ -9,8 +9,8 @@ build:
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
       requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_iplanrio__equipamentos_arcgis
-      tag: "{{ get-commit-hash.stdout }}"
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__equipamentos_arcgis-{{ get-commit-hash.stdout }}"
       dockerfile: pipelines/rj_iplanrio__equipamentos_arcgis/Dockerfile
 
 push:
@@ -79,4 +79,3 @@ deployments:
           crs: EPSG:31983
           dataset_id: brutos_equipamentos
           table_id: culturais_datario
-

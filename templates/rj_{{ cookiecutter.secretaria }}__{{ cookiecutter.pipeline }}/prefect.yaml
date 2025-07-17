@@ -9,8 +9,8 @@ build:
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
       requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
-      tag: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}-{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
       dockerfile: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/Dockerfile
 
 push:

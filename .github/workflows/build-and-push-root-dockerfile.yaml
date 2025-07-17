@@ -6,6 +6,8 @@ on:
       - master
     paths:
       - Dockerfile
+      - pyproject.toml
+      - uv.lock
   workflow_dispatch:
 
 jobs:
