@@ -9,7 +9,7 @@ build:
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
       requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_segovi__dump_db_1746
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
       tag: "rj_segovi__dump_db_1746-{{ get-commit-hash.stdout }}"
       dockerfile: pipelines/rj_segovi__dump_db_1746/Dockerfile
 
