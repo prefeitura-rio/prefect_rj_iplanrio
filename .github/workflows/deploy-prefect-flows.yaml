@@ -56,4 +56,5 @@ jobs:
           PREFECT_API_URL: ${{ inputs.prefect_api_url }}
           PIPELINES_PATH: ${{ inputs.pipelines_path }}
           FORCE_DEPLOY: ${{ inputs.force_deploy }}
+          GITHUB_SHA: ${{ github.sha }}
         run: uv run .github/scripts/deploy_prefect_flows.py

@@ -1,12 +1,16 @@
 # /// script
-# dependencies = ["prefect>=3.4.3", "prefect-docker>=0.6.5"]
+# dependencies = ["prefect>=3.4.3", "prefect-docker>=0.6.5", "pyyaml>=6.0.2"]
 # ///
 
 import asyncio
 import logging
 import sys
+from collections.abc import Iterable
+from functools import partial
 from os import environ
 from pathlib import Path
+
+from yaml import safe_load
 
 logging.basicConfig(
     stream=sys.stdout,
@@ -14,28 +18,56 @@ logging.basicConfig(
     format="%(levelname)s: %(message)s",
 )
 
-
-async def package_was_changed(package_dir: Path) -> bool:
-    """Returns True if the package directory has changes in git compared to HEAD."""
-
-    try:
-        process = await asyncio.create_subprocess_exec(
-            "git",
-            "diff",
-            "--name-only",
-            "HEAD",
-            package_dir.as_posix(),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, _ = await process.communicate()
-        return bool(stdout.decode().strip())
-    except Exception as e:
-        logging.warning(f"Could not determine git changes for `{package_dir}`: {e}")
-        return True
+# TODO: add Pydantic model for `prefect.yaml` validation
 
 
-async def deploy_flow(file: Path, environment: str, force: bool) -> tuple[Path, int]:
+async def get_deployments(prefect_yaml: Path) -> list[str]:
+    """Extract deployment names from the given `prefect.yaml` file."""
+
+    content = safe_load(prefect_yaml.read_text())
+
+    deployments_section = content.get("deployments")
+
+    if not deployments_section:
+        logging.warning(f"No deployments section found in `{prefect_yaml}`.")
+        return []
+
+    return [d.get("name") for d in deployments_section]
+
+
+async def get_prefect_yaml_files(package_dir: Iterable[Path]) -> list[Path]:
+    """Get all `prefect.yaml` files in the specified package directory."""
+
+    return [d / "prefect.yaml" for d in package_dir if d.is_dir() and (d / "prefect.yaml").exists()]
+
+
+async def get_changed_directories(package_dir: Path, sha: str) -> list[Path]:
+    """Get directories that have changed since the specified commit SHA."""
+
+    command = [
+        "git",
+        "diff-tree",
+        "--no-commit-id",
+        "--name-only",
+        "-r",
+        sha,
+        package_dir.as_posix(),
+    ]
+
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout, _ = await process.communicate()
+
+    files = {Path(f).parent for f in stdout.decode().splitlines()}
+
+    return list(files)
+
+
+async def deploy_flow(file: Path, environment: str) -> tuple[Path, int]:
     """Deploy a Prefect flow defined in the given file to the specified environment."""
 
     package = file.parent.name
@@ -44,18 +76,15 @@ async def deploy_flow(file: Path, environment: str, force: bool) -> tuple[Path, 
         logging.error(f"File `{file}` does not exist.")
         return file, 1
 
-    if force:
-        logging.warning(f"Force deploy is enabled. Deploying `{package}` regardless of changes.")
-    else:
-        logging.info(f"Checking if package `{package}` has changes...")
-        changed = await package_was_changed(file.parent)
-        if not changed:
-            logging.info(f"No changes detected in `{package}`. Skipping deployment.")
-            return file, 0
-
     logging.info(f"Deploying `{package}` {environment} pipelines...")
 
-    name = package.replace("_", "-")
+    deployments = await get_deployments(file)
+
+    try:
+        deployment = next(filter(lambda d: d.endswith(environment), deployments))
+    except StopIteration:
+        logging.warning(f"No deployment found for `{package}` in `{environment}` environment. Skipping.")
+        return file, 0
 
     command = [
         "uv",
@@ -67,7 +96,7 @@ async def deploy_flow(file: Path, environment: str, force: bool) -> tuple[Path, 
         "--no-prompt",
         "deploy",
         "--name",
-        f"{name}--{environment}",
+        deployment,
         "--prefect-file",
         str(file),
     ]
@@ -108,24 +137,35 @@ async def main() -> None:
     logging.info("Starting deployment of Prefect flows...")
 
     environment = environ.get("ENVIRONMENT", "staging")
-    force_deploy = environ.get("FORCE_DEPLOY", "1").lower() == "1"
+    force_deploy = environ.get("FORCE_DEPLOY", "0") == "1"
+    sha = environ.get("GITHUB_SHA", "HEAD")
 
-    if "ENVIRONMENT" not in environ:
-        logging.warning("ENVIRONMENT variable not set, defaulting to 'staging'.")
+    logging.debug(f"Environment: `{environment}`")
+    logging.debug(f"Force deploy: `{force_deploy}`")
+    logging.debug(f"SHA: `{sha}`")
 
     pipelines = Path(environ.get("PIPELINES_PATH", "pipelines"))
 
     if not pipelines.exists():
-        logging.error(f"Pipelines path `{pipelines}` does not exist.")
+        logging.error(f"Path `{pipelines}` does not exist.")
         sys.exit(1)
 
-    logging.info(f"Using pipelines path: `{pipelines}`")
+    changed_pipelines = await get_changed_directories(pipelines, sha)
 
-    yamls = [d / "prefect.yaml" for d in pipelines.iterdir() if d.is_dir() and (d / "prefect.yaml").exists()]
+    if not changed_pipelines:
+        if not force_deploy:
+            logging.info("No changes detected, skipping deployment.")
+            sys.exit(0)
+
+        yamls = await get_prefect_yaml_files(pipelines.iterdir())
+    else:
+        yamls = await get_prefect_yaml_files(changed_pipelines)
+
     logging.info(f"Found {len(yamls)} flow(s) to deploy: {[str(y) for y in yamls]}")
 
-    tasks = [deploy_flow(file, environment, force_deploy) for file in yamls]
-    result = await asyncio.gather(*tasks)
+    deploy_flow_with_environment = partial(deploy_flow, environment=environment)
+
+    result = await asyncio.gather(*[deploy_flow_with_environment(file) for file in yamls])
 
     errors = [file for file, code in result if code != 0]
 
