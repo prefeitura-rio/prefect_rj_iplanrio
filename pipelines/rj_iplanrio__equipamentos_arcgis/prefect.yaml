@@ -35,25 +35,25 @@ deployments:
         command: uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute
     schedules:
       - interval: 86400
-        anchor_date: "2025-07-15T00:00:00"
+        anchor_date: '2025-07-15T00:00:00'
         timezone: America/Sao_Paulo
-        slug: unidades_saude_datario
+        slug: unidades_saude_arcgis
         parameters:
           url: https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/0
           crs: EPSG:31983
           dataset_id: brutos_equipamentos
-          table_id: unidades_saude_datario
+          table_id: unidades_saude_arcgis
       - interval: 86400
-        anchor_date: "2025-07-15T00:10:00"
+        anchor_date: '2025-07-15T00:10:00'
         timezone: America/Sao_Paulo
-        slug: unidades_saude_poligonos_datario
+        slug: unidades_saude_poligonos_arcgis
         parameters:
           url: https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/1
           crs: EPSG:31983
           dataset_id: brutos_equipamentos
-          table_id: unidades_saude_poligonos_datario
+          table_id: unidades_saude_poligonos_arcgis
       - interval: 86400
-        anchor_date: "2025-07-15T00:20:00"
+        anchor_date: '2025-07-15T00:20:00'
         timezone: America/Sao_Paulo
         slug: escolas_datario
         parameters:
@@ -62,7 +62,7 @@ deployments:
           dataset_id: brutos_equipamentos
           table_id: escolas_datario
       - interval: 86400
-        anchor_date: "2025-07-15T00:30:00"
+        anchor_date: '2025-07-15T00:30:00'
         timezone: America/Sao_Paulo
         slug: escolas_datario
         parameters:
@@ -71,7 +71,7 @@ deployments:
           dataset_id: brutos_equipamentos
           table_id: escolas_datario
       - interval: 86400
-        anchor_date: "2025-07-15T00:40:00"
+        anchor_date: '2025-07-15T00:40:00'
         timezone: America/Sao_Paulo
         slug: unidades_saude_datario
         parameters:
@@ -80,7 +80,7 @@ deployments:
           dataset_id: brutos_equipamentos
           table_id: unidades_saude_datario
       - interval: 86400
-        anchor_date: "2025-07-15T00:50:00"
+        anchor_date: '2025-07-15T00:50:00'
         timezone: America/Sao_Paulo
         slug: culturais_datario
         parameters:

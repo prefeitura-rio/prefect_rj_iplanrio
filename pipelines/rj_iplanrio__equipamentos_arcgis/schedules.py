@@ -6,13 +6,13 @@ schedules_parameters = [
         "url": "https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/0",
         "crs": "EPSG:31983",
         "dataset_id": "brutos_equipamentos",
-        "table_id": "unidades_saude_datario",
+        "table_id": "unidades_saude_arcgis",
     },
     {
         "url": "https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/1",
         "crs": "EPSG:31983",
         "dataset_id": "brutos_equipamentos",
-        "table_id": "unidades_saude_poligonos_datario",
+        "table_id": "unidades_saude_poligonos_arcgis",
     },
     {
         "url": "https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Educacao/SME/MapServer/1",
@@ -56,7 +56,9 @@ TIMEZONE = "America/Sao_Paulo"
 WORK_POOL_NAME = "default-pool"
 WORK_QUEUE_NAME = "default"
 JOB_IMAGE = "{{ build-image.image_name }}:{{ build-image.tag }}"
-JOB_COMMAND = "uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute"
+JOB_COMMAND = (
+    "uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute"
+)
 
 
 schedules_config = create_schedules(
