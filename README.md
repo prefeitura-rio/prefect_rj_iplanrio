@@ -89,6 +89,6 @@ O repositório utiliza GitHub Actions para automatizar todo o ciclo de vida das 
     - Execução do script `.github/scripts/deploy_prefect_flows.py`, que faz o deploy automático de todos os flows definidos em `pipelines/*/prefect.yaml`
     - Caso algum deploy falhe, o workflow é interrompido e o erro é registrado nos logs
 
-- **Build e publicação da imagem Docker base**: o workflow `.github/workflows/build-and-push-root-dockerfile.yaml` é acionado em alterações no `Dockerfile` da raiz a cada push na branch `master`, além de poder ser executado manualmente. Ele realiza:
+- **Build e publicação da imagem base**: o workflow `.github/workflows/build-and-push-root-dockerfile.yaml` é acionado em alterações no `Dockerfile` da raiz a cada push na branch `master`, além de poder ser executado manualmente. Ele realiza:
   - Build da imagem Docker definida no `Dockerfile` do repositório
   - Publicação da imagem no GitHub Container Registry (`ghcr.io/${{ github.repository }}:latest`)
