@@ -1,7 +1,0 @@
-[project]
-name = "rj_iplan__equipamentos_arcgis"
-version = "0.1.0"
-description = "Pipeline equipamentos_arcgis da secretaria iplan"
-dependencies = [
-    "geopandas>=1.1.1",
-]

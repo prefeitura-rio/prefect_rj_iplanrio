@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
-import yaml
 
-from iplanrio.pipelines_utils.prefect import create_dump_db_deployment
+from iplanrio.pipelines_utils.prefect import create_dump_db_schedules
 
 QUERY_CHAMADO_1746_DS = """
 select
@@ -346,14 +345,8 @@ _1746_queries = [
 
 
 # The list of queries and their specific configurations
-ERGON_QUERIES_CONFIG = []
 
 # General Deployment Settings
-DEPLOYMENT_NAME = "SEGOVI: DUMP DB - 1746"
-VERSION = "{{ get-commit-hash.stdout }}"
-ENTRYPOINT = "pipelines/rj_segovi__dump_db_1746/flow.py:rj_segovi_dump_db_1746"
-
-# Schedule Settings
 BASE_ANCHOR_DATE = "2025-07-15T00:00:00"
 BASE_INTERVAL_SECONDS = 3600 * 24  # Run each table every day
 RUNS_SEPARATION_MINUTES = 10  # Stagger start times by 10 minutes
@@ -367,18 +360,8 @@ DB_PORT = 1433
 DATASET_ID = "brutos_1746"
 INFISICAL_SECRET_PATH = "/db-1746"
 
-# Work Pool Settings
-WORK_POOL_NAME = "default-pool"
-WORK_QUEUE_NAME = "default"
-JOB_IMAGE = "{{ build-image.image_name }}"
-JOB_COMMAND = "uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute"
-
-
 # --- Generate and Print YAML ---
-deployment_yaml_config = create_dump_db_deployment(
-    deployment_name=DEPLOYMENT_NAME,
-    entrypoint=ENTRYPOINT,
-    version=VERSION,
+schedules_config = create_dump_db_schedules(
     table_parameters_list=_1746_queries,
     base_interval_seconds=BASE_INTERVAL_SECONDS,
     base_anchor_date_str=BASE_ANCHOR_DATE,
@@ -390,12 +373,7 @@ deployment_yaml_config = create_dump_db_deployment(
     db_port=DB_PORT,
     dataset_id=None,
     infisical_secret_path=INFISICAL_SECRET_PATH,
-    work_pool_name=WORK_POOL_NAME,
-    work_queue_name=WORK_QUEUE_NAME,
-    job_image=JOB_IMAGE,
-    job_command=JOB_COMMAND,
 )
 
 # Use sort_keys=False to maintain the intended order of keys in the output
-yaml_output = yaml.dump(deployment_yaml_config, sort_keys=False, indent=2, width=120)
-print(yaml_output)
+print(schedules_config)

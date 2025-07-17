@@ -1,4 +1,4 @@
-name: rj_iplan__equipamentos_arcgis
+name: rj_iplanrio__equipamentos_arcgis
 prefect-version: 3.4.3
 
 build:
@@ -9,9 +9,9 @@ build:
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
       requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_iplan__equipamentos_arcgis
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/rj_iplanrio__equipamentos_arcgis
       tag: "{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_iplan__equipamentos_arcgis/Dockerfile
+      dockerfile: pipelines/rj_iplanrio__equipamentos_arcgis/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -24,15 +24,15 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: 'rj_iplan__equipamentos_arcgis'
-    version: '{{ build-image.tag }}'
-    entrypoint: pipelines/rj_iplan__equipamentos_arcgis/flow.py:rj_iplan__equipamentos_arcgis
+  - name: rj-iplanrio--equipamentos-arcgis
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__equipamentos_arcgis/flow.py:rj_iplanrio__equipamentos_arcgis
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_iplan__equipamentos_arcgis -- prefect flow-run execute
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute
     schedules:
       - interval: 86400
         anchor_date: '2025-07-15T00:00:00'

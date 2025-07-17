@@ -4,7 +4,8 @@ This flow is used to download the equipamentos from the ARCGIS and upload to BIG
 """
 
 from prefect import flow
-from tasks import (
+
+from pipelines.rj_iplanrio__equipamentos_arcgis.tasks import (
     create_table_and_upload_to_gcs_task,
     download_equipamentos_from_datario,
 )

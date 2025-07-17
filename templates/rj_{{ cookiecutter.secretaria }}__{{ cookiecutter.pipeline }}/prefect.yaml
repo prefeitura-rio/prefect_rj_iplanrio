@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-{{ cookiecutter.secretaria | upper }}--{{ cookiecutter.pipeline }}--staging
+  - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--staging
     version: "{% raw %}{{ build-image.tag }}{% endraw %}"
     entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
     work_pool:
@@ -33,7 +33,7 @@ deployments:
       job_variables:
         image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
         command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
-  - name: rj-{{ cookiecutter.secretaria | upper }}--{{ cookiecutter.pipeline }}--prod
+  - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--prod
     version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
     entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
     schedules:
