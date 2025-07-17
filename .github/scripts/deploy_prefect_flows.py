@@ -14,7 +14,7 @@ from yaml import safe_load
 
 logging.basicConfig(
     stream=sys.stdout,
-    level=logging.DEBUG,
+    level=environ.get("LOG_LEVEL", "INFO").upper(),
     format="%(levelname)s: %(message)s",
 )
 
@@ -62,7 +62,12 @@ async def get_changed_directories(package_dir: Path, sha: str) -> list[Path]:
 
     stdout, _ = await process.communicate()
 
-    files = {Path(f).parent for f in stdout.decode().splitlines()}
+    parsed_stdout = stdout.decode().strip().splitlines()
+
+    logging.debug(f"Command: `{' '.join(command)}`")
+    logging.debug(f"STDOUT: {parsed_stdout}")
+
+    files = {Path(f).parent for f in parsed_stdout}
 
     return list(files)
 

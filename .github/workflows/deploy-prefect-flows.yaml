@@ -34,6 +34,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Log in to GitHub container registry
         uses: docker/login-action@v3
@@ -57,4 +59,5 @@ jobs:
           PIPELINES_PATH: ${{ inputs.pipelines_path }}
           FORCE_DEPLOY: ${{ inputs.force_deploy }}
           GITHUB_SHA: ${{ github.sha }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL }}
         run: uv run .github/scripts/deploy_prefect_flows.py
