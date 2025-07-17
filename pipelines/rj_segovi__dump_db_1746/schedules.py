@@ -276,7 +276,7 @@ group by
 _1746_queries = [
     {
         "table_id": "chamado",
-        "dataset_id": "adm_central_atendimento_1746",
+        "dataset_id": "brutos_1746",
         "partition_columns": "dt_inicio",
         "break_query_frequency": "month",
         "break_query_start": "2021-01-01",
