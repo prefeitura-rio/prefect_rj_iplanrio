@@ -43,7 +43,7 @@ def rj_segovi__dump_db_1746(
     secrets = get_database_username_and_password_from_secret_task(
         infisical_secret_path=infisical_secret_path
     )
-    partition_columns = parse_comma_separated_string_to_list_task(
+    partition_columns_list = parse_comma_separated_string_to_list_task(
         text=partition_columns
     )
 
@@ -52,7 +52,7 @@ def rj_segovi__dump_db_1746(
         dataset_id=dataset_id,
         table_id=table_id,
         database_type=db_type,
-        partition_columns=partition_columns,
+        partition_columns=partition_columns_list,
         lower_bound_date=lower_bound_date,
         date_format=partition_date_format,
         break_query_start=break_query_start,
@@ -65,7 +65,7 @@ def rj_segovi__dump_db_1746(
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
-        partition_columns=partition_columns,
+        partition_columns=partition_columns_list,
         batch_data_type=batch_data_type,
         biglake_table=biglake_table,
         log_number_of_batches=log_number_of_batches,
