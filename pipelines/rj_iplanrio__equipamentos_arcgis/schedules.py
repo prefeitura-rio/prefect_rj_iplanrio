@@ -4,13 +4,13 @@ from iplanrio.pipelines_utils.prefect import create_schedules
 schedules_parameters = [
     {
         "url": "https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/0",
-        "crs": "EPSG:31983",
+        "crs": "EPSG:3857",
         "dataset_id": "brutos_equipamentos",
         "table_id": "unidades_saude_arcgis",
     },
     {
         "url": "https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/1",
-        "crs": "EPSG:31983",
+        "crs": "EPSG:3857",
         "dataset_id": "brutos_equipamentos",
         "table_id": "unidades_saude_poligonos_arcgis",
     },

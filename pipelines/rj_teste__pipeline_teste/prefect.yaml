@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-teste--pipeline_teste--staging
+  - name: rj-teste--pipeline-teste--prod
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_teste__pipeline_teste/flow.py:rj_teste__pipeline_teste
     work_pool:
@@ -33,14 +33,4 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_teste__pipeline_teste -- prefect flow-run execute
-  - name: rj-teste--pipeline_teste--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_teste__pipeline_teste/flow.py:rj_teste__pipeline_teste
-    schedules:
-      - cron: "0 0 * * *"
-    work_pool:
-      name: default-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_teste__pipeline_teste -- prefect flow-run execute
+
