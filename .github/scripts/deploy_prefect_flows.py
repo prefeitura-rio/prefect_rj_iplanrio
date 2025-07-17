@@ -46,11 +46,11 @@ async def get_changed_directories(package_dir: Path, sha: str) -> list[Path]:
 
     command = [
         "git",
-        "diff-tree",
-        "--no-commit-id",
+        "diff",
         "--name-only",
-        "-r",
+        f"{sha}^",
         sha,
+        "--",
         package_dir.as_posix(),
     ]
 
