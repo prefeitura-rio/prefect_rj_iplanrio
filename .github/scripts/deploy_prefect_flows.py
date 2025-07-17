@@ -117,7 +117,7 @@ async def main() -> None:
 
     if not pipelines.exists():
         logging.error(f"Pipelines path `{pipelines}` does not exist.")
-        return
+        sys.exit(1)
 
     logging.info(f"Using pipelines path: `{pipelines}`")
 

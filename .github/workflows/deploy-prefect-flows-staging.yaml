@@ -9,40 +9,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
-    name: Deploy Prefect flows
-    runs-on: ubuntu-latest
-    environment: cicd
-
-    steps:
-      - name: Tailscale
-        uses: tailscale/github-action@v3
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:cicd
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to GitHub container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GH_TOKEN }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: pyproject.toml
-
-      - name: Deploy Prefect flows
-        env:
-          ENVIRONMENT: staging
-          PREFECT_API_URL: ${{ vars.PREFECT_API_URL }}
-          PIPELINES_PATH: ${{ github.workspace }}/pipelines
-        run: uv run .github/scripts/deploy_prefect_flows.py
+  deploy-prefect-staging-flows:
+    name: Deploy Prefect staging flows
+    secrets: inherit
+    uses: ./.github/workflows/deploy-prefect-flows.yaml
+    with:
+      environment: staging
+      pipelines_path: ./pipelines
+      prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
+      ts_tags: tag:prefect-cicd
