@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: 'IPLARION: EQUIPAMENTOS FROM ARCGIS'
+  - name: 'rj_iplan__equipamentos_arcgis'
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_iplan__equipamentos_arcgis/flow.py:rj_iplan__equipamentos_arcgis
     work_pool:
