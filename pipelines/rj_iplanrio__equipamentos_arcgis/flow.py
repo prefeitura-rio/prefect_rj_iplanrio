@@ -12,7 +12,7 @@ from pipelines.rj_iplanrio__equipamentos_arcgis.tasks import (
 
 
 @flow(log_prints=True)
-def rj_iplan__equipamentos_arcgis(
+def rj_iplanrio__equipamentos_arcgis(
     url: str = "https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/1",
     crs: str = "EPSG:31983",
     dataset_id: str = "brutos_equipamentos",
