@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY..
+This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY
 """
 
 from prefect import flow
