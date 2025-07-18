@@ -25,7 +25,7 @@ pull:
 
 deployments:
   - name: rj-iplanrio--equipamentos-arcgis--prod
-    version: "{{ build-image.tag }}"
+    version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__equipamentos_arcgis/flow.py:rj_iplanrio__equipamentos_arcgis
     work_pool:
       name: default-pool
