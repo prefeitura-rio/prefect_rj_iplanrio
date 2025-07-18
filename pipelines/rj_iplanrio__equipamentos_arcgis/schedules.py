@@ -21,12 +21,6 @@ schedules_parameters = [
         "table_id": "escolas_datario",
     },
     {
-        "url": "https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Educacao/SME/MapServer/1",
-        "crs": "EPSG:31983",
-        "dataset_id": "brutos_equipamentos",
-        "table_id": "escolas_datario",
-    },
-    {
         "url": "https://services1.arcgis.com/OlP4dGNtIcnD3RYf/arcgis/rest/services/OSA2/FeatureServer/0",
         "crs": "EPSG:3857",
         "dataset_id": "brutos_equipamentos",

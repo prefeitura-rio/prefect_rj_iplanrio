@@ -62,15 +62,6 @@ deployments:
           dataset_id: brutos_equipamentos
           table_id: escolas_datario
       - interval: 86400
-        anchor_date: '2025-07-15T00:30:00'
-        timezone: America/Sao_Paulo
-        slug: escolas_datario
-        parameters:
-          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Educacao/SME/MapServer/1
-          crs: EPSG:31983
-          dataset_id: brutos_equipamentos
-          table_id: escolas_datario
-      - interval: 86400
         anchor_date: '2025-07-15T00:40:00'
         timezone: America/Sao_Paulo
         slug: unidades_saude_datario
