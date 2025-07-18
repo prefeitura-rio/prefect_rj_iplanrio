@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-iplanrio--equipamentos-arcgis--prod
+  - name: rj-iplanrio--equipamentos_arcgis--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__equipamentos_arcgis/flow.py:rj_iplanrio__equipamentos_arcgis
     work_pool:
