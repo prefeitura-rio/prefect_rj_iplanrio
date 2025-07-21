@@ -50,9 +50,7 @@ TIMEZONE = "America/Sao_Paulo"
 WORK_POOL_NAME = "default-pool"
 WORK_QUEUE_NAME = "default"
 JOB_IMAGE = "{{ build-image.image_name }}:{{ build-image.tag }}"
-JOB_COMMAND = (
-    "uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute"
-)
+JOB_COMMAND = "uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute"
 
 
 schedules_config = create_schedules(
