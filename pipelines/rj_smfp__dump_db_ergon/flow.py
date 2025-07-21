@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY
+This flow is used to dump the database from the Ergon server to the BIGQUERY
 """
 
 from typing import Optional
@@ -18,7 +18,7 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_segovi__dump_db_1746(
+def rj_smfp__dump_db_ergon(
     db_database: str = "db_database",
     db_host: str = "db_host",
     db_port: str = "db_port",
