@@ -43,7 +43,7 @@ deployments:
           db_database: REPLICA1746
           db_host: 10.70.1.34
           db_port: '1433'
-          dataset_id: null
+          dataset_id: brutos_ergon
           infisical_secret_path: /db-1746
           biglake_table: true
           batch_size: 50000
@@ -64,7 +64,7 @@ deployments:
           db_database: REPLICA1746
           db_host: 10.70.1.34
           db_port: '1433'
-          dataset_id: null
+          dataset_id: brutos_ergon
           infisical_secret_path: /db-1746
           biglake_table: true
           batch_size: 50000
@@ -85,7 +85,7 @@ deployments:
           db_database: REPLICA1746
           db_host: 10.70.1.34
           db_port: '1433'
-          dataset_id: null
+          dataset_id: brutos_ergon
           infisical_secret_path: /db-1746
           biglake_table: true
           batch_size: 50000
