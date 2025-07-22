@@ -6,13 +6,11 @@ This flow is used to download the equipamentos from the ARCGIS and upload to BIG
 from prefect import flow
 
 from pipelines.rj_iplanrio__equipamentos_arcgis.tasks import (
-    create_table_and_upload_to_gcs_task,
     download_equipamentos_from_datario,
-    inject_bd_credentials_task,
 )
-
-
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 
 
 @flow(log_prints=True)
@@ -22,7 +20,7 @@ def rj_iplanrio__equipamentos_arcgis(
     dataset_id: str = "brutos_equipamentos",
     table_id: str = "unidades_saude_poligonos_datario",
 ):
-    rename_flow_run = rename_current_flow_run(new_name=f"{dataset_id}.{table_id}")
+    rename_flow_run = rename_current_flow_run_task(new_name=f"{dataset_id}.{table_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
     path = download_equipamentos_from_datario(url=url, crs=crs)
     create_table_and_upload_to_gcs_task(

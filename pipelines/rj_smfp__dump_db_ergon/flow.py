@@ -9,10 +9,10 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
     dump_upload_batch_task,
     format_partitioned_query_task,
     get_database_username_and_password_from_secret_task,
-    inject_bd_credentials_task,
     parse_comma_separated_string_to_list_task,
 )
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 
 from prefect import flow
 
@@ -41,7 +41,7 @@ def rj_smfp__dump_db_ergon(
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
 ):
-    rename_flow_run = rename_current_flow_run(new_name=f"{dataset_id}.{table_id}")
+    rename_flow_run = rename_current_flow_run_task(new_name=f"{dataset_id}.{table_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
     secrets = get_database_username_and_password_from_secret_task(
         infisical_secret_path=infisical_secret_path
