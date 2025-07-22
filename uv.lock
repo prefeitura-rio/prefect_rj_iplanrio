@@ -831,7 +831,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#dc01fdee8246db05657e054321e9fd49cc215658" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git#a5e383fa8d1a9e9111ec9ec66adef3df837821d5" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
