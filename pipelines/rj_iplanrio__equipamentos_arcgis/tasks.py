@@ -9,6 +9,7 @@ from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from shapely.geometry import Point, Polygon
+from iplanrio.pipelines_utils.env import inject_bd_credentials
 
 
 @task
@@ -28,6 +29,11 @@ def create_table_and_upload_to_gcs_task(
         biglake_table=biglake_table,
         source_format=source_format,
     )
+
+
+@task
+def inject_bd_credentials_task(environment: str = "prod"):
+    inject_bd_credentials(environment=environment)
 
 
 @task
@@ -82,7 +88,9 @@ def download_equipamentos_from_datario(
         log("Nenhum dado de escola foi encontrado.")
         return None
 
-    log(f"Download completo!\nTotal de {pages} páginas.\nTotal de {len(all_features)} rows.")
+    log(
+        f"Download completo!\nTotal de {pages} páginas.\nTotal de {len(all_features)} rows."
+    )
 
     log("Processando dados e criando GeoDataFrame...")
 

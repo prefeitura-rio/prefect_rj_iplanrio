@@ -8,7 +8,10 @@ from prefect import flow
 from pipelines.rj_iplanrio__equipamentos_arcgis.tasks import (
     create_table_and_upload_to_gcs_task,
     download_equipamentos_from_datario,
+    inject_bd_credentials_task,
 )
+
+
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run
 
 
@@ -20,6 +23,7 @@ def rj_iplanrio__equipamentos_arcgis(
     table_id: str = "unidades_saude_poligonos_datario",
 ):
     rename_current_flow_run(new_name=f"{dataset_id}.{table_id}")
+    crd = inject_bd_credentials_task(environment="prod")  # noqa
     path = download_equipamentos_from_datario(url=url, crs=crs)
     create_table_and_upload_to_gcs_task(
         data_path=path,
