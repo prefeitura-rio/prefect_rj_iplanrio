@@ -8,6 +8,32 @@ import requests
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from shapely.geometry import Point, Polygon
+from prefect.context import get_run_context
+from prefect.client.orchestration import get_client
+import asyncio
+
+
+@task
+def rename_current_flow_run_task(new_name: str):
+    """
+    Atualiza o nome da execução do fluxo atual.
+    """
+
+    # Pega o contexto da execução atual para obter o ID
+    context = get_run_context()
+    flow_run_id = context.flow_run.flow_id
+    log(f"Contex: {context}")
+    log(f"Obtido o ID da execução do fluxo: {flow_run_id}")
+
+    # Usa o cliente assíncrono do Prefect para interagir com a API
+    # 1. Define uma função async interna para fazer o trabalho com o cliente
+    async def _update_run_name():
+        async with get_client() as client:
+            await client.update_flow_run(flow_run_id=flow_run_id, name=new_name)
+
+    asyncio.run(_update_run_name())
+
+    log(f"Nome da execução do fluxo atualizado para {new_name}!")
 
 
 @task
