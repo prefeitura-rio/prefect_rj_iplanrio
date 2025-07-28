@@ -39,12 +39,12 @@ deployments:
         timezone: America/Sao_Paulo
         slug: IPL_PT_FICHAS
         parameters:
-          db_type: sql_server
-          db_database: REPLICA1746
-          db_host: 10.70.1.34
-          db_port: '1433'
+          db_type: oracle
+          db_database: P01.PCRJ
+          db_host: 10.70.6.21
+          db_port: '1526'
           dataset_id: brutos_ergon
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-ergon-prod
           biglake_table: true
           batch_size: 50000
           table_id: IPL_PT_FICHAS
@@ -60,12 +60,12 @@ deployments:
         timezone: America/Sao_Paulo
         slug: FICHAS_FINANCEIRAS
         parameters:
-          db_type: sql_server
-          db_database: REPLICA1746
-          db_host: 10.70.1.34
-          db_port: '1433'
+          db_type: oracle
+          db_database: P01.PCRJ
+          db_host: 10.70.6.21
+          db_port: '1526'
           dataset_id: brutos_ergon
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-ergon-prod
           biglake_table: true
           batch_size: 50000
           table_id: FICHAS_FINANCEIRAS
@@ -81,12 +81,12 @@ deployments:
         timezone: America/Sao_Paulo
         slug: VW_DLK_ERG_FITA_BANCO
         parameters:
-          db_type: sql_server
-          db_database: REPLICA1746
-          db_host: 10.70.1.34
-          db_port: '1433'
+          db_type: oracle
+          db_database: P01.PCRJ
+          db_host: 10.70.6.21
+          db_port: '1526'
           dataset_id: brutos_ergon
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-ergon-prod
           biglake_table: true
           batch_size: 50000
           table_id: VW_DLK_ERG_FITA_BANCO
