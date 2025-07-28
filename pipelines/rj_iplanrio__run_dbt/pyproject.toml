@@ -1,0 +1,8 @@
+[project]
+name = "rj_iplanrio__run_dbt"
+version = "0.1.0"
+description = "Pipeline run_dbt da secretaria iplanrio"
+dependencies = [
+    "prefect[dbt]>=3.0.0",
+    "prefect-dbt[bigquery]>=0.1.0",
+]
