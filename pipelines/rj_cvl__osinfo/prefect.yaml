@@ -48,7 +48,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: despesas
@@ -88,7 +88,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: contrato
@@ -123,7 +123,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: plano_contas
@@ -148,7 +148,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: rubrica
@@ -170,7 +170,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: secretaria
@@ -196,7 +196,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: contrato_terceiros
@@ -228,7 +228,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: receita_dados
@@ -257,7 +257,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: receita_item
@@ -281,7 +281,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: saldo_dados
@@ -309,7 +309,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: saldo_item
@@ -333,7 +333,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: conta_bancaria
@@ -359,7 +359,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: conta_bancaria_tipo
@@ -381,7 +381,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: agencia
@@ -406,7 +406,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: banco
@@ -430,7 +430,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: itens_nota_fiscal
@@ -464,7 +464,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: fornecedor
@@ -506,7 +506,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: historico_alteracoes
@@ -536,7 +536,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: tipo_arquivo
@@ -559,7 +559,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: fechamento
@@ -588,7 +588,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: estado_entrega
@@ -612,7 +612,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: usuario
@@ -639,7 +639,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: administracao_unidade
@@ -679,7 +679,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: usuario_sistema
@@ -703,7 +703,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: administracao_perfil
@@ -723,7 +723,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: administracao_unidade_perfil
@@ -745,7 +745,7 @@ deployments:
           db_host: 10.70.4.188
           db_port: 3306
           dataset_id: adm_contrato_gestao
-          infisical_secret_path: /db-1746
+          infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
           table_id: tipo_documento

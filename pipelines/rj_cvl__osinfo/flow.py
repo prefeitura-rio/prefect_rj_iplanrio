@@ -27,7 +27,7 @@ def rj_cvl__osinfo(
     execute_query: str = "execute_query",
     dataset_id: str = "adm_contrato_gestao",
     table_id: str = "table_id",
-    infisical_secret_path: str = "infisical_secret_path",
+    infisical_secret_path: str = "/db-osinfo",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
