@@ -1,0 +1,11 @@
+[project]
+name = "rj_iplanrio__run_dbt"
+version = "0.1.0"
+description = "Pipeline run_dbt da secretaria iplanrio"
+dependencies = [
+    "pip>=25.1.1",
+    "gitpython>=3.1.45",
+    "prefect-dbt>=0.7.5",
+    "aiohttp>=3.12.15",
+    "discord-py>=2.3.2"
+]
