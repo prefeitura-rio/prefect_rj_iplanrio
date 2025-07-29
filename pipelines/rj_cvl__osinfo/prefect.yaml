@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_cvl__osinfo/flow.py:rj_cvl__osinfo
     work_pool:
-      name: default-pool
+      name: datario-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -757,7 +757,7 @@ deployments:
                 `TIPO_DOCUMENTO` as `DOCUMENTO`
             FROM `osinfo`.`tipo_documento`;
     work_pool:
-      name: default-pool
+      name: datario-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
