@@ -17,6 +17,8 @@ import requests
 from prefect import flow, task, get_run_logger
 from prefect.context import get_run_context
 from prefect_dbt import PrefectDbtRunner
+from iplanrio.pipelines_utils.logging import log
+
 
 # Import statements for external modules (to be handled later)
 # from prefeitura_rio.pipelines_utils.credential_injector import authenticated_task
@@ -32,13 +34,12 @@ class GcsBucket(TypedDict):
     dev: str
 
 
-
 @task
 def download_repository(git_repository_path: str):
     """
     Downloads the repository specified by the REPOSITORY_URL.
     """
-    # create repository folder
+    # Create repository folder
     try:
         repository_path = os.path.join(os.getcwd(), "dbt_repository")
 
@@ -51,7 +52,7 @@ def download_repository(git_repository_path: str):
     except Exception as e:
         raise Exception(f"Error when creating repository folder: {e}")
 
-    # download repository
+    # Download repository
     try:
         git.Repo.clone_from(git_repository_path, repository_path)
         log(f"Repository downloaded: {git_repository_path}")
@@ -81,7 +82,6 @@ def execute_dbt(
     """
     Executes a dbt command using PrefectDbtRunner from prefect-dbt.
     """
-    
     
     # Build the command arguments
     command_args = [command]
