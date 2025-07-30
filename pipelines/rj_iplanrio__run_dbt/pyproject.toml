@@ -5,4 +5,6 @@ description = "Pipeline run_dbt da secretaria iplanrio"
 dependencies = [
     "pip>=25.1.1",
     "prefect-dbt>=0.7.5",
+    "aiohttp>=3.12.15",
+    "discord-py>=2.3.2"
 ]
