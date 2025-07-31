@@ -24,6 +24,15 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
+  - name: rj-sme--brutos_core_sso--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_sme__brutos_core_sso/flow.py:rj_sme__brutos_core_sso
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sme__brutos_core_sso -- prefect flow-run execute
   - name: rj-sme--brutos_core_sso--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_sme__brutos_core_sso/flow.py:rj_sme__brutos_core_sso
