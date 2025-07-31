@@ -46,11 +46,11 @@ deployments:
       - interval: 86400
         anchor_date: "2022-01-01T21:00:00"
         timezone: America/Sao_Paulo
-        slug: sys_entidade
+        slug: SYS_Entidade
         parameters:
           biglake_table: true
           batch_size: 50000
-          table_id: sys_entidade
+          table_id: SYS_Entidade
           dump_mode: overwrite
           execute_query: |
             SELECT  ent_id,
@@ -72,11 +72,11 @@ deployments:
       - interval: 86400
         anchor_date: "2022-01-01T21:00:00"
         timezone: America/Sao_Paulo
-        slug: sys_dianao_util
+        slug: SYS_DiaNaoUtil
         parameters:
           biglake_table: true
           batch_size: 50000
-          table_id: sys_dianao_util
+          table_id: SYS_DiaNaoUtil
           dump_mode: overwrite
           execute_query: |
             SELECT  dnu_id,
@@ -96,11 +96,11 @@ deployments:
       - interval: 86400
         anchor_date: "2022-01-01T21:00:00"
         timezone: America/Sao_Paulo
-        slug: sys_entidade_endereco
+        slug: SYS_EntidadeEndereco
         parameters:
           biglake_table: true
           batch_size: 50000
-          table_id: sys_entidade_endereco
+          table_id: SYS_EntidadeEndereco
           dump_mode: overwrite
           execute_query: |
             SELECT  ent_id,
@@ -115,11 +115,11 @@ deployments:
       - interval: 86400
         anchor_date: "2022-01-01T21:00:00"
         timezone: America/Sao_Paulo
-        slug: end_endereco
+        slug: END_Endereco
         parameters:
           biglake_table: true
           batch_size: 50000
-          table_id: end_endereco
+          table_id: END_Endereco
           dump_mode: overwrite
           execute_query: |
             SELECT  end_id,
@@ -137,11 +137,11 @@ deployments:
       - interval: 86400
         anchor_date: "2022-01-01T21:00:00"
         timezone: America/Sao_Paulo
-        slug: end_cidade
+        slug: END_Cidade
         parameters:
           biglake_table: true
           batch_size: 50000
-          table_id: end_cidade
+          table_id: END_Cidade
           dump_mode: overwrite
           execute_query: |
             SELECT  cid_id,
