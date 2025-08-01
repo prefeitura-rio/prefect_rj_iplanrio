@@ -128,11 +128,11 @@ deployments:
           dump_mode: overwrite
           execute_query: |
            SELECT
-                    MTU.alu_id
-                    ,MTU.mtu_id
-                    ,CAP.tpc_id
-			        ,GestaoEscolar.dbo.FN_CalcularDiasUteis(CAP.cap_dataInicio,GETDATE(),'8BB1DECA-BB19-E011-87E8-E61F133BFC53',CAP.cal_id) * ISNULL(CRP.crp_qtdeTemposDia,1) numeroAulas
-                    ,GETDATE() AS loaded_at
+                    MTU.alu_id,
+                    MTU.mtu_id,
+                    CAP.tpc_id,
+                    GestaoEscolar.dbo.FN_CalcularDiasUteis(CAP.cap_dataInicio,GETDATE(),'8BB1DECA-BB19-E011-87E8-E61F133BFC53',CAP.cal_id) * ISNULL(CRP.crp_qtdeTemposDia,1) numeroAulas,
+                    GETDATE() AS loaded_at
             FROM MTR_MatriculaTurma MTU WITH(NOLOCK)
                 INNER JOIN TUR_Turma TUR WITH(NOLOCK)
                     ON MTU.tur_id = TUR.tur_id
@@ -150,7 +150,7 @@ deployments:
                     AND CRP.crp_situacao = 1
                 INNER JOIN ACA_CalendarioPeriodo CAP WITH(NOLOCK)
                     ON TUR.cal_id = CAP.cal_id
-				    AND GETDATE() BETWEEN CAP.cap_dataInicio AND CAP.cap_dataFim
+                    AND GETDATE() BETWEEN CAP.cap_dataInicio AND CAP.cap_dataFim
       - interval: 86400
         anchor_date: "2022-01-01T23:10:00"
         timezone: America/Sao_Paulo
