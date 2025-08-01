@@ -62,9 +62,7 @@ def download_equipamentos_from_datario(
         log("Nenhum dado de escola foi encontrado.")
         return None
 
-    log(
-        f"Download completo!\nTotal de {pages} páginas.\nTotal de {len(all_features)} rows."
-    )
+    log(f"Download completo!\nTotal de {pages} páginas.\nTotal de {len(all_features)} rows.")
 
     log("Processando dados e criando GeoDataFrame...")
 
