@@ -3,15 +3,14 @@
 This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY.
 """
 
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_iplanrio__equipamentos_arcgis.tasks import (
     download_equipamentos_from_datario,
 )
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 
 
 @flow(log_prints=True)
