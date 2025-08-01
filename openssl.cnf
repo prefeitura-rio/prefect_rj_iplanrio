@@ -8,14 +8,13 @@
 # Note that you can include other files from the main configuration
 # file using the .include directive.
 #.include filename
-openssl_conf = default_conf
 
 # This definition stops the following lines choking if HOME isn't
 # defined.
 HOME                    = .
 
  # Use this in order to automatically load providers.
-openssl_conf = openssl_init
+openssl_conf = default_conf
 
 # Comment out the next line to ignore configuration errors
 config_diagnostics = 1
@@ -397,5 +396,5 @@ ssl_conf = ssl_sect
 system_default = system_default_sect
 
 [system_default_sect]
-MinProtocol = TLSv1.0
-CipherString = DEFAULT@SECLEVEL=1
+MinProtocol = TLSv1.2
+CipherString = DEFAULT@SECLEVEL=0

@@ -13,7 +13,6 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
 )
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-
 from prefect import flow
 
 
@@ -43,12 +42,8 @@ def rj_segovi__dump_db_1746(
 ):
     rename_flow_run = rename_current_flow_run_task(new_name=table_id)
     crd = inject_bd_credentials_task(environment="prod")  # noqa
-    secrets = get_database_username_and_password_from_secret_task(
-        infisical_secret_path=infisical_secret_path
-    )
-    partition_columns_list = parse_comma_separated_string_to_list_task(
-        text=partition_columns
-    )
+    secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
+    partition_columns_list = parse_comma_separated_string_to_list_task(text=partition_columns)
 
     formated_query = format_partitioned_query_task(
         query=execute_query,
