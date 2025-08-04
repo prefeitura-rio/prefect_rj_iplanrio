@@ -70,7 +70,7 @@ deployments:
                     GETDATE() AS loaded_at
             FROM CoreSSO.dbo.SYS_Entidade;
       - interval: 86400
-        anchor_date: "2022-01-01T21:00:00"
+        anchor_date: "2022-01-01T21:02:00"
         timezone: America/Sao_Paulo
         slug: SYS_DiaNaoUtil
         parameters:
@@ -94,7 +94,7 @@ deployments:
                     GETDATE() AS loaded_at
             FROM CoreSSO.dbo.SYS_DiaNaoUtil;
       - interval: 86400
-        anchor_date: "2022-01-01T21:00:00"
+        anchor_date: "2022-01-01T21:04:00"
         timezone: America/Sao_Paulo
         slug: SYS_EntidadeEndereco
         parameters:
@@ -113,7 +113,7 @@ deployments:
                     ene_dataAlteracao
             FROM CoreSSO.dbo.SYS_EntidadeEndereco;
       - interval: 86400
-        anchor_date: "2022-01-01T21:00:00"
+        anchor_date: "2022-01-01T21:06:00"
         timezone: America/Sao_Paulo
         slug: END_Endereco
         parameters:
@@ -135,7 +135,7 @@ deployments:
                     end_integridade
             FROM CoreSSO.dbo.END_Endereco;
       - interval: 86400
-        anchor_date: "2022-01-01T21:00:00"
+        anchor_date: "2022-01-01T21:08:00"
         timezone: America/Sao_Paulo
         slug: END_Cidade
         parameters:
