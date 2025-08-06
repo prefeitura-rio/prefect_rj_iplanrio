@@ -68,7 +68,7 @@ deployments:
         command: uv run --package rj_sme__brutos_gestao_escolar -- prefect flow-run execute
     schedules:
       - interval: 86400
-        anchor_date: "2022-01-01T23:10:00+03:00""
+        anchor_date: "2022-01-01T23:10:00+03:00"
         timezone: America/Sao_Paulo
         slug: turma
         parameters:
