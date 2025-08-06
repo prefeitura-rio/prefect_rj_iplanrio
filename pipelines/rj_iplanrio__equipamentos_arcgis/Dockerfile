@@ -8,4 +8,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_iplanrio__equipamentos_arcgis ./pipelines/rj_iplanrio__equipamentos_arcgis/
 
-RUN uv sync
+RUN uv sync --all-packages
