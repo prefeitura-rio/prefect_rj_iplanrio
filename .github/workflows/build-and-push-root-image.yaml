@@ -13,23 +13,24 @@ jobs:
     name: Build and push root image
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Build and push root image
         uses: ./.github/actions/build-and-push-root-image
         with:
           repository: ${{ github.repository }}
           github_token: ${{ secrets.GH_TOKEN }}
 
-  build-and-push-staging-images:
-    name: Build and push staging images
+  deploy-prefect-flows-staging:
+    name: Deploy Prefect staging flows
     needs: build-and-push-root-image
     runs-on: ubuntu-latest
     steps:
-      - name: Build and push staging image
-        uses: ./.github/actions/build-and-push-root-image
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          github_token: ${{ secrets.GH_TOKEN }}
-          environment: staging
+          fetch-depth: 0
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
@@ -39,18 +40,20 @@ jobs:
           pipelines_path: ./pipelines
           prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
           ts_tags: tag:prefect-cicd
+          ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
+          gh_token: ${{ secrets.GH_TOKEN }}
+          log_level: ${{ vars.LOG_LEVEL }}
 
-  build-and-push-prod-images:
-    name: Build and push prod images
+  deploy-prefect-flows-prod:
+    name: Deploy Prefect prod flows
     needs: build-and-push-root-image
     runs-on: ubuntu-latest
     steps:
-      - name: Build and push prod image
-        uses: ./.github/actions/build-and-push-root-image
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository }}
-          github_token: ${{ secrets.GH_TOKEN }}
-          environment: prod
+          fetch-depth: 0
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
@@ -60,3 +63,7 @@ jobs:
           pipelines_path: ./pipelines
           prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
           ts_tags: tag:prefect-cicd
+          ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
+          gh_token: ${{ secrets.GH_TOKEN }}
+          log_level: ${{ vars.LOG_LEVEL }}

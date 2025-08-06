@@ -18,6 +18,19 @@ inputs:
   ts_tags:
     description: Tailscale tags
     required: true
+  ts_oauth_client_id:
+    description: Tailscale OAuth client ID
+    required: true
+  ts_oauth_secret:
+    description: Tailscale OAuth secret
+    required: true
+  gh_token:
+    description: GitHub token
+    required: true
+  log_level:
+    description: Log level
+    required: false
+    default: "INFO"
 
 runs:
   using: composite
@@ -25,21 +38,16 @@ runs:
     - name: Tailscale
       uses: tailscale/github-action@v3
       with:
-        oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-        oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+        oauth-client-id: ${{ inputs.ts_oauth_client_id }}
+        oauth-secret: ${{ inputs.ts_oauth_secret }}
         tags: ${{ inputs.ts_tags }}
-
-    - name: Checkout
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
 
     - name: Log in to GitHub container registry
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
-        password: ${{ secrets.GH_TOKEN }}
+        password: ${{ inputs.gh_token }}
 
     - name: Install uv
       uses: astral-sh/setup-uv@v5
@@ -57,5 +65,5 @@ runs:
         PIPELINES_PATH: ${{ inputs.pipelines_path }}
         FORCE_DEPLOY: ${{ inputs.force_deploy }}
         GITHUB_SHA: ${{ github.sha }}
-        LOG_LEVEL: ${{ vars.LOG_LEVEL }}
+        LOG_LEVEL: ${{ inputs.log_level }}
       run: uv run .github/scripts/deploy_prefect_flows.py
