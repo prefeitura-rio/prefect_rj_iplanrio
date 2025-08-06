@@ -6,54 +6,35 @@ on:
       - master
     paths:
       - Dockerfile
-      - pyproject.toml
-      - uv.lock
   workflow_dispatch:
 
 jobs:
-  build-and-push-root-image:
-    name: Build and push root image
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to GitHub container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GH_TOKEN }}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ghcr.io/${{ github.repository }}:latest
-
-  build-and-push-staging-images:
-    name: Build and push staging images
-    needs: build-and-push-root-image
-    secrets: inherit
-    uses: ./.github/workflows/deploy-prefect-flows.yaml
-    with:
-      environment: staging
-      force_deploy: 1
-      pipelines_path: ./pipelines
-      prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
-      ts_tags: tag:prefect-cicd
-
   build-and-push-prod-images:
     name: Build and push prod images
     needs: build-and-push-root-image
-    secrets: inherit
-    uses: ./.github/workflows/deploy-prefect-flows.yaml
-    with:
-      environment: prod
-      force_deploy: 1
-      pipelines_path: ./pipelines
-      prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
-      ts_tags: tag:prefect-cicd
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and push root image
+        uses: ./.github/actions/build-and-push-root-image
+        with:
+          repository: ${{ github.repository }}
+          github_token: ${{ secrets.GH_TOKEN }}
+          tag: latest
+
+      - name: Deploy Prefect staging flows
+        uses: ./.github/actions/deploy-prefect-flows
+        with:
+          environment: staging
+          force_deploy: "1"
+          pipelines_path: ./pipelines
+          prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
+          ts_tags: tag:prefect-cicd
+
+      - name: Deploy Prefect prod flows
+        uses: ./.github/actions/deploy-prefect-flows
+        with:
+          environment: prod
+          force_deploy: "1"
+          pipelines_path: ./pipelines
+          prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
+          ts_tags: tag:prefect-cicd
