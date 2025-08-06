@@ -9,9 +9,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-push-prod-images:
-    name: Build and push prod images
-    needs: build-and-push-root-image
+  build-and-push-root-image:
+    name: Build and push root image
     runs-on: ubuntu-latest
     steps:
       - name: Build and push root image
@@ -19,9 +18,20 @@ jobs:
         with:
           repository: ${{ github.repository }}
           github_token: ${{ secrets.GH_TOKEN }}
-          tag: latest
 
-      - name: Deploy Prefect staging flows
+  build-and-push-staging-images:
+    name: Build and push staging images
+    needs: build-and-push-root-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and push staging image
+        uses: ./.github/actions/build-and-push-root-image
+        with:
+          repository: ${{ github.repository }}
+          github_token: ${{ secrets.GH_TOKEN }}
+          environment: staging
+
+      - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
         with:
           environment: staging
@@ -30,7 +40,19 @@ jobs:
           prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
           ts_tags: tag:prefect-cicd
 
-      - name: Deploy Prefect prod flows
+  build-and-push-prod-images:
+    name: Build and push prod images
+    needs: build-and-push-root-image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build and push prod image
+        uses: ./.github/actions/build-and-push-root-image
+        with:
+          repository: ${{ github.repository }}
+          github_token: ${{ secrets.GH_TOKEN }}
+          environment: prod
+
+      - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
         with:
           environment: prod

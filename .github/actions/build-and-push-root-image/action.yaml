@@ -8,10 +8,6 @@ inputs:
   github_token:
     description: GitHub token for authentication
     required: true
-  tag:
-    description: Image tag
-    required: false
-    default: "latest"
 
 runs:
   using: composite
@@ -32,4 +28,4 @@ runs:
         context: .
         file: ./Dockerfile
         push: true
-        tags: ghcr.io/${{ inputs.repository }}:${{ inputs.tag }}
+        tags: ghcr.io/${{ inputs.repository }}:latest
