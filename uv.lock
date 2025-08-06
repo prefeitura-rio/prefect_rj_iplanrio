@@ -1573,15 +1573,6 @@ wheels = [
 ]
 
 [[package]]
-name = "ordered-set"
-version = "4.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/4c/ca/bfac8bc689799bcca4157e0e0ced07e70ce125193fc2e166d2e685b7e2fe/ordered-set-4.1.0.tar.gz", hash = "sha256:694a8e44c87657c59292ede72891eb91d34131f6531463aab3009191c77364a8", size = 12826, upload-time = "2022-01-26T14:38:56.6Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/33/55/af02708f230eb77084a299d7b08175cff006dea4f2721074b92cdb0296c0/ordered_set-4.1.0-py3-none-any.whl", hash = "sha256:046e1132c71fcf3330438a539928932caf51ddbc582496833e23de611de14562", size = 7634, upload-time = "2022-01-26T14:38:48.677Z" },
-]
-
-[[package]]
 name = "orjson"
 version = "3.11.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1777,21 +1768,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8b/ae/7f35a550fb8c35ca54c55f2bc4593506beed9d8231db50002cc1b6e4a3ba/prefect_dbt-0.7.6.tar.gz", hash = "sha256:c58b76a7d4f9ff20206ff953627d376e778478481ea7d00bf62e27864ed16ce2", size = 73451, upload-time = "2025-07-31T20:36:51.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ab/49/619c85b20b30921253e7c5af0b0fd2ead08ec631b35aed6342797629c31c/prefect_dbt-0.7.6-py3-none-any.whl", hash = "sha256:027f194bdfaa57a8d365b0f3a1b58e55f342d148253fe693610e35224fe92131", size = 54839, upload-time = "2025-07-31T20:36:50.421Z" },
-]
-
-[[package]]
-name = "prefect-dbt"
-version = "0.7.5"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "dbt-core" },
-    { name = "prefect" },
-    { name = "prefect-shell" },
-    { name = "sgqlc" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/80/05/510c960574a7f133005f0eef3fa6d4019d683484e1df4dc5ee72a71379f6/prefect_dbt-0.7.5.tar.gz", hash = "sha256:0719b27aa3696bc60406d51fd3dfda0aa7b9bd2814b43daedec50bd0cdb832a2", size = 73495, upload-time = "2025-07-23T21:04:42.162Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/82/12/44908d3affe37ca9dbf049382a8c6cd61c546528ef1ee91354931687115d/prefect_dbt-0.7.5-py3-none-any.whl", hash = "sha256:f4e01e585c794696e4a824727b7d0b5c6162f1d5d6c2bb1a2c2a0ed36a5ba015", size = 54840, upload-time = "2025-07-23T21:04:40.369Z" },
 ]
 
 [[package]]
@@ -2195,15 +2171,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c0/fb/49fc4c3d61dbc8404879bed6c94c0595e654951ac9145645b057c4883966/python_socks-2.7.2.tar.gz", hash = "sha256:4c845d4700352bc7e7382f302dfc6baf0af0de34d2a6d70ba356b2539d4dbb62", size = 229950, upload-time = "2025-08-01T06:47:05.488Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8d/e6/1fdebffa733e79e67b43ee8930e4e5049eb51eae3608caeafc83518798aa/python_socks-2.7.2-py3-none-any.whl", hash = "sha256:d311aefbacc0ddfaa1fa1c32096c436d4fe75b899c24d78e677e1b0623c52c48", size = 55048, upload-time = "2025-08-01T06:47:03.734Z" },
-]
-
-[[package]]
-name = "pytimeparse"
-version = "1.1.8"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/37/5d/231f5f33c81e09682708fb323f9e4041408d8223e2f0fb9742843328778f/pytimeparse-1.1.8.tar.gz", hash = "sha256:e86136477be924d7e670646a98561957e8ca7308d44841e21f5ddea757556a0a", size = 9403, upload-time = "2018-05-18T17:40:42.76Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1b/b4/afd75551a3b910abd1d922dbd45e49e5deeb4d47dc50209ce489ba9844dd/pytimeparse-1.1.8-py2.py3-none-any.whl", hash = "sha256:04b7be6cc8bd9f5647a6325444926c3ac34ee6bc7e69da4367ba282f076036bd", size = 9969, upload-time = "2018-05-18T17:40:41.28Z" },
 ]
 
 [[package]]
