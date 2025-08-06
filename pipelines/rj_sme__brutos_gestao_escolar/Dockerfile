@@ -8,4 +8,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_sme__brutos_gestao_escolar ./pipelines/rj_sme__brutos_gestao_escolar/
 
-RUN uv sync
+RUN uv sync --all-packages

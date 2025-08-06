@@ -33,6 +33,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute
+        image_pull_policy: Always
     schedules:
       - interval: 86400
         anchor_date: "2025-07-15T00:00:00"
