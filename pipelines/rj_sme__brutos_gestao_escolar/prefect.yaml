@@ -33,30 +33,6 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_sme__brutos_gestao_escolar -- prefect flow-run execute
-      schedules:
-      - interval: 86400
-        anchor_date: "2022-01-01T23:10:00+03:00"
-        timezone: America/Sao_Paulo
-        slug: turma
-        parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: turma
-          dataset_id: brutos_gestao_escolar
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          execute_query: |
-            SELECT
-                Ano, Curso, Nivel_Ensino,
-                Modalidade, Grupamento, Turma,
-                Turno, Sala, Area_Sala, Capac_Sala,
-                Tipo_Sala, Sala_Util_Como, Tot_Turma,
-                tur_id, esc_id, dep_id
-            FROM GestaoEscolar.dbo.VW_BI_Turma
   - name: rj-sme--brutos_gestao_escolar--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_sme__brutos_gestao_escolar/flow.py:rj_sme__brutos_gestao_escolar
@@ -68,7 +44,7 @@ deployments:
         command: uv run --package rj_sme__brutos_gestao_escolar -- prefect flow-run execute
     schedules:
       - interval: 86400
-        anchor_date: "2022-01-01T23:10:00+03:00"
+        anchor_date: "2022-01-01T23:10:00"
         timezone: America/Sao_Paulo
         slug: turma
         parameters:
@@ -91,7 +67,7 @@ deployments:
                 tur_id, esc_id, dep_id
             FROM GestaoEscolar.dbo.VW_BI_Turma
       - interval: 86400
-        anchor_date: "2022-01-01T23:12:00+03:00"
+        anchor_date: "2022-01-01T23:12:00"
         timezone: America/Sao_Paulo
         slug: CLS_TurmaAulaAluno
         parameters:
@@ -123,7 +99,7 @@ deployments:
                 GETDATE() AS loaded_at
             FROM GestaoEscolar.dbo.CLS_TurmaAulaAluno
       - interval: 86400
-        anchor_date: "2022-01-01T23:14:00+03:00"
+        anchor_date: "2022-01-01T23:14:00"
         timezone: America/Sao_Paulo
         slug: diasCoc
         parameters:
@@ -141,7 +117,7 @@ deployments:
             INNER JOIN ACA_CalendarioAnual          CAL WITH(NOLOCK) ON CAL.cal_id = cap.cal_id and cal_situacao <> 3
             inner join MTR_ProcessoFechamentoInicio pfi WITH(NOLOCK) ON pfi.pfi_anoInicio = cal.cal_ano and pfi_situacao <> 3 and pfi_AnoLetivoCorrente = 1
       - interval: 86400
-        anchor_date: "2022-01-01T23:16:00+03:00"
+        anchor_date: "2022-01-01T23:16:00"
         timezone: America/Sao_Paulo
         slug: numeroDeAulasCte
         parameters:
@@ -176,7 +152,7 @@ deployments:
                     ON TUR.cal_id = CAP.cal_id
                     AND GETDATE() BETWEEN CAP.cap_dataInicio AND CAP.cap_dataFim
       - interval: 86400
-        anchor_date: "2022-01-01T23:18:00+03:00"
+        anchor_date: "2022-01-01T23:18:00"
         timezone: America/Sao_Paulo
         slug: CLS_AlunoAvaliacaoTurma
         parameters:
