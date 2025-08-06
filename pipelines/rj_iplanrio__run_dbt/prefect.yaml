@@ -34,6 +34,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
   - name: rj-iplanrio--run_dbt--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__run_dbt/flow.py:rj_iplanrio__run_dbt
@@ -44,6 +45,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-secrets
+        image_pull_policy: Always
     schedules:
       # Daily schedules (86400 seconds = 24 hours)
       # Schedule 1: Daily build with daily and monitoring tags
@@ -94,3 +96,4 @@ deployments:
           gcs_buckets:
             prod: "dbt-artifacts-prod"
             dev: "dbt-artifacts-dev"
+
