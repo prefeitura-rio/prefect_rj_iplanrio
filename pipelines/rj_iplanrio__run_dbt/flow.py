@@ -2,7 +2,7 @@
 # pylint: disable=C0301
 # flake8: noqa: E501
 """
-Migrated DBT Transform Flow from Prefect 1.4 to 3.0
+Migrated DBT Transform Flow from Prefect 1.4 to 3.0.
 """
 
 import datetime
