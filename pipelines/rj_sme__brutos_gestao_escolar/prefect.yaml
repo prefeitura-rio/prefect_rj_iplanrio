@@ -45,7 +45,6 @@ deployments:
     schedules:
       - interval: 86400
         anchor_date: "2022-01-01T23:10:00"
-        timezone: America/Sao_Paulo
         slug: turma
         parameters:
           biglake_table: true
@@ -68,7 +67,6 @@ deployments:
             FROM GestaoEscolar.dbo.VW_BI_Turma
       - interval: 86400
         anchor_date: "2022-01-01T23:12:00"
-        timezone: America/Sao_Paulo
         slug: CLS_TurmaAulaAluno
         parameters:
           biglake_table: true
@@ -100,7 +98,6 @@ deployments:
             FROM GestaoEscolar.dbo.CLS_TurmaAulaAluno
       - interval: 86400
         anchor_date: "2022-01-01T23:14:00"
-        timezone: America/Sao_Paulo
         slug: diasCoc
         parameters:
           biglake_table: true
@@ -118,7 +115,6 @@ deployments:
             inner join MTR_ProcessoFechamentoInicio pfi WITH(NOLOCK) ON pfi.pfi_anoInicio = cal.cal_ano and pfi_situacao <> 3 and pfi_AnoLetivoCorrente = 1
       - interval: 86400
         anchor_date: "2022-01-01T23:16:00"
-        timezone: America/Sao_Paulo
         slug: numeroDeAulasCte
         parameters:
           biglake_table: true
@@ -153,7 +149,6 @@ deployments:
                     AND GETDATE() BETWEEN CAP.cap_dataInicio AND CAP.cap_dataFim
       - interval: 86400
         anchor_date: "2022-01-01T23:18:00"
-        timezone: America/Sao_Paulo
         slug: CLS_AlunoAvaliacaoTurma
         parameters:
           biglake_table: true
