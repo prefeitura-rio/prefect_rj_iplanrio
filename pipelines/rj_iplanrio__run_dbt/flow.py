@@ -20,6 +20,10 @@ from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from iplanrio.pipelines_utils.logging import log
 from utils import send_message, log_to_file, process_dbt_logs, Summarizer, download_from_cloud_storage, upload_to_cloud_storage
 from pathlib import Path
+from iplanrio.pipelines_templates.dump_db.tasks import (
+    inject_bd_credentials_task,
+)
+
 
 
 # Import statements for external modules (to be handled later)..
@@ -509,6 +513,9 @@ def rj_iplanrio__run_dbt(
     Main DBT Transform Flow migrated from Prefect 1.4 to 3.0
     """
     
+    # Load BQ Credentials
+    crd = inject_bd_credentials_task(environment="prod")  # noqa
+
     #####################################
     # Set environment
     ####################################
