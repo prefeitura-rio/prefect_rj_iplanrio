@@ -119,7 +119,7 @@ def execute_dbt(
     )
         
     # Execute the dbt command
-    running_result = runner.invoke(command_args)
+    running_result = runner.invoke(["source", "freshness"])
     
     log("RESULTADOS:")
     log(str(running_result))
@@ -581,21 +581,21 @@ def rj_iplanrio__run_dbt(
             gcs_buckets=gcs_buckets
         )
 
-# PARAMETERS 
+if __name__ == "__main__":  
 
-rj_iplanrio__run_dbt(
-    flag="",
-    select="",
-    command="source freshness",
-    exclude="",
-    dbt_secrets=[],
-    environment="prod",
-    gcs_buckets={
-        "dev": "rj-iplanrio-dev_dbt",
-        "prod": "rj-iplanrio_dbt"
-    },
-    github_repo="https://github.com/prefeitura-rio/queries-rj-iplanrio.git",
-    rename_flow=True,
-    bigquery_project="rj-iplanrio",
-    send_discord_report=False
+    rj_iplanrio__run_dbt(
+        flag="",
+        select="",
+        command="source freshness",
+        exclude="",
+        dbt_secrets=[],
+        environment="prod",
+        gcs_buckets={
+            "dev": "rj-iplanrio-dev_dbt",
+            "prod": "rj-iplanrio_dbt"
+        },
+        github_repo="https://github.com/prefeitura-rio/queries-rj-iplanrio.git",
+        rename_flow=True,
+        bigquery_project="rj-iplanrio",
+        send_discord_report=False
 )
