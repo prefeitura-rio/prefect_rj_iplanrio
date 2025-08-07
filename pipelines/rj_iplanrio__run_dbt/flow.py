@@ -112,6 +112,8 @@ def execute_dbt(
             project_dir=Path(repository_path)
     )
 
+    print(repository_path)
+
     # Initialize PrefectDbtRunner with project directory
     runner = PrefectDbtRunner(
         settings=settings_dbt,
