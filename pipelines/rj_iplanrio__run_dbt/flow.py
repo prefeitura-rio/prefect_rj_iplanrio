@@ -459,7 +459,7 @@ def get_current_flow_project_name():
     return "dbt-transform-project"
 
 
-@flow(log_prints=True, flow_run_name="DBT {command} {target}")
+@flow(log_prints=True, flow_run_name="DBT {command} {environment}")
 def rj_iplanrio__run_dbt(
     # Flow parameters
     send_discord_report: bool = True,
