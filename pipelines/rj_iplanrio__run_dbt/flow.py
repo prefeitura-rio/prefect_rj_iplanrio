@@ -16,9 +16,10 @@ import git
 import requests
 from prefect import flow, task, get_run_logger
 from prefect.context import get_run_context
-from prefect_dbt import PrefectDbtRunner
+from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from iplanrio.pipelines_utils.logging import log
 from utils import send_message, log_to_file, process_dbt_logs, Summarizer, download_from_cloud_storage, upload_to_cloud_storage
+from pathlib import Path
 
 
 # Import statements for external modules (to be handled later)..
@@ -84,9 +85,12 @@ def execute_dbt(
     """
     
     # Build the command arguments
-    command_args = [command]
+    if command == "source freshness":
+        command_args = ["source", "freshness"]
+    else:
+        command_args = [command]
     
-    if command in ("build", "data_test", "run", "test"):
+    if command in ("build", "data_test", "run", "test", "source freshness"):
         command_args.extend(["--target", target])
         
         if select:
@@ -100,13 +104,17 @@ def execute_dbt(
     
     log(f"Executing dbt command: {' '.join(command_args)}", level="info")
     
+    settings_dbt = PrefectDbtSettings(
+            profiles_dir=Path(repository_path),
+            project_dir=Path(repository_path)
+    )
+
     # Initialize PrefectDbtRunner with project directory
     runner = PrefectDbtRunner(
-        project_dir=repository_path,
-        profiles_dir=repository_path,
+        settings=settings_dbt,
         raise_on_failure=False  # Allow the flow to handle failures gracefully
     )
-    
+        
     # Execute the dbt command
     running_result = runner.invoke(command_args)
     
@@ -566,3 +574,22 @@ def rj_iplanrio__run_dbt(
             environment=environment, 
             gcs_buckets=gcs_buckets
         )
+
+# PARAMETERS 
+
+rj_iplanrio__run_dbt(
+    flag="",
+    select="",
+    command="source freshness",
+    exclude="",
+    dbt_secrets=[],
+    environment="prod",
+    gcs_buckets={
+        "dev": "rj-iplanrio-dev_dbt",
+        "prod": "rj-iplanrio_dbt"
+    },
+    github_repo="https://github.com/prefeitura-rio/queries-rj-iplanrio.git",
+    rename_flow=True,
+    bigquery_project="rj-iplanrio",
+    send_discord_report=False
+)
