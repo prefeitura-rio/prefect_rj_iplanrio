@@ -20,9 +20,8 @@ from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from iplanrio.pipelines_utils.logging import log
 from utils import send_message, log_to_file, process_dbt_logs, Summarizer, download_from_cloud_storage, upload_to_cloud_storage
 from pathlib import Path
-from iplanrio.pipelines_templates.dump_db.tasks import (
-    inject_bd_credentials_task,
-)
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+
 
 
 
