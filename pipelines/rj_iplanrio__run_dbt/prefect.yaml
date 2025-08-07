@@ -57,7 +57,6 @@ deployments:
           command: "build"
           select: "tag:daily tag:dbt-bigquery-monitoring"
           environment: "prod"
-          rename_flow: true
           send_discord_report: true
           github_repo: "https://github.com/prefeitura-rio/dbt-iplanrio.git"
           bigquery_project: "iplanrio"
@@ -72,7 +71,6 @@ deployments:
         parameters:
           command: "source freshness"
           environment: "prod"
-          rename_flow: true
           send_discord_report: true
           github_repo: "https://github.com/prefeitura-rio/dbt-iplanrio.git"
           bigquery_project: "iplanrio"
@@ -89,7 +87,6 @@ deployments:
           command: "build"
           select: "tag:weekly"
           environment: "prod"
-          rename_flow: true
           send_discord_report: true
           github_repo: "https://github.com/prefeitura-rio/dbt-iplanrio.git"
           bigquery_project: "iplanrio"

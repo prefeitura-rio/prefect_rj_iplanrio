@@ -107,16 +107,8 @@ def execute_dbt(
     
     log(f"Executing dbt command: {' '.join(command_args)}", level="info")
     
-    settings_dbt = PrefectDbtSettings(
-            profiles_dir=Path(repository_path),
-            project_dir=Path(repository_path)
-    )
-
-    print(repository_path)
-
-    # Initialize PrefectDbtRunner with project directory
+    # Initialize PrefectDbtRunner
     runner = PrefectDbtRunner(
-        settings=settings_dbt,
         raise_on_failure=False  # Allow the flow to handle failures gracefully
     )
         
@@ -399,30 +391,6 @@ def create_dbt_report(
 
 
 @task
-def rename_current_flow_run_dbt(
-    command: str,
-    target: str,
-    select: str,
-    exclude: str,
-) -> None:
-    """
-    Rename the current flow run.
-    """
-    # In Prefect 3.0, flow run naming is handled differently
-    # This is a placeholder for the functionality
-    flow_run_name = f"dbt {command}"
-
-    if select:
-        flow_run_name += f" --select {select}"
-    if exclude:
-        flow_run_name += f" --exclude {exclude}"
-
-    flow_run_name += f" --target {target}"
-
-    log(f"Flow run would be renamed to: {flow_run_name}", level="info")
-
-
-@task
 def get_target_from_environment(environment: str):
     """
     Retrieves the target environment based on the given environment parameter.
@@ -491,10 +459,9 @@ def get_current_flow_project_name():
     return "dbt-transform-project"
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, flow_run_name="DBT {command} {target}")
 def rj_iplanrio__run_dbt(
     # Flow parameters
-    rename_flow: bool = False,
     send_discord_report: bool = True,
     
     # DBT parameters
@@ -516,24 +483,16 @@ def rj_iplanrio__run_dbt(
     
     # Load BQ Credentials
     crd = inject_bd_credentials_task(environment="prod")  # noqa
-
-    #####################################
-    # Set environment
-    ####################################
-    target = get_target_from_environment(environment=environment)
     
+
+    # Get target and current flow project name
+    target = get_target_from_environment(environment=environment)
     current_flow_project_name = get_current_flow_project_name()
 
-    if rename_flow:
-        rename_current_flow_run_dbt(
-            command=command, 
-            select=select, 
-            exclude=exclude, 
-            target=target
-        )
-    
+    # Download repository
     download_repository_task = download_repository(git_repository_path=github_repo)
     
+    # Install dbt packages
     install_dbt_packages = execute_dbt(
         repository_path=download_repository_task,
         target=target,
@@ -559,7 +518,7 @@ def rj_iplanrio__run_dbt(
         exclude=exclude,
         flag=flag,
         prefect_environment=current_flow_project_name,
-    )
+    ).submit(wait_for=[install_dbt_packages, download_dbt_artifacts_task])
     
     if send_discord_report:
         create_dbt_report(
