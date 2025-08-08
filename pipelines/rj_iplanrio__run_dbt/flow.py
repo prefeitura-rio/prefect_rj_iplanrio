@@ -556,7 +556,7 @@ def rj_iplanrio__run_dbt(
     )
     
     # Create summary report
-    create_dbt_report(
+    dbt_report = create_dbt_report(
         running_results=running_results,
         repository_path=download_repository_task,
         bigquery_project=bigquery_project,
@@ -572,3 +572,4 @@ def rj_iplanrio__run_dbt(
             gcs_buckets=gcs_buckets
         )
 
+    return dbt_report
