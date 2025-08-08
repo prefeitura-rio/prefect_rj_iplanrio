@@ -45,15 +45,11 @@ def get_current_flow_info():
     try:
         flow_name = runtime.flow_run.name
         flow_run_id = runtime.flow_run.id
-
         flow_environment = runtime.deployment.name.split("--")[-1]
     except Exception:
         flow_name = None
         flow_run_id = None
-
-    log(f"Flow name: {flow_name}")
-    log(f"Flow run id: {flow_run_id}")
-    log(f"Flow environment: {flow_environment}")
+        flow_environment = None
 
     return {
         "flow_name": flow_name,
@@ -147,16 +143,24 @@ def execute_dbt(
 def send_dbt_error_message(
     running_result,
     command: str,
-    prefect_environment: str,
+    flow_info: dict,
+    destination: str = "notifications",
 ):
     """
     Sends error messages when DBT execution fails.
+    
+    Args:
+        running_result: Result of DBT execution
+        command: DBT command that was executed
+        flow_info: Dictionary with flow information
+        destination: Destination environment for the message ("notifications", "incidentes", etc.)
     """
-    if not running_result.success:
+    if running_result.success : #TODO: revert to not running_result.success
         send_message(
             title="❌ Erro ao executar DBT",
             message=f"DBT command '{command}' failed. Check logs for details.",
-            prefect_environment=prefect_environment,
+            flow_info=flow_info,
+            destination=destination,
         )
         raise Exception(f"DBT command '{command}' failed. Success: {running_result.success}")
     else:
@@ -188,7 +192,7 @@ def create_dbt_report(
     running_results,
     repository_path: str,
     bigquery_project: str,
-    prefect_environment: str,
+    flow_info: dict,
     github_issue_repository: str,
 ) -> None:
     """
@@ -287,7 +291,8 @@ def create_dbt_report(
         title=f"{emoji} [{bigquery_project}] - Execução `dbt {command}` finalizada {complement}",
         message=message,
         file_path=log_path,
-        prefect_environment=prefect_environment,
+        flow_info=flow_info,
+        destination="notifications",  # Default destination for DBT reports
     )
 
 #    if not fully_successful and parameters.get("environment") == "prod":
@@ -537,12 +542,7 @@ def rj_iplanrio__run_dbt(
     
     # Install dbt packages
     install_dbt_packages = install_dbt_dependencies()
-    
-    ####################################
-    # Tasks section #1 - Execute commands in DBT
-    #####################################
-    
-
+        
     # Execute DBT command
     running_results = execute_dbt(
           command=command,
@@ -557,21 +557,17 @@ def rj_iplanrio__run_dbt(
     send_dbt_error_message(
         running_result=running_results,
         command=command,
-        prefect_environment=flow_info["flow_environment"],
-    )
+        flow_info=flow_info,
+        destination="notifications",
     
     if send_discord_report:
         create_dbt_report(
             running_results=running_results,
             repository_path=download_repository_task,
             bigquery_project=bigquery_project,
-            prefect_environment=flow_info["flow_environment"],
+            flow_info=flow_info,
             github_issue_repository=github_repo,
         )
-    
-    ####################################
-    # Tasks section #3 - Upload new artifacts to GCS
-    #####################################
     
     check_if_upload_dbt_artifacts = check_if_dbt_artifacts_upload_is_needed(command=command)
     

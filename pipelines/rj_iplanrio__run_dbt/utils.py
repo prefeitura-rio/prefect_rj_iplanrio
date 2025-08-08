@@ -26,15 +26,25 @@ async def send_discord_webhook(
     text_content: str,
     file_path: str = None,
     username: str = None,
+    destination: str = "dbt-runs",
 ):
     """
     Sends a message to a Discord webhook
 
     Args:
-        message (str): The message to send.
+        text_content (str): The message to send.
+        file_path (str, optional): Path to file to attach. Defaults to None.
         username (str, optional): The username to use when sending the message. Defaults to None.
+        destination (str, optional): Destination environment for the message. Defaults to "dbt-runs".
     """
-    webhook_url = os.getenv("DBT-RUN__DISCORD_WEBHOOK_URL_DBT-RUNS")
+    # Select webhook URL based on destination
+    if destination == "notifications":
+        webhook_url = os.getenv("DBT-RUN__DISCORD_WEBHOOK_URL_NOTIFICATIONS")
+    elif destination == "incidentes":
+        webhook_url = os.getenv("DBT-RUN__DISCORD_WEBHOOK_URL_INCIDENTES")
+    else:
+        # Default to notifications if destination is not recognized
+        webhook_url = os.getenv("DBT-RUN__DISCORD_WEBHOOK_URL_NOTIFICATIONS")
 
     if len(text_content) > 2000:
         raise ValueError(f"Message content is too long: {len(text_content)} > 2000 characters.")
@@ -61,7 +71,7 @@ async def send_discord_webhook(
 
 
 def send_message(
-    title, message, flow_info: dict, file_path=None, username=None
+    title, message, flow_info: dict, file_path=None, username=None, destination: str = "notifications"
 ):
     """
     Sends a message with the given title and content to a webhook.
@@ -69,7 +79,10 @@ def send_message(
     Args:
         title (str): The title of the message.
         message (str): The content of the message.
+        flow_info (dict): Dictionary containing flow information.
+        file_path (str, optional): Path to file to attach. Defaults to None.
         username (str, optional): The username to be used for the webhook. Defaults to None.
+        destination (str, optional): Destination environment for the message ("notifications", "incidentes", etc.). Defaults to "notifications".
     """
 
     flow_environment = flow_info["flow_environment"]
@@ -114,7 +127,9 @@ def send_message(
             await send_discord_webhook(
                 text_content=content,
                 file_path=file_path if i == len(contents) - 1 else None,
-                username=username            )
+                username=username,
+                destination=destination
+            )
 
     asyncio.run(main(message_contents))
 
