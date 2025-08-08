@@ -52,6 +52,10 @@ def get_current_flow_info():
         flow_name = None
         flow_run_id = None
 
+    log(f"Flow name: {flow_name}")
+    log(f"Flow run id: {flow_run_id}")
+    log(f"Flow environment: {flow_environment}")
+
     return {
         "flow_name": flow_name,
         "flow_run_id": flow_run_id,
