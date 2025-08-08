@@ -502,9 +502,8 @@ def rj_iplanrio__run_dbt(
           repository_path=download_repository_task,
           target=target,
           command="deps",
-    ).submit(wait_for=[download_dbt_artifacts_task])
+    )
     
-
     ####################################
     # Tasks section #1 - Execute commands in DBT
     #####################################
@@ -519,7 +518,7 @@ def rj_iplanrio__run_dbt(
           exclude=exclude,
           flag=flag,
           prefect_environment=current_flow_project_name,
-    ).submit(wait_for=[install_dbt_packages, download_dbt_artifacts_task])
+    )
     
     if send_discord_report:
         create_dbt_report(
