@@ -15,7 +15,7 @@ from typing import TypedDict
 import git
 import requests
 from prefect import flow, task, get_run_logger
-from prefect.context import get_run_context
+from prefect import runtime
 from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from iplanrio.pipelines_utils.logging import log
 from utils import send_message, log_to_file, process_dbt_logs, Summarizer, download_from_cloud_storage, upload_to_cloud_storage
@@ -43,9 +43,8 @@ def get_current_flow_info():
     Retrieves the current flow project, flow run id and environment.
     """
     try:
-        context = get_run_context()
-        flow_name = context.flow.name
-        flow_run_id = context.flow_run.id
+        flow_name = runtime.flow_run.name
+        flow_run_id = runtime.flow_run.id
 
         flow_environment = flow_name.split("--")[-1]
     except Exception:
