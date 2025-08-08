@@ -46,7 +46,7 @@ def get_current_flow_info():
         flow_name = runtime.flow_run.name
         flow_run_id = runtime.flow_run.id
 
-        flow_environment = flow_name.split("--")[-1]
+        flow_environment = runtime.deployment.name.split("--")[-1]
     except Exception:
         flow_name = None
         flow_run_id = None
