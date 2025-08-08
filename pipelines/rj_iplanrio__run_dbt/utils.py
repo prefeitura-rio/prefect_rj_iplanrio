@@ -79,6 +79,10 @@ def send_message(
         flow_name = None
         flow_run_id = None
 
+    print("FLOW NAME AND FLOW RUN ID")
+    print(flow_name)
+    print(flow_run_id)
+    
     header_content = f"""
 ## {title}
 > Prefect Environment: {flow_name.split("--")[-1]}
