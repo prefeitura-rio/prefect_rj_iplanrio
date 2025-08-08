@@ -457,7 +457,7 @@ def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
 
     gcs_bucket = gcs_buckets[environment]
 
-    upload_to_cloud_storage(dbt_artifacts_path, gcs_bucket)
+    upload_to_cloud_storage(path=dbt_artifacts_path, bucket_name=gcs_bucket)
     log(f"DBT artifacts sent to GCS bucket: {gcs_bucket}", level="info")
 
 
@@ -553,7 +553,6 @@ def rj_iplanrio__run_dbt(
     
     if check_if_upload_dbt_artifacts:
         upload_dbt_artifacts_to_gcs(
-            dbt_path=download_repository_task, 
             environment=environment, 
             gcs_buckets=gcs_buckets
         )
