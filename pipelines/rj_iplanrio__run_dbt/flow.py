@@ -17,6 +17,7 @@ from prefect_dbt import PrefectDbtRunner
 from iplanrio.pipelines_utils.logging import log
 from utils import send_message, log_to_file, process_dbt_logs, Summarizer, download_from_cloud_storage, upload_to_cloud_storage
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from prefect.states import Failed
 
 
 class GcsBucket(TypedDict):
@@ -222,9 +223,6 @@ def create_dbt_report(
     general_report = sorted(general_report, reverse=True)
     general_report = "**Resumo**:\n" + "\n".join(general_report)
     log(general_report)
-
-    if not is_successful:
-        raise Exception(f"dbt {parameters.get('command')} executed with errors")
     
     if send_discord_report:
         # Get Parameters
@@ -348,7 +346,7 @@ def create_dbt_report(
 #            response = requests.post(api_url, json=data, headers=headers, timeout=300)
 #        except requests.exceptions.RequestException as e:
 #            log(f"❌ Failed to send DBT log to X9 Agent: {e}")
-#            return
+#
 #
 #        log(f"✅ DBT log sent successfully")
 #        log(f"Response status: {response.status_code}")
@@ -359,7 +357,6 @@ def create_dbt_report(
 #            response_text = json.loads(response.text)
 #        except json.JSONDecodeError:
 #            log(f"❌ Failed to decode JSON response: {response.text}")
-#            return
 #
 #        # Extract task details from response
 #        task_details = response_text.get("task_details", {})
@@ -419,8 +416,8 @@ def create_dbt_report(
 #            except requests.exceptions.RequestException as e:
 #                log(f"❌ Failed to send Discord webhook: {e}")
 #
-#    raise Exception(general_report)
-
+    if not is_successful:
+        return Failed(message=f"dbt {parameters.get('command')} executed with errors")
 
 @task
 def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket) -> Optional[str]:

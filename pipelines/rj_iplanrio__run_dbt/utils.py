@@ -185,7 +185,7 @@ def log_to_file(logs: pd.DataFrame, levels=None) -> str:
     for _, row in logs.iterrows():
         report.append(f"{row['time']} [{row['level'].rjust(5, ' ')}] {row['text']}")
     report = "\n".join(report)
-    log(f"Logs do DBT:{report}")
+    #log(f"Logs do DBT:{report}")
 
     with open("dbt_log.txt", "w+", encoding="utf-8") as log_file:
         log_file.write(report)
