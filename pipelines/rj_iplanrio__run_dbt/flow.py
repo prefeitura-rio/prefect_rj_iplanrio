@@ -189,13 +189,11 @@ def create_dbt_report(
 
     log_path = None
     if logs is not None:
-        
         log_path = log_to_file(logs)
     
     summarizer = Summarizer()
-
+    parameters = runtime.flow_run.parameters
     is_successful, has_warnings = True, False
-
     general_report = []
     failed_models = []
     
@@ -231,8 +229,6 @@ def create_dbt_report(
     if send_discord_report:
         # Get Parameters
         param_report = ["**Parametros**:"]
-
-        parameters = runtime.flow_run.parameters
 
         if parameters.get("target") == "dev":
             bigquery_project = bigquery_project + "-dev"
