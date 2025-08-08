@@ -559,6 +559,7 @@ def rj_iplanrio__run_dbt(
         command=command,
         flow_info=flow_info,
         destination="notifications",
+    )
     
     if send_discord_report:
         create_dbt_report(
