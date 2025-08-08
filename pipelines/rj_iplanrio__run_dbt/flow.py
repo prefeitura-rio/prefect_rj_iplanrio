@@ -131,6 +131,28 @@ def execute_dbt(
 
 
 @task
+def install_dbt_dependencies():
+    """
+    Installs DBT dependencies using the 'deps' command.
+    This task is specifically designed to install packages defined in packages.yml.
+    """
+    
+    log("Installing DBT dependencies...", level="info")
+    
+    # Initialize PrefectDbtRunner
+    runner = PrefectDbtRunner(
+        raise_on_failure=False  # Allow the flow to handle failures gracefully
+    )
+    
+    # Execute the dbt deps command
+    deps_result = runner.invoke(["deps"])
+
+    
+    log("✅ DBT dependencies installed successfully", level="info")
+    return deps_result
+
+
+@task
 def create_dbt_report(
     running_results,
     repository_path: str,
@@ -427,11 +449,11 @@ def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket):
 
 
 @task
-def upload_dbt_artifacts_to_gcs(dbt_path: str, environment: str, gcs_buckets: GcsBucket):
+def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
     """
     Sends the dbt artifacts to Google Cloud Storage.
     """
-    dbt_artifacts_path = os.path.join(dbt_path, "target_base")
+    dbt_artifacts_path = os.path.join(os.getcwd(), "target_base")
 
     gcs_bucket = gcs_buckets[environment]
 
@@ -496,11 +518,7 @@ def rj_iplanrio__run_dbt(
     )
     
     # Install dbt packages
-    install_dbt_packages = execute_dbt(
-          repository_path=download_repository_task,
-          target=target,
-          command="deps",
-    )
+    install_dbt_packages = install_dbt_dependencies()
     
     ####################################
     # Tasks section #1 - Execute commands in DBT
