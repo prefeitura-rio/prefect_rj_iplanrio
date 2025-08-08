@@ -5,6 +5,7 @@ from typing import Literal
 import aiohttp
 import prefect
 from discord import AllowedMentions, Embed, File, Webhook
+from prefect.context import get_run_context
 
 import os 
 import re
@@ -70,13 +71,18 @@ def send_message(
         message (str): The content of the message.
         username (str, optional): The username to be used for the webhook. Defaults to None.
     """
-    flow_name = prefect.context.get("flow_name")
-    flow_run_id = prefect.context.get("flow_run_id")
+    try:
+        context = get_run_context()
+        flow_name = context.flow.name
+        flow_run_id = context.flow_run.id
+    except Exception:
+        flow_name = None
+        flow_run_id = None
 
     header_content = f"""
 ## {title}
 > Prefect Environment: {prefect_environment}
-> Flow Run: [{flow_name}](https://pipelines.dados.rio/flow-run/{flow_run_id})
+> Flow Run: [{flow_name}](https://prefect.squirrel-regulus.ts.net/runs/flow-run{flow_run_id})
     """
     # Calculate max char count for message
     message_max_char_count = 2000 - len(header_content)
