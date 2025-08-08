@@ -469,7 +469,7 @@ def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
 
     gcs_bucket = gcs_buckets[environment]
 
-    log("Uploading dbt artifacts from {dbt_artifacts_path} to GCS bucket: {gcs_bucket}", level="info")
+    log(f"Uploading dbt artifacts from {dbt_artifacts_path} to GCS bucket: {gcs_bucket}", level="info")
     upload_to_cloud_storage(path=dbt_artifacts_path, bucket_name=gcs_bucket)
     log(f"DBT artifacts sent to GCS bucket: {gcs_bucket}", level="info")
 
