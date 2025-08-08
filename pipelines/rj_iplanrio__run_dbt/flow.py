@@ -74,14 +74,12 @@ def download_repository(git_repository_path: str):
 
 @task
 def execute_dbt(
-    repository_path: str,
     command: str = "run",
     target: str = "dev",
     select="",
     exclude="",
     state="",
     flag="",
-    prefect_environment="",
 ):
     """
     Executes a dbt command using PrefectDbtRunner from prefect-dbt.
@@ -118,7 +116,18 @@ def execute_dbt(
     log("RESULTADOS:")
     log(str(running_result))
     
-    # Check if the command was successful
+    return running_result
+
+
+@task
+def send_dbt_error_message(
+    running_result,
+    command: str,
+    prefect_environment: str,
+):
+    """
+    Sends error messages when DBT execution fails.
+    """
     if not running_result.success:
         send_message(
             title="❌ Erro ao executar DBT",
@@ -126,8 +135,8 @@ def execute_dbt(
             prefect_environment=prefect_environment,
         )
         raise Exception(f"DBT command '{command}' failed. Success: {running_result.success}")
-    
-    return running_result
+    else:
+        log("✅ DBT command executed successfully", level="info")
 
 
 @task
@@ -455,8 +464,12 @@ def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
     """
     dbt_artifacts_path = os.path.join(os.getcwd(), "target_base")
 
+    #LOG all files in dbt_artifacts_path
+    log(f"Files in dbt_artifacts_path: {os.listdir(dbt_artifacts_path)}", level="info")
+
     gcs_bucket = gcs_buckets[environment]
 
+    log("Uploading dbt artifacts from {dbt_artifacts_path} to GCS bucket: {gcs_bucket}", level="info")
     upload_to_cloud_storage(path=dbt_artifacts_path, bucket_name=gcs_bucket)
     log(f"DBT artifacts sent to GCS bucket: {gcs_bucket}", level="info")
 
@@ -525,15 +538,21 @@ def rj_iplanrio__run_dbt(
     #####################################
     
 
+    # Execute DBT command
     running_results = execute_dbt(
-          repository_path=download_repository_task,
-          state=download_dbt_artifacts_task,
-          target=target,
           command=command,
+          target=target,
           select=select,
           exclude=exclude,
           flag=flag,
-          prefect_environment=current_flow_project_name,
+          state=download_dbt_artifacts_task,
+    )
+    
+    # Send error message if DBT execution failed
+    send_dbt_error_message(
+        running_result=running_results,
+        command=command,
+        prefect_environment=current_flow_project_name,
     )
     
     if send_discord_report:
