@@ -199,8 +199,7 @@ def create_dbt_report(
     general_report = []
     failed_models = []
     
-    # PrefectDbtRunner provides results in a different format
-    # The result object contains information about the execution
+    # Check if the are errors in the running results
     if hasattr(running_results, 'result') and running_results.result:
         for command_result in running_results.result:
             if hasattr(command_result, 'status'):
@@ -220,21 +219,15 @@ def create_dbt_report(
                     if hasattr(command_result, 'node') and hasattr(command_result.node, 'name'):
                         failed_models.append(command_result.node.name)
 
-    
-    # If no detailed results, check overall success
-    if not general_report:
-        if not running_results.success:
-            is_successful = False
-            general_report.append(f"- ❌ DBT command failed with success status: {running_results.success}")
-        else:
-            general_report.append("- ✅ DBT command completed successfully")
 
     # Sort and log the general report
     general_report = sorted(general_report, reverse=True)
     general_report = "**Resumo**:\n" + "\n".join(general_report)
     log(general_report)
 
-
+    if not is_successful:
+        raise Exception(f"dbt {parameters.get('command')} executed with errors")
+    
     if send_discord_report:
         # Get Parameters
         param_report = ["**Parametros**:"]
