@@ -37,6 +37,27 @@ class GcsBucket(TypedDict):
     prod: str
     dev: str
 
+@task
+def get_current_flow_info():
+    """
+    Retrieves the current flow project, flow run id and environment.
+    """
+    try:
+        context = get_run_context()
+        flow_name = context.flow.name
+        flow_run_id = context.flow_run.id
+
+        flow_environment = flow_name.split("--")[-1]
+    except Exception:
+        flow_name = None
+        flow_run_id = None
+
+    return {
+        "flow_name": flow_name,
+        "flow_run_id": flow_run_id,
+        "flow_environment": flow_environment,
+    }
+
 
 @task
 def download_repository(git_repository_path: str):
@@ -156,8 +177,6 @@ def install_dbt_dependencies():
     # Execute the dbt deps command
     deps_result = runner.invoke(["deps"])
 
-    
-    log("✅ DBT dependencies installed successfully", level="info")
     return deps_result
 
 
@@ -420,27 +439,11 @@ def create_dbt_report(
 
 
 @task
-def get_target_from_environment(environment: str):
-    """
-    Retrieves the target environment based on the given environment parameter.
-    """
-    converter = {
-        "prod": "prod",
-        "local-prod": "prod",
-        "staging": "dev",
-        "local-staging": "dev",
-        "dev": "dev",
-    }
-    return converter.get(environment, "dev")
-
-
-@task
 def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket):
     """
     Retrieves the dbt artifacts from Google Cloud Storage.
     """
     gcs_bucket = gcs_buckets[environment]
-
     target_base_path = os.path.join(os.getcwd(), "target_base")
 
     if os.path.exists(target_base_path):
@@ -462,16 +465,18 @@ def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
     """
     Sends the dbt artifacts to Google Cloud Storage.
     """
+    gcs_bucket = gcs_buckets[environment]
     dbt_artifacts_path = os.path.join(os.getcwd(), "target_base")
 
-    #LOG all files in dbt_artifacts_path
-    log(f"Files in dbt_artifacts_path: {os.listdir(dbt_artifacts_path)}", level="info")
-
-    gcs_bucket = gcs_buckets[environment]
-
-    log(f"Uploading dbt artifacts from {dbt_artifacts_path} to GCS bucket: {gcs_bucket}", level="info")
-    upload_to_cloud_storage(path=dbt_artifacts_path, bucket_name=gcs_bucket)
-    log(f"DBT artifacts sent to GCS bucket: {gcs_bucket}", level="info")
+    try:
+        upload_to_cloud_storage(path=dbt_artifacts_path, bucket_name=gcs_bucket)
+        log(f"DBT artifacts uploaded to GCS bucket: {gcs_bucket}", level="info")
+        return True
+    except Exception as e:
+        log(f"Error when uploading DBT artifacts to GCS: {e}", level="error")
+        return None
+    
+    
 
 
 @task
@@ -484,12 +489,6 @@ def check_if_dbt_artifacts_upload_is_needed(command: str):
     return False
 
 
-@task
-def get_current_flow_project_name():
-    """
-    Placeholder for get_current_flow_project_name function.
-    """
-    return "dbt-transform-project"
 
 
 @flow(log_prints=True, flow_run_name="DBT {command} {environment}")
@@ -504,10 +503,10 @@ def rj_iplanrio__run_dbt(
     flag: str = None,
     github_repo: str = None,
     bigquery_project: str = None,
+    target: str = "dev",
     dbt_secrets: list[str] = None,
     
     # GCP parameters
-    environment: str = "dev",
     gcs_buckets: GcsBucket = None,
 ) -> None:
     """
@@ -517,16 +516,19 @@ def rj_iplanrio__run_dbt(
     # Load BQ Credentials
     crd = inject_bd_credentials_task(environment="prod")  # noqa
     
-    # Get target and current flow project name
-    target = get_target_from_environment(environment=environment)
-    current_flow_project_name = get_current_flow_project_name()
+    # Get flow info
+    flow_info = get_current_flow_info()
+
+    log(f"Flow name: {flow_info['flow_name']}")
+    log(f"Flow run id: {flow_info['flow_run_id']}")
+    log(f"Flow environment: {flow_info['flow_environment']}")
 
     # Download repository
     download_repository_task = download_repository(git_repository_path=github_repo)
     
     # Download dbt artifacts
     download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(
-        environment=environment, 
+        environment=target, 
         gcs_buckets=gcs_buckets
     )
     
@@ -552,7 +554,7 @@ def rj_iplanrio__run_dbt(
     send_dbt_error_message(
         running_result=running_results,
         command=command,
-        prefect_environment=current_flow_project_name,
+        prefect_environment=flow_info["flow_environment"],
     )
     
     if send_discord_report:
@@ -560,7 +562,7 @@ def rj_iplanrio__run_dbt(
             running_results=running_results,
             repository_path=download_repository_task,
             bigquery_project=bigquery_project,
-            prefect_environment=current_flow_project_name,
+            prefect_environment=flow_info["flow_environment"],
             github_issue_repository=github_repo,
         )
     
@@ -572,7 +574,7 @@ def rj_iplanrio__run_dbt(
     
     if check_if_upload_dbt_artifacts:
         upload_dbt_artifacts_to_gcs(
-            environment=environment, 
+            environment=target, 
             gcs_buckets=gcs_buckets
         )
         
@@ -584,7 +586,6 @@ if __name__ == "__main__":
         command="source freshness",
         exclude="",
         dbt_secrets=[],
-        environment="prod",
         gcs_buckets={
             "dev": "rj-iplanrio-dev_dbt",
             "prod": "rj-iplanrio_dbt"

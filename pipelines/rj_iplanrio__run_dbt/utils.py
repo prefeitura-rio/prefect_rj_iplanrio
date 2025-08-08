@@ -61,7 +61,7 @@ async def send_discord_webhook(
 
 
 def send_message(
-    title, message, prefect_environment: str, file_path=None, username=None
+    title, message, flow_info: dict, file_path=None, username=None
 ):
     """
     Sends a message with the given title and content to a webhook.
@@ -71,22 +71,15 @@ def send_message(
         message (str): The content of the message.
         username (str, optional): The username to be used for the webhook. Defaults to None.
     """
-    try:
-        context = get_run_context()
-        flow_name = context.flow.name
-        flow_run_id = context.flow_run.id
-    except Exception:
-        flow_name = None
-        flow_run_id = None
 
-    print("FLOW NAME AND FLOW RUN ID")
-    print(flow_name)
-    print(flow_run_id)
+    flow_environment = flow_info["flow_environment"]
+    flow_name = flow_info["flow_name"]
+    flow_run_id = flow_info["flow_run_id"]
     
     header_content = f"""
 ## {title}
-> Prefect Environment: {flow_name.split("--")[-1]}
-> Flow Run: [{flow_name}](https://prefect.squirrel-regulus.ts.net/runs/flow-run{flow_run_id})
+> Prefect Environment: {flow_environment}
+> Flow Run: [{flow_name}](https://prefect.squirrel-regulus.ts.net/runs/flow-run/{flow_run_id})
     """
     # Calculate max char count for message
     message_max_char_count = 2000 - len(header_content)

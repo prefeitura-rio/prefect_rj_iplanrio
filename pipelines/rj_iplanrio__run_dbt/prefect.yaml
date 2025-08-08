@@ -56,13 +56,12 @@ deployments:
         parameters:
           command: "build"
           select: "tag:daily tag:dbt-bigquery-monitoring"
-          environment: "prod"
           send_discord_report: true
-          github_repo: "https://github.com/prefeitura-rio/dbt-iplanrio.git"
-          bigquery_project: "iplanrio"
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
           gcs_buckets:
-            prod: "dbt-artifacts-prod"
-            dev: "dbt-artifacts-dev"
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
       # Schedule 2: Daily source freshness check
       - interval: 86400
         anchor_date: "2023-01-01T06:45:00"
@@ -70,13 +69,12 @@ deployments:
         slug: dbt_daily_freshness
         parameters:
           command: "source freshness"
-          environment: "prod"
           send_discord_report: true
-          github_repo: "https://github.com/prefeitura-rio/dbt-iplanrio.git"
-          bigquery_project: "iplanrio"
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
           gcs_buckets:
-            prod: "dbt-artifacts-prod"
-            dev: "dbt-artifacts-dev"
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
       # Weekly schedules (604800 seconds = 7 days)
       # Schedule 3: Weekly build with weekly tags
       - interval: 604800
@@ -86,11 +84,10 @@ deployments:
         parameters:
           command: "build"
           select: "tag:weekly"
-          environment: "prod"
           send_discord_report: true
-          github_repo: "https://github.com/prefeitura-rio/dbt-iplanrio.git"
-          bigquery_project: "iplanrio"
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
           gcs_buckets:
-            prod: "dbt-artifacts-prod"
-            dev: "dbt-artifacts-dev"
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
 
