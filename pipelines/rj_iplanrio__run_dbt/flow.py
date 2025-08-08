@@ -123,7 +123,6 @@ def execute_dbt(
         send_message(
             title="❌ Erro ao executar DBT",
             message=f"DBT command '{command}' failed. Check logs for details.",
-            monitor_slug="dbt-runs",
             prefect_environment=prefect_environment,
         )
         raise Exception(f"DBT command '{command}' failed. Success: {running_result.success}")
@@ -235,7 +234,6 @@ def create_dbt_report(
         title=f"{emoji} [{bigquery_project}] - Execução `dbt {command}` finalizada {complement}",
         message=message,
         file_path=log_path,
-        monitor_slug="dbt-runs",
         prefect_environment=prefect_environment,
     )
 
