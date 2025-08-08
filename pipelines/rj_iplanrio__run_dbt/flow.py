@@ -156,34 +156,6 @@ def execute_dbt(
 
 
 @task
-def send_dbt_error_message(
-    running_result,
-    command: str,
-    flow_info: dict,
-    destination: str = "notifications",
-):
-    """
-    Sends error messages when DBT execution fails.
-    
-    Args:
-        running_result: Result of DBT execution
-        command: DBT command that was executed
-        flow_info: Dictionary with flow information
-        destination: Destination environment for the message ("notifications", "incidentes", etc.)
-    """
-    if not running_result.success:
-        send_message(
-            title="❌ Erro ao executar DBT",
-            message=f"DBT command '{command}' in flow {flow_info['flow_name']} failed. Check logs for details.",
-            flow_info=flow_info,
-            destination=destination,
-        )
-        raise Exception(f"DBT command '{command}' failed. Success: {running_result.success}")
-    else:
-        log("✅ DBT command executed successfully", level="info")
-
-
-@task
 def install_dbt_dependencies():
     """
     Installs DBT dependencies using the 'deps' command.
@@ -458,7 +430,7 @@ def create_dbt_report(
 #            except requests.exceptions.RequestException as e:
 #                log(f"❌ Failed to send Discord webhook: {e}")
 #
-    raise Exception(general_report)
+#    raise Exception(general_report)
 
 
 @task
@@ -552,14 +524,6 @@ def rj_iplanrio__run_dbt(
           exclude=exclude,
           flag=flag,
           state=download_dbt_artifacts_task,
-    )
-    
-    # Send error message if DBT execution failed
-    send_dbt_error_message(
-        running_result=running_results,
-        command=command,
-        flow_info=flow_info,
-        destination="notifications",
     )
     
     if send_discord_report:
