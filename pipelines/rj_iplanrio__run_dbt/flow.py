@@ -103,6 +103,17 @@ def execute_dbt(
 ):
     """
     Executes a dbt command using PrefectDbtRunner from prefect-dbt.
+    
+    Args:
+        command (str): DBT command to execute (run, test, build, source freshness, deps, etc.)
+        target (str): DBT target environment (dev, prod, etc.)
+        select (str): DBT select argument for filtering models
+        exclude (str): DBT exclude argument for filtering models
+        state (str): DBT state argument for incremental processing
+        flag (str): Additional DBT flags
+        
+    Returns:
+        PrefectDbtResult: Result of the DBT command execution
     """
     
     # Build the command arguments
@@ -111,7 +122,8 @@ def execute_dbt(
     else:
         command_args = [command]
     
-    if command in ("build", "data_test", "run", "test", "source freshness"):
+    # Add common arguments for most DBT commands
+    if command in ("build", "run", "test", "source freshness", "seed", "snapshot"):
         command_args.extend(["--target", target])
         
         if select:
@@ -122,6 +134,7 @@ def execute_dbt(
             command_args.extend(["--state", state])
         if flag:
             command_args.extend([flag])
+   
     
     log(f"Executing dbt command: {' '.join(command_args)}", level="info")
     
@@ -130,11 +143,14 @@ def execute_dbt(
         raise_on_failure=False  # Allow the flow to handle failures gracefully
     )
         
-    # Execute the dbt command
-    running_result = runner.invoke(["source", "freshness"])
+    # Execute the dbt command with the constructed arguments
+    try:
+        running_result = runner.invoke(command_args)
+        log(f"DBT command completed with success: {running_result.success}", level="info")
+    except Exception as e:
+        log(f"Error executing DBT command: {e}", level="error")
+        raise
     
-    log("RESULTADOS:")
-    log(str(running_result))
     
     return running_result
 
@@ -155,10 +171,10 @@ def send_dbt_error_message(
         flow_info: Dictionary with flow information
         destination: Destination environment for the message ("notifications", "incidentes", etc.)
     """
-    if running_result.success : #TODO: revert to not running_result.success
+    if not running_result.success:
         send_message(
             title="❌ Erro ao executar DBT",
-            message=f"DBT command '{command}' failed. Check logs for details.",
+            message=f"DBT command '{command}' in flow {flow_info['flow_name']} failed. Check logs for details.",
             flow_info=flow_info,
             destination=destination,
         )
@@ -251,13 +267,12 @@ def create_dbt_report(
     # Get Parameters
     param_report = ["**Parametros**:"]
 
-    context = get_run_context()
-    parameters = context.parameters
+    parameters = runtime.flow_run.parameters
 
-    if parameters.get("environment") == "dev":
-        bigquery_project = "rj-" + bigquery_project + "-dev"
-    elif parameters.get("environment") == "prod":
-        bigquery_project = "rj-" + bigquery_project
+    if parameters.get("target") == "dev":
+        bigquery_project = bigquery_project + "-dev"
+    elif parameters.get("target") == "prod":
+        bigquery_project = bigquery_project
 
     param_report.append(f"- Projeto BigQuery: `{bigquery_project}`")
     param_report.append(f"- Target dbt: `{parameters.get('environment')}`")
