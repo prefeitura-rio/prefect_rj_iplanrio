@@ -275,7 +275,7 @@ def create_dbt_report(
         bigquery_project = bigquery_project
 
     param_report.append(f"- Projeto BigQuery: `{bigquery_project}`")
-    param_report.append(f"- Target dbt: `{parameters.get('environment')}`")
+    param_report.append(f"- Target dbt: `{parameters.get('target')}`")
     param_report.append(f"- Comando: `{parameters.get('command')}`")
 
     if parameters.get("select"):
@@ -501,19 +501,6 @@ def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
     
     
 
-
-@task
-def check_if_dbt_artifacts_upload_is_needed(command: str):
-    """
-    Checks if the upload of dbt artifacts is needed.
-    """
-    if command in ["build", "source freshness"]:
-        return True
-    return False
-
-
-
-
 @flow(log_prints=True, flow_run_name="DBT {command} {target}")
 def rj_iplanrio__run_dbt(
     # Flow parameters
@@ -527,7 +514,6 @@ def rj_iplanrio__run_dbt(
     github_repo: str = None,
     bigquery_project: str = None,
     target: str = "dev",
-    dbt_secrets: list[str] = None,
     
     # GCP parameters
     gcs_buckets: GcsBucket = None,
@@ -585,9 +571,8 @@ def rj_iplanrio__run_dbt(
             github_issue_repository=github_repo,
         )
     
-    check_if_upload_dbt_artifacts = check_if_dbt_artifacts_upload_is_needed(command=command)
-    
-    if check_if_upload_dbt_artifacts:
+    # Upload dbt artifacts to GCS if needed
+    if flow_info["flow_environment"] == "prod" and command in ["build", "source freshness"]:
         upload_dbt_artifacts_to_gcs(
             environment=target, 
             gcs_buckets=gcs_buckets
@@ -600,7 +585,6 @@ if __name__ == "__main__":
         select="",
         command="source freshness",
         exclude="",
-        dbt_secrets=[],
         gcs_buckets={
             "dev": "rj-iplanrio-dev_dbt",
             "prod": "rj-iplanrio_dbt"
