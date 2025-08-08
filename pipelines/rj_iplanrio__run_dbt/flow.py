@@ -5,37 +5,24 @@
 Migrated DBT Transform Flow from Prefect 1.4 to 3.0
 """
 
-import datetime
-import json
 import os
 import re
 import shutil
-from typing import TypedDict
+from typing import TypedDict, Optional
 
 import git
-import requests
-from prefect import flow, task, get_run_logger
+from prefect import flow, task
 from prefect import runtime
-from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
+from prefect_dbt import PrefectDbtRunner
 from iplanrio.pipelines_utils.logging import log
 from utils import send_message, log_to_file, process_dbt_logs, Summarizer, download_from_cloud_storage, upload_to_cloud_storage
-from pathlib import Path
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-
-
-
-
-# Import statements for external modules (to be handled later)..
-# from prefeitura_rio.pipelines_utils.credential_injector import authenticated_task
-# from prefeitura_rio.pipelines_utils.dbt import Summarizer, log_to_file, process_dbt_logs
-# from prefeitura_rio.pipelines_utils.googleutils import download_from_cloud_storage, upload_to_cloud_storage
-# from prefeitura_rio.pipelines_utils.logging import log
-# from prefeitura_rio.pipelines_utils.monitor import send_message
 
 
 class GcsBucket(TypedDict):
     prod: str
     dev: str
+
 
 @task
 def get_current_flow_info():
@@ -63,6 +50,9 @@ def download_repository(git_repository_path: str):
     """
     Downloads the repository specified by the REPOSITORY_URL.
     """
+    if not git_repository_path:
+        raise ValueError("git_repository_path is required")
+    
     # Create repository folder
     try:
         repository_path = os.path.join(os.getcwd(), "dbt_repository")
@@ -71,7 +61,7 @@ def download_repository(git_repository_path: str):
             shutil.rmtree(repository_path, ignore_errors=False)
         os.makedirs(repository_path)
 
-        log(f"Repository folder created: {repository_path}")
+        log(f"Repository folder created: {repository_path}", level="info")
 
     except Exception as e:
         raise Exception(f"Error when creating repository folder: {e}")
@@ -79,14 +69,14 @@ def download_repository(git_repository_path: str):
     # Download repository
     try:
         git.Repo.clone_from(git_repository_path, repository_path)
-        log(f"Repository downloaded: {git_repository_path}")
+        log(f"Repository downloaded: {git_repository_path}", level="info")
     except git.GitCommandError as e:
         raise Exception(f"Error when downloading repository: {e}")
 
     # check for 'queries' folder
     queries_path = os.path.join(repository_path, "queries")
     if os.path.isdir(queries_path):
-        log(f"'queries' folder found at: {queries_path}")
+        log(f"'queries' folder found at: {queries_path}", level="info")
         return queries_path
 
     return repository_path
@@ -96,10 +86,10 @@ def download_repository(git_repository_path: str):
 def execute_dbt(
     command: str = "run",
     target: str = "dev",
-    select="",
-    exclude="",
-    state="",
-    flag="",
+    select: str = "",
+    exclude: str = "",
+    state: str = "",
+    flag: str = "",
 ):
     """
     Executes a dbt command using PrefectDbtRunner from prefect-dbt.
@@ -170,9 +160,13 @@ def install_dbt_dependencies():
     )
     
     # Execute the dbt deps command
-    deps_result = runner.invoke(["deps"])
-
-    return deps_result
+    try:
+        deps_result = runner.invoke(["deps"])
+        log("✅ DBT dependencies installed successfully", level="info")
+        return deps_result
+    except Exception as e:
+        log(f"❌ Error installing DBT dependencies: {e}", level="error")
+        raise
 
 
 @task
@@ -182,14 +176,22 @@ def create_dbt_report(
     bigquery_project: str,
     flow_info: dict,
     github_issue_repository: str,
+    send_discord_report: bool,
 ) -> None:
     """
     Creates a report based on the results of running dbt commands.
     """
-    logs = process_dbt_logs(log_path=os.path.join(repository_path, "logs", "dbt.log"))
+    try:
+        logs = process_dbt_logs(log_path=os.path.join(repository_path, "logs", "dbt.log"))
+    except Exception as e:
+        log(f"Warning: Could not process DBT logs: {e}", level="warning")
+        logs = None
 
-    log(f"Processed logs: {logs}", level="info")
-    log_path = log_to_file(logs)
+    log_path = None
+    if logs is not None:
+        
+        log_path = log_to_file(logs)
+    
     summarizer = Summarizer()
 
     is_successful, has_warnings = True, False
@@ -217,11 +219,7 @@ def create_dbt_report(
                     general_report.append(f"- ⚠️ WARN: {summarizer(command_result)}")
                     if hasattr(command_result, 'node') and hasattr(command_result.node, 'name'):
                         failed_models.append(command_result.node.name)
-                elif command_result.status == "runtime error":  # Table which source freshness failed
-                    is_successful = False
-                    general_report.append(f"- ⏱️ STALE TABLE: {summarizer(command_result)}")
-                    if hasattr(command_result, 'node') and hasattr(command_result.node, 'name'):
-                        failed_models.append(command_result.node.name)
+
     
     # If no detailed results, check overall success
     if not general_report:
@@ -236,53 +234,55 @@ def create_dbt_report(
     general_report = "**Resumo**:\n" + "\n".join(general_report)
     log(general_report)
 
-    # Get Parameters
-    param_report = ["**Parametros**:"]
 
-    parameters = runtime.flow_run.parameters
+    if send_discord_report:
+        # Get Parameters
+        param_report = ["**Parametros**:"]
 
-    if parameters.get("target") == "dev":
-        bigquery_project = bigquery_project + "-dev"
-    elif parameters.get("target") == "prod":
-        bigquery_project = bigquery_project
+        parameters = runtime.flow_run.parameters
 
-    param_report.append(f"- Projeto BigQuery: `{bigquery_project}`")
-    param_report.append(f"- Target dbt: `{parameters.get('target')}`")
-    param_report.append(f"- Comando: `{parameters.get('command')}`")
+        if parameters.get("target") == "dev":
+            bigquery_project = bigquery_project + "-dev"
+        elif parameters.get("target") == "prod":
+            bigquery_project = bigquery_project
 
-    if parameters.get("select"):
-        param_report.append(f"- Select: `{parameters.get('select')}`")
-    if parameters.get("exclude"):
-        param_report.append(f"- Exclude: `{parameters.get('exclude')}`")
-    if parameters.get("flag"):
-        param_report.append(f"- Flag: `{parameters.get('flag')}`")
+        param_report.append(f"- Projeto BigQuery: `{bigquery_project}`")
+        param_report.append(f"- Target dbt: `{parameters.get('target')}`")
+        param_report.append(f"- Comando: `{parameters.get('command')}`")
 
-    param_report.append(
-        f"- GitHub Repo: `{parameters.get('github_repo').rsplit('/', 1)[-1].removesuffix('.git')}`"
-    )
+        if parameters.get("select"):
+            param_report.append(f"- Select: `{parameters.get('select')}`")
+        if parameters.get("exclude"):
+            param_report.append(f"- Exclude: `{parameters.get('exclude')}`")
+        if parameters.get("flag"):
+            param_report.append(f"- Flag: `{parameters.get('flag')}`")
 
-    param_report = "\n".join(param_report)
-    param_report += " \n"
+        param_report.append(
+            f"- GitHub Repo: `{parameters.get('github_repo').rsplit('/', 1)[-1].removesuffix('.git')}`"
+        )
 
-    # PrefectDbtRunner provides success status directly
-    fully_successful = is_successful and getattr(running_results, 'success', True)
-    include_report = has_warnings or (not fully_successful)
+        param_report = "\n".join(param_report)
+        param_report += " \n"
 
-    # DBT - Sending Logs to Discord
-    command = parameters.get("command")
-    emoji = "❌" if not fully_successful else "✅"
-    complement = "com Erros" if not fully_successful else "sem Erros"
-    message = f"{param_report}\n{general_report}" if include_report else param_report
+        # PrefectDbtRunner provides success status directly
+        fully_successful = is_successful and getattr(running_results, 'success', True)
+        include_report = has_warnings or (not fully_successful)
 
-    send_message(
-        title=f"{emoji} [{bigquery_project}] - Execução `dbt {command}` finalizada {complement}",
-        message=message,
-        file_path=log_path,
-        flow_info=flow_info,
-        destination="notifications",  # Default destination for DBT reports
-    )
+        # DBT - Sending Logs to Discord
+        command = parameters.get("command")
+        emoji = "❌" if not fully_successful else "✅"
+        complement = "com Erros" if not fully_successful else "sem Erros"
+        message = f"{param_report}\n{general_report}" if include_report else param_report
 
-#    if not fully_successful and parameters.get("environment") == "prod":
+        send_message(
+            title=f"{emoji} [{bigquery_project}] - Execução `dbt {command}` finalizada {complement}",
+            message=message,
+            file_path=log_path,
+            flow_info=flow_info,
+            destination="notifications",  # Default destination for DBT reports
+        )
+
+#    if not fully_successful and parameters.get("target") == "prod":
 #        log(f"Warning the X9 Agent about failed models: {failed_models}")
 #
 #        br_timezone = datetime.timezone(datetime.timedelta(hours=-3))
@@ -434,10 +434,21 @@ def create_dbt_report(
 
 
 @task
-def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket):
+def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket) -> Optional[str]:
     """
     Retrieves the dbt artifacts from Google Cloud Storage.
+    
+    Args:
+        environment (str): Environment (dev/prod)
+        gcs_buckets (GcsBucket): Dictionary with bucket names for each environment
+        
+    Returns:
+        Optional[str]: Path to downloaded artifacts or None if failed
     """
+    if not gcs_buckets or environment not in gcs_buckets:
+        log(f"No GCS bucket configured for environment: {environment}", level="warning")
+        return None
+        
     gcs_bucket = gcs_buckets[environment]
     target_base_path = os.path.join(os.getcwd(), "target_base")
 
@@ -456,12 +467,28 @@ def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket):
 
 
 @task
-def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
+def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket) -> bool:
     """
     Sends the dbt artifacts to Google Cloud Storage.
+    
+    Args:
+        environment (str): Environment (dev/prod)
+        gcs_buckets (GcsBucket): Dictionary with bucket names for each environment
+        
+    Returns:
+        bool: True if upload was successful, False otherwise
     """
+    if not gcs_buckets or environment not in gcs_buckets:
+        log(f"No GCS bucket configured for environment: {environment}", level="warning")
+        return False
+        
     gcs_bucket = gcs_buckets[environment]
     dbt_artifacts_path = os.path.join(os.getcwd(), "target_base")
+
+    # Check if artifacts directory exists
+    if not os.path.exists(dbt_artifacts_path):
+        log(f"DBT artifacts directory not found: {dbt_artifacts_path}", level="warning")
+        return False
 
     try:
         upload_to_cloud_storage(path=dbt_artifacts_path, bucket_name=gcs_bucket)
@@ -469,9 +496,8 @@ def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket):
         return True
     except Exception as e:
         log(f"Error when uploading DBT artifacts to GCS: {e}", level="error")
-        return None
-    
-    
+        return False
+
 
 @flow(log_prints=True, flow_run_name="DBT {command} {target}")
 def rj_iplanrio__run_dbt(
@@ -492,7 +518,24 @@ def rj_iplanrio__run_dbt(
 ) -> None:
     """
     Main DBT Transform Flow migrated from Prefect 1.4 to 3.0
+    
+    Args:
+        send_discord_report (bool): Whether to send Discord report
+        command (str): DBT command to execute
+        select (str): DBT select argument
+        exclude (str): DBT exclude argument
+        flag (str): Additional DBT flags
+        github_repo (str): GitHub repository URL
+        bigquery_project (str): BigQuery project name
+        target (str): DBT target environment
+        gcs_buckets (GcsBucket): GCS bucket configuration
     """
+    
+    # Validate required parameters
+    if not github_repo:
+        raise ValueError("github_repo is required")
+    if not bigquery_project:
+        raise ValueError("bigquery_project is required")
     
     # Load BQ Credentials
     crd = inject_bd_credentials_task(environment="prod")  # noqa
@@ -500,9 +543,9 @@ def rj_iplanrio__run_dbt(
     # Get flow info
     flow_info = get_current_flow_info()
 
-    log(f"Flow name: {flow_info['flow_name']}")
-    log(f"Flow run id: {flow_info['flow_run_id']}")
-    log(f"Flow environment: {flow_info['flow_environment']}")
+    log(f"Flow name: {flow_info['flow_name']}", level="info")
+    log(f"Flow run id: {flow_info['flow_run_id']}", level="info")
+    log(f"Flow environment: {flow_info['flow_environment']}", level="info")
 
     # Download repository
     download_repository_task = download_repository(git_repository_path=github_repo)
@@ -526,14 +569,15 @@ def rj_iplanrio__run_dbt(
           state=download_dbt_artifacts_task,
     )
     
-    if send_discord_report:
-        create_dbt_report(
-            running_results=running_results,
-            repository_path=download_repository_task,
-            bigquery_project=bigquery_project,
-            flow_info=flow_info,
-            github_issue_repository=github_repo,
-        )
+    # Create summary report
+    create_dbt_report(
+        running_results=running_results,
+        repository_path=download_repository_task,
+        bigquery_project=bigquery_project,
+        flow_info=flow_info,
+        github_issue_repository=github_repo,
+        send_discord_report=send_discord_report,
+    )
     
     # Upload dbt artifacts to GCS if needed
     if flow_info["flow_environment"] == "prod" and command in ["build", "source freshness"]:
@@ -541,19 +585,4 @@ def rj_iplanrio__run_dbt(
             environment=target, 
             gcs_buckets=gcs_buckets
         )
-        
-if __name__ == "__main__":  
 
-    rj_iplanrio__run_dbt(
-        flag="",
-        select="",
-        command="source freshness",
-        exclude="",
-        gcs_buckets={
-            "dev": "rj-iplanrio-dev_dbt",
-            "prod": "rj-iplanrio_dbt"
-        },
-        github_repo="https://github.com/prefeitura-rio/queries-rj-iplanrio.git",
-        bigquery_project="rj-iplanrio",
-        send_discord_report=False
-)
