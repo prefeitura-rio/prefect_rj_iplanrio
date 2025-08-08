@@ -117,9 +117,7 @@ def send_message(
             await send_discord_webhook(
                 text_content=content,
                 file_path=file_path if i == len(contents) - 1 else None,
-                username=username,
-                monitor_slug=monitor_slug,
-            )
+                username=username            )
 
     asyncio.run(main(message_contents))
 
