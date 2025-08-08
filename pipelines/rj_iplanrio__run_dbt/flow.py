@@ -406,13 +406,13 @@ def get_target_from_environment(environment: str):
 
 
 @task
-def download_dbt_artifacts_from_gcs(dbt_path: str, environment: str, gcs_buckets: GcsBucket):
+def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket):
     """
     Retrieves the dbt artifacts from Google Cloud Storage.
     """
     gcs_bucket = gcs_buckets[environment]
 
-    target_base_path = os.path.join(dbt_path, "target_base")
+    target_base_path = os.path.join(os.getcwd(), "target_base")
 
     if os.path.exists(target_base_path):
         shutil.rmtree(target_base_path, ignore_errors=False)
@@ -484,7 +484,6 @@ def rj_iplanrio__run_dbt(
     # Load BQ Credentials
     crd = inject_bd_credentials_task(environment="prod")  # noqa
     
-
     # Get target and current flow project name
     target = get_target_from_environment(environment=environment)
     current_flow_project_name = get_current_flow_project_name()
@@ -492,32 +491,34 @@ def rj_iplanrio__run_dbt(
     # Download repository
     download_repository_task = download_repository(git_repository_path=github_repo)
     
-    # Install dbt packages
-    install_dbt_packages = execute_dbt(
-        repository_path=download_repository_task,
-        target=target,
-        command="deps",
-    )
-    
+    # Download dbt artifacts
     download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(
-        dbt_path=download_repository_task, 
         environment=environment, 
         gcs_buckets=gcs_buckets
     )
     
+    # Install dbt packages
+    install_dbt_packages = execute_dbt(
+          repository_path=download_repository_task,
+          target=target,
+          command="deps",
+    ).submit(wait_for=[download_dbt_artifacts_task])
+    
+
     ####################################
     # Tasks section #1 - Execute commands in DBT
     #####################################
     
+
     running_results = execute_dbt(
-        repository_path=download_repository_task,
-        state=download_dbt_artifacts_task,
-        target=target,
-        command=command,
-        select=select,
-        exclude=exclude,
-        flag=flag,
-        prefect_environment=current_flow_project_name,
+          repository_path=download_repository_task,
+          state=download_dbt_artifacts_task,
+          target=target,
+          command=command,
+          select=select,
+          exclude=exclude,
+          flag=flag,
+          prefect_environment=current_flow_project_name,
     ).submit(wait_for=[install_dbt_packages, download_dbt_artifacts_task])
     
     if send_discord_report:
@@ -541,7 +542,7 @@ def rj_iplanrio__run_dbt(
             environment=environment, 
             gcs_buckets=gcs_buckets
         )
-
+        
 if __name__ == "__main__":  
 
     rj_iplanrio__run_dbt(
@@ -556,7 +557,6 @@ if __name__ == "__main__":
             "prod": "rj-iplanrio_dbt"
         },
         github_repo="https://github.com/prefeitura-rio/queries-rj-iplanrio.git",
-        rename_flow=True,
         bigquery_project="rj-iplanrio",
         send_discord_report=False
 )
