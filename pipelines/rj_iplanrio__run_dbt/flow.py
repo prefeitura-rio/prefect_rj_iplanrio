@@ -491,7 +491,7 @@ def check_if_dbt_artifacts_upload_is_needed(command: str):
 
 
 
-@flow(log_prints=True, flow_run_name="DBT {command} {environment}")
+@flow(log_prints=True, flow_run_name="DBT {command} {target}")
 def rj_iplanrio__run_dbt(
     # Flow parameters
     send_discord_report: bool = True,
