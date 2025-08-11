@@ -1,0 +1,58 @@
+# -*- coding: utf-8 -*-
+"""
+Custom query processors for disparo template - migrado do Prefect 1.4
+Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/processors.py
+Registry of functions that process queries at runtime
+"""
+
+from datetime import datetime
+
+from iplanrio.pipelines_utils.logging import log
+
+
+def process_cadunico_query(query: str) -> str:
+    """
+    Processes the CADUNICO query by substituting dynamic values.
+
+    Args:
+        query: The query string with placeholders
+
+    Returns:
+        The processed query with substituted values
+
+    Raises:
+        ValueError: If {days_ahead} placeholder is not found in query
+    """
+    if "{days_ahead}" not in query:
+        raise ValueError("Query must contain {days_ahead} placeholder for dynamic substitution")
+
+    # Get dynamic days_ahead based on current weekday
+    current_weekday = datetime.now().weekday()  # 0=Monday, 6=Sunday
+    weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+    # Thursday (3) or Friday (4) = 4 days ahead
+    if current_weekday in [3, 4]:  # quinta, sexta
+        days_ahead = 4
+        log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
+    else:
+        # Other days = 2 days ahead
+        days_ahead = 2
+        log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
+
+    # ⚠️ MIGRATION NOTE: Original template usava cadunico_constants.CADUNICO_HSM_ID.value
+    # Manter referência para futura configuração
+    hsm_id = "CADUNICO_HSM_ID"  # Placeholder - deve ser configurado via constants
+
+    return query.format(days_ahead=days_ahead, hsm_id=hsm_id)
+
+
+# Registry of custom query processors
+QUERY_PROCESSORS = {
+    "cadunico": process_cadunico_query,
+    # Future processors can be added here
+}
+
+
+def get_query_processor(processor_name: str):
+    """Get query processor function by name"""
+    return QUERY_PROCESSORS.get(processor_name)
