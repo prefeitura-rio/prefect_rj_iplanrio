@@ -63,7 +63,7 @@ def rj_segovi__dump_db_1746(
     )
 
     dump_upload = process_single_query.map(  # noqa
-        queries=formated_query,
+        query=formated_query,
         batch_size=[batch_size],
         dataset_id=[dataset_id],
         table_id=[table_id],
@@ -72,7 +72,7 @@ def rj_segovi__dump_db_1746(
         batch_data_type=[batch_data_type],
         biglake_table=[biglake_table],
         log_number_of_batches=[log_number_of_batches],
-        retry_dump_upload_attempts=[retry_dump_upload_attempts],
+        # retry_dump_upload_attempts=[retry_dump_upload_attempts],
         database_type=[db_type],
         hostname=[db_host],
         port=[db_port],
@@ -81,3 +81,5 @@ def rj_segovi__dump_db_1746(
         database=[db_database],
         charset=[db_charset],
     )
+    # Parâmetros de Conexão
+    # Parâmetros de Batch e Tabela
