@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 from uuid import uuid4
+import asyncio
 
 import basedosdados as bd
 from prefect import task
@@ -134,7 +135,7 @@ def database_execute(
     retry_delay_seconds=30,
     # tags=["dump_sql_dump_upload_batch_mappable_task_limit"],
 )
-def _process_single_query(
+async def _process_single_query(
     # Parâmetros de Conexão
     database_type: str,
     hostname: str,
@@ -482,13 +483,14 @@ def _process_single_query(
 
         # delete batch data from prepath
         shutil.rmtree(prepath)
+    log(msg=f"--- Batchs: {idx}, Rows: {batchs_len} ---")
 
     return cleared_partitions, cleared_table, idx, batchs_len
 
 
 @task(
     name="dump_upload_batch_mappable_task",
-    description="Orchestrates dumping data. Runs sequentially for one query, or in parallel for multiple queries (forcing append).",
+    description="Orchestrates dumping data. Runs concurrently for multiple queries using an internal asyncio loop.",
 )
 def dump_upload_batch_mappable_task(
     database_type: str,
@@ -507,60 +509,163 @@ def dump_upload_batch_mappable_task(
     batch_data_type: str = "csv",
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
-    retry_dump_upload_attempts: int = 2,
+    max_concurrency: int = 1,  # Novo parâmetro para definir o limite do semáforo
 ):
     """
-    Ponto de entrada principal com passagem de variáveis explícita e logs detalhados.
+    Ponto de entrada síncrono que, internamente, cria um loop de eventos asyncio
+    para executar múltiplas queries concorrentemente com um semáforo.
     """
     bd_version = bd.__version__
-    log(msg=f"Usando basedosdados@{bd_version}")
-    queries_strings = [query["query"] for query in queries]
-    start_dates = [query["start_date"] for query in queries]
-    end_dates = [query["end_date"] for query in queries]
+    log(f"Using basedosdados@{bd_version}")
 
-    # Substitua o .map() e .wait() por um laço for
-    num_queries = len(queries_strings)
-    cleared_partitions = set()
-    cleared_table = False
+    # --- Início da lógica assíncrona interna ---
+
+    async def _process_single_query_with_semaphore(
+        semaphore: asyncio.Semaphore, **kwargs
+    ) -> Tuple[Set[str], bool, int, int]:
+        """Wrapper que adquire o semáforo antes de executar a task."""
+        async with semaphore:
+            # Usamos .fn() para chamar a corrotina pura da task,
+            # sem acionar o mecanismo de submissão da Prefect novamente.
+            return await _process_single_query.fn(**kwargs)
+
+    async def _main_async_runner():
+        """A corrotina principal que orquestra a execução concorrente."""
+        semaphore = asyncio.Semaphore(max_concurrency)
+        log(
+            f"Controle de concorrência ativado. Máximo de {max_concurrency} tarefas simultâneas."
+        )
+
+        tasks_to_run = []
+        initial_cleared_partitions = set()
+        initial_cleared_table = False
+
+        for query_info in queries:
+            task_args = {
+                "database_type": database_type,
+                "hostname": hostname,
+                "port": port,
+                "user": user,
+                "password": password,
+                "database": database,
+                "charset": charset,
+                "query": query_info["query"],
+                "batch_size": batch_size,
+                "dataset_id": dataset_id,
+                "table_id": table_id,
+                "dump_mode": dump_mode,
+                "partition_columns": partition_columns,
+                "batch_data_type": batch_data_type,
+                "biglake_table": biglake_table,
+                "log_number_of_batches": log_number_of_batches,
+                "cleared_partitions": initial_cleared_partitions,
+                "cleared_table": initial_cleared_table,
+            }
+            task = _process_single_query_with_semaphore(semaphore, **task_args)
+            tasks_to_run.append(task)
+
+        log(f"Iniciando a execução de {len(tasks_to_run)} queries em paralelo...")
+        # Executa todas as tarefas e aguarda os resultados
+        return await asyncio.gather(*tasks_to_run)
+
+    # --- Fim da lógica assíncrona interna ---
+
+    # Ponto chave: Inicia o loop de eventos asyncio e executa a corrotina principal.
+    # Esta chamada é bloqueante: ela só retorna quando TODAS as tarefas em _main_async_runner terminarem.
+    results = asyncio.run(_main_async_runner())
+
+    # Agrega os resultados de forma síncrona após a conclusão de tudo
     total_idx = 0
     total_batchs_len = 0
-    for i in range(num_queries):
-        log(
-            f"query {i+1} of {len(queries_strings)} |{ round(100 * (i+1) / len(queries_strings), 2)}"
-        )
-        # Chame a task trabalhadora diretamente. A execução vai parar aqui e esperar.
-        future = _process_single_query.submit(
-            # Parâmetros de Conexão
-            database_type=database_type,
-            hostname=hostname,
-            port=port,
-            user=user,
-            password=password,
-            database=database,
-            charset=charset,
-            # Parâmetros de Batch e Tabela
-            query=queries_strings[i],
-            batch_size=batch_size,
-            dataset_id=dataset_id,
-            table_id=table_id,
-            dump_mode=dump_mode,
-            partition_columns=partition_columns,
-            batch_data_type=batch_data_type,
-            biglake_table=biglake_table,
-            log_number_of_batches=log_number_of_batches,
-            # Estado e Informações
-            cleared_partitions=cleared_partitions,
-            cleared_table=cleared_table,
-        )
-        future.wait()
-        cleared_partitions, cleared_table, idx, batchs_len = future.result()
+    final_cleared_partitions = set()
 
-        log(msg=f"--- Task {i+1} concluída. Batchs: {idx}, Rows: {batchs_len} ---")
+    for i, result in enumerate(results):
+        cleared_parts, _, idx, batchs_len = result
         total_idx += idx
         total_batchs_len += batchs_len
+        final_cleared_partitions.update(cleared_parts)
+
     log(
-        msg=f"SUCESSO: {num_queries} queries foram executadas sequencialmente. Total de Batchs: {total_idx}, Rows: {total_batchs_len}"
+        msg=f"SUCESSO: {len(queries)} queries foram executadas. Total de Batchs: {total_idx}, Rows: {total_batchs_len}"
     )
+    log(f"Partições limpas durante a execução: {final_cleared_partitions}")
+
+
+# @task(
+#     name="dump_upload_batch_subimit_task",
+#     description="Orchestrates dumping data. Runs sequentially for one query, or in parallel for multiple queries (forcing append).",
+# )
+# def dump_upload_batch_subimit_task(
+#     database_type: str,
+#     hostname: str,
+#     port: int,
+#     user: str,
+#     password: str,
+#     database: str,
+#     queries: List[dict],
+#     batch_size: int,
+#     dataset_id: str,
+#     table_id: str,
+#     dump_mode: str,
+#     charset: str = NOT_SET,
+#     partition_columns: List[str] = [],
+#     batch_data_type: str = "csv",
+#     biglake_table: bool = True,
+#     log_number_of_batches: int = 100,
+#     retry_dump_upload_attempts: int = 2,
+# ):
+#     """
+#     Ponto de entrada principal com passagem de variáveis explícita e logs detalhados.
+#     """
+#     bd_version = bd.__version__
+#     log(msg=f"Usando basedosdados@{bd_version}")
+#     queries_strings = [query["query"] for query in queries]
+#     start_dates = [query["start_date"] for query in queries]
+#     end_dates = [query["end_date"] for query in queries]
+
+#     # Substitua o .map() e .wait() por um laço for
+#     num_queries = len(queries_strings)
+#     cleared_partitions = set()
+#     cleared_table = False
+#     total_idx = 0
+#     total_batchs_len = 0
+#     for i in range(num_queries):
+#         log(
+#             f"query {i+1} of {len(queries_strings)} |{ round(100 * (i+1) / len(queries_strings), 2)}"
+#         )
+#         # Chame a task trabalhadora diretamente. A execução vai parar aqui e esperar.
+#         future = _process_single_query.submit(
+#             # Parâmetros de Conexão
+#             database_type=database_type,
+#             hostname=hostname,
+#             port=port,
+#             user=user,
+#             password=password,
+#             database=database,
+#             charset=charset,
+#             # Parâmetros de Batch e Tabela
+#             query=queries_strings[i],
+#             batch_size=batch_size,
+#             dataset_id=dataset_id,
+#             table_id=table_id,
+#             dump_mode=dump_mode,
+#             partition_columns=partition_columns,
+#             batch_data_type=batch_data_type,
+#             biglake_table=biglake_table,
+#             log_number_of_batches=log_number_of_batches,
+#             # Estado e Informações
+#             cleared_partitions=cleared_partitions,
+#             cleared_table=cleared_table,
+#         )
+#         future.wait()
+#         cleared_partitions, cleared_table, idx, batchs_len = future.result()
+
+#         log(msg=f"--- Task {i+1} concluída. Batchs: {idx}, Rows: {batchs_len} ---")
+#         total_idx += idx
+#         total_batchs_len += batchs_len
+#     log(
+#         msg=f"SUCESSO: {num_queries} queries foram executadas sequencialmente. Total de Batchs: {total_idx}, Rows: {total_batchs_len}"
+#     )
 
 
 def format_partitioned_query(
