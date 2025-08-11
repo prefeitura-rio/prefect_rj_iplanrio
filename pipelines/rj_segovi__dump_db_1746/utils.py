@@ -347,7 +347,7 @@ def _process_single_query(
 
 @task(
     name="_mappable_worker_task",
-    tags=["dump_sql_dump_upload_batch_mappable_task_limit"],
+    # tags=["dump_sql_dump_upload_batch_mappable_task_limit"],
 )
 def _mappable_worker_task(
     # Parâmetros de Conexão
