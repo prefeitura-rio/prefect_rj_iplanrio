@@ -489,7 +489,7 @@ def dump_upload_batch_mappable_task(
             log(msg=f"--- Iniciando a execução da task {query_info} ---")
 
             # Chame a task trabalhadora diretamente. A execução vai parar aqui e esperar.
-            _mappable_worker_task(
+            future = _mappable_worker_task.submit(
                 database_type=database_type,
                 hostname=hostname,
                 port=port,
@@ -510,8 +510,8 @@ def dump_upload_batch_mappable_task(
                 log_number_of_batches=log_number_of_batches,
                 query_info=query_info,
             )
+            future.wait()
             log(msg=f"--- Task {query_info} concluída. Partindo para a próxima. ---")
-
         log(msg="----------------------------------------------------")
         log(msg=f"SUCESSO: {num_queries} queries foram executadas sequencialmente.")
 
