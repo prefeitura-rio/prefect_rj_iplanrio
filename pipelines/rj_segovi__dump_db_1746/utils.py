@@ -132,6 +132,7 @@ def database_execute(
     name="_process_single_query",
     retries=3,
     retry_delay_seconds=30,
+    # tags=["dump_sql_dump_upload_batch_mappable_task_limit"],
 )
 def _process_single_query(
     # Parâmetros de Conexão
@@ -153,19 +154,11 @@ def _process_single_query(
     biglake_table: bool,
     log_number_of_batches: int,
     # Estado e Informações
-    shared_state: dict,
-    query_info: str,
+    cleared_partitions: Set[str],
+    cleared_table: bool,
 ) -> Tuple[Set[str], bool, int, int]:
-    """
-    Processa uma única query com logs detalhados e passagem explícita de parâmetros.
-    """
-    log(msg=f"Iniciando processamento para a query {query_info}")
-
-    cleared_partitions = shared_state["cleared_partitions"]
-    cleared_table = shared_state["cleared_table"]
-    prepath = Path(f"data/{uuid4()}/")
-
-    # Conexão explícita com o banco
+    # Keep track of cleared stuff
+    prepath = f"data/{uuid4()}/"
     db_object = database_get_db(
         database_type=database_type,
         hostname=hostname,
@@ -175,41 +168,51 @@ def _process_single_query(
         database=database,
         charset=charset,
     )
-    database_execute(database=db_object, query=query)
 
+    database_execute(  # pylint: disable=invalid-name
+        database=db_object,
+        query=query,
+    )
+
+    # Get data columns
     columns = db_object.get_columns()
-    log(msg=f"Colunas obtidas: {columns}")
+    log(f"Got columns: {columns}")
+
     new_query_cols = build_query_new_columns(table_columns=columns)
     log(f"New query columns without accents: {new_query_cols}")
 
-    partition_column = (
-        partition_columns[0] if partition_columns and partition_columns[0] else None
-    )
-    if partition_column:
-        log(
-            msg=f"Coluna de partição: {partition_column} ENCONTRADA! Gravando em arquivos particionados."
-        )
-    else:
-        log(msg="NENHUMA coluna de partição especificada! Gravando em arquivos únicos.")
+    prepath = Path(prepath)
 
+    if not partition_columns or partition_columns[0] == "":
+        partition_column = None
+    else:
+        partition_column = partition_columns[0]
+
+    if not partition_column:
+        log("NO partition column specified! Writing unique files")
+    else:
+        log(f"Partition column: {partition_column} FOUND!! Write to partitioned files")
+
+    # Now loop until we have no more data.
     batch = db_object.fetch_batch(batch_size)
     idx = 0
     batchs_len = 0
     while len(batch) > 0:
         prepath.mkdir(parents=True, exist_ok=True)
+        # Log progress each 100 batches.
         log_mod(
-            msg=f"Extraindo batch {idx+1} com {len(batch)} linhas",
+            msg=f"Dumping batch {idx+1} with size {len(batch)}",
             index=idx,
             mod=log_number_of_batches,
         )
         batchs_len += len(batch)
 
+        # Dump batch to file.
         dataframe = batch_to_dataframe(batch=batch, columns=columns)
         old_columns = dataframe.columns.tolist()
         dataframe.columns = remove_columns_accents(dataframe)
         new_columns_dict = dict(zip(old_columns, dataframe.columns.tolist()))
         dataframe = clean_dataframe(dataframe)
-
         saved_files = []
         if partition_column:
             dataframe, date_partition_columns = parse_date_columns(
@@ -225,177 +228,262 @@ def _process_single_query(
                 data_type=batch_data_type,
                 suffix=f"{datetime.now().strftime('%Y%m%d-%H%M%S')}",
             )
-        else:
-            fname = prepath / f"{uuid4()}.{batch_data_type}"
-            if batch_data_type == "csv":
-                dataframe_to_csv(dataframe, fname)
-            elif batch_data_type == "parquet":
-                dataframe_to_parquet(dataframe, fname)
+        elif batch_data_type == "csv":
+            fname = prepath / f"{uuid4()}.csv"
+            dataframe_to_csv(dataframe, fname)
             saved_files = [fname]
+        elif batch_data_type == "parquet":
+            fname = prepath / f"{uuid4()}.parquet"
+            dataframe_to_parquet(dataframe, fname)
+            saved_files = [fname]
+        else:
+            raise ValueError(f"Unknown data type: {batch_data_type}")
+
+        # Log progress each 100 batches.
 
         log_mod(
-            msg=f"Batch gerou {len(saved_files)} arquivos. Iniciando upload.",
+            msg=f"Batch generated {len(saved_files)} files. Will now upload.",
             index=idx,
             mod=log_number_of_batches,
         )
 
+        # Upload files.
         tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
+        table_staging = f"{tb.table_full_name['staging']}"
         st = bd.Storage(dataset_id=dataset_id, table_id=table_id)
-        table_staging_uri = f"{tb.table_full_name['staging']}"
-        storage_path_link = f"https://console.cloud.google.com/storage/browser/{st.bucket_name}/staging/{dataset_id}/{table_id}"
+        storage_path = f"{st.bucket_name}.staging.{dataset_id}.{table_id}"
+        storage_path_link = (
+            f"https://console.cloud.google.com/storage/browser/{st.bucket_name}"
+            f"/staging/{dataset_id}/{table_id}"
+        )
         dataset_is_public = tb.client["bigquery_prod"].project == "datario"
-
+        # If we have a partition column
         if partition_column:
-            current_partitions = {
-                str(f.parent.relative_to(prepath)) for f in saved_files
-            }
-            partitions_to_clear = current_partitions - cleared_partitions
-            if partitions_to_clear:
+            # Extract the partition from the filenames
+            partitions = []
+            for saved_file in saved_files:
+                # Remove the prepath and filename. This is the partition.
+                partition = str(saved_file).replace(str(prepath), "")
+                partition = partition.replace(saved_file.name, "")
+                # Strip slashes from beginning and end.
+                partition = partition.strip("/")
+                # Add to list.
+                partitions.append(partition)
+            # Remove duplicates.
+            partitions = list(set(partitions))
+            log_mod(
+                msg=f"Got partitions: {partitions}",
+                index=idx,
+                mod=log_number_of_batches,
+            )
+            # Loop through partitions and delete files from GCS.
+            blobs_to_delete = []
+            for partition in partitions:
+                if partition not in cleared_partitions:
+                    blobs = list_blobs_with_prefix(
+                        bucket_name=st.bucket_name,
+                        prefix=f"staging/{dataset_id}/{table_id}/{partition}",
+                        mode="staging",
+                    )
+                    blobs_to_delete.extend(blobs)
+                cleared_partitions.add(partition)
+            if blobs_to_delete:
+                delete_blobs_list(bucket_name=st.bucket_name, blobs=blobs_to_delete)
                 log_mod(
-                    msg=f"Limpando partições no GCS: {partitions_to_clear}",
+                    msg=f"Deleted {len(blobs_to_delete)} blobs from GCS: {blobs_to_delete}",  # noqa
                     index=idx,
                     mod=log_number_of_batches,
                 )
-                blobs_to_delete = [
-                    blob
-                    for part in partitions_to_clear
-                    for blob in list_blobs_with_prefix(
-                        st.bucket_name,
-                        f"staging/{dataset_id}/{table_id}/{part}",
-                        "staging",
+        if dump_mode == "append":
+            if tb.table_exists(mode="staging"):
+                log_mod(
+                    msg=(
+                        "MODE APPEND: Table ALREADY EXISTS:"
+                        + f"\n{table_staging}"
+                        + f"\n{storage_path_link}"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )
+            else:
+                # the header is needed to create a table when dosen't exist
+                log_mod(
+                    msg="MODE APPEND: Table DOESN'T EXISTS\nStart to CREATE HEADER file",  # noqa
+                    index=idx,
+                    mod=log_number_of_batches,
+                )
+                header_path = dump_header_to_file(data_path=saved_files[0])
+                log_mod(
+                    msg="MODE APPEND: Created HEADER file:\n" f"{header_path}",
+                    index=idx,
+                    mod=log_number_of_batches,
+                )
+
+                tb.create(
+                    path=header_path,
+                    if_storage_data_exists="replace",
+                    if_table_exists="replace",
+                    biglake_table=biglake_table,
+                    dataset_is_public=dataset_is_public,
+                )
+
+                log_mod(
+                    msg=(
+                        "MODE APPEND: Sucessfully CREATED A NEW TABLE:\n"
+                        + f"{table_staging}\n"
+                        + f"{storage_path_link}"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )  # pylint: disable=C0301
+
+                if not cleared_table:
+                    st.delete_table(
+                        mode="staging",
+                        bucket_name=st.bucket_name,
+                        not_found_ok=True,
                     )
-                ]
-                if blobs_to_delete:
-                    delete_blobs_list(st.bucket_name, blobs_to_delete)
                     log_mod(
-                        msg=f"Deletados {len(blobs_to_delete)} blobs do GCS.",
+                        msg=(
+                            "MODE APPEND: Sucessfully REMOVED HEADER DATA from Storage:\n"  # noqa
+                            + f"{storage_path}\n"
+                            + f"{storage_path_link}"
+                        ),
                         index=idx,
                         mod=log_number_of_batches,
-                    )
-            cleared_partitions.update(current_partitions)
+                    )  # pylint: disable=C0301
+                    cleared_table = True
+        elif dump_mode == "overwrite":
+            if tb.table_exists(mode="staging") and not cleared_table:
+                log_mod(
+                    msg=(
+                        "MODE OVERWRITE: Table ALREADY EXISTS, DELETING OLD DATA!\n"
+                        + f"{storage_path}\n"
+                        + f"{storage_path_link}"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )  # pylint: disable=C0301
+                st.delete_table(
+                    mode="staging",
+                    bucket_name=st.bucket_name,
+                    not_found_ok=True,
+                )
+                log_mod(
+                    msg=(
+                        "MODE OVERWRITE: Sucessfully DELETED OLD DATA from Storage:\n"
+                        + f"{storage_path}\n"
+                        + f"{storage_path_link}"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )  # pylint: disable=C0301
+                # delete only staging table and let DBT overwrite the prod table
+                tb.delete(mode="staging")
+                log_mod(
+                    msg=(
+                        "MODE OVERWRITE: Sucessfully DELETED TABLE:\n"
+                        + f"{table_staging}\n"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )  # pylint: disable=C0301
 
-        if dump_mode == "overwrite" and not cleared_table:
-            log_mod(
-                msg=f"MODO OVERWRITE: Deletando dados antigos em {storage_path_link}",
-                index=idx,
-                mod=log_number_of_batches,
-            )
-            st.delete_table(
-                mode="staging", bucket_name=st.bucket_name, not_found_ok=True
-            )
-            tb.delete(mode="staging")
-            log_mod(
-                msg=f"MODO OVERWRITE: Tabela {table_staging_uri} e dados do Storage deletados.",
-                index=idx,
-                mod=log_number_of_batches,
-            )
-            cleared_table = True
+            if not cleared_table:
+                # the header is needed to create a table when dosen't exist
+                # in overwrite mode the header is always created
+                st.delete_table(
+                    mode="staging",
+                    bucket_name=st.bucket_name,
+                    not_found_ok=True,
+                )
+                log_mod(
+                    msg=(
+                        "MODE OVERWRITE: Sucessfully DELETED OLD DATA from Storage:\n"
+                        + f"{storage_path}\n"
+                        + f"{storage_path_link}"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )  # pylint: disable=C0301
 
-        if not tb.table_exists(mode="staging"):
-            log_msg_prefix = (
-                "MODO APPEND" if dump_mode == "append" else "MODO OVERWRITE"
-            )
-            log_mod(
-                msg=f"{log_msg_prefix}: Tabela de staging não existe. Criando com base no schema do primeiro batch.",
-                index=idx,
-                mod=log_number_of_batches,
-            )
-            header_path = dump_header_to_file(data_path=saved_files[0])
-            log_mod(
-                msg=f"{log_msg_prefix}: Arquivo de header criado: {header_path}",
-                index=idx,
-                mod=log_number_of_batches,
-            )
-            tb.create(
-                path=header_path,
-                if_storage_data_exists="replace",
-                if_table_exists="replace",
-                biglake_table=biglake_table,
-                dataset_is_public=dataset_is_public,
-            )
-            log_mod(
-                msg=f"{log_msg_prefix}: Tabela criada com sucesso: {table_staging_uri}",
-                index=idx,
-                mod=log_number_of_batches,
-            )
-            st.delete_table(
-                mode="staging", bucket_name=st.bucket_name, not_found_ok=True
-            )
-            log_mod(
-                msg=f"{log_msg_prefix}: Dados do header removidos do Storage.",
-                index=idx,
-                mod=log_number_of_batches,
-            )
-            cleared_table = True
+                log_mod(
+                    msg="MODE OVERWRITE: Table DOSEN'T EXISTS\nStart to CREATE HEADER file",  # noqa
+                    index=idx,
+                    mod=log_number_of_batches,
+                )
+                header_path = dump_header_to_file(data_path=saved_files[0])
+                log_mod(
+                    "MODE OVERWRITE: Created HEADER file:\n" f"{header_path}",
+                    index=idx,
+                    mod=log_number_of_batches,
+                )
+
+                tb.create(
+                    path=header_path,
+                    if_storage_data_exists="replace",
+                    if_table_exists="replace",
+                    biglake_table=biglake_table,
+                    dataset_is_public=dataset_is_public,
+                )
+
+                log_mod(
+                    msg=(
+                        "MODE OVERWRITE: Sucessfully CREATED TABLE\n"
+                        + f"{table_staging}\n"
+                        + f"{storage_path_link}"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )
+
+                st.delete_table(
+                    mode="staging",
+                    bucket_name=st.bucket_name,
+                    not_found_ok=True,
+                )
+                log_mod(
+                    msg=(
+                        "MODE OVERWRITE: Sucessfully REMOVED HEADER DATA from Storage\n:"  # noqa
+                        + f"{storage_path}\n"
+                        + f"{storage_path_link}"
+                    ),
+                    index=idx,
+                    mod=log_number_of_batches,
+                )  # pylint: disable=C0301
+                cleared_table = True
 
         log_mod(
-            msg="Iniciando upload para o GCS.", index=idx, mod=log_number_of_batches
-        )
-        tb.append(filepath=prepath, if_exists="replace")
-        log_mod(
-            msg=f"UPLOAD: Batch {idx + 1} enviado com sucesso para o Storage.",
+            msg="STARTING UPLOAD TO GCS",
             index=idx,
             mod=log_number_of_batches,
         )
-        shutil.rmtree(prepath)
-
+        if tb.table_exists(mode="staging"):
+            # Upload them all at once
+            tb.append(filepath=prepath, if_exists="replace")
+            log_mod(
+                msg=f"STEP UPLOAD: Sucessfully uploaded batch {idx +1} file with size {len(batch)} to Storage",
+                index=idx,
+                mod=log_number_of_batches,
+            )
+            for saved_file in saved_files:
+                # Delete the files
+                saved_file.unlink()
+        else:
+            # pylint: disable=C0301
+            log_mod(
+                msg="STEP UPLOAD: Table does not exist in STAGING, need to create first",  # noqa
+                index=idx,
+                mod=log_number_of_batches,
+            )
+        # Get next batch.
         batch = db_object.fetch_batch(batch_size)
         idx += 1
 
+        # delete batch data from prepath
+        shutil.rmtree(prepath)
+
     return cleared_partitions, cleared_table, idx, batchs_len
-
-
-@task(
-    name="_mappable_worker_task",
-    # tags=["dump_sql_dump_upload_batch_mappable_task_limit"],
-)
-def _mappable_worker_task(
-    # Parâmetros de Conexão
-    database_type: str,
-    hostname: str,
-    port: int,
-    user: str,
-    password: str,
-    database: str,
-    charset: str,
-    # Parâmetros de Batch e Tabela
-    query: str,
-    start_date: str,
-    end_date: str,
-    batch_size: int,
-    dataset_id: str,
-    table_id: str,
-    dump_mode: str,
-    partition_columns: List[str],
-    batch_data_type: str,
-    biglake_table: bool,
-    log_number_of_batches: int,
-    # Informações
-    query_info: str,
-):
-    """Task trabalhadora para .map() com passagem explícita de parâmetros."""
-    worker_state = {"cleared_partitions": set(), "cleared_table": True}
-    log(msg=f"From {start_date} to {end_date} - Query info: {query_info}")
-    _process_single_query(
-        database_type=database_type,
-        hostname=hostname,
-        port=port,
-        user=user,
-        password=password,
-        database=database,
-        charset=charset,
-        query=query,
-        batch_size=batch_size,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=dump_mode,
-        partition_columns=partition_columns,
-        batch_data_type=batch_data_type,
-        biglake_table=biglake_table,
-        log_number_of_batches=log_number_of_batches,
-        shared_state=worker_state,
-        query_info=query_info,
-    )
 
 
 @task(
@@ -430,15 +518,19 @@ def dump_upload_batch_mappable_task(
     start_dates = [query["start_date"] for query in queries]
     end_dates = [query["end_date"] for query in queries]
 
-    if len(queries_strings) <= 1 or dump_mode == "overwrite":
-        log(msg="Executando em modo SEQUENCIAL.")
-        if not queries_strings:
-            log(msg="Nenhuma query fornecida. Finalizando.")
-            return
-
-        initial_state = {"cleared_partitions": set(), "cleared_table": False}
-        # Chamada explícita para o modo sequencial
-        _, _, total_idx, total_batchs_len = _process_single_query(
+    # Substitua o .map() e .wait() por um laço for
+    num_queries = len(queries_strings)
+    cleared_partitions = set()
+    cleared_table = False
+    total_idx = 0
+    total_batchs_len = 0
+    for i in range(num_queries):
+        log(
+            f"query {i+1} of {len(queries_strings)} |{ round(100 * (i+1) / len(queries_strings), 2)}"
+        )
+        # Chame a task trabalhadora diretamente. A execução vai parar aqui e esperar.
+        future = _process_single_query.submit(
+            # Parâmetros de Conexão
             database_type=database_type,
             hostname=hostname,
             port=port,
@@ -446,7 +538,8 @@ def dump_upload_batch_mappable_task(
             password=password,
             database=database,
             charset=charset,
-            query=queries_strings[0],
+            # Parâmetros de Batch e Tabela
+            query=queries_strings[i],
             batch_size=batch_size,
             dataset_id=dataset_id,
             table_id=table_id,
@@ -455,90 +548,19 @@ def dump_upload_batch_mappable_task(
             batch_data_type=batch_data_type,
             biglake_table=biglake_table,
             log_number_of_batches=log_number_of_batches,
-            shared_state=initial_state,
-            query_info="1 de 1",
+            # Estado e Informações
+            cleared_partitions=cleared_partitions,
+            cleared_table=cleared_table,
         )
-        log(msg="----------------------------------------------------")
-        log(msg=f"SUCESSO: Extração finalizada para 1 query.")
-        log(msg=f"Total de batches: {total_idx}, Total de linhas: {total_batchs_len}")
-        log(msg="----------------------------------------------------")
+        future.wait()
+        cleared_partitions, cleared_table, idx, batchs_len = future.result()
 
-    else:
-
-        log(
-            msg=f"Executando {len(queries_strings)} queries em modo SEQUENCIAL OBSERVÁVEL."
-        )
-        if dump_mode == "overwrite":
-            log(
-                msg="AVISO: 'overwrite' é inseguro para execuções paralelas. A tabela será limpa uma vez, e todos os workers farão append.",
-                level="warning",
-            )
-
-        # Opcional: Bloco de preparação de tabela pode ser mantido se necessário
-        tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
-        if not tb.table_exists(mode="staging") or dump_mode == "overwrite":
-            log(
-                msg="Preparando a tabela de destino (limpando ou criando o schema inicial)."
-            )
-            prep_state = {"cleared_partitions": set(), "cleared_table": False}
-            _process_single_query(
-                database_type=database_type,
-                hostname=hostname,
-                port=port,
-                user=user,
-                password=password,
-                database=database,
-                charset=charset,
-                query=queries_strings[0],
-                batch_size=1,
-                dataset_id=dataset_id,
-                table_id=table_id,
-                dump_mode="overwrite",
-                partition_columns=partition_columns,
-                batch_data_type=batch_data_type,
-                biglake_table=biglake_table,
-                log_number_of_batches=log_number_of_batches,
-                shared_state=prep_state,
-                query_info="preparação de schema",
-            )
-            st = bd.Storage(dataset_id=dataset_id, table_id=table_id)
-            st.delete_table(
-                mode="staging", bucket_name=st.bucket_name, not_found_ok=True
-            )
-            log(msg="Tabela de destino pronta para receber appends em paralelo.")
-
-        # Substitua o .map() e .wait() por um laço for
-        num_queries = len(queries_strings)
-        for i in range(num_queries):
-            query_info = f"{i+1} de {num_queries}"
-            log(msg=f"--- Iniciando a execução da task {query_info} ---")
-
-            # Chame a task trabalhadora diretamente. A execução vai parar aqui e esperar.
-            future = _mappable_worker_task.submit(
-                database_type=database_type,
-                hostname=hostname,
-                port=port,
-                user=user,
-                password=password,
-                database=database,
-                charset=charset,
-                query=queries_strings[i],  # Use o índice do laço
-                start_date=start_dates[i],  # Use o índice do laço
-                end_date=end_dates[i],  # Use o índice do laço
-                batch_size=batch_size,
-                dataset_id=dataset_id,
-                table_id=table_id,
-                dump_mode="append",  # Workers sempre anexam
-                partition_columns=partition_columns,
-                batch_data_type=batch_data_type,
-                biglake_table=biglake_table,
-                log_number_of_batches=log_number_of_batches,
-                query_info=query_info,
-            )
-            future.wait()
-            log(msg=f"--- Task {query_info} concluída. Partindo para a próxima. ---")
-        log(msg="----------------------------------------------------")
-        log(msg=f"SUCESSO: {num_queries} queries foram executadas sequencialmente.")
+        log(msg=f"--- Task {i+1} concluída. Batchs: {idx}, Rows: {batchs_len} ---")
+        total_idx += idx
+        total_batchs_len += batchs_len
+    log(
+        msg=f"SUCESSO: {num_queries} queries foram executadas sequencialmente. Total de Batchs: {total_idx}, Rows: {total_batchs_len}"
+    )
 
 
 def format_partitioned_query(
