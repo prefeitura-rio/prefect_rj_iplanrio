@@ -35,7 +35,7 @@ def dump_upload_batch_task(
     user: str,
     password: str,
     database: str,
-    queries: List[str],
+    queries: List[dict],
     batch_size: int,
     dataset_id: str,
     table_id: str,

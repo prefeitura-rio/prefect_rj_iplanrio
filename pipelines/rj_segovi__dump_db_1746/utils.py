@@ -375,9 +375,7 @@ def _mappable_worker_task(
 ):
     """Task trabalhadora para .map() com passagem explícita de parâmetros."""
     worker_state = {"cleared_partitions": set(), "cleared_table": True}
-    rename_current_task_run_task(
-        new_name=f"From {start_date} to {end_date} - Query info: {query_info}"
-    )
+    log(msg=f"From {start_date} to {end_date} - Query info: {query_info}")
     _process_single_query(
         database_type=database_type,
         hostname=hostname,
@@ -432,7 +430,7 @@ def dump_upload_batch_mappable_task(
     start_dates = [query["start_date"] for query in queries]
     end_dates = [query["end_date"] for query in queries]
 
-    if len(queries_strings) <= 1:
+    if len(queries_strings) <= 1 or dump_mode == "overwrite":
         log(msg="Executando em modo SEQUENCIAL.")
         if not queries_strings:
             log(msg="Nenhuma query fornecida. Finalizando.")
@@ -479,8 +477,35 @@ def dump_upload_batch_mappable_task(
         # Opcional: Bloco de preparação de tabela pode ser mantido se necessário
         tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
         if not tb.table_exists(mode="staging") or dump_mode == "overwrite":
-            # ... (seu código de preparação de tabela continua o mesmo) ...
-            pass  # Apenas para o exemplo ficar claro
+            log(
+                msg="Preparando a tabela de destino (limpando ou criando o schema inicial)."
+            )
+            prep_state = {"cleared_partitions": set(), "cleared_table": False}
+            _process_single_query(
+                database_type=database_type,
+                hostname=hostname,
+                port=port,
+                user=user,
+                password=password,
+                database=database,
+                charset=charset,
+                query=queries_strings[0],
+                batch_size=1,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                dump_mode="overwrite",
+                partition_columns=partition_columns,
+                batch_data_type=batch_data_type,
+                biglake_table=biglake_table,
+                log_number_of_batches=log_number_of_batches,
+                shared_state=prep_state,
+                query_info="preparação de schema",
+            )
+            st = bd.Storage(dataset_id=dataset_id, table_id=table_id)
+            st.delete_table(
+                mode="staging", bucket_name=st.bucket_name, not_found_ok=True
+            )
+            log(msg="Tabela de destino pronta para receber appends em paralelo.")
 
         # Substitua o .map() e .wait() por um laço for
         num_queries = len(queries_strings)
