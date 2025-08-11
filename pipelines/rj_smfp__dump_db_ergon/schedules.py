@@ -2,7 +2,6 @@
 
 from iplanrio.pipelines_utils.prefect import create_dump_db_schedules
 
-
 ERGON_QUERIES = [
     {
         "table_id": "IPL_PT_FICHAS",

@@ -6,6 +6,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
-COPY ./pipelines/rj_segovi__dump_db_1746 ./pipelines/rj_segovi__dump_db_1746/
+COPY ./pipelines/rj_sme__brutos_core_sso ./pipelines/rj_sme__brutos_core_sso/
 
 RUN uv sync --all-packages

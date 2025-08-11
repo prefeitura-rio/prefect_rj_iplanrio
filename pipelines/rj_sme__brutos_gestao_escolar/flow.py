@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the Ergon server to the BIGQUERY.
+This flow is used to dump the database from the GestaoEscolar server to the BIGQUERY.
 """
 
 from typing import Optional
@@ -17,16 +17,16 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_smfp__dump_db_ergon(
-    db_database: str = "db_database",
-    db_host: str = "db_host",
-    db_port: str = "db_port",
-    db_type: str = "db_type",
+def rj_sme__brutos_gestao_escolar(
+    db_database: str = "GestaoEscolar",
+    db_host: str = "10.70.6.103",
+    db_port: str = "1433",
+    db_type: str = "sql_server",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "dataset_id",
+    dataset_id: str = "brutos_gestao_escolar",
     table_id: str = "table_id",
-    infisical_secret_path: str = "infisical_secret_path",
+    infisical_secret_path: str = "/db-gestao-escolar",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,

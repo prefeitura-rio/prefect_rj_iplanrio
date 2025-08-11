@@ -4,7 +4,7 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 
 RUN wget -O /tmp/instantclient.zip "https://download.oracle.com/otn_software/linux/instantclient/2118000/instantclient-basic-linux.x64-21.18.0.0.0dbru.zip" && unzip /tmp/instantclient.zip -d /tmp
 
-FROM prefecthq/prefect:3.4.3-python3.13
+FROM prefecthq/prefect:3.4.3-python3.13@sha256:684329aa8a737b2505301118d220eb4fabdb0967e7ece5eeb2deb7909e9d309f
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -24,7 +24,5 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     sh -c "echo /opt/oracle/instantclient > /etc/ld.so.conf.d/oracle-instantclient.conf" && \
     ldconfig
-
-COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 RUN mkdir pipelines
