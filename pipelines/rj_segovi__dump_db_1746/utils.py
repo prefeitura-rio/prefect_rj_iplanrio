@@ -509,6 +509,7 @@ def dump_upload_batch_mappable_task(
     batch_data_type: str = "csv",
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
+    retry_dump_upload_attempts: int = 2,
     max_concurrency: int = 1,  # Novo parâmetro para definir o limite do semáforo
 ):
     """
