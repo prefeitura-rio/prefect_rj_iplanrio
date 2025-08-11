@@ -7,6 +7,8 @@ members = [
     "prefect-rj-iplanrio",
     "rj-iplanrio-equipamentos-arcgis",
     "rj-segovi-dump-db-1746",
+    "rj-sme-brutos-core-sso",
+    "rj-sme-brutos-gestao-escolar",
     "rj-smfp-dump-db-ergon",
 ]
 
@@ -840,7 +842,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#d204541e80b74d7729519a79ef1cf36250511e87" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git#f210a184028873e5465ec4630a11581d3ddaeeae" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -1861,6 +1863,16 @@ requires-dist = [{ name = "geopandas", specifier = ">=1.1.1" }]
 name = "rj-segovi-dump-db-1746"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_segovi__dump_db_1746" }
+
+[[package]]
+name = "rj-sme-brutos-core-sso"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_sme__brutos_core_sso" }
+
+[[package]]
+name = "rj-sme-brutos-gestao-escolar"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_sme__brutos_gestao_escolar" }
 
 [[package]]
 name = "rj-smfp-dump-db-ergon"
