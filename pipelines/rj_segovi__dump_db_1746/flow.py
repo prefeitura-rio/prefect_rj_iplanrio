@@ -6,7 +6,7 @@ This flow is used to dump the database from the 1746 server to the BIGQUERY.
 from typing import Optional
 
 from iplanrio.pipelines_templates.dump_db.tasks import (
-    dump_upload_batch_task,
+    dump_upload_batch_mappable_task,
     format_partitioned_query_task,
     get_database_username_and_password_from_secret_task,
     parse_comma_separated_string_to_list_task,
@@ -62,7 +62,8 @@ def rj_segovi__dump_db_1746(
         break_query_end=break_query_end,
         break_query_frequency=break_query_frequency,
     )
-    dump_upload = dump_upload_batch_task(  # noqa
+
+    dump_upload = dump_upload_batch_mappable_task(  # noqa
         queries=formated_query,
         batch_size=batch_size,
         dataset_id=dataset_id,

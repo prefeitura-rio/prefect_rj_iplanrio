@@ -8,7 +8,7 @@ dependencies = [
     "idna>=3.10",
     "iplanrio",
     "pandas>=2.2.3",
-    "prefect==3.4.8",
+    "prefect==3.4.9",
 ]
 
 [tool.uv.sources]
