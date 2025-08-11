@@ -157,7 +157,7 @@ def process_single_query(
     # Estado e Informações
     cleared_partitions: Set[str] = set(),
     cleared_table: bool = False,
-) -> Tuple[Set[str], bool, int, int]:
+):
     # Keep track of cleared stuff
     bd_version = bd.__version__
     log(msg=f"Usando basedosdados@{bd_version}")

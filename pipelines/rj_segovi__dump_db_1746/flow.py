@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY...
+This flow is used to dump the database from the 1746 server to the BIGQUERY....
 """
 
 from typing import Optional
@@ -64,20 +64,20 @@ def rj_segovi__dump_db_1746(
 
     dump_upload = process_single_query.map(  # noqa
         queries=formated_query,
-        batch_size=batch_size,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=dump_mode,
-        partition_columns=partition_columns_list,
-        batch_data_type=batch_data_type,
-        biglake_table=biglake_table,
-        log_number_of_batches=log_number_of_batches,
-        retry_dump_upload_attempts=retry_dump_upload_attempts,
-        database_type=db_type,
-        hostname=db_host,
-        port=db_port,
-        user=secrets["DB_USERNAME"],
-        password=secrets["DB_PASSWORD"],
-        database=db_database,
-        charset=db_charset,
+        batch_size=[batch_size],
+        dataset_id=[dataset_id],
+        table_id=[table_id],
+        dump_mode=[dump_mode],
+        partition_columns=[partition_columns_list],
+        batch_data_type=[batch_data_type],
+        biglake_table=[biglake_table],
+        log_number_of_batches=[log_number_of_batches],
+        retry_dump_upload_attempts=[retry_dump_upload_attempts],
+        database_type=[db_type],
+        hostname=[db_host],
+        port=[db_port],
+        user=[secrets["DB_USERNAME"]],
+        password=[secrets["DB_PASSWORD"]],
+        database=[db_database],
+        charset=[db_charset],
     )
