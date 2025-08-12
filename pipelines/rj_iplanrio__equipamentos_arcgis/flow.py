@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY..
+This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY.
 """
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
