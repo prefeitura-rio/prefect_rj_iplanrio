@@ -28,7 +28,7 @@ from pipelines.rj_smas__disparo_cadunico.tasks import (
     printar,
     remove_duplicate_phones,
 )
-from pipelines.utils.tasks import (
+from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
     access_api,
     create_date_partitions,
 )
@@ -48,24 +48,19 @@ def rj_smas__disparo_cadunico(
     chunk_size: int = 1000,
     query_processor_name: Optional[str] = None,
     billing_project_id: str = "rj-smas",
+    # Parâmetros de segredos
+    infisical_secret_path: str = "/wetalkie",
 ):
     # Tarefas padrão do Prefect 3.0
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
-    # ⚠️ ALERTA: Credenciais hardcoded - migrar para Infisical
-    # Estas constantes precisam ser configuradas adequadamente
-    infisical_path = "/wetalkie"  # constants.WETALKIE_PATH.value
-    infisical_url = "wetalkie_url"  # constants.WETALKIE_URL.value
-    infisical_username = "wetalkie_user"  # constants.WETALKIE_USERNAME.value
-    infisical_password = "wetalkie_pass"  # constants.WETALKIE_PASSWORD.value
-
-    # Acesso à API
+    # Acesso à API usando segredos do Infisical via variáveis de ambiente
     api = access_api(
-        infisical_path,
-        infisical_url,
-        infisical_username,
-        infisical_password,
+        infisical_secret_path,
+        "wetalkie_url",
+        "wetalkie_user", 
+        "wetalkie_pass",
         login_route="users/login",
     )
 

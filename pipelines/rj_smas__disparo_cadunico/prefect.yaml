@@ -46,3 +46,5 @@ deployments:
           # Parâmetros específicos do disparo CADUNICO
           query_processor_name: cadunico
           chunk_size: 1000
+          # Parâmetros de segredos
+          infisical_secret_path: /wetalkie
