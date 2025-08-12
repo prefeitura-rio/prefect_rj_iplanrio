@@ -54,6 +54,7 @@ def rj_smas__disparo_cadunico():
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
+    # Acesso à API usando segredos do Infisical via variáveis de ambiente
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
