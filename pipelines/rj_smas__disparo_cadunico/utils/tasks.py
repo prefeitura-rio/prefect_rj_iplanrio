@@ -32,8 +32,6 @@ def access_api(
     Returns:
         ApiHandler: Authenticated API handler instance
     """
-    # Transform path for environment variables
-    # /wetalkie -> WETALKIE
     env_prefix = infisical_path.upper().replace("-", "_").replace("/", "")
 
     # Get credentials from environment variables
@@ -42,7 +40,9 @@ def access_api(
     password = getenv_or_action(f"{env_prefix}__{infisical_password.upper()}")
 
     # Create and return authenticated API handler
-    api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
+    api = ApiHandler(
+        base_url=url, username=username, password=password, login_route=login_route
+    )
 
     return api
 

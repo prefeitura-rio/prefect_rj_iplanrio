@@ -54,7 +54,6 @@ def rj_smas__disparo_cadunico():
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
-    # Acesso à API usando segredos do Infisical via variáveis de ambiente
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
@@ -63,10 +62,8 @@ def rj_smas__disparo_cadunico():
         login_route="users/login",
     )
 
-    # Flow para disparo CADUNICO (baseado no template)
     api_status = check_api_status(api)
 
-    # Get destinations usando função do template
     destinations_result = get_destinations(
         destinations=destinations,
         query=query,
@@ -74,7 +71,6 @@ def rj_smas__disparo_cadunico():
         query_processor_name=query_processor_name,
     )
 
-    # Remove duplicatas (funcionalidade do template)
     unique_destinations = remove_duplicate_phones(destinations_result)
 
     if api_status:
@@ -84,9 +80,8 @@ def rj_smas__disparo_cadunico():
             destinations=unique_destinations,
         )
 
-        printar(id_hsm)  # Debug do template
+        printar(id_hsm)
 
-        # Disparo com chunks (função do template)
         dispatch_date = dispatch(
             api=api,
             id_hsm=id_hsm,
@@ -107,7 +102,6 @@ def rj_smas__disparo_cadunico():
             root_folder="./data_dispatch/",
         )
 
-        # Upload para BigQuery
         create_table = create_table_and_upload_to_gcs_task(
             data_path=partitions_path,
             dataset_id=dataset_id,
