@@ -54,20 +54,19 @@ def rj_smas__disparo_cadunico(
     campaign_name = campaign_name or CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
     cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
     chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
-    
+
     # Valores fixos das constants (não alteráveis na UI)
     query_processor_name = CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
     infisical_secret_path = CadunicoConstants.CADUNICO_INFISICAL_SECRET_PATH.value
     query = CadunicoConstants.CADUNICO_QUERY.value
-    
+
     # Destinations via environment variable
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
     # Tarefas padrão do Prefect 3.0
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
-    # Acesso à API usando segredos do Infisical via variáveis de ambiente
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
