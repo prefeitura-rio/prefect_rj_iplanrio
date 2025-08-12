@@ -14,7 +14,7 @@ from numpy import ceil
 from prefect import task
 from pytz import timezone
 
-from pipelines.utils.utils import download_data_from_bigquery
+from pipelines.rj_smas__disparo_cadunico.utils.tasks import task_download_data_from_bigquery
 
 
 @task
@@ -147,7 +147,7 @@ def get_destinations(
             else:
                 log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
 
-        destinations = download_data_from_bigquery(
+        destinations = task_download_data_from_bigquery(
             query=final_query,
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,

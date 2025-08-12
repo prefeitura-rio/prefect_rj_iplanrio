@@ -32,6 +32,7 @@ from pipelines.rj_smas__disparo_cadunico.tasks import (
 from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
     access_api,
     create_date_partitions,
+    skip_flow_if_empty,
 )
 
 
@@ -84,7 +85,13 @@ def rj_smas__disparo_cadunico(
         query_processor_name=query_processor_name,
     )
 
-    unique_destinations = remove_duplicate_phones(destinations_result)
+    # Validate that we have destinations before proceeding
+    validated_destinations = skip_flow_if_empty(
+        data=destinations_result,
+        message="No destinations found from query. Skipping flow execution."
+    )
+
+    unique_destinations = remove_duplicate_phones(validated_destinations)
 
     if api_status:
         dispatch_payload = create_dispatch_payload(
@@ -111,7 +118,7 @@ def rj_smas__disparo_cadunico(
         partitions_path = create_date_partitions(
             dataframe=dfr,
             partition_column="dispatch_date",
-            file_format="csv",
+            file_format="parquet",
             root_folder="./data_dispatch/",
         )
 
