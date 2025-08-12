@@ -1,0 +1,12 @@
+[project]
+name = "rj_smas__disparo_cadunico"
+version = "0.1.0"
+description = "Pipeline disparo cadunico da secretaria smas"
+dependencies = [
+    "prefect>=3.0.0",
+    "pandas",
+    "requests",
+    "pytz",
+    "numpy",
+    "iplanrio @ git+https://github.com/prefeitura-rio/iplanrio.git",
+]
