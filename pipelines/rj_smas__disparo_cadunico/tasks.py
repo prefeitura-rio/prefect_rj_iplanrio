@@ -9,19 +9,16 @@ from datetime import datetime
 from typing import Dict, List, Union
 
 import pandas as pd
-import requests
-from prefect import task
 from iplanrio.pipelines_utils.logging import log
-from pytz import timezone
 from numpy import ceil
+from prefect import task
+from pytz import timezone
 
 from pipelines.utils.utils import download_data_from_bigquery
 
 
 @task
-def create_dispatch_payload(
-    campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]
-) -> Dict:
+def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
     """
     Cria o payload para o dispatch
     """
@@ -53,7 +50,7 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         dispatch_payload["destinations"] = batch
         dispatch_payload["campaignName"] = f"{campaign_name}-{dispatch_date[:10]}-lote{i}"
         log(f"Disparando lote {i} de {int(ceil(total // chunk))} com {len(batch)} destinos")
-        
+
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=dispatch_payload)
 
         if response.status_code != 201:
@@ -142,6 +139,7 @@ def get_destinations(
         final_query = query
         if query_processor_name:
             from pipelines.rj_smas__disparo_cadunico.processors import get_query_processor
+
             processor_func = get_query_processor(query_processor_name)
             if processor_func:
                 log(f"Applying query processor: {query_processor_name}")
@@ -156,9 +154,7 @@ def get_destinations(
         )
         log(f"response from query {destinations.head()}")
         destinations = destinations.iloc[:, 0].tolist()
-        destinations = [
-            json.loads(str(item).replace("celular_disparo", "to")) for item in destinations
-        ]
+        destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
         destinations = json.loads(destinations)
     return destinations
