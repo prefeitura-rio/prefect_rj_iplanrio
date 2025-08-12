@@ -85,10 +85,10 @@ def rj_smas__disparo_cadunico(
         query_processor_name=query_processor_name,
     )
 
-    # Validate that we have destinations before proceeding
+    # Validate that we have destinations before proceeding.
     validated_destinations = skip_flow_if_empty(
         data=destinations_result,
-        message="No destinations found from query. Skipping flow execution."
+        message="No destinations found from query. Skipping flow execution.",
     )
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
