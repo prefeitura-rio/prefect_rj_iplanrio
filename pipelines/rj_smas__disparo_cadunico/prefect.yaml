@@ -102,7 +102,7 @@ deployments:
       # Configurações CadÚnico
       id_hsm: 101
       campaign_name: smas-lembretecadunico-prod
-      cost_center_id: 1
+      cost_center_id: 4
       billing_project_id: rj-crm-registry
       # Query CadÚnico (será processada dinamicamente)
       query: |
