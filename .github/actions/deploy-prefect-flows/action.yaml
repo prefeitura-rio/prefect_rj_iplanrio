@@ -1,0 +1,69 @@
+name: Deploy Prefect flows
+description: Deploy Prefect flows with environment configuration
+
+inputs:
+  environment:
+    description: Environment to deploy to
+    required: true
+  force_deploy:
+    description: Force deploy flag
+    required: false
+    default: "0"
+  prefect_api_url:
+    description: Prefect API URL
+    required: true
+  pipelines_path:
+    description: Path to pipelines
+    required: true
+  ts_tags:
+    description: Tailscale tags
+    required: true
+  ts_oauth_client_id:
+    description: Tailscale OAuth client ID
+    required: true
+  ts_oauth_secret:
+    description: Tailscale OAuth secret
+    required: true
+  gh_token:
+    description: GitHub token
+    required: true
+  log_level:
+    description: Log level
+    required: false
+    default: "INFO"
+
+runs:
+  using: composite
+  steps:
+    - name: Tailscale
+      uses: tailscale/github-action@v3
+      with:
+        oauth-client-id: ${{ inputs.ts_oauth_client_id }}
+        oauth-secret: ${{ inputs.ts_oauth_secret }}
+        tags: ${{ inputs.ts_tags }}
+
+    - name: Log in to GitHub container registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.gh_token }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version-file: pyproject.toml
+
+    - name: Deploy Prefect flows
+      shell: bash
+      env:
+        ENVIRONMENT: ${{ inputs.environment }}
+        PREFECT_API_URL: ${{ inputs.prefect_api_url }}
+        PIPELINES_PATH: ${{ inputs.pipelines_path }}
+        FORCE_DEPLOY: ${{ inputs.force_deploy }}
+        GITHUB_SHA: ${{ github.sha }}
+        LOG_LEVEL: ${{ inputs.log_level }}
+      run: uv run .github/scripts/deploy_prefect_flows.py

@@ -33,6 +33,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_sme__brutos_gestao_escolar -- prefect flow-run execute
+        image_pull_policy: Always
   - name: rj-sme--brutos_gestao_escolar--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_sme__brutos_gestao_escolar/flow.py:rj_sme__brutos_gestao_escolar
@@ -42,6 +43,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_sme__brutos_gestao_escolar -- prefect flow-run execute
+        image_pull_policy: Always
     schedules:
       - interval: 86400
         anchor_date: "2022-01-01T02:30:00"
@@ -127,30 +129,30 @@ deployments:
           dataset_id: brutos_gestao_escolar
           dump_mode: overwrite
           execute_query: |
-           SELECT
-                    MTU.alu_id,
-                    MTU.mtu_id,
-                    CAP.tpc_id,
-                    GestaoEscolar.dbo.FN_CalcularDiasUteis(CAP.cap_dataInicio,GETDATE(),'8BB1DECA-BB19-E011-87E8-E61F133BFC53',CAP.cal_id) * ISNULL(CRP.crp_qtdeTemposDia,1) numeroAulas,
-                    GETDATE() AS loaded_at
-            FROM MTR_MatriculaTurma MTU WITH(NOLOCK)
-                INNER JOIN TUR_Turma TUR WITH(NOLOCK)
-                    ON MTU.tur_id = TUR.tur_id
-                    AND TUR.tur_situacao IN (1,5)
-                INNER JOIN ACA_CalendarioAnual CAL WITH(NOLOCK)
-                    ON TUR.cal_id = CAL.cal_id
-                    AND CAL.cal_ano = YEAR(GETDATE())
-                INNER JOIN TUR_TurmaCurriculo TCR WITH(NOLOCK)
-                    ON TUR.tur_id = TCR.tur_id
-                    AND TCR.tcr_situacao = 1
-                INNER JOIN ACA_CurriculoPeriodo CRP WITH(NOLOCK)
-                    ON TCR.cur_id = CRP.cur_id
-                    AND TCR.crr_id = CRP.crr_id
-                    AND TCR.crp_id = CRP.crp_id
-                    AND CRP.crp_situacao = 1
-                INNER JOIN ACA_CalendarioPeriodo CAP WITH(NOLOCK)
-                    ON TUR.cal_id = CAP.cal_id
-                    AND GETDATE() BETWEEN CAP.cap_dataInicio AND CAP.cap_dataFim
+            SELECT
+                     MTU.alu_id,
+                     MTU.mtu_id,
+                     CAP.tpc_id,
+                     GestaoEscolar.dbo.FN_CalcularDiasUteis(CAP.cap_dataInicio,GETDATE(),'8BB1DECA-BB19-E011-87E8-E61F133BFC53',CAP.cal_id) * ISNULL(CRP.crp_qtdeTemposDia,1) numeroAulas,
+                     GETDATE() AS loaded_at
+             FROM MTR_MatriculaTurma MTU WITH(NOLOCK)
+                 INNER JOIN TUR_Turma TUR WITH(NOLOCK)
+                     ON MTU.tur_id = TUR.tur_id
+                     AND TUR.tur_situacao IN (1,5)
+                 INNER JOIN ACA_CalendarioAnual CAL WITH(NOLOCK)
+                     ON TUR.cal_id = CAL.cal_id
+                     AND CAL.cal_ano = YEAR(GETDATE())
+                 INNER JOIN TUR_TurmaCurriculo TCR WITH(NOLOCK)
+                     ON TUR.tur_id = TCR.tur_id
+                     AND TCR.tcr_situacao = 1
+                 INNER JOIN ACA_CurriculoPeriodo CRP WITH(NOLOCK)
+                     ON TCR.cur_id = CRP.cur_id
+                     AND TCR.crr_id = CRP.crr_id
+                     AND TCR.crp_id = CRP.crp_id
+                     AND CRP.crp_situacao = 1
+                 INNER JOIN ACA_CalendarioPeriodo CAP WITH(NOLOCK)
+                     ON TUR.cal_id = CAP.cal_id
+                     AND GETDATE() BETWEEN CAP.cap_dataInicio AND CAP.cap_dataFim
       - interval: 86400
         anchor_date: "2022-01-01T02:38:00"
         timezone: America/Sao_Paulo
@@ -197,3 +199,4 @@ deployments:
                     aat_frequenciaFinalAjustada,
                     GETDATE() AS loaded_at
             FROM GestaoEscolar.dbo.CLS_AlunoAvaliacaoTurma
+
