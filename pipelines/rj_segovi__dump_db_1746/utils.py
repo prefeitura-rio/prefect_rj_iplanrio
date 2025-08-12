@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 from uuid import uuid4
 import asyncio
 import traceback
+from functools import partial
 
 import basedosdados as bd
 from prefect import task
@@ -129,7 +130,7 @@ def database_execute(
     database.execute_query(query)
 
 
-async def _process_single_query(
+def _process_single_query(
     # Parâmetros de Conexão
     database_type: str,
     hostname: str,
@@ -539,8 +540,16 @@ def dump_upload_batch_mappable_task(
                     log(
                         f"Tentativa {attempt + 1}/{retry_attempts} para a query com datas {query_info['start_date']} a {query_info['end_date']}."
                     )
-                    # Chama a função de trabalho principal
-                    result = await _process_single_query(**kwargs)
+                    # Pega o loop de eventos atual
+                    loop = asyncio.get_running_loop()
+
+                    # Prepara a função TRABALHADORA (síncrona) para ser executada.
+                    # Assumindo que a trabalhadora se chama `_process_single_query` (e agora é `def`)
+                    func_to_run = partial(_process_single_query, **kwargs)
+
+                    # Envia a função bloqueante para um thread separado e aguarda o resultado
+                    result = await loop.run_in_executor(None, func_to_run)
+
                     return result
             except Exception as e:
                 log(
