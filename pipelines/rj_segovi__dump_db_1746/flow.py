@@ -39,6 +39,7 @@ def rj_segovi__dump_db_1746(
     batch_data_type: str = "csv",
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
+    max_concurrency: int = 1,
 ):
     rename_flow_run = rename_current_flow_run_task(new_name=table_id)
     crd = inject_bd_credentials_task(environment="prod")  # noqa
@@ -80,4 +81,5 @@ def rj_segovi__dump_db_1746(
         password=secrets["DB_PASSWORD"],
         database=db_database,
         charset=db_charset,
+        max_concurrency=max_concurrency,
     )
