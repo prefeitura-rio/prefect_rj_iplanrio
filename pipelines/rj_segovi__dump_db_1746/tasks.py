@@ -5,8 +5,7 @@ from prefect import task
 
 from pipelines.rj_segovi__dump_db_1746.utils import (
     dump_upload_batch,
-    # dump_upload_batch_mappable_task,
-    process_single_query,
+    dump_upload_batch_mappable_task,
     format_partitioned_query,
     parse_comma_separated_string_to_list,
 )
