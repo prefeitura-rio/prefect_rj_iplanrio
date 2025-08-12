@@ -18,6 +18,8 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task, getenv_or_a
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
+from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
+
 from pipelines.rj_smas__disparo_cadunico.tasks import (
     check_api_status,
     create_dispatch_dfr,
@@ -35,21 +37,21 @@ from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
 
 @flow(log_prints=True)
 def rj_smas__disparo_cadunico():
-    # Carregar configurações via environment variables (padrão Infisical)
-    dataset_id = getenv_or_action("CADUNICO__DATASET_ID")
-    table_id = getenv_or_action("CADUNICO__TABLE_ID")
-    dump_mode = getenv_or_action("CADUNICO__DUMP_MODE")
-    # Parâmetros para disparo CADUNICO
-    query = getenv_or_action("CADUNICO__QUERY")
+    # Carregar configurações das constants
+    dataset_id = CadunicoConstants.CADUNICO_DATASET_ID.value
+    table_id = CadunicoConstants.CADUNICO_TABLE_ID.value
+    dump_mode = CadunicoConstants.CADUNICO_DUMP_MODE.value
+    id_hsm = CadunicoConstants.CADUNICO_ID_HSM.value
+    campaign_name = CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
+    cost_center_id = CadunicoConstants.CADUNICO_COST_CENTER_ID.value
+    chunk_size = CadunicoConstants.CADUNICO_CHUNK_SIZE.value
+    query_processor_name = CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
+    billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
+    infisical_secret_path = CadunicoConstants.CADUNICO_INFISICAL_SECRET_PATH.value
+    
+    # Query das constants
+    query = CadunicoConstants.CADUNICO_QUERY.value
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
-    id_hsm = int(getenv_or_action("CADUNICO__ID_HSM"))
-    campaign_name = getenv_or_action("CADUNICO__CAMPAIGN_NAME")
-    cost_center_id = int(getenv_or_action("CADUNICO__COST_CENTER_ID"))
-    chunk_size = int(getenv_or_action("CADUNICO__CHUNK_SIZE"))
-    query_processor_name = getenv_or_action("CADUNICO__QUERY_PROCESSOR_NAME")
-    billing_project_id = getenv_or_action("CADUNICO__BILLING_PROJECT_ID")
-    # Parâmetros de segredos
-    infisical_secret_path = getenv_or_action("CADUNICO__INFISICAL_SECRET_PATH")
     # Tarefas padrão do Prefect 3.0
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa

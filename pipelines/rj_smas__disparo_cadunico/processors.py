@@ -9,13 +9,16 @@ from datetime import datetime
 
 from iplanrio.pipelines_utils.logging import log
 
+from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
 
-def process_cadunico_query(query: str) -> str:
+
+def process_cadunico_query(query: str = None) -> str:
     """
     Processes the CADUNICO query by substituting dynamic values.
+    If no query provided, uses the one from constants.
 
     Args:
-        query: The query string with placeholders
+        query: Optional query string with placeholders. If None, uses constants.
 
     Returns:
         The processed query with substituted values
@@ -23,6 +26,10 @@ def process_cadunico_query(query: str) -> str:
     Raises:
         ValueError: If {days_ahead} placeholder is not found in query
     """
+    # Use query from constants if none provided
+    if query is None:
+        query = CadunicoConstants.CADUNICO_QUERY.value
+        
     if "{days_ahead}" not in query:
         raise ValueError("Query must contain {days_ahead} placeholder for dynamic substitution")
 
@@ -39,9 +46,10 @@ def process_cadunico_query(query: str) -> str:
         days_ahead = 2
         log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
 
-    # HSM ID será extraído da query que já vem com placeholder {hsm_id}
-    # A query do YAML já tem os placeholders corretos
-    return query.format(days_ahead=days_ahead, hsm_id="{hsm_id}")
+    # Use HSM ID from constants
+    hsm_id = CadunicoConstants.CADUNICO_ID_HSM.value
+
+    return query.format(days_ahead=days_ahead, hsm_id=hsm_id)
 
 
 # Registry of custom query processors
