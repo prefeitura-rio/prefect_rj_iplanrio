@@ -17,7 +17,7 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_segovi__dump_db_1746(
+def rj_smfp__dump_db_ergon(
     db_database: str = "db_database",
     db_host: str = "db_host",
     db_port: str = "db_port",
