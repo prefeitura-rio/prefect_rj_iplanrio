@@ -9,6 +9,8 @@ from datetime import datetime
 
 from iplanrio.pipelines_utils.logging import log
 
+from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
+
 
 def process_cadunico_query(query: str) -> str:
     """
@@ -39,9 +41,8 @@ def process_cadunico_query(query: str) -> str:
         days_ahead = 2
         log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
 
-    # ⚠️ MIGRATION NOTE: Original template usava cadunico_constants.CADUNICO_HSM_ID.value
-    # Manter referência para futura configuração
-    hsm_id = "CADUNICO_HSM_ID"  # Placeholder - deve ser configurado via constants
+    # Use HSM ID from constants
+    hsm_id = CadunicoConstants.CADUNICO_HSM_ID.value
 
     return query.format(days_ahead=days_ahead, hsm_id=hsm_id)
 
