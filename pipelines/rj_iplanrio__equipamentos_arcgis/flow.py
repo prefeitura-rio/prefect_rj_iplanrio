@@ -23,7 +23,7 @@ def rj_iplanrio__equipamentos_arcgis(
     rename_flow_run = rename_current_flow_run_task(new_name=table_id)
     crd = inject_bd_credentials_task(environment="prod")  # noqa
     path = download_equipamentos_from_datario(url=url, crs=crs)
-    create_table_and_upload_to_gcs_task(
+    data_path = create_table_and_upload_to_gcs_task(
         data_path=path,
         dataset_id=dataset_id,
         table_id=table_id,
