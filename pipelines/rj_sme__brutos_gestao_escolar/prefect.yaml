@@ -46,7 +46,7 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 86400
-        anchor_date: "2022-01-01T23:10:00"
+        anchor_date: "2022-01-01T02:30:00"
         timezone: America/Sao_Paulo
         slug: turma
         parameters:
@@ -69,7 +69,7 @@ deployments:
                 tur_id, esc_id, dep_id
             FROM GestaoEscolar.dbo.VW_BI_Turma
       - interval: 86400
-        anchor_date: "2022-01-01T23:12:00"
+        anchor_date: "2022-01-01T02:32:00"
         timezone: America/Sao_Paulo
         slug: CLS_TurmaAulaAluno
         parameters:
@@ -101,7 +101,7 @@ deployments:
                 GETDATE() AS loaded_at
             FROM GestaoEscolar.dbo.CLS_TurmaAulaAluno
       - interval: 86400
-        anchor_date: "2022-01-01T23:14:00"
+        anchor_date: "2022-01-01T02:34:00"
         timezone: America/Sao_Paulo
         slug: diasCoc
         parameters:
@@ -119,7 +119,7 @@ deployments:
             INNER JOIN ACA_CalendarioAnual          CAL WITH(NOLOCK) ON CAL.cal_id = cap.cal_id and cal_situacao <> 3
             inner join MTR_ProcessoFechamentoInicio pfi WITH(NOLOCK) ON pfi.pfi_anoInicio = cal.cal_ano and pfi_situacao <> 3 and pfi_AnoLetivoCorrente = 1
       - interval: 86400
-        anchor_date: "2022-01-01T23:16:00"
+        anchor_date: "2022-01-01T02:36:00"
         timezone: America/Sao_Paulo
         slug: numeroDeAulasCte
         parameters:
@@ -154,7 +154,7 @@ deployments:
                      ON TUR.cal_id = CAP.cal_id
                      AND GETDATE() BETWEEN CAP.cap_dataInicio AND CAP.cap_dataFim
       - interval: 86400
-        anchor_date: "2022-01-01T23:18:00"
+        anchor_date: "2022-01-01T02:38:00"
         timezone: America/Sao_Paulo
         slug: CLS_AlunoAvaliacaoTurma
         parameters:
