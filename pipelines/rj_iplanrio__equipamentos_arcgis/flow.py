@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY..
+This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY
 """
 
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from iplanrio.pipelines_utils.tasks import create_table_and_upload_to_gcs_task
@@ -23,7 +24,7 @@ def rj_iplanrio__equipamentos_arcgis(
     rename_flow_run = rename_current_flow_run_task(new_name=table_id)
     crd = inject_bd_credentials_task(environment="prod")  # noqa
     path = download_equipamentos_from_datario(url=url, crs=crs)
-    create_table_and_upload_to_gcs_task(
+    data_path = create_table_and_upload_to_gcs_task(
         data_path=path,
         dataset_id=dataset_id,
         table_id=table_id,
