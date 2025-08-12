@@ -12,10 +12,9 @@ Flow migrado do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
 - case (conditional execution): Substituído por if/else padrão
 """
 
-from typing import Optional
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task, getenv_or_action
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
@@ -35,22 +34,22 @@ from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
 
 
 @flow(log_prints=True)
-def rj_smas__disparo_cadunico(
-    dataset_id: str = "brutos_cadunico",
-    table_id: str = "disparos",
-    dump_mode: str = "append",
+def rj_smas__disparo_cadunico():
+    # Carregar configurações via environment variables (padrão Infisical)
+    dataset_id = getenv_or_action("CADUNICO__DATASET_ID")
+    table_id = getenv_or_action("CADUNICO__TABLE_ID")
+    dump_mode = getenv_or_action("CADUNICO__DUMP_MODE")
     # Parâmetros para disparo CADUNICO
-    query: Optional[str] = None,
-    destinations: Optional[str] = None,
-    id_hsm: int = 0,
-    campaign_name: Optional[str] = None,
-    cost_center_id: Optional[int] = None,
-    chunk_size: int = 1000,
-    query_processor_name: Optional[str] = None,
-    billing_project_id: str = "rj-smas",
+    query = getenv_or_action("CADUNICO__QUERY")
+    destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
+    id_hsm = int(getenv_or_action("CADUNICO__ID_HSM"))
+    campaign_name = getenv_or_action("CADUNICO__CAMPAIGN_NAME")
+    cost_center_id = int(getenv_or_action("CADUNICO__COST_CENTER_ID"))
+    chunk_size = int(getenv_or_action("CADUNICO__CHUNK_SIZE"))
+    query_processor_name = getenv_or_action("CADUNICO__QUERY_PROCESSOR_NAME")
+    billing_project_id = getenv_or_action("CADUNICO__BILLING_PROJECT_ID")
     # Parâmetros de segredos
-    infisical_secret_path: str = "/wetalkie",
-):
+    infisical_secret_path = getenv_or_action("CADUNICO__INFISICAL_SECRET_PATH")
     # Tarefas padrão do Prefect 3.0
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa

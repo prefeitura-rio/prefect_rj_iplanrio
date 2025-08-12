@@ -9,8 +9,6 @@ from datetime import datetime
 
 from iplanrio.pipelines_utils.logging import log
 
-from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
-
 
 def process_cadunico_query(query: str) -> str:
     """
@@ -41,10 +39,9 @@ def process_cadunico_query(query: str) -> str:
         days_ahead = 2
         log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
 
-    # Use HSM ID from constants
-    hsm_id = CadunicoConstants.CADUNICO_HSM_ID.value
-
-    return query.format(days_ahead=days_ahead, hsm_id=hsm_id)
+    # HSM ID será extraído da query que já vem com placeholder {hsm_id}
+    # A query do YAML já tem os placeholders corretos
+    return query.format(days_ahead=days_ahead, hsm_id="{hsm_id}")
 
 
 # Registry of custom query processors
