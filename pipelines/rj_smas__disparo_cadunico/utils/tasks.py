@@ -144,7 +144,7 @@ def create_date_partitions(
         if file_format == "csv":
             _dataframe.to_csv(file_folder, index=False)
         elif file_format == "parquet":
-            safe_export_df_to_parquet.run(df=_dataframe, output_path=file_folder)
+            safe_export_df_to_parquet(dfr=_dataframe, output_path=file_folder)
 
     log(f"Files saved on {root_folder}")
     return root_folder
