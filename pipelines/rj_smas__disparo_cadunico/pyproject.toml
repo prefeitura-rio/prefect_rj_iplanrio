@@ -7,7 +7,6 @@ dependencies = [
     "google-cloud-storage==2.10.0",
     "prefect==3.4.9",
     "prefeitura-rio[actions] @ git+https://github.com/prefeitura-rio/prefeitura-rio@54593ddff444158b0ecbab5514c5cde4d44012c0",
-    "shapely==2.0.2",
     "geopy==2.4.1",
     "opencage==3.0.4",
     "python-dotenv==1.0.1",
