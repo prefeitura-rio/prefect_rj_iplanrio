@@ -36,21 +36,32 @@ from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
 
 
 @flow(log_prints=True)
-def rj_smas__disparo_cadunico():
-    # Carregar configurações das constants
-    dataset_id = CadunicoConstants.CADUNICO_DATASET_ID.value
-    table_id = CadunicoConstants.CADUNICO_TABLE_ID.value
-    dump_mode = CadunicoConstants.CADUNICO_DUMP_MODE.value
-    id_hsm = CadunicoConstants.CADUNICO_ID_HSM.value
-    campaign_name = CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
-    cost_center_id = CadunicoConstants.CADUNICO_COST_CENTER_ID.value
-    chunk_size = CadunicoConstants.CADUNICO_CHUNK_SIZE.value
+def rj_smas__disparo_cadunico(
+    # Parâmetros opcionais para override manual na UI
+    id_hsm: int | None = None,
+    campaign_name: str | None = None,
+    cost_center_id: int | None = None,
+    chunk_size: int | None = None,
+    dataset_id: str | None = None,
+    table_id: str | None = None,
+    dump_mode: str | None = None,
+):
+    # Usar parâmetro se fornecido, senão usar constants
+    dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
+    table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
+    dump_mode = dump_mode or CadunicoConstants.CADUNICO_DUMP_MODE.value
+    id_hsm = id_hsm or CadunicoConstants.CADUNICO_ID_HSM.value
+    campaign_name = campaign_name or CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
+    cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
+    chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
+    
+    # Valores fixos das constants (não alteráveis na UI)
     query_processor_name = CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
     infisical_secret_path = CadunicoConstants.CADUNICO_INFISICAL_SECRET_PATH.value
-    
-    # Query das constants
     query = CadunicoConstants.CADUNICO_QUERY.value
+    
+    # Destinations via environment variable
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
     # Tarefas padrão do Prefect 3.0
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
