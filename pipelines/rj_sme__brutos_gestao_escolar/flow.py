@@ -24,7 +24,7 @@ def rj_sme__brutos_gestao_escolar(
     db_type: str = "sql_server",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "brutos_gestao_escolar",
+    dataset_id: str = "sme_brutos_gestao_escolar",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-gestao-escolar",
     dump_mode: str = "overwrite",
