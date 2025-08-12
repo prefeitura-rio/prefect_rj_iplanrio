@@ -11,6 +11,8 @@ from functools import partial
 
 import basedosdados as bd
 from prefect import task
+from prefect.utilities.asyncutils import run_sync_in_worker_thread
+
 
 from iplanrio.pipelines_utils.bd import get_storage_blobs
 from iplanrio.pipelines_utils.constants import NOT_SET
@@ -548,7 +550,7 @@ def dump_upload_batch_mappable_task(
                     func_to_run = partial(_process_single_query, **kwargs)
 
                     # Envia a função bloqueante para um thread separado e aguarda o resultado
-                    result = await loop.run_in_executor(None, func_to_run)
+                    result = await run_sync_in_worker_thread(func_to_run)
 
                     return result
             except Exception as e:
