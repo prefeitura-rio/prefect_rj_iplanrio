@@ -59,7 +59,7 @@ def rj_smas__disparo_cadunico(
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
-        "wetalkie_user", 
+        "wetalkie_user",
         "wetalkie_pass",
         login_route="users/login",
     )
