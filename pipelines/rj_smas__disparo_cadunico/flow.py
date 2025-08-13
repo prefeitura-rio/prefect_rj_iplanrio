@@ -57,7 +57,7 @@ def rj_smas__disparo_cadunico(
     cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
     chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
 
-    # Valores fixos das constants (não alteráveis na UI)
+    # Valores fixos das constants (não alteráveis na UI).
     query_processor_name = CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
     query = CadunicoConstants.CADUNICO_QUERY.value

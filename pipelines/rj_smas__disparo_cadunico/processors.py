@@ -60,8 +60,7 @@ def process_cadunico_query(query: str = None) -> str:
             f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead"
         )
 
-    # Use HSM ID from constants
-    hsm_id = int(CadunicoConstants.CADUNICO_ID_HSM.value)
+    hsm_id = str(CadunicoConstants.CADUNICO_ID_HSM.value)
 
     return query.format(days_ahead=days_ahead, hsm_id=hsm_id)
 
