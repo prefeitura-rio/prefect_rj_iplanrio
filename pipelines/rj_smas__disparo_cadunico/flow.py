@@ -62,7 +62,6 @@ def rj_smas__disparo_cadunico(
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
     query = CadunicoConstants.CADUNICO_QUERY.value
 
-    # Destinations via environment variable
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
@@ -85,7 +84,6 @@ def rj_smas__disparo_cadunico(
         query_processor_name=query_processor_name,
     )
 
-    # Validate that we have destinations before proceeding....
     validated_destinations = skip_flow_if_empty(
         data=destinations_result,
         message="No destinations found from query. Skipping flow execution.",

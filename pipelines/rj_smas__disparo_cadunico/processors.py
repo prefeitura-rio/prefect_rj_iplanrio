@@ -29,25 +29,39 @@ def process_cadunico_query(query: str = None) -> str:
     # Use query from constants if none provided
     if query is None:
         query = CadunicoConstants.CADUNICO_QUERY.value
-        
+
     if "{days_ahead}" not in query:
-        raise ValueError("Query must contain {days_ahead} placeholder for dynamic substitution")
+        raise ValueError(
+            "Query must contain {days_ahead} placeholder for dynamic substitution"
+        )
 
     # Get dynamic days_ahead based on current weekday
     current_weekday = datetime.now().weekday()  # 0=Monday, 6=Sunday
-    weekday_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    weekday_names = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ]
 
     # Thursday (3) or Friday (4) = 4 days ahead
     if current_weekday in [3, 4]:  # quinta, sexta
         days_ahead = 4
-        log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
+        log(
+            f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead"
+        )
     else:
         # Other days = 2 days ahead
         days_ahead = 2
-        log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
+        log(
+            f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead"
+        )
 
     # Use HSM ID from constants
-    hsm_id = CadunicoConstants.CADUNICO_ID_HSM.value
+    hsm_id = int(CadunicoConstants.CADUNICO_ID_HSM.value)
 
     return query.format(days_ahead=days_ahead, hsm_id=hsm_id)
 
