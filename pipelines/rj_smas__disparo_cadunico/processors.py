@@ -60,9 +60,10 @@ def process_cadunico_query(query: str = None) -> str:
             f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead"
         )
 
-    hsm_id = str(CadunicoConstants.CADUNICO_ID_HSM.value)
-
-    return query.format(days_ahead=days_ahead, hsm_id=hsm_id)
+    hsm_id = CadunicoConstants.CADUNICO_ID_HSM.value
+    formatted_query = query.format(days_ahead=int(days_ahead), hsm_id=str(hsm_id))
+    print(formatted_query)
+    return formatted_query
 
 
 # Registry of custom query processors

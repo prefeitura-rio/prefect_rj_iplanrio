@@ -61,7 +61,7 @@ class CadunicoConstants(Enum):
         AND telefone NOT IN (
             SELECT contato_telefone
             FROM `rj-crm-registry-dev.patricia__crm_whatsapp.telefone_disparado`
-            WHERE id_hsm = {hsm_id}
+            WHERE id_hsm = '{hsm_id}'
                 AND data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 15 DAY)
         )
     ORDER BY data_hora
