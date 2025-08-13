@@ -48,7 +48,7 @@ def rj_smas__disparo_cadunico(
     dump_mode: str | None = None,
     infisical_secret_path: str = "/wetalkie",
 ):
-    # Usar parâmetro se fornecido, senão usar constants
+
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
     table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
     dump_mode = dump_mode or CadunicoConstants.CADUNICO_DUMP_MODE.value
