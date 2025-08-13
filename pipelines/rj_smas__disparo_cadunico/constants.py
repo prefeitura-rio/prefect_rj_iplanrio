@@ -36,7 +36,7 @@ class CadunicoConstants(Enum):
     CADUNICO_QUERY = """
     SELECT
         TO_JSON_STRING(STRUCT(
-            REGEXP_REPLACE(telefone, r'[^\\d]', '') as celular_disparo,
+            REGEXP_REPLACE(telefone, r'[^\d]', '') as celular_disparo,
             STRUCT(
                 primeiro_nome as NOME,
                 FORMAT_DATETIME('%d/%m/%Y', DATETIME(data_hora)) as DATA,
@@ -57,7 +57,7 @@ class CadunicoConstants(Enum):
             WHERE data_atualizacao > DATE_SUB(CURRENT_DATE(), INTERVAL 1 YEAR)
         )
         AND telefone IS NOT NULL
-        AND LENGTH(REGEXP_REPLACE(telefone, r'[^\\d]', '')) >= 10
+        AND LENGTH(REGEXP_REPLACE(telefone, r'[^\d]', '')) >= 10
         AND telefone NOT IN (
             SELECT contato_telefone
             FROM `rj-crm-registry-dev.patricia__crm_whatsapp.telefone_disparado`
