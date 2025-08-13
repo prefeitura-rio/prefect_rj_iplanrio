@@ -56,6 +56,8 @@ class ApiHandler:
                 token = response_data["authToken"]
             elif "jwt" in response_data:
                 token = response_data["jwt"]
+            elif "data" in response_data and "item" in response_data["data"] and "token" in response_data["data"]["item"]:
+                token = response_data["data"]["item"]["token"]
 
             if token:
                 self.token = token
