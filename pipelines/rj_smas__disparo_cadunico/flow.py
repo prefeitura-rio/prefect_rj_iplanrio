@@ -46,6 +46,7 @@ def rj_smas__disparo_cadunico(
     dataset_id: str | None = None,
     table_id: str | None = None,
     dump_mode: str | None = None,
+    infisical_secret_path: str = "/wetalkie",
 ):
     # Usar parâmetro se fornecido, senão usar constants
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
@@ -59,7 +60,6 @@ def rj_smas__disparo_cadunico(
     # Valores fixos das constants (não alteráveis na UI)
     query_processor_name = CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
-    infisical_secret_path = CadunicoConstants.CADUNICO_INFISICAL_SECRET_PATH.value
     query = CadunicoConstants.CADUNICO_QUERY.value
 
     # Destinations via environment variable

@@ -10,31 +10,28 @@ class CadunicoConstants(Enum):
     """
     Constantes para o pipeline de disparo CadÚnico SMAS
     """
-    
+
     # HSM Template ID para mensagens CadÚnico
     CADUNICO_ID_HSM = 101
-    
+
     # Nome da campanha
     CADUNICO_CAMPAIGN_NAME = "smas-lembretecadunico-prod"
-    
-    # Cost Center ID  
+
+    # Cost Center ID
     CADUNICO_COST_CENTER_ID = 4
-    
+
     # Billing Project ID
     CADUNICO_BILLING_PROJECT_ID = "rj-crm-registry"
-    
+
     # Query processor name
     CADUNICO_QUERY_PROCESSOR_NAME = "cadunico"
-    
+
     # Configurações de dataset
     CADUNICO_DATASET_ID = "brutos_cadunico"
     CADUNICO_TABLE_ID = "disparos"
     CADUNICO_DUMP_MODE = "append"
     CADUNICO_CHUNK_SIZE = 1000
-    
-    # Parâmetros de segredos
-    CADUNICO_INFISICAL_SECRET_PATH = "/wetalkie"
-    
+
     # Query principal do CadÚnico
     CADUNICO_QUERY = """
     SELECT
