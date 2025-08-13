@@ -70,9 +70,6 @@ def rj_smas__disparo_cadunico(
     # Tarefas padrão do Prefect 3.0
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
-    secrets = get_database_username_and_password_from_secret_task(
-        infisical_secret_path=infisical_secret_path
-    )
 
     api = access_api(
         infisical_secret_path,
