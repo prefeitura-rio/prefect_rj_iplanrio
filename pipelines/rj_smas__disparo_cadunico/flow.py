@@ -13,9 +13,6 @@ Flow migrado do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
 """
 
 
-from iplanrio.pipelines_templates.dump_db.tasks import (
-    get_database_username_and_password_from_secret_task,
-)
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task, getenv_or_action
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
@@ -70,9 +67,6 @@ def rj_smas__disparo_cadunico(
     # Tarefas padrão do Prefect 3.0
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
-    secrets = get_database_username_and_password_from_secret_task(
-        infisical_secret_path=infisical_secret_path
-    )
 
     api = access_api(
         infisical_secret_path,
