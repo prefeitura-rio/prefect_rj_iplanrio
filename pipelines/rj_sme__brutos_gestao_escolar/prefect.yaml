@@ -53,7 +53,6 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: turma
-          dataset_id: brutos_gestao_escolar
           dump_mode: append
           partition_columns: Ano
           partition_date_format: "%Y"
@@ -76,7 +75,6 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: CLS_TurmaAulaAluno
-          dataset_id: brutos_gestao_escolar
           dump_mode: append
           partition_columns: taa_dataAlteracao_converted
           partition_date_format: "%Y-%m-%d"
@@ -108,7 +106,6 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: diasCoc
-          dataset_id: brutos_gestao_escolar
           dump_mode: overwrite
           execute_query: |
             select distinct cal.cal_id,
@@ -127,7 +124,6 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: numeroDeAulasCte
-          dataset_id: brutos_gestao_escolar
           dump_mode: overwrite
           execute_query: |
             SELECT
@@ -162,7 +158,6 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: CLS_AlunoAvaliacaoTurma
-          dataset_id: brutos_gestao_escolar
           dump_mode: append
           partition_columns: aat_dataAlteracao_converted
           partition_date_format: "%Y-%m-%d"
