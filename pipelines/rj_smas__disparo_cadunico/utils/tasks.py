@@ -48,9 +48,9 @@ def access_api(
     env_prefix = infisical_path.upper().replace("-", "_").replace("/", "")
 
     # Get credentials from environment variables
-    url = getenv_or_action(f"{env_prefix}__{infisical_url.upper()}")
-    username = getenv_or_action(f"{env_prefix}__{infisical_username.upper()}")
-    password = getenv_or_action(f"{env_prefix}__{infisical_password.upper()}")
+    url = getenv_or_action(f"{infisical_url.upper()}")
+    username = getenv_or_action(f"{infisical_username.upper()}")
+    password = getenv_or_action(f"{infisical_password.upper()}")
 
     # Create and return authenticated API handler
     api = ApiHandler(
