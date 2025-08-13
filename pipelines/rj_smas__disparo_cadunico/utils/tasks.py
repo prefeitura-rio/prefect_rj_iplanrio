@@ -20,7 +20,7 @@ from pipelines.rj_smas__disparo_cadunico.utils.api_handler import ApiHandler
 # import seaborn as sns
 from basedosdados import Base  # pylint: disable=E0611, E0401
 from google.cloud import bigquery  # pylint: disable=E0611, E0401
-from prefeitura_rio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 
 @task

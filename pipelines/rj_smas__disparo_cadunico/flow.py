@@ -38,7 +38,7 @@ from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
 
 @flow(log_prints=True)
 def rj_smas__disparo_cadunico(
-    # Parâmetros opcionais para override manual na UI
+    # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
     campaign_name: str | None = None,
     cost_center_id: int | None = None,
