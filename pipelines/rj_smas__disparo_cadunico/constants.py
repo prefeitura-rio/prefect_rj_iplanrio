@@ -65,5 +65,4 @@ class CadunicoConstants(Enum):
                 AND data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 15 DAY)
         )
     ORDER BY data_hora
-    LIMIT 0
     """
