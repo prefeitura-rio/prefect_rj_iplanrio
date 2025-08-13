@@ -64,7 +64,7 @@ def rj_smas__disparo_cadunico(
 
     # Destinations via environment variable
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
-    # Tarefas padrão do Prefect 3.0
+
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
