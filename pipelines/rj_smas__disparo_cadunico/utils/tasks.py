@@ -14,8 +14,9 @@ import pandas as pd
 from prefect import task
 from prefect.exceptions import PrefectException
 
-from iplanrio.pipelines_utils.env import getenv_or_action
+# from iplanrio.pipelines_utils.env import getenv_or_action
 from pipelines.rj_smas__disparo_cadunico.utils.api_handler import ApiHandler
+from prefeitura_rio.pipelines_utils.infisical import get_secret
 
 # import seaborn as sns
 from basedosdados import Base  # pylint: disable=E0611, E0401
@@ -45,13 +46,10 @@ def access_api(
     Returns:
         ApiHandler: Authenticated API handler instance
     """
-    env_prefix = infisical_path.upper().replace("-", "_").replace("/", "")
 
-    # Get credentials from environment variables
-    url = getenv_or_action(f"{infisical_url.upper()}")
-    username = getenv_or_action(f"{infisical_username.upper()}")
-    password = getenv_or_action(f"{infisical_password.upper()}")
-
+    url = get_secret(infisical_url, path=infisical_path)[infisical_url]
+    username = get_secret(infisical_username, path=infisical_path)[infisical_username]
+    password = get_secret(infisical_password, path=infisical_path)[infisical_password]
     # Create and return authenticated API handler
     api = ApiHandler(
         base_url=url, username=username, password=password, login_route=login_route
