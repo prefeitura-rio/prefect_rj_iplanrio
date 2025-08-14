@@ -100,13 +100,13 @@ def rj_smas__api_datametrica_agendamentos(
     )
 
     # Upload para GCS e BigQuery
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=dump_mode,
-        biglake_table=biglake_table,
-    )
+    # create_table_and_upload_to_gcs_task(
+    #    data_path=partitions_path,
+    #    dataset_id=dataset_id,
+    #    table_id=table_id,
+    #    dump_mode=dump_mode,
+    #    biglake_table=biglake_table,
+    # )
 
     # Executar DBT se materialize_after_dump for True
     # ⚠️ NOTA: task_run_dbt_model_task não tem equivalente em iplanrio
