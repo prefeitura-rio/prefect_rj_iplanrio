@@ -41,6 +41,7 @@ deployments:
       dump_mode: append
       materialize_after_dump: true
       date: null
+      infisical_secret_path: /api-datametrica
   - name: rj-smas--api-datametrica-agendamentos--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__api_datametrica_agendamentos/flow.py:rj_smas__api_datametrica_agendamentos
@@ -58,6 +59,8 @@ deployments:
       dump_mode: append
       materialize_after_dump: true
       date: null  # null usa o próximo dia automaticamente
+      infisical_secret_path: /api-datametrica
+
     #schedules:
     #  - cron: "0 10 * * *"  # Diariamente às 10:00
     #    timezone: America/Sao_Paulo

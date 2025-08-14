@@ -59,27 +59,32 @@ def calculate_target_date() -> str:
 @task
 def get_datametrica_credentials() -> Dict[str, str]:
     """
-    Recupera as credenciais da API da Datametrica usando iplanrio.
+    Recupera as credenciais da API da Datametrica e do proxy brasileiro usando iplanrio.
 
     Returns:
-        Dict com 'url' e 'token'
+        Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
     """
 
-    log("Recuperando credenciais da Datametrica")
-
-    url_key = DatametricaConstants.DATAMETRICA_URL.value
-    token_key = DatametricaConstants.DATAMETRICA_TOKEN.value
+    log("Recuperando credenciais da Datametrica e do proxy brasileiro")
 
     # Use getenv_or_action to get secrets from environment
-    url = getenv_or_action(url_key)
+    url = getenv_or_action("dm_url")
     if not url.startswith("http"):
         url = f"http://{url}"
 
-    token = getenv_or_action(token_key)
+    token = getenv_or_action("dm_token")
+    proxy_url = getenv_or_action("proxy_url")
+    proxy_token = getenv_or_action("proxy_token")
 
     log("Credenciais recuperadas com sucesso")
     log(f"URL: {url}")
-    return {"url": url, "token": token}
+    log(f"Proxy URL: {proxy_url}")
+    return {
+        "url": url, 
+        "token": token, 
+        "proxy_url": proxy_url, 
+        "proxy_token": proxy_token
+    }
 
 
 @task
@@ -87,27 +92,34 @@ def fetch_agendamentos_from_api(
     credentials: Dict[str, str], date: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
-    Busca os agendamentos da API da Datametrica.
+    Busca os agendamentos da API da Datametrica usando proxy brasileiro.
 
     Args:
-        credentials: Dict com 'url' e 'token' da API
+        credentials: Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
         date: Data no formato YYYY-MM-DD. Se None, usa lógica padrão (dia seguinte - DEPRECATED, usar calculate_target_date).
 
     Returns:
         Lista de dicionários com os dados dos agendamentos
     """
-    # Build URL inline to avoid import issues
+    # Build Datametrica URL
     base_url = credentials["url"].rstrip("/")
     if date is None:
         from datetime import datetime, timedelta
 
         date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    url = f"{base_url}/{date}"
+    datametrica_url = f"{base_url}/{date}"
+    
+    # Build proxy URL
+    proxy_url = f"{credentials['proxy_url'].rstrip('/')}/?url={datametrica_url}"
 
-    log(f"Buscando agendamentos na URL: {url}")
+    log(f"Buscando agendamentos via proxy brasileiro")
+    log(f"Datametrica URL: {datametrica_url}")
+    log(f"Proxy URL: {proxy_url}")
     log(f"Token (primeiros 10 chars): {credentials['token'][:10]}...")
 
+    # Headers incluindo o token do proxy e os headers originais da Datametrica
     headers = {
+        "X-Proxy-Api-Token": credentials["proxy_token"],
         "Authorization": f"Bearer {credentials['token']}",
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
@@ -117,7 +129,7 @@ def fetch_agendamentos_from_api(
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=30, verify=False)
+        response = requests.get(proxy_url, headers=headers, timeout=30, verify=False)
 
         # Log response details for debugging
         log(f"Status code: {response.status_code}")
@@ -133,7 +145,7 @@ def fetch_agendamentos_from_api(
         return agendamentos_data
 
     except requests.exceptions.RequestException as e:
-        log(f"Erro ao buscar agendamentos: {e}")
+        log(f"Erro ao buscar agendamentos via proxy: {e}")
         if hasattr(e, "response") and e.response is not None:
             log(f"Response status: {e.response.status_code}")
             log(f"Response text: {e.response.text[:500]}")
