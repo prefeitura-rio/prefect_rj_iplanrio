@@ -36,12 +36,11 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
-      # Valores padrão (podem ser alterados na UI)
       dataset_id: brutos_data_metrica
       table_id: agendamentos_cadunico
       dump_mode: append
       materialize_after_dump: true
-      date: null  # null usa o próximo dia automaticamente
+      date: null
   - name: rj-smas--api-datametrica-agendamentos--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__api_datametrica_agendamentos/flow.py:rj_smas__api_datametrica_agendamentos
@@ -54,13 +53,11 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
-      # Valores padrão (podem ser alterados na UI)
       dataset_id: brutos_data_metrica
       table_id: agendamentos_cadunico
       dump_mode: append
       materialize_after_dump: true
       date: null  # null usa o próximo dia automaticamente
-    schedules:
-      # Migrado de IntervalClock(interval=timedelta(days=1), start_date=datetime(2025, 1, 1, 10, 0, 0))
-      - cron: "0 10 * * *"  # Diariamente às 10:00
-        timezone: America/Sao_Paulo
+    #schedules:
+    #  - cron: "0 10 * * *"  # Diariamente às 10:00
+    #    timezone: America/Sao_Paulo
