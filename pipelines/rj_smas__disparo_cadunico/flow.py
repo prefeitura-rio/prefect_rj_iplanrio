@@ -12,28 +12,23 @@ Flow migrado do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
 - case (conditional execution): Substituído por if/else padrão
 """
 
+import os
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task, getenv_or_action
+from iplanrio.pipelines_utils.env import (getenv_or_action,
+                                          inject_bd_credentials_task)
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect import flow
-
 from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
-
-from pipelines.rj_smas__disparo_cadunico.tasks import (
-    check_api_status,
-    create_dispatch_dfr,
-    create_dispatch_payload,
-    dispatch,
-    get_destinations,
-    printar,
-    remove_duplicate_phones,
-)
+from pipelines.rj_smas__disparo_cadunico.tasks import (check_api_status,
+                                                       create_dispatch_dfr,
+                                                       create_dispatch_payload,
+                                                       dispatch,
+                                                       get_destinations,
+                                                       printar,
+                                                       remove_duplicate_phones)
 from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
-    access_api,
-    create_date_partitions,
-    skip_flow_if_empty,
-)
+    access_api, create_date_partitions, skip_flow_if_empty)
+from prefect import flow
 
 
 @flow(log_prints=True)
@@ -90,6 +85,9 @@ def rj_smas__disparo_cadunico(
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
 
+    # Log destination counts for tracking
+    print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
+
     if api_status:
         dispatch_payload = create_dispatch_payload(
             campaign_name=campaign_name,
@@ -106,11 +104,19 @@ def rj_smas__disparo_cadunico(
             chunk=chunk_size,
         )
 
+        print(
+            f"Dispatch completed successfully for {len(unique_destinations)} destinations"
+        )
+
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
-            dispatch_payload=dispatch_payload,
+            original_destinations=unique_destinations,
+            campaign_name=campaign_name,
+            cost_center_id=cost_center_id,
             dispatch_date=dispatch_date,
         )
+
+        print(f"DataFrame created with {len(dfr)} records for BigQuery upload")
 
         partitions_path = create_date_partitions(
             dataframe=dfr,
@@ -118,6 +124,21 @@ def rj_smas__disparo_cadunico(
             file_format="parquet",
             root_folder="./data_dispatch/",
         )
+
+        # Validation to prevent NoneType errors in BigQuery upload
+        if not partitions_path:
+            raise ValueError("partitions_path is None - partition creation failed")
+
+        if not os.path.exists(partitions_path):
+            raise ValueError(f"partitions_path does not exist: {partitions_path}")
+
+        # Log path details for debugging
+        print(f"Generated partitions_path: {partitions_path}")
+        if os.path.exists(partitions_path):
+            files_in_path = []
+            for root, dirs, files in os.walk(partitions_path):
+                files_in_path.extend([os.path.join(root, f) for f in files])
+            print(f"Files in partitions path: {files_in_path}")
 
         create_table = create_table_and_upload_to_gcs_task(
             data_path=partitions_path,

@@ -56,7 +56,11 @@ class ApiHandler:
                 token = response_data["authToken"]
             elif "jwt" in response_data:
                 token = response_data["jwt"]
-            elif "data" in response_data and "item" in response_data["data"] and "token" in response_data["data"]["item"]:
+            elif (
+                "data" in response_data
+                and "item" in response_data["data"]
+                and "token" in response_data["data"]["item"]
+            ):
                 token = response_data["data"]["item"]["token"]
 
             if token:
@@ -79,7 +83,9 @@ class ApiHandler:
             return True
         return False
 
-    def get(self, path: str, params: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def get(
+        self, path: str, params: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         """Perform GET request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
@@ -91,26 +97,46 @@ class ApiHandler:
 
         return response
 
-    def post(self, path: str, json: Optional[Dict] = None, data: Optional[Any] = None, **kwargs) -> requests.Response:
+    def post(
+        self,
+        path: str,
+        json: Optional[Dict] = None,
+        data: Optional[Any] = None,
+        **kwargs,
+    ) -> requests.Response:
         """Perform POST request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        response = requests.post(url, headers=self.headers, json=json, data=data, **kwargs)
+        response = requests.post(
+            url, headers=self.headers, json=json, data=data, **kwargs
+        )
 
         if self._refresh_token_if_needed(response):
             # Retry with new token
-            response = requests.post(url, headers=self.headers, json=json, data=data, **kwargs)
+            response = requests.post(
+                url, headers=self.headers, json=json, data=data, **kwargs
+            )
 
         return response
 
-    def put(self, path: str, json: Optional[Dict] = None, data: Optional[Any] = None, **kwargs) -> requests.Response:
+    def put(
+        self,
+        path: str,
+        json: Optional[Dict] = None,
+        data: Optional[Any] = None,
+        **kwargs,
+    ) -> requests.Response:
         """Perform PUT request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        response = requests.put(url, headers=self.headers, json=json, data=data, **kwargs)
+        response = requests.put(
+            url, headers=self.headers, json=json, data=data, **kwargs
+        )
 
         if self._refresh_token_if_needed(response):
             # Retry with new token
-            response = requests.put(url, headers=self.headers, json=json, data=data, **kwargs)
+            response = requests.put(
+                url, headers=self.headers, json=json, data=data, **kwargs
+            )
 
         return response

@@ -8,19 +8,18 @@ import os
 import uuid
 from datetime import datetime
 from time import sleep
-from typing import Literal, Union, List, Dict
+from typing import Dict, List, Literal, Union
 
 import pandas as pd
-from prefect import task
-from prefect.exceptions import PrefectException
-
-from iplanrio.pipelines_utils.env import getenv_or_action
-from pipelines.rj_smas__disparo_cadunico.utils.api_handler import ApiHandler
-
 # import seaborn as sns
 from basedosdados import Base  # pylint: disable=E0611, E0401
 from google.cloud import bigquery  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.env import getenv_or_action
+from iplanrio.pipelines_utils.logging import \
+    log  # pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_cadunico.utils.api_handler import ApiHandler
+from prefect import task
+from prefect.exceptions import PrefectException
 
 
 @task

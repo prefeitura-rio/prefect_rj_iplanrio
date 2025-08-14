@@ -8,7 +8,6 @@ Registry of functions that process queries at runtime
 from datetime import datetime
 
 from iplanrio.pipelines_utils.logging import log
-
 from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
 
 
