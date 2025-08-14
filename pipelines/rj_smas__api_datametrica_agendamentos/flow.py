@@ -39,6 +39,7 @@ def rj_smas__api_datametrica_agendamentos(
     dump_mode: str | None = None,
     materialize_after_dump: bool | None = None,
     date: str | None = None,
+    infisical_secret_path: str | None = "/api-datametrica",
 ):
     """
     Flow para extrair agendamentos da API Datametrica e carregar no BigQuery.
@@ -53,6 +54,7 @@ def rj_smas__api_datametrica_agendamentos(
         dump_mode: Modo de dump (default: append)
         materialize_after_dump: Se deve materializar após dump (default: True)
         date: Data para buscar agendamentos no formato YYYY-MM-DD (default: None = usa regra de negócio)
+        infisical_secret_path: Caminho dos secrets no Infisical (default: None)
     """
 
     # Usar valores dos constants como padrão
@@ -77,7 +79,7 @@ def rj_smas__api_datametrica_agendamentos(
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Obter credenciais da API Datametrica
-    credentials = get_datametrica_credentials()
+    credentials = get_datametrica_credentials(infisical_secret_path=infisical_secret_path)
 
     # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
     target_date = date if date is not None else calculate_target_date()

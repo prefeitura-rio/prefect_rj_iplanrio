@@ -57,9 +57,12 @@ def calculate_target_date() -> str:
 
 
 @task
-def get_datametrica_credentials() -> Dict[str, str]:
+def get_datametrica_credentials(infisical_secret_path: str | None = None) -> Dict[str, str]:
     """
     Recupera as credenciais da API da Datametrica e do proxy brasileiro usando iplanrio.
+
+    Args:
+        infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)
 
     Returns:
         Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
