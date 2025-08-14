@@ -17,6 +17,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import DatametricaConstants
 from pipelines.rj_smas__api_datametrica_agendamentos.tasks import (
+    calculate_target_date,
     convert_agendamentos_to_dataframe,
     fetch_agendamentos_from_api,
     get_datametrica_credentials,
@@ -38,12 +39,16 @@ def rj_smas__api_datametrica_agendamentos(
     """
     Flow para extrair agendamentos da API Datametrica e carregar no BigQuery.
     
+    Regra de negócio para datas:
+    - Dias normais: busca dados para 2 dias à frente
+    - Quinta e sexta-feira: busca dados para 4 dias à frente (cobrindo fim de semana)
+    
     Args:
         dataset_id: ID do dataset no BigQuery (default: brutos_data_metrica)
         table_id: ID da tabela no BigQuery (default: agendamentos_cadunico)  
         dump_mode: Modo de dump (default: append)
         materialize_after_dump: Se deve materializar após dump (default: True)
-        date: Data para buscar agendamentos no formato YYYY-MM-DD (default: None = próximo dia)
+        date: Data para buscar agendamentos no formato YYYY-MM-DD (default: None = usa regra de negócio)
     """
     
     # Usar valores dos constants como padrão
@@ -66,8 +71,11 @@ def rj_smas__api_datametrica_agendamentos(
     # Obter credenciais da API Datametrica
     credentials = get_datametrica_credentials()
 
+    # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
+    target_date = date if date is not None else calculate_target_date()
+
     # Buscar dados da API
-    raw_data = fetch_agendamentos_from_api(credentials=credentials, date=date)
+    raw_data = fetch_agendamentos_from_api(credentials=credentials, date=target_date)
 
     # Transformar os dados
     processed_data = transform_agendamentos_data(raw_data)

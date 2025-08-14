@@ -4,6 +4,7 @@ Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 """
 # pylint: disable=invalid-name
 # flake8: noqa: E501
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
@@ -16,7 +17,43 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__api_datametrica_agendamentos.constants import DatametricaConstants  # pylint: disable=E0611, E0401
+from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
+    DatametricaConstants,
+)  # pylint: disable=E0611, E0401
+
+
+@task
+def calculate_target_date() -> str:
+    """
+    Calcula a data target baseada na regra de negócio:
+    - Dias normais: 2 dias à frente
+    - Quinta-feira (4) e Sexta-feira (5): 4 dias à frente
+
+    Returns:
+        str: Data no formato YYYY-MM-DD
+    """
+    today = datetime.now()
+    weekday = today.weekday()  # 0=Monday, 1=Tuesday, ..., 6=Sunday
+
+    # Quinta-feira (3) e Sexta-feira (4) em Python weekday (0-indexed, Monday=0)
+    if weekday in [3, 4]:  # Thursday and Friday
+        days_ahead = 4
+        log(
+            "(calculate_target_date) - Quinta/sexta detectada - carregando dados para 4 dias à frente"
+        )
+    else:
+        days_ahead = 2
+        log(
+            "(calculate_target_date) - Dia normal (S/T/Q) detectado - carregando dados para 2 dias à frente"
+        )
+
+    target_date = today + timedelta(days=days_ahead)
+    target_date_str = target_date.strftime("%Y-%m-%d")
+
+    log(
+        f"Data target calculada: {target_date_str} (hoje: {today.strftime('%Y-%m-%d')}, {days_ahead} dias à frente)"
+    )
+    return target_date_str
 
 
 @task
@@ -32,7 +69,7 @@ def get_datametrica_credentials() -> Dict[str, str]:
 
     url_key = DatametricaConstants.DATAMETRICA_URL.value
     token_key = DatametricaConstants.DATAMETRICA_TOKEN.value
-    
+
     # Use getenv_or_action to get secrets from environment
     url = getenv_or_action(url_key)
     if not url.startswith("http"):
@@ -54,7 +91,7 @@ def fetch_agendamentos_from_api(
 
     Args:
         credentials: Dict com 'url' e 'token' da API
-        date: Data no formato YYYY-MM-DD. Se None, usa o dia seguinte.
+        date: Data no formato YYYY-MM-DD. Se None, usa lógica padrão (dia seguinte - DEPRECATED, usar calculate_target_date).
 
     Returns:
         Lista de dicionários com os dados dos agendamentos
@@ -107,7 +144,9 @@ def fetch_agendamentos_from_api(
 
 
 @task
-def transform_agendamentos_data(agendamentos_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def transform_agendamentos_data(
+    agendamentos_data: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     """
     Transforma e valida os dados brutos dos agendamentos.
     """
@@ -142,7 +181,9 @@ def transform_agendamentos_data(agendamentos_data: List[Dict[str, Any]]) -> List
 
 
 @task
-def convert_agendamentos_to_dataframe(agendamentos: List[Dict[str, Any]]) -> pd.DataFrame:
+def convert_agendamentos_to_dataframe(
+    agendamentos: List[Dict[str, Any]],
+) -> pd.DataFrame:
     """
     Converte a lista de agendamentos para um DataFrame pandas.
 
