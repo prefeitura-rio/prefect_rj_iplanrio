@@ -15,7 +15,7 @@ from pipelines.rj_iplanrio__eai_history.tasks import fetch_history_data, get_las
 
 @flow(log_prints=True)
 def rj_iplanrio__eai_history(  # noqa
-    last_update: Optional[None] = None,
+    last_update: Optional[str] = None,
     session_timeout_seconds: Optional[int] = 3600,
     use_whatsapp_format: bool = False,
     dataset_id: str = "brutos_eai_logs",
