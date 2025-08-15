@@ -6,3 +6,4 @@ dependencies = [
     "langchain>=0.3.27",
     "langchain-google-cloud-sql-pg>=0.14.1",
 ]
+
