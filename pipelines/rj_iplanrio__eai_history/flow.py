@@ -28,6 +28,4 @@ def rj_iplanrio__eai_history(
         session_timeout_seconds=session_timeout_seconds,
         use_whatsapp_format=use_whatsapp_format,
     )
-    create_table_and_upload_to_gcs_task(
-        data_path=data_path, dataset_id=dataset_id, table_id=table_id
-    )
+    create_table_and_upload_to_gcs_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
