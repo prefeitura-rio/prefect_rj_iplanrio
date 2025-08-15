@@ -10,7 +10,6 @@ if os.path.exists("src/config/.env"):
     dotenv.load_dotenv(dotenv_path="src/config/.env")
 
 PROJECT_ID = getenv_or_action("EAI__PROJECT_ID")
-PROJECT_NUMBER = getenv_or_action("EAI__PROJECT_NUMBER")
 LOCATION = getenv_or_action("EAI__LOCATION")
 INSTANCE = getenv_or_action("EAI__INSTANCE")
 DATABASE = getenv_or_action("EAI__DATABASE")
