@@ -33,7 +33,7 @@ class CadunicoConstants(Enum):
     CADUNICO_CHUNK_SIZE = 1000
 
     # Query principal do CadÚnico
-    CADUNICO_QUERY = """
+    CADUNICO_QUERY = r"""
     SELECT
         TO_JSON_STRING(STRUCT(
             REGEXP_REPLACE(telefone, r'[^\d]', '') as celular_disparo,

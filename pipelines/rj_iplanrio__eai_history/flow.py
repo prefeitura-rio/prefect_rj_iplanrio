@@ -1,4 +1,8 @@
 # -*- coding: utf-8 -*-
+"""
+Upload eai messages history to bq
+"""
+
 from typing import Optional
 
 from prefect import flow
