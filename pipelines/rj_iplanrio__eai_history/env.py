@@ -7,5 +7,10 @@ if os.path.exists("src/config/.env"):
 
     dotenv.load_dotenv(dotenv_path="src/config/.env")
 
-PG_URI = getenv_or_action("EAI__PG_URI")
-DB_SSL = getenv_or_action("EAI__DB_SSL", default="true")
+PROJECT_ID = getenv_or_action("PROJECT_ID")
+PROJECT_NUMBER = getenv_or_action("PROJECT_NUMBER")
+LOCATION = getenv_or_action("LOCATION")
+INSTANCE = getenv_or_action("INSTANCE")
+DATABASE = getenv_or_action("DATABASE")
+DATABASE_USER = getenv_or_action("DATABASE_USER")
+DATABASE_PASSWORD = getenv_or_action("DATABASE_PASSWORD")

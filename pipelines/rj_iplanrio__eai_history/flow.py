@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Upload eai messages history to bq
+Upload eai messages history to bq.
 """
 
 from typing import Optional

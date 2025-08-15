@@ -21,21 +21,14 @@ class GoogleAgentEngineHistory:
     @classmethod
     async def create(cls) -> "GoogleAgentEngineHistory":
         """Factory method para criar uma instância com checkpointer inicializado"""
-        url = env.PG_URI
-        if url.startswith("postgres://"):
-            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-        elif url.startswith("postgresql://"):
-            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-        connect_args = {}
-        if env.DB_SSL.lower() in ("false", "0", "no"):
-            connect_args = {"ssl": False}
-
-        engine = PostgresEngine.from_engine_args(
-            url=url,
-            pool_pre_ping=True,
-            pool_recycle=300,
-            connect_args=connect_args,
+        engine = await PostgresEngine.afrom_instance(
+            project_id=env.PROJECT_ID,
+            region=env.LOCATION,
+            instance=env.INSTANCE,
+            database=env.DATABASE,
+            user=env.DATABASE_USER,
+            password=env.DATABASE_PASSWORD,
+            engine_args={"pool_pre_ping": True, "pool_recycle": 300},
         )
         checkpointer = await PostgresSaver.create(engine=engine)
         log("Checkpointer inicializado")
