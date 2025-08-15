@@ -15,20 +15,21 @@ Flow migrado do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
 import os
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import (getenv_or_action,
-                                          inject_bd_credentials_task)
+from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
-from pipelines.rj_smas__disparo_cadunico.tasks import (check_api_status,
-                                                       create_dispatch_dfr,
-                                                       create_dispatch_payload,
-                                                       dispatch,
-                                                       get_destinations,
-                                                       printar,
-                                                       remove_duplicate_phones)
-from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
-    access_api, create_date_partitions, skip_flow_if_empty)
 from prefect import flow
+
+from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
+from pipelines.rj_smas__disparo_cadunico.tasks import (
+    check_api_status,
+    create_dispatch_dfr,
+    create_dispatch_payload,
+    dispatch,
+    get_destinations,
+    printar,
+    remove_duplicate_phones,
+)
+from pipelines.rj_smas__disparo_cadunico.utils.tasks import access_api, create_date_partitions, skip_flow_if_empty
 
 
 @flow(log_prints=True)
@@ -43,7 +44,6 @@ def rj_smas__disparo_cadunico(
     dump_mode: str | None = None,
     infisical_secret_path: str = "/wetalkie",
 ):
-
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
     table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
     dump_mode = dump_mode or CadunicoConstants.CADUNICO_DUMP_MODE.value
@@ -104,9 +104,7 @@ def rj_smas__disparo_cadunico(
             chunk=chunk_size,
         )
 
-        print(
-            f"Dispatch completed successfully for {len(unique_destinations)} destinations"
-        )
+        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
 
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
