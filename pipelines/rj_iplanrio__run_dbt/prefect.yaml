@@ -70,7 +70,6 @@ deployments:
         parameters:
           command: "build"
           select: "tag:daily source_status:fresher+"
-          state: "/opt/prefect/prefect_rj_iplanrio/gcs_artifacts/"
           send_discord_report: true
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
@@ -87,7 +86,6 @@ deployments:
         parameters:
           command: "build"
           select: "tag:weekly source_status:fresher+"
-          state: "/opt/prefect/prefect_rj_iplanrio/gcs_artifacts/"
           send_discord_report: true
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
