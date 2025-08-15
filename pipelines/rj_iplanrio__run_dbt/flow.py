@@ -436,16 +436,16 @@ def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket) ->
         return None
         
     gcs_bucket = gcs_buckets[environment]
-    target_base_path = os.path.join(os.getcwd(), "target_base")
+    gcs_artifacts_path = os.path.join(os.getcwd(), "gcs_artifacts")
 
-    if os.path.exists(target_base_path):
-        shutil.rmtree(target_base_path, ignore_errors=False)
-        os.makedirs(target_base_path)
+    if os.path.exists(gcs_artifacts_path):
+        shutil.rmtree(gcs_artifacts_path, ignore_errors=False)
+        os.makedirs(gcs_artifacts_path)
 
     try:
-        download_from_cloud_storage(target_base_path, gcs_bucket)
+        download_from_cloud_storage(gcs_artifacts_path, gcs_bucket)
         log(f"DBT artifacts downloaded from GCS bucket: {gcs_bucket}", level="info")
-        return target_base_path
+        return gcs_artifacts_path
 
     except Exception as e:
         log(f"Error when downloading DBT artifacts from GCS: {e}", level="error")
