@@ -54,6 +54,7 @@ deployments:
           break_query_start: "2021-01-01"
           break_query_end: current_month
           dump_mode: append
+          max_concurrency: 1
           execute_query:
             "select distinct ch.id_chamado, ch.ds_chamado, CONVERT ( VARCHAR, CONVERT(DATETIME, ch.dt_inicio, 10),\
             \ 20 ) AS [dt_inicio], CONVERT ( VARCHAR, CONVERT(DATETIME, ch.dt_fim, 10), 20 ) AS [dt_fim], tr.id_territorialidade,\
@@ -133,6 +134,7 @@ deployments:
           batch_size: 50000
           table_id: chamado_cpf
           dump_mode: overwrite
+          max_concurrency: 1
           execute_query:
             SELECT pc.id_chamado_fk AS id_chamado, CASE WHEN p.ds_cpf IS NOT NULL THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(p.ds_cpf,
             '-', ''), '.', ''), '/', ''), '(', ''), ')', ''), ' ', ''), ',', ''), '+', ''), ';', '') ELSE NULL END AS cpf FROM
@@ -153,6 +155,7 @@ deployments:
           batch_size: 50000
           table_id: origem_ocorrencia
           dump_mode: overwrite
+          max_concurrency: 1
           execute_query: SELECT id_origem_ocorrencia, no_origem_ocorrencia FROM tb_origem_ocorrencia
       - interval: 86400
         anchor_date: "2025-07-15T00:30:00"
@@ -169,6 +172,7 @@ deployments:
           batch_size: 50000
           table_id: pessoa
           dump_mode: overwrite
+          max_concurrency: 1
           execute_query:
             select id_pessoa, no_pessoa, ds_email, ds_endereco, ds_endereco_numero, ds_endereco_cep, ds_endereco_complemento,
             ds_endereco_referencia, ds_telefone_1, ds_telefone_2, ds_telefone_3, dt_nascimento, ic_sexo, ds_cpf, ds_identidade,

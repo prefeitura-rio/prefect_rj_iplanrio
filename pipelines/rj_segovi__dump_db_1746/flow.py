@@ -39,11 +39,16 @@ def rj_segovi__dump_db_1746(
     batch_data_type: str = "csv",
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
+    max_concurrency: int = 1,
 ):
-    rename_flow_run = rename_current_flow_run_task(new_name=table_id)
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
-    secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
-    partition_columns_list = parse_comma_separated_string_to_list_task(text=partition_columns)
+    rename_current_flow_run_task(new_name=table_id)
+    inject_bd_credentials_task(environment="prod")
+    secrets = get_database_username_and_password_from_secret_task(
+        infisical_secret_path=infisical_secret_path
+    )
+    partition_columns_list = parse_comma_separated_string_to_list_task(
+        text=partition_columns
+    )
 
     formated_query = format_partitioned_query_task(
         query=execute_query,
@@ -57,6 +62,7 @@ def rj_segovi__dump_db_1746(
         break_query_end=break_query_end,
         break_query_frequency=break_query_frequency,
     )
+
     dump_upload = dump_upload_batch_task(  # noqa
         queries=formated_query,
         batch_size=batch_size,
@@ -75,4 +81,5 @@ def rj_segovi__dump_db_1746(
         password=secrets["DB_PASSWORD"],
         database=db_database,
         charset=db_charset,
+        max_concurrency=max_concurrency,
     )

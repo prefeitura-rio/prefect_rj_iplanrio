@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the GestaoEscolar server to the BIGQUERY.
+This flow is used to dump the database from the 1746 server to the BIGQUERY.
 """
 
 from typing import Optional
@@ -24,7 +24,7 @@ def rj_sme__brutos_gestao_escolar(
     db_type: str = "sql_server",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "brutos_gestao_escolar",
+    dataset_id: str = "sme_brutos_gestao_escolar",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-gestao-escolar",
     dump_mode: str = "overwrite",
@@ -39,11 +39,16 @@ def rj_sme__brutos_gestao_escolar(
     batch_data_type: str = "csv",
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
+    max_concurrency: int = 1,
 ):
-    rename_flow_run = rename_current_flow_run_task(new_name=table_id)
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
-    secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
-    partition_columns_list = parse_comma_separated_string_to_list_task(text=partition_columns)
+    rename_current_flow_run_task(new_name=table_id)
+    inject_bd_credentials_task(environment="prod")
+    secrets = get_database_username_and_password_from_secret_task(
+        infisical_secret_path=infisical_secret_path
+    )
+    partition_columns_list = parse_comma_separated_string_to_list_task(
+        text=partition_columns
+    )
 
     formated_query = format_partitioned_query_task(
         query=execute_query,
@@ -57,7 +62,8 @@ def rj_sme__brutos_gestao_escolar(
         break_query_end=break_query_end,
         break_query_frequency=break_query_frequency,
     )
-    dump_upload = dump_upload_batch_task(  # noqa
+
+    dump_upload_batch_task(
         queries=formated_query,
         batch_size=batch_size,
         dataset_id=dataset_id,
@@ -75,4 +81,5 @@ def rj_sme__brutos_gestao_escolar(
         password=secrets["DB_PASSWORD"],
         database=db_database,
         charset=db_charset,
+        max_concurrency=max_concurrency,
     )
