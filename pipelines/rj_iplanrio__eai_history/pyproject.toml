@@ -1,0 +1,12 @@
+[project]
+name = "rj_iplanrio__eai_history"
+version = "0.1.0"
+description = "Pipeline eai_history da secretaria iplanrio"
+dependencies = [
+    "langchain>=0.3.27",
+    "langchain-google-cloud-sql-pg>=0.14.1",
+    "idna>=3.10",
+    "iplanrio",
+    "pandas>=2.2.3",
+    "prefect==3.4.9",
+]
