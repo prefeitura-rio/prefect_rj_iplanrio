@@ -8,6 +8,7 @@ Registry of functions that process queries at runtime
 from datetime import datetime
 
 from iplanrio.pipelines_utils.logging import log
+
 from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
 
 
@@ -30,9 +31,7 @@ def process_cadunico_query(query: str = None) -> str:
         query = CadunicoConstants.CADUNICO_QUERY.value
 
     if "{days_ahead}" not in query:
-        raise ValueError(
-            "Query must contain {days_ahead} placeholder for dynamic substitution"
-        )
+        raise ValueError("Query must contain {days_ahead} placeholder for dynamic substitution")
 
     # Get dynamic days_ahead based on current weekday
     current_weekday = datetime.now().weekday()  # 0=Monday, 6=Sunday
@@ -49,15 +48,11 @@ def process_cadunico_query(query: str = None) -> str:
     # Thursday (3) or Friday (4) = 4 days ahead
     if current_weekday in [3, 4]:  # quinta, sexta
         days_ahead = 4
-        log(
-            f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead"
-        )
+        log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
     else:
         # Other days = 2 days ahead
         days_ahead = 2
-        log(
-            f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead"
-        )
+        log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
 
     hsm_id = CadunicoConstants.CADUNICO_ID_HSM.value
     formatted_query = query.format(days_ahead=int(days_ahead), hsm_id=str(hsm_id))

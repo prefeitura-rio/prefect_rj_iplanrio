@@ -1,18 +1,13 @@
 # -*- coding: utf-8 -*-
 import asyncio
-from typing import Literal
+import os
+import re
 
 import aiohttp
-import prefect
-from discord import AllowedMentions, Embed, File, Webhook
-from prefect.context import get_run_context
-
-import os 
-import re
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
-
+import prefect
 from dbt.contracts.results import RunResult, SourceFreshnessResult
+from discord import AllowedMentions, Embed, File, Webhook
 from google.cloud import storage
 
 
@@ -21,6 +16,7 @@ def get_environment():
 
 
 # DISCORD - UTILS
+
 
 async def send_discord_webhook(
     text_content: str,
@@ -70,9 +66,7 @@ async def send_discord_webhook(
             raise ValueError(f"Error sending message to Discord webhook: {webhook_url}")
 
 
-def send_message(
-    title, message, flow_info: dict, file_path=None, username=None, destination: str = "notifications"
-):
+def send_message(title, message, flow_info: dict, file_path=None, username=None, destination: str = "notifications"):
     """
     Sends a message with the given title and content to a webhook.
 
@@ -88,7 +82,7 @@ def send_message(
     flow_environment = flow_info["flow_environment"]
     flow_name = flow_info["flow_name"]
     flow_run_id = flow_info["flow_run_id"]
-    
+
     header_content = f"""
 ## {title}
 > Prefect Environment: {flow_environment}
@@ -128,14 +122,14 @@ def send_message(
                 text_content=content,
                 file_path=file_path if i == len(contents) - 1 else None,
                 username=username,
-                destination=destination
+                destination=destination,
             )
 
     asyncio.run(main(message_contents))
 
 
-
 # DBT - UTILS
+
 
 def process_dbt_logs(log_path: str = "dbt_repository/logs/dbt.log") -> pd.DataFrame:
     """
@@ -185,12 +179,13 @@ def log_to_file(logs: pd.DataFrame, levels=None) -> str:
     for _, row in logs.iterrows():
         report.append(f"{row['time']} [{row['level'].rjust(5, ' ')}] {row['text']}")
     report = "\n".join(report)
-    #log(f"Logs do DBT:{report}")
+    # log(f"Logs do DBT:{report}")
 
     with open("dbt_log.txt", "w+", encoding="utf-8") as log_file:
         log_file.write(report)
 
     return "dbt_log.txt"
+
 
 # =============================
 # SUMMARIZERS
@@ -220,7 +215,7 @@ class RunResultSummarizer:
         return f"`{result.node.name}`\n  {result.message.replace('__', '_')} \n"
 
     def fail(self, result):
-        return f"`{result.node.name}`\n   {result.message}: ``` select * from {result.node.relation_name.replace('`','')}``` \n"  # noqa
+        return f"`{result.node.name}`\n   {result.message}: ``` select * from {result.node.relation_name.replace('`', '')}``` \n"  # noqa
 
     def warn(self, result):
         return f"`{result.node.name}`\n  {result.message.replace('__', '_')} \n"
