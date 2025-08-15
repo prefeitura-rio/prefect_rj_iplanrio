@@ -11,7 +11,7 @@ from pipelines.rj_iplanrio__eai_history.db import GoogleAgentEngineHistory
 
 # A anotação @task deve estar na função que o Prefect irá chamar diretamente.
 @task
-def get_last_update(dataset_id: str, table_id: str) -> Optional[str]:
+def get_last_update(dataset_id: str, table_id: str) -> str:
     """
     Busca a data da última atualização da tabela no BigQuery.
     Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
@@ -30,7 +30,7 @@ def get_last_update(dataset_id: str, table_id: str) -> Optional[str]:
 
     if result is None or result.empty:
         log("Nenhum 'last_update' encontrado.")
-        return None
+        return "2025-07-25T00:00:00"
 
     last_update = result["last_update"][0]
     log(f"Último 'last_update' encontrado: {last_update}")

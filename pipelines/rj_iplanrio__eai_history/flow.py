@@ -10,7 +10,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_iplanrio__eai_history.tasks import fetch_history_data
+from pipelines.rj_iplanrio__eai_history.tasks import fetch_history_data, get_last_update
 
 
 @flow(log_prints=True)
@@ -23,6 +23,9 @@ def rj_iplanrio__eai_history(
 ):
     rename_current_flow_run_task(new_name=last_update)
     inject_bd_credentials_task()
+
+    last_update = get_last_update(dataset_id=dataset_id, table_id=table_id)
+
     data_path = fetch_history_data(
         last_update=last_update,
         session_timeout_seconds=session_timeout_seconds,

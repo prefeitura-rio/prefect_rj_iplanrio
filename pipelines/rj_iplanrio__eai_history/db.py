@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional
 from uuid import uuid4
 
 import pandas as pd
@@ -40,9 +40,11 @@ class GoogleAgentEngineHistory:
     async def _get_single_user_history(
         self,
         user_id: str,
+        save_path: str,
+        last_update: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
-    ) -> tuple[str, list]:
+    ):
         """Método auxiliar para processar histórico de um único usuário"""
         config = RunnableConfig(configurable={"thread_id": user_id})
 
@@ -53,42 +55,28 @@ class GoogleAgentEngineHistory:
         messages = state.get("channel_values", {}).get("messages", [])
         # logger.info(messages)
 
-        letta_payload = to_gateway_format(
+        messages = to_gateway_format(
             messages=messages,
             thread_id=user_id,
             session_timeout_seconds=session_timeout_seconds,
             use_whatsapp_format=use_whatsapp_format,
         )
 
-        return user_id, letta_payload.get("data", {}).get("messages", [])
-
-    async def get_history_bulk(
-        self,
-        user_ids: List[str],
-        session_timeout_seconds: Optional[int] = 3600,
-        use_whatsapp_format: bool = True,
-    ) -> Dict[str, list]:
-        """Método otimizado com async concorrente para buscar histórico de múltiplos usuários"""
-        tasks = [
-            self._get_single_user_history(
-                user_id=user_id,
-                session_timeout_seconds=session_timeout_seconds,
-                use_whatsapp_format=use_whatsapp_format,
-            )
-            for user_id in user_ids
+        bq_payload = [
+            {
+                "project_id": env.PROJECT_ID,
+                "last_update": last_update,
+                "user_id": user_id,
+                "messages": messages.get("data", {}).get("messages", []),
+            }
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        result = {}
-        for item in results:
-            if isinstance(item, Exception):
-                log(msg=f"Erro ao processar histórico: {item}", level="error")
-                continue
-            if isinstance(item, tuple) and len(item) == 2:
-                user_id, messages = item
-                result[user_id] = messages
-
-        return result
+        dataframe = pd.DataFrame(data=bq_payload)
+        to_partitions(
+            data=dataframe,
+            partition_columns=["project_id", "user_id"],
+            savepath=str(save_path),
+        )
 
     async def get_history_bulk_from_last_update(
         self,
@@ -140,33 +128,22 @@ class GoogleAgentEngineHistory:
         loader = await PostgresLoader.create(engine=engine, query=query)
         docs = await loader.aload()
         user_ids = [doc.page_content for doc in docs]
-
         if not user_ids:
             log(msg="No data to save")
             return None
-
-        history_to_save = await self.get_history_bulk(
-            user_ids=user_ids,
-            session_timeout_seconds=session_timeout_seconds,
-            use_whatsapp_format=use_whatsapp_format,
-        )
-
-        bq_payload = [
-            {
-                "project_id": env.PROJECT_ID,
-                "last_update": last_update,
-                "user_id": user_id,
-                "messages": history_to_save[user_id],
-            }
-            for user_id in history_to_save.keys()
+        else:
+            log(f"Found {len(user_ids)} users to process")
+        save_path = str(Path(f"/tmp/data/{uuid4()}"))
+        tasks = [
+            self._get_single_user_history(
+                user_id=user_id,
+                last_update=last_update,
+                save_path=save_path,
+                session_timeout_seconds=session_timeout_seconds,
+                use_whatsapp_format=use_whatsapp_format,
+            )
+            for user_id in user_ids
         ]
-
-        dataframe = pd.DataFrame(data=bq_payload)
-        save_path = Path(f"/tmp/data/{uuid4()}")
-        to_partitions(
-            data=dataframe,
-            partition_columns=["project_id", "user_id"],
-            savepath=str(save_path),
-        )
+        await asyncio.gather(*tasks, return_exceptions=True)
 
         return str(save_path)
