@@ -11,18 +11,22 @@ from pipelines.rj_iplanrio__eai_history.db import GoogleAgentEngineHistory
 
 # A anotação @task deve estar na função que o Prefect irá chamar diretamente.
 @task
-def get_last_update(dataset_id: str, table_id: str) -> str:
+def get_last_update(dataset_id: str, table_id: str, last_update: Optional[str] = None) -> str:
     """
     Busca a data da última atualização da tabela no BigQuery.
     Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
     """
+
+    if last_update:
+        log(f"'last_update' fornecido via parametro: {last_update}")
+        return last_update
     log(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
     bd.config.billing_project_id = "rj-iplanrio"
     bd.config.from_file = True
     query = f"""
         SELECT
             last_update
-        FROM `{dataset_id}`.`{table_id}`
+        FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
         ORDER BY last_update DESC
         LIMIT 1
     """
@@ -33,8 +37,12 @@ def get_last_update(dataset_id: str, table_id: str) -> str:
         return "2025-07-25T00:00:00"
 
     last_update = result["last_update"][0]
-    log(f"Último 'last_update' encontrado: {last_update}")
-    return last_update
+    if last_update:
+        log(f"Último 'last_update' encontrado: {last_update}")
+        return last_update
+    else:
+        log("Nenhum 'last_update' encontrado.")
+        return "2025-07-25T00:00:00"
 
 
 @task
@@ -42,6 +50,7 @@ def fetch_history_data(
     last_update: str,
     session_timeout_seconds: Optional[int] = 3600,
     use_whatsapp_format: bool = True,
+    max_user_save_limit: int = 100,
 ) -> Optional[str]:
     """
     Ponto de entrada SÍNCRONO que orquestra a execução da lógica assíncrona,
@@ -58,6 +67,7 @@ def fetch_history_data(
             last_update=last_update,
             session_timeout_seconds=session_timeout_seconds,
             use_whatsapp_format=use_whatsapp_format,
+            max_user_save_limit=max_user_save_limit,
         )
 
         return data_path

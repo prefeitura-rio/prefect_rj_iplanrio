@@ -83,6 +83,7 @@ class GoogleAgentEngineHistory:
         last_update: str = "2025-07-25",
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
+        max_user_save_limit: int = 100,
     ) -> Optional[str]:
         """
         CREATE VIEW "public"."thread_ids" AS (
@@ -133,17 +134,42 @@ class GoogleAgentEngineHistory:
             return None
         else:
             log(f"Found {len(user_ids)} users to process")
+
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
-        tasks = [
-            self._get_single_user_history(
-                user_id=user_id,
-                last_update=last_update,
-                save_path=save_path,
-                session_timeout_seconds=session_timeout_seconds,
-                use_whatsapp_format=use_whatsapp_format,
+        batch_size = max_user_save_limit
+        user_id_chunks = [user_ids[i : i + batch_size] for i in range(0, len(user_ids), batch_size)]
+        total_batches = len(user_id_chunks)
+        all_results = []
+
+        log(
+            msg=f"Starting processing of {len(user_ids)} users in {total_batches} batches of up to {batch_size} users each."  # noqa
+        )
+
+        for batch_num, user_chunk in enumerate(user_id_chunks, 1):
+            tasks_for_this_batch = [
+                self._get_single_user_history(
+                    user_id=user_id,
+                    last_update=last_update,
+                    save_path=save_path,
+                    session_timeout_seconds=session_timeout_seconds,
+                    use_whatsapp_format=use_whatsapp_format,
+                )
+                for user_id in user_chunk
+            ]
+
+            results_of_batch = await asyncio.gather(*tasks_for_this_batch, return_exceptions=True)
+            all_results.extend(results_of_batch)
+
+            progress = 100 * (batch_num / total_batches)
+            log(f"Processed batch {batch_num} / {total_batches} - {progress}%")
+
+        errors = [res for res in all_results if isinstance(res, Exception)]
+        if errors:
+            log(
+                msg=f"Finished processing with {len(errors)} errors out of {len(user_ids)} users.",
+                level="warning",
             )
-            for user_id in user_ids
-        ]
-        await asyncio.gather(*tasks, return_exceptions=True)
+        else:
+            log("Finished processing all batches successfully.")
 
         return str(save_path)
