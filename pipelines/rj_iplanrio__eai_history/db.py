@@ -153,6 +153,7 @@ class GoogleAgentEngineHistory:
 
         bq_payload = [
             {
+                "project_id": env.PROJECT_ID,
                 "last_update": last_update,
                 "user_id": user_id,
                 "messages": history_to_save[user_id],
@@ -162,6 +163,10 @@ class GoogleAgentEngineHistory:
 
         dataframe = pd.DataFrame(data=bq_payload)
         save_path = Path(f"/tmp/data/{uuid4()}")
-        to_partitions(data=dataframe, partition_columns=["user_id"], savepath=str(save_path))
+        to_partitions(
+            data=dataframe,
+            partition_columns=["project_id", "user_id"],
+            savepath=str(save_path),
+        )
 
         return str(save_path)
