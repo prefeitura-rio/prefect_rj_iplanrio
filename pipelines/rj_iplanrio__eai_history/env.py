@@ -1,5 +1,7 @@
-from iplanrio.pipelines_utils.env import getenv_or_action
+# -*- coding: utf-8 -*-
 import os
+
+from iplanrio.pipelines_utils.env import getenv_or_action
 
 # if file .env exists, load it
 if os.path.exists("src/config/.env"):

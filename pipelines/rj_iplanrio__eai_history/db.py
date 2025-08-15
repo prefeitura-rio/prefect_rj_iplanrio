@@ -1,17 +1,17 @@
-from typing import List, Dict, Optional
+# -*- coding: utf-8 -*-
 import asyncio
+from pathlib import Path
+from typing import Dict, List, Optional
+from uuid import uuid4
 
+import pandas as pd
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.pandas import to_partitions
+from langchain_core.runnables import RunnableConfig
+from langchain_google_cloud_sql_pg import PostgresEngine, PostgresLoader, PostgresSaver
 
 from pipelines.rj_iplanrio__eai_history import env
 from pipelines.rj_iplanrio__eai_history.message_formatter import to_gateway_format
-
-from langchain_google_cloud_sql_pg import PostgresSaver, PostgresEngine, PostgresLoader
-from langchain_core.runnables import RunnableConfig
-import pandas as pd
-from pathlib import Path
-from uuid import uuid4
 
 
 class GoogleAgentEngineHistory:
@@ -130,8 +130,8 @@ class GoogleAgentEngineHistory:
         """
 
         query = f"""
-            SELECT 
-                thread_id 
+            SELECT
+                thread_id
             FROM "public"."thread_ids"
             WHERE checkpoint_ts >='{last_update}'
         """
@@ -162,8 +162,6 @@ class GoogleAgentEngineHistory:
 
         dataframe = pd.DataFrame(data=bq_payload)
         save_path = Path(f"/tmp/data/{uuid4()}")
-        to_partitions(
-            data=dataframe, partition_columns=["user_id"], savepath=str(save_path)
-        )
+        to_partitions(data=dataframe, partition_columns=["user_id"], savepath=str(save_path))
 
         return str(save_path)

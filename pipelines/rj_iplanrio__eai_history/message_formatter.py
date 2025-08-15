@@ -1,11 +1,14 @@
-from typing import List, Optional, Union, Dict, Any
-from datetime import datetime, timezone
-import uuid
-import json
+# -*- coding: utf-8 -*-
 import hashlib
-from pipelines.rj_iplanrio__eai_history.md_to_wpp import markdown_to_whatsapp
-from langchain_core.messages import BaseMessage
+import json
+import uuid
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional, Union
+
 from langchain_core.load.dump import dumpd
+from langchain_core.messages import BaseMessage
+
+from pipelines.rj_iplanrio__eai_history.md_to_wpp import markdown_to_whatsapp
 
 
 class LangGraphMessageFormatter:
@@ -52,9 +55,7 @@ class LangGraphMessageFormatter:
 
         return raw
 
-    def generate_deterministic_session_id(
-        self, timestamp_str: str, thread_id: Optional[str] = None
-    ) -> str:
+    def generate_deterministic_session_id(self, timestamp_str: str, thread_id: Optional[str] = None) -> str:
         """
         Gera um session_id determinístico baseado no timestamp e thread_id.
 
@@ -108,9 +109,7 @@ class LangGraphMessageFormatter:
         except:
             return None
 
-    def calculate_time_since_last_message(
-        self, current_timestamp: Optional[str]
-    ) -> Optional[float]:
+    def calculate_time_since_last_message(self, current_timestamp: Optional[str]) -> Optional[float]:
         """
         Calcula o tempo em segundos desde a última mensagem.
 
@@ -148,16 +147,15 @@ class LangGraphMessageFormatter:
         if session_timeout_seconds is None:
             # Para API: session_id sempre None
             self.current_session_id = None
-        else:
-            # Para histórico completo: verificar se deve criar nova sessão
-            if self.current_session_id is None or self.should_create_new_session(
-                time_since_last_message, session_timeout_seconds
-            ):
-                # Nova sessão: usar o timestamp atual como base para gerar o ID determinístico
-                self.current_session_start_time = message_timestamp
-                self.current_session_id = self.generate_deterministic_session_id(
-                    self.current_session_start_time, self.thread_id
-                )
+        # Para histórico completo: verificar se deve criar nova sessão
+        elif self.current_session_id is None or self.should_create_new_session(
+            time_since_last_message, session_timeout_seconds
+        ):
+            # Nova sessão: usar o timestamp atual como base para gerar o ID determinístico
+            self.current_session_start_time = message_timestamp
+            self.current_session_id = self.generate_deterministic_session_id(
+                self.current_session_start_time, self.thread_id
+            )
 
         # Atualizar o último timestamp de mensagem
         if message_timestamp:
@@ -196,9 +194,7 @@ class LangGraphMessageFormatter:
                     "candidates_token_count": usage_md.get("candidates_token_count", 0),
                     "total_token_count": usage_md.get("total_token_count", 0),
                     "thoughts_token_count": usage_md.get("thoughts_token_count", 0),
-                    "cached_content_token_count": usage_md.get(
-                        "cached_content_token_count", 0
-                    ),
+                    "cached_content_token_count": usage_md.get("cached_content_token_count", 0),
                 },
             }
 
@@ -236,9 +232,7 @@ class LangGraphMessageFormatter:
             **metadata,
         }
 
-    def process_human_message(
-        self, kwargs: Dict[str, Any], base_dict: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def process_human_message(self, kwargs: Dict[str, Any], base_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Processa mensagem do tipo human."""
         return {
             **base_dict,
@@ -306,19 +300,13 @@ class LangGraphMessageFormatter:
                 {
                     **base_dict,
                     "message_type": "assistant_message",
-                    "content": (
-                        markdown_to_whatsapp(content)
-                        if use_whatsapp_format
-                        else content
-                    ),
+                    "content": (markdown_to_whatsapp(content) if use_whatsapp_format else content),
                 }
             )
 
         return messages
 
-    def _process_tool_call(
-        self, tool_call: Dict[str, Any], base_dict: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _process_tool_call(self, tool_call: Dict[str, Any], base_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Processa uma tool call individual."""
         tool_call_id = tool_call.get("id", str(uuid.uuid4()))
 
@@ -343,26 +331,18 @@ class LangGraphMessageFormatter:
             },
         }
 
-    def process_tool_message(
-        self, kwargs: Dict[str, Any], base_dict: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def process_tool_message(self, kwargs: Dict[str, Any], base_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Processa mensagem do tipo tool."""
         status = "error" if (kwargs.get("status") == "error") else "success"
         tool_call_id = kwargs.get("tool_call_id", "")
 
         # Usar o mapeamento para obter o nome da ferramenta
-        tool_name = (
-            self.tool_call_to_name.get(tool_call_id)
-            or kwargs.get("name")
-            or "unknown_tool"
-        )
+        tool_name = self.tool_call_to_name.get(tool_call_id) or kwargs.get("name") or "unknown_tool"
 
         # Tentar parsear tool_return como JSON
         tool_content = kwargs.get("content", "")
         try:
-            if isinstance(tool_content, str) and tool_content.strip().startswith(
-                ("{", "[")
-            ):
+            if isinstance(tool_content, str) and tool_content.strip().startswith(("{", "[")):
                 parsed_tool_return = json.loads(tool_content)
             else:
                 parsed_tool_return = tool_content
@@ -385,9 +365,7 @@ class LangGraphMessageFormatter:
             "stderr": parsed_tool_return if status == "error" else None,
         }
 
-    def calculate_usage_statistics(
-        self, messages_to_process: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+    def calculate_usage_statistics(self, messages_to_process: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Calcula estatísticas de uso agregadas.
 
@@ -422,9 +400,7 @@ class LangGraphMessageFormatter:
             "completion_tokens": output_tokens,
             "prompt_tokens": input_tokens,
             "total_tokens": total_tokens or (input_tokens + output_tokens),
-            "step_count": len(
-                {m.get("step_id") for m in self.processed_messages if m.get("step_id")}
-            ),
+            "step_count": len({m.get("step_id") for m in self.processed_messages if m.get("step_id")}),
             "steps_messages": None,
             "run_ids": None,
             "agent_id": self.thread_id,
@@ -479,22 +455,16 @@ class LangGraphMessageFormatter:
             message_timestamp = additional_kwargs.get("timestamp", None)
 
             # Calcular tempo entre mensagens
-            time_since_last_message = self.calculate_time_since_last_message(
-                message_timestamp
-            )
+            time_since_last_message = self.calculate_time_since_last_message(message_timestamp)
 
             # Atualizar estado da sessão
-            self.update_session_state(
-                message_timestamp, time_since_last_message, session_timeout_seconds
-            )
+            self.update_session_state(message_timestamp, time_since_last_message, session_timeout_seconds)
 
             # Extrair metadados
             metadata = self.extract_message_metadata(kwargs)
 
             # Criar base da mensagem
-            base_dict = self.create_base_message_dict(
-                kwargs, message_timestamp, time_since_last_message, metadata
-            )
+            base_dict = self.create_base_message_dict(kwargs, message_timestamp, time_since_last_message, metadata)
 
             # Processar baseado no tipo
             if msg_type == "human":
@@ -502,9 +472,7 @@ class LangGraphMessageFormatter:
                 self.processed_messages.append(processed_msg)
 
             elif msg_type == "ai":
-                processed_msgs = self.process_ai_message(
-                    kwargs, base_dict, use_whatsapp_format
-                )
+                processed_msgs = self.process_ai_message(kwargs, base_dict, use_whatsapp_format)
                 self.processed_messages.extend(processed_msgs)
 
             elif msg_type == "tool":

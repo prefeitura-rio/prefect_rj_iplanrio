@@ -1,11 +1,12 @@
-import basedosdados as bd
-from iplanrio.pipelines_utils.logging import log
+# -*- coding: utf-8 -*-
+import asyncio
 from typing import Optional
 
-from pipelines.rj_iplanrio__eai_history.db import GoogleAgentEngineHistory
+import basedosdados as bd
+from iplanrio.pipelines_utils.logging import log
 from prefect import task
-from prefect.utilities.asyncutils import run_sync_in_worker_thread
-import asyncio
+
+from pipelines.rj_iplanrio__eai_history.db import GoogleAgentEngineHistory
 
 
 # A anotação @task deve estar na função que o Prefect irá chamar diretamente.
