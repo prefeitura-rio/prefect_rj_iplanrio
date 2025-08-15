@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 """
 i am working in a markdon to whatsapp converter it is
 almost perfect, only need to work in the break lines lost
-and include a removal for the bars patern, sometimes it include before and after the text example \"Samba & Feijoada"\ or \Samba & Feijoada\
-run the code to see the results of the tests, and them fix it, run again to se if not break anything, do this untill solved my last problems    
+and include a removal for the bars patern, sometimes it include before and after the text example \"Samba & Feijoada"\\ or \\Samba & Feijoada\
+run the code to see the results of the tests, and them fix it, run again to se if not break anything, do this untill solved my last problems
 
 """
 
@@ -23,14 +24,12 @@ def markdown_to_whatsapp(text):
 
     def preserve_code(match):
         code_blocks.append(match.group(0))
-        return f"¤C{len(code_blocks)-1}¤"
+        return f"¤C{len(code_blocks) - 1}¤"
 
     converted_text = re.sub(r"```[\s\S]*?```|`[^`\n]+`", preserve_code, converted_text)
 
     # Protect list markers before they can be confused with italics
-    converted_text = re.sub(
-        r"^(\s*)\*\s", r"\1¤L¤ ", converted_text, flags=re.MULTILINE
-    )
+    converted_text = re.sub(r"^(\s*)\*\s", r"\1¤L¤ ", converted_text, flags=re.MULTILINE)
 
     # 2. DATA EXTRACTION & INLINE CONVERSIONS
     footnote_defs = {}
@@ -57,15 +56,11 @@ def markdown_to_whatsapp(text):
     # 3. INLINE FORMATTING (using temporary placeholders)
     # The order is critical: multi-character markers first.
     converted_text = re.sub(r"~~(.*?)~~", r"<s>\1</s>", converted_text, flags=re.DOTALL)
-    converted_text = re.sub(
-        r"\*\*(.*?)\*\*", r"<b>\1</b>", converted_text, flags=re.DOTALL
-    )
+    converted_text = re.sub(r"\*\*(.*?)\*\*", r"<b>\1</b>", converted_text, flags=re.DOTALL)
     converted_text = re.sub(r"__(.*?)__", r"<b>\1</b>", converted_text, flags=re.DOTALL)
 
     # Specific regex for italics to prevent conflict with bold markers
-    converted_text = re.sub(
-        r"(?<!\*)\*([^\*\n].*?)\*(?!\*)", r"<i>\1</i>", converted_text
-    )
+    converted_text = re.sub(r"(?<!\*)\*([^\*\n].*?)\*(?!\*)", r"<i>\1</i>", converted_text)
     converted_text = re.sub(r"(?<!_)_([^\_\n].*?)_(?!_)", r"<i>\1</i>", converted_text)
 
     # Convert placeholders to final WhatsApp format
@@ -75,14 +70,10 @@ def markdown_to_whatsapp(text):
 
     # 4. BLOCK-LEVEL CONVERSIONS
     # FIX 1: Add a newline after headers to ensure separation.
-    converted_text = re.sub(
-        r"^\s*#+\s+(.+?)\s*#*$", r"*\1*\n", converted_text, flags=re.MULTILINE
-    )
+    converted_text = re.sub(r"^\s*#+\s+(.+?)\s*#*$", r"*\1*\n", converted_text, flags=re.MULTILINE)
 
     # Replace horizontal rules with a guaranteed paragraph break
-    converted_text = re.sub(
-        r"^\s*[-*_]{3,}\s*$", "\n", converted_text, flags=re.MULTILINE
-    )
+    converted_text = re.sub(r"^\s*[-*_]{3,}\s*$", "\n", converted_text, flags=re.MULTILINE)
 
     def convert_table(match):
         table_text = match.group(0).strip()
@@ -110,13 +101,9 @@ def markdown_to_whatsapp(text):
         # Return with guaranteed spacing and monospace formatting
         return f"\n\n```{formatted_table.strip()}```\n\n"
 
-    converted_text = re.sub(
-        r"(?:^\|.*\|\n?)+", convert_table, converted_text, flags=re.MULTILINE
-    )
+    converted_text = re.sub(r"(?:^\|.*\|\n?)+", convert_table, converted_text, flags=re.MULTILINE)
 
-    converted_text = re.sub(
-        r"^(\s*[-+]|¤L¤)\s*\[[xX ]\]\s+", r"\1 ", converted_text, flags=re.MULTILINE
-    )
+    converted_text = re.sub(r"^(\s*[-+]|¤L¤)\s*\[[xX ]\]\s+", r"\1 ", converted_text, flags=re.MULTILINE)
 
     footnote_map = {}
     footnote_counter = 1
@@ -301,13 +288,13 @@ def run_tests():
             passed_tests += 1
         print(f"{i:2d}. {test['name']}: {status}")
         if not passed:
-            print(f"     Input:    {repr(test['input'])}")
-            print(f"     Output:   {repr(result)}")
+            print(f"     Input:    {test['input']!r}")
+            print(f"     Output:   {result!r}")
             missing = [exp for exp in test["expected_contains"] if exp not in result]
             print(f"     Missing:  {missing}")
             print()
     print(
-        f"\n=== TEST SUMMARY: {passed_tests}/{len(test_cases)} PASSED ({passed_tests/len(test_cases)*100:.1f}%) ===\n"
+        f"\n=== TEST SUMMARY: {passed_tests}/{len(test_cases)} PASSED ({passed_tests / len(test_cases) * 100:.1f}%) ===\n"
     )
 
 
@@ -340,7 +327,7 @@ The main conclusion[^1] is that we are growing steadily. More details can be fou
 
 * **Rio Scenarium:**
     * Abre de quarta a sábado com diversos show. Aos sábados, costuma ter o evento {r'\\"Samba & Feijoada\\"'} a partir das 13h.
-    
+
 **Importante:**: ....
 """
 
