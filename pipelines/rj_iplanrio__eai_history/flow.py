@@ -21,6 +21,7 @@ def rj_iplanrio__eai_history(  # noqa
     dataset_id: str = "brutos_eai_logs",
     table_id: str = "history",
     max_user_save_limit: int = 100,
+    enviroment: str = "staging",
 ):
     rename_current_flow_run_task(new_name=last_update)
     inject_bd_credentials_task()
@@ -32,6 +33,7 @@ def rj_iplanrio__eai_history(  # noqa
         session_timeout_seconds=session_timeout_seconds,
         use_whatsapp_format=use_whatsapp_format,
         max_user_save_limit=max_user_save_limit,
+        enviroment=enviroment,
     )
     create_table_and_upload_to_gcs_task(
         data_path=data_path,

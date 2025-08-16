@@ -6,7 +6,7 @@ import basedosdados as bd
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
-from pipelines.rj_iplanrio__eai_history.db import GoogleAgentEngineHistory
+from pipelines.rj_iplanrio__eai_history.history import GoogleAgentEngineHistory
 
 
 # A anotação @task deve estar na função que o Prefect irá chamar diretamente.
@@ -51,6 +51,7 @@ def fetch_history_data(
     session_timeout_seconds: Optional[int] = 3600,
     use_whatsapp_format: bool = True,
     max_user_save_limit: int = 100,
+    enviroment: str = "staging",
 ) -> Optional[str]:
     """
     Ponto de entrada SÍNCRONO que orquestra a execução da lógica assíncrona,
@@ -60,7 +61,7 @@ def fetch_history_data(
     # --- Início da lógica assíncrona interna ---
     async def _main_async_runner() -> Optional[str]:
         log("Criando instância de GoogleAgentEngineHistory...")
-        history_instance = await GoogleAgentEngineHistory.create()
+        history_instance = await GoogleAgentEngineHistory.create(enviroment=enviroment)
 
         log(f"Buscando histórico a partir de: {last_update or 'início dos tempos'}.")
         data_path = await history_instance.get_history_bulk_from_last_update(

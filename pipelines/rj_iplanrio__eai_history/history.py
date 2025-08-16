@@ -16,24 +16,42 @@ from pipelines.rj_iplanrio__eai_history.message_formatter import to_gateway_form
 
 
 class GoogleAgentEngineHistory:
-    def __init__(self, checkpointer: PostgresSaver):
+    def __init__(self, checkpointer: PostgresSaver, project_id: str):
         self._checkpointer = checkpointer
+        self._projet_id = project_id
 
     @classmethod
-    async def create(cls) -> "GoogleAgentEngineHistory":
+    async def create(cls, enviroment: str) -> "GoogleAgentEngineHistory":
         """Factory method para criar uma instância com checkpointer inicializado"""
+        if enviroment == "staging":
+            project_id = env.PROJECT_ID or ""
+            region = env.LOCATION or ""
+            instance = env.INSTANCE or ""
+            database = env.DATABASE or ""
+            user = env.DATABASE_USER or ""
+            password = env.DATABASE_PASSWORD or ""
+        elif enviroment == "prod":
+            project_id = env.PROJECT_ID_PROD or ""
+            region = env.LOCATION_PROD or ""
+            instance = env.INSTANCE_PROD or ""
+            database = env.DATABASE_PROD or ""
+            user = env.DATABASE_USER_PROD or ""
+            password = env.DATABASE_PASSWORD_PROD or ""
+        else:
+            raise (ValueError("enviromet must be prod or staging"))
+
         engine = await PostgresEngine.afrom_instance(
-            project_id=env.PROJECT_ID,
-            region=env.LOCATION,
-            instance=env.INSTANCE,
-            database=env.DATABASE,
-            user=env.DATABASE_USER,
-            password=env.DATABASE_PASSWORD,
+            project_id=project_id,
+            region=region,
+            instance=instance,
+            database=database,
+            user=user,
+            password=password,
             engine_args={"pool_pre_ping": True, "pool_recycle": 300},
         )
         checkpointer = await PostgresSaver.create(engine=engine)
         log("Checkpointer inicializado")
-        return cls(checkpointer)
+        return cls(checkpointer=checkpointer, project_id=project_id)
 
     async def get_checkpointer(self) -> PostgresSaver:
         return self._checkpointer
@@ -65,7 +83,7 @@ class GoogleAgentEngineHistory:
         messages = payload.get("data", {}).get("messages", [])
         bq_payload = [
             {
-                "project_id": env.PROJECT_ID,
+                "project_id": self._projet_id,
                 "last_update": last_update,
                 "user_id": user_id,
                 "messages": json.dumps(messages, ensure_ascii=False, indent=2),
@@ -130,39 +148,39 @@ class GoogleAgentEngineHistory:
         engine = self._checkpointer._engine
         loader = await PostgresLoader.create(engine=engine, query=query)
         docs = await loader.aload()
-        user_ids_infos = [
+        users_infos = [
             {
                 "user_id": doc.page_content,
                 "last_update": doc.metadata["checkpoint_ts"][:19].replace(" ", "T"),
             }
             for doc in docs
         ]
-        if not user_ids_infos:
+        if not users_infos:
             log(msg="No data to save")
             return None
         else:
-            log(f"Found {len(user_ids_infos)} users to process")
+            log(f"Found {len(users_infos)} users to process")
 
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
         batch_size = max_user_save_limit
-        user_id_chunks = [user_ids_infos[i : i + batch_size] for i in range(0, len(user_ids_infos), batch_size)]
+        user_id_chunks = [users_infos[i : i + batch_size] for i in range(0, len(users_infos), batch_size)]
         total_batches = len(user_id_chunks)
         all_results = []
 
         log(
-            msg=f"Starting processing of {len(user_ids_infos)} users in {total_batches} batches of up to {batch_size} users each."  # noqa
+            msg=f"Starting processing of {len(users_infos)} users in {total_batches} batches of up to {batch_size} users each."  # noqa
         )
 
         for batch_num, user_chunk in enumerate(user_id_chunks, 1):
             tasks_for_this_batch = [
                 self._get_single_user_history(
-                    user_id=user_id_info["user_id"],
-                    last_update=user_id_info["last_update"],
+                    user_id=user_info["user_id"],
+                    last_update=user_info["last_update"],
                     save_path=save_path,
                     session_timeout_seconds=session_timeout_seconds,
                     use_whatsapp_format=use_whatsapp_format,
                 )
-                for user_id_info in user_chunk
+                for user_info in user_chunk
             ]
 
             results_of_batch = await asyncio.gather(*tasks_for_this_batch, return_exceptions=True)
@@ -174,7 +192,7 @@ class GoogleAgentEngineHistory:
         errors = [res for res in all_results if isinstance(res, Exception)]
         if errors:
             log(
-                msg=f"Finished processing with {len(errors)} errors out of {len(user_ids_infos)} users.",
+                msg=f"Finished processing with {len(errors)} errors out of {len(users_infos)} users.",
                 level="warning",
             )
         else:

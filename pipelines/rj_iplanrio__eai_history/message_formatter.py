@@ -106,7 +106,7 @@ class LangGraphMessageFormatter:
             if timestamp_str.endswith("Z"):
                 timestamp_str = timestamp_str[:-1] + "+00:00"
             return datetime.fromisoformat(timestamp_str)
-        except:
+        except:  # noqa
             return None
 
     def calculate_time_since_last_message(self, current_timestamp: Optional[str]) -> Optional[float]:
