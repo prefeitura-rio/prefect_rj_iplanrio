@@ -43,8 +43,10 @@ def get_last_update(
         SELECT
             MAX(last_update) as last_update
         FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
-        WHERE project_id = {project_id}
+        WHERE project_id = '{project_id}'
     """
+    log(msg=f"Runing query:\n{query}")
+
     result = bd.read_sql(query=query)
 
     if result is None or result.empty:
