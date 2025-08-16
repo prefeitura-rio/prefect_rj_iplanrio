@@ -23,10 +23,15 @@ def rj_iplanrio__eai_history(  # noqa
     max_user_save_limit: int = 100,
     enviroment: str = "staging",
 ):
-    rename_current_flow_run_task(new_name=last_update)
+    rename_current_flow_run_task(new_name=enviroment)
     inject_bd_credentials_task()
 
-    last_update_task = get_last_update(dataset_id=dataset_id, table_id=table_id, last_update=last_update)
+    last_update_task = get_last_update(
+        dataset_id=dataset_id,
+        table_id=table_id,
+        last_update=last_update,
+        enviroment=enviroment,
+    )
 
     data_path = fetch_history_data(
         last_update=last_update_task,

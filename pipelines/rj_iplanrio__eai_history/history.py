@@ -50,7 +50,7 @@ class GoogleAgentEngineHistory:
             engine_args={"pool_pre_ping": True, "pool_recycle": 300},
         )
         checkpointer = await PostgresSaver.create(engine=engine)
-        log("Checkpointer inicializado")
+        log(f"Checkpointer inicializado para project_id: {project_id}")
         return cls(checkpointer=checkpointer, project_id=project_id)
 
     async def get_checkpointer(self) -> PostgresSaver:

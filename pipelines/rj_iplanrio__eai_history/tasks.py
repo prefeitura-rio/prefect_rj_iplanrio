@@ -6,29 +6,44 @@ import basedosdados as bd
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
+from pipelines.rj_iplanrio__eai_history import env
 from pipelines.rj_iplanrio__eai_history.history import GoogleAgentEngineHistory
 
 
 # A anotação @task deve estar na função que o Prefect irá chamar diretamente.
 @task
-def get_last_update(dataset_id: str, table_id: str, last_update: Optional[str] = None) -> str:
+def get_last_update(
+    dataset_id: str,
+    table_id: str,
+    last_update: Optional[str] = None,
+    enviroment: str = "staging",
+) -> str:
     """
     Busca a data da última atualização da tabela no BigQuery.
     Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
     """
-
     if last_update:
         log(f"'last_update' fornecido via parametro: {last_update}")
         return last_update
+
+    if enviroment == "stagging":
+        project_id = env.PROJECT_ID
+        log(f"'enviroment' staging using project_id: {env.PROJECT_ID}")
+
+    elif enviroment == "prod":
+        project_id = env.PROJECT_ID_PROD
+        log(f"'enviroment' prod using project_id: {env.PROJECT_ID_PROD}")
+    else:
+        raise (ValueError("enviroment must be prod or staging"))
+
     log(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
     bd.config.billing_project_id = "rj-iplanrio"
     bd.config.from_file = True
     query = f"""
         SELECT
-            last_update
+            MAX(last_update) as last_update
         FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
-        ORDER BY last_update DESC
-        LIMIT 1
+        WHERE project_id = {project_id}
     """
     result = bd.read_sql(query=query)
 
