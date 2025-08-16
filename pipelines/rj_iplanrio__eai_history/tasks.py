@@ -26,7 +26,7 @@ def get_last_update(
         log(f"'last_update' fornecido via parametro: {last_update}")
         return last_update
 
-    if enviroment == "stagging":
+    if enviroment == "staging":
         project_id = env.PROJECT_ID
         log(f"'enviroment' staging using project_id: {env.PROJECT_ID}")
 
