@@ -16,21 +16,21 @@ from pipelines.rj_iplanrio__eai_history.message_formatter import to_gateway_form
 
 
 class GoogleAgentEngineHistory:
-    def __init__(self, checkpointer: PostgresSaver, project_id: str):
+    def __init__(self, checkpointer: PostgresSaver, environment: str):
         self._checkpointer = checkpointer
-        self._projet_id = project_id
+        self._environment = environment
 
     @classmethod
-    async def create(cls, enviroment: str) -> "GoogleAgentEngineHistory":
+    async def create(cls, environment: str) -> "GoogleAgentEngineHistory":
         """Factory method para criar uma instância com checkpointer inicializado"""
-        if enviroment == "staging":
+        if environment == "staging":
             project_id = env.PROJECT_ID or ""
             region = env.LOCATION or ""
             instance = env.INSTANCE or ""
             database = env.DATABASE or ""
             user = env.DATABASE_USER or ""
             password = env.DATABASE_PASSWORD or ""
-        elif enviroment == "prod":
+        elif environment == "prod":
             project_id = env.PROJECT_ID_PROD or ""
             region = env.LOCATION_PROD or ""
             instance = env.INSTANCE_PROD or ""
@@ -50,8 +50,8 @@ class GoogleAgentEngineHistory:
             engine_args={"pool_pre_ping": True, "pool_recycle": 300},
         )
         checkpointer = await PostgresSaver.create(engine=engine)
-        log(f"Checkpointer inicializado para project_id: {project_id}")
-        return cls(checkpointer=checkpointer, project_id=project_id)
+        log(f"Checkpointer inicializado para project_id: {environment} | {project_id}")
+        return cls(checkpointer=checkpointer, environment=environment)
 
     async def get_checkpointer(self) -> PostgresSaver:
         return self._checkpointer
@@ -83,7 +83,7 @@ class GoogleAgentEngineHistory:
         messages = payload.get("data", {}).get("messages", [])
         bq_payload = [
             {
-                "project_id": self._projet_id,
+                "environment": self._environment,
                 "last_update": last_update,
                 "user_id": user_id,
                 "messages": json.dumps(messages, ensure_ascii=False, indent=2),
@@ -93,7 +93,7 @@ class GoogleAgentEngineHistory:
         dataframe = pd.DataFrame(data=bq_payload)
         to_partitions(
             data=dataframe,
-            partition_columns=["project_id", "user_id"],
+            partition_columns=["environment", "user_id"],
             savepath=str(save_path),
         )
 
