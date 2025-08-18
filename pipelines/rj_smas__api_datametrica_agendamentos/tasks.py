@@ -57,7 +57,9 @@ def calculate_target_date() -> str:
 
 
 @task
-def get_datametrica_credentials(infisical_secret_path: str | None = None) -> Dict[str, str]:
+def get_datametrica_credentials(
+    infisical_secret_path: str | None = None,
+) -> Dict[str, str]:
     """
     Recupera as credenciais da API da Datametrica e do proxy brasileiro usando iplanrio.
 
@@ -80,13 +82,12 @@ def get_datametrica_credentials(infisical_secret_path: str | None = None) -> Dic
     proxy_token = getenv_or_action("proxy_token")
 
     log("Credenciais recuperadas com sucesso")
-    log(f"URL: {url}")
-    log(f"Proxy URL: {proxy_url}")
+
     return {
-        "url": url, 
-        "token": token, 
-        "proxy_url": proxy_url, 
-        "proxy_token": proxy_token
+        "url": url,
+        "token": token,
+        "proxy_url": proxy_url,
+        "proxy_token": proxy_token,
     }
 
 
@@ -111,7 +112,7 @@ def fetch_agendamentos_from_api(
 
         date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     datametrica_url = f"{base_url}/{date}"
-    
+
     # Build proxy URL
     proxy_url = f"{credentials['proxy_url'].rstrip('/')}/?url={datametrica_url}"
 
@@ -127,8 +128,6 @@ def fetch_agendamentos_from_api(
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept": "application/json",
-        "Referer": "https://cadunico.rio/",
-        "Origin": "https://cadunico.rio",
     }
 
     try:
