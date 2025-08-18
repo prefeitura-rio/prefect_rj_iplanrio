@@ -16,7 +16,7 @@ def get_last_update(
     dataset_id: str,
     table_id: str,
     last_update: Optional[str] = None,
-    enviroment: str = "staging",
+    environment: str = "staging",
 ) -> str:
     """
     Busca a data da última atualização da tabela no BigQuery.
@@ -26,15 +26,15 @@ def get_last_update(
         log(f"'last_update' fornecido via parametro: {last_update}")
         return last_update
 
-    if enviroment == "staging":
+    if environment == "staging":
         project_id = env.PROJECT_ID
-        log(f"'enviroment' staging using project_id: {env.PROJECT_ID}")
+        log(f"'environment' staging using project_id: {project_id}")
 
-    elif enviroment == "prod":
+    elif environment == "prod":
         project_id = env.PROJECT_ID_PROD
-        log(f"'enviroment' prod using project_id: {env.PROJECT_ID_PROD}")
+        log(f"'environment' prod using project_id: {project_id}")
     else:
-        raise (ValueError("enviroment must be prod or staging"))
+        raise (ValueError("environment must be prod or staging"))
 
     log(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
     bd.config.billing_project_id = "rj-iplanrio"
@@ -43,7 +43,7 @@ def get_last_update(
         SELECT
             MAX(last_update) as last_update
         FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
-        WHERE project_id = '{project_id}'
+        WHERE environment = '{environment}'
     """
     log(msg=f"Runing query:\n{query}")
 
@@ -68,7 +68,7 @@ def fetch_history_data(
     session_timeout_seconds: Optional[int] = 3600,
     use_whatsapp_format: bool = True,
     max_user_save_limit: int = 100,
-    enviroment: str = "staging",
+    environment: str = "staging",
 ) -> Optional[str]:
     """
     Ponto de entrada SÍNCRONO que orquestra a execução da lógica assíncrona,
@@ -78,7 +78,7 @@ def fetch_history_data(
     # --- Início da lógica assíncrona interna ---
     async def _main_async_runner() -> Optional[str]:
         log("Criando instância de GoogleAgentEngineHistory...")
-        history_instance = await GoogleAgentEngineHistory.create(enviroment=enviroment)
+        history_instance = await GoogleAgentEngineHistory.create(environment=environment)
 
         log(f"Buscando histórico a partir de: {last_update or 'início dos tempos'}.")
         data_path = await history_instance.get_history_bulk_from_last_update(

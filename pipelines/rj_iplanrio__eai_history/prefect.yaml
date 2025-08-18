@@ -52,10 +52,10 @@ deployments:
         timezone: America/Sao_Paulo
         slug: prod
         parameters:
-          enviroment: prod
+          environment: prod
       - interval: 3600
         anchor_date: "2025-01-01T00:05:00"
         timezone: America/Sao_Paulo
         slug: staging
         parameters:
-          enviroment: staging
+          environment: staging
