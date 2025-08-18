@@ -12,9 +12,10 @@ Flow migrado do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 - case (conditional execution): Substituído por if/else padrão
 """
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from prefect import flow
+
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
     DatametricaConstants,
 )
@@ -28,7 +29,6 @@ from pipelines.rj_smas__api_datametrica_agendamentos.tasks import (
 from pipelines.rj_smas__api_datametrica_agendamentos.utils.tasks import (
     create_date_partitions,
 )
-from prefect import flow
 
 
 @flow(log_prints=True)
@@ -79,9 +79,7 @@ def rj_smas__api_datametrica_agendamentos(
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Obter credenciais da API Datametrica
-    credentials = get_datametrica_credentials(
-        infisical_secret_path=infisical_secret_path
-    )
+    credentials = get_datametrica_credentials(infisical_secret_path=infisical_secret_path)
 
     # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
     target_date = date if date is not None else calculate_target_date()

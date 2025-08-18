@@ -29,9 +29,7 @@ def create_date_partitions(
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
     else:
-        dataframe[partition_column] = pd.to_datetime(
-            dataframe[partition_column], errors="coerce"
-        )
+        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
         dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
         if dataframe["data_particao"].isnull().any():
             raise ValueError("Some dates in the partition column could not be parsed.")
@@ -40,10 +38,8 @@ def create_date_partitions(
     dataframes = [
         (
             date,
-            dataframe[dataframe["data_particao"] == date].drop(
-                columns=["data_particao"]
-            ),
-        )  # noqa
+            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
+        )
         for date in dates
     ]
 

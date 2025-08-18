@@ -2,6 +2,7 @@
 """
 Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 """
+
 # pylint: disable=invalid-name
 # flake8: noqa: E501
 from datetime import datetime, timedelta
@@ -16,10 +17,6 @@ from prefect import task  # pylint: disable=E0611, E0401
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
-
-from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
-    DatametricaConstants,
-)  # pylint: disable=E0611, E0401
 
 
 @task
@@ -38,21 +35,15 @@ def calculate_target_date() -> str:
     # Quinta-feira (3) e Sexta-feira (4) em Python weekday (0-indexed, Monday=0)
     if weekday in [3, 4]:  # Thursday and Friday
         days_ahead = 4
-        log(
-            "(calculate_target_date) - Quinta/sexta detectada - carregando dados para 4 dias à frente"
-        )
+        log("(calculate_target_date) - Quinta/sexta detectada - carregando dados para 4 dias à frente")
     else:
         days_ahead = 2
-        log(
-            "(calculate_target_date) - Dia normal (S/T/Q) detectado - carregando dados para 2 dias à frente"
-        )
+        log("(calculate_target_date) - Dia normal (S/T/Q) detectado - carregando dados para 2 dias à frente")
 
     target_date = today + timedelta(days=days_ahead)
     target_date_str = target_date.strftime("%Y-%m-%d")
 
-    log(
-        f"Data target calculada: {target_date_str} (hoje: {today.strftime('%Y-%m-%d')}, {days_ahead} dias à frente)"
-    )
+    log(f"Data target calculada: {target_date_str} (hoje: {today.strftime('%Y-%m-%d')}, {days_ahead} dias à frente)")
     return target_date_str
 
 
@@ -92,9 +83,7 @@ def get_datametrica_credentials(
 
 
 @task
-def fetch_agendamentos_from_api(
-    credentials: Dict[str, str], date: Optional[str] = None
-) -> List[Dict[str, Any]]:
+def fetch_agendamentos_from_api(credentials: Dict[str, str], date: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Busca os agendamentos da API da Datametrica usando proxy brasileiro.
 
@@ -116,7 +105,7 @@ def fetch_agendamentos_from_api(
     # Build proxy URL
     proxy_url = f"{credentials['proxy_url'].rstrip('/')}/?url={datametrica_url}"
 
-    log(f"Buscando agendamentos via proxy brasileiro")
+    log("Buscando agendamentos via proxy brasileiro")
     log(f"Datametrica URL: {datametrica_url}")
     log(f"Proxy URL: {proxy_url}")
     log(f"Token (primeiros 10 chars): {credentials['token'][:10]}...")
