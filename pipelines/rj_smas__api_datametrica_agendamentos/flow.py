@@ -79,7 +79,9 @@ def rj_smas__api_datametrica_agendamentos(
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Obter credenciais da API Datametrica
-    credentials = get_datametrica_credentials(infisical_secret_path=infisical_secret_path)
+    credentials = get_datametrica_credentials(
+        infisical_secret_path=infisical_secret_path
+    )
 
     # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
     target_date = date if date is not None else calculate_target_date()
@@ -93,6 +95,8 @@ def rj_smas__api_datametrica_agendamentos(
     # Converter para DataFrame
     df = convert_agendamentos_to_dataframe(processed_data)
 
+    print(df.columns)
+    print(df)
     # Criar partições por data
     partitions_path = create_date_partitions(
         dataframe=df,
@@ -113,6 +117,7 @@ def rj_smas__api_datametrica_agendamentos(
     # Executar DBT se materialize_after_dump for True
     # ⚠️ NOTA: task_run_dbt_model_task não tem equivalente em iplanrio
     # Implementar se necessário ou executar DBT separadamente
+
     if materialize_after_dump:
         print(
             f"⚠️ DBT materialization requested but not implemented - run manually for dataset_id={dataset_id}, table_id={table_id}"
