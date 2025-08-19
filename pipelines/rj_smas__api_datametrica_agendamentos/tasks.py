@@ -184,6 +184,33 @@ def transform_agendamentos_data(
 
 
 @task
+def get_bigquery_config(
+    infisical_secret_path: str | None = None,
+) -> Dict[str, str]:
+    """
+    Recupera dataset_id e table_id do BigQuery usando iplanrio.
+
+    Args:
+        infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)
+
+    Returns:
+        Dict com 'dataset_id' e 'table_id'
+    """
+    log("Recuperando configuração do BigQuery do Infisical")
+
+    # Use getenv_or_action to get secrets from environment
+    dataset_id = getenv_or_action("dataset_id")
+    table_id = getenv_or_action("table_id")
+
+    log("Configuração do BigQuery recuperada com sucesso")
+
+    return {
+        "dataset_id": dataset_id,
+        "table_id": table_id,
+    }
+
+
+@task
 def convert_agendamentos_to_dataframe(
     agendamentos: List[Dict[str, Any]],
 ) -> pd.DataFrame:
