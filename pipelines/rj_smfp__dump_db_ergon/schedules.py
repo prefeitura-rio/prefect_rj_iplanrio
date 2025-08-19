@@ -5,7 +5,6 @@ from iplanrio.pipelines_utils.prefect import create_dump_db_schedules
 ERGON_QUERIES = [
     {
         "table_id": "IPL_PT_FICHAS",
-        "biglake_table": True,
         "dump_mode": "append",
         "break_query_frequency": "month",
         "break_query_start": "current_month",
@@ -21,7 +20,6 @@ ERGON_QUERIES = [
     },
     {
         "table_id": "FICHAS_FINANCEIRAS",
-        "biglake_table": True,
         "dump_mode": "append",
         "break_query_frequency": "month",
         "break_query_start": "current_month",
@@ -36,7 +34,6 @@ ERGON_QUERIES = [
     },
     {
         "table_id": "VW_DLK_ERG_FITA_BANCO",
-        "biglake_table": True,
         "partition_columns": "MES_ANO",
         "dump_mode": "append",
         "break_query_frequency": "month",
@@ -62,15 +59,6 @@ BASE_INTERVAL_SECONDS = 3600 * 24  # Run each table every day
 RUNS_SEPARATION_MINUTES = 10  # Stagger start times by 10 minutes
 TIMEZONE = "America/Sao_Paulo"
 
-# Database & Secret Settings
-DB_TYPE = "oracle"
-DB_DATABASE = "P01.PCRJ"
-DB_HOST = "10.70.6.21"
-DB_PORT = 1526
-DATASET_ID = "brutos_ergon"
-INFISICAL_SECRET_PATH = "/db-ergon-prod"
-
-
 # --- Generate and Print YAML ---
 schedules_config = create_dump_db_schedules(
     table_parameters_list=ERGON_QUERIES,
@@ -78,12 +66,6 @@ schedules_config = create_dump_db_schedules(
     base_anchor_date_str=BASE_ANCHOR_DATE,
     runs_interval_minutes=RUNS_SEPARATION_MINUTES,
     timezone=TIMEZONE,
-    db_type=DB_TYPE,
-    db_database=DB_DATABASE,
-    db_host=DB_HOST,
-    db_port=DB_PORT,
-    dataset_id=DATASET_ID,
-    infisical_secret_path=INFISICAL_SECRET_PATH,
 )
 
 # Use sort_keys=False to maintain the intended order of keys in the output

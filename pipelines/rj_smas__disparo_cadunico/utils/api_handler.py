@@ -57,9 +57,7 @@ class ApiHandler:
             elif "jwt" in response_data:
                 token = response_data["jwt"]
             elif (
-                "data" in response_data
-                and "item" in response_data["data"]
-                and "token" in response_data["data"]["item"]
+                "data" in response_data and "item" in response_data["data"] and "token" in response_data["data"]["item"]
             ):
                 token = response_data["data"]["item"]["token"]
 
@@ -83,9 +81,7 @@ class ApiHandler:
             return True
         return False
 
-    def get(
-        self, path: str, params: Optional[Dict] = None, **kwargs
-    ) -> requests.Response:
+    def get(self, path: str, params: Optional[Dict] = None, **kwargs) -> requests.Response:
         """Perform GET request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
@@ -107,15 +103,11 @@ class ApiHandler:
         """Perform POST request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        response = requests.post(
-            url, headers=self.headers, json=json, data=data, **kwargs
-        )
+        response = requests.post(url, headers=self.headers, json=json, data=data, **kwargs)
 
         if self._refresh_token_if_needed(response):
             # Retry with new token
-            response = requests.post(
-                url, headers=self.headers, json=json, data=data, **kwargs
-            )
+            response = requests.post(url, headers=self.headers, json=json, data=data, **kwargs)
 
         return response
 
@@ -129,14 +121,10 @@ class ApiHandler:
         """Perform PUT request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        response = requests.put(
-            url, headers=self.headers, json=json, data=data, **kwargs
-        )
+        response = requests.put(url, headers=self.headers, json=json, data=data, **kwargs)
 
         if self._refresh_token_if_needed(response):
             # Retry with new token
-            response = requests.put(
-                url, headers=self.headers, json=json, data=data, **kwargs
-            )
+            response = requests.put(url, headers=self.headers, json=json, data=data, **kwargs)
 
         return response

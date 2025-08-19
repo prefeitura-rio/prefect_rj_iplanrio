@@ -33,7 +33,6 @@ Este repositório utiliza um modelo monorepo para gerenciar múltiplas pipelines
 - **Dockerfile base**: o arquivo `Dockerfile` na raiz define a imagem base utilizada por todas as pipelines. Ele inclui as dependências essenciais para execução dos fluxos, como Python, Prefect, drivers de banco de dados e ferramentas auxiliares. Cada pipeline pode customizar sua própria imagem a partir desse Dockerfile base, garantindo consistência e facilidade de manutenção.
 
 - **`pyproject.toml` centralizado com uv workspaces**: o `pyproject.toml` na raiz do projeto gerencia as dependências Python de todas as pipelines utilizando [uv workspaces](https://github.com/astral-sh/uv).
-
   - Cada subdiretório em `pipelines/` representa um módulo Python independente, mas todos são importados automaticamente como membros do workspace.
   - As dependências e configurações definidas no `pyproject.toml` base são herdadas por todas as pipelines, facilitando a atualização e padronização do ambiente.
   - Novas pipelines adicionadas à pasta `pipelines/` são automaticamente reconhecidas e integradas ao workspace, sem necessidade de configuração manual adicional.
@@ -54,6 +53,29 @@ Alterações específicas de cada pipeline devem ser adicionadas no `Dockerfile`
 O arquivo `prefect.yaml` é responsável por definir as configurações de deployment do flow Prefect. Esse arquivo especifica variáveis de ambiente, parâmetros, agendamento, infraestrutura de execução e outras opções necessárias para o correto funcionamento do fluxo. O arquivo também é utilizado nos workflows de CI/CD para registrar e disponibilizar os flows.
 
 Consulte a [documentação oficial do Prefect](https://docs.prefect.io/v3/how-to-guides/deployments/prefect-yaml) para detalhes sobre todas as opções disponíveis.
+
+#### Configuração de secrets
+
+O parâmetro `secretName` nas `job_variables` do `prefect.yaml` especifica qual Kubernetes Secret deve ser montado no container durante a execução do job. Esse secret contém variáveis de ambiente necessárias para o funcionamento da pipeline, como credenciais de banco de dados, tokens de API e outras informações sensíveis.
+
+**Valores padrão utilizados:**
+
+- **`prefect-jobs-secrets`**: para deployments de produção
+- **`prefect-jobs-secrets-staging`**: para deployments de staging
+
+Exemplo de configuração no `prefect.yaml`:
+
+```yaml
+deployments:
+  - name: rj-secretaria--pipeline--prod
+    work_pool:
+      job_variables:
+        secretName: prefect-jobs-secrets
+  - name: rj-secretaria--pipeline--staging
+    work_pool:
+      job_variables:
+        secretName: prefect-jobs-secrets-staging
+```
 
 ### Convenções de nomenclatura
 
@@ -88,7 +110,6 @@ Ao configurar um deployment no arquivo `prefect.yaml`, selecione o pool apropria
 O repositório utiliza GitHub Actions para automatizar todo o ciclo de vida das pipelines, incluindo build, deploy e publicação de imagens Docker:
 
 - **Deploy automático dos flows**: os workflows `.github/workflows/deploy-prefect-flows-prod.yaml` e `.github/workflows/deploy-prefect-flows-staging.yaml` realizam o deploy automático dos flows Prefect para os ambientes de produção e staging, respectivamente.
-
   - O workflow de produção é acionado a cada push na branch `master` ou manualmente, sempre que houver alterações em arquivos dentro de `pipelines/**`.
   - O workflow de staging é acionado a cada push em branches `staging/*` ou manualmente, também monitorando alterações em `pipelines/**`.
   - Ambos executam:

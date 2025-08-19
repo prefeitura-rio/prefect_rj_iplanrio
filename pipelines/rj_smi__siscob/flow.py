@@ -17,16 +17,16 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_segovi__dump_db_1746(  # noqa
-    db_database: str = "REPLICA1746",
+def rj_smi__siscob(  # noqa
+    db_database: str = "SISCOB200",
     db_host: str = "10.70.1.34",
     db_port: str = "1433",
     db_type: str = "sql_server",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "brutos_1746",
+    dataset_id: str = "brutos_siscob",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-1746",
+    infisical_secret_path: str = "/db_siscob",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
@@ -59,7 +59,7 @@ def rj_segovi__dump_db_1746(  # noqa
         break_query_frequency=break_query_frequency,
     )
 
-    dump_upload = dump_upload_batch_task(  # noqa
+    dump_upload_batch_task(
         queries=formated_query,
         batch_size=batch_size,
         dataset_id=dataset_id,
