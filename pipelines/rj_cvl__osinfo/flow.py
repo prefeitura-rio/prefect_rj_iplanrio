@@ -19,7 +19,7 @@ from prefect import flow
 @flow(log_prints=True)
 def rj_cvl__osinfo(  # noqa
     db_database: str = "osinfo_V2",
-    db_host: str = "10.70.6.21",
+    db_host: str = "10.70.4.188",
     db_port: str = "3306",
     db_type: str = "mysql",
     db_charset: Optional[str] = "utf8",
