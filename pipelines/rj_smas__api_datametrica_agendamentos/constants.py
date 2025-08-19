@@ -13,7 +13,7 @@ class DatametricaConstants(Enum):
 
     # Dataset e tabela do BigQuery
     DATASET_ID = "brutos_data_metrica"
-    TABLE_ID = "raw_agendamentos_cadunico"
+    TABLE_ID = "cadunico_agendamentos"
     DUMP_MODE = "append"
 
     # Configuração para materialização após dump
