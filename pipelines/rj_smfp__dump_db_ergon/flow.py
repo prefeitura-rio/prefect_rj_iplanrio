@@ -17,16 +17,16 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_smfp__dump_db_ergon(
-    db_database: str = "db_database",
-    db_host: str = "db_host",
-    db_port: str = "db_port",
-    db_type: str = "db_type",
+def rj_smfp__dump_db_ergon(  # noqa
+    db_database: str = "P01.PCRJ",
+    db_host: str = "10.70.6.21",
+    db_port: str = "1526",
+    db_type: str = "oracle",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
     dataset_id: str = "dataset_id",
     table_id: str = "table_id",
-    infisical_secret_path: str = "infisical_secret_path",
+    infisical_secret_path: str = "/db-ergon-prod",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
