@@ -123,4 +123,4 @@ def rj_smas__api_datametrica_agendamentos(
 
     if materialize_after_dump:
         dbt_select = "--select raw_cadunico_agendamentos"
-        execute_dbt_task(select=dbt_select, target="prod")
+        execute_dbt_task(select=dbt_select, target="dev")
