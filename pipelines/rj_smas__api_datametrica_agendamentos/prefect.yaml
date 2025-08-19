@@ -55,7 +55,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       dataset_id: brutos_data_metrica
-      table_id: agendamentos_cadunico
+      table_id: cadunico_agendamentos
       dump_mode: append
       materialize_after_dump: true
       date: null  # null usa o próximo dia automaticamente
