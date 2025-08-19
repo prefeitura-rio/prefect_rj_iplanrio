@@ -85,7 +85,7 @@ def rj_smas__api_datametrica_agendamentos(
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
 
     # Injetar credenciais do BD
-    crd = inject_bd_credentials_task(environment="dev")  # noqa
+    crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Obter credenciais da API Datametrica
     credentials = get_datametrica_credentials(
