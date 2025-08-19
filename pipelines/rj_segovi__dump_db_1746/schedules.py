@@ -292,7 +292,9 @@ _1746_queries = [
                 pc.id_chamado_fk AS id_chamado,
                 CASE
                     WHEN p.ds_cpf IS NOT NULL THEN
-                        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(p.ds_cpf, '-', ''), '.', ''), '/', ''), '(', ''), ')', ''), ' ', ''), ',', ''), '+', ''), ';', '')
+                        REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(
+                            p.ds_cpf, '-', ''), '.', ''), '/', ''), '(', ''), ')', ''), ' ', ''),
+                            ',', ''), '+', ''), ';', '')
                     ELSE NULL
                 END AS cpf
             FROM tb_protocolo_chamado pc
@@ -352,14 +354,6 @@ BASE_INTERVAL_SECONDS = 3600 * 24  # Run each table every day
 RUNS_SEPARATION_MINUTES = 10  # Stagger start times by 10 minutes
 TIMEZONE = "America/Sao_Paulo"
 
-# Database & Secret Settings
-DB_TYPE = "sql_server"
-DB_DATABASE = "REPLICA1746"
-DB_HOST = "10.70.1.34"
-DB_PORT = 1433
-DATASET_ID = "brutos_1746"
-INFISICAL_SECRET_PATH = "/db-1746"
-
 # --- Generate and Print YAML ---
 schedules_config = create_dump_db_schedules(
     table_parameters_list=_1746_queries,
@@ -367,12 +361,6 @@ schedules_config = create_dump_db_schedules(
     base_anchor_date_str=BASE_ANCHOR_DATE,
     runs_interval_minutes=RUNS_SEPARATION_MINUTES,
     timezone=TIMEZONE,
-    db_type=DB_TYPE,
-    db_database=DB_DATABASE,
-    db_host=DB_HOST,
-    db_port=DB_PORT,
-    dataset_id=None,
-    infisical_secret_path=INFISICAL_SECRET_PATH,
 )
 
 # Use sort_keys=False to maintain the intended order of keys in the output
