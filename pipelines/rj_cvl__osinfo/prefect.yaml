@@ -288,3 +288,4 @@ deployments:
           table_id: estado_entrega
           dump_mode: overwrite
           execute_query: SELECT `reen_cd_estado_entrega` as `COD_ESTADO`, `reen_ds_estado_entrega` as `ESTADO`, `reen_classe_css_estado_entrega`
+            as `ETIQUETA`, `reen_ajuda_estado_entrega` as `DETALHE` FROM `osinfo_V2`.`tb_estado_entrega`;
