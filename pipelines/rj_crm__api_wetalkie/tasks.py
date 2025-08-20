@@ -9,7 +9,7 @@ Tasks migradas do Prefect 1.4 para 3.0 - CRM API Wetalkie
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 import pandas as pd
 import requests
@@ -76,9 +76,7 @@ def get_attendances(api: object) -> pd.DataFrame:
 
 
 @task
-def create_dispatch_payload(
-    campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]
-) -> Dict:
+def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
     """
     Cria o payload para o dispatch
     Exemplo da estrutura do payload:
@@ -104,17 +102,13 @@ def create_dispatch_payload(
 
 
 @task
-def dispatch(
-    api: object, id_hsm: int, dispatch_payload: dict, chunk: int = 1000
-) -> str:
+def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int = 1000) -> str:
     """
     Do a dispatch with chunking support
     Expected response:
     {"data":{"items":[{"externalId":null,"id":174}]},"message":"Created","statusCode":201}
     """
-    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S")
 
     # Split destinations into chunks if needed
     destinations = dispatch_payload["destinations"]
@@ -132,14 +126,12 @@ def dispatch(
             "destinations": chunk_destinations,
         }
 
-        log(
-            f"Dispatching chunk {i//chunk + 1} with {len(chunk_destinations)} destinations"
-        )
+        log(f"Dispatching chunk {i // chunk + 1} with {len(chunk_destinations)} destinations")
 
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=chunk_payload)
 
         if response.status_code != 201:
-            error_msg = f"Falha no disparo do chunk {i//chunk + 1}: {response.text}"
+            error_msg = f"Falha no disparo do chunk {i // chunk + 1}: {response.text}"
             log(error_msg, level="error")
             response.raise_for_status()
             raise Exception(error_msg)
@@ -166,17 +158,9 @@ def create_dispatch_dfr(
             "dispatch_date": dispatch_date,
             "campaignName": campaign_name,
             "costCenterId": cost_center_id,
-            "to": (
-                destination.get("to") if isinstance(destination, dict) else destination
-            ),
-            "externalId": (
-                destination.get("externalId", None)
-                if isinstance(destination, dict)
-                else None
-            ),
-            "vars": (
-                destination.get("vars", None) if isinstance(destination, dict) else None
-            ),
+            "to": (destination.get("to") if isinstance(destination, dict) else destination),
+            "externalId": (destination.get("externalId", None) if isinstance(destination, dict) else None),
+            "vars": (destination.get("vars", None) if isinstance(destination, dict) else None),
         }
         data.append(row)
 
@@ -272,9 +256,7 @@ def remove_duplicate_phones(destinations: List) -> List:
             seen_phones.add(phone)
             unique_destinations.append(dest)
 
-    log(
-        f"Removed {len(destinations) - len(unique_destinations)} duplicate phone numbers"
-    )
+    log(f"Removed {len(destinations) - len(unique_destinations)} duplicate phone numbers")
     return unique_destinations
 
 
@@ -330,16 +312,11 @@ def processar_json_e_transcrever_audios(
                         and not texto_original
                         and (
                             "audio" in content_type
-                            or any(
-                                url_audio.endswith(ext)
-                                for ext in [".mp3", ".wav", ".ogg", ".oga", ".opus"]
-                            )
+                            or any(url_audio.endswith(ext) for ext in [".mp3", ".wav", ".ogg", ".oga", ".opus"])
                         )
                     ):
                         audio_encontrado = True
-                        log(
-                            f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}"
-                        )
+                        log(f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}")
                         audio_path_temp = None
                         try:
                             audio_path_temp = download_audio(url_audio)
@@ -356,14 +333,14 @@ def processar_json_e_transcrever_audios(
                             AudioProcessingError,
                             AudioTranscriptionError,
                         ) as e:
-                            erro_msg = f"ERRO_TRANSCRICAO: {type(e).__name__}: {str(e)}"
+                            erro_msg = f"ERRO_TRANSCRICAO: {type(e).__name__}: {e!s}"
                             log(
                                 f"Erro ao transcrever áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}",
                                 level="error",
                             )
                             msg_copy["text"] = None
                         except Exception as e:
-                            erro_msg = f"ERRO_INESPERADO_TRANSCRICAO: {type(e).__name__}: {str(e)}"
+                            erro_msg = f"ERRO_INESPERADO_TRANSCRICAO: {type(e).__name__}: {e!s}"
                             log(
                                 f"Erro inesperado ao processar áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}",
                                 level="error",
@@ -395,9 +372,7 @@ def processar_json_e_transcrever_audios(
             )
             dados_processados.append(registro)
 
-    log(
-        f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros."
-    )
+    log(f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros.")
     return dados_processados
 
 

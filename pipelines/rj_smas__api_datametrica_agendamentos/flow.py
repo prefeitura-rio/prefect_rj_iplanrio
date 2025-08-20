@@ -53,9 +53,7 @@ def rj_smas__api_datametrica_agendamentos(
 
     # Obter configuração do BigQuery do Infisical se não fornecida via parâmetros
     if dataset_id is None or table_id is None:
-        bigquery_config = get_bigquery_config(
-            infisical_secret_path=infisical_secret_path
-        )
+        bigquery_config = get_bigquery_config(infisical_secret_path=infisical_secret_path)
         dataset_id = dataset_id or bigquery_config["dataset_id"]
         table_id = table_id or bigquery_config["table_id"]
 
@@ -79,9 +77,7 @@ def rj_smas__api_datametrica_agendamentos(
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Obter credenciais da API Datametrica
-    credentials = get_datametrica_credentials(
-        infisical_secret_path=infisical_secret_path
-    )
+    credentials = get_datametrica_credentials(infisical_secret_path=infisical_secret_path)
 
     # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
     target_date = date if date is not None else calculate_target_date()

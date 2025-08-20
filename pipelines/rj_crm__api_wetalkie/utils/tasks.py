@@ -31,16 +31,19 @@ from pipelines.rj_crm__api_wetalkie.utils.api_handler import ApiHandler
 # Audio processing exceptions
 class AudioDownloadError(IOError):
     """Exceção para falhas no download de áudio."""
+
     pass
 
 
 class AudioProcessingError(ValueError):
     """Exceção para erros durante o processamento de áudio."""
+
     pass
 
 
 class AudioTranscriptionError(Exception):
     """Exceção para falhas na transcrição de áudio."""
+
     pass
 
 
@@ -196,9 +199,7 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
             raise AudioProcessingError(f"Formato de áudio não suportado: {audio_format}")
 
         if duration > max_duration_seconds:
-            raise AudioProcessingError(
-                f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s"
-            )
+            raise AudioProcessingError(f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s")
 
         log(f"Duração do áudio verificada: {duration:.2f}s", level="debug")
 
