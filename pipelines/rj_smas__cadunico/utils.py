@@ -1,22 +1,23 @@
 # -*- coding: utf-8 -*-
-# ruff: noqa: DTZ007
+# ruff: noqa: DTZ007,PLR2004
 
 from datetime import datetime
 
 
-def parse_partition(blob_name: str) -> str:
+def parse_partition_from_filename(blob_name: str) -> str:
     name_parts = blob_name.split(".")
     partition_info = None
+
     for name_part in name_parts:
-        if name_part.startswith("A"):
+        if name_part.startswith("A") and len(name_part) == 7:
             partition_info = name_part.replace("A", "")
-            break
+            parsed_date = datetime.strptime(partition_info, "%y%m%d").strftime("%Y-%m-%d")
+            return str(parsed_date)
+        elif len(name_part) == 8 and name_part.isdigit():
+            parsed_date = datetime.strptime(name_part, "%Y%m%d").strftime("%Y-%m-%d")
+            return str(parsed_date)
 
-    if partition_info is None:
-        raise ValueError(f"No partition info found in blob name: {blob_name}")
-
-    parsed_date = datetime.strptime(partition_info, "%y%m%d").strftime("%Y-%m-%d")
-    return str(parsed_date)
+    raise ValueError(f"No partition info found in blob name: {blob_name}")
 
 
 def parse_txt_first_line(filepath):

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 from os import system
 from pathlib import Path
 from typing import List
@@ -16,7 +17,10 @@ from iplanrio.pipelines_utils.gcs import (
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
-from pipelines.rj_smas__cadunico.utils import parse_partition, parse_txt_first_line
+from pipelines.rj_smas__cadunico.utils import (
+    parse_partition_from_filename,
+    parse_txt_first_line,
+)
 
 
 @task
@@ -64,15 +68,17 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     log(f"Blobs: {raw_blobs}")
 
     # Filter ZIP files
-    raw_blobs = [blob for blob in raw_blobs if blob.name.lower().endswith(".zip")]
+    raw_blobs = [blob for blob in raw_blobs if blob.name and blob.name.lower().endswith(".zip")]
     log(f"ZIP blobs: {raw_blobs}")
 
     # Extract partition information from blobs
     raw_partitions = []
     raw_partitions_blobs = []
     for blob in raw_blobs:
+        if not blob.name:
+            continue
         try:
-            raw_partitions.append(parse_partition(blob.name))
+            raw_partitions.append(parse_partition_from_filename(blob.name))
             raw_partitions_blobs.append(blob)
         except Exception as e:
             log(f"Failed to parse partition from blob {blob.name}: {e}", "warning")
@@ -81,13 +87,15 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     # Filter files that are not in the staging area
     files_to_ingest = []
     partitions_to_ingest = []
+    log_to_injest = {}
     for blob, partition in zip(raw_partitions_blobs, raw_partitions, strict=False):
         if partition not in partitions:
             files_to_ingest.append(blob.name)
             partitions_to_ingest.append(partition)
+            log_to_injest[blob.name] = partition
 
-    log(f"Partitions to ingest: {partitions_to_ingest}")
-    log(f"Files to ingest: {files_to_ingest}")
+    log_to_injest_str = json.dumps(log_to_injest, indent=2, ensure_ascii=False)
+    log(f"Found {len(files_to_ingest)} files to ingest\n{log_to_injest_str}")
     return files_to_ingest
 
 
@@ -168,7 +176,7 @@ def ingest_file(blob_name: str, bucket_name: str, output_directory: str) -> None
     log(f"CSV files: {csv_files}")
 
     # Create partition directories
-    partition = parse_partition(blob_name)
+    partition = parse_partition_from_filename(blob_name)
     if partition == txt_date:
         log(f"Partition {partition} is equal to date inside TXT {txt_date}")
     else:
