@@ -32,6 +32,9 @@ def get_existing_partitions(prefix: str, bucket_name: str) -> List[str]:
         List[str]: Lista de partições no formato `YYYY-MM-DD`.
     """
     # List blobs in staging area
+
+    log(f"Listing blobs in staging area with prefix {bucket_name}/{prefix}")
+
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(staging_blobs)} blobs in staging area")
     log(f"Blobs: {staging_blobs}")

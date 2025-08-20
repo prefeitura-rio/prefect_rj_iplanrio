@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# ruff: noqa: PLR0913
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials
 from prefect import flow, unmapped
@@ -17,11 +16,9 @@ from pipelines.rj_smas__cadunico.tasks import (
 @flow(log_prints=True)
 def rj_smas__cadunico(
     prefix_raw_area="raw/protecao_social_cadunico/registro_familia",
-    prefix_staging_area="staging/protecao_social_cadunico_test/registro_familia",
     ingested_files_output="/tmp/ingested_files/",
     dataset_id="brutos_cadunico",
     table_id="registro_familia",
-    dump_mode="append",
 ):
     """
     Pipeline simplificada do CadÚnico:
@@ -33,7 +30,7 @@ def rj_smas__cadunico(
     _ = inject_bd_credentials()
 
     # Verificar o que já existe em staging
-    existing_partitions = get_existing_partitions(prefix=prefix_staging_area, bucket_name="rj-iplanrio")
+    existing_partitions = get_existing_partitions(prefix=f"staging/{dataset_id}/{table_id}", bucket_name="rj-iplanrio")
 
     # Identificar arquivos novos para ingerir
     files_to_ingest = get_files_to_ingest(prefix=prefix_raw_area, partitions=existing_partitions, bucket_name="rj-smas")
@@ -59,6 +56,6 @@ def rj_smas__cadunico(
             data_path=ingested_files_output,
             dataset_id=dataset_id,
             table_id=table_id,
-            dump_mode=dump_mode,
+            dump_mode="append",
             wait_for=[create_table],
         )
