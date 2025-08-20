@@ -18,7 +18,7 @@ from pipelines.rj_smas__cadunico.utils import (
 
 
 @task
-def get_existing_partitions(prefix: str, bucket_name: str) -> List[str]:
+def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, table_id: str) -> List[str]:
     """
     Lista as partições já processadas na área de staging.
 
@@ -32,6 +32,7 @@ def get_existing_partitions(prefix: str, bucket_name: str) -> List[str]:
     # List blobs in staging area
 
     log(f"Listing blobs in staging area with prefix {bucket_name}/{prefix}")
+    log(f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}")
 
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(staging_blobs)} blobs in staging area")
@@ -58,6 +59,7 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     """
     # List blobs in raw area
     raw_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
+    log(f"https://console.cloud.google.com/storage/browser/{bucket_name}/{prefix}")
     log(f"Found {len(raw_blobs)} blobs in raw area")
 
     # Filter ZIP files

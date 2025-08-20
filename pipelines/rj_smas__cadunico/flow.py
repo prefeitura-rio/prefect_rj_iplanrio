@@ -31,7 +31,12 @@ def rj_smas__cadunico(
     _ = inject_bd_credentials()
 
     # Verificar o que já existe em staging
-    existing_partitions = get_existing_partitions(prefix=staging_prefix_area, bucket_name=staging_bucket)
+    existing_partitions = get_existing_partitions(
+        prefix=staging_prefix_area,
+        bucket_name=staging_bucket,
+        dataset_id=dataset_id,
+        table_id=table_id,
+    )
 
     # Identificar arquivos novos para ingerir
     files_to_ingest = get_files_to_ingest(
