@@ -1,17 +1,14 @@
+# -*- coding: utf-8 -*-
 from typing import Optional
 
 from iplanrio.pipelines_templates.dump_url.flows import (
     parse_comma_separated_string_to_list_task,
 )
-
 from iplanrio.pipelines_templates.dump_url.tasks import download_url, dump_files
-
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-
-
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+
 
 @flow(log_prints=True)
 def rj_smtur__observatorio_do_turismo(
@@ -43,9 +40,7 @@ def rj_smtur__observatorio_do_turismo(
     # Rename flow run
     #
     #####################################
-    rename_flow_run = rename_current_flow_run_task(
-        new_name=f"Dump: {dataset_id}.{table_id}"
-    )
+    rename_flow_run = rename_current_flow_run_task(new_name=f"Dump: {dataset_id}.{table_id}")
 
     #####################################
     #
@@ -65,9 +60,7 @@ def rj_smtur__observatorio_do_turismo(
         gsheets_sheet_range=gsheets_sheet_range,
     )
 
-    partition_columns = parse_comma_separated_string_to_list_task(
-        text=partition_columns
-    )
+    partition_columns = parse_comma_separated_string_to_list_task(text=partition_columns)
 
     DUMP_CHUNKS_TASK = dump_files(
         file_path=DATA_FNAME,
