@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# ruff: noqa: E501,PLR0915
+
+import asyncio
 import json
 from os import system
 from pathlib import Path
@@ -109,8 +112,7 @@ def need_to_ingest(files_to_ingest: list) -> bool:
     return variable
 
 
-@task
-def ingest_file(blob_name: str, bucket_name: str, output_directory: str) -> None:
+async def _ingest_file(blob_name: str, bucket_name: str, output_directory: str) -> None:
     """
     Processa um arquivo ZIP: baixa, extrai, divide em chunks e converte para CSV.
 
@@ -119,6 +121,14 @@ def ingest_file(blob_name: str, bucket_name: str, output_directory: str) -> None
         bucket_name (str): Nome do bucket GCS.
         output_directory (str): Diretório de saída dos arquivos processados.
     """
+    # Criar ID único para tracking deste arquivo
+    partition = parse_partition_from_filename(blob_name)
+    file_id = partition
+
+    file_short_name = blob_name.split("/")[-1]
+
+    log(f"[{file_id}] INICIANDO processamento de {file_short_name}")
+
     # Assert that the output directory exists
     output_directory_path: Path = Path(output_directory)
     output_directory_path.mkdir(parents=True, exist_ok=True)
@@ -126,62 +136,80 @@ def ingest_file(blob_name: str, bucket_name: str, output_directory: str) -> None
     # Create temporary directory for file
     temp_directory: Path = Path("/tmp") / str(uuid4())
     temp_directory.mkdir(parents=True, exist_ok=True)
-    log(f"Created temporary directory {temp_directory}")
 
+    log(f"[{file_id}] ETAPA 1/6: Iniciando download de {file_short_name}")
     # Download blob to temporary directory
     gcs_client = get_gcs_client()
     bucket = gcs_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     fname = str(temp_directory / blob_name.rpartition("/")[-1])
     blob.download_to_filename(fname, client=gcs_client)
-    log(f"Downloaded blob {blob_name} to {fname}")
+
+    file_size_mb = Path(fname).stat().st_size / (1024 * 1024)
+    log(f"[{file_id}] ✓ Download concluído - {file_short_name} ({file_size_mb:.1f} MB)")
 
     # Unzip file
+    log(f"[{file_id}] ETAPA 2/6: Extraindo arquivos do ZIP")
     unzip_output_directory = temp_directory / "output"
     unzip_output_directory.mkdir(parents=True, exist_ok=True)
     with ZipFile(fname, "r") as zip_file:
         zip_file.extractall(unzip_output_directory)
-    log(f"Unzipped {fname} to {unzip_output_directory}")
-    log(f"Unzipped files: {list(unzip_output_directory.glob('*'))}")
+
+    extracted_files = list(unzip_output_directory.glob("*"))
+    log(f"[{file_id}] ✓ Extração concluída - {len(extracted_files)} arquivo(s) extraído(s)")
 
     # List TXT files (non-case sensitive)
     txt_files = list(unzip_output_directory.glob("*.txt")) + list(unzip_output_directory.glob("*.TXT"))
-    log(f"TXT files: {txt_files}")
+    log(f"[{file_id}] Encontrados {len(txt_files)} arquivo(s) TXT para processamento")
 
-    # Split TXT files into chunks of 1GB\
+    # Split TXT files into chunks of 1GB
+    log(f"[{file_id}] ETAPA 3/6: Analisando e dividindo arquivos TXT")
     txt_layout_version = None
     txt_date = None
     txt_files_after_split: List[Path] = []
-    for txt_file in txt_files:
+    total_size_gb = 0
+
+    for i, txt_file in enumerate(txt_files, 1):
         txt_layout_version, txt_date = parse_txt_first_line(filepath=txt_file)
-        log(f"TXT layout version: {txt_layout_version}")
         txt_file_size = txt_file.stat().st_size
+        txt_file_size_gb = txt_file_size / (1024**3)
+        total_size_gb += txt_file_size_gb
+
+        log(f"[{file_id}] Arquivo TXT {i}/{len(txt_files)}: {txt_file.name} ({txt_file_size_gb:.2f} GB)")
+        log(f"[{file_id}] Layout version: {txt_layout_version}, Data: {txt_date}")
+
         if txt_file_size > 1e9:  # noqa
-            log(f"Splitting {txt_file} into chunks of 1GB")
+            log(f"[{file_id}] Dividindo arquivo grande em chunks de 1GB...")
             system(f"split -b 1G {txt_file} {txt_file}.PART_")
             txt_file.unlink()
-            txt_files_after_split.extend(list(unzip_output_directory.glob("*.PART_*")))
+            parts = list(unzip_output_directory.glob("*.PART_*"))
+            txt_files_after_split.extend(parts)
+            log(f"[{file_id}] ✓ Arquivo dividido em {len(parts)} partes")
         else:
-            log(f"File {txt_file} is smaller than 1GB, not splitting")
+            log(f"[{file_id}] Arquivo menor que 1GB, mantendo inteiro")
             txt_files_after_split.append(txt_file)
+
     txt_files = txt_files_after_split
-    log(f"TXT files after split: {txt_files}")
+    log(
+        f"[{file_id}] ✓ Processamento TXT concluído - {len(txt_files)} arquivo(s) final(is) ({total_size_gb:.2f} GB total)"
+    )
 
     # Modify extension to CSV
+    log(f"[{file_id}] ETAPA 4/6: Convertendo TXT para CSV")
     csv_files: List[Path] = []
     for txt_file in txt_files:
         csv_file = Path(str(txt_file) + ".csv")
         txt_file.rename(csv_file)
         csv_files.append(csv_file)
-    log(f"CSV files: {csv_files}")
+    log(f"[{file_id}] ✓ Conversão concluída - {len(csv_files)} arquivo(s) CSV criado(s)")
 
     # Create partition directories
-    partition = parse_partition_from_filename(blob_name)
+    log(f"[{file_id}] ETAPA 5/6: Criando estrutura de partições")
     if partition == txt_date:
-        log(f"Partition {partition} is equal to date inside TXT {txt_date}")
+        log(f"[{file_id}] ✓ Partição validada: {partition} (consistente com data no TXT)")
     else:
         log(
-            f"Partition {partition} is different from date inside TXT {txt_date}",
+            f"[{file_id}] ⚠ ATENÇÃO: Partição {partition} difere da data no TXT {txt_date}",
             "warning",
         )
 
@@ -195,9 +223,67 @@ def ingest_file(blob_name: str, bucket_name: str, output_directory: str) -> None
     )
     partition_directory.mkdir(parents=True, exist_ok=True)
 
+    log(f"[{file_id}] Estrutura criada: {partition_directory.relative_to(output_directory_path)}")
+
     # Move CSV files to partition directory
-    for csv_file in csv_files:
+    log(f"[{file_id}] ETAPA 6/6: Movendo arquivos para estrutura final")
+    total_csv_size = 0
+    for i, csv_file in enumerate(csv_files, 1):
+        csv_size_mb = csv_file.stat().st_size / (1024 * 1024)
+        total_csv_size += csv_size_mb
         csv_file.rename(partition_directory / csv_file.name)
+        log(f"[{file_id}] Movido arquivo {i}/{len(csv_files)}: {csv_file.name} ({csv_size_mb:.1f} MB)")
+
+    log(f"[{file_id}] ✅ PROCESSAMENTO CONCLUÍDO - {file_short_name}")
+    log(f"[{file_id}] 📊 Resumo: {len(csv_files)} arquivo(s) CSV, {total_csv_size:.1f} MB total, partição {partition}")
+
+
+async def _ingest_file_with_semaphore(
+    semaphore: asyncio.Semaphore,
+    blob_name: str,
+    bucket_name: str,
+    output_directory: str,
+) -> None:
+    """
+    Wrapper assíncrono para ingest_file com controle de semáforo.
+    """
+    async with semaphore:
+        await _ingest_file(blob_name, bucket_name, output_directory)
+
+
+@task
+def ingest_files(
+    files_to_ingest: List[str],
+    bucket_name: str,
+    output_directory: str,
+    max_concurrent: int = 3,
+) -> None:
+    """
+    Processa múltiplos arquivos ZIP de forma assíncrona com controle de concorrência.
+
+    Args:
+        files_to_ingest (List[str]): Lista de nomes de blobs para ingerir.
+        bucket_name (str): Nome do bucket GCS.
+        output_directory (str): Diretório de saída dos arquivos processados.
+        max_concurrent (int): Número máximo de downloads/processamentos simultâneos.
+    """
+    if not files_to_ingest:
+        log("No files to ingest")
+        return
+
+    async def _run_async():
+        semaphore = asyncio.Semaphore(max_concurrent)
+        log(f"Starting async ingestion of {len(files_to_ingest)} files with max {max_concurrent} concurrent tasks")
+
+        tasks = []
+        for blob_name in files_to_ingest:
+            task = _ingest_file_with_semaphore(semaphore, blob_name, bucket_name, output_directory)
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
+        log(f"Completed ingestion of {len(files_to_ingest)} files")
+
+    asyncio.run(_run_async())
 
 
 @task
