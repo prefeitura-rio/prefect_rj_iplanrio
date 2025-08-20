@@ -252,21 +252,27 @@ async def ingest_file(blob_name: str, bucket_name: str, dataset_id: str, table_i
     log(f"[{file_id}] 📊 Resumo: {len(csv_files)} arquivo(s) CSV, {total_csv_size:.1f} MB total, partição {partition}")
 
     # ETAPA 7: Upload para BigQuery/GCS
-    log(f"[{file_id}] ETAPA 7/8: Criando tabela se necessário")
-    await asyncio.to_thread(
-        create_table_if_not_exists,
-        dataset_id=dataset_id,
-        table_id=table_id,
-    )
+    try:
+        log(f"[{file_id}] ETAPA 7/8: Criando tabela se necessário")
+        await asyncio.to_thread(
+            create_table_if_not_exists,
+            dataset_id=dataset_id,
+            table_id=table_id,
+        )
+        log(f"[{file_id}] ✓ Tabela verificada/criada")
 
-    log(f"[{file_id}] ETAPA 8/8: Fazendo upload dos dados")
-    await asyncio.to_thread(
-        append_data_to_storage,
-        data_path=output_directory_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode="append",
-    )
+        log(f"[{file_id}] ETAPA 8/8: Fazendo upload dos dados")
+        await asyncio.to_thread(
+            append_data_to_storage,
+            data_path=output_directory_path,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            dump_mode="append",
+        )
+        log(f"[{file_id}] ✓ Upload concluído")
+    except Exception as e:
+        log(f"[{file_id}] ❌ ERRO no upload: {e}", "error")
+        raise
 
     # Limpar diretórios temporários
     log(f"[{file_id}] 🧹 Limpando arquivos temporários...")
