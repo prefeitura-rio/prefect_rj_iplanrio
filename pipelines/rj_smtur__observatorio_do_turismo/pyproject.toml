@@ -1,0 +1,4 @@
+[project]
+name = "rj_smtur__observatorio_do_turismo"
+version = "0.1.0"
+description = "Pipeline observatorio_do_turismo da secretaria smtur"
