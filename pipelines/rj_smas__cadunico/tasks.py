@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 from iplanrio.pipelines_utils.gcs import (
@@ -10,6 +9,7 @@ from iplanrio.pipelines_utils.gcs import (
 )
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
+from prefect.utilities.asyncutils import run_sync_in_worker_thread
 
 from pipelines.rj_smas__cadunico.utils import (
     ingest_file_sync,
@@ -35,11 +35,11 @@ def get_existing_partitions(prefix: str, bucket_name: str) -> List[str]:
 
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(staging_blobs)} blobs in staging area")
-    log(f"Blobs: {staging_blobs}")
 
     # Extract partition information from blobs
     staging_partitions = parse_blobs_to_partition_list(staging_blobs)
-    log(f"Staging partitions: {staging_partitions}")
+    staging_partitions = list(set(staging_partitions))
+    log(f"Staging partitions {len(staging_partitions)}: {staging_partitions}")
     return staging_partitions
 
 
@@ -59,11 +59,10 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     # List blobs in raw area
     raw_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(raw_blobs)} blobs in raw area")
-    log(f"Blobs: {raw_blobs}")
 
     # Filter ZIP files
     raw_blobs = [blob for blob in raw_blobs if blob.name and blob.name.lower().endswith(".zip")]
-    log(f"ZIP blobs: {raw_blobs}")
+    log(f"ZIP blobs {len(raw_blobs)}")
 
     # Extract partition information from blobs
     raw_partitions = []
@@ -86,7 +85,7 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
         if partition not in partitions:
             files_to_ingest.append(blob.name)
             partitions_to_ingest.append(partition)
-            log_to_injest[blob.name] = partition
+            log_to_injest[partition] = blob.name
 
     log_to_injest_str = json.dumps(log_to_injest, indent=2, ensure_ascii=False)
     log(f"Found {len(files_to_ingest)} files to ingest\n{log_to_injest_str}")
@@ -128,21 +127,24 @@ def ingest_files(
     async def _run_async():
         log(f"Starting async ingestion of {len(files_to_ingest)} files with max {max_concurrent} concurrent tasks")
 
-        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
-            loop = asyncio.get_event_loop()
-            tasks = []
-            for blob_name in files_to_ingest:
-                task = loop.run_in_executor(
-                    executor,
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def _run_with_semaphore(blob_name):
+            async with semaphore:
+                return await run_sync_in_worker_thread(
                     ingest_file_sync,
                     blob_name,
                     bucket_name,
                     dataset_id,
                     table_id,
                 )
-                tasks.append(task)
 
-            await asyncio.gather(*tasks)
+        tasks = []
+        for blob_name in files_to_ingest:
+            task = _run_with_semaphore(blob_name)
+            tasks.append(task)
+
+        await asyncio.gather(*tasks)
         log(f"Completed ingestion of {len(files_to_ingest)} files")
 
     asyncio.run(_run_async())
