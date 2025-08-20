@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 from typing import Optional
 
-from iplanrio.pipelines_templates.dump_url.flows import (
-    parse_comma_separated_string_to_list_task,
+from iplanrio.pipelines_templates.dump_db.tasks import (
+    parse_comma_separated_string_to_list_task
 )
 from iplanrio.pipelines_templates.dump_url.tasks import download_url, dump_files
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
