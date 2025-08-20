@@ -1,0 +1,129 @@
+name: rj_iplanrio__dados_mestres
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__dados_mestres-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__dados_mestres/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--dados_mestres--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__dados_mestres/flow.py:rj_iplanrio__dados_mestres
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__dados_mestres -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+  - name: rj-iplanrio--dados_mestres--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__dados_mestres/flow.py:rj_iplanrio__dados_mestres
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__dados_mestres -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    schedules:
+      - interval: 604800
+        anchor_date: '2025-07-15T00:00:00'
+        timezone: America/Sao_Paulo
+        slug: bairro
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/4
+          crs: EPSG:31983
+          table_id: bairro
+      - interval: 604800
+        anchor_date: '2025-07-15T00:10:00'
+        timezone: America/Sao_Paulo
+        slug: area_planejamento
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/1
+          crs: EPSG:31983
+          table_id: area_planejamento
+      - interval: 604800
+        anchor_date: '2025-07-15T00:20:00'
+        timezone: America/Sao_Paulo
+        slug: regiao_planejamento
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/2
+          crs: EPSG:31983
+          table_id: regiao_planejamento
+      - interval: 604800
+        anchor_date: '2025-07-15T00:30:00'
+        timezone: America/Sao_Paulo
+        slug: regiao_administrativa
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/3
+          crs: EPSG:31983
+          table_id: regiao_administrativa
+      - interval: 604800
+        anchor_date: '2025-07-15T00:40:00'
+        timezone: America/Sao_Paulo
+        slug: rio_janeiro
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Limites_administrativos/MapServer/0
+          crs: EPSG:31983
+          table_id: rio_janeiro
+      - interval: 604800
+        anchor_date: '2025-07-15T00:50:00'
+        timezone: America/Sao_Paulo
+        slug: subprefeitura
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cartografia/Subprefeituras/MapServer/0
+          crs: EPSG:31983
+          table_id: subprefeitura
+      - interval: 604800
+        anchor_date: '2025-07-15T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: zoneamento_macro_zonas
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_Zoneamento_urbano_vigente/MapServer/1
+          crs: EPSG:31983
+          table_id: zoneamento_macro_zonas
+      - interval: 604800
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: zoneamento_urbano
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_Zoneamento_urbano_vigente/MapServer/0
+          crs: EPSG:31983
+          table_id: zoneamento_urbano
+      - interval: 604800
+        anchor_date: '2025-07-15T01:20:00'
+        timezone: America/Sao_Paulo
+        slug: logradouro
+        parameters:
+          url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/CadLog/Trechos_Logradouros/MapServer/0
+          crs: EPSG:31983
+          table_id: logradouro
+      - interval: 604800
+        anchor_date: '2025-07-15T01:30:00'
+        timezone: America/Sao_Paulo
+        slug: numero_porta
+        parameters:
+          url: 'https://pgeo3.rio.rj.gov.br/arcgis/rest/services/CadLog/Numero_de_porta/FeatureServer/0'
+          crs: EPSG:31983
+          table_id: numero_porta
