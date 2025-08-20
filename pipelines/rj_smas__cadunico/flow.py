@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# ruff: noqa: PLR0913
+
+from iplanrio.pipelines_utils.env import inject_bd_credentials
 from prefect import flow, unmapped
 
 from pipelines.rj_smas__cadunico.tasks import (
@@ -12,29 +15,47 @@ from pipelines.rj_smas__cadunico.tasks import (
 
 
 @flow(log_prints=True)
-def rj_smas__cadunico(  # noqa
+def rj_smas__cadunico(
     prefix_raw_area="raw/protecao_social_cadunico/registro_familia",
-    prefix_staging_area="staging/protecao_social_cadunico/registro_familia",
+    prefix_staging_area="staging/protecao_social_cadunico_test/registro_familia",
     ingested_files_output="/tmp/ingested_files/",
     dataset_id="brutos_cadunico",
     table_id="registro_familia",
     dump_mode="append",
 ):
-    existing_partitions = get_existing_partitions(prefix=prefix_staging_area, bucket_name="rj-iplanrio")
-    files_to_ingest = get_files_to_ingest(prefix=prefix_raw_area, partitions=existing_partitions, bucket_name="rj-smas")
-    need_to_ingest_bool = need_to_ingest(files_to_ingest=files_to_ingest)
+    """
+    Pipeline simplificada do CadÚnico:
+    1. Verifica partições existentes em staging
+    2. Compara com arquivos em raw
+    3. Ingere apenas arquivos novos
+    """
 
-    if need_to_ingest_bool:
+    _ = inject_bd_credentials()
+
+    # Verificar o que já existe em staging
+    existing_partitions = get_existing_partitions(prefix=prefix_staging_area, bucket_name="rj-iplanrio")
+
+    # Identificar arquivos novos para ingerir
+    files_to_ingest = get_files_to_ingest(prefix=prefix_raw_area, partitions=existing_partitions, bucket_name="rj-smas")
+
+    # Verificar se há arquivos para ingerir
+    if need_to_ingest(files_to_ingest=files_to_ingest):
+        # Processar arquivos em paralelo
         ingested_files = ingest_file.map(
-            blob=files_to_ingest,
+            blob_name=files_to_ingest,
+            bucket_name=unmapped("rj-smas"),
             output_directory=unmapped(ingested_files_output),
         )
+
+        # Criar tabela se não existir
         create_table = create_table_if_not_exists(
             dataset_id=dataset_id,
             table_id=table_id,
             wait_for=[ingested_files],
         )
-        _ = append_data_to_storage(
+
+        # Upload dos dados para storage
+        append_data_to_storage(
             data_path=ingested_files_output,
             dataset_id=dataset_id,
             table_id=table_id,

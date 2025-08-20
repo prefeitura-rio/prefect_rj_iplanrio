@@ -3,15 +3,18 @@
 
 from datetime import datetime
 
-from google.cloud.storage.blob import Blob
 
-
-def parse_partition(blob: Blob) -> str:
-    name_parts = blob.name.split(".")
+def parse_partition(blob_name: str) -> str:
+    name_parts = blob_name.split(".")
+    partition_info = None
     for name_part in name_parts:
         if name_part.startswith("A"):
             partition_info = name_part.replace("A", "")
             break
+
+    if partition_info is None:
+        raise ValueError(f"No partition info found in blob name: {blob_name}")
+
     parsed_date = datetime.strptime(partition_info, "%y%m%d").strftime("%Y-%m-%d")
     return str(parsed_date)
 

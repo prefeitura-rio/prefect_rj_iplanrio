@@ -7,7 +7,6 @@ from zipfile import ZipFile
 
 import basedosdados as bd
 import pandas as pd
-from google.cloud.storage.blob import Blob
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
 from iplanrio.pipelines_utils.gcs import (
     get_gcs_client,
@@ -23,13 +22,14 @@ from pipelines.rj_smas__cadunico.utils import parse_partition, parse_txt_first_l
 @task
 def get_existing_partitions(prefix: str, bucket_name: str) -> List[str]:
     """
-    List the existing partitions in the staging area.
+    Lista as partições já processadas na área de staging.
 
     Args:
-        prefix (str): The path prefix to list partitions from.
+        prefix (str): Prefixo do caminho para listar partições.
+        bucket_name (str): Nome do bucket GCS.
 
     Returns:
-        List[str]: A list of partitions in format `YYYY-MM-DD`.
+        List[str]: Lista de partições no formato `YYYY-MM-DD`.
     """
     # List blobs in staging area
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
@@ -43,16 +43,17 @@ def get_existing_partitions(prefix: str, bucket_name: str) -> List[str]:
 
 
 @task()
-def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) -> List[Blob]:
+def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) -> List[str]:
     """
-    List the files to ingest from the raw area (files that are not yet in the staging area).
+    Identifica arquivos ZIP novos na área raw que ainda não foram processados.
 
     Args:
-        prefix (str): The path prefix to list files from.
-        partitions (List[str]): A list of partitions to list files from.
+        prefix (str): Prefixo do caminho na área raw.
+        partitions (List[str]): Lista de partições já processadas.
+        bucket_name (str): Nome do bucket GCS.
 
     Returns:
-        List[str]: A list of files to ingest.
+        List[str]: Lista de nomes de blobs para ingerir.
     """
     # List blobs in raw area
     raw_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
@@ -68,7 +69,7 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     raw_partitions_blobs = []
     for blob in raw_blobs:
         try:
-            raw_partitions.append(parse_partition(blob))
+            raw_partitions.append(parse_partition(blob.name))
             raw_partitions_blobs.append(blob)
         except Exception as e:
             log(f"Failed to parse partition from blob {blob.name}: {e}", "warning")
@@ -79,7 +80,7 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
     partitions_to_ingest = []
     for blob, partition in zip(raw_partitions_blobs, raw_partitions, strict=False):
         if partition not in partitions:
-            files_to_ingest.append(blob)
+            files_to_ingest.append(blob.name)
             partitions_to_ingest.append(partition)
 
     log(f"Partitions to ingest: {partitions_to_ingest}")
@@ -90,7 +91,7 @@ def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) ->
 @task
 def need_to_ingest(files_to_ingest: list) -> bool:
     """
-    Check if there are files to ingest, to be used in a Prefect case.
+    Verifica se existem arquivos para ingerir.
     """
     variable = files_to_ingest != []
     log(f"Need to ingest: {variable}")
@@ -98,13 +99,14 @@ def need_to_ingest(files_to_ingest: list) -> bool:
 
 
 @task
-def ingest_file(blob: Blob, output_directory: str) -> None:
+def ingest_file(blob_name: str, bucket_name: str, output_directory: str) -> None:
     """
-    Ingest a file from the raw area to the staging area.
+    Processa um arquivo ZIP: baixa, extrai, divide em chunks e converte para CSV.
 
     Args:
-        blob (Blob): The blob to ingest.
-        output_directory (str): The directory to ingest the file to.
+        blob_name (str): Nome do blob para ingerir.
+        bucket_name (str): Nome do bucket GCS.
+        output_directory (str): Diretório de saída dos arquivos processados.
     """
     # Assert that the output directory exists
     output_directory_path: Path = Path(output_directory)
@@ -117,9 +119,11 @@ def ingest_file(blob: Blob, output_directory: str) -> None:
 
     # Download blob to temporary directory
     gcs_client = get_gcs_client()
-    fname = str(temp_directory / blob.name.rpartition("/")[-1])
+    bucket = gcs_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+    fname = str(temp_directory / blob_name.rpartition("/")[-1])
     blob.download_to_filename(fname, client=gcs_client)
-    log(f"Downloaded blob {blob.name} to {fname}")
+    log(f"Downloaded blob {blob_name} to {fname}")
 
     # Unzip file
     unzip_output_directory = temp_directory / "output"
@@ -161,7 +165,7 @@ def ingest_file(blob: Blob, output_directory: str) -> None:
     log(f"CSV files: {csv_files}")
 
     # Create partition directories
-    partition = parse_partition(blob)
+    partition = parse_partition(blob_name)
     if partition == txt_date:
         log(f"Partition {partition} is equal to date inside TXT {txt_date}")
     else:
