@@ -41,8 +41,8 @@ def rj_crm__api_wetalkie(
 ):
     """
     Flow para extrair dados de atendimentos da API Wetalkie e carregar no BigQuery.
-    
-    Este flow coleta os atendimentos (attendances) da API Wetalkie, processa áudios 
+
+    Este flow coleta os atendimentos (attendances) da API Wetalkie, processa áudios
     encontrados nas mensagens transcrevendo-os, e carrega os dados no BigQuery.
 
     Args:
@@ -58,9 +58,7 @@ def rj_crm__api_wetalkie(
     table_id = table_id or WetalkieConstants.TABLE_ID.value
     dump_mode = dump_mode or WetalkieConstants.DUMP_MODE.value
     materialize_after_dump = (
-        materialize_after_dump
-        if materialize_after_dump is not None
-        else WetalkieConstants.MATERIALIZE_AFTER_DUMP.value
+        materialize_after_dump if materialize_after_dump is not None else WetalkieConstants.MATERIALIZE_AFTER_DUMP.value
     )
 
     partition_column = WetalkieConstants.PARTITION_COLUMN.value
@@ -78,7 +76,7 @@ def rj_crm__api_wetalkie(
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
-        "wetalkie_user", 
+        "wetalkie_user",
         "wetalkie_pass",
         login_route=WetalkieConstants.API_LOGIN_ROUTE.value,
     )
@@ -93,9 +91,7 @@ def rj_crm__api_wetalkie(
     )
 
     # Processar JSON e transcrever áudios
-    processed_data = processar_json_e_transcrever_audios(
-        dados_entrada=validated_attendances
-    )
+    processed_data = processar_json_e_transcrever_audios(dados_entrada=validated_attendances)
 
     # Converter lista processada para DataFrame
     df = criar_dataframe_de_lista(processed_data)
