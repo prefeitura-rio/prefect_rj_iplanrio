@@ -4,8 +4,6 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials
 from prefect import flow
 
 from pipelines.rj_smas__cadunico.tasks import (
-    append_data_to_storage,
-    create_table_if_not_exists,
     get_existing_partitions,
     get_files_to_ingest,
     ingest_files,
@@ -23,12 +21,11 @@ def rj_smas__cadunico(
     max_concurrent: int = 3,
 ):
     """
-    Pipeline simplificada do CadÚnico:
+    Pipeline otimizada do CadÚnico:
     1. Verifica partições existentes em staging
     2. Compara com arquivos em raw
-    3. Ingere apenas arquivos novos
+    3. Processa, cria tabela e faz upload de cada arquivo individualmente
     """
-    ingested_files_output = "/tmp/ingested_files/"
     staging_prefix_area = f"staging/{dataset_id}/{table_id}"
 
     _ = inject_bd_credentials()
@@ -43,26 +40,11 @@ def rj_smas__cadunico(
 
     # Verificar se há arquivos para ingerir
     if need_to_ingest(files_to_ingest=files_to_ingest):
-        # Processar arquivos de forma assíncrona com controle de concorrência
-        ingested_files = ingest_files(
+        # Processar arquivos de forma assíncrona com upload imediato
+        ingest_files(
             files_to_ingest=files_to_ingest,
             bucket_name=raw_bucket,
-            output_directory=ingested_files_output,
+            dataset_id=dataset_id,
+            table_id=table_id,
             max_concurrent=max_concurrent,
-        )
-
-        # Criar tabela se não existir
-        create_table = create_table_if_not_exists(
-            dataset_id=dataset_id,
-            table_id=table_id,
-            wait_for=[ingested_files],
-        )
-
-        # Upload dos dados para storage
-        append_data_to_storage(
-            data_path=ingested_files_output,
-            dataset_id=dataset_id,
-            table_id=table_id,
-            dump_mode="append",
-            wait_for=[create_table],
         )
