@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # ruff: noqa: DTZ007,PLR2004,E501,PLR0915
-import asyncio
 import shutil
 from datetime import datetime
 from os import system
@@ -125,7 +124,7 @@ def append_data_to_storage(
     return dataset_id
 
 
-async def ingest_file(blob_name: str, bucket_name: str, dataset_id: str, table_id: str) -> None:
+def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id: str) -> None:
     """
     Processa um arquivo ZIP: baixa, extrai, divide em chunks, converte para CSV e faz upload.
 
@@ -280,17 +279,3 @@ async def ingest_file(blob_name: str, bucket_name: str, dataset_id: str, table_i
 
     log(f"[{file_id}] ✅ UPLOAD E LIMPEZA CONCLUÍDOS - {file_short_name}")
     log(f"[{file_id}] 🎯 Partição {partition} disponível em {dataset_id}.{table_id}")
-
-
-async def ingest_file_with_semaphore(
-    semaphore: asyncio.Semaphore,
-    blob_name: str,
-    bucket_name: str,
-    dataset_id: str,
-    table_id: str,
-) -> None:
-    """
-    Wrapper assíncrono para ingest_file com controle de semáforo.
-    """
-    async with semaphore:
-        await ingest_file(blob_name, bucket_name, dataset_id, table_id)

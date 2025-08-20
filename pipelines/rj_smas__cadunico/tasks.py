@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 from iplanrio.pipelines_utils.gcs import (
@@ -11,7 +12,7 @@ from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_smas__cadunico.utils import (
-    ingest_file_with_semaphore,
+    ingest_file_sync,
     parse_partition_from_filename,
 )
 
@@ -125,15 +126,23 @@ def ingest_files(
         return
 
     async def _run_async():
-        semaphore = asyncio.Semaphore(max_concurrent)
         log(f"Starting async ingestion of {len(files_to_ingest)} files with max {max_concurrent} concurrent tasks")
 
-        tasks = []
-        for blob_name in files_to_ingest:
-            task = ingest_file_with_semaphore(semaphore, blob_name, bucket_name, dataset_id, table_id)
-            tasks.append(task)
+        with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+            loop = asyncio.get_event_loop()
+            tasks = []
+            for blob_name in files_to_ingest:
+                task = loop.run_in_executor(
+                    executor,
+                    ingest_file_sync,
+                    blob_name,
+                    bucket_name,
+                    dataset_id,
+                    table_id,
+                )
+                tasks.append(task)
 
-        await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks)
         log(f"Completed ingestion of {len(files_to_ingest)} files")
 
     asyncio.run(_run_async())
