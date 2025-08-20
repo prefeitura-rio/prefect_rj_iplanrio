@@ -15,10 +15,11 @@ from pipelines.rj_smas__cadunico.tasks import (
 
 @flow(log_prints=True)
 def rj_smas__cadunico(
-    prefix_raw_area="raw/protecao_social_cadunico/registro_familia",
-    ingested_files_output="/tmp/ingested_files/",
-    dataset_id="brutos_cadunico",
+    raw_bucket="rj-smas",
+    raw_prefix_area="raw/protecao_social_cadunico/registro_familia",
+    staging_bucket="rj-iplanrio",
     table_id="registro_familia",
+    dataset_id="brutos_cadunico",
 ):
     """
     Pipeline simplificada do CadÚnico:
@@ -26,21 +27,24 @@ def rj_smas__cadunico(
     2. Compara com arquivos em raw
     3. Ingere apenas arquivos novos
     """
+    ingested_files_output = "/tmp/ingested_files/"
 
     _ = inject_bd_credentials()
 
     # Verificar o que já existe em staging
-    existing_partitions = get_existing_partitions(prefix=f"staging/{dataset_id}/{table_id}", bucket_name="rj-iplanrio")
+    existing_partitions = get_existing_partitions(prefix=f"staging/{dataset_id}/{table_id}", bucket_name=staging_bucket)
 
     # Identificar arquivos novos para ingerir
-    files_to_ingest = get_files_to_ingest(prefix=prefix_raw_area, partitions=existing_partitions, bucket_name="rj-smas")
+    files_to_ingest = get_files_to_ingest(
+        prefix=raw_prefix_area, partitions=existing_partitions, bucket_name=raw_bucket
+    )
 
     # Verificar se há arquivos para ingerir
     if need_to_ingest(files_to_ingest=files_to_ingest):
         # Processar arquivos em paralelo
         ingested_files = ingest_file.map(
             blob_name=files_to_ingest,
-            bucket_name=unmapped("rj-smas"),
+            bucket_name=unmapped(raw_bucket),
             output_directory=unmapped(ingested_files_output),
         )
 
