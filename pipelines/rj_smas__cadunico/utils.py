@@ -254,16 +254,14 @@ async def ingest_file(blob_name: str, bucket_name: str, dataset_id: str, table_i
     # ETAPA 7: Upload para BigQuery/GCS
     try:
         log(f"[{file_id}] ETAPA 7/8: Criando tabela se necessário")
-        await asyncio.to_thread(
-            create_table_if_not_exists,
+        create_table_if_not_exists(
             dataset_id=dataset_id,
             table_id=table_id,
         )
         log(f"[{file_id}] ✓ Tabela verificada/criada")
 
         log(f"[{file_id}] ETAPA 8/8: Fazendo upload dos dados")
-        await asyncio.to_thread(
-            append_data_to_storage,
+        append_data_to_storage(
             data_path=output_directory_path,
             dataset_id=dataset_id,
             table_id=table_id,
