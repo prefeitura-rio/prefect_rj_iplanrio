@@ -1,0 +1,4 @@
+[project]
+name = "rj_smas__cadunico"
+version = "0.1.0"
+description = "Pipeline cadunico da secretaria smas"
