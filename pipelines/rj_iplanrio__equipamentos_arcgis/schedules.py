@@ -37,22 +37,11 @@ schedules_parameters = [
 ]
 
 
-# General Deployment Settings
-DEPLOYMENT_NAME = "IPLARION: EQUIPAMENTOS FROM ARCGIS"
-VERSION = "{{ build-image.tag }}"
-ENTRYPOINT = "pipelines/rj_iplanrio__equipamentos_arcgis/flow.py:rj_iplanrio__equipamentos_arcgis"
-
 # Schedule Settings
 BASE_ANCHOR_DATE = "2025-07-15T00:00:00"
 BASE_INTERVAL_SECONDS = 3600 * 24  # Run each table every day
 RUNS_SEPARATION_MINUTES = 10  # Stagger start times by 10 minutes
 TIMEZONE = "America/Sao_Paulo"
-
-# Work Pool Settings
-WORK_POOL_NAME = "default-pool"
-WORK_QUEUE_NAME = "default"
-JOB_IMAGE = "{{ build-image.image_name }}:{{ build-image.tag }}"
-JOB_COMMAND = "uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute"
 
 
 schedules_config = create_schedules(

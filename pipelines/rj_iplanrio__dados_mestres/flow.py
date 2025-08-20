@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to download the equipamentos from the ARCGIS and upload to BIGQUERY
+This flow is used to download the datario data from the ARCGIS and upload to BIGQUERY
 """
 
 from iplanrio.pipelines_templates.dump_arcgis.tasks import (
@@ -13,11 +13,11 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_iplanrio__equipamentos_arcgis(
+def rj_iplanrio__dados_mestres(
     url: str = "https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/1",
     crs: str = "EPSG:3857",
-    dataset_id: str = "brutos_equipamentos",
-    table_id: str = "unidades_saude_poligonos_datario",
+    dataset_id: str = "brutos_dados_mestres",
+    table_id: str = "table_id",
 ):
     rename_flow_run = rename_current_flow_run_task(new_name=table_id)
     crd = inject_bd_credentials_task(environment="prod", wait_for=[rename_flow_run])
