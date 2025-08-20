@@ -15,11 +15,11 @@ from pipelines.rj_smas__cadunico.tasks import (
 
 @flow(log_prints=True)
 def rj_smas__cadunico(
-    raw_bucket="rj-smas",
-    raw_prefix_area="raw/protecao_social_cadunico/registro_familia",
-    staging_bucket="rj-iplanrio",
-    table_id="registro_familia",
-    dataset_id="brutos_cadunico",
+    raw_bucket: str = "rj-smas",
+    raw_prefix_area: str = "raw/protecao_social_cadunico/registro_familia",
+    staging_bucket: str = "rj-iplanrio",
+    table_id: str = "registro_familia",
+    dataset_id: str = "brutos_cadunico",
 ):
     """
     Pipeline simplificada do CadÚnico:
@@ -28,11 +28,12 @@ def rj_smas__cadunico(
     3. Ingere apenas arquivos novos
     """
     ingested_files_output = "/tmp/ingested_files/"
+    staging_prefix_area = f"staging/{dataset_id}/{table_id}"
 
     _ = inject_bd_credentials()
 
     # Verificar o que já existe em staging
-    existing_partitions = get_existing_partitions(prefix=f"staging/{dataset_id}/{table_id}", bucket_name=staging_bucket)
+    existing_partitions = get_existing_partitions(prefix=staging_prefix_area, bucket_name=staging_bucket)
 
     # Identificar arquivos novos para ingerir
     files_to_ingest = get_files_to_ingest(
