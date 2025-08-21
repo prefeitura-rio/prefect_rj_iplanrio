@@ -24,7 +24,7 @@ def rj_smfp__dump_db_ergon(  # noqa
     db_type: str = "oracle",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "dataset_id",
+    dataset_id: str = "brutos_ergon",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-ergon-prod",
     dump_mode: str = "overwrite",
