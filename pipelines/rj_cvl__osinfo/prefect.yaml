@@ -96,9 +96,9 @@ deployments:
       - interval: 86400
         anchor_date: '2025-07-15T02:00:00'
         timezone: America/Sao_Paulo
-        slug: tidespesaspo_documento
+        slug: despesa
         parameters:
-          table_id: tidespesaspo_documento
+          table_id: despesa
           dump_mode: overwrite
           execute_query: SELECT `ID_DOCUMENTO`, `COD_OS` as `COD_ORGANIZACAO`, `COD_UNIDADE`, `DATA_ENVIO`, `ID_TIPO_DOCUMENTO`,
             `CODIGO_FISCAL`, `CNPJ`, `RAZAO`, `CPF`, `NOME`, `NUM_DOCUMENTO`, `SERIE`, `DESCRICAO`, `DATA_EMISSAO`, `DATA_VENCIMENTO`,

@@ -96,7 +96,7 @@ OSINFO_QUERIES = [
         """,
     },
     {
-        "table_id": "tidespesaspo_documento",
+        "table_id": "despesa",
         "dump_mode": "overwrite",
         "execute_query": """
             SELECT
