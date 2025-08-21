@@ -278,7 +278,7 @@ _1746_queries = [
         "dataset_id": "brutos_1746",
         "partition_columns": "dt_inicio",
         "break_query_frequency": "month",
-        "break_query_start": "2021-01-01",
+        "break_query_start": "2024-01-01",
         "break_query_end": "current_month",
         "dump_mode": "append",
         "execute_query": QUERY_CHAMADO_1746_DS,
