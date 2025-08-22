@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # /// script
 # dependencies = ["prefect>=3.4.3", "prefect-docker>=0.6.5", "pyyaml>=6.0.2", "uvloop>=0.21.0"]
 # ///
