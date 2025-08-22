@@ -58,7 +58,9 @@ def rj_crm__api_wetalkie(
     table_id = table_id or WetalkieConstants.TABLE_ID.value
     dump_mode = dump_mode or WetalkieConstants.DUMP_MODE.value
     materialize_after_dump = (
-        materialize_after_dump if materialize_after_dump is not None else WetalkieConstants.MATERIALIZE_AFTER_DUMP.value
+        materialize_after_dump
+        if materialize_after_dump is not None
+        else WetalkieConstants.MATERIALIZE_AFTER_DUMP.value
     )
 
     partition_column = WetalkieConstants.PARTITION_COLUMN.value
@@ -72,7 +74,6 @@ def rj_crm__api_wetalkie(
     # Injetar credenciais do BD
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
-    # Acessar API Wetalkie
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
@@ -81,7 +82,6 @@ def rj_crm__api_wetalkie(
         login_route=WetalkieConstants.API_LOGIN_ROUTE.value,
     )
 
-    # Buscar atendimentos da API
     raw_attendances = get_attendances(api)
 
     # Verificar se há dados para processar
@@ -91,7 +91,9 @@ def rj_crm__api_wetalkie(
     )
 
     # Processar JSON e transcrever áudios
-    processed_data = processar_json_e_transcrever_audios(dados_entrada=validated_attendances)
+    processed_data = processar_json_e_transcrever_audios(
+        dados_entrada=validated_attendances
+    )
 
     # Converter lista processada para DataFrame
     df = criar_dataframe_de_lista(processed_data)
