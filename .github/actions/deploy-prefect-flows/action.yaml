@@ -31,6 +31,22 @@ inputs:
     description: Log level
     required: false
     default: "INFO"
+  debug:
+    description: Enable debug logging
+    required: false
+    default: "false"
+  batch_size:
+    description: Number of concurrent deployments
+    required: false
+    default: "3"
+  cleanup_docker:
+    description: Clean up Docker images between batches
+    required: false
+    default: "true"
+  max_retries:
+    description: Maximum number of retries for failed deployments
+    required: false
+    default: "2"
 
 runs:
   using: composite
@@ -65,5 +81,8 @@ runs:
         PIPELINES_PATH: ${{ inputs.pipelines_path }}
         FORCE_DEPLOY: ${{ inputs.force_deploy }}
         GITHUB_SHA: ${{ github.sha }}
-        LOG_LEVEL: ${{ inputs.log_level }}
+        LOG_LEVEL: ${{ inputs.debug == 'true' && 'DEBUG' || '' }}
+        BATCH_SIZE: ${{ inputs.batch_size }}
+        CLEANUP_DOCKER: ${{ inputs.cleanup_docker == 'true' && '1' || '0' }}
+        MAX_RETRIES: ${{ inputs.max_retries }}
       run: uv run .github/scripts/deploy_prefect_flows.py
