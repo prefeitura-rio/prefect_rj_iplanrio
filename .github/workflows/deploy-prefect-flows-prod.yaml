@@ -7,6 +7,12 @@ on:
     paths:
       - pipelines/**
   workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "Force deploy all flows"
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   deploy-prefect-prod-flows:
@@ -29,3 +35,4 @@ jobs:
           ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
           gh_token: ${{ secrets.GH_TOKEN }}
           log_level: ${{ vars.LOG_LEVEL }}
+          force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
