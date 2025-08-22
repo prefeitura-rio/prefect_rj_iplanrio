@@ -81,7 +81,7 @@ runs:
         PIPELINES_PATH: ${{ inputs.pipelines_path }}
         FORCE_DEPLOY: ${{ inputs.force_deploy }}
         GITHUB_SHA: ${{ github.sha }}
-        LOG_LEVEL: ${{ inputs.debug == 'true' && 'DEBUG' || '' }}
+        LOG_LEVEL: ${{ inputs.debug == 'true' && 'DEBUG' || 'INFO' }}
         BATCH_SIZE: ${{ inputs.batch_size }}
         CLEANUP_DOCKER: ${{ inputs.cleanup_docker == 'true' && '1' || '0' }}
         MAX_RETRIES: ${{ inputs.max_retries }}
