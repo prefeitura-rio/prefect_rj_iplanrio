@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # /// script
-# dependencies = ["prefect>=3.4.3", "prefect-docker>=0.6.5", "pyyaml>=6.0.2"]
+# dependencies = ["prefect>=3.4.3", "prefect-docker>=0.6.5", "pyyaml>=6.0.2", "uvloop>=0.21.0"]
 # ///
 
 import asyncio
@@ -11,6 +11,7 @@ from functools import partial
 from os import environ
 from pathlib import Path
 
+import uvloop
 from yaml import safe_load
 
 logging.basicConfig(
@@ -159,11 +160,11 @@ async def main() -> None:
     changed_pipelines = await get_changed_directories(pipelines, sha)
 
     if not changed_pipelines:
-        if not force_deploy:
+        if force_deploy:
+            yamls = await get_prefect_yaml_files(pipelines.iterdir())
+        else:
             logging.info("No changes detected, skipping deployment.")
             sys.exit(0)
-
-        yamls = await get_prefect_yaml_files(pipelines.iterdir())
     else:
         yamls = await get_prefect_yaml_files(changed_pipelines)
 
@@ -180,4 +181,4 @@ async def main() -> None:
         sys.exit(1)
 
 
-asyncio.run(main())
+uvloop.run(main())
