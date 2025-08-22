@@ -33,4 +33,4 @@ class WetalkieConstants(Enum):
     API_ATTENDANCES_ENDPOINT = "/callcenter/attendances/pull"
 
     # DBT model para materialização
-    DBT_SELECT = "raw_FIXME.sql"
+    DBT_SELECT = "*crm_whatsapp*"
