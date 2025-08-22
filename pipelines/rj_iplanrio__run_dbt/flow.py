@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=C0301
+# ruff: disable=C0301,PTH118,PTH109,PTH110,PTH103,B904,B904,PTH118,PTH112
 """
-Migrated DBT Transform Flow from Prefect 1.4 to 3.0.
+Migrated DBT Transform Flow from Prefect 1.4 to 3.0..
 """
 
 import os
@@ -140,7 +140,10 @@ def execute_dbt(
     # Execute the dbt command with the constructed arguments
     try:
         running_result = runner.invoke(command_args)
-        log(f"DBT command completed with success: {running_result.success}", level="info")
+        log(
+            f"DBT command completed with success: {running_result.success}",
+            level="info",
+        )
     except Exception as e:
         log(f"Error executing DBT command: {e}", level="error")
         raise
@@ -561,7 +564,10 @@ def rj_iplanrio__run_dbt(
     )
 
     # Upload dbt artifacts to GCS if needed
-    if flow_info["flow_environment"] == "prod" and command in ["build", "source freshness"]:
+    if flow_info["flow_environment"] == "prod" and command in [
+        "build",
+        "source freshness",
+    ]:
         upload_dbt_artifacts_to_gcs(environment=target, gcs_buckets=gcs_buckets)
 
     return dbt_report
