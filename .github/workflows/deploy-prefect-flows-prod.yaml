@@ -23,6 +23,16 @@ on:
         required: false
         type: number
         default: 3
+      cleanup_docker:
+        description: "Clean up Docker images between batches"
+        required: false
+        type: boolean
+        default: true
+      max_retries:
+        description: "Maximum number of retries for failed deployments"
+        required: false
+        type: number
+        default: 2
 
 jobs:
   deploy-prefect-prod-flows:
@@ -47,3 +57,5 @@ jobs:
           force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
           debug: ${{ github.event.inputs.debug }}
           batch_size: ${{ github.event.inputs.batch_size || '3' }}
+          cleanup_docker: ${{ github.event.inputs.cleanup_docker || 'true' }}
+          max_retries: ${{ github.event.inputs.max_retries || '2' }}
