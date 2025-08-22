@@ -65,11 +65,17 @@ class GoogleAgentEngineHistory:
         use_whatsapp_format: bool = True,
     ):
         """Método auxiliar para processar histórico de um único usuário"""
+
+        if user_id in ["", " ", "/"]:
+            log(f"Invalid user_id: {user_id}", level="warning")
+            return
+
         config = RunnableConfig(configurable={"thread_id": user_id})
 
         state = await self._checkpointer.aget(config=config)
         if not state:
-            return user_id, []
+            log(f"No state found for user_id: {user_id}", level="warning")
+            return
 
         messages = state.get("channel_values", {}).get("messages", [])
         # logger.info(messages)
