@@ -3,7 +3,6 @@
 # dependencies = ["prefect>=3.4.3", "prefect-docker>=0.6.5", "pyyaml>=6.0.2", "uvloop>=0.21.0"]
 # ///
 
-import asyncio
 import logging
 import sys
 from collections.abc import Iterable
