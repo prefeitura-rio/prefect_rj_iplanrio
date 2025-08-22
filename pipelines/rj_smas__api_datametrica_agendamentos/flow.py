@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Flow migrado do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
+Flow migrado do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos.
 
 ⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no iplanrio:
 - handler_initialize_sentry: SEM EQUIVALENTE
