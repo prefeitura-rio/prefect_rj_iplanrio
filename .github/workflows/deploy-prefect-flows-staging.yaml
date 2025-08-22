@@ -13,6 +13,16 @@ on:
         required: false
         type: boolean
         default: false
+      debug:
+        description: "Enable debug logging"
+        required: false
+        type: boolean
+        default: false
+      batch_size:
+        description: "Number of concurrent deployments"
+        required: false
+        type: number
+        default: 3
 
 jobs:
   deploy-prefect-staging-flows:
@@ -34,5 +44,6 @@ jobs:
           ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
           gh_token: ${{ secrets.GH_TOKEN }}
-          log_level: ${{ vars.LOG_LEVEL }}
           force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
+          debug: ${{ github.event.inputs.debug }}
+          batch_size: ${{ github.event.inputs.batch_size || '3' }}
