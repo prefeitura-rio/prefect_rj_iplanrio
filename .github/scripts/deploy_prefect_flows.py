@@ -66,15 +66,17 @@ def safe_float_from_env(key: str, default: float, min_value: float = 0.0) -> flo
 class DeploymentConfig:
     """Configuration for deployment script."""
 
-    environment: str = field(default_factory=lambda: environ.get("ENVIRONMENT", "staging"))
-    force_deploy: bool = field(default_factory=lambda: environ.get("FORCE_DEPLOY", "0") == "1")
-    sha: str = field(default_factory=lambda: environ.get("GITHUB_SHA", "HEAD"))
+    backoff_multiplier: float = field(default_factory=lambda: safe_float_from_env("BACKOFF_MULTIPLIER", 2.0, 1.0))
     batch_size: int = field(default_factory=lambda: safe_int_from_env("BATCH_SIZE", 3, 1))
     cleanup_docker: bool = field(default_factory=lambda: environ.get("CLEANUP_DOCKER", "1") == "1")
-    max_retries: int = field(default_factory=lambda: safe_int_from_env("MAX_RETRIES", 2, 0))
     deployment_timeout: int = field(default_factory=lambda: safe_int_from_env("DEPLOYMENT_TIMEOUT", 600, 30))
+    environment: str = field(default_factory=lambda: environ.get("ENVIRONMENT", "staging"))
+    force_deploy: bool = field(default_factory=lambda: environ.get("FORCE_DEPLOY", "0") == "1")
+    max_retries: int = field(default_factory=lambda: safe_int_from_env("MAX_RETRIES", 2, 0))
+    pipeline: str | None = field(default_factory=lambda: environ.get("PIPELINE"))
+    pipelines_path: str = field(default_factory=lambda: environ.get("PIPELINES_PATH", "pipelines"))
     retry_delay: int = field(default_factory=lambda: safe_int_from_env("RETRY_DELAY", 30, 1))
-    backoff_multiplier: float = field(default_factory=lambda: safe_float_from_env("BACKOFF_MULTIPLIER", 2.0, 1.0))
+    sha: str = field(default_factory=lambda: environ.get("GITHUB_SHA", "HEAD"))
 
 
 CONFIG = DeploymentConfig()
@@ -146,9 +148,14 @@ async def get_deployments(prefect_yaml: Path) -> list[str]:
     return [d.get("name", "") for d in deployments_section if d.get("name")]
 
 
-def get_prefect_yaml_files(package_dir: Iterable[Path]) -> list[Path]:
-    """Get all `prefect.yaml` files in the specified package directory."""
-    return [d / "prefect.yaml" for d in package_dir if d.is_dir() and (d / "prefect.yaml").exists()]
+def get_prefect_yaml_files(package_dir: Iterable[Path], pipeline_filter: str | None = None) -> list[Path]:
+    """Get all `prefect.yaml` files in the specified package directory, optionally filtered by pipeline name."""
+    yaml_files = [d / "prefect.yaml" for d in package_dir if d.is_dir() and (d / "prefect.yaml").exists()]
+
+    if pipeline_filter:
+        return [f for f in yaml_files if f.parent.name == pipeline_filter]
+
+    return yaml_files
 
 
 async def get_changed_directories(package_dir: Path, sha: str) -> list[Path]:
@@ -263,6 +270,83 @@ async def run_subprocess(command: list[str]) -> asyncio.subprocess.Process:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+
+
+def validate_configuration() -> None:
+    """Validate configuration for conflicting options."""
+    if CONFIG.pipeline and CONFIG.force_deploy:
+        logging.error("Cannot use both PIPELINE and FORCE_DEPLOY options simultaneously")
+        logging.error("Use PIPELINE for single pipeline deployment OR FORCE_DEPLOY for all pipelines")
+        sys.exit(1)
+
+
+def validate_pipelines_path(pipelines_path: str) -> Path:
+    """Validate and return pipelines path."""
+    if not pipelines_path:
+        logging.error("PIPELINES_PATH cannot be empty")
+        sys.exit(1)
+
+    pipelines = Path(pipelines_path)
+
+    if not pipelines.exists():
+        logging.error(f"Path `{pipelines}` does not exist.")
+        sys.exit(1)
+
+    if not pipelines.is_dir():
+        logging.error(f"Path `{pipelines}` is not a directory.")
+        sys.exit(1)
+
+    return pipelines
+
+
+async def discover_yaml_files(pipelines: Path, pipeline_filter: str | None) -> list[Path]:
+    """Discover YAML files to deploy based on configuration."""
+    if pipeline_filter:
+        logging.debug(f"Pipeline: `{pipeline_filter}`")
+        pipeline_path = pipelines / pipeline_filter
+
+        if not pipeline_path.exists() or not pipeline_path.is_dir():
+            logging.error(f"Pipeline `{pipeline_filter}` does not exist in `{pipelines}`")
+            sys.exit(1)
+
+        yamls = get_prefect_yaml_files([pipeline_path], pipeline_filter)
+
+        if not yamls:
+            logging.error(f"No prefect.yaml found in pipeline `{pipeline_filter}`")
+            sys.exit(1)
+
+        return yamls
+
+    changed_pipelines = await get_changed_directories(pipelines, CONFIG.sha)
+
+    if not changed_pipelines and not CONFIG.force_deploy:
+        logging.info("No changes detected, skipping deployment.")
+        sys.exit(0)
+
+    return get_prefect_yaml_files(changed_pipelines if changed_pipelines else pipelines.iterdir())
+
+
+async def execute_deployments(yamls: list[Path]) -> list[Path]:
+    """Execute deployments in batches and return failed deployments."""
+    all_errors: list[Path] = []
+    batches = list(batched(yamls, CONFIG.batch_size, strict=False))
+
+    with Progress(console=console) as progress:
+        task_id: TaskID = progress.add_task("Deploying flows...", total=len(yamls))
+
+        for batch_num, batch in enumerate(batches, 1):
+            logging.info(f"Deploying batch {batch_num}/{len(batches)}: {[str(y) for y in batch]}")
+
+            tasks = [deploy_flow(file, CONFIG.environment) for file in batch]
+            result: list[tuple[Path, int]] = await asyncio.gather(*tasks)
+            all_errors.extend(file for file, code in result if code != 0)
+
+            progress.update(task_id, advance=len(batch))
+
+            if CONFIG.cleanup_docker and batch_num < len(batches):
+                await cleanup_docker_images()
+
+    return all_errors
 
 
 async def cleanup_docker_images() -> None:
@@ -397,55 +481,20 @@ async def main() -> None:
     logging.debug(f"Retry delay: `{CONFIG.retry_delay}`")
     logging.debug(f"Backoff multiplier: `{CONFIG.backoff_multiplier}`")
 
-    pipelines_path = environ.get("PIPELINES_PATH", "pipelines")
-    if not pipelines_path:
-        logging.error("PIPELINES_PATH cannot be empty")
-        sys.exit(1)
+    validate_configuration()
 
-    pipelines = Path(pipelines_path)
-
-    if not pipelines.exists():
-        logging.error(f"Path `{pipelines}` does not exist.")
-        sys.exit(1)
-
-    if not pipelines.is_dir():
-        logging.error(f"Path `{pipelines}` is not a directory.")
-        sys.exit(1)
-
-    changed_pipelines = await get_changed_directories(pipelines, CONFIG.sha)
-
-    if not changed_pipelines and not CONFIG.force_deploy:
-        logging.info("No changes detected, skipping deployment.")
-        sys.exit(0)
-
-    yamls = get_prefect_yaml_files(changed_pipelines if changed_pipelines else pipelines.iterdir())
+    pipelines = validate_pipelines_path(CONFIG.pipelines_path)
+    yamls = await discover_yaml_files(pipelines, CONFIG.pipeline)
 
     logging.info(f"Found {len(yamls)} flow(s) to deploy: {[str(y) for y in yamls]}")
 
-    all_errors: list[Path] = []
-
-    batches = list(batched(yamls, CONFIG.batch_size, strict=False))
-
-    with Progress(console=console) as progress:
-        task_id: TaskID = progress.add_task("Deploying flows...", total=len(yamls))
-
-        for batch_num, batch in enumerate(batches, 1):
-            logging.info(f"Deploying batch {batch_num}/{len(batches)}: {[str(y) for y in batch]}")
-
-            tasks = [deploy_flow(file, CONFIG.environment) for file in batch]
-            result: list[tuple[Path, int]] = await asyncio.gather(*tasks)
-            all_errors.extend(file for file, code in result if code != 0)
-
-            progress.update(task_id, advance=len(batch))
-
-            if CONFIG.cleanup_docker and batch_num < len(batches):
-                await cleanup_docker_images()
+    failed_deployments = await execute_deployments(yamls)
 
     display_deployment_summary()
 
-    if all_errors:
-        errors = [str(e) for e in set(all_errors)]
-        logging.error(f"Deployment completed with errors in {len(all_errors)} flow(s): {errors}")
+    if failed_deployments:
+        errors = [str(e) for e in set(failed_deployments)]
+        logging.error(f"Deployment completed with errors in {len(failed_deployments)} flow(s): {errors}")
         sys.exit(1)
 
 
