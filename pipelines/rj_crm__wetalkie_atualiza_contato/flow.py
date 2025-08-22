@@ -70,9 +70,7 @@ def rj_crm__wetalkie_atualiza_contato(
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Buscar contatos com dados faltantes do BigQuery
-    df_contacts = download_missing_contacts(
-        query=query, billing_project_id=billing_project_id, bucket_name=bucket_name
-    )
+    df_contacts = download_missing_contacts(query=query, billing_project_id=billing_project_id, bucket_name=bucket_name)
 
     # Verificar se há contatos para processar
     validated_contacts = skip_flow_if_empty(
@@ -99,9 +97,7 @@ def rj_crm__wetalkie_atualiza_contato(
     )
 
     # Exportar dados para arquivo
-    exported_path = safe_export_df_to_parquet(
-        dfr=final_contacts, output_path=root_folder
-    )
+    exported_path = safe_export_df_to_parquet(dfr=final_contacts, output_path=root_folder)
 
     # Upload para GCS e BigQuery
     create_table_and_upload_to_gcs_task(
