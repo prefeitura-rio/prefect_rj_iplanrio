@@ -39,7 +39,16 @@ def get_attendances(api: object) -> pd.DataFrame:
     data = []
 
     log(f"all_attendances content: {all_attendances}")
-    all_attendances = all_attendances["data"]["items"]
+    log(f"all_attendances type: {type(all_attendances)}")
+    
+    if hasattr(all_attendances, "json"):
+        response_data = all_attendances.json()
+        log(f"response_data after json(): {response_data}")
+    else:
+        response_data = all_attendances
+        log(f"response_data (no json method): {response_data}")
+    
+    all_attendances = response_data["data"]["items"]
     if not all_attendances:
         log("No attendances found in the Wetalkie API", level="warning")
         return pd.DataFrame()  # Return empty DataFrame instead of raising ENDRUN
