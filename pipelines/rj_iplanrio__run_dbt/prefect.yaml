@@ -69,7 +69,7 @@ deployments:
         slug: dbt_daily_build
         parameters:
           command: "build"
-          select: "tag:daily source_status:fresher+"
+          select: "tag:daily"
           send_discord_report: true
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
@@ -85,7 +85,7 @@ deployments:
         slug: dbt_weekly_build
         parameters:
           command: "build"
-          select: "tag:weekly source_status:fresher+"
+          select: "tag:weekly"
           send_discord_report: true
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
