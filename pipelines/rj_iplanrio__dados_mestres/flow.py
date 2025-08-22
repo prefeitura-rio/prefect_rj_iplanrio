@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to download the datario data from the ARCGIS and upload to BIGQUERY
+This flow is used to download the datario data from the ARCGIS and upload to BIGQUERY.
 """
 
 from iplanrio.pipelines_templates.dump_arcgis.tasks import (
