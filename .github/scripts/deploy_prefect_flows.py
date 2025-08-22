@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from functools import partial
 from os import environ
 from pathlib import Path
-
+import asyncio
 import uvloop
 from yaml import safe_load
 
@@ -39,7 +39,11 @@ async def get_deployments(prefect_yaml: Path) -> list[str]:
 async def get_prefect_yaml_files(package_dir: Iterable[Path]) -> list[Path]:
     """Get all `prefect.yaml` files in the specified package directory."""
 
-    return [d / "prefect.yaml" for d in package_dir if d.is_dir() and (d / "prefect.yaml").exists()]
+    return [
+        d / "prefect.yaml"
+        for d in package_dir
+        if d.is_dir() and (d / "prefect.yaml").exists()
+    ]
 
 
 async def get_changed_directories(package_dir: Path, sha: str) -> list[Path]:
@@ -89,7 +93,9 @@ async def deploy_flow(file: Path, environment: str) -> tuple[Path, int]:
     try:
         deployment = next(filter(lambda d: d.endswith(environment), deployments))
     except StopIteration:
-        logging.warning(f"No deployment found for `{package}` in `{environment}` environment. Skipping.")
+        logging.warning(
+            f"No deployment found for `{package}` in `{environment}` environment. Skipping."
+        )
         return file, 0
 
     command = [
@@ -171,12 +177,16 @@ async def main() -> None:
 
     deploy_flow_with_environment = partial(deploy_flow, environment=environment)
 
-    result = await asyncio.gather(*[deploy_flow_with_environment(file) for file in yamls])
+    result = await asyncio.gather(
+        *[deploy_flow_with_environment(file) for file in yamls]
+    )
 
     errors = [file for file, code in result if code != 0]
 
     if errors:
-        logging.error(f"Deployment completed with errors in {len(errors)} flow(s): {[str(e) for e in set(errors)]}")
+        logging.error(
+            f"Deployment completed with errors in {len(errors)} flow(s): {[str(e) for e in set(errors)]}"
+        )
         sys.exit(1)
 
 
