@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 # ruff: noqa: PLR0913
+"""
+Dump CADUNICO TO BQ.
+"""
+
 from iplanrio.pipelines_utils.env import inject_bd_credentials
 from prefect import flow
 
