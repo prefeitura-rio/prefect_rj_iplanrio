@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # /// script
 # dependencies = [
 #     "prefect-docker>=0.6.5",
@@ -10,6 +9,7 @@
 # ]
 # ///
 
+import asyncio
 import logging
 import sys
 from collections.abc import Awaitable, Iterable
@@ -296,16 +296,6 @@ def validate_pipelines_path(pipelines_path: str) -> Path:
         logging.error(f"Path `{pipelines}` is not a directory.")
         sys.exit(1)
 
-<<<<<<< HEAD
-    if not changed_pipelines:
-        if force_deploy:
-            yamls = await get_prefect_yaml_files(pipelines.iterdir())
-        else:
-            logging.info("No changes detected, skipping deployment.")
-            sys.exit(0)
-    else:
-        yamls = await get_prefect_yaml_files(changed_pipelines)
-=======
     return pipelines
 
 
@@ -495,7 +485,6 @@ async def main() -> None:
 
     pipelines = validate_pipelines_path(CONFIG.pipelines_path)
     yamls = await discover_yaml_files(pipelines, CONFIG.pipeline)
->>>>>>> 57b5ac912c88ff74a8cda2b63cb8fc25ae4e11f0
 
     logging.info(f"Found {len(yamls)} flow(s) to deploy: {[str(y) for y in yamls]}")
 

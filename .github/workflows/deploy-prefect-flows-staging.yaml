@@ -54,13 +54,8 @@ jobs:
           ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
           gh_token: ${{ secrets.GH_TOKEN }}
-<<<<<<< HEAD
-          log_level: ${{ vars.LOG_LEVEL }}
-          force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
-=======
           force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
           debug: ${{ github.event.inputs.debug }}
           batch_size: ${{ github.event.inputs.batch_size || '3' }}
           cleanup_docker: ${{ github.event.inputs.cleanup_docker || 'true' }}
           max_retries: ${{ github.event.inputs.max_retries || '2' }}
->>>>>>> 57b5ac912c88ff74a8cda2b63cb8fc25ae4e11f0
