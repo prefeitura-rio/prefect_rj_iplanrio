@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
+# ruff: noqa
+
 import json
 import re
 import shutil
 import textwrap
-from datetime import datetime
 from pathlib import Path
 from typing import List
 
@@ -12,14 +13,12 @@ import numpy as np
 import pandas as pd
 import ruamel.yaml as ryaml
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
-from iplanrio.pipelines_utils.pandas import to_partitions
-from iplanrio.pipelines_utils.io import get_root_path
-from iplanrio.pipelines_utils.logging import log
-from unidecode import unidecode
-
 from iplanrio.pipelines_utils.gcs import (
     list_blobs_with_prefix,
 )
+from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.pandas import to_partitions
+from unidecode import unidecode
 
 
 def get_tables_names_dict() -> dict:
@@ -74,9 +73,7 @@ def handle_merged_cells(df):
         if pd.isna(row["reg"]):
             if not pd.isna(row["descricao"]):
                 df.loc[last_index_not_na, "descricao"] = (
-                    str(df.loc[last_index_not_na, "descricao"])
-                    + "    \n"
-                    + str(row["descricao"]).strip()
+                    str(df.loc[last_index_not_na, "descricao"]) + "    \n" + str(row["descricao"]).strip()
                 )
         else:
             last_index_not_na = index
@@ -109,9 +106,7 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
                     ini_col = int(col)
                     end_col = int(col) + len(table_cols) - 1
 
-                    table_data = df.iloc[
-                        ini_row : end_row + 1, ini_col : end_col + 1  # noqa: E203
-                    ].copy()
+                    table_data = df.iloc[ini_row : end_row + 1, ini_col : end_col + 1].copy()
                     table_data = table_data.reset_index(drop=True)
                     if len(table_data.columns) < len(table_cols):
                         table_data["observacoes"] = np.nan
@@ -140,12 +135,7 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
 
     df_final["column"] = df_final["arquivo_base_versao_7"].fillna("sem_nome")
     df_final["column"] = df_final["column"].apply(
-        lambda x: unidecode(x)
-        .replace("-", "_")
-        .replace(" ", "_")
-        .replace("/", "_")
-        .lower()
-        .strip()
+        lambda x: unidecode(x).replace("-", "_").replace(" ", "_").replace("/", "_").lower().strip()
     )
 
     df_final["reg_version"] = df_final["reg"] + "____" + df_final["version"]
@@ -174,9 +164,7 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
     return df_final
 
 
-def parse_xlsx_files_and_save_partition(
-    output_path: str, raw_filespaths_to_ingest: List
-) -> str:
+def parse_xlsx_files_and_save_partition(output_path: str, raw_filespaths_to_ingest: List) -> str:
     shutil.rmtree(output_path, ignore_errors=True)
     for raw_file in raw_filespaths_to_ingest:
         name = str(raw_file).split("/")[-1]
@@ -186,9 +174,7 @@ def parse_xlsx_files_and_save_partition(
         csv_name = name.replace(".xlsx", ".csv").replace(".xls", ".csv")
 
         version_float = str(float(version[:2] + "." + version[2:]))
-        version_float = (
-            version_float if len(version_float) == 4 else f"{version_float}0"
-        )
+        version_float = version_float if len(version_float) == 4 else f"{version_float}0"
 
         df_final = parse_tables_from_xlsx(  # noqa
             xlsx_input=raw_file,
@@ -200,9 +186,7 @@ def parse_xlsx_files_and_save_partition(
     return str(output_path)
 
 
-def get_existing_partitions(
-    prefix: str, bucket_name: str, dataset_id: str, table_id: str
-) -> List[str]:
+def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, table_id: str) -> List[str]:
     """
     Lista as partições já processadas na área de staging.
 
@@ -216,9 +200,7 @@ def get_existing_partitions(
     # List blobs in staging area
 
     log(f"Listing blobs in staging area with prefix {bucket_name}/{prefix}")
-    log(
-        f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}"
-    )
+    log(f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}")
 
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(staging_blobs)} blobs in staging area")
@@ -244,9 +226,7 @@ def download_files_from_storage_raw(
     raw_prefix_area="raw/protecao_social_cadunico/layout",
 ):
     raw_blobs = list_blobs_with_prefix(bucket_name=raw_bucket, prefix=raw_prefix_area)
-    log(
-        f"https://console.cloud.google.com/storage/browser/{raw_bucket}/{raw_prefix_area}"
-    )
+    log(f"https://console.cloud.google.com/storage/browser/{raw_bucket}/{raw_prefix_area}")
     log(f"Found {len(raw_blobs)} blobs in raw area")
 
     raw_blobs_files = []
@@ -306,10 +286,7 @@ def download_files_from_storage_raw(
     return raw_filespaths_to_ingest
 
 
-def get_layout_table_from_staging(
-    project_id, dataset_id, registo_familia_table_id, layout_table_id
-):
-
+def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_id, layout_table_id):
     log("VALIDATE COLUMN NAMES\n")
     query = f"""
     WITH layout_unique_columns AS (
@@ -339,25 +316,21 @@ def get_layout_table_from_staging(
     """
 
     log(f"Columns Validation Query:\n{query}")
-    df_validation = bd.read_sql(
-        query=query, billing_project_id=project_id, from_file=True
-    )
+    df_validation = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
 
     if df_validation is not None:
         columns_to_create = df_validation.to_dict(orient="records")
         if len(columns_to_create) >= 1:
-            columns_to_create_str = json.dumps(
-                columns_to_create, indent=2, ensure_ascii=False
-            )
+            columns_to_create_str = json.dumps(columns_to_create, indent=2, ensure_ascii=False)
 
             raise_msg = ""
-            raise_msg += "Antes de prosseguir as colunas abaixo precisam ser criadas na planilha dicionario_colunas_cadunico:\n"
+            raise_msg += (
+                "Antes de prosseguir as colunas abaixo precisam ser criadas na planilha dicionario_colunas_cadunico:\n"
+            )
             raise_msg += "https://docs.google.com/spreadsheets/d/1VgtSVom_s4QsJoOws6caPZxGfwYrpjpoSjbOrqhRbM8/edit?gid=542906575#gid=542906575\n\n"
             raise_msg += f"Colunas que devem ser inseridas:\n{columns_to_create_str}"
             raise ValueError(raise_msg)
-    log(
-        f"GET CONSOLIDATE LAYOUT TO CREATE: `{project_id}.{dataset_id}_staging.layout_columns_version_control`"
-    )
+    log(f"GET CONSOLIDATE LAYOUT TO CREATE: `{project_id}.{dataset_id}_staging.layout_columns_version_control`")
 
     query = f"""
         SELECT
@@ -399,9 +372,7 @@ def columns_version_control_diff(dataframe: pd.DataFrame):
             version_columns = df_version["column"].tolist()
 
             next_version = table_versions[i + 1]
-            df_next_version = df_table[
-                df_table["versao_layout_particao"] == next_version
-            ]
+            df_next_version = df_table[df_table["versao_layout_particao"] == next_version]
             next_version_columns = df_next_version["column"].tolist()
 
             control_column_version = []
@@ -427,9 +398,7 @@ def columns_version_control_diff(dataframe: pd.DataFrame):
 
 def parse_columns_version_control(dataframe: pd.DataFrame):
     log("ASCENDING SEARCH\n")
-    df_ascending = columns_version_control_diff(
-        dataframe=dataframe.sort_values(["reg", "versao_layout_particao"])
-    )
+    df_ascending = columns_version_control_diff(dataframe=dataframe.sort_values(["reg", "versao_layout_particao"]))
     # create new row for versions lass than versao_layout_anterior
     versions = df_ascending["versao_layout_particao"].unique()
     versions.sort()
@@ -450,9 +419,7 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
 
     log("\nDESCENDING SEARCH\n")
     df_descending = columns_version_control_diff(
-        dataframe=dataframe.sort_values(
-            ["reg", "versao_layout_particao"], ascending=False
-        )
+        dataframe=dataframe.sort_values(["reg", "versao_layout_particao"], ascending=False)
     )
 
     # create new row for versions lass than versao_layout_anterior
@@ -520,26 +487,23 @@ def convert_string_to_json(s):
 def create_cadunico_dbt_consolidated_models(
     dbt_repository_path: str,
     dataframe: pd.DataFrame,
+    project_id: str,
     model_dataset_id: str,
     model_table_id: str,
 ):
-    model_path = Path(dbt_repository_path) / f"models/raw/smas/protecao_social_cadunico"
+    model_path = Path(dbt_repository_path) / "models/raw/smas/protecao_social_cadunico"
     model_name_prefix = "raw_protecao_social_cadunico"
 
     df = dataframe.copy()
     df["reg"] = df["reg"].apply(lambda x: x if len(x) > 1 else f"0{x}")
-    df["version"] = (
-        df["version"].str.replace(".", "").apply(lambda x: x if len(x) > 3 else f"0{x}")
-    )
+    df["version"] = df["version"].str.replace(".", "").apply(lambda x: x if len(x) > 3 else f"0{x}")
     df = df.sort_values(["reg", "versao_layout_particao"])
     df["version"] = np.where(
         df["coluna_esta_versao_anterior"] == "False",
         df["versao_layout_anterior"],
         df["version"],
     )
-    df["dicionario_atributos"] = df["dicionario_atributos"].apply(
-        lambda s: convert_string_to_json(s)
-    )
+    df["dicionario_atributos"] = df["dicionario_atributos"].apply(lambda s: convert_string_to_json(s))
 
     # remove columns that are empty
     df = df[np.logical_not(df["column"].str.contains("vazio"))]
@@ -554,15 +518,11 @@ def create_cadunico_dbt_consolidated_models(
         schema = {"version": 2, "models": []}
         table_schema = {}
         table_model_name = tables_dict[table_number]
-        model_name = (
-            table_model_name
-            if "test" not in model_dataset_id
-            else f"{table_model_name}_test"
-        )
+        model_name = table_model_name if "test" not in model_dataset_id else f"{table_model_name}_test"
 
         tables = df[df["reg"] == table_number]
         versions = tables["version"].unique()
-        table_schema["name"] = model_name
+        table_schema["name"] = f"{model_name_prefix}__{model_name}"
         table_schema["description"] = f"Table {model_name} from number {table_number}"
         table_schema["columns"] = []
         final_query = ""
@@ -572,7 +532,7 @@ def create_cadunico_dbt_consolidated_models(
         end_query = """
                 SAFE_CAST(versao_layout_particao AS STRING) AS versao_layout,
                 SAFE_CAST(data_particao AS DATE) AS data_particao
-            FROM `rj-smas.__dataset_id_replacer___staging.__model_table_id_replacer__`
+            FROM `__project_id_replacer__.__dataset_id_replacer___staging.__model_table_id_replacer__`
             WHERE versao_layout_particao = '__version_replacer__'
                 AND SUBSTRING(text,38,2) = '__table_number_replacer__'
 
@@ -587,11 +547,7 @@ def create_cadunico_dbt_consolidated_models(
             table_version = table_version.sort_values("column")
             columns = table_version["column"].tolist()
             table_name_original = f"{model_name}_{version}"
-            table_name = (
-                f"{table_name_original}_test"
-                if "test" in model_dataset_id
-                else table_name_original
-            )
+            table_name = f"{table_name_original}_test" if "test" in model_dataset_id else table_name_original
             columns = []
             for index, row in table_version.iterrows():
                 column = row["column"]
@@ -603,106 +559,93 @@ def create_cadunico_dbt_consolidated_models(
                 ajuste_decimal = row["ajuste_decimal"]
                 col_in_last_version = row["coluna_esta_versao_anterior"]
 
-                col_name_padronizado = (
-                    col_name_padronizado
-                    if col_name_padronizado is not None
-                    else col_name
-                )
+                col_name_padronizado = col_name_padronizado if col_name_padronizado is not None else col_name
                 dicionario_atributos = row["dicionario_atributos"]
 
                 if dicionario_atributos is not None:
                     if "id_" in col_name_padronizado:
-                        col_name_padronizado_dict_atr = col_name_padronizado.replace(
-                            "id_", "", 1
-                        )
+                        col_name_padronizado_dict_atr = col_name_padronizado.replace("id_", "", 1)
                     else:
-                        raise Exception(
-                            f"col_name_padronizado: {col_name_padronizado} should have id_ in the name"  # noqa
-                        )
+                        raise Exception(f"col_name_padronizado: {col_name_padronizado} should have id_ in the name")
 
                 if col_in_last_version == "False":
                     col_expression = (
                         f"\n    --column: {column}\n"
-                        + f"    NULL AS {col_name_padronizado}, --Essa coluna não esta na versao posterior"  # noqa
+                        + f"    NULL AS {col_name_padronizado}, --Essa coluna não esta na versao posterior"
                     )
                     if dicionario_atributos is not None:
                         col_expression = (
                             col_expression
                             + f"\n    --column: {column}\n"
-                            + f"    NULL AS {col_name_padronizado_dict_atr}, --Essa coluna não esta na versao posterior"  # noqa
+                            + f"    NULL AS {col_name_padronizado_dict_atr}, --Essa coluna não esta na versao posterior"
                         )
+                elif bigquery_type == "DATE":
+                    col_expression = (
+                        f"\n    --column: {column}\n"
+                        + "    SAFE.PARSE_DATE(\n"
+                        + f"        '{date_format}',\n"
+                        + "        CASE\n"
+                        + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"
+                        + f"            ELSE TRIM({col_name})\n"
+                        + "        END"
+                        + f"    ) AS {col_name_padronizado},"
+                    )
+                elif bigquery_type == "INT64":
+                    col_expression = (
+                        f"\n    --column: {column}\n"
+                        + "    SAFE_CAST(\n"
+                        + "        CASE\n"
+                        + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"
+                        + f"            ELSE TRIM({col_name})\n"
+                        + f"        END AS {bigquery_type}\n"
+                        + f"    ) AS {col_name_padronizado},"
+                    )
+                elif bigquery_type == "FLOAT64":
+                    col_expression = (
+                        f"\n    --column: {column}\n"
+                        + "    SAFE_CAST(\n"
+                        + "        CASE\n"
+                        + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"
+                        + f"            ELSE SAFE_CAST( TRIM({col_name}) AS INT64) / {ajuste_decimal}\n"
+                        + f"        END AS {bigquery_type}\n"
+                        + f"    ) AS {col_name_padronizado},"
+                    )
                 else:
-                    if bigquery_type == "DATE":
+                    col_expression = (
+                        f"\n    --column: {column}\n"
+                        + "    CAST(\n"
+                        + "        CASE\n"
+                        + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"
+                        + f"            ELSE TRIM({col_name})\n"
+                        + f"        END AS {bigquery_type}\n"
+                        + f"    ) AS {col_name_padronizado},"
+                    )
+
+                    if dicionario_atributos is not None:
                         col_expression = (
-                            f"\n    --column: {column}\n"
-                            + "    SAFE.PARSE_DATE(\n"
-                            + f"        '{date_format}',\n"
-                            + "        CASE\n"
-                            + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"  # noqa
-                            + f"            ELSE TRIM({col_name})\n"
-                            + "        END"
-                            + f"    ) AS {col_name_padronizado},"
-                        )
-                    elif bigquery_type == "INT64":
-                        col_expression = (
-                            f"\n    --column: {column}\n"
-                            + "    SAFE_CAST(\n"
-                            + "        CASE\n"
-                            + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"  # noqa
-                            + f"            ELSE TRIM({col_name})\n"
-                            + f"        END AS {bigquery_type}\n"
-                            + f"    ) AS {col_name_padronizado},"
-                        )
-                    elif bigquery_type == "FLOAT64":
-                        col_expression = (
-                            f"\n    --column: {column}\n"
-                            + "    SAFE_CAST(\n"
-                            + "        CASE\n"
-                            + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"  # noqa
-                            + f"            ELSE SAFE_CAST( TRIM({col_name}) AS INT64) / {ajuste_decimal}\n"  # noqa
-                            + f"        END AS {bigquery_type}\n"
-                            + f"    ) AS {col_name_padronizado},"
-                        )
-                    else:
-                        col_expression = (
-                            f"\n    --column: {column}\n"
+                            col_expression
+                            + f"\n    --column: {column}\n"
                             + "    CAST(\n"
                             + "        CASE\n"
-                            + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"  # noqa
+                            + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"
+                        )
+                        for key in dicionario_atributos.keys():
+                            col_expression = (
+                                col_expression
+                                + f"            WHEN REGEXP_CONTAINS({col_name}, r'^{key}$') THEN '{dicionario_atributos[key]}'\n"  # noqa
+                            )
+                        col_expression = (
+                            col_expression
                             + f"            ELSE TRIM({col_name})\n"
                             + f"        END AS {bigquery_type}\n"
-                            + f"    ) AS {col_name_padronizado},"
+                            + f"    ) AS {col_name_padronizado_dict_atr},"
                         )
-
-                        if dicionario_atributos is not None:
-                            col_expression = (
-                                col_expression
-                                + f"\n    --column: {column}\n"
-                                + "    CAST(\n"
-                                + "        CASE\n"
-                                + f"            WHEN REGEXP_CONTAINS({col_name}, r'^\\s*$') THEN NULL\n"  # noqa
-                            )
-                            for key in dicionario_atributos.keys():
-                                col_expression = (
-                                    col_expression
-                                    + f"            WHEN REGEXP_CONTAINS({col_name}, r'^{key}$') THEN '{dicionario_atributos[key]}'\n"  # noqa
-                                )
-                            col_expression = (
-                                col_expression
-                                + f"            ELSE TRIM({col_name})\n"
-                                + f"        END AS {bigquery_type}\n"
-                                + f"    ) AS {col_name_padronizado_dict_atr},"
-                            )
 
                 columns.append(col_expression)
 
                 # get the description from the last version of the layout
                 if version == last_version:
-                    col_description = (
-                        row["descricao"]
-                        if row["descricao"] is not None
-                        else "Sem descrição"
-                    )
+                    col_description = row["descricao"] if row["descricao"] is not None else "Sem descrição"
                     col_description = (
                         re.sub(r"\s+", " ", col_description)
                         .replace(";", "\n")
@@ -730,15 +673,12 @@ def create_cadunico_dbt_consolidated_models(
             column_dict = {}
 
             table_query = ini_query + "\n".join(columns) + end_query
-            table_query = table_query.replace(
-                "__dataset_id_replacer__", model_dataset_id
-            )
+            table_query = table_query.replace("__project_id_replacer__", project_id)
+            table_query = table_query.replace("__dataset_id_replacer__", model_dataset_id)
             table_query = table_query.replace("__table_id_replacer__", table_name)
             table_query = table_query.replace("__table_number_replacer__", table_number)
             table_query = table_query.replace("__version_replacer__", version)
-            table_query = table_query.replace(
-                "__model_table_id_replacer__", model_table_id
-            )
+            table_query = table_query.replace("__model_table_id_replacer__", model_table_id)
             final_query += table_query
         final_query = final_query.rsplit("UNION ALL", 1)[0]
         for item in table_schema["columns"]:
@@ -753,7 +693,7 @@ def create_cadunico_dbt_consolidated_models(
         config_partition = """
                 {{
                     config(
-                        alias=__model_name__,
+                        alias='__model_name__',
                         schema='protecao_social_cadunico',
                         materialized="table",
                         partition_by={
@@ -777,10 +717,7 @@ def create_cadunico_dbt_consolidated_models(
     log(f"created {len(log_created_models)} prod models : {json_log}")
 
 
-def create_layout_column_cross_version_control_bq_table(
-    dataframe, dataset_id, table_id
-):
-
+def create_layout_column_cross_version_control_bq_table(dataframe, dataset_id, table_id):
     new_dataframe = parse_columns_version_control(dataframe=dataframe)
 
     output_path = Path("/tmp/cadunico/final_layout")
@@ -832,7 +769,6 @@ def update_layout_from_storage_and_create_versions_dbt_models(
         staging_partitions_list=staging_partitions_list,
         output_path_str="/tmp/cadunico/raw/layout",
     )
-
     if raw_filespaths_to_ingest:
         log(f"FILES TO INGEST: {raw_filespaths_to_ingest}")
         output_path = parse_xlsx_files_and_save_partition(
@@ -849,7 +785,6 @@ def update_layout_from_storage_and_create_versions_dbt_models(
         output_path = str(output_path_result)
     else:
         log("NO LAYOUT FILES TO INGEST")
-
     if raw_filespaths_to_ingest or force_create_models:
         log("GET LAYOUT TABLE FROM STAGING")
         dataframe = get_layout_table_from_staging(
@@ -866,6 +801,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
 
         log("CREATE DBT CONSOLIDATED MODELS")
         create_cadunico_dbt_consolidated_models(
+            project_id=staging_bucket,
             dbt_repository_path=repository_path,
             dataframe=df_final,
             model_dataset_id=dataset_id,

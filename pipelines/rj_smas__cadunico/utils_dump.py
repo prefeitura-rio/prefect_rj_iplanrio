@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# ruff: noqa: DTZ007,PLR2004,E501,PLR0915
+# ruff: noqa
+
 import asyncio
 import shutil
 from datetime import datetime
@@ -31,9 +32,7 @@ def parse_partition_from_filename(blob_name: str) -> str:
     for name_part in name_parts:
         if name_part.startswith("A") and len(name_part) == 7:
             partition_info = name_part.replace("A", "")
-            parsed_date = datetime.strptime(partition_info, "%y%m%d").strftime(
-                "%Y-%m-%d"
-            )
+            parsed_date = datetime.strptime(partition_info, "%y%m%d").strftime("%Y-%m-%d")
             return str(parsed_date)
         elif len(name_part) == 8 and name_part.isdigit():
             parsed_date = datetime.strptime(name_part, "%Y%m%d").strftime("%Y-%m-%d")
@@ -135,9 +134,7 @@ def append_data_to_storage(
     return dataset_id
 
 
-def ingest_file_sync(
-    blob_name: str, bucket_name: str, dataset_id: str, table_id: str
-) -> None:
+def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id: str) -> None:
     """
     Processa um arquivo ZIP: baixa, extrai, divide em chunks, converte para CSV e faz upload.
 
@@ -182,14 +179,10 @@ def ingest_file_sync(
         zip_file.extractall(unzip_output_directory)
 
     extracted_files = list(unzip_output_directory.glob("*"))
-    log(
-        f"[{file_id}] ✓ Extração concluída - {len(extracted_files)} arquivo(s) extraído(s)"
-    )
+    log(f"[{file_id}] ✓ Extração concluída - {len(extracted_files)} arquivo(s) extraído(s)")
 
     # List TXT files (non-case sensitive)
-    txt_files = list(unzip_output_directory.glob("*.txt")) + list(
-        unzip_output_directory.glob("*.TXT")
-    )
+    txt_files = list(unzip_output_directory.glob("*.txt")) + list(unzip_output_directory.glob("*.TXT"))
     log(f"[{file_id}] Encontrados {len(txt_files)} arquivo(s) TXT para processamento")
 
     # Split TXT files into chunks of 1GB
@@ -205,9 +198,7 @@ def ingest_file_sync(
         txt_file_size_gb = txt_file_size / (1024**3)
         total_size_gb += txt_file_size_gb
 
-        log(
-            f"[{file_id}] Arquivo TXT {i}/{len(txt_files)}: {txt_file.name} ({txt_file_size_gb:.2f} GB)"
-        )
+        log(f"[{file_id}] Arquivo TXT {i}/{len(txt_files)}: {txt_file.name} ({txt_file_size_gb:.2f} GB)")
         log(f"[{file_id}] Layout version: {txt_layout_version}, Data: {txt_date}")
 
         if txt_file_size > 1e9:
@@ -233,16 +224,12 @@ def ingest_file_sync(
         csv_file = Path(str(txt_file) + ".csv")
         txt_file.rename(csv_file)
         csv_files.append(csv_file)
-    log(
-        f"[{file_id}] ✓ Conversão concluída - {len(csv_files)} arquivo(s) CSV criado(s)"
-    )
+    log(f"[{file_id}] ✓ Conversão concluída - {len(csv_files)} arquivo(s) CSV criado(s)")
 
     # Create partition directories
     log(f"[{file_id}] ETAPA 5/6: Criando estrutura de partições")
     if partition == txt_date:
-        log(
-            f"[{file_id}] ✓ Partição validada: {partition} (consistente com data no TXT)"
-        )
+        log(f"[{file_id}] ✓ Partição validada: {partition} (consistente com data no TXT)")
     else:
         log(
             f"[{file_id}] ⚠ ATENÇÃO: Partição {partition} difere da data no TXT {txt_date}",
@@ -259,9 +246,7 @@ def ingest_file_sync(
     )
     partition_directory.mkdir(parents=True, exist_ok=True)
 
-    log(
-        f"[{file_id}] Estrutura criada: {partition_directory.relative_to(output_directory_path)}"
-    )
+    log(f"[{file_id}] Estrutura criada: {partition_directory.relative_to(output_directory_path)}")
 
     # Move CSV files to partition directory
     log(f"[{file_id}] ETAPA 6/6: Movendo arquivos para estrutura final")
@@ -270,14 +255,10 @@ def ingest_file_sync(
         csv_size_mb = csv_file.stat().st_size / (1024 * 1024)
         total_csv_size += csv_size_mb
         csv_file.rename(partition_directory / csv_file.name)
-        log(
-            f"[{file_id}] Movido arquivo {i}/{len(csv_files)}: {csv_file.name} ({csv_size_mb:.1f} MB)"
-        )
+        log(f"[{file_id}] Movido arquivo {i}/{len(csv_files)}: {csv_file.name} ({csv_size_mb:.1f} MB)")
 
     log(f"[{file_id}] ✅ PROCESSAMENTO CONCLUÍDO - {file_short_name}")
-    log(
-        f"[{file_id}] 📊 Resumo: {len(csv_files)} arquivo(s) CSV, {total_csv_size:.1f} MB total, partição {partition}"
-    )
+    log(f"[{file_id}] 📊 Resumo: {len(csv_files)} arquivo(s) CSV, {total_csv_size:.1f} MB total, partição {partition}")
 
     # ETAPA 7: Upload para BigQuery/GCS
     try:
@@ -310,9 +291,7 @@ def ingest_file_sync(
     log(f"[{file_id}] 🎯 Partição {partition} disponível em {dataset_id}.{table_id}")
 
 
-def get_existing_partitions(
-    prefix: str, bucket_name: str, dataset_id: str, table_id: str
-) -> List[str]:
+def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, table_id: str) -> List[str]:
     """
     Lista as partições já processadas na área de staging.
 
@@ -326,9 +305,7 @@ def get_existing_partitions(
     # List blobs in staging area
 
     log(f"Listing blobs in staging area with prefix {bucket_name}/{prefix}")
-    log(
-        f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}"
-    )
+    log(f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}")
 
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(staging_blobs)} blobs in staging area")
@@ -340,9 +317,7 @@ def get_existing_partitions(
     return staging_partitions
 
 
-def get_files_to_ingest(
-    prefix: str, partitions: List[str], bucket_name: str
-) -> List[str]:
+def get_files_to_ingest(prefix: str, partitions: List[str], bucket_name: str) -> List[str]:
     """
     Identifica arquivos ZIP novos na área raw que ainda não foram processados.
 
@@ -360,9 +335,7 @@ def get_files_to_ingest(
     log(f"Found {len(raw_blobs)} blobs in raw area")
 
     # Filter ZIP files
-    raw_blobs = [
-        blob for blob in raw_blobs if blob.name and blob.name.lower().endswith(".zip")
-    ]
+    raw_blobs = [blob for blob in raw_blobs if blob.name and blob.name.lower().endswith(".zip")]
     log(f"ZIP blobs {len(raw_blobs)}")
 
     # Extract partition information from blobs
@@ -424,9 +397,7 @@ def ingest_files(
         return
 
     async def _run_async():
-        log(
-            f"Starting async ingestion of {len(files_to_ingest)} files with max {max_concurrent} concurrent tasks"
-        )
+        log(f"Starting async ingestion of {len(files_to_ingest)} files with max {max_concurrent} concurrent tasks")
 
         semaphore = asyncio.Semaphore(max_concurrent)
 

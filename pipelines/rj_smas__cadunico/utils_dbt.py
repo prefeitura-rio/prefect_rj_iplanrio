@@ -1,10 +1,10 @@
+# -*- coding: utf-8 -*-
+# ruff: noqa
 import shutil
-import os
 
 import git
-from prefect_dbt import PrefectDbtRunner
-
 from iplanrio.pipelines_utils.logging import log
+from prefect_dbt import PrefectDbtRunner
 
 
 def get_github_token() -> str:
@@ -59,9 +59,7 @@ def download_repository(git_repository_path: str, branch: str = "master") -> str
         )
         log(f"Current branch: {repo.active_branch.name}", level="info")
     except git.GitCommandError as e:
-        raise Exception(
-            f"Error when downloading repository from branch '{branch}': {e}"
-        )
+        raise Exception(f"Error when downloading repository from branch '{branch}': {e}")
 
     # check for 'queries' folder
     queries_path = os.path.join(repository_path, "queries")
@@ -124,9 +122,7 @@ def push_models_to_branch(
 
             # Listar arquivos que serão commitados
             staged_files = (
-                repo.git.diff("--cached", "--name-only").split("\n")
-                if repo.git.diff("--cached", "--name-only")
-                else []
+                repo.git.diff("--cached", "--name-only").split("\n") if repo.git.diff("--cached", "--name-only") else []
             )
             untracked_files = repo.untracked_files
 
@@ -190,7 +186,7 @@ def push_models_to_branch(
         return False
 
 
-def execute_dbt_task(
+def execute_dbt(
     command: str = "run",
     target: str = "dev",
     select: str = "",
