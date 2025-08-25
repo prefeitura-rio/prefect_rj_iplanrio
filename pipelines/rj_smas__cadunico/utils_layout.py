@@ -765,7 +765,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
     log("GET RAW PARTITIONS")
     raw_filespaths_to_ingest = download_files_from_storage_raw(
         raw_bucket=raw_bucket,
-        raw_prefix_area=raw_prefix_area,
+        raw_prefix_area=f"raw/protecao_social_cadunico/layout",
         staging_partitions_list=staging_partitions_list,
         output_path_str="/tmp/cadunico/raw/layout",
     )
