@@ -86,7 +86,7 @@ def update_layout_from_storage_and_create_versions_dbt_models_task(
 @task
 def push_models_to_branch_task(
     repository_path: str,
-    github_token: Optional[str],
+    github_token: Optional[str] = None,
     commit_message: str = "feat: update CadUnico models",
     author_name: str = "pipeline_cadunico",
     author_email: str = "pipeline@prefeitura.rio",
