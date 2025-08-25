@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # /// script
 # dependencies = [
 #     "prefect-docker>=0.6.5",
