@@ -2,3 +2,7 @@
 name = "rj_smas__cadunico"
 version = "0.1.0"
 description = "Pipeline cadunico da secretaria smas"
+dependencies = [
+    "openpyxl>=3.1.5",
+    "xlrd>=2.0.2",
+]

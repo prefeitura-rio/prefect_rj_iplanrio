@@ -4,10 +4,10 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials
 from prefect import flow
 
 from pipelines.rj_smas__cadunico.tasks import (
-    get_existing_partitions,
-    get_files_to_ingest,
-    ingest_files,
-    need_to_ingest,
+    get_existing_partitions_task,
+    get_files_to_ingest_task,
+    ingest_files_task,
+    need_to_ingest_task,
 )
 
 
@@ -31,7 +31,7 @@ def rj_smas__cadunico(
     _ = inject_bd_credentials()
 
     # Verificar o que já existe em staging
-    existing_partitions = get_existing_partitions(
+    existing_partitions = get_existing_partitions_task(
         prefix=staging_prefix_area,
         bucket_name=staging_bucket,
         dataset_id=dataset_id,
@@ -39,14 +39,14 @@ def rj_smas__cadunico(
     )
 
     # Identificar arquivos novos para ingerir
-    files_to_ingest = get_files_to_ingest(
+    files_to_ingest = get_files_to_ingest_task(
         prefix=raw_prefix_area, partitions=existing_partitions, bucket_name=raw_bucket
     )
 
     # Verificar se há arquivos para ingerir
-    if need_to_ingest(files_to_ingest=files_to_ingest):
+    if need_to_ingest_task(files_to_ingest=files_to_ingest):
         # Processar arquivos de forma assíncrona com upload imediato
-        ingest_files(
+        ingest_files_task(
             files_to_ingest=files_to_ingest,
             bucket_name=raw_bucket,
             dataset_id=dataset_id,

@@ -4,10 +4,10 @@ import os
 from iplanrio.pipelines_utils.env import getenv_or_action
 
 # if file .env exists, load it
-if os.path.exists("src/config/.env"):  # noqa
+if os.path.exists("pipelines/rj_iplanrio__eai_history/.env"):  # noqa
     import dotenv
 
-    dotenv.load_dotenv(dotenv_path="src/config/.env")
+    dotenv.load_dotenv(dotenv_path="pipelines/rj_iplanrio__eai_history/.env")
 
 PROJECT_ID = getenv_or_action("EAI__PROJECT_ID")
 LOCATION = getenv_or_action("EAI__LOCATION")
