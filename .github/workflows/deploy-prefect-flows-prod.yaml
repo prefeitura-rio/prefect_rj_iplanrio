@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       force_deploy:
-        description: "Force deploy all flows"
+        description: "Force deploy all flows (conflicts with pipeline option)"
         required: false
         type: boolean
         default: false
@@ -33,6 +33,10 @@ on:
         required: false
         type: number
         default: 2
+      pipeline:
+        description: "Deploy specific pipeline (conflicts with force deploy)"
+        required: false
+        type: string
 
 jobs:
   deploy-prefect-prod-flows:
@@ -59,3 +63,4 @@ jobs:
           batch_size: ${{ github.event.inputs.batch_size || '3' }}
           cleanup_docker: ${{ github.event.inputs.cleanup_docker || 'true' }}
           max_retries: ${{ github.event.inputs.max_retries || '2' }}
+          pipeline: ${{ github.event.inputs.pipeline }}
