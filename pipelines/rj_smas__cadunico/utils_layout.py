@@ -17,6 +17,7 @@ from iplanrio.pipelines_utils.gcs import (
     list_blobs_with_prefix,
 )
 from iplanrio.pipelines_utils.logging import log
+from pipelines.rj_smas__cadunico.utils_logging import PipelineLogger
 from iplanrio.pipelines_utils.pandas import to_partitions
 from unidecode import unidecode
 
@@ -128,10 +129,11 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
 
     found_versions = df_final["version"].unique().tolist()
     found_versions.sort()
-    log(f"PARSED VERSIONS: {found_versions}")
+    # Log consolidado de versões
+    version_info = f"PARSED VERSIONS: {found_versions}\nFiltered versions: {filter_versions}"
+    log(version_info)
 
     df_final = df_final[df_final["version"].isin(filter_versions)]
-    log(f"Filtered versions: {filter_versions}")
 
     df_final["column"] = df_final["arquivo_base_versao_7"].fillna("sem_nome")
     df_final["column"] = df_final["column"].apply(
@@ -199,8 +201,10 @@ def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, tabl
     """
     # List blobs in staging area
 
-    log(f"Listing blobs in staging area with prefix {bucket_name}/{prefix}")
-    log(f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}")
+    # Log consolidado de staging blobs
+    staging_info = f"Listing blobs in staging area with prefix {bucket_name}/{prefix}\n"
+    staging_info += f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}"
+    log(staging_info)
 
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(staging_blobs)} blobs in staging area")
@@ -226,8 +230,10 @@ def download_files_from_storage_raw(
     raw_prefix_area="raw/protecao_social_cadunico/layout",
 ):
     raw_blobs = list_blobs_with_prefix(bucket_name=raw_bucket, prefix=raw_prefix_area)
-    log(f"https://console.cloud.google.com/storage/browser/{raw_bucket}/{raw_prefix_area}")
-    log(f"Found {len(raw_blobs)} blobs in raw area")
+    # Log consolidado de raw blobs
+    raw_info = f"https://console.cloud.google.com/storage/browser/{raw_bucket}/{raw_prefix_area}\n"
+    raw_info += f"Found {len(raw_blobs)} blobs in raw area"
+    log(raw_info)
 
     raw_blobs_files = []
     for blob in raw_blobs:
@@ -262,7 +268,8 @@ def download_files_from_storage_raw(
             "raw": version in raw_versions,
         }
 
-    log("📊 COMPARAÇÃO DE VERSÕES (staging vs raw):")
+    # Log consolidado de comparação de versões
+    comparison_msg = "📊 COMPARAÇÃO DE VERSÕES (staging vs raw):\n"
     for version, status in comparison_log.items():
         staging_status = "✅" if status["staging"] else "❌"
         raw_status = "✅" if status["raw"] else "❌"
@@ -277,7 +284,8 @@ def download_files_from_storage_raw(
         else:
             action = "→ INCONSISTENTE"
 
-        log(f"   {version}: staging={staging_status} raw={raw_status} {action}")
+        comparison_msg += f"   {version}: staging={staging_status} raw={raw_status} {action}\n"
+    log(comparison_msg)
 
     log(
         f"📈 RESUMO: {len(raw_versions)} versões no raw, {len(staging_partitions_list)} no staging, {len(raw_filespaths_to_ingest)} para ingerir"
@@ -287,7 +295,6 @@ def download_files_from_storage_raw(
 
 
 def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_id, layout_table_id):
-    log("VALIDATE COLUMN NAMES\n")
     query = f"""
     WITH layout_unique_columns AS (
         SELECT
@@ -315,7 +322,9 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
     ORDER BY coluna_layout
     """
 
-    log(f"Columns Validation Query:\n{query}")
+    # Log consolidado de validação de colunas
+    validation_info = f"VALIDATE COLUMN NAMES\n\nColumns Validation Query:\n{query}"
+    log(validation_info)
     df_validation = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
 
     if df_validation is not None:
@@ -330,8 +339,6 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
             raise_msg += "https://docs.google.com/spreadsheets/d/1VgtSVom_s4QsJoOws6caPZxGfwYrpjpoSjbOrqhRbM8/edit?gid=542906575#gid=542906575\n\n"
             raise_msg += f"Colunas que devem ser inseridas:\n{columns_to_create_str}"
             raise ValueError(raise_msg)
-    log(f"GET CONSOLIDATE LAYOUT TO CREATE: `{project_id}.{dataset_id}_staging.layout_columns_version_control`")
-
     query = f"""
         SELECT
             t1.* EXCEPT(column),
@@ -341,7 +348,9 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
         ON t1.column = t2.column
         WHERE table != "REG_99_DIARIA"
     """
-    log(f"Using project_id: {project_id}\n\n{query}")
+    # Log consolidado de layout consolidado
+    layout_info = f"GET CONSOLIDATE LAYOUT TO CREATE: `{project_id}.{dataset_id}_staging.layout_columns_version_control`\nUsing project_id: {project_id}\n\n{query}"
+    log(layout_info)
     dataframe = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
 
     versions = get_existing_partitions(
@@ -350,17 +359,35 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
         table_id=registo_familia_table_id,
         prefix=f"staging/{dataset_id}/{registo_familia_table_id}",
     )
-    log(
-        f"Dataframe will be filtered using versions from {project_id}.{dataset_id}_staging.{registo_familia_table_id}: {versions}"  # noqa
-    )
+
     if dataframe is not None and not dataframe.empty:
+        layout_versions = dataframe["versao_layout_particao"].tolist()
+        not_in_layout_versions = [version for version in versions if version not in layout_versions]  # noqa
+        if not_in_layout_versions:
+            raise_msg = ""
+            raise_msg += "Please, upload the layouts to the storage raw:\n"
+            raise_msg += (
+                "https://console.cloud.google.com/storage/browser/rj-smas/raw/protecao_social_cadunico/layout\n\n"
+            )
+            raise_msg += "layout versions to be uploaded\n{not_in_layout_versions}"
+
+            raise ValueError(raise_msg)
+
+        log(
+            f"Dataframe will be filtered using versions from {project_id}.{dataset_id}_staging.{registo_familia_table_id}: {versions}"  # noqa
+        )
+
         return dataframe[dataframe["versao_layout_particao"].isin(versions)]
     else:
         raise ValueError(f"Dataframe is None or empty: {dataframe}")
 
 
 def columns_version_control_diff(dataframe: pd.DataFrame):
+    """Analisa diferenças entre versões de layout com logging consolidado detalhado"""
     df_concat = pd.DataFrame()
+    version_warnings = []  # Coletar warnings para log consolidado
+    tables_dict = get_tables_names_dict()  # Obter nomes reais das tabelas
+
     for reg in dataframe["reg"].unique().tolist():
         df_table = dataframe[dataframe["reg"] == reg]
         table_versions = df_table["versao_layout_particao"].unique().tolist()
@@ -377,27 +404,41 @@ def columns_version_control_diff(dataframe: pd.DataFrame):
 
             control_column_version = []
             prev_versions = []
+            missing_columns_in_table = []
+
             for nv_col in next_version_columns:
                 prev_versions.append(current_version)
                 if nv_col not in version_columns:
                     control_column_version.append("False")
-                    log_msg = (
-                        f"Table {reg} version {next_version}\n"
-                        + f"Column {nv_col} not found in version {current_version}"
-                    )
-                    log(log_msg, level="warning")
+                    missing_columns_in_table.append(nv_col)
                 else:
                     control_column_version.append("True")
+
+            # Registrar warnings detalhados da tabela se houver
+            if missing_columns_in_table:
+                # Obter nome real da tabela
+                table_name = tables_dict.get(reg.zfill(2), f"reg_{reg}")
+
+                # Criar warning detalhado com TODAS as colunas
+                columns_list = ", ".join(missing_columns_in_table)
+                warning_msg = f"Tabela {reg.zfill(2)} ({table_name}) v{next_version}: Colunas ausentes em v{current_version}: [{columns_list}]"
+                version_warnings.append(warning_msg)
 
             df_next_version["versao_layout_anterior"] = prev_versions
             df_next_version["coluna_esta_versao_anterior"] = control_column_version
 
             df_concat = pd.concat([df_concat, df_next_version])
+
+    # Log consolidado de todos os warnings encontrados (SEM OMISSÃO)
+    if version_warnings:
+        logger = PipelineLogger()
+        logger.log_warning_summary("INCONSISTÊNCIAS ENTRE VERSÕES", version_warnings)
+
     return df_concat.sort_values(["reg", "versao_layout_particao"])
 
 
 def parse_columns_version_control(dataframe: pd.DataFrame):
-    log("ASCENDING SEARCH\n")
+    log("ASCENDING SEARCH")
     df_ascending = columns_version_control_diff(dataframe=dataframe.sort_values(["reg", "versao_layout_particao"]))
     # create new row for versions lass than versao_layout_anterior
     versions = df_ascending["versao_layout_particao"].unique()
@@ -417,7 +458,7 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
     df_final = pd.concat([df_ascending, df_new])
     df_final = df_final.sort_values(["reg", "versao_layout_particao"])
 
-    log("\nDESCENDING SEARCH\n")
+    log("DESCENDING SEARCH")
     df_descending = columns_version_control_diff(
         dataframe=dataframe.sort_values(["reg", "versao_layout_particao"], ascending=False)
     )
@@ -466,7 +507,7 @@ def dump_dict_to_dbt_yaml(schema, schema_yaml_path):
                     + f"Description lenght:{col_description_lenght}"
                 )
                 log(log_msg, level="warning")
-    log(f"Dumping schema to {schema_yaml_path}")
+    # log(f"Dumping schema to {schema_yaml_path}")
     ruamel.dump(
         schema,
         open(Path(schema_yaml_path), "w", encoding="utf-8"),
@@ -753,8 +794,19 @@ def update_layout_from_storage_and_create_versions_dbt_models(
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
 ):
-    log("GET STAGING PARTITIONS")
+    logger = PipelineLogger("Materialização CadÚnico")
+
+    # FASE 1: Sincronização de Layouts
+    logger.start_phase(
+        "SINCRONIZAÇÃO DE LAYOUTS",
+        {
+            "dataset": dataset_id,
+            "raw_bucket": raw_bucket,
+            "staging_bucket": staging_bucket,
+        },
+    )
     staging_prefix_area = f"staging/{dataset_id}/{layout_table_id}"
+    logger.log_progress("VERIFICANDO PARTIÇÕES EM STAGING")
     staging_partitions_list = get_existing_partitions(
         prefix=staging_prefix_area,
         bucket_name=staging_bucket,
@@ -762,19 +814,23 @@ def update_layout_from_storage_and_create_versions_dbt_models(
         table_id=layout_table_id,
     )
 
-    log("GET RAW PARTITIONS")
+    logger.log_progress("BUSCANDO NOVOS LAYOUTS EM RAW")
     raw_filespaths_to_ingest = download_files_from_storage_raw(
         raw_bucket=raw_bucket,
-        raw_prefix_area=raw_prefix_area,
+        raw_prefix_area=f"raw/protecao_social_cadunico/layout",
         staging_partitions_list=staging_partitions_list,
         output_path_str="/tmp/cadunico/raw/layout",
     )
+
+    files_to_process = len(raw_filespaths_to_ingest) if raw_filespaths_to_ingest else 0
+
     if raw_filespaths_to_ingest:
-        log(f"FILES TO INGEST: {raw_filespaths_to_ingest}")
+        logger.log_progress("PROCESSANDO LAYOUTS NOVOS", {"arquivos": files_to_process})
         output_path = parse_xlsx_files_and_save_partition(
             output_path="/tmp/cadunico/staging/layout",
             raw_filespaths_to_ingest=raw_filespaths_to_ingest,
         )
+        log(f"CRIANDO TABELA DE LAYOUT: {raw_bucket}.{dataset_id}.{layout_table_id}")
         output_path_result = create_table_and_upload_to_gcs(
             data_path=str(output_path),
             dump_mode="append",
@@ -783,10 +839,18 @@ def update_layout_from_storage_and_create_versions_dbt_models(
             only_staging_dataset=True,
         )
         output_path = str(output_path_result)
+        logger.complete_phase(True, {"layouts_processados": files_to_process})
     else:
-        log("NO LAYOUT FILES TO INGEST")
+        logger.complete_phase(True, {"layouts_novos": 0, "status": "nenhum arquivo novo"})
+
+    # FASE 2: Geração de Modelos DBT
     if raw_filespaths_to_ingest or force_create_models:
-        log("GET LAYOUT TABLE FROM STAGING")
+        logger.start_phase(
+            "GERAÇÃO DE MODELOS DBT",
+            {"força_criação": force_create_models, "repositório": repository_path},
+        )
+
+        logger.log_progress("CARREGANDO LAYOUT CONSOLIDADO DO STAGING")
         dataframe = get_layout_table_from_staging(
             project_id=staging_bucket,
             dataset_id=dataset_id,
@@ -794,18 +858,27 @@ def update_layout_from_storage_and_create_versions_dbt_models(
             registo_familia_table_id=registo_familia_table_id,
         )
 
-        log("CREATE LAYOUT COLUMNS VERSION CONTROL IN BQ")
+        logger.log_progress("CRIANDO CONTROLE DE VERSÕES CROSS-LAYOUT")
         df_final = create_layout_column_cross_version_control_bq_table(
             dataframe=dataframe, dataset_id=dataset_id, table_id=layout_table_id
         )
 
-        log("CREATE DBT CONSOLIDATED MODELS")
+        logger.log_progress("GERANDO MODELOS DBT CONSOLIDADOS")
         create_cadunico_dbt_consolidated_models(
             project_id=staging_bucket,
             dbt_repository_path=repository_path,
             dataframe=df_final,
             model_dataset_id=dataset_id,
             model_table_id=registo_familia_table_id,
+        )
+
+        tables_dict = get_tables_names_dict()
+        logger.complete_phase(
+            True,
+            {
+                "tabelas_processadas": (len(df_final["reg"].unique()) if not df_final.empty else 0),
+                "tipos_modelo": len(tables_dict),
+            },
         )
 
 
