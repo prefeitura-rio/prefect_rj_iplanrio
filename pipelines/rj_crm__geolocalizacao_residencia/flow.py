@@ -52,7 +52,7 @@ def rj_crm__geolocalizacao_residencia(
 ):
     """
     Flow para geolocalizar endereços residenciais usando múltiplas estratégias.
-    
+
     Este flow suporta três estratégias de geocoding:
     1. 'nominatim' - Usa apenas Nominatim self-hosted (rápido, menor precisão)
     2. 'fallback' - Usa múltiplos provedores sequencialmente (lento, maior precisão)
@@ -81,24 +81,24 @@ def rj_crm__geolocalizacao_residencia(
     billing_project_id = billing_project_id or GeolocalizacaoConstants.BILLING_PROJECT_ID.value
     bucket_name = bucket_name or GeolocalizacaoConstants.BUCKET_NAME.value
     biglake_table = biglake_table if biglake_table is not None else GeolocalizacaoConstants.BIGLAKE_TABLE.value
-    
+
     file_folder = file_folder or GeolocalizacaoConstants.FILE_FOLDER.value
     file_format = file_format or GeolocalizacaoConstants.FILE_FORMAT.value
     source_format = source_format or GeolocalizacaoConstants.SOURCE_FORMAT.value
     dump_mode = dump_mode or GeolocalizacaoConstants.DUMP_MODE.value
-    
+
     max_concurrent_nominatim = max_concurrent_nominatim or GeolocalizacaoConstants.MAX_CONCURRENT_NOMINATIM.value
-    return_original_cols = return_original_cols if return_original_cols is not None else GeolocalizacaoConstants.RETURN_ORIGINAL_COLS.value
+    return_original_cols = (
+        return_original_cols if return_original_cols is not None else GeolocalizacaoConstants.RETURN_ORIGINAL_COLS.value
+    )
     geoapify_batch_size = geoapify_batch_size or GeolocalizacaoConstants.GEOAPIFY_BATCH_SIZE.value
-    
+
     # Query to use
     query = query_override or GeolocalizacaoConstants.ADDRESS_QUERY.value
     address_column = GeolocalizacaoConstants.ADDRESS_COLUMN.value
 
     # Renomear flow run para melhor identificação
-    rename_flow_run = rename_current_flow_run_task(
-        new_name=f"geo_{provider_strategy}_{table_id}_{dataset_id}"
-    )
+    rename_flow_run = rename_current_flow_run_task(new_name=f"geo_{provider_strategy}_{table_id}_{dataset_id}")
 
     # Injetar credenciais do BD
     crd = inject_bd_credentials_task(environment="prod")
@@ -123,14 +123,14 @@ def rj_crm__geolocalizacao_residencia(
                 max_concurrent_nominatim=max_concurrent_nominatim,
                 return_original_cols=return_original_cols,
             )
-            
+
         elif provider_strategy == GeolocalizacaoConstants.STRATEGY_FALLBACK.value:
             # Strategy 2: Multiple provider fallback (slower, higher accuracy)
             georeferenced_table = async_geocoding_dataframe_with_fallback(
                 dataframe=dataframe,
                 address_column=address_column,
             )
-            
+
         elif provider_strategy == GeolocalizacaoConstants.STRATEGY_GEOAPIFY_BATCH.value:
             # Strategy 3: Geoapify batch processing (medium speed, good accuracy)
             georeferenced_table = geoapify_batch_geocoding_task(
@@ -140,7 +140,9 @@ def rj_crm__geolocalizacao_residencia(
                 return_original_cols=return_original_cols,
             )
         else:
-            raise ValueError(f"Invalid provider_strategy: {provider_strategy}. Must be one of: nominatim, fallback, geoapify_batch")
+            raise ValueError(
+                f"Invalid provider_strategy: {provider_strategy}. Must be one of: nominatim, fallback, geoapify_batch"
+            )
 
         # Check if geocoding produced results
         empty_geocoded = check_df_emptiness(dataframe=georeferenced_table)
@@ -148,14 +150,12 @@ def rj_crm__geolocalizacao_residencia(
         if not empty_geocoded:
             # Add plus codes
             georeferenced_table = add_plus_code_column(georeferenced_table)
-            
+
             # Save to file
             base_path = dataframe_to_file(
-                dataframe=georeferenced_table, 
-                file_folder=file_folder,
-                file_format=file_format
+                dataframe=georeferenced_table, file_folder=file_folder, file_format=file_format
             )
-            
+
             # Upload to GCS and BigQuery
             create_table_and_upload_to_gcs_task(
                 data_path=base_path,

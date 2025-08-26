@@ -10,9 +10,9 @@ import pandas as pd
 import pendulum
 import requests
 from geopy.geocoders import Nominatim
-from openlocationcode import openlocationcode as olc
 from iplanrio.pipelines_utils.infisical import get_secret
 from iplanrio.pipelines_utils.logging import log
+from openlocationcode import openlocationcode as olc
 from unidecode import unidecode
 
 GEOCODING_FIELDS = [
@@ -39,10 +39,7 @@ JITTER_RANGE = 0.1
 
 def _prepare_addresses_for_nominatim(addresses: list[str]) -> list[str]:
     """Prepare addresses for Nominatim geocoding by ensuring Rio de Janeiro context."""
-    return [
-        f"{address}, Rio de Janeiro" if "Rio de Janeiro" not in address else address
-        for address in addresses
-    ]
+    return [f"{address}, Rio de Janeiro" if "Rio de Janeiro" not in address else address for address in addresses]
 
 
 def _create_empty_geocoding_result(updated_date: str) -> list:
@@ -99,9 +96,7 @@ def geocode_nominatim(
 
         try:
             cleaned_address = address.replace(" RJ,", "").replace("Brasil", "Brazil")
-            location = geolocator.geocode(
-                cleaned_address, country_codes=["br"], addressdetails=True
-            )
+            location = geolocator.geocode(cleaned_address, country_codes=["br"], addressdetails=True)
             geolocated_addresses = _parse_nominatim_result(location, updated_date)
             consecutive_errors = 0
         except Exception as e:
@@ -168,9 +163,7 @@ def _parse_geocode_xyz_result(data: dict, index: int, data_store: dict) -> None:
     )
     data_store["numero_porta_geocode"][index] = standard.get("stnumber")
     data_store["bairro_geocode"][index] = None
-    data_store["cidade_geocode"][index] = (
-        unidecode(standard.get("city", "")).lower() if standard.get("city") else None
-    )
+    data_store["cidade_geocode"][index] = unidecode(standard.get("city", "")).lower() if standard.get("city") else None
 
     estado_geocode = standard.get("statename")
     if isinstance(estado_geocode, str):
@@ -233,9 +226,7 @@ def geocode_geocodexyz(
     while retry_count < max_retries:
         should_break = False
 
-        for i, address in enumerate(
-            dataframe[address_column].iloc[start_index:], start=start_index
-        ):
+        for i, address in enumerate(dataframe[address_column].iloc[start_index:], start=start_index):
             try:
                 url = _build_geocode_xyz_url(base_url, address, api_key)
                 response = requests.get(url, timeout=DEFAULT_TIMEOUT)
@@ -303,9 +294,7 @@ def geocode_locationiq(
 
     # Obtém o número de requisições restantes na API
     try:
-        balance_response = requests.get(
-            f"https://us1.locationiq.com/v1/balance?key={api_key}&format=json"
-        ).json()
+        balance_response = requests.get(f"https://us1.locationiq.com/v1/balance?key={api_key}&format=json").json()
         num_requests_left = int(balance_response.get("balance", {}).get("day", 0))
     except Exception as e:
         print(f"Erro ao verificar o saldo de requisições: {e}")
@@ -330,17 +319,11 @@ def geocode_locationiq(
             data = response.json()
 
             if isinstance(data, list) and data:
-                valid_results = [
-                    res
-                    for res in data
-                    if "Rio de Janeiro" in res.get("display_name", "").split(", ")[2]
-                ]
+                valid_results = [res for res in data if "Rio de Janeiro" in res.get("display_name", "").split(", ")[2]]
                 best_result = max(valid_results, key=lambda x: x.get("importance", 0), default=None)
 
                 if best_result:
-                    display_parts = [
-                        unidecode(p.strip().lower()) for p in best_result["display_name"].split(",")
-                    ]
+                    display_parts = [unidecode(p.strip().lower()) for p in best_result["display_name"].split(",")]
 
                     dataframe.at[idx, "latitude"] = float(best_result.get("lat", 0))
                     dataframe.at[idx, "longitude"] = float(best_result.get("lon", 0))
@@ -398,24 +381,14 @@ def geocode_opencage(
 
                 data_store["latitude"].append(result["geometry"].get("lat"))
                 data_store["longitude"].append(result["geometry"].get("lng"))
-                data_store["logradouro_geocode"].append(
-                    unidecode(components.get("road", "").strip().lower())
-                )
+                data_store["logradouro_geocode"].append(unidecode(components.get("road", "").strip().lower()))
                 data_store["numero_porta_geocode"].append(None)
-                data_store["bairro_geocode"].append(
-                    unidecode(components.get("suburb", "").strip().lower())
-                )
+                data_store["bairro_geocode"].append(unidecode(components.get("suburb", "").strip().lower()))
                 if "city" in components:
-                    data_store["cidade_geocode"].append(
-                        unidecode(components.get("city", "").strip().lower())
-                    )
+                    data_store["cidade_geocode"].append(unidecode(components.get("city", "").strip().lower()))
                 else:
-                    data_store["cidade_geocode"].append(
-                        unidecode(components.get("county", "").strip().lower())
-                    )
-                data_store["estado_geocode"].append(
-                    unidecode(components.get("state", "").strip().lower())
-                )
+                    data_store["cidade_geocode"].append(unidecode(components.get("county", "").strip().lower()))
+                data_store["estado_geocode"].append(unidecode(components.get("state", "").strip().lower()))
                 data_store["cep_geocode"].append(components.get("postcode", "").strip())
                 data_store["confianca"].append(result.get("confidence", 0) / 10)
                 data_store["updated_date"].append(pd.Timestamp.now().strftime("%Y-%m-%d"))
@@ -456,22 +429,19 @@ def geocode_maptiler(
 
     for i, address in enumerate(dataframe[address_column]):
         # Prepare address for MapTiler (include Rio de Janeiro context)
-        search_address = f"{address}, Rio de Janeiro, Brazil" if "Rio de Janeiro" not in address else f"{address}, Brazil"
-        
+        search_address = (
+            f"{address}, Rio de Janeiro, Brazil" if "Rio de Janeiro" not in address else f"{address}, Brazil"
+        )
+
         url = f"{base_url}/{search_address}.json"
-        params = {
-            "key": api_key,
-            "language": "pt",
-            "limit": 1,
-            "country": "br"
-        }
+        params = {"key": api_key, "language": "pt", "limit": 1, "country": "br"}
 
         try:
             response = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
 
             if response.status_code == 402:  # Quota excedida
                 raise requests.exceptions.HTTPError("402 Payment Required - quota exceeded")
-            
+
             if response.status_code == 429:  # Rate limit
                 raise requests.exceptions.HTTPError("429 Too Many Requests - rate limited")
 
@@ -481,7 +451,7 @@ def geocode_maptiler(
                 result = data["features"][0]
                 geometry = result.get("geometry", {})
                 properties = result.get("properties", {})
-                
+
                 # Extract coordinates
                 coordinates = geometry.get("coordinates", [])
                 lon = coordinates[0] if len(coordinates) > 0 else None
@@ -489,26 +459,24 @@ def geocode_maptiler(
 
                 data_store["latitude"].append(lat)
                 data_store["longitude"].append(lon)
-                
+
                 # Parse address components from properties
                 place_name = properties.get("place_name", "")
                 context = properties.get("context", [])
-                
+
                 # Extract street from text or place_name
                 street = properties.get("text", "")
                 if street:
-                    data_store["logradouro_geocode"].append(
-                        unidecode(street).lower().strip()
-                    )
+                    data_store["logradouro_geocode"].append(unidecode(street).lower().strip())
                 else:
                     data_store["logradouro_geocode"].append(None)
-                
+
                 # Extract neighborhood/district from context
                 neighborhood = None
                 city = None
                 state = None
                 postcode = None
-                
+
                 for ctx in context:
                     ctx_type = ctx.get("id", "").split(".")[0]
                     if ctx_type in ["neighborhood", "locality"]:
@@ -519,19 +487,13 @@ def geocode_maptiler(
                         state = ctx.get("text", "")
                     elif ctx_type == "postcode":
                         postcode = ctx.get("text", "")
-                
+
                 data_store["numero_porta_geocode"].append(None)
-                data_store["bairro_geocode"].append(
-                    unidecode(neighborhood).lower().strip() if neighborhood else None
-                )
-                data_store["cidade_geocode"].append(
-                    unidecode(city).lower().strip() if city else "rio de janeiro"
-                )
-                data_store["estado_geocode"].append(
-                    unidecode(state).lower().strip() if state else "rio de janeiro"
-                )
+                data_store["bairro_geocode"].append(unidecode(neighborhood).lower().strip() if neighborhood else None)
+                data_store["cidade_geocode"].append(unidecode(city).lower().strip() if city else "rio de janeiro")
+                data_store["estado_geocode"].append(unidecode(state).lower().strip() if state else "rio de janeiro")
                 data_store["cep_geocode"].append(postcode.strip() if postcode else None)
-                
+
                 # MapTiler doesn't provide explicit confidence score, use 1.0 for successful matches
                 data_store["confianca"].append(1.0)
                 data_store["updated_date"].append(pd.Timestamp.now().strftime("%Y-%m-%d"))
@@ -559,7 +521,7 @@ def geocode_maptiler(
 
     successful_geocodes = output.dropna(subset=["latitude"]).shape[0]
     log(f"Found {successful_geocodes} addresses of {output.shape[0]} using MapTiler")
-    
+
     return output
 
 

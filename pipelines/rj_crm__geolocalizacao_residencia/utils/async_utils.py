@@ -6,7 +6,7 @@ Async helper functions for geocoding
 import asyncio
 import random
 from time import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import aiohttp
 import pandas as pd
@@ -21,17 +21,12 @@ from .geo_utils import (
     GEOCODING_FIELDS,
     JITTER_RANGE,
     MAX_BACKOFF_TIME,
-    MAX_RETRIES_DEFAULT,
-    _build_geocode_xyz_url,
     _create_empty_geocoding_result,
-    _is_valid_geocode_xyz_coordinates,
     _prepare_addresses_for_nominatim,
 )
 
 
-async def _async_exponential_backoff_sleep(
-    attempt: int, base_time: float = BASE_BACKOFF_TIME
-) -> None:
+async def _async_exponential_backoff_sleep(attempt: int, base_time: float = BASE_BACKOFF_TIME) -> None:
     """
     Async sleep with exponential backoff and jitter.
 
@@ -45,9 +40,7 @@ async def _async_exponential_backoff_sleep(
     await asyncio.sleep(sleep_time)
 
 
-def _create_empty_async_result(
-    address: str, updated_date: str, provider: str = "opencage"
-) -> Dict[str, Any]:
+def _create_empty_async_result(address: str, updated_date: str, provider: str = "opencage") -> Dict[str, Any]:
     """Create empty geocoding result for async functions."""
     return {
         "address": address,
@@ -65,13 +58,16 @@ def _create_empty_async_result(
     }
 
 
-def _log_progress(geocoder_name: str, processed: int, total: int, successes: int, 
-                 failures: int, interval: int = 100) -> None:
+def _log_progress(
+    geocoder_name: str, processed: int, total: int, successes: int, failures: int, interval: int = 100
+) -> None:
     """Log progress for geocoding operations at specified intervals."""
     if processed % interval == 0 or processed == total:
         success_rate = (successes / processed * 100) if processed > 0 else 0
-        log(f"[{geocoder_name}] Processados: {processed}/{total} endereços "
-            f"({successes} sucessos, {failures} falhas) - {success_rate:.1f}% sucesso")
+        log(
+            f"[{geocoder_name}] Processados: {processed}/{total} endereços "
+            f"({successes} sucessos, {failures} falhas) - {success_rate:.1f}% sucesso"
+        )
 
 
 async def _geocode_single_nominatim_async(
@@ -109,15 +105,11 @@ async def _geocode_single_nominatim_async(
                 headers=headers,
                 timeout=aiohttp.ClientTimeout(total=DEFAULT_TIMEOUT),
             ) as response:
-
                 if response.status != 200:
-                    log(
-                        f"Nominatim request failed with status {response.status} "
-                        f"for address: {address}"
-                    )
+                    log(f"Nominatim request failed with status {response.status} for address: {address}")
                     # Use utility function for empty result
                     empty_result = _create_empty_geocoding_result(updated_date)
-                    geocode_result = dict(zip(GEOCODING_FIELDS, empty_result))
+                    geocode_result = dict(zip(GEOCODING_FIELDS, empty_result, strict=False))
                     geocode_result["address"] = address
                     geocode_result["geocode"] = "nominatim"
                     return geocode_result
@@ -134,25 +126,17 @@ async def _geocode_single_nominatim_async(
                         "latitude": location_data.get("lat"),
                         "longitude": location_data.get("lon"),
                         "logradouro_geocode": (
-                            unidecode(address_data.get("road", "")).lower()
-                            if address_data.get("road")
-                            else None
+                            unidecode(address_data.get("road", "")).lower() if address_data.get("road") else None
                         ),
                         "numero_porta_geocode": address_data.get("house_number"),
                         "bairro_geocode": (
-                            unidecode(address_data.get("suburb", "")).lower()
-                            if address_data.get("suburb")
-                            else None
+                            unidecode(address_data.get("suburb", "")).lower() if address_data.get("suburb") else None
                         ),
                         "cidade_geocode": (
-                            unidecode(address_data.get("city", "")).lower()
-                            if address_data.get("city")
-                            else None
+                            unidecode(address_data.get("city", "")).lower() if address_data.get("city") else None
                         ),
                         "estado_geocode": (
-                            unidecode(address_data.get("state", "")).lower()
-                            if address_data.get("state")
-                            else None
+                            unidecode(address_data.get("state", "")).lower() if address_data.get("state") else None
                         ),
                         "cep_geocode": address_data.get("postcode"),
                         "confianca": None,
@@ -162,14 +146,14 @@ async def _geocode_single_nominatim_async(
                 else:
                     # Use utility function for empty result
                     empty_result = _create_empty_geocoding_result(updated_date)
-                    geocode_result = dict(zip(GEOCODING_FIELDS, empty_result))
+                    geocode_result = dict(zip(GEOCODING_FIELDS, empty_result, strict=False))
                     geocode_result["address"] = address
                     geocode_result["geocode"] = "nominatim"
 
         except Exception:
             # Use utility function for empty result
             empty_result = _create_empty_geocoding_result(updated_date)
-            geocode_result = dict(zip(GEOCODING_FIELDS, empty_result))
+            geocode_result = dict(zip(GEOCODING_FIELDS, empty_result, strict=False))
             geocode_result["address"] = address
             geocode_result["geocode"] = "nominatim"
 
@@ -197,7 +181,7 @@ async def _geocode_single_waze_async(
             "exp": "8,10,12",
             "geo-env": "row",
             "v": "-22.93958242,-43.198843;-22.87404002,-43.1470871",
-            "lang": "pt-BR"
+            "lang": "pt-BR",
         }
         updated_date = pd.Timestamp.now().strftime("%Y-%m-%d")
 
@@ -218,17 +202,17 @@ async def _geocode_single_waze_async(
                         # Get the first result
                         result = data[0]
                         location = result.get("location", {})
-                        
+
                         lat = location.get("lat")
                         lon = location.get("lon")
-                        
+
                         # Parse address components from result
                         name = result.get("name", "")
                         full_name = result.get("fullName", "")
-                        
+
                         # Extract components from fullName or name
                         address_parts = full_name.split(", ") if full_name else name.split(", ")
-                        
+
                         street = address_parts[0] if len(address_parts) > 0 else ""
                         neighborhood = address_parts[1] if len(address_parts) > 1 else ""
                         city = address_parts[2] if len(address_parts) > 2 else "Rio de Janeiro"
@@ -250,7 +234,7 @@ async def _geocode_single_waze_async(
                     else:
                         geocode_result = _create_empty_async_result(address, updated_date, "waze")
 
-        except Exception as e:
+        except Exception:
             geocode_result = _create_empty_async_result(address, updated_date, "waze")
 
     # Sleep outside semaphore to allow true concurrency
@@ -273,15 +257,12 @@ async def _geocode_single_maptiler_async(
     """Geocode a single address using MapTiler API asynchronously."""
     async with semaphore:
         # Prepare address for MapTiler (include Rio de Janeiro context)
-        search_address = f"{address}, Rio de Janeiro, Brazil" if "Rio de Janeiro" not in address else f"{address}, Brazil"
-        
+        search_address = (
+            f"{address}, Rio de Janeiro, Brazil" if "Rio de Janeiro" not in address else f"{address}, Brazil"
+        )
+
         url = f"https://api.maptiler.com/geocoding/{search_address}.json"
-        params = {
-            "key": api_key,
-            "language": "pt",
-            "limit": 1,
-            "country": "br"
-        }
+        params = {"key": api_key, "language": "pt", "limit": 1, "country": "br"}
         updated_date = pd.Timestamp.now().strftime("%Y-%m-%d")
 
         try:
@@ -301,7 +282,7 @@ async def _geocode_single_maptiler_async(
                         result = data["features"][0]
                         geometry = result.get("geometry", {})
                         properties = result.get("properties", {})
-                        
+
                         # Extract coordinates
                         coordinates = geometry.get("coordinates", [])
                         lon = coordinates[0] if len(coordinates) > 0 else None
@@ -309,16 +290,16 @@ async def _geocode_single_maptiler_async(
 
                         # Parse address components from properties
                         context = properties.get("context", [])
-                        
+
                         # Extract street from text or place_name
                         street = properties.get("text", "")
-                        
+
                         # Extract neighborhood/district from context
                         neighborhood = None
                         city = None
                         state = None
                         postcode = None
-                        
+
                         for ctx in context:
                             ctx_type = ctx.get("id", "").split(".")[0]
                             if ctx_type in ["neighborhood", "locality"]:
@@ -347,7 +328,7 @@ async def _geocode_single_maptiler_async(
                     else:
                         geocode_result = _create_empty_async_result(address, updated_date, "maptiler")
 
-        except Exception as e:
+        except Exception:
             geocode_result = _create_empty_async_result(address, updated_date, "maptiler")
 
     # Sleep outside semaphore to allow true concurrency
@@ -398,24 +379,24 @@ async def geocode_nominatim_async(
         successes = 0
         failures = 0
         total_addresses = len(valid_results)
-        
+
         for i, result in enumerate(valid_results):
             if i < len(output):
-                # Check if this result has valid coordinates 
+                # Check if this result has valid coordinates
                 has_coords = result.get("latitude") is not None and result.get("longitude") is not None
                 if has_coords:
                     successes += 1
                 else:
                     failures += 1
-                    
+
                 for field in GEOCODING_FIELDS:
                     if field in result:
                         output.at[i, field] = result[field]
-                
+
                 # Log progress every 100 addresses
                 processed = i + 1
                 _log_progress("Nominatim", processed, total_addresses, successes, failures)
-                
+
         output["geocode"] = "nominatim"
 
     if return_original_cols:
@@ -445,9 +426,7 @@ async def geocode_waze_async(
 
     async with aiohttp.ClientSession() as session:
         tasks = [
-            _geocode_single_waze_async(
-                session, semaphore, address, sleep_time, use_exponential_backoff
-            )
+            _geocode_single_waze_async(session, semaphore, address, sleep_time, use_exponential_backoff)
             for address in addresses
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -465,23 +444,23 @@ async def geocode_waze_async(
         successes = 0
         failures = 0
         total_addresses = len(valid_results)
-        
+
         for i, result in enumerate(valid_results):
-            # Check if this result has valid coordinates 
+            # Check if this result has valid coordinates
             has_coords = result.get("latitude") is not None and result.get("longitude") is not None
             if has_coords:
                 successes += 1
             else:
                 failures += 1
-                
+
             for field in GEOCODING_FIELDS:
                 if field in result:
                     output.at[i, field] = result[field]
-            
+
             # Log progress every 100 addresses
             processed = i + 1
             _log_progress("Waze", processed, total_addresses, successes, failures)
-            
+
         output["geocode"] = "waze"
 
     successful_geocodes = output.dropna(subset=["latitude"]).shape[0]
@@ -507,9 +486,7 @@ async def geocode_maptiler_async(
 
     async with aiohttp.ClientSession() as session:
         tasks = [
-            _geocode_single_maptiler_async(
-                session, semaphore, address, api_key, sleep_time, use_exponential_backoff
-            )
+            _geocode_single_maptiler_async(session, semaphore, address, api_key, sleep_time, use_exponential_backoff)
             for address in addresses
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -527,23 +504,23 @@ async def geocode_maptiler_async(
         successes = 0
         failures = 0
         total_addresses = len(valid_results)
-        
+
         for i, result in enumerate(valid_results):
-            # Check if this result has valid coordinates 
+            # Check if this result has valid coordinates
             has_coords = result.get("latitude") is not None and result.get("longitude") is not None
             if has_coords:
                 successes += 1
             else:
                 failures += 1
-                
+
             for field in GEOCODING_FIELDS:
                 if field in result:
                     output.at[i, field] = result[field]
-            
+
             # Log progress every 100 addresses
             processed = i + 1
             _log_progress("MapTiler", processed, total_addresses, successes, failures)
-            
+
         output["geocode"] = "maptiler"
 
     successful_geocodes = output.dropna(subset=["latitude"]).shape[0]

@@ -10,37 +10,34 @@ from uuid import uuid4
 import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery
-from prefect import task
 from iplanrio.pipelines_utils.infisical import get_secret
 from iplanrio.pipelines_utils.logging import log
+from prefect import task
 
-from pipelines.rj_crm__geolocalizacao_residencia.constants import GeolocalizacaoConstants
 from pipelines.rj_crm__geolocalizacao_residencia.utils.async_utils import (
+    run_geocode_maptiler_async,
     run_geocode_nominatim_async,
     run_geocode_waze_async,
-    run_geocode_maptiler_async,
 )
 from pipelines.rj_crm__geolocalizacao_residencia.utils.geo_utils import (
+    GEOCODING_FIELDS,
     coordinates_to_pluscode,
     geocode_geocodexyz,
     geocode_locationiq,
     geocode_opencage,
-    GEOCODING_FIELDS,
 )
 
 
 @task
 def download_data_from_bigquery(
-    query: str, 
-    billing_project_id: str, 
-    bucket_name: str, 
-    limit: int = None
+    query: str, billing_project_id: str, bucket_name: str, limit: int = None
 ) -> pd.DataFrame:
     """Download batch of addresses from BigQuery for geocoding"""
 
     # Apply dynamic limit if provided
     if limit is not None:
         import re
+
         query = re.sub(r"LIMIT \d+", f"LIMIT {limit}", query)
         log(f"Querying batch of addresses from BigQuery (max {limit} records)")
     else:
@@ -125,15 +122,11 @@ def async_geocoding_dataframe(
     # Ensure string types for all columns, replacing None with empty string
     if not final_dataframe.empty:
         final_dataframe = final_dataframe.fillna("")
-        final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype(
-            "str"
-        )
+        final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype("str")
         log(f"Final result preview: \n{final_dataframe.iloc[0]}")
 
     total_time = time() - start_time
-    final_success_rate = (
-        (len(final_dataframe) / total_addresses) * 100 if total_addresses > 0 else 0
-    )
+    final_success_rate = (len(final_dataframe) / total_addresses) * 100 if total_addresses > 0 else 0
     log(
         f"Async geocoding completed in {total_time: .2f}s - Final success "
         f"{len(final_dataframe)}/{total_addresses} ({final_success_rate: .1f}%)"
@@ -266,10 +259,7 @@ def async_geocoding_dataframe_with_fallback(
                 )
 
             # Check for rate limiting by examining results
-            all_empty = (
-                geocoder_result["latitude"].isna().all()
-                and geocoder_result["longitude"].isna().all()
-            )
+            all_empty = geocoder_result["latitude"].isna().all() and geocoder_result["longitude"].isna().all()
 
             if all_empty and len(remaining_failures) > 0:
                 log(f"{config['display_name']} appears to be rate limited - skipping")
@@ -284,9 +274,7 @@ def async_geocoding_dataframe_with_fallback(
 
             # Add new successes to our successful results
             if not new_successes.empty:
-                successful_results = pd.concat(
-                    [successful_results, new_successes], ignore_index=True
-                )
+                successful_results = pd.concat([successful_results, new_successes], ignore_index=True)
 
             geocoder_success = len(new_successes)
             log(f"{config['display_name']} geocoded {geocoder_success} additional addresses")
@@ -294,9 +282,7 @@ def async_geocoding_dataframe_with_fallback(
         except Exception as e:
             log(f"Error processing with {config['display_name']}: {e}")
             # Mark as rate limited if error suggests quota issues
-            if any(
-                term in str(e).lower() for term in ["402", "quota", "limit", "credits", "balance"]
-            ):
+            if any(term in str(e).lower() for term in ["402", "quota", "limit", "credits", "balance"]):
                 geocoder_status[config["name"]]["rate_limited"] = True
             continue
 
@@ -310,9 +296,7 @@ def async_geocoding_dataframe_with_fallback(
     # Ensure string types for all columns, replacing None with empty string
     if not successful_results.empty:
         successful_results = successful_results.fillna("")
-        successful_results[successful_results.columns] = successful_results[
-            successful_results.columns
-        ].astype("str")
+        successful_results[successful_results.columns] = successful_results[successful_results.columns].astype("str")
         log(f"Final result preview: \n{successful_results.iloc[0]}")
 
     total_time = time() - start_time
@@ -367,7 +351,7 @@ def geoapify_batch_geocoding_task(
     # For now, return empty results since we'd need to implement the full async Geoapify batch logic
     # This would require the full async batch implementation from the original code
     log("Geoapify batch geocoding not fully implemented - returning empty results")
-    
+
     # Return empty result DataFrame with proper structure
     final_dataframe = dataframe.copy()
     for field in GEOCODING_FIELDS:
@@ -434,9 +418,7 @@ def add_plus_code_column(df: pd.DataFrame) -> pd.DataFrame:
         Unit testing is recommended to ensure correct plus code generation.
     """
     df = df.copy()
-    df["pluscode"] = df.apply(
-        lambda row: coordinates_to_pluscode(row["latitude"], row["longitude"]), axis=1
-    )
+    df["pluscode"] = df.apply(lambda row: coordinates_to_pluscode(row["latitude"], row["longitude"]), axis=1)
     return df
 
 

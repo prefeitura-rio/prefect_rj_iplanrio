@@ -2,47 +2,48 @@
 """
 Constants for geolocation pipeline
 """
+
 from enum import Enum
 
 
 class GeolocalizacaoConstants(Enum):
     """Constants for geolocation pipeline"""
-    
+
     # Dataset and table configuration
     DATASET_ID = "intermediario_dados_mestres"
     TABLE_ID = "enderecos_geolocalizados"
     BILLING_PROJECT_ID = "rj-crm-registry"
     BUCKET_NAME = "rj-sms"
     BIGLAKE_TABLE = False
-    
+
     # File and data configuration
     FILE_FOLDER = "pipelines/data"
     FILE_FORMAT = "parquet"
     SOURCE_FORMAT = "parquet"
     DUMP_MODE = "append"
-    
+
     # Address column name
     ADDRESS_COLUMN = "endereco_completo"
     RETURN_ORIGINAL_COLS = True
-    
+
     # Geocoding configuration
     MAX_CONCURRENT_NOMINATIM = 100
     SLEEP_TIME = 1.1
     USE_EXPONENTIAL_BACKOFF = True
-    
+
     # Provider strategies
     STRATEGY_NOMINATIM = "nominatim"
     STRATEGY_FALLBACK = "fallback"
     STRATEGY_GEOAPIFY_BATCH = "geoapify_batch"
-    
+
     # Default strategy
     DEFAULT_STRATEGY = "fallback"
-    
+
     # Geoapify batch configuration
     GEOAPIFY_BATCH_SIZE = 100
     GEOAPIFY_MAX_WAIT_TIME = 300
     GEOAPIFY_POLL_INTERVAL = 5
-    
+
     # BigQuery address extraction query
     ADDRESS_QUERY = """
 WITH enderecos_rmi AS (
