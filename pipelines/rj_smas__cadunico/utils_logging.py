@@ -113,15 +113,13 @@ class PipelineLogger:
             level="info",
         )
 
-        # Log de arquivos com falha
+        # Log consolidado de arquivos com falha
         failed_files = [f for f in processed_files if not f.get("success", True)]
         if failed_files:
-            log(f"❌ ARQUIVOS COM FALHA ({len(failed_files)}):", level="error")
+            failed_msg = f"❌ ARQUIVOS COM FALHA ({len(failed_files)}): \n"
             for f in failed_files[:3]:  # Mostrar até 3 falhas
-                log(
-                    f"   • {f.get('name', 'Unknown')}: {f.get('error', 'Erro desconhecido')}",
-                    level="error",
-                )
+                failed_msg += f"   • {f.get('name', 'Unknown')}: {f.get('error', 'Erro desconhecido')}\n"
+            log(failed_msg, level="error")
 
     def log_model_generation_summary(self, created_models: List[str], tables_dict: Dict[str, str]):
         """Log consolidado de geração de modelos DBT"""
@@ -145,13 +143,16 @@ class PipelineLogger:
                     model_types[table_name] = model_types.get(table_name, 0) + 1
                     break
 
-        # Log dos tipos criados
-        for table_name, count in model_types.items():
-            log(f"   📄 {table_name}: {count} arquivo(s)", level="info")
+        # Log consolidado dos tipos criados
+        if model_types:
+            types_msg = ""
+            for table_name, count in model_types.items():
+                types_msg += f"   📄 {table_name}: {count} arquivo(s)\n"
+            log(types_msg, level="info")
 
     def log_comparison_table(self, title: str, comparisons: Dict[str, Dict[str, bool]]):
-        """Log de tabela de comparação (ex: raw vs staging)"""
-        log(f"📊 {title}:", level="info")
+        """Log de tabela de comparação consolidado (ex: raw vs staging)"""
+        comparison_msg = f"📊 {title}:\n"
 
         for item, status in comparisons.items():
             status_icons = []
@@ -174,7 +175,9 @@ class PipelineLogger:
             action_str = " ".join(actions)
             status_str = " | ".join(status_icons)
 
-            log(f"   {item}: {status_str} {action_str}", level="info")
+            comparison_msg += f"   {item}: {status_str} {action_str}\n"
+
+        log(comparison_msg, level="info")
 
     def _format_details(self, details: Dict[str, Any]) -> str:
         """Formata dicionário para exibição em logs"""
@@ -412,20 +415,20 @@ def log_ingestion_summary(
         level="info",
     )
 
-    # Log de arquivos com falha se houver
+    # Log consolidado de arquivos com falha se houver
     failed_results = [r for r in processing_results if not r.get("success", True)]
     if failed_results:
-        log(f"❌ FALHAS ({len(failed_results)}):", level="error")
+        failed_msg = f"❌ FALHAS ({len(failed_results)}): \n"
         for result in failed_results[:3]:  # Mostrar até 3 falhas
-            log(
-                f"   • {result.get('file_name', 'Unknown')}: {result.get('error', 'Erro desconhecido')}",
-                level="error",
-            )
+            failed_msg += f"   • {result.get('file_name', 'Unknown')}: {result.get('error', 'Erro desconhecido')}\n"
+        log(failed_msg, level="error")
 
     # Estatísticas de partições criadas
     partitions_created = list(set(r.get("partition") for r in processing_results if r.get("partition") is not None))
     if partitions_created:
+        # Filtrar valores None antes de ordenar
+        valid_partitions = [p for p in partitions_created if p is not None]
         log(
-            f"📅 PARTIÇÕES CRIADAS ({len(partitions_created)}): {', '.join(sorted(partitions_created))}",
+            f"📅 PARTIÇÕES CRIADAS ({len(valid_partitions)}): {', '.join(sorted(valid_partitions))}",
             level="info",
         )

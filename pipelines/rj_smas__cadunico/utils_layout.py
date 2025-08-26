@@ -129,10 +129,11 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
 
     found_versions = df_final["version"].unique().tolist()
     found_versions.sort()
-    log(f"PARSED VERSIONS: {found_versions}")
+    # Log consolidado de versões
+    version_info = f"PARSED VERSIONS: {found_versions}\nFiltered versions: {filter_versions}"
+    log(version_info)
 
     df_final = df_final[df_final["version"].isin(filter_versions)]
-    log(f"Filtered versions: {filter_versions}")
 
     df_final["column"] = df_final["arquivo_base_versao_7"].fillna("sem_nome")
     df_final["column"] = df_final["column"].apply(
@@ -200,8 +201,10 @@ def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, tabl
     """
     # List blobs in staging area
 
-    log(f"Listing blobs in staging area with prefix {bucket_name}/{prefix}")
-    log(f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}")
+    # Log consolidado de staging blobs
+    staging_info = f"Listing blobs in staging area with prefix {bucket_name}/{prefix}\n"
+    staging_info += f"https://console.cloud.google.com/storage/browser/{bucket_name}/staging/{dataset_id}/{table_id}"
+    log(staging_info)
 
     staging_blobs = list_blobs_with_prefix(bucket_name=bucket_name, prefix=prefix)
     log(f"Found {len(staging_blobs)} blobs in staging area")
@@ -227,8 +230,10 @@ def download_files_from_storage_raw(
     raw_prefix_area="raw/protecao_social_cadunico/layout",
 ):
     raw_blobs = list_blobs_with_prefix(bucket_name=raw_bucket, prefix=raw_prefix_area)
-    log(f"https://console.cloud.google.com/storage/browser/{raw_bucket}/{raw_prefix_area}")
-    log(f"Found {len(raw_blobs)} blobs in raw area")
+    # Log consolidado de raw blobs
+    raw_info = f"https://console.cloud.google.com/storage/browser/{raw_bucket}/{raw_prefix_area}\n"
+    raw_info += f"Found {len(raw_blobs)} blobs in raw area"
+    log(raw_info)
 
     raw_blobs_files = []
     for blob in raw_blobs:
@@ -263,7 +268,8 @@ def download_files_from_storage_raw(
             "raw": version in raw_versions,
         }
 
-    log("📊 COMPARAÇÃO DE VERSÕES (staging vs raw):")
+    # Log consolidado de comparação de versões
+    comparison_msg = "📊 COMPARAÇÃO DE VERSÕES (staging vs raw):\n"
     for version, status in comparison_log.items():
         staging_status = "✅" if status["staging"] else "❌"
         raw_status = "✅" if status["raw"] else "❌"
@@ -278,7 +284,8 @@ def download_files_from_storage_raw(
         else:
             action = "→ INCONSISTENTE"
 
-        log(f"   {version}: staging={staging_status} raw={raw_status} {action}")
+        comparison_msg += f"   {version}: staging={staging_status} raw={raw_status} {action}\n"
+    log(comparison_msg)
 
     log(
         f"📈 RESUMO: {len(raw_versions)} versões no raw, {len(staging_partitions_list)} no staging, {len(raw_filespaths_to_ingest)} para ingerir"
@@ -288,7 +295,6 @@ def download_files_from_storage_raw(
 
 
 def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_id, layout_table_id):
-    log("VALIDATE COLUMN NAMES\n")
     query = f"""
     WITH layout_unique_columns AS (
         SELECT
@@ -316,7 +322,9 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
     ORDER BY coluna_layout
     """
 
-    log(f"Columns Validation Query:\n{query}")
+    # Log consolidado de validação de colunas
+    validation_info = f"VALIDATE COLUMN NAMES\n\nColumns Validation Query:\n{query}"
+    log(validation_info)
     df_validation = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
 
     if df_validation is not None:
@@ -331,8 +339,6 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
             raise_msg += "https://docs.google.com/spreadsheets/d/1VgtSVom_s4QsJoOws6caPZxGfwYrpjpoSjbOrqhRbM8/edit?gid=542906575#gid=542906575\n\n"
             raise_msg += f"Colunas que devem ser inseridas:\n{columns_to_create_str}"
             raise ValueError(raise_msg)
-    log(f"GET CONSOLIDATE LAYOUT TO CREATE: `{project_id}.{dataset_id}_staging.layout_columns_version_control`")
-
     query = f"""
         SELECT
             t1.* EXCEPT(column),
@@ -342,7 +348,9 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
         ON t1.column = t2.column
         WHERE table != "REG_99_DIARIA"
     """
-    log(f"Using project_id: {project_id}\n\n{query}")
+    # Log consolidado de layout consolidado
+    layout_info = f"GET CONSOLIDATE LAYOUT TO CREATE: `{project_id}.{dataset_id}_staging.layout_columns_version_control`\nUsing project_id: {project_id}\n\n{query}"
+    log(layout_info)
     dataframe = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
 
     versions = get_existing_partitions(
@@ -430,7 +438,7 @@ def columns_version_control_diff(dataframe: pd.DataFrame):
 
 
 def parse_columns_version_control(dataframe: pd.DataFrame):
-    log("ASCENDING SEARCH\n")
+    log("ASCENDING SEARCH")
     df_ascending = columns_version_control_diff(dataframe=dataframe.sort_values(["reg", "versao_layout_particao"]))
     # create new row for versions lass than versao_layout_anterior
     versions = df_ascending["versao_layout_particao"].unique()
@@ -450,7 +458,7 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
     df_final = pd.concat([df_ascending, df_new])
     df_final = df_final.sort_values(["reg", "versao_layout_particao"])
 
-    log("\nDESCENDING SEARCH\n")
+    log("DESCENDING SEARCH")
     df_descending = columns_version_control_diff(
         dataframe=dataframe.sort_values(["reg", "versao_layout_particao"], ascending=False)
     )
