@@ -10,7 +10,7 @@ from uuid import uuid4
 import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.infisical import get_secret
+from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
@@ -99,8 +99,8 @@ def async_geocoding_dataframe(
     log(f"Processing {total_addresses} addresses in one batch")
 
     log("Geocoding with Nominatim")
-    user_agent = get_secret("NOMINATIM", path="/nominatim")["NOMINATIM"]
-    domain = get_secret("NOMINATIM_DOMAIN", path="/nominatim")["NOMINATIM_DOMAIN"]
+    user_agent = getenv_or_action("NOMINATIM")
+    domain = getenv_or_action("NOMINATIM_DOMAIN")
 
     final_dataframe = run_geocode_nominatim_async(
         dataframe=dataframe,
@@ -237,9 +237,8 @@ def async_geocoding_dataframe_with_fallback(
             # Get API key if required
             if config["secret_key"] and config["secret_path"]:
                 log(f"Getting API key: {config['secret_key']} from {config['secret_path']}")
-                api_key = get_secret(config["secret_key"], path=config["secret_path"])
+                api_key = getenv_or_action(config["secret_key"])
                 log(f"PD FOR {config['display_name']}: {api_key}")
-                api_key = api_key[config["secret_key"]]
 
                 # Process failed addresses with current geocoder (with API key)
                 geocoder_result = config["function"](
@@ -345,7 +344,7 @@ def geoapify_batch_geocoding_task(
     log(f"Processing {total_addresses} addresses with Geoapify batch API")
 
     # Get API key from secrets
-    api_key = get_secret("API_TOKEN", path="/geoapify")["API_TOKEN"]
+    api_key = getenv_or_action("API_TOKEN")
     log(f"Token: {api_key[0:5]}")
 
     # For now, return empty results since we'd need to implement the full async Geoapify batch logic

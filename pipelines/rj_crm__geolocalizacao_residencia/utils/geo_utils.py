@@ -10,7 +10,7 @@ import pandas as pd
 import pendulum
 import requests
 from geopy.geocoders import Nominatim
-from iplanrio.pipelines_utils.infisical import get_secret
+from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from openlocationcode import openlocationcode as olc
 from unidecode import unidecode
@@ -81,8 +81,8 @@ def geocode_nominatim(
     all_addresses = new_addresses[address_column].tolist()
     all_addresses = _prepare_addresses_for_nominatim(all_addresses)
 
-    user_agent = get_secret("NOMINATIM", path="/nominatim")["NOMINATIM"]
-    domain = get_secret("NOMINATIM_DOMAIN", path="/nominatim")["NOMINATIM_DOMAIN"]
+    user_agent = getenv_or_action("NOMINATIM")
+    domain = getenv_or_action("NOMINATIM_DOMAIN")
     geolocator = Nominatim(user_agent=user_agent, domain=domain)
 
     log(f"There are {len(all_addresses)} addresses to georeference")
