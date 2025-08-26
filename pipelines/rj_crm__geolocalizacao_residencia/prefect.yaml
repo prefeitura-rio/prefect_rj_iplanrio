@@ -34,6 +34,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
@@ -41,6 +42,7 @@ deployments:
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       max_concurrent_nominatim: 100
+      infisical_secret_path: "/geocoding"
 
   - name: rj-crm--geolocalizacao-residencia--nominatim--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -51,6 +53,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
@@ -58,6 +61,7 @@ deployments:
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       max_concurrent_nominatim: 100
+      infisical_secret_path: "/geocoding"
     schedules:
       - interval: 180  # 3 minutes (from updated schedule)
         anchor_date: "2021-01-01T00:06:00"
@@ -74,12 +78,14 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
+      infisical_secret_path: "/geocoding"
 
   - name: rj-crm--geolocalizacao-residencia--fallback--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -90,12 +96,14 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
+      infisical_secret_path: "/geocoding"
     schedules:
       - interval: 3600  # 1 hour for fallback strategy (more expensive)
         anchor_date: "2021-01-01T00:00:00"
@@ -112,6 +120,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
@@ -119,6 +128,7 @@ deployments:
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       geoapify_batch_size: 100
+      infisical_secret_path: "/geocoding"
 
   - name: rj-crm--geolocalizacao-residencia--geoapify--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -129,6 +139,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
@@ -136,6 +147,7 @@ deployments:
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       geoapify_batch_size: 100
+      infisical_secret_path: "/geocoding"
     schedules:
       - interval: 1800  # 30 minutes for batch strategy (balanced frequency)
         anchor_date: "2021-01-01T00:00:00"
