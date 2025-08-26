@@ -1,4 +1,11 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio/base:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
 
-COPY pipelines/rj_crm__geolocalizacao_residencia /opt/prefect/prefect_rj_iplanrio/pipelines/rj_crm__geolocalizacao_residencia
+LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
+
 WORKDIR /opt/prefect/prefect_rj_iplanrio
+
+COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+
+COPY ./pipelines/rj_crm__geolocalizacao_residencia ./pipelines/rj_crm__geolocalizacao_residencia/
+
+RUN uv sync --all-packages
