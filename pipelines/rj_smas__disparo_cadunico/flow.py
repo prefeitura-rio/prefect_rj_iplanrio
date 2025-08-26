@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Flow migrado do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
+Flow migrado do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO.
 
 ⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no iplanrio:
 - handler_initialize_sentry: SEM EQUIVALENTE
@@ -29,7 +29,11 @@ from pipelines.rj_smas__disparo_cadunico.tasks import (
     printar,
     remove_duplicate_phones,
 )
-from pipelines.rj_smas__disparo_cadunico.utils.tasks import access_api, create_date_partitions, skip_flow_if_empty
+from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
+    access_api,
+    create_date_partitions,
+    skip_flow_if_empty,
+)
 
 
 @flow(log_prints=True)

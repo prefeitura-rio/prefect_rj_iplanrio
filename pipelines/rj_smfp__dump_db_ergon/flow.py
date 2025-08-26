@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY.
+This flow is used to dump the database from the 1746 server to the BIGQUERY..
 """
 
 from typing import Optional
@@ -24,7 +24,7 @@ def rj_smfp__dump_db_ergon(  # noqa
     db_type: str = "oracle",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "dataset_id",
+    dataset_id: str = "brutos_ergon",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-ergon-prod",
     dump_mode: str = "overwrite",
@@ -40,6 +40,7 @@ def rj_smfp__dump_db_ergon(  # noqa
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
     max_concurrency: int = 1,
+    only_staging_dataset: bool = True,
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
@@ -78,4 +79,5 @@ def rj_smfp__dump_db_ergon(  # noqa
         database=db_database,
         charset=db_charset,
         max_concurrency=max_concurrency,
+        only_staging_dataset=only_staging_dataset,
     )
