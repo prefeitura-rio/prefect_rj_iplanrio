@@ -1,0 +1,4 @@
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio/base:latest
+
+COPY pipelines/rj_crm__geolocalizacao_residencia /opt/prefect/prefect_rj_iplanrio/pipelines/rj_crm__geolocalizacao_residencia
+WORKDIR /opt/prefect/prefect_rj_iplanrio

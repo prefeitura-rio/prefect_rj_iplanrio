@@ -1,0 +1,143 @@
+name: rj_crm__geolocalizacao_residencia
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_crm__geolocalizacao_residencia-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_crm__geolocalizacao_residencia/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # Nominatim-only strategy (fast, basic accuracy)
+  - name: rj-crm--geolocalizacao-residencia--nominatim--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        image_pull_policy: Always
+    parameters:
+      provider_strategy: "nominatim"
+      dataset_id: "intermediario_dados_mestres"
+      table_id: "enderecos_geolocalizados"
+      billing_project_id: "rj-crm-registry"
+      max_concurrent_nominatim: 100
+
+  - name: rj-crm--geolocalizacao-residencia--nominatim--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        image_pull_policy: Always
+    parameters:
+      provider_strategy: "nominatim"
+      dataset_id: "intermediario_dados_mestres"
+      table_id: "enderecos_geolocalizados"
+      billing_project_id: "rj-crm-registry"
+      max_concurrent_nominatim: 100
+    schedules:
+      - interval: 180  # 3 minutes (from updated schedule)
+        anchor_date: "2021-01-01T00:06:00"
+        timezone: America/Sao_Paulo
+        slug: geocoding_every_3min
+
+  # Fallback strategy (slower, higher accuracy)
+  - name: rj-crm--geolocalizacao-residencia--fallback--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        image_pull_policy: Always
+    parameters:
+      provider_strategy: "fallback"
+      dataset_id: "intermediario_dados_mestres"
+      table_id: "enderecos_geolocalizados"
+      billing_project_id: "rj-crm-registry"
+
+  - name: rj-crm--geolocalizacao-residencia--fallback--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        image_pull_policy: Always
+    parameters:
+      provider_strategy: "fallback"
+      dataset_id: "intermediario_dados_mestres"
+      table_id: "enderecos_geolocalizados"
+      billing_project_id: "rj-crm-registry"
+    schedules:
+      - interval: 3600  # 1 hour for fallback strategy (more expensive)
+        anchor_date: "2021-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: fallback_geocoding_hourly
+
+  # Geoapify batch strategy (medium speed, good accuracy)
+  - name: rj-crm--geolocalizacao-residencia--geoapify--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        image_pull_policy: Always
+    parameters:
+      provider_strategy: "geoapify_batch"
+      dataset_id: "intermediario_dados_mestres"
+      table_id: "enderecos_geolocalizados"
+      billing_project_id: "rj-crm-registry"
+      geoapify_batch_size: 100
+
+  - name: rj-crm--geolocalizacao-residencia--geoapify--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
+        image_pull_policy: Always
+    parameters:
+      provider_strategy: "geoapify_batch"
+      dataset_id: "intermediario_dados_mestres"
+      table_id: "enderecos_geolocalizados"
+      billing_project_id: "rj-crm-registry"
+      geoapify_batch_size: 100
+    schedules:
+      - interval: 1800  # 30 minutes for batch strategy (balanced frequency)
+        anchor_date: "2021-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: batch_geocoding_30min
