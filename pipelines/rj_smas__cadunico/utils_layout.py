@@ -350,10 +350,24 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
         table_id=registo_familia_table_id,
         prefix=f"staging/{dataset_id}/{registo_familia_table_id}",
     )
-    log(
-        f"Dataframe will be filtered using versions from {project_id}.{dataset_id}_staging.{registo_familia_table_id}: {versions}"  # noqa
-    )
+
     if dataframe is not None and not dataframe.empty:
+        layout_versions = dataframe["versao_layout_particao"].tolist()
+        not_in_layout_versions = [version for version in versions if version not in layout_versions]  # noqa
+        if not_in_layout_versions:
+            raise_msg = ""
+            raise_msg += "Please, upload the layouts to the storage raw:\n"
+            raise_msg += (
+                "https://console.cloud.google.com/storage/browser/rj-smas/raw/protecao_social_cadunico/layout\n\n"
+            )
+            raise_msg += "layout versions to be uploaded\n{not_in_layout_versions}"
+
+            raise ValueError(raise_msg)
+
+        log(
+            f"Dataframe will be filtered using versions from {project_id}.{dataset_id}_staging.{registo_familia_table_id}: {versions}"  # noqa
+        )
+
         return dataframe[dataframe["versao_layout_particao"].isin(versions)]
     else:
         raise ValueError(f"Dataframe is None or empty: {dataframe}")
