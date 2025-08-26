@@ -5,6 +5,7 @@ import shutil
 
 import git
 from iplanrio.pipelines_utils.logging import log
+from pipelines.rj_smas__cadunico.utils_logging import log_git_operation_result, log_dbt_execution_result
 from prefect_dbt import PrefectDbtRunner
 
 
@@ -126,17 +127,10 @@ def push_models_to_branch(
                 repo.git.diff("--cached", "--name-only").split("\n") if repo.git.diff("--cached", "--name-only") else []
             )
             untracked_files = repo.untracked_files
-
             all_changes = staged_files + untracked_files
-            log(f"Files to be committed ({len(all_changes)}):", level="info")
-            for file_path in all_changes[:10]:  # Mostrar primeiros 10 arquivos
-                log(f"  - {file_path}", level="info")
-            if len(all_changes) > 10:
-                log(f"  ... and {len(all_changes) - 10} more files", level="info")
 
             # Fazer commit
             commit = repo.index.commit(commit_message)
-            log(f"Commit created: {commit.hexsha[:8]} - {commit_message}", level="info")
 
             # Configurar URL remota com token para push
             origin = repo.remote("origin")
@@ -147,7 +141,6 @@ def push_models_to_branch(
                 repo_path = original_url.replace("https://github.com/", "")
                 auth_url = f"https://{github_token}@github.com/{repo_path}"
                 origin.set_url(auth_url)
-                log("Configured remote URL with GitHub token for push", level="info")
 
             # Fazer push
             push_info = origin.push(current_branch)
@@ -156,27 +149,39 @@ def push_models_to_branch(
             origin.set_url(original_url)
 
             # Verificar resultado do push
+            push_success = True
+            push_errors = []
+
             for info in push_info:
                 if info.flags & info.ERROR:
-                    log(
-                        f"Error pushing to {current_branch}: {info.summary}",
-                        level="error",
-                    )
-                    return False
-                else:
-                    log(
-                        f"Successfully pushed to {current_branch}: {info.summary}",
-                        level="info",
-                    )
+                    push_errors.append(info.summary)
+                    push_success = False
 
-            log(
-                f"✅ Models successfully pushed to branch '{current_branch}'",
-                level="info",
-            )
-            return True
+            # Log consolidado do resultado
+            if push_success:
+                log_git_operation_result(
+                    operation=f"PUSH para branch '{current_branch}'",
+                    success=True,
+                    details={
+                        "commit": commit.hexsha[:8],
+                        "arquivos": len(all_changes),
+                        "mensagem": commit_message[:50],
+                    },
+                )
+            else:
+                log_git_operation_result(
+                    operation=f"PUSH para branch '{current_branch}'",
+                    success=False,
+                    details={
+                        "erros": len(push_errors),
+                        "primeiro_erro": push_errors[0] if push_errors else "Erro desconhecido",
+                    },
+                )
+
+            return push_success
 
         else:
-            log("No changes to commit", level="info")
+            log_git_operation_result(operation="PUSH", success=True, details={"status": "nenhuma mudança para commit"})
             return True
 
     except git.GitCommandError as e:
@@ -228,28 +233,26 @@ def execute_dbt(
         if flag:
             command_args.extend([flag])
 
-    log(f"Executing dbt command: {' '.join(command_args)}", level="info")
-
     # Initialize PrefectDbtRunner
     runner = PrefectDbtRunner(
         raise_on_failure=False  # Allow the flow to handle failures gracefully
     )
+
     # Execute the dbt deps command
     try:
         deps_result = runner.invoke(["deps"])
-        log("✅ DBT dependencies installed successfully", level="info")
-        log(msg=str(deps_result))
+        log_dbt_execution_result(deps_result, ["deps"])
     except Exception as e:
-        log(f"❌ Error installing DBT dependencies: {e}", level="error")
+        log_git_operation_result(operation="DBT deps", success=False, details={"erro": str(e)[:200]})
         raise
 
     # Execute the dbt command with the constructed arguments
     try:
         running_result = runner.invoke(command_args)
-        log(
-            f"DBT command completed with success: {running_result.success}",
-            level="info",
-        )
+        log_dbt_execution_result(running_result, command_args)
+        return running_result
     except Exception as e:
-        log(f"Error executing DBT command: {e}", level="error")
+        log_git_operation_result(
+            operation=f"DBT {' '.join(command_args)}", success=False, details={"erro": str(e)[:200]}
+        )
         raise
