@@ -14,7 +14,7 @@ dependencies = [
     # Google Cloud dependencies
     "google-cloud-bigquery>=3.4.0",
     "google-cloud-storage==2.10.0",
-    "basedosdados>=2.0.0",
+    "basedosdados==2.0.0b23",
 
     # Geocoding libraries
     "geopy>=2.3.0",
