@@ -253,5 +253,3 @@ def execute_dbt(
     except Exception as e:
         log(f"Error executing DBT command: {e}", level="error")
         raise
-
-    log(msg=str(running_result))
