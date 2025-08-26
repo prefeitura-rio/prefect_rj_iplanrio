@@ -49,6 +49,8 @@ def rj_crm__geolocalizacao_residencia(
     max_concurrent_nominatim: int | None = None,
     return_original_cols: bool | None = None,
     geoapify_batch_size: int | None = None,
+    # Secrets path
+    infisical_secret_path: str = "/geocoding",
 ):
     """
     Flow para geolocalizar endereços residenciais usando múltiplas estratégias.
