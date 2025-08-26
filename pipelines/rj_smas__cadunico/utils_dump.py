@@ -26,7 +26,10 @@ from iplanrio.pipelines_utils.gcs import (
 
 
 def parse_partition_from_filename(blob_name: str) -> str:
-    name_parts = blob_name.split(".")
+    if "_" in blob_name:
+        name_parts = blob_name.split("_")[-1].split(".")
+    else:
+        name_parts = blob_name.split(".")
     partition_info = None
 
     for name_part in name_parts:
@@ -37,7 +40,9 @@ def parse_partition_from_filename(blob_name: str) -> str:
         elif len(name_part) == 8 and name_part.isdigit():
             parsed_date = datetime.strptime(name_part, "%Y%m%d").strftime("%Y-%m-%d")
             return str(parsed_date)
-
+        elif len(name_part) == 6 and name_part.isdigit():
+            parsed_date = datetime.strptime(name_part + "01", "%Y%m%d").strftime("%Y-%m-%d")
+            return str(parsed_date)
     raise ValueError(f"No partition info found in blob name: {blob_name}")
 
 
