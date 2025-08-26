@@ -1,2 +1,0 @@
-table,version,reg,campo,arquivo_base_versao_7,posicao,tamanho,tipo,transformacao,descricao,nulos,observacoes,column,nome_padronizado,bigquery_type,ajuste_decimal,date_format,dicionario_atributos,versao_layout_anterior,coluna_esta_versao_anterior
-REG_00,6.23,0,SIS,VAZIO,1,37,N,,Espaços em branco,Sim,,vazio,vazio,STRING,,,,620,True
