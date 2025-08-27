@@ -87,7 +87,7 @@ deployments:
           execute_query: SELECT CHAVE, NUMFUNC,NUMVINC,FINALIDADE,DIASTOT,DIASFPUB,DIASFPUBESP,TOTAL_PERIODOS,
             TOTAL_ANOS,DATA_PROXIMO,NOME_PROXIMO,EMP_CODIGO FROM ERGON.TOTAL_CONTA
       - interval: 86400
-        anchor_date: '2025-07-15T01:20:00'
+        anchor_date: '2025-07-15T01:40:00'
         timezone: America/Sao_Paulo
         slug: VANTAGENS
         parameters:
