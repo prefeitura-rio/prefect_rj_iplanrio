@@ -38,10 +38,18 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
+      query_override: null
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
+      bucket_name: "rj-sms"
+      biglake_table: false
+      file_folder: "pipelines/data"
+      file_format: "parquet"
+      source_format: "parquet"
+      dump_mode: "append"
       max_concurrent_nominatim: 100
+      return_original_cols: true
       infisical_secret_path: "/geocoding"
 
   - name: rj-crm--geolocalizacao-residencia--nominatim--prod
@@ -57,10 +65,18 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
+      query_override: null
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
+      bucket_name: "rj-sms"
+      biglake_table: false
+      file_folder: "pipelines/data"
+      file_format: "parquet"
+      source_format: "parquet"
+      dump_mode: "append"
       max_concurrent_nominatim: 100
+      return_original_cols: true
       infisical_secret_path: "/geocoding"
     schedules:
       - interval: 180  # 3 minutes (from updated schedule)
@@ -82,9 +98,18 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
+      query_override: null
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
+      bucket_name: "rj-sms"
+      biglake_table: false
+      file_folder: "pipelines/data"
+      file_format: "parquet"
+      source_format: "parquet"
+      dump_mode: "append"
+      max_concurrent_nominatim: 100
+      return_original_cols: true
       infisical_secret_path: "/geocoding"
 
   - name: rj-crm--geolocalizacao-residencia--fallback--prod
@@ -100,9 +125,18 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
+      query_override: null
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
+      bucket_name: "rj-sms"
+      biglake_table: false
+      file_folder: "pipelines/data"
+      file_format: "parquet"
+      source_format: "parquet"
+      dump_mode: "append"
+      max_concurrent_nominatim: 100
+      return_original_cols: true
       infisical_secret_path: "/geocoding"
     schedules:
       - interval: 3600  # 1 hour for fallback strategy (more expensive)
@@ -124,10 +158,18 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
+      query_override: null
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
-      geoapify_batch_size: 100
+      bucket_name: "rj-sms"
+      biglake_table: false
+      file_folder: "pipelines/data"
+      file_format: "parquet"
+      source_format: "parquet"
+      dump_mode: "append"
+      max_concurrent_nominatim: 100
+      return_original_cols: true
       infisical_secret_path: "/geocoding"
 
   - name: rj-crm--geolocalizacao-residencia--geoapify--prod
@@ -143,10 +185,18 @@ deployments:
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
+      query_override: null
       dataset_id: "intermediario_dados_mestres"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
-      geoapify_batch_size: 100
+      bucket_name: "rj-sms"
+      biglake_table: false
+      file_folder: "pipelines/data"
+      file_format: "parquet"
+      source_format: "parquet"
+      dump_mode: "append"
+      max_concurrent_nominatim: 100
+      return_original_cols: true
       infisical_secret_path: "/geocoding"
     schedules:
       - interval: 1800  # 30 minutes for batch strategy (balanced frequency)

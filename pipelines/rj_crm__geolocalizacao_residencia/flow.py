@@ -48,7 +48,6 @@ def rj_crm__geolocalizacao_residencia(
     # Geocoding parameters
     max_concurrent_nominatim: int | None = None,
     return_original_cols: bool | None = None,
-    geoapify_batch_size: int | None = None,
     # Secrets path
     infisical_secret_path: str = "/geocoding",
 ):
@@ -74,7 +73,6 @@ def rj_crm__geolocalizacao_residencia(
         dump_mode: Modo de dump (default: append)
         max_concurrent_nominatim: Max requests concorrentes Nominatim (default: 100)
         return_original_cols: Retornar colunas originais (default: True)
-        geoapify_batch_size: Tamanho do lote Geoapify (default: 100)
     """
 
     # Usar valores dos constants como padrão para parâmetros
@@ -93,7 +91,6 @@ def rj_crm__geolocalizacao_residencia(
     return_original_cols = (
         return_original_cols if return_original_cols is not None else GeolocalizacaoConstants.RETURN_ORIGINAL_COLS.value
     )
-    geoapify_batch_size = geoapify_batch_size or GeolocalizacaoConstants.GEOAPIFY_BATCH_SIZE.value
 
     # Query to use
     query = query_override or GeolocalizacaoConstants.ADDRESS_QUERY.value
@@ -138,7 +135,7 @@ def rj_crm__geolocalizacao_residencia(
             georeferenced_table = geoapify_batch_geocoding_task(
                 dataframe=dataframe,
                 address_column=address_column,
-                batch_size=geoapify_batch_size,
+                batch_size=GeolocalizacaoConstants.GEOAPIFY_BATCH_SIZE.value,
                 return_original_cols=return_original_cols,
             )
         else:
