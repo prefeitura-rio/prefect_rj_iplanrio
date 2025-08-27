@@ -192,32 +192,28 @@ def async_geocoding_dataframe_with_fallback(
             "name": "maptiler",
             "display_name": "MapTiler",
             "function": run_geocode_maptiler_async,
-            "secret_path": "/maptiler_token",
-            "secret_key": "API_KEY",
+            "secret_key": "MAPTILER_API_KEY",
             "params": {"max_concurrent": 10, "sleep_time": 1.1},
         },
         {
             "name": "geocode_xyz",
             "display_name": "Geocode.xyz",
             "function": geocode_geocodexyz,
-            "secret_path": "/geocode_xyz",
-            "secret_key": "API_KEY",
+            "secret_key": "GEOCODE_XYZ_API_KEY",
             "params": {"sleep_time": 1.6},
         },
         {
             "name": "locationiq",
             "display_name": "LocationIQ",
             "function": geocode_locationiq,
-            "secret_path": "/locationiq",
-            "secret_key": "API_KEY",
+            "secret_key": "LOCATIONIQ_API_KEY",
             "params": {"sleep_time": 1.1},
         },
         {
             "name": "opencage",
             "display_name": "OpenCage",
             "function": geocode_opencage,
-            "secret_path": "/opencage",
-            "secret_key": "API_KEY",
+            "secret_key": "OPENCAGE_API_KEY",
             "params": {"sleep_time": 1.1},
         },
     ]
@@ -235,8 +231,8 @@ def async_geocoding_dataframe_with_fallback(
 
         try:
             # Get API key if required
-            if config["secret_key"] and config["secret_path"]:
-                log(f"Getting API key: {config['secret_key']} from {config['secret_path']}")
+            if config["secret_key"]:
+                log(f"Getting API key: {config['secret_key']}")
                 api_key = getenv_or_action(config["secret_key"])
                 log(f"PD FOR {config['display_name']}: {api_key}")
 
@@ -344,7 +340,7 @@ def geoapify_batch_geocoding_task(
     log(f"Processing {total_addresses} addresses with Geoapify batch API")
 
     # Get API key from secrets
-    api_key = getenv_or_action("API_TOKEN")
+    api_key = getenv_or_action("GEOAPIFY_API_TOKEN")
     log(f"Token: {api_key[0:5]}")
 
     # For now, return empty results since we'd need to implement the full async Geoapify batch logic
