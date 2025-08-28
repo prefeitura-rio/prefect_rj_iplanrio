@@ -54,3 +54,29 @@ deployments:
         anchor_date: "2024-01-01T10:00:00"
         timezone: America/Sao_Paulo
         slug: sisreg_daily_10am
+
+  - name: rj-sms--sisreg-disparo-lembretes--staging
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_sms__sisreg_disparo_lembretes/flow.py:rj_sms__sisreg_disparo_lembretes
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sms__sisreg_disparo_lembretes -- prefect flow-run execute
+        image_pull_policy: Always
+        env:
+          INFISICAL_ENVIRONMENT: staging
+          INFISICAL_SECRET_PATH: /wetalkie
+    parameters:
+      dataset_id: disparos
+      table_id: disparos_efetuados_staging
+      destination_dataset_id: disparos
+      destination_table_id: disparos_efetuados_staging
+      billing_project_id: rj-crm-registry-dev
+      dump_mode: append
+      id_hsm: 18
+      campaign_name: SISREG_AGENDAMENTOS_STAGING
+      cost_center_id: "2"
+      chunk_size: 100
+      infisical_secret_path: /wetalkie
