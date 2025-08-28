@@ -15,20 +15,16 @@ from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__geolocalizacao_residencia.utils.async_utils import (
-    run_geocode_maptiler_async,
-    run_geocode_nominatim_async,
-    run_geocode_waze_async,
-    run_geocode_opencage_async,
+    run_geoapify_batch_geocoding_async,
     run_geocode_geocodexyz_async,
     run_geocode_locationiq_async,
-    run_geoapify_batch_geocoding_async,
+    run_geocode_maptiler_async,
+    run_geocode_nominatim_async,
+    run_geocode_opencage_async,
+    run_geocode_waze_async,
 )
 from pipelines.rj_crm__geolocalizacao_residencia.utils.geo_utils import (
-    GEOCODING_FIELDS,
     coordinates_to_pluscode,
-    geocode_geocodexyz,
-    geocode_locationiq,
-    geocode_opencage,
 )
 
 
@@ -365,9 +361,7 @@ def geoapify_batch_geocoding_task(
     # Ensure string types for all columns, replacing None with empty string
     if not final_dataframe.empty:
         final_dataframe = final_dataframe.fillna("")
-        final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype(
-            "str"
-        )
+        final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype("str")
         log(f"Task result preview: \n{final_dataframe.iloc[0]}")
 
     total_time = time() - start_time

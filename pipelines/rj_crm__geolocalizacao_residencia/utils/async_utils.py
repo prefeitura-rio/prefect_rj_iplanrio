@@ -127,25 +127,17 @@ async def _geocode_single_nominatim_async(
                         "latitude": location_data.get("lat"),
                         "longitude": location_data.get("lon"),
                         "logradouro_geocode": (
-                            unidecode(address_data.get("road", "")).lower()
-                            if address_data.get("road")
-                            else None
+                            unidecode(address_data.get("road", "")).lower() if address_data.get("road") else None
                         ),
                         "numero_porta_geocode": address_data.get("house_number"),
                         "bairro_geocode": (
-                            unidecode(address_data.get("suburb", "")).lower()
-                            if address_data.get("suburb")
-                            else None
+                            unidecode(address_data.get("suburb", "")).lower() if address_data.get("suburb") else None
                         ),
                         "cidade_geocode": (
-                            unidecode(address_data.get("city", "")).lower()
-                            if address_data.get("city")
-                            else None
+                            unidecode(address_data.get("city", "")).lower() if address_data.get("city") else None
                         ),
                         "estado_geocode": (
-                            unidecode(address_data.get("state", "")).lower()
-                            if address_data.get("state")
-                            else None
+                            unidecode(address_data.get("state", "")).lower() if address_data.get("state") else None
                         ),
                         "cep_geocode": address_data.get("postcode"),
                         "confianca": None,
@@ -393,9 +385,7 @@ async def _geocode_single_opencage_async(
                                 else None
                             ),
                             "cidade_geocode": (
-                                unidecode(
-                                    components.get("city", components.get("county", "")).strip().lower()
-                                )
+                                unidecode(components.get("city", components.get("county", "")).strip().lower())
                                 if components.get("city") or components.get("county")
                                 else None
                             ),
@@ -472,9 +462,7 @@ async def _geocode_single_geocodexyz_async(
                             "latitude": data["latt"],
                             "longitude": data["longt"],
                             "logradouro_geocode": (
-                                unidecode(standard.get("addresst", "")).lower()
-                                if standard.get("addresst")
-                                else None
+                                unidecode(standard.get("addresst", "")).lower() if standard.get("addresst") else None
                             ),
                             "numero_porta_geocode": standard.get("stnumber"),
                             "bairro_geocode": None,
@@ -540,13 +528,9 @@ async def _geocode_single_locationiq_async(
 
                     if isinstance(data, list) and data:
                         valid_results = [
-                            res
-                            for res in data
-                            if "Rio de Janeiro" in res.get("display_name", "").split(", ")[2]
+                            res for res in data if "Rio de Janeiro" in res.get("display_name", "").split(", ")[2]
                         ]
-                        best_result = max(
-                            valid_results, key=lambda x: x.get("importance", 0), default=None
-                        )
+                        best_result = max(valid_results, key=lambda x: x.get("importance", 0), default=None)
 
                         if best_result:
                             display_parts = [
@@ -790,9 +774,7 @@ async def geocode_opencage_async(
 
     async with aiohttp.ClientSession() as session:
         tasks = [
-            _geocode_single_opencage_async(
-                session, semaphore, address, api_key, sleep_time, use_exponential_backoff
-            )
+            _geocode_single_opencage_async(session, semaphore, address, api_key, sleep_time, use_exponential_backoff)
             for address in addresses
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -935,9 +917,7 @@ async def geocode_locationiq_async(
 
     async with aiohttp.ClientSession() as session:
         tasks = [
-            _geocode_single_locationiq_async(
-                session, semaphore, address, api_key, sleep_time, use_exponential_backoff
-            )
+            _geocode_single_locationiq_async(session, semaphore, address, api_key, sleep_time, use_exponential_backoff)
             for address in addresses
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -980,8 +960,9 @@ async def geocode_locationiq_async(
 
 
 # =============================================================================
-# GEOAPIFY BATCH GEOCODING 
+# GEOAPIFY BATCH GEOCODING
 # =============================================================================
+
 
 async def _submit_geoapify_batch_job(
     session: aiohttp.ClientSession,
@@ -1127,9 +1108,7 @@ async def geocode_geoapify_batch_async(
             if not job_url:
                 # If submission failed, create empty results for this batch
                 updated_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-                batch_results = [
-                    _create_empty_async_result(addr, updated_date, "geoapify") for addr in batch_addresses
-                ]
+                batch_results = [_create_empty_async_result(addr, updated_date, "geoapify") for addr in batch_addresses]
                 all_results.extend(batch_results)
                 continue
 
@@ -1159,9 +1138,7 @@ async def geocode_geoapify_batch_async(
                 log(f"Batch {batch_num} timed out after {max_wait_time} seconds")
                 # Create empty results for this batch
                 updated_date = pd.Timestamp.now().strftime("%Y-%m-%d")
-                batch_results = [
-                    _create_empty_async_result(addr, updated_date, "geoapify") for addr in batch_addresses
-                ]
+                batch_results = [_create_empty_async_result(addr, updated_date, "geoapify") for addr in batch_addresses]
                 all_results.extend(batch_results)
 
     # Convert results to DataFrame
