@@ -18,6 +18,10 @@ from pipelines.rj_crm__geolocalizacao_residencia.utils.async_utils import (
     run_geocode_maptiler_async,
     run_geocode_nominatim_async,
     run_geocode_waze_async,
+    run_geocode_opencage_async,
+    run_geocode_geocodexyz_async,
+    run_geocode_locationiq_async,
+    run_geoapify_batch_geocoding_async,
 )
 from pipelines.rj_crm__geolocalizacao_residencia.utils.geo_utils import (
     GEOCODING_FIELDS,
@@ -198,23 +202,23 @@ def async_geocoding_dataframe_with_fallback(
         {
             "name": "geocode_xyz",
             "display_name": "Geocode.xyz",
-            "function": geocode_geocodexyz,
+            "function": run_geocode_geocodexyz_async,
             "secret_key": "GEOCODE_XYZ_API_KEY",
-            "params": {"sleep_time": 1.6},
+            "params": {"max_concurrent": 5, "sleep_time": 1.6},
         },
         {
             "name": "locationiq",
             "display_name": "LocationIQ",
-            "function": geocode_locationiq,
+            "function": run_geocode_locationiq_async,
             "secret_key": "LOCATIONIQ_API_KEY",
-            "params": {"sleep_time": 1.1},
+            "params": {"max_concurrent": 10, "sleep_time": 1.1},
         },
         {
             "name": "opencage",
             "display_name": "OpenCage",
-            "function": geocode_opencage,
+            "function": run_geocode_opencage_async,
             "secret_key": "OPENCAGE_API_KEY",
-            "params": {"sleep_time": 1.1},
+            "params": {"max_concurrent": 10, "sleep_time": 1.1},
         },
     ]
 
@@ -341,22 +345,39 @@ def geoapify_batch_geocoding_task(
 
     # Get API key from secrets
     api_key = getenv_or_action("GEOAPIFY_API_TOKEN")
-    log(f"Token: {api_key[0:5]}")
+    log(f"Token: {api_key[:5] if api_key else 'None'}")
 
-    # For now, return empty results since we'd need to implement the full async Geoapify batch logic
-    # This would require the full async batch implementation from the original code
-    log("Geoapify batch geocoding not fully implemented - returning empty results")
+    if not api_key:
+        log("No Geoapify API token found - returning empty results")
+        return pd.DataFrame()
 
-    # Return empty result DataFrame with proper structure
-    final_dataframe = dataframe.copy()
-    for field in GEOCODING_FIELDS:
-        final_dataframe[field] = None
-    final_dataframe["geocode"] = "geoapify"
+    # Use the working implementation from async_utils
+    final_dataframe = run_geoapify_batch_geocoding_async(
+        dataframe=dataframe,
+        address_column=address_column,
+        api_key=api_key,
+        batch_size=batch_size,
+    )
+
+    success_count = len(final_dataframe)
+    log(f"Successfully geocoded {success_count}/{total_addresses} addresses")
+
+    # Ensure string types for all columns, replacing None with empty string
+    if not final_dataframe.empty:
+        final_dataframe = final_dataframe.fillna("")
+        final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype(
+            "str"
+        )
+        log(f"Task result preview: \n{final_dataframe.iloc[0]}")
 
     total_time = time() - start_time
-    log(f"Geoapify batch geocoding task completed in {total_time: .2f}s - No results (not implemented)")
+    final_success_rate = (success_count / total_addresses) * 100 if total_addresses > 0 else 0
+    log(
+        f"Geoapify batch geocoding task completed in {total_time: .2f}s - Success "
+        f"{success_count}/{total_addresses} ({final_success_rate: .1f}%)"
+    )
 
-    return pd.DataFrame()  # Return empty for now
+    return final_dataframe
 
 
 @task
