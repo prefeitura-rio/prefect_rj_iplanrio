@@ -8,17 +8,15 @@ from time import sleep
 import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery
-from prefect import task
-from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.env import getenv_or_action
+from iplanrio.pipelines_utils.logging import log
+from prefect import task
 
 from .api_handler import ApiHandler
 
 
 @task
-def download_data_from_bigquery(
-    query: str, billing_project_id: str, bucket_name: str
-) -> pd.DataFrame:
+def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
     """
     Execute a BigQuery SQL query and return results as a pandas DataFrame.
 
@@ -58,14 +56,9 @@ def access_api(login_route: str = "users/login") -> ApiHandler:
     """
     # Get credentials from environment (injected by sidecar)
     url = getenv_or_action("URL")
-    username = getenv_or_action("USERNAME") 
+    username = getenv_or_action("USERNAME")
     password = getenv_or_action("PASSWORD")
-    
-    api = ApiHandler(
-        base_url=url, 
-        username=username, 
-        password=password, 
-        login_route=login_route
-    )
+
+    api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
 
     return api

@@ -58,9 +58,7 @@ class ApiHandler:
 
     def _get_token(self, data: dict) -> str:
         """Return the token from the json checking the path"""
-        token_word = re.search(
-            r"\b\w*token\w*\b", simplejson.dumps(data, ensure_ascii=False), re.IGNORECASE
-        ).group()
+        token_word = re.search(r"\b\w*token\w*\b", simplejson.dumps(data, ensure_ascii=False), re.IGNORECASE).group()
         token_path = self._find_token_path(data=data, path="", token_word=token_word)
         keys = token_path.split(".")
         token_word = keys[-1]

@@ -4,20 +4,20 @@ SISREG SMS Dispatch Pipeline
 Sends SMS reminders for next day appointments via Wetalkie API
 """
 
-from prefect import flow
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from prefect import flow
 
 from .constants import SisregConstants
 from .tasks import (
     check_api_status,
-    create_dispatch_payload,
+    create_date_partitions,
     create_dispatch_dfr,
+    create_dispatch_payload,
     dispatch,
     get_destinations,
     remove_duplicate_phones,
-    create_date_partitions,
 )
 from .utils.tasks import access_api
 
@@ -41,11 +41,11 @@ def rj_sms__sisreg_disparo_lembretes(
 ):
     """
     SISREG SMS Dispatch Pipeline
-    
+
     Sends SMS reminders to patients with scheduled appointments for the next day.
     Queries BigQuery for SISREG appointments, formats messages, and dispatches via Wetalkie API.
     """
-    
+
     # Use values from constants as defaults
     dataset_id = dataset_id or SisregConstants.DATASET_ID.value
     table_id = table_id or SisregConstants.TABLE_ID.value
@@ -58,63 +58,45 @@ def rj_sms__sisreg_disparo_lembretes(
     campaign_name = campaign_name or SisregConstants.CAMPAIGN_NAME.value
     cost_center_id = cost_center_id or SisregConstants.COST_CENTER_ID.value
     chunk_size = chunk_size or SisregConstants.CHUNK_SIZE.value
-    
+
     # Rename flow run for better identification
     rename_flow_run = rename_current_flow_run_task(
         new_name=f"sisreg_dispatch_{destination_table_id}_{destination_dataset_id}"
     )
-    
+
     # Inject BigQuery credentials
     credentials = inject_bd_credentials_task(environment="prod")
-    
+
     # Access Wetalkie API
     api = access_api(login_route="users/login")
-    
+
     # Check if API is accessible
     api_status = check_api_status(api)
-    
+
     # Get destinations from BigQuery query
-    destinations_data = get_destinations(
-        destinations=destinations, 
-        query=query, 
-        billing_project_id=billing_project_id
-    )
-    
+    destinations_data = get_destinations(destinations=destinations, query=query, billing_project_id=billing_project_id)
+
     # Remove duplicate phone numbers
     unique_destinations = remove_duplicate_phones(destinations_data)
-    
+
     # Only proceed if API is working and we have destinations
     if api_status and unique_destinations:
         # Create dispatch payload
         dispatch_payload = create_dispatch_payload(
-            campaign_name=campaign_name,
-            cost_center_id=int(cost_center_id), 
-            destinations=unique_destinations
+            campaign_name=campaign_name, cost_center_id=int(cost_center_id), destinations=unique_destinations
         )
-        
+
         # Dispatch messages in chunks
-        dispatch_date = dispatch(
-            api=api,
-            id_hsm=id_hsm,
-            dispatch_payload=dispatch_payload,
-            chunk=chunk_size
-        )
-        
+        dispatch_date = dispatch(api=api, id_hsm=id_hsm, dispatch_payload=dispatch_payload, chunk=chunk_size)
+
         # Create DataFrame with dispatch results
-        dfr = create_dispatch_dfr(
-            id_hsm=id_hsm,
-            dispatch_payload=dispatch_payload,
-            dispatch_date=dispatch_date
-        )
-        
+        dfr = create_dispatch_dfr(id_hsm=id_hsm, dispatch_payload=dispatch_payload, dispatch_date=dispatch_date)
+
         # Create date partitions for storage
         partitions_path = create_date_partitions(
-            dataframe=dfr,
-            partition_column="dispatch_date",
-            file_format="csv",
-            root_folder="./data_dispatch/"
+            dataframe=dfr, partition_column="dispatch_date", file_format="csv", root_folder="./data_dispatch/"
         )
-        
+
         # Upload to BigQuery
         create_table = create_table_and_upload_to_gcs_task(
             data_path=partitions_path,
@@ -123,9 +105,9 @@ def rj_sms__sisreg_disparo_lembretes(
             dump_mode=dump_mode,
             biglake_table=False,
         )
+    elif not api_status:
+        raise Exception("Wetalkie API is not accessible")
     else:
-        if not api_status:
-            raise Exception("Wetalkie API is not accessible")
-        else:
-            from iplanrio.pipelines_utils.logging import log
-            log("No destinations found for dispatch. Skipping flow execution.")
+        from iplanrio.pipelines_utils.logging import log
+
+        log("No destinations found for dispatch. Skipping flow execution.")
