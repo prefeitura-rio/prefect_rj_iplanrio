@@ -39,7 +39,7 @@ deployments:
     parameters:
       provider_strategy: "nominatim"
       query_override: null
-      dataset_id: "intermediario_dados_mestres"
+      dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       bucket_name: "rj-sms"

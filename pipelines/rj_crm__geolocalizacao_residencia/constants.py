@@ -64,7 +64,7 @@ WITH enderecos_rmi AS (
 enderecos_geolocalizados AS (
   SELECT
     DISTINCT logradouro_tratado, numero_porta, IFNULL(bairro, "") AS bairro
-  FROM `rj-crm-registry.intermediario_dados_mestres_staging.enderecos_geolocalizados`
+  FROM `rj-crm-registry.dados_brutos_enriquecidos.enderecos_geolocalizados`
 )
 SELECT
   DISTINCT
