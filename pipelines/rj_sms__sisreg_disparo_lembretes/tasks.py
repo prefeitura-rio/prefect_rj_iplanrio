@@ -9,18 +9,16 @@ from datetime import datetime
 from typing import Dict, List, Union
 
 import pandas as pd
+from iplanrio.pipelines_utils.logging import log
 from numpy import ceil
 from prefect import task
 from pytz import timezone
-from iplanrio.pipelines_utils.logging import log
 
 from .utils.tasks import download_data_from_bigquery
 
 
 @task
-def create_dispatch_payload(
-    campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]
-) -> Dict:
+def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
     """
     Create payload for dispatch
     """
@@ -41,17 +39,15 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
     campaign_name = dispatch_payload["campaignName"]
 
     dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S")
-    
+
     for i, start in enumerate(range(0, total, chunk), 1):
         end = start + chunk
         batch = destinations[start:end]
         dispatch_payload["destinations"] = batch
-        dispatch_payload["campaignName"] = (
-            f"{campaign_name}-{dispatch_date[:10]}-lote{i}"
-        )
-        
+        dispatch_payload["campaignName"] = f"{campaign_name}-{dispatch_date[:10]}-lote{i}"
+
         log(f"Disparando lote {i} de {int(ceil(total / chunk))} com {len(batch)} destinos")
-        
+
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=dispatch_payload)
 
         if response.status_code != 201:
@@ -136,7 +132,7 @@ def get_destinations(
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
         destinations = json.loads(destinations)
-    
+
     return destinations if destinations else []
 
 
@@ -149,11 +145,11 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     if not destinations:
         log("No destinations to process")
         return destinations
-    
+
     seen_phones = set()
     unique_destinations = []
     duplicates_count = 0
-    
+
     for destination in destinations:
         phone = destination.get("to")
         if phone and phone not in seen_phones:
@@ -161,34 +157,31 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
             unique_destinations.append(destination)
         elif phone in seen_phones:
             duplicates_count += 1
-    
+
     log(f"Removed {duplicates_count} duplicate phone numbers")
     log(f"Total unique destinations: {len(unique_destinations)}")
-    
+
     return unique_destinations
 
 
 @task
 def create_date_partitions(
-    dataframe: pd.DataFrame,
-    partition_column: str,
-    file_format: str = "csv",
-    root_folder: str = "./data_dispatch/"
+    dataframe: pd.DataFrame, partition_column: str, file_format: str = "csv", root_folder: str = "./data_dispatch/"
 ) -> str:
     """
     Create date partitions for data storage
     """
     import os
     import uuid
-    
+
     os.makedirs(root_folder, exist_ok=True)
     filename = f"{uuid.uuid4()}.{file_format}"
     file_path = os.path.join(root_folder, filename)
-    
+
     if file_format == "csv":
         dataframe.to_csv(file_path, index=False)
     else:
         raise ValueError(f"Unsupported file format: {file_format}")
-    
+
     log(f"Created partition file: {file_path}")
     return file_path

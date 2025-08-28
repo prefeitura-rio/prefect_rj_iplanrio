@@ -14,20 +14,20 @@ class SisregConstants(Enum):
     # Dataset and table for storing dispatches
     DATASET_ID = "disparos"
     TABLE_ID = "disparos_efetuados"
-    
+
     # BigQuery configuration
     BILLING_PROJECT_ID = "rj-crm-registry"
     DUMP_MODE = "append"
-    
+
     # Wetalkie API configuration
     HSM_ID = 18  # HSM Template ID for SISREG messages
     CAMPAIGN_NAME = "SISREG_AGENDAMENTOS"
     COST_CENTER_ID = "2"  # TODO: Define correct cost center
     CHUNK_SIZE = 1000
-    
+
     # Infisical configuration for Wetalkie credentials
     INFISICAL_SECRET_PATH = "/wetalkie"
-    
+
     # BigQuery query to get SISREG appointments for next day
     QUERY = """
     WITH sisreg AS (
