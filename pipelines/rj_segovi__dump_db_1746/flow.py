@@ -5,15 +5,16 @@ This flow is used to dump the database from the 1746 server to the BIGQUERY..
 
 from typing import Optional
 
-from iplanrio.pipelines_templates.dump_db.tasks import (
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from prefect import flow
+
+from pipelines.rj_segovi__dump_db_1746.tasks import (
     dump_upload_batch_task,
     format_partitioned_query_task,
     get_database_username_and_password_from_secret_task,
     parse_comma_separated_string_to_list_task,
 )
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect import flow
 
 
 @flow(log_prints=True)
