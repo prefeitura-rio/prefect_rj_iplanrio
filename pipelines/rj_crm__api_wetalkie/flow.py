@@ -112,4 +112,3 @@ def rj_crm__api_wetalkie(
     if materialize_after_dump:
         dbt_select = WetalkieConstants.DBT_SELECT.value
         execute_dbt_task(select=dbt_select, target="prod")
-
