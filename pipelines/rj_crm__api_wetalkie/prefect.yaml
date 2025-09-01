@@ -1,4 +1,4 @@
-name: rj_smas__disparo_cadunico
+name: rj_crm__api_wetalkie
 prefect-version: 3.4.3
 
 build:
@@ -10,8 +10,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_smas__disparo_cadunico-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_smas__disparo_cadunico/Dockerfile
+      tag: "rj_crm__api_wetalkie-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_crm__api_wetalkie/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -24,50 +24,44 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-smas--disparo-cadunico--staging
+  - name: rj-crm--api-wetalkie--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_smas__disparo_cadunico/flow.py:rj_smas__disparo_cadunico
+    entrypoint: pipelines/rj_crm__api_wetalkie/flow.py:rj_crm__api_wetalkie
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smas__disparo_cadunico -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-staging
-        image_pull_policy: Always
-    parameters:
-      # Valores padrão (podem ser alterados na UI)
-      id_hsm: 101
-      campaign_name: smas-lembretecadunico-prod
-      cost_center_id: 4
-      chunk_size: 1000
-      dataset_id: brutos_cadunico
-      table_id: disparos
-      dump_mode: append
-      infisical_secret_path: /wetalkie
-  - name: rj-smas--disparo-cadunico--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_smas__disparo_cadunico/flow.py:rj_smas__disparo_cadunico
-    work_pool:
-      name: default-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smas__disparo_cadunico -- prefect flow-run execute
+        command: uv run --package rj_crm__api_wetalkie -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
-      id_hsm: 101
-      campaign_name: smas-lembretecadunico-prod
-      cost_center_id: 4
-      chunk_size: 1000
-      dataset_id: brutos_cadunico
-      table_id: disparos
+      dataset_id: brutos_wetalkie
+      table_id: fluxos_ura
       dump_mode: append
+      materialize_after_dump: true
       infisical_secret_path: /wetalkie
-    # schedules:
-    #   - interval: 86400
-    #     anchor_date: "2021-01-01T09:00:00"
-    #     timezone: America/Sao_Paulo
-    #     slug: disparo_cadunico_daily
+  - name: rj-crm--api-wetalkie--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__api_wetalkie/flow.py:rj_crm__api_wetalkie
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__api_wetalkie -- prefect flow-run execute
+        secretName: prefect-jobs-crm-registry-dev
+        image_pull_policy: Always
+    parameters:
+      # Valores padrão (podem ser alterados na UI)
+      dataset_id: brutos_wetalkie
+      table_id: fluxos_ura
+      dump_mode: append
+      materialize_after_dump: true
+      infisical_secret_path: /wetalkie
+    schedules:
+      - interval: 600  # 10 minutos
+        anchor_date: "2021-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: wetalkie_every_10min

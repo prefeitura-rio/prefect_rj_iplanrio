@@ -155,7 +155,6 @@ def rj_crm__geolocalizacao_residencia(
                 dataframe=georeferenced_table, file_folder=file_folder, file_format=file_format
             )
 
-            # Upload to GCS and BigQuery
             create_table_and_upload_to_gcs_task(
                 data_path=base_path,
                 dataset_id=dataset_id,
@@ -167,4 +166,4 @@ def rj_crm__geolocalizacao_residencia(
         else:
             print(f"No geocoded results from strategy '{provider_strategy}' - skipping upload")
     else:
-        print("No addresses found to geocode - skipping flow execution")
+        print("No addresses found to geocode - skipping flow execution.")

@@ -34,12 +34,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        secretName: prefect-jobs-crm-registry-dev
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
       query_override: null
-      dataset_id: "intermediario_dados_mestres"
+      dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       bucket_name: "rj-sms"
@@ -61,12 +61,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-crm-registry
         image_pull_policy: Always
     parameters:
       provider_strategy: "nominatim"
       query_override: null
-      dataset_id: "intermediario_dados_mestres"
+      dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       bucket_name: "rj-sms"
@@ -94,12 +94,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        secretName: prefect-jobs-crm-registry-dev
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
       query_override: null
-      dataset_id: "intermediario_dados_mestres"
+      dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       bucket_name: "rj-sms"
@@ -121,12 +121,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-crm-registry
         image_pull_policy: Always
     parameters:
       provider_strategy: "fallback"
       query_override: null
-      dataset_id: "intermediario_dados_mestres"
+      dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       bucket_name: "rj-sms"
@@ -154,12 +154,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-secrets-staging
+        secretName: prefect-jobs-crm-registry-dev
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
       query_override: null
-      dataset_id: "intermediario_dados_mestres"
+      dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       bucket_name: "rj-sms"
@@ -181,12 +181,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__geolocalizacao_residencia -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-crm-registry
         image_pull_policy: Always
     parameters:
       provider_strategy: "geoapify_batch"
       query_override: null
-      dataset_id: "intermediario_dados_mestres"
+      dataset_id: "brutos_dados_enriquecidos"
       table_id: "enderecos_geolocalizados"
       billing_project_id: "rj-crm-registry"
       bucket_name: "rj-sms"
