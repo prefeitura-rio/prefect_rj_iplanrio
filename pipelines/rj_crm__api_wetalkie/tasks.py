@@ -48,6 +48,11 @@ def get_attendances(api: object) -> pd.DataFrame:
         response_data = all_attendances
         log(f"response_data (no json method): {response_data}")
 
+    # Check if API returned a "message" response (indicates no data available)
+    if "message" in response_data and "data" not in response_data:
+        log(f"WeTalkie API returned message response (no data available): {response_data.get('message')}")
+        return pd.DataFrame()  # Return empty DataFrame - no data to process
+
     all_attendances = response_data["data"]["items"]
     if not all_attendances:
         log("No attendances found in the Wetalkie API", level="warning")

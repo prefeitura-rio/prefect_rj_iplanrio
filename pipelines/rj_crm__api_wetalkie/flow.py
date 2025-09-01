@@ -26,7 +26,6 @@ from pipelines.rj_crm__api_wetalkie.tasks import (
 from pipelines.rj_crm__api_wetalkie.utils.tasks import (
     access_api,
     create_date_partitions,
-    skip_flow_if_empty,
 )
 
 
@@ -82,14 +81,13 @@ def rj_crm__api_wetalkie(
 
     raw_attendances = get_attendances(api)
 
-    # Verificar se há dados para processar
-    validated_attendances = skip_flow_if_empty(
-        data=raw_attendances,
-        message="No attendances found from API. Skipping flow execution.",
-    )
-
+    # Check if there's data to process - return early if empty
+    if raw_attendances.empty:
+        log("No attendances found from API. Flow completed successfully with no data to process.")
+        return
+    
     # Processar JSON e transcrever áudios
-    processed_data = processar_json_e_transcrever_audios(dados_entrada=validated_attendances)
+    processed_data = processar_json_e_transcrever_audios(dados_entrada=raw_attendances)
 
     # Converter lista processada para DataFrame
     df = criar_dataframe_de_lista(processed_data)
