@@ -13,7 +13,7 @@ dependencies = [
     "pendulum==3.0.0",
     "simplejson==3.20.1",
     "dbt-core>=1.8.0",
-    "basedosdados>=2.0.0",
+    "basedosdados==2.0.0b23",
     "pandas>=1.5.0",
     "numpy>=1.20.0",
     "requests>=2.25.0",
