@@ -155,7 +155,6 @@ def rj_crm__geolocalizacao_residencia(
                 dataframe=georeferenced_table, file_folder=file_folder, file_format=file_format
             )
 
-            # Upload to GCS and BigQuery
             create_table_and_upload_to_gcs_task(
                 data_path=base_path,
                 dataset_id=dataset_id,

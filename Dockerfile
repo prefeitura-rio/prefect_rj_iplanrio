@@ -5,8 +5,6 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 RUN wget -O /tmp/instantclient.zip "https://download.oracle.com/otn_software/linux/instantclient/2118000/instantclient-basic-linux.x64-21.18.0.0.0dbru.zip" \
     && unzip /tmp/instantclient.zip -d /tmp \
     && rm /tmp/instantclient.zip
-
-
 FROM python:3.13-slim-bookworm
 
 COPY --from=get-instant-client-step /tmp/instantclient_21_18 /opt/oracle/instantclient
@@ -14,7 +12,6 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY ./openssl.cnf /etc/ssl/openssl.cnf
 
 RUN apt-get update \
-
     && apt-get install --no-install-recommends -y git curl gnupg2 libaio1 ca-certificates build-essential \
     && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \
     && echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
