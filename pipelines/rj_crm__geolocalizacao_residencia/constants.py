@@ -10,7 +10,7 @@ class GeolocalizacaoConstants(Enum):
     """Constants for geolocation pipeline"""
 
     # Dataset and table configuration
-    DATASET_ID = "intermediario_dados_mestres"
+    DATASET_ID = "brutos_dados_enriquecidos"
     TABLE_ID = "enderecos_geolocalizados"
     BILLING_PROJECT_ID = "rj-crm-registry"
     BUCKET_NAME = "rj-sms"
@@ -64,7 +64,7 @@ WITH enderecos_rmi AS (
 enderecos_geolocalizados AS (
   SELECT
     DISTINCT logradouro_tratado, numero_porta, IFNULL(bairro, "") AS bairro
-  FROM `rj-crm-registry.intermediario_dados_mestres_staging.enderecos_geolocalizados`
+  FROM `rj-crm-registry.brutos_dados_enriquecidos.enderecos_geolocalizados`
 )
 SELECT
   DISTINCT
