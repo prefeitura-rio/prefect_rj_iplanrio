@@ -1,0 +1,21 @@
+[project]
+name = "rj_sms__sisreg_disparo_lembretes"
+version = "0.1.0"
+description = "Pipeline SMS SISREG para disparo de lembretes de agendamentos"
+dependencies = [
+    "dbt-bigquery>=1.6.1",
+    "google-cloud-storage==2.10.0",
+    "google-cloud-bigquery",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
+    "prefeitura-rio[actions] @ git+https://github.com/prefeitura-rio/prefeitura-rio@54593ddff444158b0ecbab5514c5cde4d44012c0",
+    "python-dotenv==1.0.1",
+    "pendulum==3.0.0",
+    "simplejson==3.20.1",
+    "dbt-core>=1.8.0",
+    "basedosdados==2.0.0b23",
+    "pandas>=1.5.0",
+    "numpy>=1.20.0",
+    "requests>=2.25.0",
+    "pytz>=2021.1",
+]
