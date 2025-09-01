@@ -85,7 +85,7 @@ def rj_crm__api_wetalkie(
     if raw_attendances.empty:
         log("No attendances found from API. Flow completed successfully with no data to process.")
         return
-    
+
     # Processar JSON e transcrever áudios
     processed_data = processar_json_e_transcrever_audios(dados_entrada=raw_attendances)
 
