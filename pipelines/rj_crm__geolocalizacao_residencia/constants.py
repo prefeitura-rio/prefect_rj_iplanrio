@@ -10,7 +10,7 @@ class GeolocalizacaoConstants(Enum):
     """Constants for geolocation pipeline"""
 
     # Dataset and table configuration
-    DATASET_ID = "intermediario_dados_mestres"
+    DATASET_ID = "brutos_dados_enriquecidos"
     TABLE_ID = "enderecos_geolocalizados"
     BILLING_PROJECT_ID = "rj-crm-registry"
     BUCKET_NAME = "rj-sms"
