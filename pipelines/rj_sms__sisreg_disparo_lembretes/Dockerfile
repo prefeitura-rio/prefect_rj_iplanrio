@@ -1,4 +1,4 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio/base:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
 
 COPY pipelines/rj_sms__sisreg_disparo_lembretes /opt/prefect/prefect_rj_iplanrio/pipelines/rj_sms__sisreg_disparo_lembretes
 WORKDIR /opt/prefect/prefect_rj_iplanrio
