@@ -65,7 +65,7 @@ deployments:
                 Modalidade, Grupamento, Turma,
                 Turno, Sala, Area_Sala, Capac_Sala,
                 Tipo_Sala, Sala_Util_Como, Tot_Turma,
-                tur_id, esc_id, dep_id
+                tur_id, esc_id, dep_id, GETDATE() AS loaded_at
             FROM GestaoEscolar.dbo.VW_BI_Turma
 
       - interval: 86400
