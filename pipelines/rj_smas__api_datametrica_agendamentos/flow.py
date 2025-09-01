@@ -23,7 +23,7 @@ from pipelines.rj_smas__api_datametrica_agendamentos.utils.tasks import (
 
 @flow(log_prints=True)
 def rj_smas__api_datametrica_agendamentos(
-    # Parâmetros opcionais para override manual na UI
+
     dataset_id: str | None = None,
     table_id: str | None = None,
     dump_mode: str | None = None,

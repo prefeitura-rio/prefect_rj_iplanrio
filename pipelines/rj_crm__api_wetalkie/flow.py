@@ -109,7 +109,7 @@ def rj_crm__api_wetalkie(
         biglake_table=biglake_table,
     )
 
-    # Materializar com DBT se necessário
     if materialize_after_dump:
         dbt_select = WetalkieConstants.DBT_SELECT.value
         execute_dbt_task(select=dbt_select, target="prod")
+
