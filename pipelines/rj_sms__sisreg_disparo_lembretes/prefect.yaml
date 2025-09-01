@@ -49,11 +49,11 @@ deployments:
       cost_center_id: "2"
       chunk_size: 1000
       infisical_secret_path: /wetalkie
-    schedules:
-      - interval: 86400  # Daily (24 hours in seconds)
-        anchor_date: "2024-01-01T10:00:00"
-        timezone: America/Sao_Paulo
-        slug: sisreg_daily_10am
+#    schedules:
+#      - interval: 86400  # Daily (24 hours in seconds)
+#        anchor_date: "2024-01-01T10:00:00"
+#        timezone: America/Sao_Paulo
+#        slug: sisreg_daily_10am
 
   - name: rj-sms--sisreg-disparo-lembretes--staging
     version: "{{ get-commit-hash.stdout }}"
