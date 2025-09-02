@@ -115,7 +115,7 @@ def rj_crm__geolocalizacao_residencia(
     if not empty_addresses:
         # Choose geocoding strategy
         if provider_strategy == GeolocalizacaoConstants.STRATEGY_NOMINATIM.value:
-            # Strategy 1: Nominatim only (fast, basic accuracy)
+            # Strategy 1: Nominatim only (fast, basic accuracy).
             georeferenced_table = async_geocoding_dataframe(
                 dataframe=dataframe,
                 address_column=address_column,
@@ -124,14 +124,14 @@ def rj_crm__geolocalizacao_residencia(
             )
 
         elif provider_strategy == GeolocalizacaoConstants.STRATEGY_FALLBACK.value:
-            # Strategy 2: Multiple provider fallback (slower, higher accuracy)
+            # Strategy 2: Multiple provider fallback (slower, higher accuracy).
             georeferenced_table = async_geocoding_dataframe_with_fallback(
                 dataframe=dataframe,
                 address_column=address_column,
             )
 
         elif provider_strategy == GeolocalizacaoConstants.STRATEGY_GEOAPIFY_BATCH.value:
-            # Strategy 3: Geoapify batch processing (medium speed, good accuracy)
+            # Strategy 3: Geoapify batch processing (medium speed, good accuracy).
             georeferenced_table = geoapify_batch_geocoding_task(
                 dataframe=dataframe,
                 address_column=address_column,
