@@ -33,7 +33,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__api_wetalkie -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-staging
+        secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
@@ -51,7 +51,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__api_wetalkie -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry
+        secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
@@ -61,7 +61,7 @@ deployments:
       materialize_after_dump: true
       infisical_secret_path: /wetalkie
     schedules:
-      - interval: 600  # 10 minutos
+      - interval: 600 # 10 minutos
         anchor_date: "2021-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: wetalkie_every_10min
