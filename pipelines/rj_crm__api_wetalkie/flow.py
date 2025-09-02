@@ -89,7 +89,6 @@ def rj_crm__api_wetalkie(
     # Processar JSON e transcrever áudios
     processed_data = processar_json_e_transcrever_audios(dados_entrada=raw_attendances)
 
-    # Converter lista processada para DataFrame
     df = criar_dataframe_de_lista(processed_data)
 
     # Criar partições por data
