@@ -60,8 +60,8 @@ deployments:
       dump_mode: append
       materialize_after_dump: true
       infisical_secret_path: /wetalkie
-    schedules:
-      - interval: 600 # 10 minutos
-        anchor_date: "2021-01-01T00:00:00"
-        timezone: America/Sao_Paulo
-        slug: wetalkie_every_10min
+#    schedules:
+#      - interval: 600 # 10 minutos
+#        anchor_date: "2021-01-01T00:00:00"
+#        timezone: America/Sao_Paulo
+#        slug: wetalkie_every_10min
