@@ -150,7 +150,6 @@ def rj_crm__geolocalizacao_residencia(
             # Add plus codes
             georeferenced_table = add_plus_code_column(georeferenced_table)
 
-            # Save to file
             base_path = dataframe_to_file(
                 dataframe=georeferenced_table, file_folder=file_folder, file_format=file_format
             )
