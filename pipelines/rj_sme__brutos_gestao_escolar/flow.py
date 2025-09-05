@@ -41,7 +41,7 @@ def rj_sme__brutos_gestao_escolar(
     log_number_of_batches: int = 100,
     max_concurrency: int = 1,
     only_staging_dataset: bool = True,
-    add_timestamp_column: bool = False
+    add_timestamp_column: bool = False,
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
