@@ -9,6 +9,7 @@ members = [
     "rj-crm-geolocalizacao-residencia",
     "rj-crm-wetalkie-atualiza-contato",
     "rj-cvl-osinfo",
+    "rj-cvl-arquivo-virtual",
     "rj-iplanrio-dados-mestres",
     "rj-iplanrio-eai-history",
     "rj-iplanrio-equipamentos-arcgis",
