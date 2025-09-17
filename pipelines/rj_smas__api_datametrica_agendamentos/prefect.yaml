@@ -33,7 +33,7 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_smas__api_datametrica_agendamentos -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets-staging
+        secretName: prefect-jobs-crm-registry-staging
         image_pull_policy: Always
     parameters:
       dataset_id: brutos_data_metrica
