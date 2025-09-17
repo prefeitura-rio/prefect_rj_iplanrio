@@ -96,6 +96,6 @@ def rj_crm__api_wetalkie(
         biglake_table=biglake_table,
     )
 
-    #if materialize_after_dump:
+    # if materialize_after_dump:
     #    dbt_select = WetalkieConstants.DBT_SELECT.value
     #    execute_dbt_task(select=dbt_select, target="prod")
