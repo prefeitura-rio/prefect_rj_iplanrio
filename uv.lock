@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.13"
 
 [manifest]
@@ -8,8 +8,8 @@ members = [
     "rj-crm-api-wetalkie",
     "rj-crm-geolocalizacao-residencia",
     "rj-crm-wetalkie-atualiza-contato",
-    "rj-cvl-osinfo",
     "rj-cvl-arquivo-virtual",
+    "rj-cvl-osinfo",
     "rj-iplanrio-dados-mestres",
     "rj-iplanrio-eai-history",
     "rj-iplanrio-equipamentos-arcgis",
@@ -3177,6 +3177,11 @@ requires-dist = [
     { name = "pytz", specifier = ">=2025.2" },
     { name = "simplejson", specifier = "==3.20.1" },
 ]
+
+[[package]]
+name = "rj-cvl-arquivo-virtual"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_cvl__arquivo_virtual" }
 
 [[package]]
 name = "rj-cvl-osinfo"

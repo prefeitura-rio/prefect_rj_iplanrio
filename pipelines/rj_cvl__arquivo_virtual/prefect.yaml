@@ -34,7 +34,7 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
         image_pull_policy: Always
-  - name: rj-sme--brutos_gestao_escolar--prod
+  - name: rj_cvl__arquivo_virtual--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cvl__arquivo_virtual/flow.py:rj_cvl__arquivo_virtual
     work_pool:
