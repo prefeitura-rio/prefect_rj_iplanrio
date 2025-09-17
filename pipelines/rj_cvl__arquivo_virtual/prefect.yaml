@@ -54,12 +54,14 @@ deployments:
           batch_size: 50000
           table_id: conjunto_arquivo
           dump_mode: overwrite
-          execute_query:""" SELECT `id_nivel` 
-            FROM conjunto_arquivo;"""
-              # id_conjuntoArquivo,
-              # id_conjuntoArquivo_pai,
-              # st_conjuntoArquivo,
-              # st_conjuntoArquivo_pai
+            execute_query: |
+              SELECT
+                  id_nivel,
+                  id_conjuntoArquivo,
+                  id_conjuntoArquivo_pai,
+                  st_conjuntoArquivo,
+                  st_conjuntoArquivo_pai
+              FROM conjunto_arquivo;
 
 
 
