@@ -9,7 +9,6 @@ members = [
     "rj-crm-geolocalizacao-residencia",
     "rj-crm-wetalkie-atualiza-contato",
     "rj-cvl-arquivo-virtual",
-    "rj-cvl-arquivo-virtual-teste",
     "rj-cvl-osinfo",
     "rj-iplanrio-dados-mestres",
     "rj-iplanrio-eai-history",
@@ -3230,11 +3229,6 @@ requires-dist = [
 name = "rj-cvl-arquivo-virtual"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cvl__arquivo_virtual" }
-
-[[package]]
-name = "rj-cvl-arquivo-virtual-teste"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_cvl__arquivo_virtual_teste" }
 
 [[package]]
 name = "rj-cvl-osinfo"
