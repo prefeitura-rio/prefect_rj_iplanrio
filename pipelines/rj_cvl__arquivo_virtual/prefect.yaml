@@ -54,7 +54,7 @@ deployments:
           batch_size: 50000
           table_id: conjunto_arquivo
           dump_mode: overwrite
-          
+
           execute_query: |
            SELECT
                 id_nivel,
@@ -74,7 +74,7 @@ deployments:
           batch_size: 50000
           table_id: a1_identificacao
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 cd_referencia,
@@ -96,7 +96,7 @@ deployments:
           batch_size: 50000
           table_id: a2_contextualizacao
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 ds_historiaAdm,
@@ -114,7 +114,7 @@ deployments:
           batch_size: 50000
           table_id: a3_conteudo_estrutura
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 ds_incorporacoes,
@@ -134,7 +134,7 @@ deployments:
           batch_size: 50000
           table_id: a4_condicoes_acesso
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 ds_condicoesReproducao,
@@ -153,7 +153,7 @@ deployments:
           batch_size: 50000
           table_id: a5_fontes_relacionada
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 ds_existLocalOriginais,
@@ -173,7 +173,7 @@ deployments:
           batch_size: 50000
           table_id: a6_notas
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 ds_notaConservacao,
@@ -192,7 +192,7 @@ deployments:
           batch_size: 50000
           table_id: a7_controle
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 ds_datasDesc,
@@ -213,7 +213,7 @@ deployments:
           batch_size: 50000
           table_id: condic_idioma
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_idioma,
@@ -229,7 +229,7 @@ deployments:
           batch_size: 50000
           table_id: condic_inst
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_condicInst,
@@ -247,7 +247,7 @@ deployments:
           batch_size: 50000
           table_id: context_produtor
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_produtor,
@@ -267,7 +267,7 @@ deployments:
           batch_size: 50000
           table_id: dimensao_suporte
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_conjuntoArquivo,
@@ -292,7 +292,7 @@ deployments:
           batch_size: 50000
           table_id: procedencia
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_procedencia,
@@ -313,7 +313,7 @@ deployments:
           batch_size: 50000
           table_id: capacidade_armazena
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 Id_capacidade,
@@ -329,7 +329,7 @@ deployments:
           batch_size: 50000
           table_id: especie
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_especie,
@@ -346,7 +346,7 @@ deployments:
           batch_size: 50000
           table_id: estado_acervo
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_estadoAcervo,
@@ -362,7 +362,7 @@ deployments:
           batch_size: 50000
           table_id: estagio_tratamento
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_estagioTratamento,
@@ -378,7 +378,7 @@ deployments:
           batch_size: 50000
           table_id: forma_entrada
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_formaEntrada,
@@ -394,7 +394,7 @@ deployments:
           batch_size: 50000
           table_id: formato
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_formato,
@@ -412,7 +412,7 @@ deployments:
           batch_size: 50000
           table_id: genero
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_genero,
@@ -429,7 +429,7 @@ deployments:
           batch_size: 50000
           table_id: idioma
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_conjuntoArquivo,
@@ -446,7 +446,7 @@ deployments:
           batch_size: 50000
           table_id: modalidade
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_modalidade,
@@ -462,7 +462,7 @@ deployments:
           batch_size: 50000
           table_id: nivel
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_nivel,
@@ -479,7 +479,7 @@ deployments:
           batch_size: 50000
           table_id: restricao
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_restricao,
@@ -495,7 +495,7 @@ deployments:
           batch_size: 50000
           table_id: tipo_escala
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_tipoEscala,
@@ -511,7 +511,7 @@ deployments:
           batch_size: 50000
           table_id: tipo_produtor
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_tipoProdutor,
@@ -527,7 +527,7 @@ deployments:
           batch_size: 50000
           table_id: tipo_restricao
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_tipoRestricao,
@@ -543,7 +543,7 @@ deployments:
           batch_size: 50000
           table_id: unidade_medida
           dump_mode: overwrite
-          
+
           execute_query: |
             SELECT
                 id_unidade,
