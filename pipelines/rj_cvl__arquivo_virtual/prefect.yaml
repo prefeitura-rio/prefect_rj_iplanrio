@@ -45,7 +45,25 @@ deployments:
         command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
         image_pull_policy: Always
     schedules:
-      - interval: 86400
+      # - interval: 86400
+      #   anchor_date: "2022-01-01T02:30:00"
+      #   timezone: America/Sao_Paulo
+      #   slug: conjunto_arquivo
+      #   parameters:
+      #     biglake_table: true
+      #     batch_size: 50000
+      #     table_id: conjunto_arquivo
+      #     dump_mode: overwrite
+      #       execute_query: |
+      #         SELECT
+      #             id_nivel,
+      #             id_conjuntoArquivo,
+      #             id_conjuntoArquivo_pai,
+      #             st_conjuntoArquivo,
+      #             st_conjuntoArquivo_pai
+      #         FROM conjunto_arquivo;
+
+      - interval: 86400  # executa a cada 24h
         anchor_date: "2022-01-01T02:30:00"
         timezone: America/Sao_Paulo
         slug: conjunto_arquivo
@@ -54,14 +72,15 @@ deployments:
           batch_size: 50000
           table_id: conjunto_arquivo
           dump_mode: overwrite
-            execute_query: |
-              SELECT
-                  id_nivel,
-                  id_conjuntoArquivo,
-                  id_conjuntoArquivo_pai,
-                  st_conjuntoArquivo,
-                  st_conjuntoArquivo_pai
-              FROM conjunto_arquivo;
+          add_timestamp_column: false  # ou true, se quiser
+          execute_query: |
+            SELECT
+                id_nivel,
+                id_conjuntoArquivo,
+                id_conjuntoArquivo_pai,
+                st_conjuntoArquivo,
+                st_conjuntoArquivo_pai
+            FROM conjunto_arquivo;
 
 
 
