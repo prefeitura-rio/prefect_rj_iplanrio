@@ -53,13 +53,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: conjunto_arquivo
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
            SELECT
                 id_nivel,
@@ -78,13 +73,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: a1_identificacao
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 cd_referencia,
@@ -105,13 +95,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: a2_contextualizacao
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 ds_historiaAdm,
@@ -128,13 +113,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: a3_conteudo_estrutura
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 ds_incorporacoes,
@@ -153,13 +133,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: a4_condicoes_acesso
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 ds_condicoesReproducao,
@@ -177,13 +152,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: a5_fontes_relacionada
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 ds_existLocalOriginais,
@@ -202,13 +172,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: a6_notas
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 ds_notaConservacao,
@@ -226,13 +191,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: a7_controle
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 ds_datasDesc,
@@ -252,13 +212,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: condic_idioma
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_idioma,
@@ -273,13 +228,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: condic_inst
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_condicInst,
@@ -296,13 +246,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: context_produtor
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_produtor,
@@ -321,13 +266,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: dimensao_suporte
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_conjuntoArquivo,
@@ -351,13 +291,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: procedencia
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_procedencia,
@@ -377,13 +312,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: capacidade_armazena
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 Id_capacidade,
@@ -398,13 +328,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: especie
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_especie,
@@ -420,13 +345,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: estado_acervo
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_estadoAcervo,
@@ -441,13 +361,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: estagio_tratamento
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_estagioTratamento,
@@ -462,13 +377,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: forma_entrada
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_formaEntrada,
@@ -483,13 +393,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: formato
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_formato,
@@ -506,13 +411,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: genero
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_genero,
@@ -528,13 +428,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: idioma
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_conjuntoArquivo,
@@ -550,13 +445,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: modalidade
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_modalidade,
@@ -571,13 +461,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: nivel
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_nivel,
@@ -593,13 +478,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: restricao
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_restricao,
@@ -614,13 +494,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: tipo_escala
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_tipoEscala,
@@ -635,13 +510,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: tipo_produtor
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_tipoProdutor,
@@ -656,13 +526,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: tipo_restricao
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_tipoRestricao,
@@ -677,13 +542,8 @@ deployments:
           biglake_table: true
           batch_size: 50000
           table_id: unidade_medida
-          dump_mode: append
-          partition_columns: Ano
-          partition_date_format: "%Y"
-          break_query_frequency: year
-          break_query_start: current_year
-          break_query_end: current_year
-          add_timestamp_column: true
+          dump_mode: overwrite
+          
           execute_query: |
             SELECT
                 id_unidade,
