@@ -1,18 +1,6 @@
 # -*- coding: utf-8 -*-
-"""
-Flow migrado do Prefect 1.4 para 3.0 - CRM API Wetalkie
-
-⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no iplanrio:
-- handler_initialize_sentry: SEM EQUIVALENTE
-- LocalDaskExecutor: Removido no Prefect 3.0
-- KubernetesRun: Removido no Prefect 3.0 (configurado no YAML)
-- GCS storage: Removido no Prefect 3.0 (configurado no YAML)
-- Parameter: Substituído por parâmetros de função
-- case (conditional execution): Substituído por if/else padrão
-"""
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.dbt import execute_dbt_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
@@ -108,6 +96,6 @@ def rj_crm__api_wetalkie(
         biglake_table=biglake_table,
     )
 
-    #if materialize_after_dump:
+    # if materialize_after_dump:
     #    dbt_select = WetalkieConstants.DBT_SELECT.value
     #    execute_dbt_task(select=dbt_select, target="prod")

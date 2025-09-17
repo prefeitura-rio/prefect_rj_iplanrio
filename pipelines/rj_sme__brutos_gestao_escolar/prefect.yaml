@@ -54,18 +54,19 @@ deployments:
           batch_size: 50000
           table_id: turma
           dump_mode: append
-          partition_columns: ano_converted
+          partition_columns: Ano
           partition_date_format: "%Y"
           break_query_frequency: year
           break_query_start: current_year
           break_query_end: current_year
+          add_timestamp_column: true
           execute_query: |
             SELECT
-                Ano, CAST(ano AS varchar) AS ano_converted, Curso, Nivel_Ensino,
+                Ano, Curso, Nivel_Ensino,
                 Modalidade, Grupamento, Turma,
                 Turno, Sala, Area_Sala, Capac_Sala,
                 Tipo_Sala, Sala_Util_Como, Tot_Turma,
-                tur_id, esc_id, dep_id, GETDATE() AS loaded_at
+                tur_id, esc_id, dep_id
             FROM GestaoEscolar.dbo.VW_BI_Turma
 
       - interval: 86400
