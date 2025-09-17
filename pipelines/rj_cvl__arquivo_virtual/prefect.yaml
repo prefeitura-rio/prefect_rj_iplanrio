@@ -45,24 +45,7 @@ deployments:
         command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
         image_pull_policy: Always
     schedules:
-      # - interval: 86400
-      #   anchor_date: "2022-01-01T02:30:00"
-      #   timezone: America/Sao_Paulo
-      #   slug: conjunto_arquivo
-      #   parameters:
-      #     biglake_table: true
-      #     batch_size: 50000
-      #     table_id: conjunto_arquivo
-      #     dump_mode: overwrite
-      #       execute_query: |
-      #         SELECT
-      #             id_nivel,
-      #             id_conjuntoArquivo,
-      #             id_conjuntoArquivo_pai,
-      #             st_conjuntoArquivo,
-      #             st_conjuntoArquivo_pai
-      #         FROM conjunto_arquivo;
-
+ 
       - interval: 86400  # executa a cada 24h
         anchor_date: "2022-01-01T02:30:00"
         timezone: America/Sao_Paulo
@@ -72,7 +55,6 @@ deployments:
           batch_size: 50000
           table_id: conjunto_arquivo
           dump_mode: overwrite
-          add_timestamp_column: false  # ou true, se quiser
           execute_query: |
             SELECT
                 id_nivel,
@@ -81,17 +63,6 @@ deployments:
                 st_conjuntoArquivo,
                 st_conjuntoArquivo_pai
             FROM conjunto_arquivo;
-
-
-
-#  execute_query: SELECT `COD_UNIDADE`, `CNES`, `UNIDADE_FANTASIA` as `NOME_FANTASIA`, `SIGLA_TIPO`, `SIGLA_PERFIL`, `SIGLA_GESTAO`,
-#             `SIGLA_TIPO_GESTAO`, `RAZAO_SOCIAL`, `NOME_FANTA_ORIG` as `NOME_FANTASIA_ORIGINAL`, `UNIDADE_ABREVIADO`, `SIGLA`, `CNPJ`,
-#             `ENDERECO`, `ENDERECO_NUMERO` as `NUMERO`, `ENDERECO_COMPLEMENTO` as `COMPLEMENTO`, `BAIRRO`, `MUNICIPIO`, `CODMUNGEST`
-#             as `COD_MUNICIPIO`, `UF`, `CEP`, `REFERENCIA`, `TEL_DDD` as `TELELEFONE_DDD`, `TEL_1` as `TELEFONE_1`, `TEL_1_RAMAL`
-#             as `TELEFONE_1_RAMAL`, `TEL_2` as `TELEFONE_2`, `TEL_2_RAMAL` as `TELEFONE_2_RAMAL`, `FAX`, `TEL_SMS_CONSULTA` as `TELEFONE_SMS_CONSULTA`,
-#             `TEL_SMS_EXAME` as `TELEFONE_SMS_EXAME`, `EMAIL`, `DT_ULTIMA_ATUALIZ` as `DATA_ULTIMA_ATUALIZACAO`, `DATA_AVALIACAO_CONTADORES`
-#             as `DATA_AVALIACAO` FROM `adm_osinfo`.`adm_unidade`;
-
 
 
 #       - interval: 86400
