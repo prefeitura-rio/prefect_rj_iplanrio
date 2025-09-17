@@ -22,7 +22,7 @@ def rj_cvl__arquivo_virtual(
     db_host: str = "v1153017.rio.rj.gov.br",
     db_port: str = "3306",
     db_type: str = "mysql",
-    db_charset: Optional[str] = "NOT_SET",
+    db_charset: Optional[str] = "utf8mb4",
     execute_query: str = "execute_query",
     dataset_id: str = "brutos_arquivo_virtual",
     table_id: str = "table_id",
