@@ -163,8 +163,8 @@ deployments:
           execute_query: |
             SELECT
                 ds_condicoesReproducao,
-                id_conjuntoArquivo, 
-                obs_restricao,  
+                id_conjuntoArquivo,
+                obs_restricao,
                 id_restricao,
                 id_tipoRestricao
             FROM a4_condicoes_acesso
@@ -191,7 +191,7 @@ deployments:
                 ds_unidDescRelacionadas,
                 ds_outrosDetentores,
                 ds_copiasNaInstituicao,
-                id_conjuntoArquivo                  
+                id_conjuntoArquivo
             FROM a5_fontes_relacionada
 
       - interval: 86400
@@ -214,7 +214,7 @@ deployments:
                 ds_notaConservacao,
                 id_estadoAcervo,
                 ds_notasGerais,
-                id_conjuntoArquivo                  
+                id_conjuntoArquivo
             FROM a6_notas
 
 
@@ -342,7 +342,7 @@ deployments:
                 id_unidade,
                 qt_capacidade
             FROM dimensao_suporte
-            
+
       - interval: 86400
         anchor_date: "2022-01-01T02:30:00"
         timezone: America/Sao_Paulo
@@ -605,7 +605,7 @@ deployments:
                 id_restricao,
                 ds_restricaobasica
             FROM restricao
-            
+
       - interval: 86400
         anchor_date: "2022-01-01T02:30:00"
         timezone: America/Sao_Paulo
@@ -689,4 +689,4 @@ deployments:
                 id_unidade,
                 nm_unidade
             FROM unidade_medida
-            
+
