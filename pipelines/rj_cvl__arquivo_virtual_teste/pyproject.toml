@@ -1,0 +1,4 @@
+[project]
+name = "rj_cvl__arquivo_virtual_teste"
+version = "0.1.0"
+description = "Pipeline arquivo_virtual_teste da secretaria cvl"

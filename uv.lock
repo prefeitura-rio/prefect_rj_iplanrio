@@ -9,6 +9,7 @@ members = [
     "rj-crm-geolocalizacao-residencia",
     "rj-crm-wetalkie-atualiza-contato",
     "rj-cvl-arquivo-virtual",
+    "rj-cvl-arquivo-virtual-teste",
     "rj-cvl-osinfo",
     "rj-iplanrio-dados-mestres",
     "rj-iplanrio-eai-history",
@@ -20,7 +21,6 @@ members = [
     "rj-smas-disparo-cadunico",
     "rj-sme-brutos-core-sso",
     "rj-sme-brutos-gestao-escolar",
-    "rj-sme-brutos-gestao-escolar2",
     "rj-smfp-dump-db-ergon",
     "rj-smi-siscob",
     "rj-sms-sisreg-disparo-lembretes",
@@ -3232,6 +3232,11 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_cvl__arquivo_virtual" }
 
 [[package]]
+name = "rj-cvl-arquivo-virtual-teste"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_cvl__arquivo_virtual_teste" }
+
+[[package]]
 name = "rj-cvl-osinfo"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cvl__osinfo" }
@@ -3421,11 +3426,6 @@ source = { virtual = "pipelines/rj_sme__brutos_core_sso" }
 name = "rj-sme-brutos-gestao-escolar"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_sme__brutos_gestao_escolar" }
-
-[[package]]
-name = "rj-sme-brutos-gestao-escolar2"
-version = "0.1.0"
-source = { virtual = "pipelines/rj_sme__brutos_gestao_escolar2" }
 
 [[package]]
 name = "rj-smfp-dump-db-ergon"
