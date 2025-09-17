@@ -34,6 +34,8 @@ def rj_smas__disparo_cadunico(
     dataset_id: str | None = None,
     table_id: str | None = None,
     dump_mode: str | None = None,
+    query: str | None = None,
+    query_processor_name: str | None = None,
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
@@ -43,10 +45,12 @@ def rj_smas__disparo_cadunico(
     campaign_name = campaign_name or CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
     cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
     chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
+    query = query or CadunicoConstants.CADUNICO_QUERY.value
+    query_processor_name = (
+        query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
+    )
 
-    query_processor_name = CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
-    query = CadunicoConstants.CADUNICO_QUERY.value
 
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
 
