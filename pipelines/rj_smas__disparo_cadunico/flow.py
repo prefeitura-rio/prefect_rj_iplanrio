@@ -100,9 +100,7 @@ def rj_smas__disparo_cadunico(
             chunk=chunk_size,
         )
 
-        print(
-            f"Dispatch completed successfully for {len(unique_destinations)} destinations"
-        )
+        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
 
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
