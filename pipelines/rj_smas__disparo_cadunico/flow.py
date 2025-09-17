@@ -96,7 +96,9 @@ def rj_smas__disparo_cadunico(
             chunk=chunk_size,
         )
 
-        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+        print(
+            f"Dispatch completed successfully for {len(unique_destinations)} destinations"
+        )
 
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
@@ -115,14 +117,12 @@ def rj_smas__disparo_cadunico(
             root_folder="./data_dispatch/",
         )
 
-        # Validation to prevent NoneType errors in BigQuery upload
         if not partitions_path:
             raise ValueError("partitions_path is None - partition creation failed")
 
         if not os.path.exists(partitions_path):
             raise ValueError(f"partitions_path does not exist: {partitions_path}")
 
-        # Log path details for debugging
         print(f"Generated partitions_path: {partitions_path}")
         if os.path.exists(partitions_path):
             files_in_path = []
