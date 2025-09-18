@@ -57,12 +57,8 @@ deployments:
           dump_mode: overwrite
           execute_query: |
             SELECT
-                id_nivel,
-                id_conjuntoArquivo,
-                id_conjuntoArquivo_pai,
-                st_conjuntoArquivo,
-                st_conjuntoArquivo_pai
-            FROM conjunto_arquivo;
+               CONJUNTO_ARQUIVO.id_nivel
+            FROM CONJUNTO_ARQUIVO
 
 
 #       - interval: 86400
