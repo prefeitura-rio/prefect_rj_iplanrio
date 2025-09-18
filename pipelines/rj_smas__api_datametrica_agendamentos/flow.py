@@ -94,7 +94,6 @@ def rj_smas__api_datametrica_agendamentos(
         root_folder=root_folder,
     )
 
-    # Upload para GCS e BigQuery
     create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
