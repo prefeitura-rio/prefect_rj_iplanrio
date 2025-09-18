@@ -23,7 +23,7 @@ def rj_cvl__arquivo_virtual(
     db_port: str = "3306",
     db_type: str = "mysql",
     db_charset: Optional[str] = "utf8",
-    query: str = "execute_query",
+    execute_query: str = "execute_query",
     dataset_id: str = "brutos_arquivo_virtual",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-arquivo-virtual",
