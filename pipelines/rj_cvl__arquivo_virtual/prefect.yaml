@@ -55,7 +55,7 @@ deployments:
           batch_size: 50000
           table_id: conjunto_arquivo
           dump_mode: overwrite
-          execute_query: SELECT 1;
+          execute_query: "SELECT 1;"
 
 #       - interval: 86400
 #         anchor_date: "2022-01-01T02:30:00"
