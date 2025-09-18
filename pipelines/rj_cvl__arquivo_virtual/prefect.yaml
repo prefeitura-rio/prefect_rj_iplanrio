@@ -45,7 +45,7 @@ deployments:
         command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
         image_pull_policy: Always
     schedules:
- 
+
       - interval: 86400  # executa a cada 24h
         anchor_date: "2022-01-01T02:30:00"
         timezone: America/Sao_Paulo
