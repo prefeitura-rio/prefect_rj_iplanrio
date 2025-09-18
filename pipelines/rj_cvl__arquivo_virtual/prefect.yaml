@@ -55,10 +55,8 @@ deployments:
           batch_size: 50000
           table_id: conjunto_arquivo
           dump_mode: overwrite
-          execute_query: |
-            SELECT
-               CONJUNTO_ARQUIVO.id_nivel
-            FROM CONJUNTO_ARQUIVO
+          execute_query:  """ |
+               SELECT 1;"""
 
 
 #       - interval: 86400
