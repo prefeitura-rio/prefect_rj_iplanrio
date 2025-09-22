@@ -15,7 +15,7 @@ import pandas as pd
 import requests
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
-from prefect.states import Completed
+from prefect.states import SKIP
 from pytz import timezone
 
 from pipelines.rj_crm__api_wetalkie.utils.tasks import (
@@ -57,7 +57,7 @@ def get_attendances(api: object) -> pd.DataFrame:
     all_attendances = response_data["data"]["items"]
     if not all_attendances:
         log("No attendances found in the Wetalkie API", level="warning")
-        return Completed(message="No attendances found in the Wetalkie API")
+        raise SKIP("No attendances found in the Wetalkie API")
 
     for item in all_attendances:
         data.append(
