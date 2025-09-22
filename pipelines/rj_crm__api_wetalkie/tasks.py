@@ -57,7 +57,7 @@ def get_attendances(api: object) -> pd.DataFrame:
     all_attendances = response_data["data"]["items"]
     if not all_attendances:
         log("No attendances found in the Wetalkie API", level="warning")
-        Completed(message="No attendances found in the Wetalkie API")
+        return Completed(message="No attendances found in the Wetalkie API")
 
     for item in all_attendances:
         data.append(
