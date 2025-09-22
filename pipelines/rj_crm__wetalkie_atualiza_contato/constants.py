@@ -32,8 +32,9 @@ class WetalkieAtualizaContatoConstants(Enum):
     API_CONTACTS_ENDPOINT = "/callcenter/contacts"
 
     # Query para buscar contatos faltantes
+    # TODO: verificar se vai ficar mesmo essa tabela
     CONTACTS_QUERY = """
-    SELECT DISTINCT id_contato FROM `rj-crm-registry.crm_whatsapp.contato`
+    SELECT DISTINCT id_contato FROM `rj-crm-registry.intermediario_crm_whatsapp.int_crm_whatsapp_contato`
     WHERE contato_telefone IS NULL
     """
 
