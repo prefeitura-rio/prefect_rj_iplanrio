@@ -63,7 +63,6 @@ def get_attendances(api: object) -> pd.DataFrame:
         
         # Raise a TerminationSignal with the new state
         raise TerminationSignal(
-            message="Flow terminated",
             state=new_state
         )
 
