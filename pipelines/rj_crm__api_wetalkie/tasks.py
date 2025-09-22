@@ -58,14 +58,10 @@ def get_attendances(api: object) -> pd.DataFrame:
     all_attendances = response_data["data"]["items"]
     if not all_attendances:
         log("No attendances found in the Wetalkie API", level="warning")
-        new_state = Completed(
-            message="Flow new state"        )
-        
+        new_state = Completed(message="Flow new state")
+
         # Raise a TerminationSignal with the new state
-        raise TerminationSignal(
-            message="Flow terminated",
-            state=new_state
-        )
+        raise TerminationSignal(message="Flow terminated", state=new_state)
 
     for item in all_attendances:
         data.append(
