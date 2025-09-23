@@ -35,7 +35,7 @@ def rj_smas__disparo_cadunico(
     table_id: str | None = None,
     dump_mode: str | None = None,
     query: str | None = None,
-    query_processor_name: str | None = None,
+    query_processor_name: str | None = "cadunico",
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
