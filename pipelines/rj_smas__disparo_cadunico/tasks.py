@@ -15,18 +15,46 @@ from prefect import task
 from pytz import timezone
 
 from pipelines.rj_smas__disparo_cadunico.utils.tasks import task_download_data_from_bigquery
+from pipelines.rj_smas__disparo_cadunico.validators import (
+    log_validation_summary,
+    validate_destinations,
+    validate_dispatch_payload,
+)
 
 
 @task
 def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
     """
-    Cria o payload para o dispatch
+    Cria o payload para o dispatch com validação rigorosa
+
+    Args:
+        campaign_name: Nome da campanha
+        cost_center_id: ID do centro de custo
+        destinations: Lista de destinatários ou DataFrame
+
+    Returns:
+        Dict com payload validado para WeTalkie API
+
+    Raises:
+        ValueError: Se algum campo for inválido
     """
-    return {
-        "campaignName": campaign_name,
-        "costCenterId": cost_center_id,
-        "destinations": destinations,
-    }
+    # Convert DataFrame to list if needed
+    if isinstance(destinations, pd.DataFrame):
+        destinations = destinations.to_dict("records")
+
+    # Validate destinations first
+    validated_destinations, validation_stats = validate_destinations(destinations)
+    log_validation_summary(validation_stats, "create_dispatch_payload")
+
+    # Validate complete payload
+    payload = validate_dispatch_payload(
+        campaign_name=campaign_name, cost_center_id=cost_center_id, destinations=validated_destinations
+    )
+
+    log(f"Payload created successfully for {len(validated_destinations)} validated destinations")
+
+    # Return as dict for backward compatibility
+    return payload.dict()
 
 
 @task
@@ -82,17 +110,26 @@ def create_dispatch_dfr(
 ) -> pd.DataFrame:
     """
     Salva o disparo no banco de dados usando todas as destinations originais
+    Agora inclui validação para garantir integridade dos dados salvos
     """
+    # Validate destinations before creating DataFrame
+    validated_destinations, validation_stats = validate_destinations(original_destinations)
+    log_validation_summary(validation_stats, "create_dispatch_dfr")
+
+    if not validated_destinations:
+        raise ValueError("Nenhum destinatário válido para criar DataFrame de dispatch")
+
     data = []
-    for destination in original_destinations:
+    for destination in validated_destinations:
+        # Use Pydantic model attributes
         row = {
             "id_hsm": id_hsm,
             "dispatch_date": dispatch_date,
             "campaignName": campaign_name,
             "costCenterId": cost_center_id,
-            "to": destination["to"],
-            "externalId": destination.get("externalId", None),
-            "vars": destination.get("vars", None),
+            "to": destination.to,
+            "externalId": destination.externalId,  # Now mandatory
+            "vars": destination.vars,
         }
         data.append(row)
 
@@ -108,8 +145,15 @@ def create_dispatch_dfr(
             "vars",
         ]
     ]
-    log(f"dfr content: {dfr}")
-    log(f"Total records in dfr: {len(dfr)} (should match all dispatched destinations)")
+
+    log(f"DataFrame created with {len(dfr)} validated records")
+    log("All records have mandatory externalId field populated")
+
+    # Validate that no externalId is None (should not happen with our validation)
+    null_external_ids = dfr["externalId"].isnull().sum()
+    if null_external_ids > 0:
+        log(f"WARNING: Found {null_external_ids} records with null externalId after validation")
+
     return dfr
 
 
@@ -143,9 +187,10 @@ def get_destinations(
     query_processor_name: str = None,
 ) -> List[Dict]:
     """
-    Get destinations from the query or from the parameter.
+    Get destinations from the query or from the parameter with validation.
     If query_processor_name is provided, it will look up and apply the corresponding processor.
-    (Função do template disparo)
+
+    Returns validated destinations with mandatory externalId field.
     """
     if query:
         log("\nQuery was found")
@@ -172,31 +217,48 @@ def get_destinations(
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
         destinations = json.loads(destinations)
+
+    # Validate destinations using centralized validation
+    if destinations:
+        validated_destinations, validation_stats = validate_destinations(destinations)
+        log_validation_summary(validation_stats, "get_destinations")
+
+        # Convert back to dict format for backward compatibility
+        return [dest.dict() for dest in validated_destinations]
+
     return destinations
 
 
 @task
 def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     """
-    Remove duplicate phone numbers from destinations list.
+    Remove duplicate phone numbers from destinations list with validation.
     Keeps only the first occurrence of each phone number.
-    (Função do template disparo)
+    Validates each destination before processing.
     """
     if not destinations:
         log("No destinations to process")
         return destinations
 
+    # Re-validate destinations to ensure data integrity
+    validated_destinations, validation_stats = validate_destinations(destinations)
+    log_validation_summary(validation_stats, "remove_duplicate_phones")
+
+    # Process only validated destinations
     seen_phones = set()
     unique_destinations = []
     duplicates_count = 0
 
-    for destination in destinations:
-        phone = destination.get("to")
-        if phone and phone not in seen_phones:
+    for destination in validated_destinations:
+        phone = destination.to  # Pydantic model attribute
+        external_id = destination.externalId
+
+        if phone not in seen_phones:
             seen_phones.add(phone)
-            unique_destinations.append(destination)
-        elif phone in seen_phones:
+            unique_destinations.append(destination.dict())  # Convert back to dict
+        else:
             duplicates_count += 1
+            log(f"Duplicate phone removed: {phone[:8]}**** (externalId: {external_id})")
 
     log(f"Removed {duplicates_count} duplicate phone numbers")
     log(f"Total unique destinations: {len(unique_destinations)}")
