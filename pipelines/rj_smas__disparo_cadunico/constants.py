@@ -24,7 +24,7 @@ class CadunicoConstants(Enum):
     CADUNICO_BILLING_PROJECT_ID = "rj-crm-registry"
 
     # Query processor name
-    CADUNICO_QUERY_PROCESSOR_NAME = None
+    CADUNICO_QUERY_PROCESSOR_NAME = ""
 
     # Configurações de dataset
     CADUNICO_DATASET_ID = "brutos_cadunico"

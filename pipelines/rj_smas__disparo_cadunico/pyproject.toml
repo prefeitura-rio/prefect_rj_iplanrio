@@ -21,4 +21,5 @@ dependencies = [
     "marshmallow==3.26.1",
     "gitpython==3.1.44",
     "discord-py==2.5.2",
+    "pydantic>=2.0.0",
 ]
