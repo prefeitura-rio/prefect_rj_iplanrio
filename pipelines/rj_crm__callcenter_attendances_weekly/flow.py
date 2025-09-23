@@ -5,7 +5,9 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_crm__callcenter_attendances_weekly.constants import CallCenterAttendancesConstants
+from pipelines.rj_crm__callcenter_attendances_weekly.constants import (
+    CallCenterAttendancesConstants,
+)
 from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
     access_api,
     calculate_date_range,
@@ -58,16 +60,15 @@ def rj_crm__callcenter_attendances_weekly(
     root_folder = CallCenterAttendancesConstants.ROOT_FOLDER.value
     biglake_table = CallCenterAttendancesConstants.BIGLAKE_TABLE.value
 
-    # Renomear flow run para melhor identificação
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
+    rename_flow_run = rename_current_flow_run_task(
+        new_name=f"{table_id}_{dataset_id}_weekly"
+    )
 
-    # Injetar credenciais do BD
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Calcular período de datas (7 dias anteriores se não fornecido)
     date_range = calculate_date_range(start_date=start_date, end_date=end_date)
 
-    # Acessar API
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
@@ -81,21 +82,19 @@ def rj_crm__callcenter_attendances_weekly(
         api=api, start_date=date_range["start_date"], end_date=date_range["end_date"]
     )
 
-    # Check if there's data to process - return early if empty
     if raw_attendances.empty:
         print(
             f"No attendances found from API for period {date_range['start_date']} to {date_range['end_date']}. Flow completed successfully with no data to process."
         )
         return
 
-    # Processar JSON e transcrever áudios (mesmo processamento da pipeline original)
     processed_data = processar_json_e_transcrever_audios(dados_entrada=raw_attendances)
-
     df = criar_dataframe_de_lista(processed_data)
 
-    print(f"Processed {len(df)} attendances for period {date_range['start_date']} to {date_range['end_date']}")
+    print(
+        f"Processed {len(df)} attendances for period {date_range['start_date']} to {date_range['end_date']}"
+    )
 
-    # Criar partições por data
     partitions_path = create_date_partitions(
         dataframe=df,
         partition_column=partition_column,
@@ -103,7 +102,6 @@ def rj_crm__callcenter_attendances_weekly(
         root_folder=root_folder,
     )
 
-    # Upload para GCS e BigQuery
     create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
