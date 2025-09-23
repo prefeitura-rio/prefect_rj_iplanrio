@@ -60,9 +60,7 @@ def rj_crm__callcenter_attendances_weekly(
     root_folder = CallCenterAttendancesConstants.ROOT_FOLDER.value
     biglake_table = CallCenterAttendancesConstants.BIGLAKE_TABLE.value
 
-    rename_flow_run = rename_current_flow_run_task(
-        new_name=f"{table_id}_{dataset_id}_weekly"
-    )
+    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
 
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
@@ -91,9 +89,7 @@ def rj_crm__callcenter_attendances_weekly(
     processed_data = processar_json_e_transcrever_audios(dados_entrada=raw_attendances)
     df = criar_dataframe_de_lista(processed_data)
 
-    print(
-        f"Processed {len(df)} attendances for period {date_range['start_date']} to {date_range['end_date']}"
-    )
+    print(f"Processed {len(df)} attendances for period {date_range['start_date']} to {date_range['end_date']}")
 
     partitions_path = create_date_partitions(
         dataframe=df,
