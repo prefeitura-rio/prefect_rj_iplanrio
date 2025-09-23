@@ -41,8 +41,8 @@ deployments:
       table_id: fluxos_ura
       dump_mode: append
       materialize_after_dump: true
-      start_date: null  
-      end_date: null    
+      start_date: null
+      end_date: null
       infisical_secret_path: /wetalkie
 
   - name: rj-crm--callcenter-attendances-weekly--prod
@@ -60,10 +60,10 @@ deployments:
       # Valores padrão (podem ser alterados na UI)
       dataset_id: brutos_wetalkie
       table_id: fluxos_ura
-      dump_mode: TBD
+      dump_mode: append
       materialize_after_dump: true
-      start_date: null  
-      end_date: null    
+      start_date: null
+      end_date: null
       infisical_secret_path: /wetalkie
     schedules:
       # Schedule semanal (604800 segundos = 7 dias)

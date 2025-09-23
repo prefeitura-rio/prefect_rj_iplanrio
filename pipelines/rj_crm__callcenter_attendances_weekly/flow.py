@@ -50,7 +50,8 @@ def rj_crm__callcenter_attendances_weekly(
     table_id = table_id or CallCenterAttendancesConstants.TABLE_ID.value
     dump_mode = dump_mode or CallCenterAttendancesConstants.DUMP_MODE.value
     materialize_after_dump = (
-        materialize_after_dump if materialize_after_dump is not None
+        materialize_after_dump
+        if materialize_after_dump is not None
         else CallCenterAttendancesConstants.MATERIALIZE_AFTER_DUMP.value
     )
 
@@ -79,14 +80,14 @@ def rj_crm__callcenter_attendances_weekly(
 
     # Buscar atendimentos para o período especificado
     raw_attendances = get_weekly_attendances(
-        api=api,
-        start_date=date_range["start_date"],
-        end_date=date_range["end_date"]
+        api=api, start_date=date_range["start_date"], end_date=date_range["end_date"]
     )
 
     # Check if there's data to process - return early if empty
     if raw_attendances.empty:
-        print(f"No attendances found from API for period {date_range['start_date']} to {date_range['end_date']}. Flow completed successfully with no data to process.")
+        print(
+            f"No attendances found from API for period {date_range['start_date']} to {date_range['end_date']}. Flow completed successfully with no data to process."
+        )
         return
 
     # Processar JSON e transcrever áudios (mesmo processamento da pipeline original)
@@ -113,7 +114,9 @@ def rj_crm__callcenter_attendances_weekly(
         biglake_table=biglake_table,
     )
 
-    print(f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}")
+    print(
+        f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
+    )
 
     # if materialize_after_dump:
     #    dbt_select = CallCenterAttendancesConstants.DBT_SELECT.value

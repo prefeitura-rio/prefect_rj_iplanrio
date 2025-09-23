@@ -38,15 +38,12 @@ def calculate_date_range(
 
         result = {
             "start_date": calculated_start_date.strftime("%Y-%m-%d"),
-            "end_date": calculated_end_date.strftime("%Y-%m-%d")
+            "end_date": calculated_end_date.strftime("%Y-%m-%d"),
         }
 
         log(f"Calculated date range: {result['start_date']} to {result['end_date']}")
     else:
-        result = {
-            "start_date": start_date,
-            "end_date": end_date
-        }
+        result = {"start_date": start_date, "end_date": end_date}
 
         log(f"Using provided date range: {result['start_date']} to {result['end_date']}")
 
@@ -54,11 +51,7 @@ def calculate_date_range(
 
 
 @task
-def get_weekly_attendances(
-    api: object,
-    start_date: str,
-    end_date: str
-) -> pd.DataFrame:
+def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.DataFrame:
     """
     Get attendances from the Wetalkie API for a specific date range
 
@@ -73,10 +66,7 @@ def get_weekly_attendances(
     log(f"Getting attendances from {start_date} to {end_date}")
 
     # Build query parameters
-    params = {
-        "startDate": start_date,
-        "endDate": end_date
-    }
+    params = {"startDate": start_date, "endDate": end_date}
 
     response = api.get(path="/callcenter/attendances", params=params)
 
@@ -88,7 +78,9 @@ def get_weekly_attendances(
 
     try:
         response_data = response.json()
-        log(f"Response data structure: {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data)}")
+        log(
+            f"Response data structure: {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data)}"
+        )
     except Exception as e:
         log(f"Failed to parse JSON response: {e}", level="error")
         raise
@@ -114,32 +106,36 @@ def get_weekly_attendances(
     # Process attendances data
     data = []
     for item in attendances:
-        data.append({
-            "end_date": item.get("endDate"),
-            "begin_date": item.get("beginDate"),
-            "ura_name": item.get("ura", {}).get("name") if item.get("ura") else None,
-            "id_ura": item.get("ura", {}).get("id") if item.get("ura") else None,
-            "channel": item.get("channel", "").lower() if item.get("channel") else None,
-            "id_reply": item.get("serial"),
-            "protocol": item.get("protocol"),
-            "json_data": item,
-        })
+        data.append(
+            {
+                "end_date": item.get("endDate"),
+                "begin_date": item.get("beginDate"),
+                "ura_name": item.get("ura", {}).get("name") if item.get("ura") else None,
+                "id_ura": item.get("ura", {}).get("id") if item.get("ura") else None,
+                "channel": item.get("channel", "").lower() if item.get("channel") else None,
+                "id_reply": item.get("serial"),
+                "protocol": item.get("protocol"),
+                "json_data": item,
+            }
+        )
 
     log(f"Processed {len(data)} attendances")
 
     dfr = pd.DataFrame(data)
 
     if not dfr.empty:
-        dfr = dfr[[
-            "id_ura",
-            "id_reply",
-            "ura_name",
-            "protocol",
-            "channel",
-            "begin_date",
-            "end_date",
-            "json_data",
-        ]]
+        dfr = dfr[
+            [
+                "id_ura",
+                "id_reply",
+                "ura_name",
+                "protocol",
+                "channel",
+                "begin_date",
+                "end_date",
+                "json_data",
+            ]
+        ]
 
     return dfr
 
