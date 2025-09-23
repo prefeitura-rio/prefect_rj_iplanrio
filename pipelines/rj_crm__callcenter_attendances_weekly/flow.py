@@ -5,6 +5,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
+from pipelines.rj_crm__api_wetalkie.tasks import processar_json_e_transcrever_audios
 from pipelines.rj_crm__callcenter_attendances_weekly.constants import CallCenterAttendancesConstants
 from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
     calculate_date_range,
@@ -15,7 +16,6 @@ from pipelines.rj_crm__callcenter_attendances_weekly.utils.tasks import (
     access_api,
     create_date_partitions,
 )
-from pipelines.rj_crm__api_wetalkie.tasks import processar_json_e_transcrever_audios
 
 
 @flow(log_prints=True)
