@@ -25,7 +25,7 @@ class DestinationInput(BaseModel):
     externalId: str = Field(..., min_length=1, description="Identificador externo obrigatório")
     vars: Optional[Dict[str, Any]] = Field(default=None, description="Variáveis opcionais para template HSM")
 
-    @validator('to')
+    @validator("to")
     def validate_phone(cls, v):
         """
         Valida que o telefone seja uma string não vazia
@@ -41,14 +41,14 @@ class DestinationInput(BaseModel):
             ValueError: Se não for string ou estiver vazio
         """
         if not isinstance(v, str):
-            raise ValueError('Telefone deve ser uma string')
+            raise ValueError("Telefone deve ser uma string")
 
         if not v.strip():
-            raise ValueError('Telefone não pode ser vazio')
+            raise ValueError("Telefone não pode ser vazio")
 
         return v.strip()
 
-    @validator('externalId')
+    @validator("externalId")
     def validate_external_id(cls, v):
         """
         Valida que externalId não seja vazio ou apenas espaços
@@ -63,10 +63,10 @@ class DestinationInput(BaseModel):
             ValueError: Se for vazio ou apenas espaços
         """
         if not isinstance(v, str):
-            raise ValueError('externalId deve ser uma string')
+            raise ValueError("externalId deve ser uma string")
 
         if not v.strip():
-            raise ValueError('externalId não pode ser vazio ou apenas espaços')
+            raise ValueError("externalId não pode ser vazio ou apenas espaços")
 
         return v.strip()
 
@@ -85,7 +85,7 @@ class DispatchPayload(BaseModel):
     costCenterId: int = Field(..., gt=0, description="ID do centro de custo (deve ser positivo)")
     destinations: List[DestinationInput] = Field(..., description="Lista de destinatários validados")
 
-    @validator('campaignName')
+    @validator("campaignName")
     def validate_campaign_name(cls, v):
         """
         Valida que o nome da campanha não seja apenas espaços
@@ -100,11 +100,11 @@ class DispatchPayload(BaseModel):
             ValueError: Se for vazio ou apenas espaços
         """
         if not v.strip():
-            raise ValueError('Nome da campanha não pode ser vazio ou apenas espaços')
+            raise ValueError("Nome da campanha não pode ser vazio ou apenas espaços")
 
         return v.strip()
 
-    @validator('destinations')
+    @validator("destinations")
     def validate_destinations_not_empty(cls, v):
         """
         Valida que a lista de destinatários não esteja vazia
@@ -119,7 +119,7 @@ class DispatchPayload(BaseModel):
             ValueError: Se a lista estiver vazia
         """
         if not v:
-            raise ValueError('Lista de destinatários não pode estar vazia')
+            raise ValueError("Lista de destinatários não pode estar vazia")
 
         return v
 

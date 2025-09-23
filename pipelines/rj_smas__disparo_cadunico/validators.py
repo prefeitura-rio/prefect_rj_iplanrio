@@ -34,10 +34,7 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
     if not destinations:
         log("Lista de destinatários vazia fornecida para validação")
         return [], ValidationStats(
-            total_input=0,
-            valid_records=0,
-            invalid_records=0,
-            validation_errors=["Lista de destinatários vazia"]
+            total_input=0, valid_records=0, invalid_records=0, validation_errors=["Lista de destinatários vazia"]
         )
 
     valid_destinations = []
@@ -56,26 +53,26 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
             # Log detalhado do erro de validação
             error_details = []
             for error in e.errors():
-                field = error.get('loc', ['unknown'])[0]
-                message = error.get('msg', 'Erro desconhecido')
+                field = error.get("loc", ["unknown"])[0]
+                message = error.get("msg", "Erro desconhecido")
                 error_details.append(f"{field}: {message}")
 
-            error_msg = f"Registro {i+1}: {'; '.join(error_details)}"
+            error_msg = f"Registro {i + 1}: {'; '.join(error_details)}"
             validation_errors.append(error_msg)
 
             # Log do destinatário inválido (sem dados sensíveis completos)
-            to_partial = destination.get('to', 'N/A')
+            to_partial = destination.get("to", "N/A")
             if isinstance(to_partial, str) and len(to_partial) > 8:
                 to_partial = to_partial[:8] + "****"
 
-            external_id = destination.get('externalId', 'N/A')
+            external_id = destination.get("externalId", "N/A")
             log(f"Destinatário inválido - to: {to_partial}, externalId: {external_id}, erros: {error_msg}")
 
         except Exception as e:
             # Erro inesperado durante validação
-            error_msg = f"Registro {i+1}: Erro inesperado - {str(e)}"
+            error_msg = f"Registro {i + 1}: Erro inesperado - {e!s}"
             validation_errors.append(error_msg)
-            log(f"Erro inesperado ao validar destinatário {i+1}: {str(e)}")
+            log(f"Erro inesperado ao validar destinatário {i + 1}: {e!s}")
 
     # Compilar estatísticas
     valid_count = len(valid_destinations)
@@ -85,7 +82,7 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
         total_input=total_input,
         valid_records=valid_count,
         invalid_records=invalid_count,
-        validation_errors=validation_errors
+        validation_errors=validation_errors,
     )
 
     # Logs de resumo
@@ -113,9 +110,7 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
 
 
 def validate_dispatch_payload(
-    campaign_name: str,
-    cost_center_id: int,
-    destinations: List[DestinationInput]
+    campaign_name: str, cost_center_id: int, destinations: List[DestinationInput]
 ) -> DispatchPayload:
     """
     Valida payload completo para dispatch na WeTalkie API
@@ -133,13 +128,11 @@ def validate_dispatch_payload(
         ValueError: Se lista de destinatários estiver vazia
     """
     try:
-        log(f"Validando payload de dispatch: campaign='{campaign_name}', cost_center={cost_center_id}, destinations={len(destinations)}")
-
-        payload = DispatchPayload(
-            campaignName=campaign_name,
-            costCenterId=cost_center_id,
-            destinations=destinations
+        log(
+            f"Validando payload de dispatch: campaign='{campaign_name}', cost_center={cost_center_id}, destinations={len(destinations)}"
         )
+
+        payload = DispatchPayload(campaignName=campaign_name, costCenterId=cost_center_id, destinations=destinations)
 
         log(f"Payload de dispatch validado com sucesso para {len(destinations)} destinatários")
         return payload
@@ -147,8 +140,8 @@ def validate_dispatch_payload(
     except ValidationError as e:
         error_details = []
         for error in e.errors():
-            field = error.get('loc', ['unknown'])[0]
-            message = error.get('msg', 'Erro desconhecido')
+            field = error.get("loc", ["unknown"])[0]
+            message = error.get("msg", "Erro desconhecido")
             error_details.append(f"{field}: {message}")
 
         error_msg = f"Payload inválido: {'; '.join(error_details)}"
@@ -203,12 +196,12 @@ def validate_single_destination(destination_dict: Dict) -> Tuple[bool, Destinati
     except ValidationError as e:
         error_details = []
         for error in e.errors():
-            field = error.get('loc', ['unknown'])[0]
-            message = error.get('msg', 'Erro desconhecido')
+            field = error.get("loc", ["unknown"])[0]
+            message = error.get("msg", "Erro desconhecido")
             error_details.append(f"{field}: {message}")
 
         error_msg = "; ".join(error_details)
         return False, None, error_msg
 
     except Exception as e:
-        return False, None, f"Erro inesperado: {str(e)}"
+        return False, None, f"Erro inesperado: {e!s}"
