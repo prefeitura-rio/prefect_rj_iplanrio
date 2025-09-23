@@ -5,6 +5,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
+from pipelines.rj_crm__api_wetalkie.tasks import processar_json_e_transcrever_audios
 from pipelines.rj_smas__callcenter_attendances_weekly.constants import CallCenterAttendancesConstants
 from pipelines.rj_smas__callcenter_attendances_weekly.tasks import (
     calculate_date_range,
@@ -15,7 +16,6 @@ from pipelines.rj_smas__callcenter_attendances_weekly.utils.tasks import (
     access_api,
     create_date_partitions,
 )
-from pipelines.rj_crm__api_wetalkie.tasks import processar_json_e_transcrever_audios
 
 
 @flow(log_prints=True)
@@ -50,7 +50,8 @@ def rj_smas__callcenter_attendances_weekly(
     table_id = table_id or CallCenterAttendancesConstants.TABLE_ID.value
     dump_mode = dump_mode or CallCenterAttendancesConstants.DUMP_MODE.value
     materialize_after_dump = (
-        materialize_after_dump if materialize_after_dump is not None
+        materialize_after_dump
+        if materialize_after_dump is not None
         else CallCenterAttendancesConstants.MATERIALIZE_AFTER_DUMP.value
     )
 
@@ -79,14 +80,14 @@ def rj_smas__callcenter_attendances_weekly(
 
     # Buscar atendimentos para o período especificado
     raw_attendances = get_weekly_attendances(
-        api=api,
-        start_date=date_range["start_date"],
-        end_date=date_range["end_date"]
+        api=api, start_date=date_range["start_date"], end_date=date_range["end_date"]
     )
 
     # Check if there's data to process - return early if empty
     if raw_attendances.empty:
-        print(f"No attendances found from API for period {date_range['start_date']} to {date_range['end_date']}. Flow completed successfully with no data to process.")
+        print(
+            f"No attendances found from API for period {date_range['start_date']} to {date_range['end_date']}. Flow completed successfully with no data to process."
+        )
         return
 
     # Processar JSON e transcrever áudios (mesmo processamento da pipeline original)
@@ -113,7 +114,9 @@ def rj_smas__callcenter_attendances_weekly(
         biglake_table=biglake_table,
     )
 
-    print(f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}")
+    print(
+        f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
+    )
 
     # if materialize_after_dump:
     #    dbt_select = CallCenterAttendancesConstants.DBT_SELECT.value
