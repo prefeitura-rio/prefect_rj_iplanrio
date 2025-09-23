@@ -9,14 +9,12 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timedelta
-from time import sleep
 from typing import Any, Dict, List, Literal, Optional, Union
 from urllib.request import urlretrieve
 
 import pandas as pd
 import requests
-from basedosdados import Base
-from google.cloud import bigquery, speech
+from google.cloud import speech
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from mutagen.mp3 import MP3
@@ -24,23 +22,25 @@ from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
 from prefect import task
-from prefect.exceptions import PrefectException
 from pytz import timezone
 
 
 # Audio processing exceptions
 class AudioDownloadError(IOError):
     """Exceção para falhas no download de áudio."""
+
     pass
 
 
 class AudioProcessingError(ValueError):
     """Exceção para erros durante o processamento de áudio."""
+
     pass
 
 
 class AudioTranscriptionError(Exception):
     """Exceção para falhas na transcrição de áudio."""
+
     pass
 
 
