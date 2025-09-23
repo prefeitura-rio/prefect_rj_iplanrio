@@ -364,10 +364,10 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     """
     log(f"Getting attendances from {start_date} to {end_date}")
 
-    # Build query parameters
-    params = {"startDate": start_date, "endDate": end_date}
+    # Build path with matrix variables (API expects beginDate/endDate as matrix variables)
+    path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date}"
 
-    response = api.get(path="/callcenter/attendances", params=params)
+    response = api.get(path=path)
 
     if response.status_code != 200:
         log(f"API request failed with status {response.status_code}: {response.text}", level="error")
