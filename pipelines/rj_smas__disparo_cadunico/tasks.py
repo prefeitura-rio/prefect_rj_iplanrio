@@ -16,9 +16,9 @@ from pytz import timezone
 
 from pipelines.rj_smas__disparo_cadunico.utils.tasks import task_download_data_from_bigquery
 from pipelines.rj_smas__disparo_cadunico.validators import (
+    log_validation_summary,
     validate_destinations,
     validate_dispatch_payload,
-    log_validation_summary,
 )
 
 
@@ -40,7 +40,7 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
     """
     # Convert DataFrame to list if needed
     if isinstance(destinations, pd.DataFrame):
-        destinations = destinations.to_dict('records')
+        destinations = destinations.to_dict("records")
 
     # Validate destinations first
     validated_destinations, validation_stats = validate_destinations(destinations)
@@ -48,9 +48,7 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
 
     # Validate complete payload
     payload = validate_dispatch_payload(
-        campaign_name=campaign_name,
-        cost_center_id=cost_center_id,
-        destinations=validated_destinations
+        campaign_name=campaign_name, cost_center_id=cost_center_id, destinations=validated_destinations
     )
 
     log(f"Payload created successfully for {len(validated_destinations)} validated destinations")
@@ -149,10 +147,10 @@ def create_dispatch_dfr(
     ]
 
     log(f"DataFrame created with {len(dfr)} validated records")
-    log(f"All records have mandatory externalId field populated")
+    log("All records have mandatory externalId field populated")
 
     # Validate that no externalId is None (should not happen with our validation)
-    null_external_ids = dfr['externalId'].isnull().sum()
+    null_external_ids = dfr["externalId"].isnull().sum()
     if null_external_ids > 0:
         log(f"WARNING: Found {null_external_ids} records with null externalId after validation")
 
