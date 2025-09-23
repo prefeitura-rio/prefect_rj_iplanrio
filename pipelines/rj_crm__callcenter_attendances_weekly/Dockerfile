@@ -13,7 +13,7 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
-COPY ./pipelines/rj_smas__callcenter_attendances_weekly ./pipelines/rj_smas__callcenter_attendances_weekly/
+COPY ./pipelines/rj_crm__callcenter_attendances_weekly ./pipelines/rj_crm__callcenter_attendances_weekly/
 
 # Copy also the wetalkie api_handler and audio processing utilities
 COPY ./pipelines/rj_crm__api_wetalkie/utils ./pipelines/rj_crm__api_wetalkie/utils/

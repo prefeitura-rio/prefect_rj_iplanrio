@@ -5,13 +5,13 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_smas__callcenter_attendances_weekly.constants import CallCenterAttendancesConstants
-from pipelines.rj_smas__callcenter_attendances_weekly.tasks import (
+from pipelines.rj_crm__callcenter_attendances_weekly.constants import CallCenterAttendancesConstants
+from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
     calculate_date_range,
     criar_dataframe_de_lista,
     get_weekly_attendances,
 )
-from pipelines.rj_smas__callcenter_attendances_weekly.utils.tasks import (
+from pipelines.rj_crm__callcenter_attendances_weekly.utils.tasks import (
     access_api,
     create_date_partitions,
 )
@@ -19,7 +19,7 @@ from pipelines.rj_crm__api_wetalkie.tasks import processar_json_e_transcrever_au
 
 
 @flow(log_prints=True)
-def rj_smas__callcenter_attendances_weekly(
+def rj_crm__callcenter_attendances_weekly(
     # Parâmetros opcionais para override manual na UI
     dataset_id: str | None = None,
     table_id: str | None = None,

@@ -1,7 +1,7 @@
 [project]
-name = "rj_smas__callcenter_attendances_weekly"
+name = "rj_crm__callcenter_attendances_weekly"
 version = "0.1.0"
-description = "Pipeline SMAS Call Center Attendances Weekly para coleta semanal de dados de atendimentos"
+description = "Pipeline CRM Call Center Attendances Weekly para coleta semanal de dados de atendimentos"
 dependencies = [
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",

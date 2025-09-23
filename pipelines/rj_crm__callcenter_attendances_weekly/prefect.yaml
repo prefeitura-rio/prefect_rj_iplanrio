@@ -1,4 +1,4 @@
-name: rj_smas__callcenter_attendances_weekly
+name: rj_crm__callcenter_attendances_weekly
 prefect-version: 3.4.3
 
 build:
@@ -11,7 +11,7 @@ build:
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
       tag: "rj_crm__callcenter_attendances_weekly-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_smas__callcenter_attendances_weekly/Dockerfile
+      dockerfile: pipelines/rj_crm__callcenter_attendances_weekly/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -38,7 +38,7 @@ deployments:
     parameters:
       # Valores padrão (podem ser alterados na UI)
       dataset_id: brutos_wetalkie
-      table_id: append
+      table_id: fluxos_ura
       dump_mode: append
       materialize_after_dump: true
       start_date: null  
@@ -59,22 +59,22 @@ deployments:
     parameters:
       # Valores padrão (podem ser alterados na UI)
       dataset_id: brutos_wetalkie
-      table_id: append
+      table_id: fluxos_ura
       dump_mode: TBD
       materialize_after_dump: true
       start_date: null  
       end_date: null    
       infisical_secret_path: /wetalkie
-    # schedules:
+    schedules:
       # Schedule semanal (604800 segundos = 7 dias)
-      #- interval: 604800
-      #  anchor_date: "2024-01-01T09:00:00"
-      #  timezone: America/Sao_Paulo
-      #  slug: callcenter_attendances_weekly
-      #  parameters:
-      #    dataset_id: brutos_wetalkie
-      #    table_id: append
-      #    dump_mode: append
-      #    materialize_after_dump: true
-      #    start_date: null  
-      #    end_date: null    
+      - interval: 604800
+        anchor_date: "2024-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        slug: callcenter_attendances_weekly
+        parameters:
+          dataset_id: brutos_wetalkie
+          table_id: fluxos_ura
+          dump_mode: append
+          materialize_after_dump: true
+          start_date: null
+          end_date: null
