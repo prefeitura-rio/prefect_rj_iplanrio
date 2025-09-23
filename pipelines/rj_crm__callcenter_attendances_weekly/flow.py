@@ -7,15 +7,13 @@ from prefect import flow
 
 from pipelines.rj_crm__callcenter_attendances_weekly.constants import CallCenterAttendancesConstants
 from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
+    access_api,
     calculate_date_range,
+    create_date_partitions,
     criar_dataframe_de_lista,
     get_weekly_attendances,
+    processar_json_e_transcrever_audios,
 )
-from pipelines.rj_crm__callcenter_attendances_weekly.utils.tasks import (
-    access_api,
-    create_date_partitions,
-)
-from pipelines.rj_crm__api_wetalkie.tasks import processar_json_e_transcrever_audios
 
 
 @flow(log_prints=True)
