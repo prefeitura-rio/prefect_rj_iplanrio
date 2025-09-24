@@ -14,9 +14,8 @@ from urllib.request import urlretrieve
 
 import pandas as pd
 import requests
-from google.cloud import speech
-from google.cloud import bigquery
 from basedosdados import Base
+from google.cloud import bigquery, speech
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from mutagen.mp3 import MP3
@@ -684,10 +683,13 @@ def filter_new_attendances(
 
     # Create composite key for each raw attendance
     raw_attendances["composite_key"] = (
-        raw_attendances["id_ura"].astype(str) + "|" +
-        raw_attendances["id_reply"].astype(str) + "|" +
-        raw_attendances["protocol"].fillna("NULL").astype(str) + "|" +
-        pd.to_datetime(raw_attendances["begin_date"]).dt.strftime("%Y-%m-%d")
+        raw_attendances["id_ura"].astype(str)
+        + "|"
+        + raw_attendances["id_reply"].astype(str)
+        + "|"
+        + raw_attendances["protocol"].fillna("NULL").astype(str)
+        + "|"
+        + pd.to_datetime(raw_attendances["begin_date"]).dt.strftime("%Y-%m-%d")
     )
 
     # Filter out attendances with keys that already exist
@@ -700,7 +702,7 @@ def filter_new_attendances(
     total_new = len(new_attendances)
     total_filtered = total_raw - total_new
 
-    log(f"Attendance filtering summary:")
+    log("Attendance filtering summary:")
     log(f"  - Total raw attendances: {total_raw}")
     log(f"  - Already processed: {total_filtered}")
     log(f"  - New to process: {total_new}")
