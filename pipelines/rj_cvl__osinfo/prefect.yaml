@@ -617,7 +617,6 @@ deployments:
           batch_size: 50000
           table_id: usuario
           dump_mode: overwrite
-          materialize_after_dump: true
           execute_query: |
             SELECT
                 `COD_USUARIO`,
@@ -645,7 +644,6 @@ deployments:
           batch_size: 50000
           table_id: administracao_unidade
           dump_mode: overwrite
-          materialize_after_dump: true
           execute_query: |
             SELECT
                 `COD_UNIDADE`,
@@ -671,7 +669,6 @@ deployments:
                 `DT_ULTIMA_ATUALIZ` as `DATA_ULTIMA_ATUALIZACAO`,
                 `DATA_AVALIACAO_CONTADORES` as `DATA_AVALIACAO`
             FROM `adm_osinfo`.`adm_unidade`;
-
       - interval: 604800
         anchor_date: "2025-07-15T00:10:00"
         timezone: America/Sao_Paulo
@@ -687,7 +684,6 @@ deployments:
           batch_size: 50000
           table_id: usuario_sistema
           dump_mode: overwrite
-          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_USUARIO_SISTEMA`,
@@ -712,7 +708,6 @@ deployments:
           batch_size: 50000
           table_id: administracao_perfil
           dump_mode: overwrite
-          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_PERFIL`,
@@ -733,7 +728,6 @@ deployments:
           batch_size: 50000
           table_id: administracao_unidade_perfil
           dump_mode: overwrite
-          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_UNID_PERFIL` as `ID_UNIDADE_PERFIL`,
@@ -756,15 +750,12 @@ deployments:
           batch_size: 50000
           table_id: tipo_documento
           dump_mode: overwrite
-          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_TIPO_DOCUMENTO`,
                 `COD_TIPO_DOCUMENTO` as `TIPO_DOCUMENTO`,
                 `TIPO_DOCUMENTO` as `DOCUMENTO`
             FROM `osinfo`.`tipo_documento`;
-
-      
 
     work_pool:
       name: datario-pool
