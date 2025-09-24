@@ -63,7 +63,9 @@ def rj_crm__callcenter_attendances_weekly(
     biglake_table = CallCenterAttendancesConstants.BIGLAKE_TABLE.value
     billing_project_id = CallCenterAttendancesConstants.BILLING_PROJECT_ID.value
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
+    rename_flow_run = rename_current_flow_run_task(
+        new_name=f"{table_id}_{dataset_id}_weekly"
+    )
 
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
@@ -105,10 +107,14 @@ def rj_crm__callcenter_attendances_weekly(
         )
         return
 
-    processed_data = processar_json_e_transcrever_audios(dados_entrada=filtered_attendances)
+    processed_data = processar_json_e_transcrever_audios(
+        dados_entrada=filtered_attendances
+    )
     df = criar_dataframe_de_lista(processed_data)
 
-    print(f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}")
+    print(
+        f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}"
+    )
 
     partitions_path = create_date_partitions(
         dataframe=df,
@@ -117,13 +123,13 @@ def rj_crm__callcenter_attendances_weekly(
         root_folder=root_folder,
     )
 
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=dump_mode,
-        biglake_table=biglake_table,
-    )
+    # create_table_and_upload_to_gcs_task(
+    #    data_path=partitions_path,
+    #    dataset_id=dataset_id,
+    #    table_id=table_id,
+    #    dump_mode=dump_mode,
+    #    biglake_table=biglake_table,
+    # )
 
     print(
         f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
