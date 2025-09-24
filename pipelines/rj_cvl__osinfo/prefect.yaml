@@ -289,3 +289,174 @@ deployments:
           dump_mode: overwrite
           execute_query: SELECT `reen_cd_estado_entrega` as `COD_ESTADO`, `reen_ds_estado_entrega` as `ESTADO`, `reen_classe_css_estado_entrega`
             as `ETIQUETA`, `reen_ajuda_estado_entrega` as `DETALHE` FROM `osinfo_V2`.`tb_estado_entrega`;
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:10:00'
+        timezone: America/Sao_Paulo
+        slug: contrato_processo_instrutivo
+        parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
+          table_id: contrato_processo_instrutivo
+          dump_mode: overwrite
+          materialize_after_dump: true
+          execute_query: |
+            SELECT  `ID_CONTRATO`, `COD_ORGAO`, `PROCESSO_INSTRUTIVO`, `COD_UNIDADE` FROM `osinfo`.`contrato_processo_instrutivo`
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:10:00'
+        timezone: America/Sao_Paulo
+        slug: bem_patrimoniado
+        parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
+          table_id: bem_patrimoniado
+          dump_mode: overwrite
+          materialize_after_dump: true
+          execute_query: |
+            SELECT
+              `ID_BEM`,
+              `COD_OS`,
+              `ID_CONTRATO`,
+              `REF_MES`,
+              `REF_ANO`,
+              `NUM_CONTROLE`,
+              `ID_BEM_TIPO`,
+              `DESCRICAO`,
+              `QUANTIDADE`,
+              `NF`,
+              `DATA_AQUISICAO`,
+              `VIDA_UTIL`,
+              `VALOR`,
+              `COD_UNIDADE`,
+              `VINCULACAO`,
+              `ID_TERMO_ADITIVO`,
+              `FORNECEDOR`,
+              `CNPJ`,
+              `IMG_NF`,
+              `SETOR_DESTINO`,
+              `ID_IMAGEM`,
+              `TIPO_REGISTRO`
+            FROM `osinfo`.`bem`;
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:10:00'
+        timezone: America/Sao_Paulo
+        slug: bem_patrimoniado_tipo
+        parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
+          table_id: bem_patrimoniado_tipo
+          dump_mode: overwrite
+          materialize_after_dump: true
+          execute_query: |
+            SELECT
+              `ID_BEM_TIPO`,
+              `BEM_TIPO`,
+              `FLG_ATIVO`,
+              `ORDEM`
+            FROM `osinfo`.`bem_tipo`;
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:10:00'
+        timezone: America/Sao_Paulo
+        slug: contrato_resumo_cronograma
+        parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
+          table_id: contrato_resumo_cronograma
+          dump_mode: overwrite
+          materialize_after_dump: true
+          execute_query: |
+            SELECT
+              `ID_CONTRATO_MES`,
+              `ID_CONTRATO`,
+              `MES`,
+              `VALOR`
+            FROM `osinfo`.`contrato_mes`;
+
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:10:00'
+        timezone: America/Sao_Paulo
+        slug: termo_aditivo
+        parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
+          table_id: termo_aditivo
+          dump_mode: overwrite
+          materialize_after_dump: true
+          execute_query: |
+            SELECT
+              `ID_TERMO_ADITIVO`,
+              `ID_CONTRATO`,
+              `NUM_TERMO_ADITIVO`,
+              `COD_OS`,
+              `DT_ATUALIZACAO`,
+              `OB_TERMO_ADITIVO`,
+              `DT_ASSINATURA`,
+              `PERIODO_VIGENCIA`,
+              `DT_PUBLICACAO`,
+              `DT_INICIO`,
+              `VLR_INICIAL`,
+              `VLR_ALTERADO`,
+              `OBSERVACAO`,
+              `FLG_ALTERA_VIGENCIA`,
+              `FLG_ALTERA_VALOR`,
+              `FLG_ALTERA_UNIDADE`
+            FROM `osinfo`.`termo_aditivo`;
+
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:10:00'
+        timezone: America/Sao_Paulo
+        slug: termo_aditivo_resumo_cronograma
+        parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
+          table_id: termo_aditivo_resumo_cronograma
+          dump_mode: overwrite
+          materialize_after_dump: true
+          execute_query: |
+            SELECT
+              `ID_TERMO_ADITIVO_MES`,
+              `ID_TERMO_ADITIVO`,
+              `MES`,
+              `VALOR`
+            FROM `osinfo`.`termo_aditivo_mes`;
