@@ -13,6 +13,8 @@ from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
     calculate_date_range,
     create_date_partitions,
     criar_dataframe_de_lista,
+    filter_new_attendances,
+    get_existing_attendance_keys,
     get_weekly_attendances,
     processar_json_e_transcrever_audios,
 )
@@ -59,6 +61,7 @@ def rj_crm__callcenter_attendances_weekly(
     file_format = CallCenterAttendancesConstants.FILE_FORMAT.value
     root_folder = CallCenterAttendancesConstants.ROOT_FOLDER.value
     biglake_table = CallCenterAttendancesConstants.BIGLAKE_TABLE.value
+    billing_project_id = CallCenterAttendancesConstants.BILLING_PROJECT_ID.value
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
 
@@ -86,10 +89,31 @@ def rj_crm__callcenter_attendances_weekly(
         )
         return
 
-    processed_data = processar_json_e_transcrever_audios(dados_entrada=raw_attendances)
+    # Verificar quais chaves compostas já existem no BigQuery para evitar duplicatas
+    existing_keys = get_existing_attendance_keys(
+        dataset_id=dataset_id,
+        table_id=table_id,
+        start_date=date_range["start_date"],
+        end_date=date_range["end_date"],
+        billing_project_id=billing_project_id,
+    )
+
+    # Filtrar apenas atendimentos novos (que não estão duplicados)
+    filtered_attendances = filter_new_attendances(
+        raw_attendances=raw_attendances,
+        existing_keys=existing_keys,
+    )
+
+    if filtered_attendances.empty:
+        print(
+            f"No new attendances to process for period {date_range['start_date']} to {date_range['end_date']}. All data already exists. Flow completed successfully."
+        )
+        return
+
+    processed_data = processar_json_e_transcrever_audios(dados_entrada=filtered_attendances)
     df = criar_dataframe_de_lista(processed_data)
 
-    print(f"Processed {len(df)} attendances for period {date_range['start_date']} to {date_range['end_date']}")
+    print(f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}")
 
     partitions_path = create_date_partitions(
         dataframe=df,

@@ -36,3 +36,6 @@ class CallCenterAttendancesConstants(Enum):
     SCHEDULE_INTERVAL = 604800  # 7 days in seconds
     SCHEDULE_ANCHOR_DATE = "2024-01-01T09:00:00"
     SCHEDULE_TIMEZONE = "America/Sao_Paulo"
+
+    # BigQuery configuration for duplicate check
+    BILLING_PROJECT_ID = "rj-crm-registry"

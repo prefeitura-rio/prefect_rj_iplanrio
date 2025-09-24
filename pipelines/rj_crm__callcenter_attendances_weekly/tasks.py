@@ -15,6 +15,8 @@ from urllib.request import urlretrieve
 import pandas as pd
 import requests
 from google.cloud import speech
+from google.cloud import bigquery
+from basedosdados import Base
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from mutagen.mp3 import MP3
@@ -567,3 +569,140 @@ def criar_dataframe_de_lista(dados_processados: list) -> pd.DataFrame:
         A pandas DataFrame created from the input list
     """
     return pd.DataFrame(dados_processados)
+
+
+def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
+    """
+    Execute a BigQuery SQL query and return results as a pandas DataFrame.
+
+    Args:
+        query (str): SQL query to execute in BigQuery
+        billing_project_id (str): GCP project ID for billing purposes
+        bucket_name (str): GCS bucket name for credential loading
+
+    Returns:
+        pd.DataFrame: Query results as a pandas DataFrame
+    """
+    from time import sleep
+
+    log("Querying data from BigQuery")
+    query = str(query)
+    bq_client = bigquery.Client(
+        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
+        project=billing_project_id,
+    )
+    job = bq_client.query(query)
+    while not job.done():
+        sleep(1)
+    log("Getting result from query")
+    results = job.result()
+    log("Converting result to pandas dataframe")
+    dfr = results.to_dataframe()
+    log("End download data from bigquery")
+    return dfr
+
+
+@task
+def get_existing_attendance_keys(
+    dataset_id: str,
+    table_id: str,
+    start_date: str,
+    end_date: str,
+    billing_project_id: str,
+) -> List[str]:
+    """
+    Get existing attendance keys from BigQuery table to avoid duplicates.
+    Uses composite key: id_ura + id_reply + protocol + begin_date
+
+    Args:
+        dataset_id: BigQuery dataset ID
+        table_id: BigQuery table ID
+        start_date: Start date in YYYY-MM-DD format
+        end_date: End date in YYYY-MM-DD format
+        billing_project_id: GCP project ID for billing
+
+    Returns:
+        List of composite keys that already exist in the table
+    """
+    query = f"""
+        SELECT DISTINCT CONCAT(
+            CAST(id_ura AS STRING), '|',
+            CAST(id_reply AS STRING), '|',
+            COALESCE(protocol, 'NULL'), '|',
+            CAST(DATE(begin_date) AS STRING)
+        ) as composite_key
+        FROM `{billing_project_id}.{dataset_id}.{table_id}`
+        WHERE DATE(begin_date) BETWEEN '{start_date}' AND '{end_date}'
+    """
+
+    log(f"Checking existing attendance keys for period {start_date} to {end_date}")
+
+    try:
+        dfr = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id,
+        )
+
+        if dfr.empty:
+            log("No existing attendance data found for the specified period")
+            return []
+
+        existing_keys = dfr["composite_key"].tolist()
+        log(f"Found {len(existing_keys)} existing attendance records")
+        return existing_keys
+
+    except Exception as e:
+        log(f"Error checking existing attendance keys: {e}", level="warning")
+        log("Proceeding without duplicate check - table might not exist yet")
+        return []
+
+
+@task
+def filter_new_attendances(
+    raw_attendances: pd.DataFrame,
+    existing_keys: List[str],
+) -> pd.DataFrame:
+    """
+    Filter attendances to include only those not already processed.
+    Uses composite key: id_ura + id_reply + protocol + begin_date
+
+    Args:
+        raw_attendances: DataFrame with raw attendance data
+        existing_keys: List of composite keys already in BigQuery
+
+    Returns:
+        DataFrame with only new attendances
+    """
+    if raw_attendances.empty:
+        log("Raw attendances DataFrame is empty, nothing to filter")
+        return raw_attendances
+
+    if not existing_keys:
+        log("No existing keys found, keeping all attendances")
+        return raw_attendances
+
+    # Create composite key for each raw attendance
+    raw_attendances["composite_key"] = (
+        raw_attendances["id_ura"].astype(str) + "|" +
+        raw_attendances["id_reply"].astype(str) + "|" +
+        raw_attendances["protocol"].fillna("NULL").astype(str) + "|" +
+        pd.to_datetime(raw_attendances["begin_date"]).dt.strftime("%Y-%m-%d")
+    )
+
+    # Filter out attendances with keys that already exist
+    new_attendances = raw_attendances[~raw_attendances["composite_key"].isin(existing_keys)]
+
+    # Drop the temporary column
+    new_attendances = new_attendances.drop(columns=["composite_key"])
+
+    total_raw = len(raw_attendances)
+    total_new = len(new_attendances)
+    total_filtered = total_raw - total_new
+
+    log(f"Attendance filtering summary:")
+    log(f"  - Total raw attendances: {total_raw}")
+    log(f"  - Already processed: {total_filtered}")
+    log(f"  - New to process: {total_new}")
+
+    return new_attendances
