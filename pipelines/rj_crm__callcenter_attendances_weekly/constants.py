@@ -12,8 +12,8 @@ class CallCenterAttendancesConstants(Enum):
     """
 
     # Dataset e tabela do BigQuery (valores a serem definidos)
-    DATASET_ID = "TBD"
-    TABLE_ID = "TBD"
+    DATASET_ID = "brutos_wetalkie"
+    TABLE_ID = "fluxos_ura"
     DUMP_MODE = "append"
 
     # Configuração para materialização após dump
