@@ -391,7 +391,9 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         return pd.DataFrame()  # Return empty DataFrame - no data to process
 
     # Extract attendances from response
-    if "data" in response_data and "items" in response_data["data"]:
+    if "data" in response_data and "item" in response_data["data"] and "elements" in response_data["data"]["item"]:
+        attendances = response_data["data"]["item"]["elements"]
+    elif "data" in response_data and "items" in response_data["data"]:
         attendances = response_data["data"]["items"]
     elif isinstance(response_data, list):
         attendances = response_data
