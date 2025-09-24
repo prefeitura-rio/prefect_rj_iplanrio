@@ -617,6 +617,7 @@ deployments:
           batch_size: 50000
           table_id: usuario
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
                 `COD_USUARIO`,
@@ -644,6 +645,7 @@ deployments:
           batch_size: 50000
           table_id: administracao_unidade
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
                 `COD_UNIDADE`,
@@ -684,6 +686,7 @@ deployments:
           batch_size: 50000
           table_id: usuario_sistema
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_USUARIO_SISTEMA`,
@@ -708,6 +711,7 @@ deployments:
           batch_size: 50000
           table_id: administracao_perfil
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_PERFIL`,
@@ -728,6 +732,7 @@ deployments:
           batch_size: 50000
           table_id: administracao_unidade_perfil
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_UNID_PERFIL` as `ID_UNIDADE_PERFIL`,
@@ -750,6 +755,7 @@ deployments:
           batch_size: 50000
           table_id: tipo_documento
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
                 `ID_TIPO_DOCUMENTO`,
@@ -772,6 +778,7 @@ deployments:
           batch_size: 50000
           table_id: contrato_processo_instrutivo
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: SELECT  `ID_CONTRATO`, `COD_ORGAO`, `PROCESSO_INSTRUTIVO`, `COD_UNIDADE` FROM `osinfo`.`contrato_processo_instrutivo`
 
       - interval: 86400
@@ -789,9 +796,10 @@ deployments:
           batch_size: 50000
           table_id: bem_patrimoniado
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: SELECT `ID_BEM`, `COD_OS`, `ID_CONTRATO`, `REF_MES`, `REF_ANO`, `NUM_CONTROLE`, `ID_BEM_TIPO`, `DESCRICAO`,
                         `QUANTIDADE`, `NF`, `DATA_AQUISICAO`, `VIDA_UTIL`, `VALOR`, `COD_UNIDADE`, `VINCULACAO`, `ID_TERMO_ADITIVO`, `FORNECEDOR`,
-                        `CNPJ`, `IMG_NF`, `SETOR_DESTINO`, `ID_IMAGEM`, `TIPO_REGISTRO FROM `osinfo`.`bem`;
+                        `CNPJ`, `IMG_NF`, `SETOR_DESTINO`, `ID_IMAGEM`, `TIPO_REGISTRO` FROM `osinfo`.`bem`;
       
       - interval: 86400
         anchor_date: '2025-07-15T05:10:00'
@@ -808,7 +816,8 @@ deployments:
           batch_size: 50000
           table_id: bem_patrimoniado_tipo
           dump_mode: overwrite
-          execute_query: SELECT `ID_BEM_TIPO`, `BEM_TIPO`, `FLG_ATIVO`, `ORDEM` FROM  `osinfo`.`bem_tipo`;;
+          materialize_after_dump: true
+          execute_query: SELECT `ID_BEM_TIPO`, `BEM_TIPO`, `FLG_ATIVO`, `ORDEM` FROM  `osinfo`.`bem_tipo`;
 
       - interval: 86400
         anchor_date: '2025-07-15T05:10:00'
@@ -825,6 +834,7 @@ deployments:
           batch_size: 50000
           table_id: contrato_resumo_cronograma
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: SELECT `ID_CONTRATO_MES`, `ID_CONTRATO`, `MES`, `VALOR` FROM `osinfo`.`contrato_mes`;
 
 
@@ -843,6 +853,7 @@ deployments:
           batch_size: 50000
           table_id: termo_aditivo
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: SELECT `ID_TERMO_ADITIVO`, `ID_CONTRATO`, `NUM_TERMO_ADITIVO`, `COD_OS`, `DT_ATUALIZACAO`, `OB_TERMO_ADITIVO`,
                                 `DT_ASSINATURA`, `PERIODO_VIGENCIA`, `DT_PUBLICACAO`, `DT_INICIO`, `VLR_INICIAL`, `VLR_ALTERADO`, `OBSERVACAO`,
                                 `FLG_ALTERA_VIGENCIA`, `FLG_ALTERA_VALOR`, `FLG_ALTERA_UNIDADE` FROM `osinfo`.`termo_aditivo`;
@@ -863,6 +874,7 @@ deployments:
           batch_size: 50000
           table_id: termo_aditivo_resumo_cronograma
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: SELECT `ID_TERMO_ADITIVO_MES`, `ID_TERMO_ADITIVO`, `MES`, `VALOR` FROM `osinfo`.`termo_aditivo_mes`;
     work_pool:
       name: datario-pool
