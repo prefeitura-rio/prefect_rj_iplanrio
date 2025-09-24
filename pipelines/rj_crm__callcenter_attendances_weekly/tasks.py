@@ -638,25 +638,19 @@ def get_existing_attendance_keys(
 
     log(f"Checking existing attendance keys for period {start_date} to {end_date}")
 
-    try:
-        dfr = download_data_from_bigquery(
-            query=query,
-            billing_project_id=billing_project_id,
-            bucket_name=billing_project_id,
-        )
+    dfr = download_data_from_bigquery(
+        query=query,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+    )
 
-        if dfr.empty:
-            log("No existing attendance data found for the specified period")
-            return []
-
-        existing_keys = dfr["composite_key"].tolist()
-        log(f"Found {len(existing_keys)} existing attendance records")
-        return existing_keys
-
-    except Exception as e:
-        log(f"Error checking existing attendance keys: {e}", level="warning")
-        log("Proceeding without duplicate check - table might not exist yet")
+    if dfr.empty:
+        log("No existing attendance data found for the specified period")
         return []
+
+    existing_keys = dfr["composite_key"].tolist()
+    log(f"Found {len(existing_keys)} existing attendance records")
+    return existing_keys
 
 
 @task
