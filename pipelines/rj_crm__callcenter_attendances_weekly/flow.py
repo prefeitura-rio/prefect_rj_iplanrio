@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
@@ -63,9 +62,7 @@ def rj_crm__callcenter_attendances_weekly(
     biglake_table = CallCenterAttendancesConstants.BIGLAKE_TABLE.value
     billing_project_id = CallCenterAttendancesConstants.BILLING_PROJECT_ID.value
 
-    rename_flow_run = rename_current_flow_run_task(
-        new_name=f"{table_id}_{dataset_id}_weekly"
-    )
+    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
 
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
@@ -107,14 +104,10 @@ def rj_crm__callcenter_attendances_weekly(
         )
         return
 
-    processed_data = processar_json_e_transcrever_audios(
-        dados_entrada=filtered_attendances
-    )
+    processed_data = processar_json_e_transcrever_audios(dados_entrada=filtered_attendances)
     df = criar_dataframe_de_lista(processed_data)
 
-    print(
-        f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}"
-    )
+    print(f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}")
 
     partitions_path = create_date_partitions(
         dataframe=df,
