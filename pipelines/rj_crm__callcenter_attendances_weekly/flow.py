@@ -63,11 +63,12 @@ def rj_crm__callcenter_attendances_weekly(
     biglake_table = CallCenterAttendancesConstants.BIGLAKE_TABLE.value
     billing_project_id = CallCenterAttendancesConstants.BILLING_PROJECT_ID.value
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
+    rename_flow_run = rename_current_flow_run_task(
+        new_name=f"{table_id}_{dataset_id}_weekly"
+    )
 
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
-    # Calcular período de datas (7 dias anteriores se não fornecido)
     date_range = calculate_date_range(start_date=start_date, end_date=end_date)
 
     api = access_api(
@@ -78,7 +79,6 @@ def rj_crm__callcenter_attendances_weekly(
         login_route=CallCenterAttendancesConstants.API_LOGIN_ROUTE.value,
     )
 
-    # Buscar atendimentos para o período especificado
     raw_attendances = get_weekly_attendances(
         api=api, start_date=date_range["start_date"], end_date=date_range["end_date"]
     )
@@ -88,8 +88,6 @@ def rj_crm__callcenter_attendances_weekly(
             f"No attendances found from API for period {date_range['start_date']} to {date_range['end_date']}. Flow completed successfully with no data to process."
         )
         return
-
-    # Verificar quais chaves compostas já existem no BigQuery para evitar duplicatas
     existing_keys = get_existing_attendance_keys(
         dataset_id=dataset_id,
         table_id=table_id,
@@ -98,7 +96,6 @@ def rj_crm__callcenter_attendances_weekly(
         billing_project_id=billing_project_id,
     )
 
-    # Filtrar apenas atendimentos novos (que não estão duplicados)
     filtered_attendances = filter_new_attendances(
         raw_attendances=raw_attendances,
         existing_keys=existing_keys,
@@ -110,10 +107,14 @@ def rj_crm__callcenter_attendances_weekly(
         )
         return
 
-    processed_data = processar_json_e_transcrever_audios(dados_entrada=filtered_attendances)
+    processed_data = processar_json_e_transcrever_audios(
+        dados_entrada=filtered_attendances
+    )
     df = criar_dataframe_de_lista(processed_data)
 
-    print(f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}")
+    print(
+        f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}"
+    )
 
     partitions_path = create_date_partitions(
         dataframe=df,
