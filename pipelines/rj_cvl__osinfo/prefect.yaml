@@ -326,31 +326,31 @@ deployments:
           dump_mode: overwrite
           materialize_after_dump: true
           execute_query: |
-            SELECT 
-              `ID_BEM`, 
-              `COD_OS`, 
-              `ID_CONTRATO`, 
-              `REF_MES`, 
-              `REF_ANO`, 
-              `NUM_CONTROLE`, 
-              `ID_BEM_TIPO`, 
+            SELECT
+              `ID_BEM`,
+              `COD_OS`,
+              `ID_CONTRATO`,
+              `REF_MES`,
+              `REF_ANO`,
+              `NUM_CONTROLE`,
+              `ID_BEM_TIPO`,
               `DESCRICAO`,
-              `QUANTIDADE`, 
-              `NF`, 
-              `DATA_AQUISICAO`, 
-              `VIDA_UTIL`, 
-              `VALOR`, 
-              `COD_UNIDADE`, 
-              `VINCULACAO`, 
-              `ID_TERMO_ADITIVO`, 
+              `QUANTIDADE`,
+              `NF`,
+              `DATA_AQUISICAO`,
+              `VIDA_UTIL`,
+              `VALOR`,
+              `COD_UNIDADE`,
+              `VINCULACAO`,
+              `ID_TERMO_ADITIVO`,
               `FORNECEDOR`,
-              `CNPJ`, 
-              `IMG_NF`, 
-              `SETOR_DESTINO`, 
-              `ID_IMAGEM`, 
-              `TIPO_REGISTRO` 
+              `CNPJ`,
+              `IMG_NF`,
+              `SETOR_DESTINO`,
+              `ID_IMAGEM`,
+              `TIPO_REGISTRO`
             FROM `osinfo`.`bem`;
-      
+
       - interval: 86400
         anchor_date: '2025-07-15T05:10:00'
         timezone: America/Sao_Paulo
@@ -374,7 +374,7 @@ deployments:
               `FLG_ATIVO`,
               `ORDEM`
             FROM `osinfo`.`bem_tipo`;
-      
+
       - interval: 86400
         anchor_date: '2025-07-15T05:10:00'
         timezone: America/Sao_Paulo
@@ -392,11 +392,11 @@ deployments:
           dump_mode: overwrite
           materialize_after_dump: true
           execute_query: |
-            SELECT 
-              `ID_CONTRATO_MES`, 
-              `ID_CONTRATO`, 
-              `MES`, 
-              `VALOR` 
+            SELECT
+              `ID_CONTRATO_MES`,
+              `ID_CONTRATO`,
+              `MES`,
+              `VALOR`
             FROM `osinfo`.`contrato_mes`;
 
 
@@ -417,22 +417,22 @@ deployments:
           dump_mode: overwrite
           materialize_after_dump: true
           execute_query: |
-            SELECT 
-              `ID_TERMO_ADITIVO`, 
-              `ID_CONTRATO`, 
-              `NUM_TERMO_ADITIVO`, 
-              `COD_OS`, 
-              `DT_ATUALIZACAO`, 
+            SELECT
+              `ID_TERMO_ADITIVO`,
+              `ID_CONTRATO`,
+              `NUM_TERMO_ADITIVO`,
+              `COD_OS`,
+              `DT_ATUALIZACAO`,
               `OB_TERMO_ADITIVO`,
-              `DT_ASSINATURA`, 
-              `PERIODO_VIGENCIA`, 
-              `DT_PUBLICACAO`, 
-              `DT_INICIO`, 
-              `VLR_INICIAL`, 
-              `VLR_ALTERADO`, 
+              `DT_ASSINATURA`,
+              `PERIODO_VIGENCIA`,
+              `DT_PUBLICACAO`,
+              `DT_INICIO`,
+              `VLR_INICIAL`,
+              `VLR_ALTERADO`,
               `OBSERVACAO`,
-              `FLG_ALTERA_VIGENCIA`, 
-              `FLG_ALTERA_VALOR`, 
+              `FLG_ALTERA_VIGENCIA`,
+              `FLG_ALTERA_VALOR`,
               `FLG_ALTERA_UNIDADE`
             FROM `osinfo`.`termo_aditivo`;
 
@@ -454,9 +454,9 @@ deployments:
           dump_mode: overwrite
           materialize_after_dump: true
           execute_query: |
-            SELECT 
-              `ID_TERMO_ADITIVO_MES`, 
-              `ID_TERMO_ADITIVO`, 
-              `MES`, 
-              `VALOR` 
+            SELECT
+              `ID_TERMO_ADITIVO_MES`,
+              `ID_TERMO_ADITIVO`,
+              `MES`,
+              `VALOR`
             FROM `osinfo`.`termo_aditivo_mes`;
