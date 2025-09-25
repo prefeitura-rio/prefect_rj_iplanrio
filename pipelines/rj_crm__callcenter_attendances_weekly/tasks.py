@@ -356,7 +356,7 @@ def calculate_date_range(
 @task
 def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.DataFrame:
     """
-    Get attendances from the Wetalkie API for a specific date range
+    Get attendances from the Wetalkie API for a specific date range with pagination
 
     Args:
         api: Authenticated API handler
@@ -368,52 +368,73 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     """
     log(f"Getting attendances from {start_date} to {end_date}")
 
-    # Build path with matrix variables (API expects beginDate/endDate as matrix variables)
-    path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date}"
+    all_attendances = []
+    page_number = 1
+    page_size = 100
 
-    response = api.get(path=path)
+    while True:
+        # Build path with matrix variables including pagination
+        path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date};pageSize={page_size};pageNumber={page_number}"
 
-    if response.status_code != 200:
-        log(
-            f"API request failed with status {response.status_code}: {response.text}",
-            level="error",
-        )
-        response.raise_for_status()
+        log(f"Fetching page {page_number} with pageSize={page_size}")
 
-    log(f"API response status: {response.status_code}")
+        response = api.get(path=path)
 
-    try:
-        response_data = response.json()
-        log(
-            f"Response data structure: {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data)}"
-        )
-    except Exception as e:
-        log(f"Failed to parse JSON response: {e}", level="error")
-        raise
+        if response.status_code != 200:
+            log(
+                f"API request failed with status {response.status_code}: {response.text}",
+                level="error",
+            )
+            response.raise_for_status()
 
-    # Check if API returned a "message" response (indicates no data available)
-    if "message" in response_data and "data" not in response_data:
-        log(f"API returned message response (no data available): {response_data.get('message')}")
-        return pd.DataFrame()  # Return empty DataFrame - no data to process
+        try:
+            response_data = response.json()
+            log(
+                f"Page {page_number} response data structure: {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data)}"
+            )
+        except Exception as e:
+            log(f"Failed to parse JSON response on page {page_number}: {e}", level="error")
+            raise
 
-    # Extract attendances from response
-    if "data" in response_data and "item" in response_data["data"] and "elements" in response_data["data"]["item"]:
-        attendances = response_data["data"]["item"]["elements"]
-    elif "data" in response_data and "items" in response_data["data"]:
-        attendances = response_data["data"]["items"]
-    elif isinstance(response_data, list):
-        attendances = response_data
-    else:
-        log(f"Unexpected response structure: {response_data}", level="warning")
+        # Check if API returned a "message" response (indicates no data available)
+        if "message" in response_data and "data" not in response_data:
+            log(f"API returned message response on page {page_number} (no data available): {response_data.get('message')}")
+            break
+
+        # Extract attendances from response
+        page_attendances = []
+        if "data" in response_data and "item" in response_data["data"] and "elements" in response_data["data"]["item"]:
+            page_attendances = response_data["data"]["item"]["elements"]
+
+        if "data" in response_data and "items" in response_data["data"]:
+            page_attendances = response_data["data"]["items"]
+
+        if isinstance(response_data, list):
+            page_attendances = response_data
+
+        if not page_attendances:
+            log(f"No attendances found on page {page_number}, ending pagination")
+            break
+
+        log(f"Found {len(page_attendances)} attendances on page {page_number}")
+        all_attendances.extend(page_attendances)
+
+        # If we got fewer results than the page size, we've reached the end
+        if len(page_attendances) < page_size:
+            log(f"Page {page_number} returned {len(page_attendances)} records (less than pageSize={page_size}), ending pagination")
+            break
+
+        page_number += 1
+
+    if not all_attendances:
+        log("No attendances found in any page", level="warning")
         return pd.DataFrame()
 
-    if not attendances:
-        log("No attendances found in the API response", level="warning")
-        return pd.DataFrame()
+    log(f"Total attendances collected across {page_number} pages: {len(all_attendances)}")
 
     # Process attendances data
     data = []
-    for item in attendances:
+    for item in all_attendances:
         data.append(
             {
                 "end_date": item.get("endDate"),
