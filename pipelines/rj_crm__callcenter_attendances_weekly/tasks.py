@@ -398,7 +398,9 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # Check if API returned a "message" response (indicates no data available)
         if "message" in response_data and "data" not in response_data:
-            log(f"API returned message response on page {page_number} (no data available): {response_data.get('message')}")
+            log(
+                f"API returned message response on page {page_number} (no data available): {response_data.get('message')}"
+            )
             break
 
         # Extract attendances from response
@@ -421,7 +423,9 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # If we got fewer results than the page size, we've reached the end
         if len(page_attendances) < page_size:
-            log(f"Page {page_number} returned {len(page_attendances)} records (less than pageSize={page_size}), ending pagination")
+            log(
+                f"Page {page_number} returned {len(page_attendances)} records (less than pageSize={page_size}), ending pagination"
+            )
             break
 
         page_number += 1
