@@ -92,7 +92,9 @@ class ApiHandler:
             elif "jwt" in response_data:
                 token = response_data["jwt"]
             elif (
-                "data" in response_data and "item" in response_data["data"] and "token" in response_data["data"]["item"]
+                "data" in response_data
+                and "item" in response_data["data"]
+                and "token" in response_data["data"]["item"]
             ):
                 token = response_data["data"]["item"]["token"]
 
@@ -116,7 +118,9 @@ class ApiHandler:
             return True
         return False
 
-    def get(self, path: str, params: Optional[Dict] = None, **kwargs) -> requests.Response:
+    def get(
+        self, path: str, params: Optional[Dict] = None, **kwargs
+    ) -> requests.Response:
         """Perform GET request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
@@ -138,11 +142,15 @@ class ApiHandler:
         """Perform POST request with automatic token refresh"""
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        response = requests.post(url, headers=self.headers, json=json, data=data, **kwargs)
+        response = requests.post(
+            url, headers=self.headers, json=json, data=data, **kwargs
+        )
 
         if self._refresh_token_if_needed(response):
             # Retry with new token
-            response = requests.post(url, headers=self.headers, json=json, data=data, **kwargs)
+            response = requests.post(
+                url, headers=self.headers, json=json, data=data, **kwargs
+            )
 
         return response
 
@@ -155,7 +163,9 @@ def download_audio(url: str) -> str:
         if original_extension not in ["mp3", "wav", "ogg", "oga", "opus"]:
             raise ValueError(f"URL não possui uma extensão de áudio suportada: {url}")
 
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=f".{original_extension}")
+        temp_file = tempfile.NamedTemporaryFile(
+            delete=False, suffix=f".{original_extension}"
+        )
         temp_path = temp_file.name
         temp_file.close()
 
@@ -174,7 +184,9 @@ def download_audio(url: str) -> str:
 def check_audio_file(audio_path: str) -> bool:
     """Check if audio file exists and is not empty."""
     if not os.path.exists(audio_path):
-        raise FileNotFoundError(f"Arquivo de áudio não encontrado no caminho: {audio_path}")
+        raise FileNotFoundError(
+            f"Arquivo de áudio não encontrado no caminho: {audio_path}"
+        )
 
     if os.path.getsize(audio_path) == 0:
         raise AudioProcessingError(f"Arquivo de áudio está vazio: {audio_path}")
@@ -202,10 +214,14 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
             audio = OggOpus(audio_path)
             duration = audio.info.length
         else:
-            raise AudioProcessingError(f"Formato de áudio não suportado: {audio_format}")
+            raise AudioProcessingError(
+                f"Formato de áudio não suportado: {audio_format}"
+            )
 
         if duration > max_duration_seconds:
-            raise AudioProcessingError(f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s")
+            raise AudioProcessingError(
+                f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s"
+            )
 
         log(f"Duração do áudio verificada: {duration:.2f}s", level="debug")
 
@@ -267,7 +283,9 @@ def access_api(
     username = getenv_or_action(infisical_username)
     password = getenv_or_action(infisical_password)
 
-    api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
+    api = ApiHandler(
+        base_url=url, username=username, password=password, login_route=login_route
+    )
     return api
 
 
@@ -283,7 +301,9 @@ def create_date_partitions(
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
     else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
+        dataframe[partition_column] = pd.to_datetime(
+            dataframe[partition_column], errors="coerce"
+        )
         dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
         if dataframe["data_particao"].isnull().any():
             raise ValueError("Some dates in the partition column could not be parsed.")
@@ -292,7 +312,9 @@ def create_date_partitions(
     dataframes = [
         (
             date,
-            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
+            dataframe[dataframe["data_particao"] == date].drop(
+                columns=["data_particao"]
+            ),
         )
         for date in dates
     ]
@@ -348,7 +370,9 @@ def calculate_date_range(
     else:
         result = {"start_date": start_date, "end_date": end_date}
 
-        log(f"Using provided date range: {result['start_date']} to {result['end_date']}")
+        log(
+            f"Using provided date range: {result['start_date']} to {result['end_date']}"
+        )
 
     return result
 
@@ -393,18 +417,28 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
                 f"Page {page_number} response data structure: {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data)}"
             )
         except Exception as e:
-            log(f"Failed to parse JSON response on page {page_number}: {e}", level="error")
+            log(
+                f"Failed to parse JSON response on page {page_number}: {e}",
+                level="error",
+            )
             raise
 
         # Check if API returned a "message" response (indicates no data available)
         if "message" in response_data and "data" not in response_data:
-            log(f"API returned message response on page {page_number} (no data available): {response_data.get('message')}")
+            log(
+                f"API returned message response on page {page_number} (no data available): {response_data.get('message')}"
+            )
             break
 
         # Extract attendances from response
         page_attendances = []
-        if "data" in response_data and "item" in response_data["data"] and "elements" in response_data["data"]["item"]:
-            page_attendances = response_data["data"]["item"]["elements"]
+        has_next_page = False
+
+        if "data" in response_data and "item" in response_data["data"]:
+            item_data = response_data["data"]["item"]
+            if "elements" in item_data:
+                page_attendances = item_data["elements"]
+            has_next_page = item_data.get("hasNextPage", False)
 
         if "data" in response_data and "items" in response_data["data"]:
             page_attendances = response_data["data"]["items"]
@@ -419,9 +453,9 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         log(f"Found {len(page_attendances)} attendances on page {page_number}")
         all_attendances.extend(page_attendances)
 
-        # If we got fewer results than the page size, we've reached the end
-        if len(page_attendances) < page_size:
-            log(f"Page {page_number} returned {len(page_attendances)} records (less than pageSize={page_size}), ending pagination")
+        # Check if there's a next page
+        if not has_next_page:
+            log(f"API indicates no next page (hasNextPage=false), ending pagination")
             break
 
         page_number += 1
@@ -430,18 +464,23 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         log("No attendances found in any page", level="warning")
         return pd.DataFrame()
 
-    log(f"Total attendances collected across {page_number} pages: {len(all_attendances)}")
+    log(
+        f"Total attendances collected across {page_number} pages: {len(all_attendances)}"
+    )
 
-    # Process attendances data
     data = []
     for item in all_attendances:
         data.append(
             {
                 "end_date": item.get("endDate"),
                 "begin_date": item.get("beginDate"),
-                "ura_name": (item.get("ura", {}).get("name") if item.get("ura") else None),
+                "ura_name": (
+                    item.get("ura", {}).get("name") if item.get("ura") else None
+                ),
                 "id_ura": item.get("ura", {}).get("id") if item.get("ura") else None,
-                "channel": (item.get("channel", "").lower() if item.get("channel") else None),
+                "channel": (
+                    item.get("channel", "").lower() if item.get("channel") else None
+                ),
                 "id_reply": item.get("serial"),
                 "protocol": item.get("protocol"),
                 "json_data": item,
@@ -521,11 +560,16 @@ def processar_json_e_transcrever_audios(
                         and not texto_original
                         and (
                             "audio" in content_type
-                            or any(url_audio.endswith(ext) for ext in [".mp3", ".wav", ".ogg", ".oga", ".opus"])
+                            or any(
+                                url_audio.endswith(ext)
+                                for ext in [".mp3", ".wav", ".ogg", ".oga", ".opus"]
+                            )
                         )
                     ):
                         audio_encontrado = True
-                        log(f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}")
+                        log(
+                            f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}"
+                        )
                         audio_path_temp = None
                         try:
                             audio_path_temp = download_audio(url_audio)
@@ -581,7 +625,9 @@ def processar_json_e_transcrever_audios(
             )
             dados_processados.append(registro)
 
-    log(f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros.")
+    log(
+        f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros."
+    )
     return dados_processados
 
 
@@ -599,7 +645,9 @@ def criar_dataframe_de_lista(dados_processados: list) -> pd.DataFrame:
     return pd.DataFrame(dados_processados)
 
 
-def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
+def download_data_from_bigquery(
+    query: str, billing_project_id: str, bucket_name: str
+) -> pd.DataFrame:
     """
     Execute a BigQuery SQL query and return results as a pandas DataFrame.
 
@@ -716,7 +764,9 @@ def filter_new_attendances(
     )
 
     # Filter out attendances with keys that already exist
-    new_attendances = raw_attendances[~raw_attendances["composite_key"].isin(existing_keys)]
+    new_attendances = raw_attendances[
+        ~raw_attendances["composite_key"].isin(existing_keys)
+    ]
 
     # Drop the temporary column
     new_attendances = new_attendances.drop(columns=["composite_key"])
