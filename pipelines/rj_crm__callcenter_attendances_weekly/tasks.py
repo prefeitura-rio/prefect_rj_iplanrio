@@ -458,7 +458,10 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         # Enhanced validation for data.item.elements structure
         if "data" in response_data and "item" in response_data["data"]:
             item_data = response_data["data"]["item"]
-            log(f"Page {page_number} item_data keys: {list(item_data.keys()) if isinstance(item_data, dict) else 'Not a dict'}", level="debug")
+            log(
+                f"Page {page_number} item_data keys: {list(item_data.keys()) if isinstance(item_data, dict) else 'Not a dict'}",
+                level="debug",
+            )
 
             if "elements" in item_data:
                 elements = item_data["elements"]
@@ -513,7 +516,10 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         else:
             log(f"Page {page_number} response structure not recognized for data extraction", level="warning")
-            log(f"Available keys in response: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}", level="debug")
+            log(
+                f"Available keys in response: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}",
+                level="debug",
+            )
 
             # Enhanced diagnostics for unrecognized structure
             if isinstance(response_data, dict):
@@ -531,16 +537,28 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
             log(f"No attendances found on page {page_number}, ending pagination")
             log(f"Page {page_number} empty content details:", level="debug")
             log(f"  - Response data type: {type(response_data)}", level="debug")
-            log(f"  - Has 'data' key: {'data' in response_data if isinstance(response_data, dict) else False}", level="debug")
-            log(f"  - Has 'item' in data: {'item' in response_data.get('data', {}) if isinstance(response_data, dict) else False}", level="debug")
-            log(f"  - Elements array length: {len(response_data.get('data', {}).get('item', {}).get('elements', [])) if isinstance(response_data, dict) else 'N/A'}", level="debug")
+            log(
+                f"  - Has 'data' key: {'data' in response_data if isinstance(response_data, dict) else False}",
+                level="debug",
+            )
+            log(
+                f"  - Has 'item' in data: {'item' in response_data.get('data', {}) if isinstance(response_data, dict) else False}",
+                level="debug",
+            )
+            log(
+                f"  - Elements array length: {len(response_data.get('data', {}).get('item', {}).get('elements', [])) if isinstance(response_data, dict) else 'N/A'}",
+                level="debug",
+            )
             log(f"Breaking pagination due to empty page content on page {page_number}", level="info")
             break
 
         # Check if page_attendances contains only empty/null items
         valid_attendances = [att for att in page_attendances if att is not None and att != {}]
         if not valid_attendances:
-            log(f"Page {page_number} contains only empty/null attendances ({len(page_attendances)} total), breaking pagination", level="warning")
+            log(
+                f"Page {page_number} contains only empty/null attendances ({len(page_attendances)} total), breaking pagination",
+                level="warning",
+            )
             log(f"Sample empty attendance items: {page_attendances[:3]}", level="debug")
             break
 
@@ -550,8 +568,8 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         if page_attendances and len(page_attendances) > 0:
             # Log first attendance details
             sample_attendance = page_attendances[0]
-            required_fields = ['endDate', 'beginDate', 'serial', 'protocol']
-            sample_info = {field: sample_attendance.get(field, 'MISSING') for field in required_fields}
+            required_fields = ["endDate", "beginDate", "serial", "protocol"]
+            sample_info = {field: sample_attendance.get(field, "MISSING") for field in required_fields}
             log(f"Page {page_number} sample attendance fields: {sample_info}", level="debug")
 
             # Log additional diagnostic info about attendance content
@@ -587,8 +605,11 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # Check if there's a next page
         if not has_next_page:
-            log(f"API indicates no next page (hasNextPage=false), ending pagination")
-            log(f"Final pagination summary: collected {len(all_attendances)} attendances across {page_number} pages", level="info")
+            log("API indicates no next page (hasNextPage=false), ending pagination")
+            log(
+                f"Final pagination summary: collected {len(all_attendances)} attendances across {page_number} pages",
+                level="info",
+            )
             break
 
         # Enhanced safety check with more detailed analysis
@@ -608,9 +629,7 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         log(f"Pagination completed after checking {page_number} pages with no data found", level="info")
         return pd.DataFrame()
 
-    log(
-        f"Total attendances collected across {page_number} pages: {len(all_attendances)}"
-    )
+    log(f"Total attendances collected across {page_number} pages: {len(all_attendances)}")
     log(f"Successful pagination completion - processed pages 1 through {page_number}", level="info")
 
     data = []
