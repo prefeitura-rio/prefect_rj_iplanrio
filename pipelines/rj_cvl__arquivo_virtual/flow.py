@@ -19,7 +19,7 @@ from prefect import flow
 @flow(log_prints=True)
 def rj_cvl__arquivo_virtual(
     db_database: str = "arquivovirtualprd",
-    db_host: str = "v1153017.rio.rj.gov.br",
+    db_host: str = "10.2.211.17",
     db_port: str = "3306",
     db_type: str = "mysql",
     db_charset: Optional[str] = "utf8",
