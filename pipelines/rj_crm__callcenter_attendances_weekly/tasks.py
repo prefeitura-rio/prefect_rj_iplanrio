@@ -419,11 +419,9 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # Enhanced check for API message responses with detailed diagnostics
         if "message" in response_data and "data" not in response_data:
-            message = response_data.get('message', 'No message provided')
-            status_code = response_data.get('statusCode', 'No status code')
-            log(
-                f"API returned message response on page {page_number} (no data available): {message}"
-            )
+            message = response_data.get("message", "No message provided")
+            status_code = response_data.get("statusCode", "No status code")
+            log(f"API returned message response on page {page_number} (no data available): {message}")
             log(f"Message response details - statusCode: {status_code}, message: '{message}'", level="info")
             log(f"Full message response content: {response_data}", level="debug")
             log(f"Breaking pagination due to message-only response on page {page_number}", level="info")
@@ -431,9 +429,12 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # Enhanced check for API responses with both message and data
         if "message" in response_data and "data" in response_data:
-            message = response_data.get('message', 'No message provided')
-            status_code = response_data.get('statusCode', 'No status code')
-            log(f"Page {page_number} API response includes message alongside data: '{message}' (status: {status_code})", level="info")
+            message = response_data.get("message", "No message provided")
+            status_code = response_data.get("statusCode", "No status code")
+            log(
+                f"Page {page_number} API response includes message alongside data: '{message}' (status: {status_code})",
+                level="info",
+            )
 
         # Enhanced check for empty response content
         if not response_data or (isinstance(response_data, dict) and not response_data):
@@ -444,11 +445,14 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # Check for responses that look like error responses
         if isinstance(response_data, dict):
-            error_indicators = ['error', 'Error', 'ERROR', 'errors']
+            error_indicators = ["error", "Error", "ERROR", "errors"]
             for indicator in error_indicators:
                 if indicator in response_data:
                     error_content = response_data[indicator]
-                    log(f"Page {page_number} response contains error indicator '{indicator}': {error_content}", level="warning")
+                    log(
+                        f"Page {page_number} response contains error indicator '{indicator}': {error_content}",
+                        level="warning",
+                    )
                     log(f"Full error response: {response_data}", level="debug")
 
         # Extract attendances from response with enhanced validation and logging
@@ -484,7 +488,10 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
             log(f"Page {page_number} complete item_data structure:", level="debug")
             for key, value in item_data.items():
                 if key == "elements":
-                    log(f"  - {key}: list with {len(value) if isinstance(value, list) else 'not a list'} items", level="debug")
+                    log(
+                        f"  - {key}: list with {len(value) if isinstance(value, list) else 'not a list'} items",
+                        level="debug",
+                    )
                 else:
                     log(f"  - {key}: {type(value).__name__} = {value}", level="debug")
 
@@ -574,14 +581,20 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
             # Log additional diagnostic info about attendance content
             log(f"Page {page_number} content diagnostics:", level="debug")
-            log(f"  - First attendance keys: {list(sample_attendance.keys()) if isinstance(sample_attendance, dict) else 'Not a dict'}", level="debug")
+            log(
+                f"  - First attendance keys: {list(sample_attendance.keys()) if isinstance(sample_attendance, dict) else 'Not a dict'}",
+                level="debug",
+            )
             log(f"  - First attendance ID/Serial: {sample_attendance.get('serial', 'NO_SERIAL')}", level="debug")
 
             # Check if all attendances in this page have the same structure
             if len(page_attendances) > 1:
                 last_attendance = page_attendances[-1]
                 log(f"  - Last attendance ID/Serial: {last_attendance.get('serial', 'NO_SERIAL')}", level="debug")
-                log(f"  - Same structure as first: {set(sample_attendance.keys()) == set(last_attendance.keys()) if isinstance(last_attendance, dict) else 'N/A'}", level="debug")
+                log(
+                    f"  - Same structure as first: {set(sample_attendance.keys()) == set(last_attendance.keys()) if isinstance(last_attendance, dict) else 'N/A'}",
+                    level="debug",
+                )
 
         all_attendances.extend(page_attendances)
 
@@ -591,7 +604,10 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         log(f"  - hasNextPage from API: {has_next_page}", level="info")
         log(f"  - Total attendances so far: {len(all_attendances)}", level="info")
         log(f"  - Requested pageSize: {page_size}", level="info")
-        log(f"  - Page size vs requested: {len(page_attendances)}/{page_size} = {(len(page_attendances)/page_size)*100:.1f}%", level="info")
+        log(
+            f"  - Page size vs requested: {len(page_attendances)}/{page_size} = {(len(page_attendances) / page_size) * 100:.1f}%",
+            level="info",
+        )
 
         # Log the actual message from API if present
         if isinstance(response_data, dict) and "message" in response_data:
@@ -614,12 +630,21 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # Enhanced safety check with more detailed analysis
         if len(page_attendances) < page_size * 0.5 and len(page_attendances) > 0:
-            log(f"Page {page_number} returned {len(page_attendances)} attendances, which is less than 50% of page_size ({page_size}). This might indicate approaching end of data.", level="warning")
-            log(f"  - Small page analysis: hasNextPage={has_next_page}, actual_size={len(page_attendances)}, expected_size={page_size}", level="warning")
+            log(
+                f"Page {page_number} returned {len(page_attendances)} attendances, which is less than 50% of page_size ({page_size}). This might indicate approaching end of data.",
+                level="warning",
+            )
+            log(
+                f"  - Small page analysis: hasNextPage={has_next_page}, actual_size={len(page_attendances)}, expected_size={page_size}",
+                level="warning",
+            )
 
             # Log if this is a consistent pattern
             if page_number > 5:  # Only log this after a few pages
-                log(f"  - This is page {page_number} with small size - check if this is a consistent pattern indicating API limitation", level="warning")
+                log(
+                    f"  - This is page {page_number} with small size - check if this is a consistent pattern indicating API limitation",
+                    level="warning",
+                )
 
         page_number += 1
         log(f"Moving to page {page_number} (hasNextPage={has_next_page})", level="info")
