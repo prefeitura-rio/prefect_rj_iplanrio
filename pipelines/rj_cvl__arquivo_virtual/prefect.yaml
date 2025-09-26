@@ -1,0 +1,547 @@
+name: rj_cvl__arquivo_virtual
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_cvl__arquivo_virtual-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_cvl__arquivo_virtual/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj_cvl__arquivo_virtual--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_cvl__arquivo_virtual/flow.py:rj_cvl__arquivo_virtual
+    work_pool:
+      name: datario-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
+        image_pull_policy: Always
+  - name: rj_cvl__arquivo_virtual--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_cvl__arquivo_virtual/flow.py:rj_cvl__arquivo_virtual
+    work_pool:
+      name: datario-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
+        image_pull_policy: Always
+    schedules:
+
+      - interval: 86400  # executa a cada 24h
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: conjunto_arquivo
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: conjunto_arquivo
+          dump_mode: overwrite
+          execute_query: |
+            SELECT
+              `id_nivel`,
+              `id_conjuntoArquivo`,
+              `id_conjuntoArquivo_pai`,
+              `st_conjuntoArquivo`,
+              `st_conjuntoArquivo_pai`
+            FROM `CONJUNTO_ARQUIVO`;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: a1_identificacao
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: a1_identificacao
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+              cd_referencia,
+              dt_fim,
+              dt_iniModalidade,
+              dt_pesquisa,
+              ds_titulo,
+              id_modalidade,
+              id_conjuntoArquivo,
+              id_setor
+            FROM A1_IDENTIFICACAO;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: a2_contextualizacao
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: a2_contextualizacao
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+              ds_historiaAdm,
+              ds_historiaArq,
+              id_NaturezaJuridica,
+              id_conjuntoArquivo
+            FROM A2_CONTEXTUALIZACAO;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: a3_conteudo_estrutura
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: a3_conteudo_estrutura
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+              ds_incorporacoes,
+              ds_avalEliminaTemp,
+              ds_ambitoConteudo,
+              id_conjuntoArquivo,
+              ds_organizacao,
+              id_estagioTratamento
+            FROM A3_CONTEUDO_ESTRUTURA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: a4_condicoes_acesso
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: a4_condicoes_acesso
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                ds_condicoesReproducao,
+                id_conjuntoArquivo,
+                obs_restricao,
+                id_restricao,
+                id_tipoRestricao
+            FROM A4_CONDICOES_ACESSO;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: a5_fontes_relacionada
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: a5_fontes_relacionada
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                ds_existLocalOriginais,
+                ds_notasPublicacao,
+                ds_unidDescRelacionadas,
+                ds_outrosDetentores,
+                ds_copiasNaInstituicao,
+                id_conjuntoArquivo
+            FROM A5_FONTES_RELACIONADA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: a6_notas
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: a6_notas
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                ds_notaConservacao,
+                id_estadoAcervo,
+                ds_notasGerais,
+                id_conjuntoArquivo
+            FROM A6_NOTAS;
+
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: a7_controle
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: a7_controle
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                ds_datasDesc,
+                ds_regrasConvencoes,
+                ds_notaArquivistica,
+                ds_unidadeCustodiadora,
+                st_arquivoDigital,
+                ds_responsavelDesc,
+                id_conjuntoArquivo
+            FROM A7_CONTROLE;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: condic_idioma
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: condic_idioma
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_idioma,
+                id_conjuntoArquivo
+            FROM CONDIC_IDIOMA
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: condic_inst
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: condic_inst
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_condicInst,
+                id_conjuntoArquivo,
+                id_instPesquisa,
+                ds_condicInst
+            FROM CONDIC_INST;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: context_produtor
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: context_produtor
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_produtor,
+                nm_produtor,
+                dt_morteExtincao,
+                dt_nascimentoCriacao,
+                id_tipoProdutor,
+                id_conjuntoArquivo
+            FROM CONTEXT_PRODUTOR;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: dimensao_suporte
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: dimensao_suporte
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_conjuntoArquivo,
+                id_genero,
+                id_especie,
+                id_capacidade,
+                id_tipoEscala,
+                id_formato,
+                qt_unidade,
+                ds_escala,
+                obs,
+                id_unidade,
+                qt_capacidade
+            FROM DIMENSAO_SUPORTE;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: procedencia
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: procedencia
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_procedencia,
+                nr_geralEntradaProc,
+                nr_anoProc,
+                nm_procedencia,
+                id_formaEntrada,
+                id_conjuntoArquivo
+            FROM PROCEDENCIA;
+
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: capacidade_armazena
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: capacidade_armazena
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                Id_capacidade,
+                ds_capacidade
+            FROM CAPACIDADE_ARMAZENA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: especie
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: especie
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_especie,
+                id_genero,
+                nm_especie
+            FROM ESPECIE;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: estado_acervo
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: estado_acervo
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_estadoAcervo,
+                nm_estado
+            FROM ESTADO_ACERVO;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: estagio_tratamento
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: estagio_tratamento
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_estagioTratamento,
+                ds_estagioTratamento
+            FROM ESTAGIO_TRATAMENTO;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: forma_entrada
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: forma_entrada
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_formaEntrada,
+                ds_formaEntrada
+            FROM FORMA_ENTRADA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: formato
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: formato
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_formato,
+                id_genero,
+                ds_formato
+            FROM FORMATO;
+
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: genero
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: genero
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_genero,
+                nm_genero,
+                nr_genero
+            FROM GENERO;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: idioma
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: idioma
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_conjuntoArquivo,
+                id_idioma,
+                nm_idioma
+            FROM IDIOMA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: modalidade
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: modalidade
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_modalidade,
+                ds_modalidade
+            FROM MODALIDADE;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: nivel
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: nivel
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_nivel,
+                ds_nivel,
+                nr_nivel
+            FROM NIVEL;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: restricao
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: restricao
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_restricao,
+                ds_restricaobasica
+            FROM RESTRICAO;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_escala
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: tipo_escala
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_tipoEscala,
+                ds_tipoEscala
+            FROM TIPO_ESCALA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_produtor
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: tipo_produtor
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+                id_tipoProdutor,
+                ds_tipoProdutor
+            FROM TIPO_PRODUTOR;
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_restricao
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: tipo_restricao
+          dump_mode: overwrite
+          execute_query: |
+            SELECT
+                id_tipoRestricao,
+                ds_restricao
+            FROM TIPO_RESTRICAO;
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: unidade_medida
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: unidade_medida
+          dump_mode: overwrite
+          execute_query: |
+            SELECT
+                id_unidade,
+                nm_unidade
+            FROM UNIDADE_MEDIDA;
+
