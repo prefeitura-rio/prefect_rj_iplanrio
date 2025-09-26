@@ -136,11 +136,11 @@ deployments:
 
           execute_query: |
             SELECT
-                ds_condicoesReproducao,
-                id_conjuntoArquivo,
-                obs_restricao,
-                id_restricao,
-                id_tipoRestricao
+              ds_condicoesReproducao,
+              id_conjuntoArquivo,
+              obs,
+              id_restricao,
+              id_tipoRestricao
             FROM A4_CONDICOES_ACESSO;
 
       - interval: 86400
@@ -431,9 +431,8 @@ deployments:
 
           execute_query: |
             SELECT
-                id_conjuntoArquivo,
-                id_idioma,
-                nm_idioma
+              nm_idioma,
+              id_idioma
             FROM IDIOMA;
 
       - interval: 86400
