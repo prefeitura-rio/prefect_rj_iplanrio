@@ -373,12 +373,11 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     page_size = 100
 
     while True:
-        # Build path with matrix variables including pagination
-        path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date};pageSize={page_size};pageNumber={page_number}"
+        # Build path with matrix variables and query parameters
+        path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date}"
+        params = {"pageSize": page_size, "pageNumber": page_number}
 
-        log(f"Fetching page {page_number} with pageSize={page_size}")
-
-        response = api.get(path=path)
+        response = api.get(path=path, params=params)
 
         if response.status_code != 200:
             log(
@@ -389,27 +388,6 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         try:
             response_data = response.json()
-            log(
-                f"Page {page_number} response data structure: {list(response_data.keys()) if isinstance(response_data, dict) else type(response_data)}"
-            )
-
-            # Enhanced content logging for debugging
-            if isinstance(response_data, dict):
-                response_size = len(str(response_data))
-                log(f"Page {page_number} response content size: {response_size} characters", level="debug")
-
-                # Log sample of response content for debugging
-                if response_size > 0:
-                    sample_content = str(response_data)[:500] + "..." if response_size > 500 else str(response_data)
-                    log(f"Page {page_number} response sample: {sample_content}", level="debug")
-                else:
-                    log(f"Page {page_number} response is empty dictionary", level="warning")
-            elif isinstance(response_data, list):
-                log(f"Page {page_number} response is a list with {len(response_data)} items", level="debug")
-                if not response_data:
-                    log(f"Page {page_number} response list is empty", level="warning")
-            else:
-                log(f"Page {page_number} response has unexpected type: {type(response_data)}", level="warning")
         except Exception as e:
             log(
                 f"Failed to parse JSON response on page {page_number}: {e}",
@@ -417,220 +395,28 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
             )
             raise
 
-        # Enhanced check for API message responses with detailed diagnostics
-        if "message" in response_data and "data" not in response_data:
-            message = response_data.get('message', 'No message provided')
-            status_code = response_data.get('statusCode', 'No status code')
-            log(
-                f"API returned message response on page {page_number} (no data available): {message}"
-            )
-            log(f"Message response details - statusCode: {status_code}, message: '{message}'", level="info")
-            log(f"Full message response content: {response_data}", level="debug")
-            log(f"Breaking pagination due to message-only response on page {page_number}", level="info")
-            break
-
-        # Enhanced check for API responses with both message and data
-        if "message" in response_data and "data" in response_data:
-            message = response_data.get('message', 'No message provided')
-            status_code = response_data.get('statusCode', 'No status code')
-            log(f"Page {page_number} API response includes message alongside data: '{message}' (status: {status_code})", level="info")
-
-        # Enhanced check for empty response content
-        if not response_data or (isinstance(response_data, dict) and not response_data):
-            log(f"Page {page_number} returned empty/null content, breaking pagination", level="warning")
-            log(f"Empty response details - Type: {type(response_data)}, Content: {response_data}", level="debug")
-            log(f"Breaking pagination due to empty response on page {page_number}", level="info")
-            break
-
-        # Check for responses that look like error responses
-        if isinstance(response_data, dict):
-            error_indicators = ['error', 'Error', 'ERROR', 'errors']
-            for indicator in error_indicators:
-                if indicator in response_data:
-                    error_content = response_data[indicator]
-                    log(f"Page {page_number} response contains error indicator '{indicator}': {error_content}", level="warning")
-                    log(f"Full error response: {response_data}", level="debug")
-
-        # Extract attendances from response with enhanced validation and logging
         page_attendances = []
-        has_next_page = False
+        has_next_page = True
 
-        # Enhanced validation for data.item.elements structure
         if "data" in response_data and "item" in response_data["data"]:
             item_data = response_data["data"]["item"]
-            log(
-                f"Page {page_number} item_data keys: {list(item_data.keys()) if isinstance(item_data, dict) else 'Not a dict'}",
-                level="debug",
-            )
-
             if "elements" in item_data:
-                elements = item_data["elements"]
-                if elements is None:
-                    log(f"Page {page_number} elements is None, treating as empty", level="warning")
-                    page_attendances = []
-                elif isinstance(elements, list):
-                    page_attendances = elements
-                    log(f"Page {page_number} extracted {len(elements)} elements from item_data", level="debug")
-                else:
-                    log(f"Page {page_number} elements has unexpected type: {type(elements)}", level="warning")
-                    page_attendances = []
-            else:
-                log(f"Page {page_number} item_data does not contain 'elements' key", level="debug")
-
+                page_attendances = item_data["elements"] or []
             has_next_page = item_data.get("hasNextPage", False)
-            log(f"Page {page_number} hasNextPage value: {has_next_page}", level="info")
-
-            # Enhanced diagnostics for API response structure
-            log(f"Page {page_number} complete item_data structure:", level="debug")
-            for key, value in item_data.items():
-                if key == "elements":
-                    log(f"  - {key}: list with {len(value) if isinstance(value, list) else 'not a list'} items", level="debug")
-                else:
-                    log(f"  - {key}: {type(value).__name__} = {value}", level="debug")
-
-        # Enhanced validation for data.items structure
-        elif "data" in response_data and "items" in response_data["data"]:
-            items = response_data["data"]["items"]
-            if items is None:
-                log(f"Page {page_number} items is None, treating as empty", level="warning")
-                page_attendances = []
-            elif isinstance(items, list):
-                page_attendances = items
-                log(f"Page {page_number} extracted {len(items)} items from data.items", level="debug")
-            else:
-                log(f"Page {page_number} items has unexpected type: {type(items)}", level="warning")
-                page_attendances = []
-
-            # Log data structure for data.items path
-            log(f"Page {page_number} data.items structure detected", level="debug")
-            if "data" in response_data:
-                data_keys = list(response_data["data"].keys())
-                log(f"  - data keys: {data_keys}", level="debug")
-
-        # Enhanced validation for direct list response
-        elif isinstance(response_data, list):
-            if not response_data:
-                log(f"Page {page_number} received empty list response", level="warning")
-            page_attendances = response_data
-            log(f"Page {page_number} received direct list with {len(response_data)} items", level="debug")
-
-        else:
-            log(f"Page {page_number} response structure not recognized for data extraction", level="warning")
-            log(
-                f"Available keys in response: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}",
-                level="debug",
-            )
-
-            # Enhanced diagnostics for unrecognized structure
-            if isinstance(response_data, dict):
-                log(f"Page {page_number} full response structure analysis:", level="debug")
-                for key, value in response_data.items():
-                    if isinstance(value, dict):
-                        log(f"  - {key}: dict with keys {list(value.keys())}", level="debug")
-                    elif isinstance(value, list):
-                        log(f"  - {key}: list with {len(value)} items", level="debug")
-                    else:
-                        log(f"  - {key}: {type(value).__name__} = {value}", level="debug")
-
-        # Enhanced empty content detection
-        if not page_attendances:
-            log(f"No attendances found on page {page_number}, ending pagination")
-            log(f"Page {page_number} empty content details:", level="debug")
-            log(f"  - Response data type: {type(response_data)}", level="debug")
-            log(
-                f"  - Has 'data' key: {'data' in response_data if isinstance(response_data, dict) else False}",
-                level="debug",
-            )
-            log(
-                f"  - Has 'item' in data: {'item' in response_data.get('data', {}) if isinstance(response_data, dict) else False}",
-                level="debug",
-            )
-            log(
-                f"  - Elements array length: {len(response_data.get('data', {}).get('item', {}).get('elements', [])) if isinstance(response_data, dict) else 'N/A'}",
-                level="debug",
-            )
-            log(f"Breaking pagination due to empty page content on page {page_number}", level="info")
-            break
-
-        # Check if page_attendances contains only empty/null items
-        valid_attendances = [att for att in page_attendances if att is not None and att != {}]
-        if not valid_attendances:
-            log(
-                f"Page {page_number} contains only empty/null attendances ({len(page_attendances)} total), breaking pagination",
-                level="warning",
-            )
-            log(f"Sample empty attendance items: {page_attendances[:3]}", level="debug")
-            break
 
         log(f"Found {len(page_attendances)} attendances on page {page_number}")
-
-        # Enhanced content diagnostics - log sample attendance and data patterns
-        if page_attendances and len(page_attendances) > 0:
-            # Log first attendance details
-            sample_attendance = page_attendances[0]
-            required_fields = ["endDate", "beginDate", "serial", "protocol"]
-            sample_info = {field: sample_attendance.get(field, "MISSING") for field in required_fields}
-            log(f"Page {page_number} sample attendance fields: {sample_info}", level="debug")
-
-            # Log additional diagnostic info about attendance content
-            log(f"Page {page_number} content diagnostics:", level="debug")
-            log(f"  - First attendance keys: {list(sample_attendance.keys()) if isinstance(sample_attendance, dict) else 'Not a dict'}", level="debug")
-            log(f"  - First attendance ID/Serial: {sample_attendance.get('serial', 'NO_SERIAL')}", level="debug")
-
-            # Check if all attendances in this page have the same structure
-            if len(page_attendances) > 1:
-                last_attendance = page_attendances[-1]
-                log(f"  - Last attendance ID/Serial: {last_attendance.get('serial', 'NO_SERIAL')}", level="debug")
-                log(f"  - Same structure as first: {set(sample_attendance.keys()) == set(last_attendance.keys()) if isinstance(last_attendance, dict) else 'N/A'}", level="debug")
-
         all_attendances.extend(page_attendances)
 
-        # Enhanced pagination decision logging with more diagnostic info
-        log(f"Page {page_number} pagination decision analysis:", level="info")
-        log(f"  - Current page size: {len(page_attendances)}", level="info")
-        log(f"  - hasNextPage from API: {has_next_page}", level="info")
-        log(f"  - Total attendances so far: {len(all_attendances)}", level="info")
-        log(f"  - Requested pageSize: {page_size}", level="info")
-        log(f"  - Page size vs requested: {len(page_attendances)}/{page_size} = {(len(page_attendances)/page_size)*100:.1f}%", level="info")
-
-        # Log the actual message from API if present
-        if isinstance(response_data, dict) and "message" in response_data:
-            api_message = response_data.get("message", "No message")
-            log(f"  - API message: {api_message}", level="info")
-
-        # Log statusCode if present
-        if isinstance(response_data, dict) and "statusCode" in response_data:
-            status_code = response_data.get("statusCode", "No status code")
-            log(f"  - API status code: {status_code}", level="info")
-
-        # Check if there's a next page
         if not has_next_page:
-            log("API indicates no next page (hasNextPage=false), ending pagination")
-            log(
-                f"Final pagination summary: collected {len(all_attendances)} attendances across {page_number} pages",
-                level="info",
-            )
             break
 
-        # Enhanced safety check with more detailed analysis
-        if len(page_attendances) < page_size * 0.5 and len(page_attendances) > 0:
-            log(f"Page {page_number} returned {len(page_attendances)} attendances, which is less than 50% of page_size ({page_size}). This might indicate approaching end of data.", level="warning")
-            log(f"  - Small page analysis: hasNextPage={has_next_page}, actual_size={len(page_attendances)}, expected_size={page_size}", level="warning")
-
-            # Log if this is a consistent pattern
-            if page_number > 5:  # Only log this after a few pages
-                log(f"  - This is page {page_number} with small size - check if this is a consistent pattern indicating API limitation", level="warning")
-
         page_number += 1
-        log(f"Moving to page {page_number} (hasNextPage={has_next_page})", level="info")
 
     if not all_attendances:
-        log("No attendances found in any page", level="warning")
-        log(f"Pagination completed after checking {page_number} pages with no data found", level="info")
+        log("No attendances found")
         return pd.DataFrame()
 
-    log(f"Total attendances collected across {page_number} pages: {len(all_attendances)}")
-    log(f"Successful pagination completion - processed pages 1 through {page_number}", level="info")
+    log(f"Total attendances collected: {len(all_attendances)}")
 
     data = []
     for item in all_attendances:
@@ -646,8 +432,6 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
                 "json_data": item,
             }
         )
-
-    log(f"Processed {len(data)} attendances")
 
     dfr = pd.DataFrame(data)
 
