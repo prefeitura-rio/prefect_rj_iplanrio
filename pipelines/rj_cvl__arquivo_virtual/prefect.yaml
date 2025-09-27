@@ -434,7 +434,7 @@ deployments:
               nm_idioma,
               id_idioma
             FROM IDIOMA;
-      
+
       - interval: 86400
         anchor_date: "2022-01-01T02:30:00"
         timezone: America/Sao_Paulo
@@ -481,7 +481,7 @@ deployments:
             SELECT
               ds_natureza,
               id_NaturezaJuridica
-            FROM NATUREZA_JURIDICA; 
+            FROM NATUREZA_JURIDICA;
 
       - interval: 86400
         anchor_date: "2022-01-01T02:30:00"
