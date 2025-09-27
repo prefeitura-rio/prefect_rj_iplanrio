@@ -434,6 +434,22 @@ deployments:
               nm_idioma,
               id_idioma
             FROM IDIOMA;
+      
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: instrumento_pesquisa
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: instrumento_pesquisa
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+              id_instPesquisa,
+              ds_instrumento
+            FROM INSTRUMENTO_PESQUISA;
 
       - interval: 86400
         anchor_date: "2022-01-01T02:30:00"
@@ -450,6 +466,22 @@ deployments:
                 id_modalidade,
                 ds_modalidade
             FROM MODALIDADE;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: natureza_juridica
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: natureza_juridica
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+              ds_natureza,
+              id_NaturezaJuridica
+            FROM NATUREZA_JURIDICA; 
 
       - interval: 86400
         anchor_date: "2022-01-01T02:30:00"
