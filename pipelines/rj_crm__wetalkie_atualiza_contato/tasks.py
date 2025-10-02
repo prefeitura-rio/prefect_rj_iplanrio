@@ -75,9 +75,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
             failed_count += 1
             continue
 
-    log(
-        f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}"
-    )
+    log(f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}")
 
     log(f">>>>>> dfr head {dfr.head()}")
     # Filter out contacts that weren't updated successfully
@@ -88,9 +86,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
 
 
 @task
-def download_missing_contacts(
-    query: str, billing_project_id: str, bucket_name: str
-) -> pd.DataFrame:
+def download_missing_contacts(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
     """
     Download contacts with missing phone data from BigQuery
 
@@ -113,9 +109,7 @@ def download_missing_contacts(
 
 
 @task
-def safe_export_df_to_parquet(
-    dfr: pd.DataFrame, output_path: str = "./data_contacts/"
-) -> str:
+def safe_export_df_to_parquet(dfr: pd.DataFrame, output_path: str = "./data_contacts/") -> str:
     """
     Safely exports a DataFrame to a Parquet file in the specified directory
 
