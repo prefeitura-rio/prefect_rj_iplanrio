@@ -40,7 +40,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
     updated_count = 0
     failed_count = 0
 
-    for contact_id in result_dfr.iloc[:, 0].unique():
+    for contact_id in result_dfr["id_contato"].unique():
         try:
             log(f"Getting contact {contact_id} from the Wetalkie API")
             response = api.get(path=f"/callcenter/contacts/{contact_id!s}")
@@ -70,6 +70,8 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
 
             # Update contact information
             result_dfr.loc[result_dfr["id_contato"] == contact_id, "json_data"] = item
+            exemple = result_dfr.loc[result_dfr["id_contato"] == contact_id].copy()
+            log(f"dentro do df {exemple}")
             updated_count += 1
 
         except Exception as error:
@@ -79,7 +81,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
 
     log(f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}")
 
-    log(f">>>>>> dfr head {dfr.head()}")
+    log(f">>>>>> dfr head {result_dfr.head()}")
     # Filter out contacts that weren't updated successfully
     successful_contacts = result_dfr[result_dfr["json_data"].notna()]
 
@@ -107,6 +109,7 @@ def download_missing_contacts(query: str, billing_project_id: str, bucket_name: 
     log("Downloading missing contacts from BigQuery")
     dfr = download_data_from_bigquery(query, billing_project_id, bucket_name)
     log(f"Found {len(dfr)} contacts with missing phone data")
+    log(f"first row {dfr.iloc[0]}")
     return dfr
 
 
