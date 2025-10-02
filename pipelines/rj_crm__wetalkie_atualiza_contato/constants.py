@@ -39,7 +39,7 @@ class WetalkieAtualizaContatoConstants(Enum):
         -- WHERE contato.telefone IS NULL
         ),
         range_ids AS (
-        SELECT id
+        SELECT cast(id as string) as id
         FROM get_max_id,
         UNNEST(GENERATE_ARRAY(1, max_id_contato)) AS id
         )
@@ -50,7 +50,6 @@ class WetalkieAtualizaContatoConstants(Enum):
         LEFT JOIN `rj-iplanrio.brutos_wetalkie_staging.contato` contato
         ON range_ids.id = id_contato
         WHERE id_contato IS NULL
-        # limit 5
     """
     # TODO: remover so comentário quanto tiver a tabela contatos materializada
 
