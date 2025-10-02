@@ -35,6 +35,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
 
     # Create a copy to avoid modifying the original DataFrame
     result_dfr = dfr.copy()
+    result_dfr["json_data"] = None
 
     updated_count = 0
     failed_count = 0
@@ -66,7 +67,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
             item = data["item"]
 
             # Update contact information
-            result_dfr.loc[result_dfr["id_contato"] == contact_id, "json"] = item
+            result_dfr.loc[result_dfr["id_contato"] == contact_id, "json_data"] = item
             updated_count += 1
 
         except Exception as error:
@@ -78,8 +79,9 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
         f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}"
     )
 
+    log(f">>>>>> dfr head {dfr.head()}")
     # Filter out contacts that weren't updated successfully
-    successful_contacts = result_dfr[result_dfr["json"].notna()]
+    successful_contacts = result_dfr[result_dfr["json_data"].notna()]
 
     log(f"Returning {len(successful_contacts)} successfully updated contacts")
     return successful_contacts

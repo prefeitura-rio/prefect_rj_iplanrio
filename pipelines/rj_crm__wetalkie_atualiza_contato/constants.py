@@ -49,6 +49,7 @@ class WetalkieAtualizaContatoConstants(Enum):
         -- LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.contato` contato
         -- ON range_ids.id = id_contato
         -- WHERE id_contato IS NULL
+        limit 5
     """
     # TODO: remover so comentário quanto tiver a tabela contatos materializada
 
