@@ -11,6 +11,7 @@ Tasks migradas do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 """
 
 import json
+
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
