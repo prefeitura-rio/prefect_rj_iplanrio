@@ -36,12 +36,6 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
     # Create a copy to avoid modifying the original DataFrame
     result_dfr = dfr.copy()
 
-    # Add columns if they don't exist
-    if "contato_telefone" not in result_dfr.columns:
-        result_dfr["contato_telefone"] = None
-    if "contato_nome" not in result_dfr.columns:
-        result_dfr["contato_nome"] = None
-
     updated_count = 0
     failed_count = 0
 
@@ -72,42 +66,29 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
             item = data["item"]
 
             # Update contact information
-            phone = str(item.get("whatsapp", "")) if item.get("whatsapp") else None
-            name = str(item.get("name", "")) if item.get("name") else None
+            result_dfr.loc[result_dfr["id_contato"] == contact_id, "json"] = item
+            updated_count += 1
 
-            if phone:
-                result_dfr.loc[result_dfr["id_contato"] == contact_id, "contato_telefone"] = phone
-                log(f"Updated phone for contact {contact_id}: {phone}")
-
-            if name:
-                result_dfr.loc[result_dfr["id_contato"] == contact_id, "contato_nome"] = name
-                log(f"Updated name for contact {contact_id}: {name}")
-
-            if phone or name:
-                updated_count += 1
-            else:
-                log(f"No useful data found for contact {contact_id}")
-                failed_count += 1
-
-        except Exception as e:
-            log(f"Error processing contact {contact_id}: {e}", level="error")
+        except Exception as error:
+            log(f"Error processing contact {contact_id}: {error}", level="error")
             failed_count += 1
             continue
 
-    log(f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}")
+    log(
+        f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}"
+    )
 
     # Filter out contacts that weren't updated successfully
-    successful_contacts = result_dfr[
-        (result_dfr["contato_telefone"].notna() & result_dfr["contato_telefone"].astype(str).str.strip().ne(""))
-        | (result_dfr["contato_nome"].notna() & result_dfr["contato_nome"].astype(str).str.strip().ne(""))
-    ]
+    successful_contacts = result_dfr[result_dfr["json"].notna()]
 
     log(f"Returning {len(successful_contacts)} successfully updated contacts")
     return successful_contacts
 
 
 @task
-def download_missing_contacts(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
+def download_missing_contacts(
+    query: str, billing_project_id: str, bucket_name: str
+) -> pd.DataFrame:
     """
     Download contacts with missing phone data from BigQuery
 
@@ -119,7 +100,9 @@ def download_missing_contacts(query: str, billing_project_id: str, bucket_name: 
     Returns:
         DataFrame with contact IDs that need phone data
     """
-    from pipelines.rj_crm__wetalkie_atualiza_contato.utils.tasks import download_data_from_bigquery
+    from pipelines.rj_crm__wetalkie_atualiza_contato.utils.tasks import (
+        download_data_from_bigquery,
+    )
 
     log("Downloading missing contacts from BigQuery")
     dfr = download_data_from_bigquery(query, billing_project_id, bucket_name)
@@ -128,7 +111,9 @@ def download_missing_contacts(query: str, billing_project_id: str, bucket_name: 
 
 
 @task
-def safe_export_df_to_parquet(dfr: pd.DataFrame, output_path: str = "./data_contacts/") -> str:
+def safe_export_df_to_parquet(
+    dfr: pd.DataFrame, output_path: str = "./data_contacts/"
+) -> str:
     """
     Safely exports a DataFrame to a Parquet file in the specified directory
 

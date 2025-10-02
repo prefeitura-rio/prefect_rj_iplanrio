@@ -13,7 +13,7 @@ class WetalkieAtualizaContatoConstants(Enum):
 
     # Dataset e tabela do BigQuery
     DATASET_ID = "brutos_wetalkie"
-    TABLE_ID = "contato_faltante"
+    TABLE_ID = "contato"
     DUMP_MODE = "append"
 
     # Configuração para materialização após dump
@@ -32,11 +32,25 @@ class WetalkieAtualizaContatoConstants(Enum):
     API_CONTACTS_ENDPOINT = "/callcenter/contacts"
 
     # Query para buscar contatos faltantes
-    # TODO: verificar se vai ficar mesmo essa tabela
     CONTACTS_QUERY = """
-    SELECT DISTINCT id_contato FROM `rj-crm-registry.intermediario_crm_whatsapp.int_crm_whatsapp_contato`
-    WHERE contato_telefone IS NULL
+    WITH get_max_id AS (
+        SELECT MAX(cast(contato.id as int64)) AS max_id_contato
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_conversas.base_receptivo`
+        -- WHERE contato.telefone IS NULL
+        ),
+        range_ids AS (
+        SELECT id
+        FROM get_max_id,
+        UNNEST(GENERATE_ARRAY(1, max_id_contato)) AS id
+        )
+
+        SELECT range_ids.id  as id_contato
+        FROM range_ids
+        -- LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.contato` contato
+        -- ON range_ids.id = id_contato
+        -- WHERE id_contato IS NULL
     """
+    # TODO: remover so comentário quanto tiver a tabela contatos materializada
 
     # Configurações do BigQuery para consulta
     BILLING_PROJECT_ID = "rj-crm-registry"
