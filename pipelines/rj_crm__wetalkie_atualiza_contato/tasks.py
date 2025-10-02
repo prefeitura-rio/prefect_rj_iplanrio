@@ -57,6 +57,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             data = response_data["data"]
+            log(f"contact {contact_id} data: {data}")
 
             # Check if the expected structure exists
             if "item" not in data or not data["item"]:
@@ -65,6 +66,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             item = data["item"]
+            log(f"contact {contact_id} item: {item}")
 
             # Update contact information
             result_dfr.loc[result_dfr["id_contato"] == contact_id, "json_data"] = item
