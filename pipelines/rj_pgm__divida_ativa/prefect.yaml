@@ -37,7 +37,7 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 86400
-          anchor_date: "2022-01-01T01:00:00"
+          anchor_date: 2022-01-01T01:00:00
           timezone: America/Sao_Paulo
           slug: CDA
           parameters:
