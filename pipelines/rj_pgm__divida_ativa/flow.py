@@ -36,7 +36,7 @@ def rj_pgm__divida_ativa(
     break_query_end: Optional[str] = None,
     retry_dump_upload_attempts: int = 1,
     batch_size: int = 50000,
-    batch_data_type: str = "parquet",
+    batch_data_type: str = "csv",
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
     max_concurrency: int = 1,
