@@ -19,7 +19,7 @@ from prefect import flow
 @flow(log_prints=True)
 def rj_pgm__divida_ativa(
     db_database: str = "DAM_PRD",
-    db_host: str = "clustersqlpgm.rio.rj.gov.br",
+    db_host: str = "10.2.221.127",
     db_port: str = "1433",
     db_type: str = "sql_server",
     db_charset: Optional[str] = "NOT_SET",
