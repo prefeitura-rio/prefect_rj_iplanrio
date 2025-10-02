@@ -10,6 +10,7 @@ Tasks migradas do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 - GCS storage: Removido no Prefect 3.0 (configurado no YAML)
 """
 
+import json
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
@@ -69,7 +70,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
             log(f"contact {contact_id} item: {item}")
 
             # Update contact information
-            result_dfr.loc[result_dfr["id_contato"] == contact_id, "json_data"] = item
+            result_dfr.loc[result_dfr["id_contato"] == contact_id, "json_data"] = json.dumps(item)
             exemple = result_dfr.loc[result_dfr["id_contato"] == contact_id].copy()
             log(f"dentro do df {exemple}")
             updated_count += 1
