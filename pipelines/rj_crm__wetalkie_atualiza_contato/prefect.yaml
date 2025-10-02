@@ -33,11 +33,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__wetalkie_atualiza_contato -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
       dataset_id: brutos_wetalkie
-      table_id: contato_faltante
+      table_id: contato
       dump_mode: append
       materialize_after_dump: false
       infisical_secret_path: /wetalkie
@@ -50,11 +51,12 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__wetalkie_atualiza_contato -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
       dataset_id: brutos_wetalkie
-      table_id: contato_faltante
+      table_id: contato
       dump_mode: append
       materialize_after_dump: false
       infisical_secret_path: /wetalkie

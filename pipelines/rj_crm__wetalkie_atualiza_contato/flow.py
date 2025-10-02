@@ -40,7 +40,7 @@ def rj_crm__wetalkie_atualiza_contato(
 
     Args:
         dataset_id: ID do dataset no BigQuery (default: brutos_wetalkie)
-        table_id: ID da tabela no BigQuery (default: contato_faltante)
+        table_id: ID da tabela no BigQuery (default: contato)
         dump_mode: Modo de dump (default: append)
         materialize_after_dump: Se deve materializar após dump (default: False)
         infisical_secret_path: Caminho dos secrets no Infisical (default: /wetalkie)
