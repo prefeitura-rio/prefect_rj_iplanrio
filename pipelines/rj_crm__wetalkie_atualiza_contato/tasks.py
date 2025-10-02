@@ -85,6 +85,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
     log(f">>>>>> dfr head {result_dfr.head()}")
     # Filter out contacts that weren't updated successfully
     successful_contacts = result_dfr[result_dfr["json_data"].notna()]
+    successful_contacts["id_contato"] = successful_contacts["id_contato"].astype(str)
 
     log(f"Returning {len(successful_contacts)} successfully updated contacts")
     return successful_contacts
