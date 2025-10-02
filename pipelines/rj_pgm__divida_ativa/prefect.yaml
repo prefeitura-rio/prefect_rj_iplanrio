@@ -107,7 +107,7 @@ deployments:
           table_id: GuiaPagamento_Honorarios
           execute_query: |
             "SELECT codExecucaoFiscal, numCDA, numGuiaPagamento, ValHonorarios, ValDesconto, FlgAtivo, DatRetirada, CodCampanha, PercDesconto, anoIPCAe, idProtesto
-          FROM DAM_PRD.dbo.GuiaPagamento_Honorarios"
+            FROM DAM_PRD.dbo.GuiaPagamento_Honorarios"
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
         timezone: America/Sao_Paulo
@@ -209,7 +209,7 @@ deployments:
           table_id: GuiaPagamento_Honorarios
           execute_query: |
             "SELECT codExecucaoFiscal, numCDA, numGuiaPagamento, ValHonorarios, ValDesconto, FlgAtivo, DatRetirada, CodCampanha, PercDesconto, anoIPCAe, idProtesto
-          FROM DAM_PRD.dbo.GuiaPagamento_Honorarios"
+            FROM DAM_PRD.dbo.GuiaPagamento_Honorarios"
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
         timezone: America/Sao_Paulo
