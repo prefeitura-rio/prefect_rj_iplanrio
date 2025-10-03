@@ -42,7 +42,74 @@ deployments:
         slug: CDA
         parameters:
           table_id: CDA
-          execute_query: SELECT numCDA, anoInscricao, idNaturezaDivida, seqCDA, versaoCDA, numNotaDebito, codInscricaoImobiliaria, codSituacaoCDA, codOrgao, DatSituacao, numEFAntiga, numEFNova, numAutoInfracao, numNotaLancamento, datCadastramento, numSerie, datApuracao, datCredito, numCreditoCalculado, descInfracao, numMatriculaFiscal, nomFiscal, datNotificacao, tipoNotificacao, numMatriculaUsuario, datExtracao, datConfissao, tipoInfracao, numSerieAuto, tipoLancamento, numSerieNota, numLoteInscricao, descObservacoes, descDadosComplementares, descQualificaoNegocio, datNegociacaoImovel, descImovelNegociado, datDecisaoFinal, ProcessoAdm, ValSaldo, ValMulta, ValJuros, ValMora, ValMoraJuros, ValPagoPrinc, ValHonorarios, ValMultaHon, ValJurosHon, ValMoraHon, ValMoraJurosHon, ValPagoHon, codSituacaoCDAANT, codFaseCobranca, FlgCampanha, FlgDuvidaIPTUProg, FlgDuvidaTCLLP, descCampanha, datLimitePPI, probRecuperacao, stSecuritizacao, valMoraOrigemSMF, valSaldoInscritoDA, dataSaldoInscritoDA, codReceita, idEntidadeCredora FROM DAM_PRD.dbo.CDA
+          execute_query: |
+            SELECT 
+              numCDA, 
+              anoInscricao, 
+              idNaturezaDivida, 
+              seqCDA, 
+              versaoCDA, 
+              numNotaDebito, 
+              codInscricaoImobiliaria, 
+              codSituacaoCDA, 
+              codOrgao, 
+              DatSituacao, 
+              numEFAntiga, 
+              numEFNova, 
+              numAutoInfracao, 
+              numNotaLancamento, 
+              datCadastramento, 
+              numSerie, 
+              datApuracao, 
+              datCredito, 
+              numCreditoCalculado, 
+              descInfracao, 
+              numMatriculaFiscal, 
+              nomFiscal, 
+              datNotificacao, 
+              tipoNotificacao, 
+              numMatriculaUsuario, 
+              datExtracao, 
+              datConfissao, 
+              tipoInfracao, 
+              numSerieAuto, 
+              tipoLancamento, 
+              numSerieNota, 
+              numLoteInscricao, 
+              descObservacoes, 
+              descDadosComplementares, 
+              descQualificaoNegocio, 
+              datNegociacaoImovel, 
+              descImovelNegociado, 
+              datDecisaoFinal, 
+              ProcessoAdm, 
+              ValSaldo, 
+              ValMulta, 
+              ValJuros, 
+              ValMora, 
+              ValMoraJuros, 
+              ValPagoPrinc, 
+              ValHonorarios, 
+              ValMultaHon, 
+              ValJurosHon, 
+              ValMoraHon, 
+              ValMoraJurosHon, 
+              ValPagoHon, 
+              codSituacaoCDAANT, 
+              codFaseCobranca, 
+              FlgCampanha, 
+              FlgDuvidaIPTUProg, 
+              FlgDuvidaTCLLP, 
+              descCampanha, 
+              datLimitePPI, 
+              probRecuperacao, 
+              stSecuritizacao, 
+              valMoraOrigemSMF, 
+              valSaldoInscritoDA, 
+              dataSaldoInscritoDA, 
+              codReceita, 
+              idEntidadeCredora 
+            FROM DAM_PRD.dbo.CDA
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
         timezone: America/Sao_Paulo
@@ -50,7 +117,37 @@ deployments:
         parameters:
           table_id: CotaPagamento
           execute_query: |
-            SELECT numGuiaPagamento, numCotaPagamento, valCotaPagamento, dtVencimento, stsCotaPagamento, valMora, ValJuros, valMulta, descObservacao, dtEmissao, dtPagamento, codSituacaoCotaPagamento, valPrincipalPago, valJurosPago, stsEmitida, anoIPCAe, valSaidaTransp, ValPrincipal, ValHonorarios, ValHonorariosPag, ValGrerj, ValGrerjPag, valJurosPagoPri, valJurosPagoHon, valJurosPri, valJurosHon, valJurosGre, codigoDeBarras, txtIdPix, codigoQrEMVPix
+            SELECT 
+              numGuiaPagamento, 
+              numCotaPagamento, 
+              valCotaPagamento, 
+              dtVencimento, 
+              stsCotaPagamento, 
+              valMora, 
+              ValJuros, 
+              valMulta, 
+              descObservacao, 
+              dtEmissao, 
+              dtPagamento, 
+              codSituacaoCotaPagamento, 
+              valPrincipalPago, 
+              valJurosPago, 
+              stsEmitida, 
+              anoIPCAe, 
+              valSaidaTransp, 
+              ValPrincipal, 
+              ValHonorarios, 
+              ValHonorariosPag, 
+              ValGrerj, 
+              ValGrerjPag, 
+              valJurosPagoPri, 
+              valJurosPagoHon, 
+              valJurosPri, 
+              valJurosHon, 
+              valJurosGre, 
+              codigoDeBarras, 
+              txtIdPix, 
+              codigoQrEMVPix
             FROM DAM_PRD.dbo.CotaPagamento
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -59,7 +156,12 @@ deployments:
         parameters:
           table_id: Cotas_Associadas
           execute_query: |
-            SELECT numGuiaPagamento, numCotaPagamento, numGuiaPagamentoAssoc, numCotaPagamentoAssoc, valEntradaTransp
+            SELECT 
+              numGuiaPagamento, 
+              numCotaPagamento, 
+              numGuiaPagamentoAssoc, 
+              numCotaPagamentoAssoc, 
+              valEntradaTransp
             FROM DAM_PRD.dbo.Cotas_Associadas
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -68,7 +170,12 @@ deployments:
         parameters:
           table_id: DevedorCDA
           execute_query: |
-            SELECT numCDA, idPessoa, descSituacaoDevedor, datSituacao, TipVinculo
+            SELECT 
+              numCDA, 
+              idPessoa, 
+              descSituacaoDevedor, 
+              datSituacao, 
+              TipVinculo
             FROM DAM_PRD.dbo.DevedorCDA
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -77,7 +184,67 @@ deployments:
         parameters:
           table_id: NotaDebito
           execute_query: |
-            SELECT numNotaDebito, codInscricaoImobiliaria, codSituacaoNotaDebito, codOrgao, DatSituacao, numEFAntiga, numEFNova, numAutoInfracao, numNotaLancamento, datCadastramento, numSerie, datApuracao, datCredito, numCreditoCalculado, descInfracao, numMatriculaFiscal, nomFiscal, datNotificacao, tipoNotificacao, numMatriculaUsuario, datExtracao, datConfissao, tipoInfracao, numSerieAuto, tipoLancamento, numSerieNota, numLoteInscricao, descObservacoes, descDadosComplementares, descQualificaoNegocio, datNegociacaoImovel, descImovelNegociado, datDecisaoFinal, ProcessoAdm, ValSaldo, ValMulta, ValJuros, ValMora, ValMoraJuros, ValPagoPrinc, ValHonorarios, ValMultaHon, ValJurosHon, ValMoraHon, ValMoraJurosHon, ValPagoHon, codSituacaoNotaDebitoANT, codFaseCobranca, FlgCampanha, FlgDuvidaIPTUProg, FlgDuvidaTCLLP, descCampanha, datLimitePPI, probRecuperacao, stSecuritizacao, valMoraOrigemSMF, valSaldoInscritoDA, dataSaldoInscritoDA, codReceita, idEntidadeCredora
+            SELECT 
+              numNotaDebito, 
+              codInscricaoImobiliaria, 
+              codSituacaoNotaDebito, 
+              codOrgao, 
+              DatSituacao, 
+              numEFAntiga, 
+              numEFNova, 
+              numAutoInfracao, 
+              numNotaLancamento, 
+              datCadastramento, 
+              numSerie, 
+              datApuracao, 
+              datCredito, 
+              numCreditoCalculado, 
+              descInfracao, 
+              numMatriculaFiscal, 
+              nomFiscal, 
+              datNotificacao, 
+              tipoNotificacao, 
+              numMatriculaUsuario, 
+              datExtracao, 
+              datConfissao, 
+              tipoInfracao, 
+              numSerieAuto, 
+              tipoLancamento, 
+              numSerieNota, 
+              numLoteInscricao, 
+              descObservacoes, 
+              descDadosComplementares, 
+              descQualificaoNegocio, 
+              datNegociacaoImovel, 
+              descImovelNegociado, 
+              datDecisaoFinal, 
+              ProcessoAdm, 
+              ValSaldo, 
+              ValMulta, 
+              ValJuros, 
+              ValMora, 
+              ValMoraJuros, 
+              ValPagoPrinc, 
+              ValHonorarios, 
+              ValMultaHon, 
+              ValJurosHon, 
+              ValMoraHon, 
+              ValMoraJurosHon, 
+              ValPagoHon, 
+              codSituacaoNotaDebitoANT, 
+              codFaseCobranca, 
+              FlgCampanha, 
+              FlgDuvidaIPTUProg, 
+              FlgDuvidaTCLLP, 
+              descCampanha, 
+              datLimitePPI, 
+              probRecuperacao, 
+              stSecuritizacao, 
+              valMoraOrigemSMF, 
+              valSaldoInscritoDA, 
+              dataSaldoInscritoDA, 
+              codReceita, 
+              idEntidadeCredora
             FROM DAM_PRD.dbo.NotaDebito
       - interval: 86400
         anchor_date: "2022-01-01T02:36:00"
@@ -86,7 +253,57 @@ deployments:
         parameters:
           table_id: GuiaPagamento
           execute_query: |
-            SELECT numGuiaPagamento, numSeqGuia, idRegraParcelamento, codTipoPagamento, idSituacaoGuia, idMotivoCancelamentoParcelamento, codReceita, idPessoa, codTipoGuia, qtdParcelas, datCriacao, qtdParcelasPagas, datUltPagamento, ValTotalDivida, ValTotalPago, qtdCDAGuia, NomRequerente, DescVinculoRequerente, NumIdentRequerente, NumTelRequerente, DescEmailRequerente, DescEmailEnvio, DescEnderecoEnvio, descBairro, numCEPEnvio, descCidade, SigUFEnvio, StsGRERJ, numProcessoAdministrativo, numTipoDoc, desVinculo, CodCampanha, PerDesc, ValDesc, idAgenciamento, descComplementoEnvio, numEnderecoEnvio, valEnviado, IdParametroGRERJ, ValPrincipal, ValHonorarios, ValGrerj, ValPrincipalPag, ValHonorariosPag, ValGrerjPag, qtdParcelasHon, qtdParcelasHonPag, qtdParcelasGrerj, qtdParcelasGrerjPag, codFaseCobranca
+            SELECT 
+              numGuiaPagamento, 
+              numSeqGuia, 
+              idRegraParcelamento, 
+              codTipoPagamento, 
+              idSituacaoGuia, 
+              idMotivoCancelamentoParcelamento, 
+              codReceita, 
+              idPessoa, 
+              codTipoGuia, 
+              qtdParcelas, 
+              datCriacao, 
+              qtdParcelasPagas, 
+              datUltPagamento, 
+              ValTotalDivida, 
+              ValTotalPago, 
+              qtdCDAGuia, 
+              NomRequerente, 
+              DescVinculoRequerente, 
+              NumIdentRequerente, 
+              NumTelRequerente, 
+              DescEmailRequerente, 
+              DescEmailEnvio, 
+              DescEnderecoEnvio, 
+              descBairro, 
+              numCEPEnvio, 
+              descCidade, 
+              SigUFEnvio, 
+              StsGRERJ, 
+              numProcessoAdministrativo, 
+              numTipoDoc, 
+              desVinculo, 
+              CodCampanha, 
+              PerDesc, 
+              ValDesc, 
+              idAgenciamento, 
+              descComplementoEnvio, 
+              numEnderecoEnvio, 
+              valEnviado, 
+              IdParametroGRERJ, 
+              ValPrincipal, 
+              ValHonorarios, 
+              ValGrerj, 
+              ValPrincipalPag, 
+              ValHonorariosPag, 
+              ValGrerjPag, 
+              qtdParcelasHon, 
+              qtdParcelasHonPag, 
+              qtdParcelasGrerj, 
+              qtdParcelasGrerjPag, 
+              codFaseCobranca
             FROM DAM_PRD.dbo.GuiaPagamento
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -95,7 +312,17 @@ deployments:
         parameters:
           table_id: GuiaPagamento_CDA
           execute_query: |
-            SELECT numGuiaPagamento, numCDA, FlgAtivo, DatRetirada, ValDescontoCDA, anoIPCAe, ValCDA, CodCampanha, PercDesconto, valDescontoSobrePrincipal
+            SELECT 
+              numGuiaPagamento, 
+              numCDA, 
+              FlgAtivo, 
+              DatRetirada, 
+              ValDescontoCDA, 
+              anoIPCAe, 
+              ValCDA, 
+              CodCampanha, 
+              PercDesconto, 
+              valDescontoSobrePrincipal
             FROM DAM_PRD.dbo.GuiaPagamento_CDA
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -104,7 +331,18 @@ deployments:
         parameters:
           table_id: GuiaPagamento_Honorarios
           execute_query: |
-            SELECT codExecucaoFiscal, numCDA, numGuiaPagamento, ValHonorarios, ValDesconto, FlgAtivo, DatRetirada, CodCampanha, PercDesconto, anoIPCAe, idProtesto
+            SELECT 
+              codExecucaoFiscal, 
+              numCDA, 
+              numGuiaPagamento, 
+              ValHonorarios, 
+              ValDesconto, 
+              FlgAtivo, 
+              DatRetirada, 
+              CodCampanha, 
+              PercDesconto, 
+              anoIPCAe, 
+              idProtesto
             FROM DAM_PRD.dbo.GuiaPagamento_Honorarios
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -113,7 +351,20 @@ deployments:
         parameters:
           table_id: Honorarios
           execute_query: |
-            SELECT numCDA, codExecucaoFiscal, numSituacao, ValSaldo, ValMM, ValJM, ValCM, ValCMJ, ValPago, FlgCampanha, idProtesto, percentualHonorarios, datPercentualHonorarios
+            SELECT 
+              numCDA, 
+              codExecucaoFiscal, 
+              numSituacao, 
+              ValSaldo, 
+              ValMM, 
+              ValJM, 
+              ValCM, 
+              ValCMJ, 
+              ValPago, 
+              FlgCampanha, 
+              idProtesto, 
+              percentualHonorarios, 
+              datPercentualHonorarios
             FROM DAM_PRD.dbo.Honorarios
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -122,7 +373,21 @@ deployments:
         parameters:
           table_id: VWPESSOA
           execute_query: |
-            SELECT idpessoa, tipopessoa, Cpf_Cnpj, Nome, NumDoc, Orgao_TpEnte, DtEmissao, NatEnte, Falencia, ProcAdm, Rito, nivelFederativo, admPublica, admPublicaIndireta
+            SELECT 
+              idpessoa, 
+              tipopessoa, 
+              Cpf_Cnpj, 
+              Nome, 
+              NumDoc, 
+              Orgao_TpEnte, 
+              DtEmissao, 
+              NatEnte, 
+              Falencia, 
+              ProcAdm, 
+              Rito, 
+              nivelFederativo, 
+              admPublica, 
+              admPublicaIndireta
             FROM DAM_PRD.dbo.VWPESSOA
   - name: rj-pgm--divida_ativa--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -159,7 +424,12 @@ deployments:
         parameters:
           table_id: Cotas_Associadas
           execute_query: |
-            SELECT numGuiaPagamento, numCotaPagamento, numGuiaPagamentoAssoc, numCotaPagamentoAssoc, valEntradaTransp
+            SELECT 
+              numGuiaPagamento, 
+              numCotaPagamento, 
+              numGuiaPagamentoAssoc, 
+              numCotaPagamentoAssoc, 
+              valEntradaTransp
             FROM DAM_PRD.dbo.Cotas_Associadas
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -168,7 +438,12 @@ deployments:
         parameters:
           table_id: DevedorCDA
           execute_query: |
-            SELECT numCDA, idPessoa, descSituacaoDevedor, datSituacao, TipVinculo
+            SELECT 
+              numCDA, 
+              idPessoa, 
+              descSituacaoDevedor, 
+              datSituacao, 
+              TipVinculo
             FROM DAM_PRD.dbo.DevedorCDA
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -177,7 +452,67 @@ deployments:
         parameters:
           table_id: NotaDebito
           execute_query: |
-            SELECT numNotaDebito, codInscricaoImobiliaria, codSituacaoNotaDebito, codOrgao, DatSituacao, numEFAntiga, numEFNova, numAutoInfracao, numNotaLancamento, datCadastramento, numSerie, datApuracao, datCredito, numCreditoCalculado, descInfracao, numMatriculaFiscal, nomFiscal, datNotificacao, tipoNotificacao, numMatriculaUsuario, datExtracao, datConfissao, tipoInfracao, numSerieAuto, tipoLancamento, numSerieNota, numLoteInscricao, descObservacoes, descDadosComplementares, descQualificaoNegocio, datNegociacaoImovel, descImovelNegociado, datDecisaoFinal, ProcessoAdm, ValSaldo, ValMulta, ValJuros, ValMora, ValMoraJuros, ValPagoPrinc, ValHonorarios, ValMultaHon, ValJurosHon, ValMoraHon, ValMoraJurosHon, ValPagoHon, codSituacaoNotaDebitoANT, codFaseCobranca, FlgCampanha, FlgDuvidaIPTUProg, FlgDuvidaTCLLP, descCampanha, datLimitePPI, probRecuperacao, stSecuritizacao, valMoraOrigemSMF, valSaldoInscritoDA, dataSaldoInscritoDA, codReceita, idEntidadeCredora
+            SELECT 
+              numNotaDebito, 
+              codInscricaoImobiliaria, 
+              codSituacaoNotaDebito, 
+              codOrgao, 
+              DatSituacao, 
+              numEFAntiga, 
+              numEFNova, 
+              numAutoInfracao, 
+              numNotaLancamento, 
+              datCadastramento, 
+              numSerie, 
+              datApuracao, 
+              datCredito, 
+              numCreditoCalculado, 
+              descInfracao, 
+              numMatriculaFiscal, 
+              nomFiscal, 
+              datNotificacao, 
+              tipoNotificacao, 
+              numMatriculaUsuario, 
+              datExtracao, 
+              datConfissao, 
+              tipoInfracao, 
+              numSerieAuto, 
+              tipoLancamento, 
+              numSerieNota, 
+              numLoteInscricao, 
+              descObservacoes, 
+              descDadosComplementares, 
+              descQualificaoNegocio, 
+              datNegociacaoImovel, 
+              descImovelNegociado, 
+              datDecisaoFinal, 
+              ProcessoAdm, 
+              ValSaldo, 
+              ValMulta, 
+              ValJuros, 
+              ValMora, 
+              ValMoraJuros, 
+              ValPagoPrinc, 
+              ValHonorarios, 
+              ValMultaHon, 
+              ValJurosHon, 
+              ValMoraHon, 
+              ValMoraJurosHon, 
+              ValPagoHon, 
+              codSituacaoNotaDebitoANT, 
+              codFaseCobranca, 
+              FlgCampanha, 
+              FlgDuvidaIPTUProg, 
+              FlgDuvidaTCLLP, 
+              descCampanha, 
+              datLimitePPI, 
+              probRecuperacao, 
+              stSecuritizacao, 
+              valMoraOrigemSMF, 
+              valSaldoInscritoDA, 
+              dataSaldoInscritoDA, 
+              codReceita, 
+              idEntidadeCredora
             FROM DAM_PRD.dbo.NotaDebito
       - interval: 86400
         anchor_date: "2022-01-01T02:36:00"
@@ -186,7 +521,57 @@ deployments:
         parameters:
           table_id: GuiaPagamento
           execute_query: |
-            SELECT numGuiaPagamento, numSeqGuia, idRegraParcelamento, codTipoPagamento, idSituacaoGuia, idMotivoCancelamentoParcelamento, codReceita, idPessoa, codTipoGuia, qtdParcelas, datCriacao, qtdParcelasPagas, datUltPagamento, ValTotalDivida, ValTotalPago, qtdCDAGuia, NomRequerente, DescVinculoRequerente, NumIdentRequerente, NumTelRequerente, DescEmailRequerente, DescEmailEnvio, DescEnderecoEnvio, descBairro, numCEPEnvio, descCidade, SigUFEnvio, StsGRERJ, numProcessoAdministrativo, numTipoDoc, desVinculo, CodCampanha, PerDesc, ValDesc, idAgenciamento, descComplementoEnvio, numEnderecoEnvio, valEnviado, IdParametroGRERJ, ValPrincipal, ValHonorarios, ValGrerj, ValPrincipalPag, ValHonorariosPag, ValGrerjPag, qtdParcelasHon, qtdParcelasHonPag, qtdParcelasGrerj, qtdParcelasGrerjPag, codFaseCobranca
+            SELECT 
+              numGuiaPagamento, 
+              numSeqGuia, 
+              idRegraParcelamento, 
+              codTipoPagamento, 
+              idSituacaoGuia, 
+              idMotivoCancelamentoParcelamento, 
+              codReceita, 
+              idPessoa, 
+              codTipoGuia, 
+              qtdParcelas, 
+              datCriacao, 
+              qtdParcelasPagas, 
+              datUltPagamento, 
+              ValTotalDivida, 
+              ValTotalPago, 
+              qtdCDAGuia, 
+              NomRequerente, 
+              DescVinculoRequerente, 
+              NumIdentRequerente, 
+              NumTelRequerente, 
+              DescEmailRequerente, 
+              DescEmailEnvio, 
+              DescEnderecoEnvio, 
+              descBairro, 
+              numCEPEnvio, 
+              descCidade, 
+              SigUFEnvio, 
+              StsGRERJ, 
+              numProcessoAdministrativo, 
+              numTipoDoc, 
+              desVinculo, 
+              CodCampanha, 
+              PerDesc, 
+              ValDesc, 
+              idAgenciamento, 
+              descComplementoEnvio, 
+              numEnderecoEnvio, 
+              valEnviado, 
+              IdParametroGRERJ, 
+              ValPrincipal, 
+              ValHonorarios, 
+              ValGrerj, 
+              ValPrincipalPag, 
+              ValHonorariosPag, 
+              ValGrerjPag, 
+              qtdParcelasHon, 
+              qtdParcelasHonPag, 
+              qtdParcelasGrerj, 
+              qtdParcelasGrerjPag, 
+              codFaseCobranca
             FROM DAM_PRD.dbo.GuiaPagamento
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -195,7 +580,17 @@ deployments:
         parameters:
           table_id: GuiaPagamento_CDA
           execute_query: |
-            SELECT numGuiaPagamento, numCDA, FlgAtivo, DatRetirada, ValDescontoCDA, anoIPCAe, ValCDA, CodCampanha, PercDesconto, valDescontoSobrePrincipal
+            SELECT 
+              numGuiaPagamento, 
+              numCDA, 
+              FlgAtivo, 
+              DatRetirada, 
+              ValDescontoCDA, 
+              anoIPCAe, 
+              ValCDA, 
+              CodCampanha, 
+              PercDesconto, 
+              valDescontoSobrePrincipal
             FROM DAM_PRD.dbo.GuiaPagamento_CDA
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -204,7 +599,18 @@ deployments:
         parameters:
           table_id: GuiaPagamento_Honorarios
           execute_query: |
-            SELECT codExecucaoFiscal, numCDA, numGuiaPagamento, ValHonorarios, ValDesconto, FlgAtivo, DatRetirada, CodCampanha, PercDesconto, anoIPCAe, idProtesto
+            SELECT 
+              codExecucaoFiscal, 
+              numCDA, 
+              numGuiaPagamento, 
+              ValHonorarios, 
+              ValDesconto, 
+              FlgAtivo, 
+              DatRetirada, 
+              CodCampanha, 
+              PercDesconto, 
+              anoIPCAe, 
+              idProtesto
             FROM DAM_PRD.dbo.GuiaPagamento_Honorarios
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -213,7 +619,20 @@ deployments:
         parameters:
           table_id: Honorarios
           execute_query: |
-            SELECT numCDA, codExecucaoFiscal, numSituacao, ValSaldo, ValMM, ValJM, ValCM, ValCMJ, ValPago, FlgCampanha, idProtesto, percentualHonorarios, datPercentualHonorarios
+            SELECT 
+              numCDA, 
+              codExecucaoFiscal, 
+              numSituacao, 
+              ValSaldo, 
+              ValMM, 
+              ValJM, 
+              ValCM, 
+              ValCMJ, 
+              ValPago, 
+              FlgCampanha, 
+              idProtesto, 
+              percentualHonorarios, 
+              datPercentualHonorarios
             FROM DAM_PRD.dbo.Honorarios
       - interval: 86400
         anchor_date: "2022-01-01T01:00:00"
@@ -222,5 +641,19 @@ deployments:
         parameters:
           table_id: VWPESSOA
           execute_query: |
-            SELECT idpessoa, tipopessoa, Cpf_Cnpj, Nome, NumDoc, Orgao_TpEnte, DtEmissao, NatEnte, Falencia, ProcAdm, Rito, nivelFederativo, admPublica, admPublicaIndireta
+            SELECT 
+              idpessoa, 
+              tipopessoa, 
+              Cpf_Cnpj, 
+              Nome, 
+              NumDoc, 
+              Orgao_TpEnte, 
+              DtEmissao, 
+              NatEnte, 
+              Falencia, 
+              ProcAdm, 
+              Rito, 
+              nivelFederativo, 
+              admPublica, 
+              admPublicaIndireta
             FROM DAM_PRD.dbo.VWPESSOA
