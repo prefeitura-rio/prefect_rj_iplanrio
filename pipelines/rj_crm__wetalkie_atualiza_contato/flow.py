@@ -58,7 +58,6 @@ def rj_crm__wetalkie_atualiza_contato(
 
     file_format = WetalkieAtualizaContatoConstants.FILE_FORMAT.value
     root_folder = WetalkieAtualizaContatoConstants.ROOT_FOLDER.value
-    biglake_table = WetalkieAtualizaContatoConstants.BIGLAKE_TABLE.value
     query = WetalkieAtualizaContatoConstants.CONTACTS_QUERY.value
     billing_project_id = WetalkieAtualizaContatoConstants.BILLING_PROJECT_ID.value
     bucket_name = WetalkieAtualizaContatoConstants.BUCKET_NAME.value
@@ -105,7 +104,6 @@ def rj_crm__wetalkie_atualiza_contato(
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
         source_format=file_format,
     )
 

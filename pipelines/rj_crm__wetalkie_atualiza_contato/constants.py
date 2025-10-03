@@ -23,9 +23,6 @@ class WetalkieAtualizaContatoConstants(Enum):
     FILE_FORMAT = "parquet"
     ROOT_FOLDER = "./data_contacts/"
 
-    # Configurações do BigQuery
-    BIGLAKE_TABLE = True
-
     # Configurações da API Wetalkie
     INFISICAL_SECRET_PATH = "/wetalkie"
     API_LOGIN_ROUTE = "users/login"
@@ -35,8 +32,8 @@ class WetalkieAtualizaContatoConstants(Enum):
     CONTACTS_QUERY = """
     WITH get_max_id AS (
         SELECT MAX(cast(contato.id as int64)) AS max_id_contato
-        FROM `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_conversas.base_receptivo`
-        -- WHERE contato.telefone IS NULL
+        FROM `rj-crm-registry-dev.staging__intermediario_rmi_conversas.base_receptivo`
+        WHERE contato.telefone IS NULL
         ),
         range_ids AS (
         SELECT cast(id as string) as id
@@ -46,8 +43,7 @@ class WetalkieAtualizaContatoConstants(Enum):
 
         SELECT range_ids.id  as id_contato
         FROM range_ids
-        -- LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.contato` contato
-        LEFT JOIN `rj-iplanrio.brutos_wetalkie_staging.contato` contato
+        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.contato` contato
         ON range_ids.id = id_contato
         WHERE id_contato IS NULL
     """
