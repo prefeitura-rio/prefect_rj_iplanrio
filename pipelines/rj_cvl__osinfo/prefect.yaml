@@ -483,4 +483,3 @@ deployments:
               `tiet_ds_tipo_entrega`,
               `tiet_tabela_tipo_entrega`
             FROM `osinfo_V2`.`tb_tipo_entrega`;
-            
