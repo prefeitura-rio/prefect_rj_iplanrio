@@ -14,7 +14,7 @@ class GeolocalizacaoConstants(Enum):
     TABLE_ID = "enderecos_geolocalizados"
     BILLING_PROJECT_ID = "rj-crm-registry"
     BUCKET_NAME = "rj-sms"
-    BIGLAKE_TABLE = False
+    BIGLAKE_TABLE = True
 
     # File and data configuration
     FILE_FOLDER = "pipelines/data"

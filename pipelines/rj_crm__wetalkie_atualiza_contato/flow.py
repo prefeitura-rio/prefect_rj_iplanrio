@@ -40,7 +40,7 @@ def rj_crm__wetalkie_atualiza_contato(
 
     Args:
         dataset_id: ID do dataset no BigQuery (default: brutos_wetalkie)
-        table_id: ID da tabela no BigQuery (default: contato_faltante)
+        table_id: ID da tabela no BigQuery (default: contato)
         dump_mode: Modo de dump (default: append)
         materialize_after_dump: Se deve materializar após dump (default: False)
         infisical_secret_path: Caminho dos secrets no Infisical (default: /wetalkie)
@@ -58,7 +58,6 @@ def rj_crm__wetalkie_atualiza_contato(
 
     file_format = WetalkieAtualizaContatoConstants.FILE_FORMAT.value
     root_folder = WetalkieAtualizaContatoConstants.ROOT_FOLDER.value
-    biglake_table = WetalkieAtualizaContatoConstants.BIGLAKE_TABLE.value
     query = WetalkieAtualizaContatoConstants.CONTACTS_QUERY.value
     billing_project_id = WetalkieAtualizaContatoConstants.BILLING_PROJECT_ID.value
     bucket_name = WetalkieAtualizaContatoConstants.BUCKET_NAME.value
@@ -105,7 +104,6 @@ def rj_crm__wetalkie_atualiza_contato(
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
         source_format=file_format,
     )
 

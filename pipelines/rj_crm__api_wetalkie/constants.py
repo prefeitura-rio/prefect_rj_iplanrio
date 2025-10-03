@@ -25,7 +25,7 @@ class WetalkieConstants(Enum):
     ROOT_FOLDER = "./data_attendances/"
 
     # Configurações do BigQuery
-    BIGLAKE_TABLE = False
+    BIGLAKE_TABLE = True
 
     # Configurações da API Wetalkie
     INFISICAL_SECRET_PATH = "/wetalkie"
