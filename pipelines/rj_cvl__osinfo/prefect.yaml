@@ -464,7 +464,7 @@ deployments:
       - interval: 86400
         anchor_date: '2025-07-15T05:10:00'
         timezone: America/Sao_Paulo
-        slug: tb_tipo_entrega
+        slug: tipo_entrega
         parameters:
           db_type: mysql
           db_database: osinfo_V2
@@ -474,7 +474,7 @@ deployments:
           infisical_secret_path: /db-osinfo
           biglake_table: true
           batch_size: 50000
-          table_id: tb_tipo_entrega
+          table_id: tipo_entrega
           dump_mode: overwrite
           materialize_after_dump: true
           execute_query: |
