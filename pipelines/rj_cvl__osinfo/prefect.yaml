@@ -412,7 +412,11 @@ deployments:
         timezone: America/Sao_Paulo
         slug: tb_tipo_entrega
         parameters:
+<<<<<<< HEAD
           table_id: tb_tipo_entrega
+=======
+          table_id: tipo_entrega
+>>>>>>> 54d4e29 (alterar para dataset igual a  adm_contrato_gestao)
           dump_mode: overwrite
           execute_query: |
             SELECT
