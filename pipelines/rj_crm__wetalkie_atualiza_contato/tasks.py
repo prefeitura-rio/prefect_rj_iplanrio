@@ -33,7 +33,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
         log("No contacts missing phone - returning empty DataFrame")
         return pd.DataFrame()  # Return empty DataFrame instead of raising ENDRUN
 
-    log("Getting all missing contacts from the Wetalkie API")
+    log(f"Getting {dfr.shape[0]} missing contacts from the Wetalkie API")
 
     # Create a copy to avoid modifying the original DataFrame
     result_dfr = dfr.copy()
@@ -59,7 +59,6 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             data = response_data["data"]
-            log(f"contact {contact_id} data: {data}")
 
             # Check if the expected structure exists
             if "item" not in data or not data["item"]:
@@ -68,12 +67,10 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
                 continue
 
             item = data["item"]
-            log(f"contact {contact_id} item: {item}")
 
             # Update contact information
             result_dfr.loc[result_dfr["id_contato"] == contact_id, "json_data"] = json.dumps(item)
             exemple = result_dfr.loc[result_dfr["id_contato"] == contact_id].copy()
-            log(f"dentro do df {exemple}")
             updated_count += 1
 
         except Exception as error:
@@ -83,7 +80,6 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
 
     log(f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}")
 
-    log(f">>>>>> dfr head {result_dfr.head()}")
     # Filter out contacts that weren't updated successfully
     successful_contacts = result_dfr[result_dfr["json_data"].notna()]
     successful_contacts["id_contato"] = successful_contacts["id_contato"].astype(str)
@@ -112,7 +108,6 @@ def download_missing_contacts(query: str, billing_project_id: str, bucket_name: 
     log("Downloading missing contacts from BigQuery")
     dfr = download_data_from_bigquery(query, billing_project_id, bucket_name)
     log(f"Found {len(dfr)} contacts with missing phone data")
-    log(f"first row {dfr.iloc[0]}")
     return dfr
 
 

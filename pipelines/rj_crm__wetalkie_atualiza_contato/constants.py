@@ -47,7 +47,6 @@ class WetalkieAtualizaContatoConstants(Enum):
         ON range_ids.id = id_contato
         WHERE id_contato IS NULL
     """
-    # TODO: remover so comentário quanto tiver a tabela contatos materializada
 
     # Configurações do BigQuery para consulta
     BILLING_PROJECT_ID = "rj-crm-registry"
