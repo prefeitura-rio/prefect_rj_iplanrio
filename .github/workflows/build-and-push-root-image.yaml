@@ -6,8 +6,10 @@ on:
       - master
     paths:
       - Dockerfile
+      - .github/workflows/build-and-push-root-image.yaml
   workflow_dispatch:
-
+env:
+  github_repository: rj-smtr/pipelines_v3
 jobs:
   build-and-push-root-image:
     name: Build and push root image
@@ -19,7 +21,7 @@ jobs:
       - name: Build and push root image
         uses: ./.github/actions/build-and-push-root-image
         with:
-          repository: ${{ github.repository }}
+          repository: github_repository
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-prefect-flows-staging:
