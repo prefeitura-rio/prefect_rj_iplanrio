@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_sme__brutos_core_sso/flow.py:rj_sme__brutos_core_sso
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -38,7 +38,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_sme__brutos_core_sso/flow.py:rj_sme__brutos_core_sso
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
