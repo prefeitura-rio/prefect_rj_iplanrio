@@ -54,9 +54,6 @@ jobs:
           environment: prod
           pipelines_path: ./pipelines
           prefect_api_url: https://prefect.mobilidade.rio/api
-          # ts_tags: tag:prefect-cicd
-          # ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          # ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
           gh_token: ${{ secrets.GH_TOKEN }}
           force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
           debug: ${{ github.event.inputs.debug }}
