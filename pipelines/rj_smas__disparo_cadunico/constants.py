@@ -44,7 +44,7 @@ class CadunicoConstants(Enum):
                     unidade_nome as LOCAL,
                     CONCAT(unidade_endereco, ' - ', unidade_bairro) as ENDERECO
                 ) as vars,
-                cpf as external_id
+                cpf as externalId
             )) as destination_data
         FROM `rj-smas.brutos_data_metrica_staging.agendamentos_cadunico`
         WHERE
