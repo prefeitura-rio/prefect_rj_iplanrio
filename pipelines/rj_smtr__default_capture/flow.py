@@ -26,7 +26,4 @@ def rj_smtr__default_capture() -> list[str]:
     use_pandas()
     customer_ids = get_customer_ids()
     results = process_customer.map(customer_ids)
-    print(results)
     return results
-
-#trigger cd
