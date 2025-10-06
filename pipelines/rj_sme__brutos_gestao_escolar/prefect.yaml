@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_sme__brutos_gestao_escolar/flow.py:rj_sme__brutos_gestao_escolar
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -38,7 +38,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_sme__brutos_gestao_escolar/flow.py:rj_sme__brutos_gestao_escolar
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -83,6 +83,7 @@ deployments:
           break_query_frequency: day
           break_query_start: current_day
           break_query_end: current_day
+          add_timestamp_column: true
           execute_query: |
             SELECT
                 tud_id,
@@ -97,8 +98,7 @@ deployments:
                 CONVERT(date, taa_dataAlteracao) AS taa_dataAlteracao_converted,
                 taa_anotacao,
                 taa_frequenciaBitMap,
-                usu_idDocenteAlteracao,
-                GETDATE() AS loaded_at
+                usu_idDocenteAlteracao
             FROM GestaoEscolar.dbo.CLS_TurmaAulaAluno
       - interval: 86400
         anchor_date: "2022-01-01T02:34:00"
