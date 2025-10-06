@@ -20,7 +20,7 @@ jobs:
         uses: ./.github/actions/build-and-push-root-image
         with:
           repository: ${{ github.repository }}
-          github_token: ${{ secrets.GH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
   deploy-prefect-flows-staging:
     name: Deploy Prefect staging flows
@@ -42,7 +42,7 @@ jobs:
           # ts_tags: tag:prefect-cicd
           # ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           # ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
-          gh_token: ${{ secrets.GH_TOKEN }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
           log_level: ${{ vars.LOG_LEVEL }}
 
   deploy-prefect-flows-prod:
@@ -65,5 +65,5 @@ jobs:
           # ts_tags: tag:prefect-cicd
           # ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           # ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
-          gh_token: ${{ secrets.GH_TOKEN }}
+          gh_token: ${{ secrets.GITHUB_TOKEN }}
           log_level: ${{ vars.LOG_LEVEL }}
