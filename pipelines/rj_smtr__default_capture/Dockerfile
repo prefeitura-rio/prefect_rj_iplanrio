@@ -6,6 +6,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
-COPY ./pipelines/rj_iplanrio__run_dbt ./pipelines/rj_iplanrio__run_dbt/
+COPY ./pipelines/rj_smtr__default_capture ./pipelines/rj_smtr__default_capture/
 
 RUN uv sync --all-packages

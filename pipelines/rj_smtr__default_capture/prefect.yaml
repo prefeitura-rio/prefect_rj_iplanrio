@@ -1,4 +1,4 @@
-name: rj_iplanrio__eai_history
+name: rj_smtr__default_capture
 prefect-version: 3.4.3
 
 build:
@@ -10,8 +10,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_iplanrio__eai_history-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_iplanrio__eai_history/Dockerfile
+      tag: "rj_smtr__default_capture-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smtr__default_capture/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -24,38 +24,27 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-iplanrio--eai_history--staging
+  - name: rj-smtr--default_capture--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_iplanrio__eai_history/flow.py:rj_iplanrio__eai_history
+    entrypoint: pipelines/rj_smtr__default_capture/flow.py:rj_smtr__default_capture
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_iplanrio__eai_history -- prefect flow-run execute
+        command: uv run --package rj_smtr__default_capture -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-  - name: rj-iplanrio--eai_history--prod
+  - name: rj-smtr--default_capture--prod
     version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_iplanrio__eai_history/flow.py:rj_iplanrio__eai_history
+    entrypoint: pipelines/rj_smtr__default_capture/flow.py:rj_smtr__default_capture
+    schedules:
+      - cron: "0 0 * * *"
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_iplanrio__eai_history -- prefect flow-run execute
+        command: uv run --package rj_smtr__default_capture -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-    schedules:
-      - interval: 3600
-        anchor_date: "2025-01-01T00:00:00"
-        timezone: America/Sao_Paulo
-        slug: prod
-        parameters:
-          environment: prod
-      - interval: 3600
-        anchor_date: "2025-01-01T00:05:00"
-        timezone: America/Sao_Paulo
-        slug: staging
-        parameters:
-          environment: staging
