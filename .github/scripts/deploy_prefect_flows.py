@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 
 DOCKER_IMAGE_FORMAT_PARTS_COUNT = 2
-BASE_IMAGE = "ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest"
+BASE_IMAGE = "ghcr.io/rj-smtr/pipelines_v3:latest"
 
 DeploymentFunc = Callable[[Path, str], Awaitable[tuple[Path, int]]]
 

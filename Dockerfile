@@ -1,6 +1,6 @@
 FROM alpine:3.22 AS get-instant-client-step
 
-LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
+LABEL org.opencontainers.image.source=https://github.com/rj-smtr/pipelines_v3
 
 RUN wget -O /tmp/instantclient.zip "https://download.oracle.com/otn_software/linux/instantclient/2118000/instantclient-basic-linux.x64-21.18.0.0.0dbru.zip" \
     && unzip /tmp/instantclient.zip -d /tmp \
