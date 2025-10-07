@@ -1,0 +1,297 @@
+# -*- coding: utf-8 -*-
+"""Tasks do fluxo rj_iplanrio__sisbicho_images."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+from datetime import datetime, timezone
+from typing import Iterable
+
+import pandas as pd
+from basedosdados import Base
+from google.cloud import bigquery, storage
+from google.cloud.exceptions import NotFound
+from iplanrio.pipelines_utils.logging import log
+from prefect import task
+
+from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import MAGIC_NUMBERS, detect_and_decode
+
+
+def _load_credentials(bucket_name: str):
+    """Carrega as credenciais padrão utilizando a infra Base dos Dados."""
+
+    return Base(bucket_name=bucket_name)._load_credentials(mode="prod")
+
+
+def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
+    """Identifica o campo que será usado como chave do animal."""
+
+    preferred = (
+        "animal_id",
+        "id_animal",
+        "id",
+        "id_animal_prontuario",
+        "codigo_animal",
+        "codigo",
+        "identificador",
+    )
+    available = {field.name.lower(): field.name for field in schema}
+
+    for candidate in preferred:
+        if candidate.lower() in available:
+            return available[candidate.lower()]
+
+    for field in schema:
+        name = field.name.lower()
+        if name not in {"qrcode_dados", "foto_dados"}:
+            return field.name
+
+    raise ValueError("Não foi possível identificar uma coluna para chave do animal.")
+
+
+def _strip_data_uri_prefix(value: str) -> str:
+    if "," in value and value.lower().startswith("data:"):
+        return value.split(",", 1)[1]
+    return value
+
+
+def _looks_like_base64(value: str) -> bool:
+    value = value.strip()
+    if not value:
+        return False
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r")
+    return set(value) <= allowed and len(value) % 4 == 0
+
+
+def _bytes_to_text(decoded_bytes: bytes) -> str | None:
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            return decoded_bytes.decode(encoding).strip()
+        except UnicodeDecodeError:
+            continue
+    return None
+
+
+def _contains_magic_number(decoded_bytes: bytes) -> bool:
+    return any(decoded_bytes.startswith(magic) for magic in MAGIC_NUMBERS)
+
+
+def _sanitize_identifier(identifier: object) -> str:
+    text = str(identifier).strip()
+    if not text:
+        return "sem_identificador"
+    return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in text)
+
+
+def _extract_qrcode_payload(value: str) -> str | None:
+    if value is None:
+        return None
+
+    candidate = str(value).strip()
+    if not candidate:
+        return None
+
+    original = candidate
+    for _ in range(2):
+        cleaned = _strip_data_uri_prefix(candidate)
+        if not _looks_like_base64(cleaned):
+            break
+        try:
+            decoded = base64.b64decode(cleaned, validate=True)
+        except ValueError:
+            break
+
+        if _contains_magic_number(decoded):
+            return original
+
+        decoded_text = _bytes_to_text(decoded)
+        if not decoded_text:
+            break
+        candidate = decoded_text
+
+    candidate = candidate.strip()
+    if not candidate:
+        return None
+
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return candidate
+
+    if isinstance(parsed, dict):
+        for key in ("payload", "qr_payload", "dados", "data"):
+            if key in parsed and parsed[key]:
+                value = parsed[key]
+                return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+        return json.dumps(parsed, ensure_ascii=False)
+
+    if isinstance(parsed, list):
+        return json.dumps(parsed, ensure_ascii=False)
+
+    return candidate
+
+
+def _infer_extension(image_bytes: bytes) -> str:
+    for magic, extension in MAGIC_NUMBERS.items():
+        if image_bytes.startswith(magic):
+            if extension == "jpeg":
+                return "jpg"
+            return extension
+    return "bin"
+
+
+def _extension_to_content_type(extension: str) -> str:
+    mapping = {
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "gif": "image/gif",
+    }
+    return mapping.get(extension.lower(), "application/octet-stream")
+
+
+@task
+def fetch_sisbicho_media_task(
+    billing_project_id: str,
+    credential_bucket: str,
+    dataset_id: str,
+    table_id: str,
+    limit: int | None = None,
+) -> pd.DataFrame:
+    """Baixa do BigQuery os dados relevantes para gerar imagens do SISBICHO."""
+
+    credentials = _load_credentials(credential_bucket)
+    client = bigquery.Client(credentials=credentials, project=billing_project_id)
+
+    full_table = f"{billing_project_id}.{dataset_id}.{table_id}"
+    table = client.get_table(full_table)
+    identifier_field = _infer_identifier_field(table.schema)
+
+    query = f"""
+        SELECT
+            {identifier_field} AS animal_identifier,
+            qrcode_dados,
+            foto_dados
+        FROM `{full_table}`
+        WHERE (qrcode_dados IS NOT NULL AND qrcode_dados != '')
+           OR (foto_dados IS NOT NULL AND foto_dados != '')
+    """.strip()
+
+    if limit:
+        query = f"{query}\nLIMIT {int(limit)}"
+
+    log(f"Executando query no BigQuery para {full_table}")
+    dataframe = client.query(query).result().to_dataframe()
+    log(f"Total de registros carregados: {len(dataframe)}")
+
+    return dataframe
+
+
+@task
+def extract_qrcode_payload_task(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Cria coluna com o payload do QRCode a partir da coluna codificada."""
+
+    if dataframe.empty:
+        return dataframe.assign(qrcode_payload=pd.Series(dtype="string"))
+
+    df = dataframe.copy()
+    df["qrcode_payload"] = df["qrcode_dados"].apply(_extract_qrcode_payload)
+
+    return df
+
+
+@task
+def upload_pet_images_task(
+    dataframe: pd.DataFrame,
+    credential_bucket: str,
+    storage_bucket: str,
+    storage_prefix: str,
+    billing_project_id: str,
+) -> pd.DataFrame:
+    """Faz o upload das imagens dos pets para o GCS e retorna a URL final."""
+
+    if dataframe.empty:
+        return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
+
+    credentials = _load_credentials(credential_bucket)
+    storage_client = storage.Client(credentials=credentials, project=billing_project_id)
+    bucket = storage_client.bucket(storage_bucket)
+
+    foto_urls: list[str | None] = []
+    blob_paths: list[str | None] = []
+
+    for _, row in dataframe.iterrows():
+        raw_value = row.get("foto_dados")
+        identifier = row.get("animal_identifier")
+        safe_identifier = _sanitize_identifier(identifier)
+
+        if raw_value is None or str(raw_value).strip() == "":
+            foto_urls.append(None)
+            blob_paths.append(None)
+            continue
+
+        cleaned = _strip_data_uri_prefix(str(raw_value))
+
+        try:
+            image_bytes = detect_and_decode(cleaned)
+        except ValueError as exc:
+            log(f"[WARN] Falha ao decodificar imagem do animal {identifier}: {exc}")
+            foto_urls.append(None)
+            blob_paths.append(None)
+            continue
+
+        extension = _infer_extension(image_bytes)
+        content_type = _extension_to_content_type(extension)
+        digest = hashlib.sha1(image_bytes).hexdigest()
+        blob_name = f"{storage_prefix}/animal_id={safe_identifier}/{digest}.{extension}"
+        blob = bucket.blob(blob_name)
+
+        try:
+            exists = blob.exists(storage_client)
+        except NotFound:
+            exists = False
+
+        if not exists:
+            log(f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}")
+            blob.upload_from_string(image_bytes, content_type=content_type)
+            blob.metadata = {"sha1": digest}
+            blob.patch()
+        else:
+            log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+
+        public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
+        foto_urls.append(public_url)
+        blob_paths.append(blob_name)
+
+    df = dataframe.copy()
+    df["foto_url"] = foto_urls
+    df["foto_blob_path"] = blob_paths
+    return df
+
+
+@task
+def build_output_dataframe_task(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Prepara o DataFrame final a ser persistido no BigQuery."""
+
+    if dataframe.empty:
+        return dataframe.assign(
+            foto_url=pd.Series(dtype="string"),
+            foto_blob_path=pd.Series(dtype="string"),
+            qrcode_payload=pd.Series(dtype="string"),
+            ingestao_data=pd.Series(dtype="datetime64[ns]"),
+        )
+
+    df = dataframe.copy()
+    df["ingestao_data"] = datetime.now(timezone.utc)
+
+    selected_columns = [
+        "animal_identifier",
+        "qrcode_payload",
+        "foto_url",
+        "foto_blob_path",
+        "ingestao_data",
+    ]
+    return df[selected_columns]
+
