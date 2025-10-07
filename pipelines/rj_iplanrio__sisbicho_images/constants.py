@@ -32,4 +32,3 @@ class SisbichoImagesConstants(Enum):
 
     # Controle de materialização pós dump (mantido como padrão False)
     MATERIALIZE_AFTER_DUMP = False
-

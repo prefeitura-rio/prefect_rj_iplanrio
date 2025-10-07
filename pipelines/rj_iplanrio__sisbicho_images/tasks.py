@@ -122,7 +122,7 @@ def _extract_qrcode_payload(value: str) -> str | None:
 
     if isinstance(parsed, dict):
         for key in ("payload", "qr_payload", "dados", "data"):
-            if key in parsed and parsed[key]:
+            if parsed.get(key):
                 value = parsed[key]
                 return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
         return json.dumps(parsed, ensure_ascii=False)
@@ -294,4 +294,3 @@ def build_output_dataframe_task(dataframe: pd.DataFrame) -> pd.DataFrame:
         "ingestao_data",
     ]
     return df[selected_columns]
-

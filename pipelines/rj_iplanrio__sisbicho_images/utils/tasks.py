@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import base64
 
 from iplanrio.pipelines_utils.logging import log
@@ -35,6 +36,4 @@ def detect_and_decode(data_b64: str) -> bytes:
         log("Decodificação dupla necessária.")
         return step2
 
-    raise ValueError(
-        "Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações."
-    )
+    raise ValueError("Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações.")
