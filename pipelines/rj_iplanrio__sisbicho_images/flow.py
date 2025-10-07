@@ -67,7 +67,6 @@ def rj_iplanrio__sisbicho_images(
     dataframe = extract_qrcode_payload_task(dataframe)
     dataframe = upload_pet_images_task(
         dataframe=dataframe,
-        credential_bucket=credential_bucket,
         storage_bucket=storage_bucket,
         storage_prefix=storage_prefix,
         billing_project_id=billing_project_id,
@@ -99,4 +98,3 @@ def rj_iplanrio__sisbicho_images(
 
     log("Fluxo concluído com sucesso.")
     return []
-

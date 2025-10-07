@@ -19,12 +19,6 @@ from prefect import task
 from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import MAGIC_NUMBERS, detect_and_decode
 
 
-def _load_credentials(bucket_name: str):
-    """Carrega as credenciais padrão utilizando a infra Base dos Dados."""
-
-    return Base(bucket_name=bucket_name)._load_credentials(mode="prod")
-
-
 def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
     """Identifica o campo que será usado como chave do animal."""
 
@@ -162,7 +156,7 @@ def fetch_sisbicho_media_task(
 ) -> pd.DataFrame:
     """Baixa do BigQuery os dados relevantes para gerar imagens do SISBICHO."""
 
-    credentials = _load_credentials(credential_bucket)
+    credentials = Base(bucket_name=credential_bucket)._load_credentials(mode="prod")
     client = bigquery.Client(credentials=credentials, project=billing_project_id)
 
     full_table = f"{billing_project_id}.{dataset_id}.{table_id}"
@@ -205,7 +199,6 @@ def extract_qrcode_payload_task(dataframe: pd.DataFrame) -> pd.DataFrame:
 @task
 def upload_pet_images_task(
     dataframe: pd.DataFrame,
-    credential_bucket: str,
     storage_bucket: str,
     storage_prefix: str,
     billing_project_id: str,
@@ -215,8 +208,7 @@ def upload_pet_images_task(
     if dataframe.empty:
         return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
 
-    credentials = _load_credentials(credential_bucket)
-    storage_client = storage.Client(credentials=credentials, project=billing_project_id)
+    storage_client = storage.Client(project=billing_project_id)
     bucket = storage_client.bucket(storage_bucket)
 
     foto_urls: list[str | None] = []
@@ -294,4 +286,3 @@ def build_output_dataframe_task(dataframe: pd.DataFrame) -> pd.DataFrame:
         "ingestao_data",
     ]
     return df[selected_columns]
-
