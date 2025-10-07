@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database to the BIGQUERY
+This flow is used to dump the database from the 1746 server to the BIGQUERY....
 """
 
 from typing import Optional
@@ -17,16 +17,16 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
-    db_database: str = "database",
-    db_host: str = "host",
-    db_port: str = "port",
-    db_type: str = "db_type",
-    db_charset: Optional[str] = "utf8",
+def rj_pgm__divida_ativa(
+    db_database: str = "DAM_PRD",
+    db_host: str = "10.2.221.127",
+    db_port: str = "1433",
+    db_type: str = "sql_server",
+    db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "dataset_id",
+    dataset_id: str = "brutos_divida_ativa",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-secret_path",
+    infisical_secret_path: str = "/db-divida-ativa",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,

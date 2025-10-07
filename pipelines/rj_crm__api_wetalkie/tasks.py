@@ -61,9 +61,7 @@ def get_attendances(api: object) -> pd.DataFrame:
         new_state = Completed(message="Flow new state")
 
         # Raise a TerminationSignal with the new state
-        raise TerminationSignal(
-            state=new_state
-        )
+        raise TerminationSignal(state=new_state)
 
     for item in all_attendances:
         data.append(

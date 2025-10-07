@@ -1,0 +1,384 @@
+name: rj_pgm__divida_ativa
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_pgm__divida_ativa-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_pgm__divida_ativa/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-pgm--divida_ativa--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_pgm__divida_ativa/flow.py:rj_pgm__divida_ativa
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_pgm__divida_ativa -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+
+  - name: rj-pgm--divida_ativa--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_pgm__divida_ativa/flow.py:rj_pgm__divida_ativa
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_pgm__divida_ativa -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    schedules:
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: CDA
+      parameters:
+        table_id: CDA
+        execute_query: |
+          SELECT
+            numCDA,
+            anoInscricao,
+            idNaturezaDivida,
+            seqCDA,
+            versaoCDA,
+            numNotaDebito,
+            codInscricaoImobiliaria,
+            codSituacaoCDA,
+            codOrgao,
+            DatSituacao,
+            numEFAntiga,
+            numEFNova,
+            numAutoInfracao,
+            numNotaLancamento,
+            datCadastramento,
+            numSerie,
+            datApuracao,
+            datCredito,
+            numCreditoCalculado,
+            descInfracao,
+            numMatriculaFiscal,
+            nomFiscal,
+            datNotificacao,
+            tipoNotificacao,
+            numMatriculaUsuario,
+            datExtracao,
+            datConfissao,
+            tipoInfracao,
+            numSerieAuto,
+            tipoLancamento,
+            numSerieNota,
+            numLoteInscricao,
+            descObservacoes,
+            descDadosComplementares,
+            descQualificaoNegocio,
+            datNegociacaoImovel,
+            descImovelNegociado,
+            datDecisaoFinal,
+            ProcessoAdm,
+            ValSaldo,
+            ValMulta,
+            ValJuros,
+            ValMora,
+            ValMoraJuros,
+            ValPagoPrinc,
+            ValHonorarios,
+            ValMultaHon,
+            ValJurosHon,
+            ValMoraHon,
+            ValMoraJurosHon,
+            ValPagoHon,
+            codSituacaoCDAANT,
+            codFaseCobranca,
+            FlgCampanha,
+            FlgDuvidaIPTUProg,
+            FlgDuvidaTCLLP,
+            descCampanha,
+            datLimitePPI,
+            probRecuperacao,
+            stSecuritizacao,
+            valMoraOrigemSMF,
+            valSaldoInscritoDA,
+            dataSaldoInscritoDA,
+            codReceita,
+            idEntidadeCredora
+          FROM DAM_PRD.dbo.CDA
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: CotaPagamento
+      parameters:
+        table_id: CotaPagamento
+        execute_query: |
+          SELECT
+            numGuiaPagamento,
+            numCotaPagamento,
+            valCotaPagamento,
+            dtVencimento,
+            stsCotaPagamento,
+            valMora,
+            ValJuros,
+            valMulta,
+            descObservacao,
+            dtEmissao,
+            dtPagamento,
+            codSituacaoCotaPagamento,
+            valPrincipalPago,
+            valJurosPago,
+            stsEmitida,
+            anoIPCAe,
+            valSaidaTransp,
+            ValPrincipal,
+            ValHonorarios,
+            ValHonorariosPag,
+            ValGrerj,
+            ValGrerjPag,
+            valJurosPagoPri,
+            valJurosPagoHon,
+            valJurosPri,
+            valJurosHon,
+            valJurosGre,
+            codigoDeBarras,
+            txtIdPix,
+            codigoQrEMVPix
+          FROM DAM_PRD.dbo.CotaPagamento
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: Cotas_Associadas
+      parameters:
+        table_id: Cotas_Associadas
+        execute_query: |
+          SELECT
+            numGuiaPagamento,
+            numCotaPagamento,
+            numGuiaPagamentoAssoc,
+            numCotaPagamentoAssoc,
+            valEntradaTransp
+          FROM DAM_PRD.dbo.Cotas_Associadas
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: DevedorCDA
+      parameters:
+        table_id: DevedorCDA
+        execute_query: |
+          SELECT
+            numCDA,
+            idPessoa,
+            descSituacaoDevedor,
+            datSituacao,
+            TipVinculo
+          FROM DAM_PRD.dbo.DevedorCDA
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: NotaDebito
+      parameters:
+        table_id: NotaDebito
+        execute_query: |
+          SELECT numNotaDebito,
+            codOrgao,
+            idNaturezaDivida,
+            datCadastramento,
+            numSerie,
+            datApuracao,
+            datCredito,
+            descInfracao,
+            numNotaSubstitutiva,
+            numMatriculaFiscal,
+            nomFiscal,
+            numProcessoAdm,
+            datNotificacao,
+            tipoNotificacao,
+            numMatriculaUsuario,
+            datExtracao,
+            datConfissao,
+            tipoInfracao,
+            numAutoInfracao,
+            numSerieAuto,
+            tipoLancamento,
+            numNotaLancamento,
+            numSerieNota,
+            numLoteInscricao,
+            codInscricaoImobiliaria,
+            numExercicio,
+            descObservacoes,
+            descDadosComplementares,
+            datDecisaoFinal,
+            idSituacaoNotaDebito,
+            descQualificaoNegocio,
+            datNegociacaoImovel,
+            valLancamento,
+            ValMora,
+            numGuiaLancamento,
+            DatInfracao,
+            NumSeqNotaDeb,
+            CodObs,
+            NumeroInscricaoMunicipal,
+            NumeroVersaoNotaDebito,
+            DataConstituicaoCredito,
+            valMoraOrigemSMF
+          FROM DAM_PRD.dbo.NotaDebito
+    - interval: 86400
+      anchor_date: "2022-01-01T02:36:00"
+      timezone: America/Sao_Paulo
+      slug: GuiaPagamento
+      parameters:
+        table_id: GuiaPagamento
+        execute_query: |
+          SELECT
+            numGuiaPagamento,
+            numSeqGuia,
+            idRegraParcelamento,
+            codTipoPagamento,
+            idSituacaoGuia,
+            idMotivoCancelamentoParcelamento,
+            codReceita,
+            idPessoa,
+            codTipoGuia,
+            qtdParcelas,
+            datCriacao,
+            qtdParcelasPagas,
+            datUltPagamento,
+            ValTotalDivida,
+            ValTotalPago,
+            qtdCDAGuia,
+            NomRequerente,
+            DescVinculoRequerente,
+            NumIdentRequerente,
+            NumTelRequerente,
+            DescEmailRequerente,
+            DescEmailEnvio,
+            DescEnderecoEnvio,
+            descBairro,
+            numCEPEnvio,
+            descCidade,
+            SigUFEnvio,
+            StsGRERJ,
+            numProcessoAdministrativo,
+            numTipoDoc,
+            desVinculo,
+            CodCampanha,
+            PerDesc,
+            ValDesc,
+            idAgenciamento,
+            descComplementoEnvio,
+            numEnderecoEnvio,
+            valEnviado,
+            IdParametroGRERJ,
+            ValPrincipal,
+            ValHonorarios,
+            ValGrerj,
+            ValPrincipalPag,
+            ValHonorariosPag,
+            ValGrerjPag,
+            qtdParcelasHon,
+            qtdParcelasHonPag,
+            qtdParcelasGrerj,
+            qtdParcelasGrerjPag,
+            codFaseCobranca
+          FROM DAM_PRD.dbo.GuiaPagamento
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: GuiaPagamento_CDA
+      parameters:
+        table_id: GuiaPagamento_CDA
+        execute_query: |
+          SELECT
+            numGuiaPagamento,
+            numCDA,
+            FlgAtivo,
+            DatRetirada,
+            ValDescontoCDA,
+            anoIPCAe,
+            ValCDA,
+            CodCampanha,
+            PercDesconto,
+            valDescontoSobrePrincipal
+          FROM DAM_PRD.dbo.GuiaPagamento_CDA
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: GuiaPagamento_Honorarios
+      parameters:
+        table_id: GuiaPagamento_Honorarios
+        execute_query: |
+          SELECT
+            codExecucaoFiscal,
+            numCDA,
+            numGuiaPagamento,
+            ValHonorarios,
+            ValDesconto,
+            FlgAtivo,
+            DatRetirada,
+            CodCampanha,
+            PercDesconto,
+            anoIPCAe,
+            idProtesto
+          FROM DAM_PRD.dbo.GuiaPagamento_Honorarios
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: Honorarios
+      parameters:
+        table_id: Honorarios
+        execute_query: |
+          SELECT
+            numCDA,
+            codExecucaoFiscal,
+            numSituacao,
+            ValSaldo,
+            ValMM,
+            ValJM,
+            ValCM,
+            ValCMJ,
+            ValPago,
+            FlgCampanha,
+            idProtesto,
+            percentualHonorarios,
+            datPercentualHonorarios
+          FROM DAM_PRD.dbo.Honorarios
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: VWPESSOA
+      parameters:
+        table_id: VWPESSOA
+        execute_query: |
+          SELECT
+            idpessoa,
+            tipopessoa,
+            Cpf_Cnpj,
+            Nome,
+            NumDoc,
+            Orgao_TpEnte,
+            DtEmissao,
+            NatEnte,
+            Falencia,
+            ProcAdm,
+            Rito,
+            nivelFederativo,
+            admPublica,
+            admPublicaIndireta
+          FROM DAM_PRD.dbo.VWPESSOA

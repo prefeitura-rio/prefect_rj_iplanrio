@@ -10,6 +10,8 @@ Tasks migradas do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 - GCS storage: Removido no Prefect 3.0 (configurado no YAML)
 """
 
+import json
+
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
@@ -31,21 +33,16 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
         log("No contacts missing phone - returning empty DataFrame")
         return pd.DataFrame()  # Return empty DataFrame instead of raising ENDRUN
 
-    log("Getting all missing contacts from the Wetalkie API")
+    log(f"Getting {dfr.shape[0]} missing contacts from the Wetalkie API")
 
     # Create a copy to avoid modifying the original DataFrame
     result_dfr = dfr.copy()
-
-    # Add columns if they don't exist
-    if "contato_telefone" not in result_dfr.columns:
-        result_dfr["contato_telefone"] = None
-    if "contato_nome" not in result_dfr.columns:
-        result_dfr["contato_nome"] = None
+    result_dfr["json_data"] = None
 
     updated_count = 0
     failed_count = 0
 
-    for contact_id in result_dfr.iloc[:, 0].unique():
+    for contact_id in result_dfr["id_contato"].unique():
         try:
             log(f"Getting contact {contact_id} from the Wetalkie API")
             response = api.get(path=f"/callcenter/contacts/{contact_id!s}")
@@ -72,35 +69,20 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
             item = data["item"]
 
             # Update contact information
-            phone = str(item.get("whatsapp", "")) if item.get("whatsapp") else None
-            name = str(item.get("name", "")) if item.get("name") else None
+            result_dfr.loc[result_dfr["id_contato"] == contact_id, "json_data"] = json.dumps(item)
+            exemple = result_dfr.loc[result_dfr["id_contato"] == contact_id].copy()
+            updated_count += 1
 
-            if phone:
-                result_dfr.loc[result_dfr["id_contato"] == contact_id, "contato_telefone"] = phone
-                log(f"Updated phone for contact {contact_id}: {phone}")
-
-            if name:
-                result_dfr.loc[result_dfr["id_contato"] == contact_id, "contato_nome"] = name
-                log(f"Updated name for contact {contact_id}: {name}")
-
-            if phone or name:
-                updated_count += 1
-            else:
-                log(f"No useful data found for contact {contact_id}")
-                failed_count += 1
-
-        except Exception as e:
-            log(f"Error processing contact {contact_id}: {e}", level="error")
+        except Exception as error:
+            log(f"Error processing contact {contact_id}: {error}", level="error")
             failed_count += 1
             continue
 
     log(f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}")
 
     # Filter out contacts that weren't updated successfully
-    successful_contacts = result_dfr[
-        (result_dfr["contato_telefone"].notna() & result_dfr["contato_telefone"].astype(str).str.strip().ne(""))
-        | (result_dfr["contato_nome"].notna() & result_dfr["contato_nome"].astype(str).str.strip().ne(""))
-    ]
+    successful_contacts = result_dfr[result_dfr["json_data"].notna()]
+    successful_contacts["id_contato"] = successful_contacts["id_contato"].astype(str)
 
     log(f"Returning {len(successful_contacts)} successfully updated contacts")
     return successful_contacts
@@ -119,7 +101,9 @@ def download_missing_contacts(query: str, billing_project_id: str, bucket_name: 
     Returns:
         DataFrame with contact IDs that need phone data
     """
-    from pipelines.rj_crm__wetalkie_atualiza_contato.utils.tasks import download_data_from_bigquery
+    from pipelines.rj_crm__wetalkie_atualiza_contato.utils.tasks import (
+        download_data_from_bigquery,
+    )
 
     log("Downloading missing contacts from BigQuery")
     dfr = download_data_from_bigquery(query, billing_project_id, bucket_name)
