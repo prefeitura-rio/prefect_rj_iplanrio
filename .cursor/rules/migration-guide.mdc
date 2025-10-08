@@ -1,0 +1,51 @@
+---
+description: "Guide for migrating Prefect 1.4 flows to Prefect 3.0"
+---
+
+# Migração Prefect 1.4 para 3.0
+
+## Processo de Migração
+
+Quando solicitado para migrar um flow do Prefect 1.4 para 3.0, siga estas etapas:
+
+### 1. Migrar o Schedule
+
+- Analise o `schedule` do Prefect 1.4 (arquivo original fornecido)
+- Converta para formato compatível com Prefect 3.0
+- Use SEMPRE o template [prefect.yaml](mdc:templates/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/prefect.yaml) como modelo de estilo e formatação
+- Gere novo arquivo YAML no local especificado seguindo a estrutura do template
+
+### 2. Adaptar o Flow
+
+- Use SEMPRE o template [flow.py](mdc:templates/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py) como modelo de boas práticas
+- Modifique o flow de destino mantendo a funcionalidade equivalente
+- Adapte nomes de variáveis, funções e fluxo conforme o nome da pasta
+- Garanta compatibilidade total com Prefect 3.0
+- Mantenha a estrutura e padrões do template
+
+### 3. Output Esperado
+
+- Conteúdo final do YAML convertido baseado no template
+- Novo flow modificado seguindo o padrão do template
+- Comentários resumindo alterações em relação aos originais
+
+## Arquivos de Referência Obrigatórios
+
+**SEMPRE use estes templates como referência:**
+- [flow.py](mdc:templates/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py) - Template de flow Prefect 3.0
+- [prefect.yaml](mdc:templates/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/prefect.yaml) - Template de configuração
+
+## Arquivos Necessários para Migração
+
+- Schedule original (Prefect 1.4): `[CAMINHO_DO_SCHEDULE_ANTIGO]`
+- YAML a ser criado (Prefect 3.0): `[CAMINHO_YAML_NOVO]`
+- Flow a ser ajustado: `[CAMINHO_FLOW_A_MODIFICAR]`
+
+## Principais Mudanças Prefect 3.0
+
+- Nova sintaxe de flows e tasks
+- Mudanças na configuração de deployments
+- Atualizações na estrutura de schedules
+- Novos padrões de logging e monitoramento
+- Alterações na API e métodos de execução
+
