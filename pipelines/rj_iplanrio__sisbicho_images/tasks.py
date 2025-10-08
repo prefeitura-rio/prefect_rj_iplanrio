@@ -177,8 +177,31 @@ def fetch_sisbicho_media_task(
         query = f"{query}\nLIMIT {int(limit)}"
 
     log(f"Executando query no BigQuery para {full_table}")
-    dataframe = client.query(query).result().to_dataframe()
+
+    # Configure job to write to a temporary destination table for large results
+    import uuid
+    temp_table_id = f"_temp_sisbicho_media_{uuid.uuid4().hex[:8]}"
+    temp_table_ref = f"{billing_project_id}.{dataset_id}.{temp_table_id}"
+
+    job_config = bigquery.QueryJobConfig(
+        destination=temp_table_ref,
+        write_disposition="WRITE_TRUNCATE",
+        use_query_cache=True,
+        use_legacy_sql=False,
+    )
+
+    log(f"Escrevendo resultados na tabela temporária {temp_table_ref}")
+    query_job = client.query(query, job_config=job_config)
+    query_job.result()  # Wait for the query to complete
+
+    # Read from the temporary table in manageable chunks
+    log("Lendo dados da tabela temporária...")
+    dataframe = client.list_rows(temp_table_ref).to_dataframe()
     log(f"Total de registros carregados: {len(dataframe)}")
+
+    # Clean up temporary table
+    client.delete_table(temp_table_ref, not_found_ok=True)
+    log(f"Tabela temporária {temp_table_ref} removida")
 
     return dataframe
 
