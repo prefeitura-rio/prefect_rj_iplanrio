@@ -180,6 +180,7 @@ def fetch_sisbicho_media_task(
 
     # Configure job to write to a temporary destination table for large results
     import uuid
+
     temp_table_id = f"_temp_sisbicho_media_{uuid.uuid4().hex[:8]}"
     temp_table_ref = f"{billing_project_id}.{dataset_id}.{temp_table_id}"
 
