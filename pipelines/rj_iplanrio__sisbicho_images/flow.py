@@ -14,7 +14,7 @@ from pipelines.rj_iplanrio__sisbicho_images.tasks import (
     fetch_sisbicho_media_task,
     upload_pet_images_task,
 )
-from pipelines.rj_smas__api_datametrica_agendamentos.utils.tasks import create_date_partitions
+from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import create_date_partitions
 
 
 @flow(log_prints=True)
@@ -45,11 +45,15 @@ def rj_iplanrio__sisbicho_images(
     source_dataset_id = source_dataset_id or constants.SOURCE_DATASET.value
     source_table_id = source_table_id or constants.SOURCE_TABLE.value
     materialize_after_dump = (
-        materialize_after_dump if materialize_after_dump is not None else constants.MATERIALIZE_AFTER_DUMP.value
+        materialize_after_dump
+        if materialize_after_dump is not None
+        else constants.MATERIALIZE_AFTER_DUMP.value
     )
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
-    credentials = inject_bd_credentials_task(environment="prod", wait_for=[rename_flow_run])
+    credentials = inject_bd_credentials_task(
+        environment="prod", wait_for=[rename_flow_run]
+    )
 
     dataframe = fetch_sisbicho_media_task(
         billing_project_id=billing_project_id,
@@ -61,7 +65,9 @@ def rj_iplanrio__sisbicho_images(
     )
 
     if dataframe.empty:
-        log("Nenhum registro com QRCode ou foto encontrado. Fluxo finalizado sem alterações.")
+        log(
+            "Nenhum registro com QRCode ou foto encontrado. Fluxo finalizado sem alterações."
+        )
         return []
 
     dataframe = extract_qrcode_payload_task(dataframe)
@@ -94,7 +100,9 @@ def rj_iplanrio__sisbicho_images(
     )
 
     if materialize_after_dump:
-        log("Nenhuma materialização configurada para este fluxo. Ignorando flag materialize_after_dump.")
+        log(
+            "Nenhuma materialização configurada para este fluxo. Ignorando flag materialize_after_dump."
+        )
 
     log("Fluxo concluído com sucesso.")
     return []
