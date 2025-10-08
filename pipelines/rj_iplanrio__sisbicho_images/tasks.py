@@ -169,8 +169,8 @@ def fetch_sisbicho_media_task(
             qrcode_dados,
             foto_dados
         FROM `{full_table}`
-        WHERE (qrcode_dados IS NOT NULL AND qrcode_dados != '')
-           OR (foto_dados IS NOT NULL AND foto_dados != '')
+        WHERE qrcode_dados IS NOT NULL
+           OR foto_dados IS NOT NULL
     """.strip()
 
     if limit:
