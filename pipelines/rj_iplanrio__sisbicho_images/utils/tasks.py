@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-from iplanrio.pipelines_utils.logging import log
+import base64
+import os
+import uuid
 from datetime import datetime
 from typing import Literal
-from prefect import task
-import pandas as pd
-import base64
-import uuid
-import os
 
+import pandas as pd
+from iplanrio.pipelines_utils.logging import log
+from prefect import task
 
 # Mapeamento de magic numbers
 MAGIC_NUMBERS = {
@@ -42,9 +42,7 @@ def detect_and_decode(data_b64: str) -> bytes:
         log("Decodificação dupla necessária.")
         return step2
 
-    raise ValueError(
-        "Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações."
-    )
+    raise ValueError("Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações.")
 
 
 @task
@@ -62,9 +60,7 @@ def create_date_partitions(
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
     else:
-        dataframe[partition_column] = pd.to_datetime(
-            dataframe[partition_column], errors="coerce"
-        )
+        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
         dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
         if dataframe["data_particao"].isnull().any():
             raise ValueError("Some dates in the partition column could not be parsed.")
@@ -73,9 +69,7 @@ def create_date_partitions(
     dataframes = [
         (
             date,
-            dataframe[dataframe["data_particao"] == date].drop(
-                columns=["data_particao"]
-            ),
+            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
         )
         for date in dates
     ]
