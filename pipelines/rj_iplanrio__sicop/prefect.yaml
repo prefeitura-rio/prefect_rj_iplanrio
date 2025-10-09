@@ -54,8 +54,8 @@ deployments:
         parameters:
           table_id: processo
           dump_mode: incremental
-          break_query_start: 'DATA_ALTERACAO'
-          break_query_end: 'DATA_ALTERACAO'
+          break_query_start: DATA_ALTERACAO
+          break_query_end: DATA_ALTERACAO
           execute_query:
             SELECT NUM_PROCESSO AS ID_PROCESSO,
               TIPO_DOCUMENTO AS DOCUMENTO, 
