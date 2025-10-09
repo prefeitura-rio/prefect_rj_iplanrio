@@ -58,10 +58,10 @@ deployments:
           break_query_end: DATA_ALTERACAO
           execute_query:
             SELECT NUM_PROCESSO AS ID_PROCESSO,
-              TIPO_DOCUMENTO AS DOCUMENTO, 
+              TIPO_DOCUMENTO AS DOCUMENTO,
               DOCUMENTO AS NOME_DOCUMENTO,
               ORGAO_DOCUMENTO AS ORGAO_DOCUMENTO,
-              TIPO_DOCTO AS TIPO_DOCUMENTO, 
+              TIPO_DOCTO AS TIPO_DOCUMENTO,
               TIPO AS NOME_TIPO_DOCUMENTO,
               CODIGO_ASSUNTO AS CODIGO_ASSUNTO,
               DESCRICAO_ASSUNTO AS DESCRICAO_ASSUNTO,
@@ -99,7 +99,7 @@ deployments:
               DOC_DISTRIBUIDO AS DOCUMENTO_DISTRIBUIDO,
               NUM_VOLUME AS NUMERO_VOLUME
             FROM SICOP.VW_PROCESSO_DLK
-          
+
       - interval: 86400
         anchor_date: '2025-07-15T05:01:00'
         timezone: America/Sao_Paulo
@@ -123,7 +123,7 @@ deployments:
               TIPO_DOCUMENTO_PARTE_ENVOLVIDA AS TIPO_DOCUMENTO_PARTE_ENVOLVIDA,
               DOCUMENTO_PARTE_ENVOLVIDA AS DOCUMENTO_PARTE_ENVOLVIDA,
               MAT_RESPONSAVEL AS MATRICULA_RESPONSAVEL
-            FROM SICOP.VW_PARTE_ENVOLVIDA_DLK	
+            FROM SICOP.VW_PARTE_ENVOLVIDA_DLK
 
       - interval: 86400
         anchor_date: '2025-07-15T05:01:00'
