@@ -161,7 +161,7 @@ def fetch_sisbicho_media_task(
     credential_bucket: str,
     dataset_id: str,
     table_id: str,
-    limit: int | None = None,
+    limit: int | None = 20,
 ) -> pd.DataFrame:
     """Baixa do BigQuery os dados relevantes para gerar imagens do SISBICHO."""
 
@@ -180,7 +180,6 @@ def fetch_sisbicho_media_task(
         FROM `{full_table}`
         WHERE qrcode_dados IS NOT NULL
            OR foto_dados IS NOT NULL
-        LIMIT 100
     """.strip()
 
     if limit:
