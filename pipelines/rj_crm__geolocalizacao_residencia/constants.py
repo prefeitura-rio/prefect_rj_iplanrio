@@ -53,7 +53,7 @@ WITH enderecos_rmi AS (
     LOWER(REGEXP_REPLACE(endereco.principal.logradouro, r'[^a-zA-Z0-9 ]', '')) AS logradouro_tratado,
     LOWER(REGEXP_REPLACE(endereco.principal.numero, r'[^a-zA-Z0-9 ]', '')) AS numero_porta,
     IFNULL(LOWER(REGEXP_REPLACE(endereco.principal.bairro, r'[^a-zA-Z0-9 ]', '')), "") AS bairro
-  FROM `rj-crm-registry.crm_dados_mestres.pessoa_fisica`
+  FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
   WHERE endereco.indicador IS TRUE
     AND (endereco.principal.municipio = "Rio de Janeiro" OR endereco.principal.municipio IS NULL)
     AND endereco.principal.logradouro IS NOT NULL
