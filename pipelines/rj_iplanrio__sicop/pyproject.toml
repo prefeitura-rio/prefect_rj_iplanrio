@@ -1,0 +1,4 @@
+[project]
+name = "rj_iplanrio__sicop"
+version = "0.1.0"
+description = "Pipeline sicop da secretaria iplanrio"
