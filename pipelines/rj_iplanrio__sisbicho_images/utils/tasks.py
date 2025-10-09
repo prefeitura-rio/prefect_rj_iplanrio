@@ -67,6 +67,7 @@ def create_date_partitions(
     # Limpar pasta apenas no primeiro batch (quando append_mode=False)
     if not append_mode and os.path.exists(root_folder):
         import shutil
+
         log(f"Limpando pasta {root_folder} para primeira gravação")
         shutil.rmtree(root_folder)
 
