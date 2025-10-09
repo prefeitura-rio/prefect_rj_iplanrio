@@ -250,10 +250,15 @@ def fetch_batch(
         query = f"""
             SELECT
                 src.{identifier_field} AS animal_identifier,
-                src.cpf_proprietario,
+                pet_master.cpf AS cpf_proprietario,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
+            LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master
+                ON EXISTS(
+                    SELECT 1 FROM UNNEST(pet_master.pet) AS p
+                    WHERE p.id_animal = src.{identifier_field}
+                )
             LEFT JOIN `{target_table}` AS tgt
                 ON src.{identifier_field} = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
@@ -266,13 +271,18 @@ def fetch_batch(
         # Query completa (primeira carga)
         query = f"""
             SELECT
-                {identifier_field} AS animal_identifier,
-                cpf_proprietario,
-                qrcode_dados,
-                foto_dados
-            FROM `{source_table}`
-            WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
-            ORDER BY {identifier_field}
+                src.{identifier_field} AS animal_identifier,
+                pet_master.cpf AS cpf_proprietario,
+                src.qrcode_dados,
+                src.foto_dados
+            FROM `{source_table}` AS src
+            LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master
+                ON EXISTS(
+                    SELECT 1 FROM UNNEST(pet_master.pet) AS p
+                    WHERE p.id_animal = src.{identifier_field}
+                )
+            WHERE src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL
+            ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
         """.strip()
