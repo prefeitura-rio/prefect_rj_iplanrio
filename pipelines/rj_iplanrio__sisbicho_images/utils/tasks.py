@@ -25,7 +25,7 @@ def detect_and_decode(data_b64: str) -> bytes:
     # Adicionar padding se necessário (Base64 deve ter comprimento múltiplo de 4)
     missing_padding = len(data_b64) % 4
     if missing_padding:
-        data_b64 += '=' * (4 - missing_padding)
+        data_b64 += "=" * (4 - missing_padding)
 
     # Primeira tentativa
     try:
@@ -48,9 +48,7 @@ def detect_and_decode(data_b64: str) -> bytes:
         log("Decodificação dupla necessária.")
         return step2
 
-    raise ValueError(
-        "Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações."
-    )
+    raise ValueError("Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações.")
 
 
 @task
@@ -83,9 +81,7 @@ def create_date_partitions(
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
     else:
-        dataframe[partition_column] = pd.to_datetime(
-            dataframe[partition_column], errors="coerce"
-        )
+        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
         dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
 
         # Validação aprimorada de datas
@@ -104,9 +100,7 @@ def create_date_partitions(
     dataframes = [
         (
             date,
-            dataframe[dataframe["data_particao"] == date].drop(
-                columns=["data_particao"]
-            ),
+            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
         )
         for date in dates
     ]
