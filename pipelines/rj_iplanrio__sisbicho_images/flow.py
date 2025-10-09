@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Fluxo responsável por preparar imagens e QRCodes do SISBICHO."""
 
+import pandas as pd
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.logging import log
@@ -9,10 +10,8 @@ from prefect import flow
 
 from pipelines.rj_iplanrio__sisbicho_images.constants import SisbichoImagesConstants
 from pipelines.rj_iplanrio__sisbicho_images.tasks import (
-    build_output_dataframe_task,
-    extract_qrcode_payload_task,
     fetch_sisbicho_media_task,
-    upload_pet_images_task,
+    process_single_batch,
 )
 from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import create_date_partitions
 
@@ -29,7 +28,8 @@ def rj_iplanrio__sisbicho_images(
     storage_prefix: str | None = None,
     billing_project_id: str | None = None,
     credential_bucket: str | None = None,
-    limit: int | None = None,
+    batch_size: int = 10,
+    max_records: int | None = None,
 ):
     """Extrai o payload do QRCode e publica as fotos dos pets do SISBICHO."""
 
@@ -51,32 +51,49 @@ def rj_iplanrio__sisbicho_images(
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     credentials = inject_bd_credentials_task(environment="prod", wait_for=[rename_flow_run])
 
-    dataframe = fetch_sisbicho_media_task(
+    # Preparar processamento em lotes
+    client, full_table, identifier_field, total_count = fetch_sisbicho_media_task(
         billing_project_id=billing_project_id,
         credential_bucket=credential_bucket,
         dataset_id=source_dataset_id,
         table_id=source_table_id,
-        limit=limit,
+        batch_size=batch_size,
+        max_records=max_records,
         wait_for=[credentials],
     )
 
-    if dataframe.empty:
+    if total_count == 0:
         log("Nenhum registro com QRCode ou foto encontrado. Fluxo finalizado sem alterações.")
         return []
 
-    dataframe = extract_qrcode_payload_task(dataframe)
-    dataframe = upload_pet_images_task(
-        dataframe=dataframe,
-        storage_bucket=storage_bucket,
-        storage_prefix=storage_prefix,
-        billing_project_id=billing_project_id,
-    )
+    # Processar dados em lotes
+    log(f"Processando {total_count} registros em lotes de {batch_size}")
+    all_output_dataframes = []
 
-    output_dataframe = build_output_dataframe_task(dataframe)
+    for offset in range(0, total_count, batch_size):
+        log(f"Processando lote {offset // batch_size + 1} de {(total_count + batch_size - 1) // batch_size}")
 
-    if output_dataframe.empty:
+        batch_output = process_single_batch(
+            client=client,
+            full_table=full_table,
+            identifier_field=identifier_field,
+            offset=offset,
+            batch_size=batch_size,
+            storage_bucket=storage_bucket,
+            storage_prefix=storage_prefix,
+            billing_project_id=billing_project_id,
+        )
+
+        if not batch_output.empty:
+            all_output_dataframes.append(batch_output)
+
+    if not all_output_dataframes:
         log("Após processamento não há dados para gravar. Fluxo encerrado.")
         return []
+
+    # Consolidar todos os lotes processados
+    output_dataframe = pd.concat(all_output_dataframes, ignore_index=True)
+    log(f"Total de registros processados: {len(output_dataframe)}")
 
     partitions_path = create_date_partitions(
         dataframe=output_dataframe,

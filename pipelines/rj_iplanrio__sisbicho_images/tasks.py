@@ -155,16 +155,39 @@ def _extension_to_content_type(extension: str) -> str:
     return mapping.get(extension.lower(), "application/octet-stream")
 
 
+def _get_total_count(
+    client: bigquery.Client,
+    full_table: str,
+) -> int:
+    """Retorna o número total de registros com mídia disponível."""
+    count_query = f"""
+        SELECT COUNT(*) as total
+        FROM `{full_table}`
+        WHERE qrcode_dados IS NOT NULL
+           OR foto_dados IS NOT NULL
+    """
+    result = client.query(count_query).result()
+    return next(result).total
+
+
 @task
 def fetch_sisbicho_media_task(
     billing_project_id: str,
     credential_bucket: str,
     dataset_id: str,
     table_id: str,
-    limit: int | None = 20,
-) -> pd.DataFrame:
-    """Baixa do BigQuery os dados relevantes para gerar imagens do SISBICHO."""
+    batch_size: int = 10,
+    max_records: int | None = None,
+) -> tuple[bigquery.Client, str, str, int]:
+    """
+    Prepara query para processar dados do SISBICHO em lotes.
 
+    Retorna informações necessárias para processar em batches:
+    - Cliente BigQuery configurado
+    - Nome da tabela completa
+    - Nome do campo identificador
+    - Total de registros a processar
+    """
     credentials = Base(bucket_name=credential_bucket)._load_credentials(mode="prod")
     client = bigquery.Client(credentials=credentials, project=billing_project_id)
 
@@ -172,6 +195,25 @@ def fetch_sisbicho_media_task(
     table = client.get_table(full_table)
     identifier_field = _infer_identifier_field(table.schema)
 
+    total_count = _get_total_count(client, full_table)
+
+    if max_records:
+        total_count = min(total_count, max_records)
+
+    log(f"Total de registros a processar: {total_count}")
+    log(f"Tamanho do lote: {batch_size}")
+
+    return client, full_table, identifier_field, total_count
+
+
+def fetch_batch(
+    client: bigquery.Client,
+    full_table: str,
+    identifier_field: str,
+    offset: int,
+    batch_size: int,
+) -> pd.DataFrame:
+    """Busca um lote específico de dados do BigQuery."""
     query = f"""
         SELECT
             {identifier_field} AS animal_identifier,
@@ -180,39 +222,22 @@ def fetch_sisbicho_media_task(
         FROM `{full_table}`
         WHERE qrcode_dados IS NOT NULL
            OR foto_dados IS NOT NULL
+        ORDER BY {identifier_field}
+        LIMIT {batch_size}
+        OFFSET {offset}
     """.strip()
 
-    if limit:
-        query = f"{query}\nLIMIT {int(limit)}"
-
-    log(f"Executando query no BigQuery para {full_table}")
-
-    # Configure job to write to a temporary destination table for large results
-    import uuid
-
-    temp_table_id = f"_temp_sisbicho_media_{uuid.uuid4().hex[:8]}"
-    temp_table_ref = f"{billing_project_id}.{dataset_id}.{temp_table_id}"
+    log(f"Buscando lote: offset={offset}, limit={batch_size}")
 
     job_config = bigquery.QueryJobConfig(
-        destination=temp_table_ref,
-        write_disposition="WRITE_TRUNCATE",
         use_query_cache=True,
         use_legacy_sql=False,
     )
 
-    log(f"Escrevendo resultados na tabela temporária {temp_table_ref}")
     query_job = client.query(query, job_config=job_config)
-    query_job.result()  # Wait for the query to complete
+    dataframe = query_job.result().to_dataframe()
 
-    # Read from the temporary table in manageable chunks
-    log("Lendo dados da tabela temporária...")
-    dataframe = client.list_rows(temp_table_ref).to_dataframe()
-    log(f"Total de registros carregados: {len(dataframe)}")
-
-    # Clean up temporary table
-    client.delete_table(temp_table_ref, not_found_ok=True)
-    log(f"Tabela temporária {temp_table_ref} removida")
-
+    log(f"Lote carregado: {len(dataframe)} registros")
     return dataframe
 
 
@@ -306,6 +331,149 @@ def upload_pet_images_task(
 def build_output_dataframe_task(dataframe: pd.DataFrame) -> pd.DataFrame:
     """Prepara o DataFrame final a ser persistido no BigQuery."""
 
+    if dataframe.empty:
+        return dataframe.assign(
+            foto_url=pd.Series(dtype="string"),
+            foto_blob_path=pd.Series(dtype="string"),
+            qrcode_payload=pd.Series(dtype="string"),
+            ingestao_data=pd.Series(dtype="datetime64[ns]"),
+        )
+
+    df = dataframe.copy()
+    df["ingestao_data"] = datetime.now(timezone.utc)
+
+    selected_columns = [
+        "animal_identifier",
+        "qrcode_payload",
+        "foto_url",
+        "foto_blob_path",
+        "ingestao_data",
+    ]
+    return df[selected_columns]
+
+
+def process_single_batch(
+    client: bigquery.Client,
+    full_table: str,
+    identifier_field: str,
+    offset: int,
+    batch_size: int,
+    storage_bucket: str,
+    storage_prefix: str,
+    billing_project_id: str,
+) -> pd.DataFrame:
+    """
+    Processa um único lote: busca dados, extrai QR code, faz upload de imagens.
+
+    Retorna o DataFrame processado pronto para gravar no BigQuery.
+    """
+    # Fetch batch
+    batch_df = fetch_batch(client, full_table, identifier_field, offset, batch_size)
+
+    if batch_df.empty:
+        log(f"Lote vazio no offset {offset}. Pulando.")
+        return pd.DataFrame()
+
+    # Extract QR code payload
+    batch_df = _extract_qrcode_payload_batch(batch_df)
+
+    # Upload images
+    batch_df = _upload_batch_images(
+        batch_df,
+        storage_bucket,
+        storage_prefix,
+        billing_project_id,
+    )
+
+    # Build output
+    output_df = _build_batch_output(batch_df)
+
+    return output_df
+
+
+def _extract_qrcode_payload_batch(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Versão sem @task para processar QR codes em lote."""
+    if dataframe.empty:
+        return dataframe.assign(qrcode_payload=pd.Series(dtype="string"))
+
+    df = dataframe.copy()
+    df["qrcode_payload"] = df["qrcode_dados"].apply(_extract_qrcode_payload)
+    return df
+
+
+def _upload_batch_images(
+    dataframe: pd.DataFrame,
+    storage_bucket: str,
+    storage_prefix: str,
+    billing_project_id: str,
+) -> pd.DataFrame:
+    """Versão sem @task para upload de imagens em lote."""
+    if dataframe.empty:
+        return dataframe.assign(
+            foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
+        )
+
+    storage_client = storage.Client(project=billing_project_id)
+    bucket = storage_client.bucket(storage_bucket)
+
+    foto_urls: list[str | None] = []
+    blob_paths: list[str | None] = []
+
+    for _, row in dataframe.iterrows():
+        raw_value = row.get("foto_dados")
+        identifier = row.get("animal_identifier")
+        safe_identifier = _sanitize_identifier(identifier)
+
+        if raw_value is None or str(raw_value).strip() == "":
+            foto_urls.append(None)
+            blob_paths.append(None)
+            continue
+
+        cleaned = _strip_data_uri_prefix(str(raw_value))
+
+        try:
+            image_bytes = detect_and_decode(cleaned)
+        except ValueError as exc:
+            log(f"[WARN] Falha ao decodificar imagem do animal {identifier}: {exc}")
+            foto_urls.append(None)
+            blob_paths.append(None)
+            continue
+
+        extension = _infer_extension(image_bytes)
+        content_type = _extension_to_content_type(extension)
+        digest = hashlib.sha1(image_bytes).hexdigest()
+        blob_name = f"{storage_prefix}/animal_id={safe_identifier}/{digest}.{extension}"
+        blob = bucket.blob(blob_name)
+
+        try:
+            exists = blob.exists(storage_client)
+        except NotFound:
+            exists = False
+
+        if not exists:
+            log(
+                f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}"
+            )
+            blob.upload_from_string(image_bytes, content_type=content_type)
+            blob.metadata = {"sha1": digest}
+            blob.patch()
+        else:
+            log(
+                f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}"
+            )
+
+        public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
+        foto_urls.append(public_url)
+        blob_paths.append(blob_name)
+
+    df = dataframe.copy()
+    df["foto_url"] = foto_urls
+    df["foto_blob_path"] = blob_paths
+    return df
+
+
+def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
+    """Versão sem @task para construir output do lote."""
     if dataframe.empty:
         return dataframe.assign(
             foto_url=pd.Series(dtype="string"),
