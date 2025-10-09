@@ -45,15 +45,11 @@ def rj_iplanrio__sisbicho_images(
     source_dataset_id = source_dataset_id or constants.SOURCE_DATASET.value
     source_table_id = source_table_id or constants.SOURCE_TABLE.value
     materialize_after_dump = (
-        materialize_after_dump
-        if materialize_after_dump is not None
-        else constants.MATERIALIZE_AFTER_DUMP.value
+        materialize_after_dump if materialize_after_dump is not None else constants.MATERIALIZE_AFTER_DUMP.value
     )
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
-    credentials = inject_bd_credentials_task(
-        environment="prod", wait_for=[rename_flow_run]
-    )
+    credentials = inject_bd_credentials_task(environment="prod", wait_for=[rename_flow_run])
 
     # Preparar processamento em lotes
     client, source_table, target_table, identifier_field, total_count = fetch_sisbicho_media_task(
@@ -69,9 +65,7 @@ def rj_iplanrio__sisbicho_images(
     )
 
     if total_count == 0:
-        log(
-            "Nenhum registro com QRCode ou foto encontrado. Fluxo finalizado sem alterações."
-        )
+        log("Nenhum registro com QRCode ou foto encontrado. Fluxo finalizado sem alterações.")
         return []
 
     # Processar dados em lotes
@@ -79,9 +73,7 @@ def rj_iplanrio__sisbicho_images(
     all_output_dataframes = []
 
     for offset in range(0, total_count, batch_size):
-        log(
-            f"Processando lote {offset // batch_size + 1} de {(total_count + batch_size - 1) // batch_size}"
-        )
+        log(f"Processando lote {offset // batch_size + 1} de {(total_count + batch_size - 1) // batch_size}")
 
         batch_output = process_single_batch(
             client=client,
@@ -122,9 +114,7 @@ def rj_iplanrio__sisbicho_images(
     )
 
     if materialize_after_dump:
-        log(
-            "Nenhuma materialização configurada para este fluxo. Ignorando flag materialize_after_dump."
-        )
+        log("Nenhuma materialização configurada para este fluxo. Ignorando flag materialize_after_dump.")
 
     log("Fluxo concluído com sucesso.")
     return []
