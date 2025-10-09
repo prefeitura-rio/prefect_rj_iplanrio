@@ -355,10 +355,11 @@ def upload_pet_images_task(
         try:
             image_bytes = detect_and_decode(cleaned)
         except ValueError as exc:
-            log(f"[WARN] Falha ao decodificar imagem do animal {identifier}: {exc}")
-            foto_urls.append(None)
-            blob_paths.append(None)
-            continue
+            log(f"[ERRO CRÍTICO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            raise ValueError(
+                f"Decode de Base64 falhou para animal {identifier}. "
+                f"Batch abortado para evitar transferência de dados incompletos."
+            ) from exc
 
         extension = _infer_extension(image_bytes)
         content_type = _extension_to_content_type(extension)
@@ -495,10 +496,11 @@ def _upload_batch_images(
         try:
             image_bytes = detect_and_decode(cleaned)
         except ValueError as exc:
-            log(f"[WARN] Falha ao decodificar imagem do animal {identifier}: {exc}")
-            foto_urls.append(None)
-            blob_paths.append(None)
-            continue
+            log(f"[ERRO CRÍTICO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            raise ValueError(
+                f"Decode de Base64 falhou para animal {identifier}. "
+                f"Batch abortado para evitar transferência de dados incompletos."
+            ) from exc
 
         extension = _infer_extension(image_bytes)
         content_type = _extension_to_content_type(extension)

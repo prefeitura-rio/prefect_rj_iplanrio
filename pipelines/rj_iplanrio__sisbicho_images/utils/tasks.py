@@ -87,8 +87,18 @@ def create_date_partitions(
             dataframe[partition_column], errors="coerce"
         )
         dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
-        if dataframe["data_particao"].isnull().any():
-            raise ValueError("Some dates in the partition column could not be parsed.")
+
+        # Validação aprimorada de datas
+        null_dates = dataframe["data_particao"].isnull()
+        if null_dates.all():
+            raise ValueError(
+                f"Todas as datas na coluna '{partition_column}' são inválidas. "
+                "Nenhum arquivo pode ser criado."
+            )
+        elif null_dates.any():
+            null_count = null_dates.sum()
+            log(f"ATENÇÃO: {null_count} registros com datas inválidas serão ignorados.")
+            dataframe = dataframe[~null_dates]  # Remove linhas com datas NULL
 
     dates = dataframe["data_particao"].unique()
     dataframes = [
@@ -101,6 +111,7 @@ def create_date_partitions(
         for date in dates
     ]
 
+    files_created = 0  # Contador de arquivos criados
     for _date, _dataframe in dataframes:
         partition_folder = os.path.join(
             root_folder,
@@ -114,6 +125,15 @@ def create_date_partitions(
             _dataframe.to_csv(file_folder, index=False)
         elif file_format == "parquet":
             _dataframe.to_parquet(file_folder, index=False)
+
+        files_created += 1  # Incrementa contador
+
+    # Validação de arquivos criados
+    if files_created == 0:
+        raise ValueError(
+            f"Nenhum arquivo foi criado em {root_folder}. "
+            f"Verifique se o DataFrame tem datas válidas na coluna '{partition_column}'."
+        )
 
     log(f"Files saved on {root_folder}")
     return root_folder
