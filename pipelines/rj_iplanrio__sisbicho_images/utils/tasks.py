@@ -88,8 +88,7 @@ def create_date_partitions(
         null_dates = dataframe["data_particao"].isnull()
         if null_dates.all():
             raise ValueError(
-                f"Todas as datas na coluna '{partition_column}' são inválidas. "
-                "Nenhum arquivo pode ser criado."
+                f"Todas as datas na coluna '{partition_column}' são inválidas. Nenhum arquivo pode ser criado."
             )
         elif null_dates.any():
             null_count = null_dates.sum()
