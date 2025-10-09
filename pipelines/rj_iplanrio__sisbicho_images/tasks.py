@@ -397,9 +397,7 @@ def _upload_batch_images(
 ) -> pd.DataFrame:
     """Versão sem @task para upload de imagens em lote."""
     if dataframe.empty:
-        return dataframe.assign(
-            foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
-        )
+        return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
 
     storage_client = storage.Client(project=billing_project_id)
     bucket = storage_client.bucket(storage_bucket)
@@ -439,16 +437,12 @@ def _upload_batch_images(
             exists = False
 
         if not exists:
-            log(
-                f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}"
-            )
+            log(f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}")
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
         else:
-            log(
-                f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}"
-            )
+            log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
