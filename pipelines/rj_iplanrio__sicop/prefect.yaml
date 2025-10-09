@@ -1,0 +1,134 @@
+name: rj_iplanrio__sicop
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__sicop-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__sicop/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--sicop--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__sicop/flow.py:rj_iplanrio__sicop
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__sicop -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+  - name: rj-iplanrio--sicop--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__sicop/flow.py:rj_iplanrio__sicop
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__sicop -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    schedules:
+      - interval: 86400
+        anchor_date: '2025-07-15T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: processo
+        parameters:
+          table_id: processo
+          dump_mode: overwrite
+          execute_query:
+            SELECT NUM_PROCESSO AS ID_PROCESSO,
+              TIPO_DOCUMENTO AS DOCUMENTO,
+              DOCUMENTO AS NOME_DOCUMENTO,
+              ORGAO_DOCUMENTO AS ORGAO_DOCUMENTO,
+              TIPO_DOCTO AS TIPO_DOCUMENTO,
+              TIPO AS NOME_TIPO_DOCUMENTO,
+              CODIGO_ASSUNTO AS CODIGO_ASSUNTO,
+              DESCRICAO_ASSUNTO AS DESCRICAO_ASSUNTO,
+              REQUERENTE AS REQUERENTE,
+              AUTO_INFRACAO AS AUTO_INFRACAO,
+              CODIGO_LOGRADOURO AS LOGRADOURO,
+              NUMERO_PORTA_REQUERENTE AS NUMERO_PORTA,
+              COMPLEMENTO_REQUERENTE AS COMPLEMENTO,
+              CEP AS CEP,
+              BAIRRO AS BAIRRO,
+              DDI AS DDI,
+              DDD AS DDD,
+              TELEFONE AS TELEFONE,
+              RAMAL AS RAMAL,
+              EMAIL AS EMAIL,
+              NUM_PROCESSO_JUDICIAL AS NUMERO_PROCESSO_JUDICIAL,
+              INS_IMOB_INICIAL AS INSCRICAO_IMOBILIARIA_INICIAL,
+              INS_IMOB_FINAL AS INSCRICAO_IMOBILIARIA_FINAL,
+              DOC_ARQUIVADO AS DOCUMENTO_ARQUIVADO,
+              DOC_MICROFILMADO AS DOCUMENTO_MICROFILMADO,
+              DOC_ELIMINADO AS DOCUMENTO_ELIMINADO,
+              DOC_EXTRAVIADO AS DOCUMENTO_EXTRAVIADO,
+              STA_REGISTRO AS STATUS_REGISTRO,
+              STA_DIG_REGISTRO AS STATUS_DIGITACAO_REGISTRO,
+              DOC_REMISSIVO AS DOCUMENTO_REMISSIVO,
+              ORG_ORIGEM AS ORGAO_ORIGEM,
+              ORG_TRANSCRITOR AS ORGAO_TRANSCRITOR,
+              PASTA_DOCUMENTO AS PASTA_LOCALIZACAO_DOCUMENTO,
+              MUDANCA_REGISTRO AS MUDANCA_REGISTRO,
+              QTD_VOLUMES AS QUANTIDADE_VOLUME,
+              MAT_ALTERACAO AS MATRICULA_ALTERACAO,
+              ORG_ALTERACAO AS ORGAO_ALTERACAO,
+              ORG_DESTINO AS ORGAO_DESTINO,
+              STA_PRINCIPAL AS STATUS_PRINCIPAL,
+              DOC_DISTRIBUIDO AS DOCUMENTO_DISTRIBUIDO,
+              NUM_VOLUME AS NUMERO_VOLUME
+            FROM SICOP.VW_PROCESSO_DLK
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: parte_envolvida
+        parameters:
+          table_id: parte_envolvida
+          dump_mode: overwrite
+          execute_query:
+            SELECT
+              NUM_PROCESSO AS ID_PROCESSO,
+              NUM_SEQUENCIAL_PARTE AS ID_SEQUENCIAL_PARTE,
+              NOME_PARTE_ENVOLVIDA AS NOME_PARTE_ENVOLVIDA,
+              ENDERECO_PARTE_ENVOLVIDA AS ENDERECO_PARTE_ENVOLVIDA,
+              NUMERO_PORTA_PARTE_ENVOLVIDA AS NUMERO_PORTA_PARTE_ENVOLVIDA,
+              COMPLEMENTO_PARTE_ENVOLVIDA AS COMPLEMENTO_PARTE_ENVOLVIDA,
+              BAIRRO_PARTE_ENVOLVIDA AS BAIRRO_PARTE_ENVOLVIDA,
+              CEP_PARTE_ENVOLVIDA AS CEP_PARTE_ENVOLVIDA,
+              TELEFONE AS TELEFONE,
+              QUALIFICACAO_DA_PARTE AS QUALIFICACAO,
+              DATA_PROCURACAO AS DATA_PROCURACAO,
+              TIPO_DOCUMENTO_PARTE_ENVOLVIDA AS TIPO_DOCUMENTO_PARTE_ENVOLVIDA,
+              DOCUMENTO_PARTE_ENVOLVIDA AS DOCUMENTO_PARTE_ENVOLVIDA,
+              MAT_RESPONSAVEL AS MATRICULA_RESPONSAVEL
+            FROM SICOP.VW_PARTE_ENVOLVIDA_DLK
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: veiculo
+        parameters:
+          table_id: veiculo
+          dump_mode: overwrite
+          execute_query:
+            SELECT NUM_PROCESSO AS ID_PROCESSO, NUM_PLACA AS ID_PLACA FROM SICOP.VW_VEICULO_DLK
