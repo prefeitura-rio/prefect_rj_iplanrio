@@ -248,17 +248,21 @@ def fetch_batch(
     if table_exists:
         # Query incremental com LEFT JOIN
         query = f"""
+            WITH animal_cpf AS (
+                SELECT
+                    p.id_animal,
+                    pet_master.cpf
+                FROM `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master,
+                UNNEST(pet_master.pet) AS p
+            )
             SELECT
                 src.{identifier_field} AS animal_identifier,
-                pet_master.cpf AS cpf_proprietario,
+                animal_cpf.cpf AS cpf_proprietario,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
-            LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master
-                ON EXISTS(
-                    SELECT 1 FROM UNNEST(pet_master.pet) AS p
-                    WHERE p.id_animal = src.{identifier_field}
-                )
+            LEFT JOIN animal_cpf
+                ON animal_cpf.id_animal = src.{identifier_field}
             LEFT JOIN `{target_table}` AS tgt
                 ON src.{identifier_field} = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
@@ -270,17 +274,21 @@ def fetch_batch(
     else:
         # Query completa (primeira carga)
         query = f"""
+            WITH animal_cpf AS (
+                SELECT
+                    p.id_animal,
+                    pet_master.cpf
+                FROM `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master,
+                UNNEST(pet_master.pet) AS p
+            )
             SELECT
                 src.{identifier_field} AS animal_identifier,
-                pet_master.cpf AS cpf_proprietario,
+                animal_cpf.cpf AS cpf_proprietario,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
-            LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master
-                ON EXISTS(
-                    SELECT 1 FROM UNNEST(pet_master.pet) AS p
-                    WHERE p.id_animal = src.{identifier_field}
-                )
+            LEFT JOIN animal_cpf
+                ON animal_cpf.id_animal = src.{identifier_field}
             WHERE src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL
             ORDER BY src.{identifier_field}
             LIMIT {batch_size}
