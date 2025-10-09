@@ -16,7 +16,10 @@ from google.cloud.exceptions import NotFound
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
-from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import MAGIC_NUMBERS, detect_and_decode
+from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
+    MAGIC_NUMBERS,
+    detect_and_decode,
+)
 
 
 def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
@@ -55,7 +58,9 @@ def _looks_like_base64(value: str) -> bool:
     value = value.strip()
     if not value:
         return False
-    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r")
+    allowed = set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r"
+    )
     return set(value) <= allowed and len(value) % 4 == 0
 
 
@@ -118,7 +123,11 @@ def _extract_qrcode_payload(value: str) -> str | None:
         for key in ("payload", "qr_payload", "dados", "data"):
             if parsed.get(key):
                 value = parsed[key]
-                return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+                return (
+                    value
+                    if isinstance(value, str)
+                    else json.dumps(value, ensure_ascii=False)
+                )
         return json.dumps(parsed, ensure_ascii=False)
 
     if isinstance(parsed, list):
@@ -171,6 +180,7 @@ def fetch_sisbicho_media_task(
         FROM `{full_table}`
         WHERE qrcode_dados IS NOT NULL
            OR foto_dados IS NOT NULL
+        LIMIT 100
     """.strip()
 
     if limit:
@@ -230,7 +240,9 @@ def upload_pet_images_task(
     """Faz o upload das imagens dos pets para o GCS e retorna a URL final."""
 
     if dataframe.empty:
-        return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
+        return dataframe.assign(
+            foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
+        )
 
     storage_client = storage.Client(project=billing_project_id)
     bucket = storage_client.bucket(storage_bucket)
@@ -270,12 +282,16 @@ def upload_pet_images_task(
             exists = False
 
         if not exists:
-            log(f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}")
+            log(
+                f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}"
+            )
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
         else:
-            log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+            log(
+                f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}"
+            )
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
