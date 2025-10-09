@@ -56,11 +56,13 @@ def rj_iplanrio__sisbicho_images(
     )
 
     # Preparar processamento em lotes
-    client, full_table, identifier_field, total_count = fetch_sisbicho_media_task(
+    client, source_table, target_table, identifier_field, total_count = fetch_sisbicho_media_task(
         billing_project_id=billing_project_id,
         credential_bucket=credential_bucket,
-        dataset_id=source_dataset_id,
-        table_id=source_table_id,
+        source_dataset_id=source_dataset_id,
+        source_table_id=source_table_id,
+        target_dataset_id=dataset_id,
+        target_table_id=table_id,
         batch_size=batch_size,
         max_records=max_records,
         wait_for=[credentials],
@@ -83,7 +85,8 @@ def rj_iplanrio__sisbicho_images(
 
         batch_output = process_single_batch(
             client=client,
-            full_table=full_table,
+            source_table=source_table,
+            target_table=target_table,
             identifier_field=identifier_field,
             offset=offset,
             batch_size=batch_size,

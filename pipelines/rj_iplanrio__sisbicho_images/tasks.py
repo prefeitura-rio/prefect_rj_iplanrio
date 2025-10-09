@@ -151,14 +151,18 @@ def _extension_to_content_type(extension: str) -> str:
 
 def _get_total_count(
     client: bigquery.Client,
-    full_table: str,
+    source_table: str,
+    target_table: str,
+    identifier_field: str,
 ) -> int:
-    """Retorna o número total de registros com mídia disponível."""
+    """Retorna o número total de registros com mídia disponível que ainda não foram processados."""
     count_query = f"""
         SELECT COUNT(*) as total
-        FROM `{full_table}`
-        WHERE qrcode_dados IS NOT NULL
-           OR foto_dados IS NOT NULL
+        FROM `{source_table}` AS src
+        LEFT JOIN `{target_table}` AS tgt
+            ON src.{identifier_field} = tgt.id_animal
+        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+          AND tgt.id_animal IS NULL
     """
     result = client.query(count_query).result()
     return next(result).total
@@ -168,28 +172,33 @@ def _get_total_count(
 def fetch_sisbicho_media_task(
     billing_project_id: str,
     credential_bucket: str,
-    dataset_id: str,
-    table_id: str,
+    source_dataset_id: str,
+    source_table_id: str,
+    target_dataset_id: str,
+    target_table_id: str,
     batch_size: int = 10,
     max_records: int | None = None,
-) -> tuple[bigquery.Client, str, str, int]:
+) -> tuple[bigquery.Client, str, str, str, int]:
     """
     Prepara query para processar dados do SISBICHO em lotes.
 
     Retorna informações necessárias para processar em batches:
     - Cliente BigQuery configurado
-    - Nome da tabela completa
+    - Nome da tabela fonte (source)
+    - Nome da tabela destino (target)
     - Nome do campo identificador
     - Total de registros a processar
     """
     credentials = Base(bucket_name=credential_bucket)._load_credentials(mode="prod")
     client = bigquery.Client(credentials=credentials, project=billing_project_id)
 
-    full_table = f"{billing_project_id}.{dataset_id}.{table_id}"
-    table = client.get_table(full_table)
+    source_table = f"{billing_project_id}.{source_dataset_id}.{source_table_id}"
+    target_table = f"{billing_project_id}.{target_dataset_id}.{target_table_id}"
+
+    table = client.get_table(source_table)
     identifier_field = _infer_identifier_field(table.schema)
 
-    total_count = _get_total_count(client, full_table)
+    total_count = _get_total_count(client, source_table, target_table, identifier_field)
 
     if max_records:
         total_count = min(total_count, max_records)
@@ -197,26 +206,30 @@ def fetch_sisbicho_media_task(
     log(f"Total de registros a processar: {total_count}")
     log(f"Tamanho do lote: {batch_size}")
 
-    return client, full_table, identifier_field, total_count
+    return client, source_table, target_table, identifier_field, total_count
 
 
 def fetch_batch(
     client: bigquery.Client,
-    full_table: str,
+    source_table: str,
+    target_table: str,
     identifier_field: str,
     offset: int,
     batch_size: int,
 ) -> pd.DataFrame:
-    """Busca um lote específico de dados do BigQuery."""
+    """Busca um lote específico de dados do BigQuery, excluindo animais já processados."""
     query = f"""
         SELECT
-            {identifier_field} AS animal_identifier,
-            qrcode_dados,
-            foto_dados
-        FROM `{full_table}`
-        WHERE qrcode_dados IS NOT NULL
-           OR foto_dados IS NOT NULL
-        ORDER BY {identifier_field}
+            src.{identifier_field} AS animal_identifier,
+            src.cpf_proprietario,
+            src.qrcode_dados,
+            src.foto_dados
+        FROM `{source_table}` AS src
+        LEFT JOIN `{target_table}` AS tgt
+            ON src.{identifier_field} = tgt.id_animal
+        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+          AND tgt.id_animal IS NULL
+        ORDER BY src.{identifier_field}
         LIMIT {batch_size}
         OFFSET {offset}
     """.strip()
@@ -342,7 +355,8 @@ def build_output_dataframe_task(dataframe: pd.DataFrame) -> pd.DataFrame:
 
 def process_single_batch(
     client: bigquery.Client,
-    full_table: str,
+    source_table: str,
+    target_table: str,
     identifier_field: str,
     offset: int,
     batch_size: int,
@@ -356,7 +370,7 @@ def process_single_batch(
     Retorna o DataFrame processado pronto para gravar no BigQuery.
     """
     # Fetch batch
-    batch_df = fetch_batch(client, full_table, identifier_field, offset, batch_size)
+    batch_df = fetch_batch(client, source_table, target_table, identifier_field, offset, batch_size)
 
     if batch_df.empty:
         log(f"Lote vazio no offset {offset}. Pulando.")
@@ -458,8 +472,9 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
     """Versão sem @task para construir output do lote."""
     if dataframe.empty:
         return dataframe.assign(
+            id_animal=pd.Series(dtype="string"),
+            cpf_proprietario=pd.Series(dtype="string"),
             foto_url=pd.Series(dtype="string"),
-            foto_blob_path=pd.Series(dtype="string"),
             qrcode_payload=pd.Series(dtype="string"),
             ingestao_data=pd.Series(dtype="datetime64[ns]"),
         )
@@ -467,11 +482,14 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
     df = dataframe.copy()
     df["ingestao_data"] = datetime.now(timezone.utc)
 
+    # Renomear animal_identifier para id_animal
+    df = df.rename(columns={"animal_identifier": "id_animal"})
+
     selected_columns = [
-        "animal_identifier",
+        "id_animal",
+        "cpf_proprietario",
         "qrcode_payload",
         "foto_url",
-        "foto_blob_path",
         "ingestao_data",
     ]
     return df[selected_columns]

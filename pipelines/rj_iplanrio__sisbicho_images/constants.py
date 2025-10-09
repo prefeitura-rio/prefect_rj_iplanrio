@@ -15,7 +15,7 @@ class SisbichoImagesConstants(Enum):
     # Destino dos dados enxutos (payload do QRCode + URL da foto)
     TARGET_DATASET = "brutos_sisbicho"
     TARGET_TABLE = "animal_imagens"
-    DUMP_MODE = "overwrite"
+    DUMP_MODE = "append"
 
     # Configuração de arquivos temporários para upload ao GCS/BQ
     PARTITION_COLUMN = "ingestao_data"
