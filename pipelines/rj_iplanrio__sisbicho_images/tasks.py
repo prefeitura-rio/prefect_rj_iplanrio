@@ -156,14 +156,33 @@ def _get_total_count(
     identifier_field: str,
 ) -> int:
     """Retorna o número total de registros com mídia disponível que ainda não foram processados."""
-    count_query = f"""
-        SELECT COUNT(*) as total
-        FROM `{source_table}` AS src
-        LEFT JOIN `{target_table}` AS tgt
-            ON src.{identifier_field} = tgt.id_animal
-        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-          AND tgt.id_animal IS NULL
-    """
+
+    # Verifica se a tabela de destino existe
+    try:
+        client.get_table(target_table)
+        table_exists = True
+    except NotFound:
+        log(f"Tabela {target_table} não existe. Primeira execução: processando todos os registros.")
+        table_exists = False
+
+    if table_exists:
+        # Query incremental com LEFT JOIN
+        count_query = f"""
+            SELECT COUNT(*) as total
+            FROM `{source_table}` AS src
+            LEFT JOIN `{target_table}` AS tgt
+                ON src.{identifier_field} = tgt.id_animal
+            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+              AND tgt.id_animal IS NULL
+        """
+    else:
+        # Query completa (primeira carga)
+        count_query = f"""
+            SELECT COUNT(*) as total
+            FROM `{source_table}` AS src
+            WHERE src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL
+        """
+
     result = client.query(count_query).result()
     return next(result).total
 
@@ -218,21 +237,45 @@ def fetch_batch(
     batch_size: int,
 ) -> pd.DataFrame:
     """Busca um lote específico de dados do BigQuery, excluindo animais já processados."""
-    query = f"""
-        SELECT
-            src.{identifier_field} AS animal_identifier,
-            src.cpf_proprietario,
-            src.qrcode_dados,
-            src.foto_dados
-        FROM `{source_table}` AS src
-        LEFT JOIN `{target_table}` AS tgt
-            ON src.{identifier_field} = tgt.id_animal
-        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-          AND tgt.id_animal IS NULL
-        ORDER BY src.{identifier_field}
-        LIMIT {batch_size}
-        OFFSET {offset}
-    """.strip()
+
+    # Verifica se a tabela de destino existe
+    try:
+        client.get_table(target_table)
+        table_exists = True
+    except NotFound:
+        table_exists = False
+
+    if table_exists:
+        # Query incremental com LEFT JOIN
+        query = f"""
+            SELECT
+                src.{identifier_field} AS animal_identifier,
+                src.cpf_proprietario,
+                src.qrcode_dados,
+                src.foto_dados
+            FROM `{source_table}` AS src
+            LEFT JOIN `{target_table}` AS tgt
+                ON src.{identifier_field} = tgt.id_animal
+            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+              AND tgt.id_animal IS NULL
+            ORDER BY src.{identifier_field}
+            LIMIT {batch_size}
+            OFFSET {offset}
+        """.strip()
+    else:
+        # Query completa (primeira carga)
+        query = f"""
+            SELECT
+                {identifier_field} AS animal_identifier,
+                cpf_proprietario,
+                qrcode_dados,
+                foto_dados
+            FROM `{source_table}`
+            WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
+            ORDER BY {identifier_field}
+            LIMIT {batch_size}
+            OFFSET {offset}
+        """.strip()
 
     log(f"Buscando lote: offset={offset}, limit={batch_size}")
 

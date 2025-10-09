@@ -51,10 +51,24 @@ def create_date_partitions(
     partition_column: str = None,
     file_format: Literal["csv", "parquet"] = "csv",
     root_folder="./data/",
+    append_mode: bool = False,
 ):
     """
     Create date partitions for a DataFrame and save them to disk.
+
+    Args:
+        dataframe: DataFrame to partition
+        partition_column: Column to use for date partitioning
+        file_format: Format to save files (csv or parquet)
+        root_folder: Root folder for saving partitions
+        append_mode: If True, keeps existing files. If False, clears root_folder first.
     """
+
+    # Limpar pasta apenas no primeiro batch (quando append_mode=False)
+    if not append_mode and os.path.exists(root_folder):
+        import shutil
+        log(f"Limpando pasta {root_folder} para primeira gravação")
+        shutil.rmtree(root_folder)
 
     if partition_column is None:
         partition_column = "data_particao"

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """Fluxo responsável por preparar imagens e QRCodes do SISBICHO."""
 
-import pandas as pd
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.logging import log
@@ -74,9 +73,10 @@ def rj_iplanrio__sisbicho_images(
         )
         return []
 
-    # Processar dados em lotes
+    # Processar dados em lotes e escrever incrementalmente
     log(f"Processando {total_count} registros em lotes de {batch_size}")
-    all_output_dataframes = []
+    total_processed = 0
+    first_batch = True
 
     for offset in range(0, total_count, batch_size):
         log(
@@ -96,30 +96,35 @@ def rj_iplanrio__sisbicho_images(
         )
 
         if not batch_output.empty:
-            all_output_dataframes.append(batch_output)
+            # Escrever batch imediatamente
+            partitions_path = create_date_partitions(
+                dataframe=batch_output,
+                partition_column=constants.PARTITION_COLUMN.value,
+                file_format=constants.FILE_FORMAT.value,
+                root_folder=constants.ROOT_FOLDER.value,
+                append_mode=not first_batch,
+            )
 
-    if not all_output_dataframes:
+            current_dump_mode = "overwrite" if first_batch else "append"
+
+            create_table_and_upload_to_gcs_task(
+                data_path=partitions_path,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                dump_mode=current_dump_mode,
+                biglake_table=True,
+            )
+
+            total_processed += len(batch_output)
+            first_batch = False
+
+            log(f"Lote gravado no BigQuery. Total acumulado: {total_processed} registros")
+
+    if total_processed == 0:
         log("Após processamento não há dados para gravar. Fluxo encerrado.")
         return []
 
-    # Consolidar todos os lotes processados
-    output_dataframe = pd.concat(all_output_dataframes, ignore_index=True)
-    log(f"Total de registros processados: {len(output_dataframe)}")
-
-    partitions_path = create_date_partitions(
-        dataframe=output_dataframe,
-        partition_column=constants.PARTITION_COLUMN.value,
-        file_format=constants.FILE_FORMAT.value,
-        root_folder=constants.ROOT_FOLDER.value,
-    )
-
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=dump_mode,
-        biglake_table=True,
-    )
+    log(f"Processamento concluído. Total de registros: {total_processed}")
 
     if materialize_after_dump:
         log(
