@@ -35,7 +35,7 @@ deployments:
         command: uv run --package rj_iplanrio__sicop -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-    
+
   - name: rj-iplanrio--sicop--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__sicop/flow.py:rj_iplanrio__sicop
