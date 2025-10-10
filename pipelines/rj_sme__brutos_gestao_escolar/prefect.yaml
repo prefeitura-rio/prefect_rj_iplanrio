@@ -50,8 +50,6 @@ deployments:
         timezone: America/Sao_Paulo
         slug: turma
         parameters:
-          biglake_table: true
-          batch_size: 50000
           table_id: turma
           dump_mode: append
           partition_columns: Ano
@@ -59,7 +57,6 @@ deployments:
           break_query_frequency: year
           break_query_start: current_year
           break_query_end: current_year
-          add_timestamp_column: true
           execute_query: |
             SELECT
                 Ano, Curso, Nivel_Ensino,
@@ -74,8 +71,6 @@ deployments:
         timezone: America/Sao_Paulo
         slug: CLS_TurmaAulaAluno
         parameters:
-          biglake_table: true
-          batch_size: 50000
           table_id: CLS_TurmaAulaAluno
           dump_mode: append
           partition_columns: taa_dataAlteracao_converted
@@ -83,7 +78,6 @@ deployments:
           break_query_frequency: day
           break_query_start: current_day
           break_query_end: current_day
-          add_timestamp_column: true
           execute_query: |
             SELECT
                 tud_id,
@@ -105,16 +99,12 @@ deployments:
         timezone: America/Sao_Paulo
         slug: diasCoc
         parameters:
-          biglake_table: true
-          batch_size: 50000
           table_id: diasCoc
-          dump_mode: overwrite
           execute_query: |
             select distinct cal.cal_id,
                             tpc_id,
                             dbo.FN_CalcularDiasUteis(cap_dataInicio,cap_dataFim,'8BB1DECA-BB19-E011-87E8-E61F133BFC53',
-                            cal.cal_id) diasCoc,
-                            GETDATE() AS loaded_at
+                            cal.cal_id) diasCoc
             from ACA_CalendarioPeriodo cap WITH(NOLOCK)
             INNER JOIN ACA_CalendarioAnual          CAL WITH(NOLOCK) ON CAL.cal_id = cap.cal_id and cal_situacao <> 3
             inner join MTR_ProcessoFechamentoInicio pfi WITH(NOLOCK) ON pfi.pfi_anoInicio = cal.cal_ano and pfi_situacao <> 3 and pfi_AnoLetivoCorrente = 1
@@ -123,18 +113,13 @@ deployments:
         timezone: America/Sao_Paulo
         slug: numeroDeAulasCte
         parameters:
-          biglake_table: true
-          batch_size: 50000
           table_id: numeroDeAulasCte
-          dump_mode: overwrite
           execute_query: |
             SELECT
                      MTU.alu_id,
                      MTU.mtu_id,
                      CAP.tpc_id,
-                     GestaoEscolar.dbo.FN_CalcularDiasUteis(CAP.cap_dataInicio,GETDATE(),'8BB1DECA-BB19-E011-87E8-E61F133BFC53',CAP.cal_id) * ISNULL(CRP.crp_qtdeTemposDia,1) numeroAulas,
-                     GETDATE() AS loaded_at
-             FROM MTR_MatriculaTurma MTU WITH(NOLOCK)
+                     GestaoEscolar.dbo.FN_CalcularDiasUteis(CAP.cap_dataInicio,GETDATE(),'8BB1DECA-BB19-E011-87E8-E61F133BFC53',CAP.cal_id) * ISNULL(CRP.crp_qtdeTemposDia,1) numeroAulas             FROM MTR_MatriculaTurma MTU WITH(NOLOCK)
                  INNER JOIN TUR_Turma TUR WITH(NOLOCK)
                      ON MTU.tur_id = TUR.tur_id
                      AND TUR.tur_situacao IN (1,5)
@@ -157,8 +142,6 @@ deployments:
         timezone: America/Sao_Paulo
         slug: CLS_AlunoAvaliacaoTurma
         parameters:
-          biglake_table: true
-          batch_size: 50000
           table_id: CLS_AlunoAvaliacaoTurma
           dump_mode: append
           partition_columns: aat_dataAlteracao_converted
@@ -194,7 +177,68 @@ deployments:
                     aat_naoAvaliado,
                     aat_avaliacaoPosConselho,
                     aat_justificativaPosConselho,
-                    aat_frequenciaFinalAjustada,
-                    GETDATE() AS loaded_at
+                    aat_frequenciaFinalAjustada
             FROM GestaoEscolar.dbo.CLS_AlunoAvaliacaoTurma
 
+      - interval: 86400
+        anchor_date: "2022-01-01T02:34:00"
+        timezone: America/Sao_Paulo
+        slug: TUR_TurmaRelTurmaDisciplina
+        parameters:
+          table_id: TUR_TurmaRelTurmaDisciplina
+          execute_query: |
+            SELECT 
+              tur_id,
+              tud_id
+            FROM GestaoEscolar.dbo.TUR_TurmaRelTurmaDisciplina
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:34:00"
+        timezone: America/Sao_Paulo
+        slug: VW_BI_Aluno_Todos_Os_Anos
+        parameters:
+          table_id: VW_BI_Aluno_Todos_Os_Anos
+          execute_query: |
+            SELECT 
+              Ano,
+              Matricula,
+              Nome,
+              Sexo,
+              Endereco,
+              Bairro,
+              CEP,
+              Filiacao_1,
+              Filiacao_2,
+              Mora_com_Filiacao,
+              CPF,
+              NIS_Aluno,
+              NIS_Resp,
+              Raça_Cor,
+              Cod_def,
+              Deficiência,
+              Tipo_Transporte,
+              Bolsa_Familia,
+              CFC,
+              Territorios_Sociais,
+              Clube_Escolar,
+              Nucleo_Artes,
+              Mais_Educacao,
+              DataNascimento,
+              Idade_Atual,
+              Idade_3112,
+              Grupamento,
+              Turma,
+              UP_Aval,
+              telefone,
+              telefone_casa,
+              telefone_recado,
+              telefone_trab,
+              celular_1,
+              celular_2,
+              Situacao,
+              Cod_Ult_Mov,
+              Ult_Movimentação,
+              Tot_Aluno,
+              alu_id,
+              tur_id
+            FROM GestaoEscolar.dbo.VW_BI_Aluno_Todos_Os_Anos
