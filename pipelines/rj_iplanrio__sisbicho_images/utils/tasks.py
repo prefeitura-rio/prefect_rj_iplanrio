@@ -28,11 +28,9 @@ def detect_and_decode(data_b64: str) -> bytes:
         data_b64 += "=" * (4 - missing_padding)
 
     log(
-        "[DEBUG] detect_and_decode: dados recebidos",
-        extra={
-            "comprimento": len(data_b64),
-            "prefixo": data_b64[:32],
-        },
+        "[DEBUG] detect_and_decode: dados recebidos comprimento=%s prefixo=%s",
+        len(data_b64),
+        data_b64[:32],
     )
 
     # Primeira tentativa
@@ -40,11 +38,9 @@ def detect_and_decode(data_b64: str) -> bytes:
         step1 = base64.b64decode(data_b64, validate=False)
     except Exception:
         log(
-            "[DEBUG] detect_and_decode: falha na primeira decodificação",
-            extra={
-                "comprimento": len(data_b64),
-                "prefixo": data_b64[:32],
-            },
+            "[DEBUG] detect_and_decode: falha na primeira decodificação comprimento=%s prefixo=%s",
+            len(data_b64),
+            data_b64[:32],
         )
         raise ValueError("Base64 inválido na primeira tentativa")
 
@@ -58,8 +54,8 @@ def detect_and_decode(data_b64: str) -> bytes:
         step2 = base64.b64decode(step1, validate=False)
     except Exception:
         log(
-            "[DEBUG] detect_and_decode: falha na segunda decodificação",
-            extra={"primeiros_bytes": step1[:16].hex()},
+            "[DEBUG] detect_and_decode: falha na segunda decodificação primeiros_bytes=%s",
+            step1[:16].hex(),
         )
         raise ValueError("Base64 inválido na segunda tentativa")
 
@@ -68,11 +64,9 @@ def detect_and_decode(data_b64: str) -> bytes:
         return step2
 
     log(
-        "[DEBUG] detect_and_decode: nenhum magic number encontrado",
-        extra={
-            "primeiros_bytes_step1": step1[:16].hex(),
-            "primeiros_bytes_step2": step2[:16].hex(),
-        },
+        "[DEBUG] detect_and_decode: nenhum magic number encontrado step1=%s step2=%s",
+        step1[:16].hex(),
+        step2[:16].hex(),
     )
 
     raise ValueError("Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações.")
