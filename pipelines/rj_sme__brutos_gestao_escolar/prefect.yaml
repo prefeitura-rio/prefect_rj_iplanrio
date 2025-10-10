@@ -187,7 +187,7 @@ deployments:
         parameters:
           table_id: TUR_TurmaRelTurmaDisciplina
           execute_query: |
-            SELECT 
+            SELECT
               tur_id,
               tud_id
             FROM GestaoEscolar.dbo.TUR_TurmaRelTurmaDisciplina
@@ -199,7 +199,7 @@ deployments:
         parameters:
           table_id: VW_BI_Aluno_Todos_Os_Anos
           execute_query: |
-            SELECT 
+            SELECT
               Ano,
               Matricula,
               Nome,
