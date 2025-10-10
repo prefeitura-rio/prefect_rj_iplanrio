@@ -352,6 +352,14 @@ def upload_pet_images_task(
 
         cleaned = _strip_data_uri_prefix(str(raw_value))
 
+        raw_preview = str(raw_value).strip().replace("\n", " ")
+        cleaned_preview = cleaned.strip().replace("\n", " ")
+        log(
+            f"[DEBUG] Preparando decode (task) animal={identifier} tipo={type(raw_value).__name__} "
+            f"len_original={len(str(raw_value)) if raw_value is not None else 'None'} "
+            f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
+        )
+
         try:
             image_bytes = detect_and_decode(cleaned)
         except ValueError as exc:
@@ -492,6 +500,14 @@ def _upload_batch_images(
             continue
 
         cleaned = _strip_data_uri_prefix(str(raw_value))
+
+        raw_preview = str(raw_value).strip().replace("\n", " ")
+        cleaned_preview = cleaned.strip().replace("\n", " ")
+        log(
+            f"[DEBUG] Preparando decode (batch) animal={identifier} tipo={type(raw_value).__name__} "
+            f"len_original={len(str(raw_value)) if raw_value is not None else 'None'} "
+            f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
+        )
 
         try:
             image_bytes = detect_and_decode(cleaned)
