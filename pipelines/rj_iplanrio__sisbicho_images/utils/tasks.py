@@ -24,7 +24,7 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
         try:
             data_b64 = data_b64.decode("ascii")
         except UnicodeDecodeError as exc:
-            log("[DEBUG] detect_and_decode: bytes não ASCII recebidos" )
+            log("[DEBUG] detect_and_decode: bytes não ASCII recebidos")
             raise ValueError("Bytes recebidos não representam Base64 ASCII válido.") from exc
 
     data_b64 = data_b64.strip()
