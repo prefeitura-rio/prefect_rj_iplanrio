@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-"""Constantes do fluxo de processamento de imagens do SISBICHO."""
 
 from enum import Enum
 
