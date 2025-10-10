@@ -25,7 +25,9 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
             data_b64 = data_b64.decode("ascii")
         except UnicodeDecodeError as exc:
             log("[DEBUG] detect_and_decode: bytes não ASCII recebidos")
-            raise ValueError("Bytes recebidos não representam Base64 ASCII válido.") from exc
+            raise ValueError(
+                "Bytes recebidos não representam Base64 ASCII válido."
+            ) from exc
 
     data_b64 = data_b64.strip()
 
@@ -38,7 +40,6 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
         f"[DEBUG] detect_and_decode: dados recebidos comprimento={len(data_b64)} prefixo={data_b64[:32]}"
     )
 
-    # Primeira tentativa
     try:
         step1 = base64.b64decode(data_b64, validate=False)
     except Exception:
@@ -69,7 +70,9 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
         f"[DEBUG] detect_and_decode: nenhum magic number encontrado step1={step1[:16].hex()} step2={step2[:16].hex()}"
     )
 
-    raise ValueError("Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações.")
+    raise ValueError(
+        "Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações."
+    )
 
 
 @task
@@ -102,7 +105,9 @@ def create_date_partitions(
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
     else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
+        dataframe[partition_column] = pd.to_datetime(
+            dataframe[partition_column], errors="coerce"
+        )
         dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
 
         # Validação aprimorada de datas
@@ -120,7 +125,9 @@ def create_date_partitions(
     dataframes = [
         (
             date,
-            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
+            dataframe[dataframe["data_particao"] == date].drop(
+                columns=["data_particao"]
+            ),
         )
         for date in dates
     ]
