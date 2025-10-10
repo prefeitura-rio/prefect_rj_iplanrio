@@ -27,8 +27,8 @@ def rj_iplanrio__sisbicho_images(
     storage_prefix: str | None = None,
     billing_project_id: str | None = None,
     credential_bucket: str | None = None,
-    batch_size: int = 500,
-    max_records: int | None = None,
+    batch_size: int = 10,
+    max_records: int | None = 10,
 ):
     """Extrai o payload do QRCode e publica as fotos dos pets do SISBICHO."""
 
