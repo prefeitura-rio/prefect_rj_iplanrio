@@ -273,7 +273,7 @@ def fetch_batch(
             )
             SELECT
                 src.{identifier_field} AS animal_identifier,
-                animal_cpf.cpf AS cpf_proprietario,
+                animal_cpf.cpf,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
@@ -299,7 +299,7 @@ def fetch_batch(
             )
             SELECT
                 src.{identifier_field} AS animal_identifier,
-                animal_cpf.cpf AS cpf_proprietario,
+                animal_cpf.cpf,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
@@ -570,7 +570,7 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
     if dataframe.empty:
         return dataframe.assign(
             id_animal=pd.Series(dtype="string"),
-            cpf_proprietario=pd.Series(dtype="string"),
+            cpf=pd.Series(dtype="string"),
             foto_url=pd.Series(dtype="string"),
             qrcode_payload=pd.Series(dtype="string"),
             ingestao_data=pd.Series(dtype="datetime64[ns]"),
@@ -584,7 +584,7 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
 
     selected_columns = [
         "id_animal",
-        "cpf_proprietario",
+        "cpf",
         "qrcode_payload",
         "foto_url",
         "ingestao_data",
