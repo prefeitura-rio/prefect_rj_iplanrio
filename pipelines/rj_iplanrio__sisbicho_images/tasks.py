@@ -54,6 +54,22 @@ def _strip_data_uri_prefix(value: str) -> str:
     return value
 
 
+def _coerce_to_base64_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        try:
+            return value.decode("ascii")
+        except UnicodeDecodeError as exc:
+            msg = (
+                "Valor de imagem em bytes não pôde ser decodificado como ASCII/Base64. "
+                "Registro não atende ao formato esperado."
+            )
+            log(f"[ERRO CRÍTICO] {msg} Detalhes: {exc}")
+            raise ValueError(msg) from exc
+    return str(value)
+
+
 def _looks_like_base64(value: str) -> bool:
     value = value.strip()
     if not value:
@@ -350,13 +366,14 @@ def upload_pet_images_task(
             blob_paths.append(None)
             continue
 
-        cleaned = _strip_data_uri_prefix(str(raw_value))
+        raw_text = _coerce_to_base64_text(raw_value)
+        cleaned = _strip_data_uri_prefix(raw_text)
 
-        raw_preview = str(raw_value).strip().replace("\n", " ")
+        raw_preview = raw_text.strip().replace("\n", " ")
         cleaned_preview = cleaned.strip().replace("\n", " ")
         log(
             f"[DEBUG] Preparando decode (task) animal={identifier} tipo={type(raw_value).__name__} "
-            f"len_original={len(str(raw_value)) if raw_value is not None else 'None'} "
+            f"len_original={len(raw_text)} "
             f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
         )
 
@@ -499,13 +516,14 @@ def _upload_batch_images(
             blob_paths.append(None)
             continue
 
-        cleaned = _strip_data_uri_prefix(str(raw_value))
+        raw_text = _coerce_to_base64_text(raw_value)
+        cleaned = _strip_data_uri_prefix(raw_text)
 
-        raw_preview = str(raw_value).strip().replace("\n", " ")
+        raw_preview = raw_text.strip().replace("\n", " ")
         cleaned_preview = cleaned.strip().replace("\n", " ")
         log(
             f"[DEBUG] Preparando decode (batch) animal={identifier} tipo={type(raw_value).__name__} "
-            f"len_original={len(str(raw_value)) if raw_value is not None else 'None'} "
+            f"len_original={len(raw_text)} "
             f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
         )
 
