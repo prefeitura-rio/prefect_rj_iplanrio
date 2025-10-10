@@ -68,7 +68,6 @@ def rj_iplanrio__sisbicho_images(
 
     log(f"Processando {total_count} registros em lotes de {batch_size}")
     total_processed = 0
-    first_batch = True
 
     for offset in range(0, total_count, batch_size):
         log(f"Processando lote {offset // batch_size + 1} de {(total_count + batch_size - 1) // batch_size}")
@@ -91,22 +90,19 @@ def rj_iplanrio__sisbicho_images(
                 partition_column=constants.PARTITION_COLUMN.value,
                 file_format=constants.FILE_FORMAT.value,
                 root_folder=constants.ROOT_FOLDER.value,
-                append_mode=not first_batch,
+                append_mode=True,
             )
-
-            current_dump_mode = "overwrite" if first_batch else "append"
 
             create_table_and_upload_to_gcs_task(
                 data_path=partitions_path,
                 dataset_id=dataset_id,
                 table_id=table_id,
-                dump_mode=current_dump_mode,
+                dump_mode=dump_mode,
                 source_format=constants.FILE_FORMAT.value,
                 biglake_table=False,
             )
 
             total_processed += len(batch_output)
-            first_batch = False
 
             log(f"Lote gravado no BigQuery. Total acumulado: {total_processed} registros")
 
