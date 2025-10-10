@@ -34,9 +34,7 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
     if missing_padding:
         data_b64 += "=" * (4 - missing_padding)
 
-    log(
-        f"[DEBUG] detect_and_decode: dados recebidos comprimento={len(data_b64)} prefixo={data_b64[:32]}"
-    )
+    log(f"[DEBUG] detect_and_decode: dados recebidos comprimento={len(data_b64)} prefixo={data_b64[:32]}")
 
     # Primeira tentativa
     try:
@@ -56,18 +54,14 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
     try:
         step2 = base64.b64decode(step1, validate=False)
     except Exception:
-        log(
-            f"[DEBUG] detect_and_decode: falha na segunda decodificação primeiros_bytes={step1[:16].hex()}"
-        )
+        log(f"[DEBUG] detect_and_decode: falha na segunda decodificação primeiros_bytes={step1[:16].hex()}")
         raise ValueError("Base64 inválido na segunda tentativa")
 
     if any(step2.startswith(m) for m in MAGIC_NUMBERS):
         log("Decodificação dupla necessária.")
         return step2
 
-    log(
-        f"[DEBUG] detect_and_decode: nenhum magic number encontrado step1={step1[:16].hex()} step2={step2[:16].hex()}"
-    )
+    log(f"[DEBUG] detect_and_decode: nenhum magic number encontrado step1={step1[:16].hex()} step2={step2[:16].hex()}")
 
     raise ValueError("Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações.")
 
