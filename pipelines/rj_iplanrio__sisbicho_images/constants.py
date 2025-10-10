@@ -18,7 +18,7 @@ class SisbichoImagesConstants(Enum):
 
     # Configuração de arquivos temporários para upload ao GCS/BQ
     PARTITION_COLUMN = "ingestao_data"
-    FILE_FORMAT = "parquet"
+    FILE_FORMAT = "csv"
     ROOT_FOLDER = "./data_sisbicho_images/"
 
     # Bucket padrão usado tanto para credenciais quanto para armazenar as imagens

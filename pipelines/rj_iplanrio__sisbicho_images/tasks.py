@@ -102,7 +102,7 @@ def _extract_qrcode_payload(value: str) -> str | None:
     if value is None:
         return None
 
-    candidate = str(value).strip()
+    candidate = _coerce_to_base64_text(value).strip()
     if not candidate:
         return None
 
