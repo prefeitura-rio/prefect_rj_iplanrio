@@ -102,6 +102,7 @@ def rj_iplanrio__sisbicho_images(
                 dataset_id=dataset_id,
                 table_id=table_id,
                 dump_mode=current_dump_mode,
+                source_format=constants.FILE_FORMAT.value,
                 biglake_table=False,
             )
 
