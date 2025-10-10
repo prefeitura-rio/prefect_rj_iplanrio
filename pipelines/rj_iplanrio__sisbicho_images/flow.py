@@ -44,43 +44,33 @@ def rj_iplanrio__sisbicho_images(
     source_dataset_id = source_dataset_id or constants.SOURCE_DATASET.value
     source_table_id = source_table_id or constants.SOURCE_TABLE.value
     materialize_after_dump = (
-        materialize_after_dump
-        if materialize_after_dump is not None
-        else constants.MATERIALIZE_AFTER_DUMP.value
+        materialize_after_dump if materialize_after_dump is not None else constants.MATERIALIZE_AFTER_DUMP.value
     )
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
-    credentials = inject_bd_credentials_task(
-        environment="prod", wait_for=[rename_flow_run]
-    )
+    credentials = inject_bd_credentials_task(environment="prod", wait_for=[rename_flow_run])
 
-    client, source_table, target_table, identifier_field, total_count = (
-        fetch_sisbicho_media_task(
-            billing_project_id=billing_project_id,
-            credential_bucket=credential_bucket,
-            source_dataset_id=source_dataset_id,
-            source_table_id=source_table_id,
-            target_dataset_id=dataset_id,
-            target_table_id=table_id,
-            batch_size=batch_size,
-            max_records=max_records,
-            wait_for=[credentials],
-        )
+    client, source_table, target_table, identifier_field, total_count = fetch_sisbicho_media_task(
+        billing_project_id=billing_project_id,
+        credential_bucket=credential_bucket,
+        source_dataset_id=source_dataset_id,
+        source_table_id=source_table_id,
+        target_dataset_id=dataset_id,
+        target_table_id=table_id,
+        batch_size=batch_size,
+        max_records=max_records,
+        wait_for=[credentials],
     )
 
     if total_count == 0:
-        log(
-            "Nenhum registro com QRCode ou foto encontrado. Fluxo finalizado sem alterações."
-        )
+        log("Nenhum registro com QRCode ou foto encontrado. Fluxo finalizado sem alterações.")
         return []
 
     log(f"Processando {total_count} registros em lotes de {batch_size}")
     total_processed = 0
 
     for offset in range(0, total_count, batch_size):
-        log(
-            f"Processando lote {offset // batch_size + 1} de {(total_count + batch_size - 1) // batch_size}"
-        )
+        log(f"Processando lote {offset // batch_size + 1} de {(total_count + batch_size - 1) // batch_size}")
 
         batch_output = process_single_batch(
             client=client,
@@ -114,9 +104,7 @@ def rj_iplanrio__sisbicho_images(
 
             total_processed += len(batch_output)
 
-            log(
-                f"Lote gravado no BigQuery. Total acumulado: {total_processed} registros"
-            )
+            log(f"Lote gravado no BigQuery. Total acumulado: {total_processed} registros")
 
     if total_processed == 0:
         log("Após processamento não há dados para gravar. Fluxo encerrado.")
@@ -125,9 +113,7 @@ def rj_iplanrio__sisbicho_images(
     log(f"Processamento concluído. Total de registros: {total_processed}")
 
     if materialize_after_dump:
-        log(
-            "Nenhuma materialização configurada para este fluxo. Ignorando flag materialize_after_dump."
-        )
+        log("Nenhuma materialização configurada para este fluxo. Ignorando flag materialize_after_dump.")
 
     log("Fluxo concluído com sucesso!!")
     return
