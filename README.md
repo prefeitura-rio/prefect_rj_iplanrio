@@ -2,6 +2,11 @@
 
 Este repositório contém pipelines desenvolvidas com Prefect para automação de fluxos de dados da Prefeitura do Rio de Janeiro.
 
+## Contribuindo com o projeto
+
+Se você deseja contribuir com o projeto, acesse nossa [guia de contribuição](https://iplan-rio.mintlify.app/data-lake/prefect/construindo-uma-pipeline).
+
+
 ## Estrutura do projeto
 
 ### Raiz do repositório
