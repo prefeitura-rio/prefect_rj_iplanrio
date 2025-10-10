@@ -34,6 +34,8 @@ def rj_iplanrio__sisbicho_images(
 
     constants = SisbichoImagesConstants
 
+    log("Fluxo rj_iplanrio__sisbicho_images – versão pós-93432b5")
+
     dataset_id = dataset_id or constants.TARGET_DATASET.value
     table_id = table_id or constants.TARGET_TABLE.value
     dump_mode = dump_mode or constants.DUMP_MODE.value
