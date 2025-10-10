@@ -39,8 +39,8 @@ deployments:
       source_dataset_id: brutos_sisbicho
       source_table_id: animal
       dataset_id: brutos_sisbicho
-      table_id: animal_imagens_staging
-      dump_mode: overwrite
+      table_id: animal_imagem
+      dump_mode: append
       materialize_after_dump: false
       storage_bucket: rj-iplanrio
       storage_prefix: raw/sisbicho/fotos
@@ -59,8 +59,8 @@ deployments:
       source_dataset_id: brutos_sisbicho
       source_table_id: animal
       dataset_id: brutos_sisbicho
-      table_id: animal_imagens
-      dump_mode: overwrite
+      table_id: animal_imagem
+      dump_mode: append
       materialize_after_dump: false
       storage_bucket: rj-iplanrio
       storage_prefix: raw/sisbicho/fotos
