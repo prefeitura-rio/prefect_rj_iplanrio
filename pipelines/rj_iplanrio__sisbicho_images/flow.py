@@ -77,7 +77,6 @@ def rj_iplanrio__sisbicho_images(
         )
         return []
 
-    # Processar dados em lotes e escrever incrementalmente
     log(f"Processando {total_count} registros em lotes de {batch_size}")
     total_processed = 0
     first_batch = True
