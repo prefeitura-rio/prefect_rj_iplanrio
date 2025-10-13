@@ -9,6 +9,8 @@ import json
 from datetime import datetime, timezone
 from typing import Iterable
 
+import cv2
+import numpy as np
 import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery, storage
@@ -98,6 +100,24 @@ def _sanitize_identifier(identifier: object) -> str:
     return "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in text)
 
 
+def _decode_qrcode_bytes(image_bytes: bytes) -> str | None:
+    """Lê o conteúdo textual presente em um QR Code representado como imagem."""
+
+    array = np.frombuffer(image_bytes, dtype=np.uint8)
+    image = cv2.imdecode(array, cv2.IMREAD_GRAYSCALE)
+    if image is None:
+        log("[ERRO] Não foi possível decodificar bytes do QR Code em imagem.")
+        return None
+
+    detector = cv2.QRCodeDetector()
+    payload, _, _ = detector.detectAndDecode(image)
+    if not payload:
+        return None
+
+    payload = payload.strip()
+    return payload or None
+
+
 def _extract_qrcode_payload(value: str) -> str | None:
     if value is None:
         return None
@@ -106,44 +126,42 @@ def _extract_qrcode_payload(value: str) -> str | None:
     if not candidate:
         return None
 
-    original = candidate
-    for _ in range(2):
-        cleaned = _strip_data_uri_prefix(candidate)
-        if not _looks_like_base64(cleaned):
-            break
-        try:
-            decoded = base64.b64decode(cleaned, validate=True)
-        except ValueError:
-            break
-
-        if _contains_magic_number(decoded):
-            return original
-
-        decoded_text = _bytes_to_text(decoded)
-        if not decoded_text:
-            break
-        candidate = decoded_text
-
-    candidate = candidate.strip()
-    if not candidate:
+    cleaned = _strip_data_uri_prefix(candidate)
+    if not _looks_like_base64(cleaned):
+        log("[ERRO] Valor de QR Code não está em Base64 válido.")
         return None
 
     try:
-        parsed = json.loads(candidate)
-    except json.JSONDecodeError:
-        return candidate
+        image_bytes = detect_and_decode(cleaned)
+    except ValueError as exc:
+        log(f"[ERRO] Falha ao decodificar imagem Base64 do QR Code: {exc}")
+        return None
 
-    if isinstance(parsed, dict):
-        for key in ("payload", "qr_payload", "dados", "data"):
-            if parsed.get(key):
-                value = parsed[key]
-                return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-        return json.dumps(parsed, ensure_ascii=False)
+    payload = _decode_qrcode_bytes(image_bytes)
+    if payload:
+        return payload
 
-    if isinstance(parsed, list):
-        return json.dumps(parsed, ensure_ascii=False)
+    decoded_text = _bytes_to_text(image_bytes)
+    if decoded_text:
+        try:
+            parsed = json.loads(decoded_text)
+        except json.JSONDecodeError:
+            return decoded_text
 
-    return candidate
+        if isinstance(parsed, dict):
+            for key in ("payload", "qr_payload", "dados", "data"):
+                if parsed.get(key):
+                    value = parsed[key]
+                    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+            return json.dumps(parsed, ensure_ascii=False)
+
+        if isinstance(parsed, list):
+            return json.dumps(parsed, ensure_ascii=False)
+
+        return decoded_text
+
+    log("[ERRO] QR Code não pôde ser interpretado.")
+    return None
 
 
 def _infer_extension(image_bytes: bytes) -> str:
