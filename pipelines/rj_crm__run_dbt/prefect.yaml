@@ -28,14 +28,14 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__run_dbt/flow.py:rj_crm__run_dbt
     work_pool:
-      name: datario-pool
+      name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_crm__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
-  - name: rj-name--run_dbt--prod
+  - name: rj-crm--run_dbt--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__run_dbt/flow.py:rj_crm__run_dbt
     work_pool:
