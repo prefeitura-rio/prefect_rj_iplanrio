@@ -160,9 +160,7 @@ def _normalize_qrcode_payload(text: str) -> str | None:
         else:
             payload_dict.setdefault("observacao", "")
             payload_dict["observacao"] = (
-                f"{payload_dict['observacao']} {line}".strip()
-                if payload_dict["observacao"]
-                else line
+                f"{payload_dict['observacao']} {line}".strip() if payload_dict["observacao"] else line
             )
 
     if payload_dict:
