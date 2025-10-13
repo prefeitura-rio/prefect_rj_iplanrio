@@ -56,8 +56,8 @@ deployments:
         parameters:
           command: "source freshness"
           send_discord_report: true
-          github_repo: "https://github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm"
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+          bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
             prod: "rj-crm_dbt"
@@ -71,8 +71,8 @@ deployments:
           command: "build"
           select: "tag:daily"
           send_discord_report: true
-          github_repo: "https://github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm"
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+          bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
             prod: "rj-crm_dbt"
@@ -87,8 +87,8 @@ deployments:
           command: "build"
           select: "tag:weekly"
           send_discord_report: true
-          github_repo: "https://github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm"
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+          bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
             prod: "rj-crm_dbt"

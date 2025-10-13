@@ -9,7 +9,7 @@ import shutil
 from typing import Optional, TypedDict
 
 import git
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task, getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from prefect import flow, runtime, task
 from prefect.states import Failed
@@ -48,6 +48,25 @@ def get_current_flow_info():
         "flow_run_id": flow_run_id,
         "flow_environment": flow_environment,
     }
+
+
+@task()
+def add_token_github_repo(repository_url: str) -> str:
+    """
+    Add the GitHub token to the repository URL.Getting it from infisical variable GITHUB_TOKEN
+
+    repository_url: str: The URL of the GitHub repository. This variable must be
+        somethintg like https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
+
+    Returns:
+        str: The repository URL with the GitHub token added if it's a private repository.
+    """
+    if "GITHUB_TOKEN" in repository_url:
+        log("Adding GitHub token to the repository URL from infisical variable GITHUB_TOKEN")
+        token = getenv_or_action("GITHUB_TOKEN")
+        repository_url = repository_url.replace("GITHUB_TOKEN", token)
+        log(f"after token {repository_url}")
+    return repository_url
 
 
 @task
@@ -535,7 +554,8 @@ def rj_crm__run_dbt(
     log(f"Flow environment: {flow_info['flow_environment']}", level="info")
 
     # Download repository
-    download_repository_task = download_repository(git_repository_path=github_repo)
+    github_repo_ = add_token_github_repo(repository_url=github_repo)
+    download_repository_task = download_repository(git_repository_path=github_repo_)
 
     # Download dbt artifacts
     download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(environment=target, gcs_buckets=gcs_buckets)
