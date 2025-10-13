@@ -60,8 +60,8 @@ deployments:
           bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
-            prod: "rj-crm_dbt"
-            dev: "rj-crm-dev_dbt"
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
       # Schedule 2: Daily build with daily and freshness tags
       - interval: 86400
         anchor_date: "2023-01-01T09:15:00"
@@ -75,8 +75,8 @@ deployments:
           bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
-            prod: "rj-crm_dbt"
-            dev: "rj-crm-dev_dbt"
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
       # Weekly schedules (604800 seconds = 7 days)
       # Schedule 3: Weekly build with weekly tags
       - interval: 604800
@@ -91,6 +91,6 @@ deployments:
           bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
-            prod: "rj-crm_dbt"
-            dev: "rj-crm-dev_dbt"
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
 
