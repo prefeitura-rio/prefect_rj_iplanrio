@@ -43,7 +43,7 @@ deployments:
       dump_mode: append
       materialize_after_dump: false
       storage_bucket: rj-iplanrio
-      storage_prefix: raw/sisbicho/fotos
+      storage_prefix: raw/sisbicho/animal_imagem_fotos
   - name: rj_iplanrio__sisbicho_imagem--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__sisbicho_images/flow.py:rj_iplanrio__sisbicho_images
@@ -63,4 +63,4 @@ deployments:
       dump_mode: append
       materialize_after_dump: false
       storage_bucket: rj-iplanrio
-      storage_prefix: raw/sisbicho/fotos
+      storage_prefix: raw/sisbicho/animal_imagem_fotos

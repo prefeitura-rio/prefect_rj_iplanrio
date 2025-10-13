@@ -462,8 +462,10 @@ def upload_pet_images_task(
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
+            blob.make_public()
         else:
             log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+            blob.make_public()
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
@@ -612,8 +614,10 @@ def _upload_batch_images(
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
+            blob.make_public()
         else:
             log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+            blob.make_public()
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
