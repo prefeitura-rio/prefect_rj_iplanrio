@@ -118,6 +118,60 @@ def _decode_qrcode_bytes(image_bytes: bytes) -> str | None:
     return payload or None
 
 
+def _normalize_qrcode_payload(text: str) -> str | None:
+    """Converte o texto lido do QR Code em JSON com chaves intactas."""
+
+    if text is None:
+        return None
+
+    cleaned = text.strip()
+    if not cleaned:
+        return None
+
+    # Primeiro, tenta parsear como JSON nativo.
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        parsed = None
+
+    if isinstance(parsed, (dict, list)):
+        return json.dumps(parsed, ensure_ascii=False)
+    if isinstance(parsed, str):
+        cleaned = parsed.strip()
+
+    lines = [line.strip() for line in cleaned.replace("\r", "\n").split("\n") if line.strip()]
+    payload_dict: dict[str, str] = {}
+    current_key: str | None = None
+
+    for line in lines:
+        if ":" in line:
+            key, value = line.split(":", 1)
+            key = key.strip()
+            value = value.strip()
+            if key:
+                payload_dict[key] = value
+                current_key = key
+                continue
+
+        if current_key:
+            extra = line.strip()
+            if extra:
+                existing = payload_dict.get(current_key, "")
+                payload_dict[current_key] = f"{existing} {extra}".strip() if existing else extra
+        else:
+            payload_dict.setdefault("observacao", "")
+            payload_dict["observacao"] = (
+                f"{payload_dict['observacao']} {line}".strip()
+                if payload_dict["observacao"]
+                else line
+            )
+
+    if payload_dict:
+        return json.dumps(payload_dict, ensure_ascii=False)
+
+    return cleaned
+
+
 def _extract_qrcode_payload(value: str) -> str | None:
     if value is None:
         return None
@@ -139,26 +193,15 @@ def _extract_qrcode_payload(value: str) -> str | None:
 
     payload = _decode_qrcode_bytes(image_bytes)
     if payload:
-        return payload
+        normalized_payload = _normalize_qrcode_payload(payload)
+        if normalized_payload:
+            return normalized_payload
 
     decoded_text = _bytes_to_text(image_bytes)
     if decoded_text:
-        try:
-            parsed = json.loads(decoded_text)
-        except json.JSONDecodeError:
-            return decoded_text
-
-        if isinstance(parsed, dict):
-            for key in ("payload", "qr_payload", "dados", "data"):
-                if parsed.get(key):
-                    value = parsed[key]
-                    return value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-            return json.dumps(parsed, ensure_ascii=False)
-
-        if isinstance(parsed, list):
-            return json.dumps(parsed, ensure_ascii=False)
-
-        return decoded_text
+        normalized_payload = _normalize_qrcode_payload(decoded_text)
+        if normalized_payload:
+            return normalized_payload
 
     log("[ERRO] QR Code não pôde ser interpretado.")
     return None
