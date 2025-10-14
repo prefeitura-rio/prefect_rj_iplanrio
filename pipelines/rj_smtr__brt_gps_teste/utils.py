@@ -162,11 +162,13 @@ def get_root_path() -> Path:
     """
     Returns the root path of the project.
     """
-    try:
-        import pipelines
-    except ImportError as exc:
-        raise ImportError("pipelines package not found") from exc
-    root_path = Path(pipelines.__file__).parent.parent
+    # try:
+    #     import pipelines
+    # except ImportError as exc:
+    #     raise ImportError("pipelines package not found") from exc
+    # root_path = Path(pipelines.__file__).parent.parent
+    root_path = Path.cwd().as_posix().split('/')[0]
+    print(f"Root path: {root_path}")
     # If the root path is site-packages, we're running in a Docker container. Thus, we
     # need to change the root path to /app
     if str(root_path).endswith("site-packages"):
