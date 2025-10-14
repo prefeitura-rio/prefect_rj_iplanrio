@@ -25,6 +25,11 @@ from utils import (
 # from pipelines.utils.secret import get_secret
 #trigger cd
 
+
+def test():
+    print("test")
+    return
+
 @task
 def bq_upload(
     dataset_id: str,
