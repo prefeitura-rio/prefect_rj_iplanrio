@@ -23,10 +23,7 @@ from utils import (
 )
 # from pipelines.utils.pretreatment import transform_to_nested_structure
 # from pipelines.utils.secret import get_secret
-
-
-
-
+#trigger cd
 
 @task
 def bq_upload(
