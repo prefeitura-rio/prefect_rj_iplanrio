@@ -253,7 +253,7 @@ def get_raw(  # pylint: disable=R0912
     filetype: str = "json",
     csv_args: dict = None,
     params: dict = None,
-    headers_prefix: str = "BRT_API_"
+    headers_prefix: str = "brt_api_v2_"
 ) -> Dict:
     """
     Request data from URL API
@@ -272,7 +272,7 @@ def get_raw(  # pylint: disable=R0912
     """
     data = None
     error = None
-
+    print('Requesting data')
     try:
         if headers is not None:
             headers = build_headers(headers_prefix=headers_prefix)
@@ -288,6 +288,7 @@ def get_raw(  # pylint: disable=R0912
             timeout=constants.MAX_TIMEOUT_SECONDS.value,
             params=params,
         )
+        print(f"Request returned status code {response.status_code}")
 
         if response.ok:  # status code is less than 400
             # if not response.content and url in [
@@ -295,8 +296,7 @@ def get_raw(  # pylint: disable=R0912
             #     constants.GPS_SPPO_API_BASE_URL.value,
             # ]:
             #     error = "Dados de GPS vazios"
-            print(f"Response OK. Status code: {response.status_code}")
-            
+
             if filetype == "json":
                 data = response.json()
 
