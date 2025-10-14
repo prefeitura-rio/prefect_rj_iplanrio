@@ -6,6 +6,26 @@ from pathlib import Path
 from typing import Union
 from os import environ
 
+def map_dict_keys(data: dict, mapping: dict) -> None:
+    """
+    Map old keys to new keys in a dict.
+    """
+    for old_key, new_key in mapping.items():
+        data[new_key] = data.pop(old_key)
+    return data
+
+# def log_critical(message: str, secret_path: str = constants.CRITICAL_SECRET_PATH.value):
+#     """Logs message to critical discord channel specified
+
+#     Args:
+#         message (str): Message to post on the channel
+#         secret_path (str, optional): Secret path storing the webhook to critical channel.
+#         Defaults to constants.CRITICAL_SECRETPATH.value.
+
+#     """
+#     url = get_secret(secret_path)["url"]
+#     return send_discord_message(message=message, webhook_url=url)
+
 def create_bq_table_schema(
     data_sample_path: Union[str, Path],
 ) -> list[bigquery.SchemaField]:
