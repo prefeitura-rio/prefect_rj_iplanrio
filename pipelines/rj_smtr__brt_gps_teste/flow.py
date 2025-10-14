@@ -17,7 +17,7 @@ from tasks import (  # get_local_dbt_client,; setup_task,
     get_now_time,
     get_raw,
     parse_timestamp_to_string,
-    rename_current_flow_run_now_time,
+    # rename_current_flow_run_now_time,
     save_raw_local,
     save_treated_local,
     upload_logs_to_bq,
@@ -46,9 +46,9 @@ def rj_smtr__gps_brt() -> list[str]:
 
     timestamp = get_current_timestamp()
     # Rename flow run
-    rename_flow_run = rename_current_flow_run_now_time(
-        prefix=rj_smtr__gps_brt.name + ": ", now_time=timestamp
-    )
+    # rename_flow_run = rename_current_flow_run_now_time(
+    #     prefix=rj_smtr__gps_brt.name + ": ", now_time=timestamp
+    # )
 
     # SETUP LOCAL #
     partitions = create_date_hour_partition(timestamp)
