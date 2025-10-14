@@ -171,7 +171,7 @@ def get_current_timestamp(
 
     return timestamp
 
-@prefect.task(checkpoint=False)
+@task
 def get_now_time():
     """
     Returns the HH:MM.
