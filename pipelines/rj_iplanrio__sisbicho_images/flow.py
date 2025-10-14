@@ -26,6 +26,7 @@ def rj_iplanrio__sisbicho_images(
     storage_bucket: str | None = None,
     storage_prefix: str | None = None,
     billing_project_id: str | None = None,
+    storage_project_id: str | None = None,
     credential_bucket: str | None = None,
     batch_size: int = 10,
     max_records: int | None = 10,
@@ -40,6 +41,7 @@ def rj_iplanrio__sisbicho_images(
     storage_bucket = storage_bucket or constants.IMAGE_BUCKET.value
     storage_prefix = storage_prefix or constants.IMAGE_PREFIX.value
     billing_project_id = billing_project_id or constants.BILLING_PROJECT.value
+    storage_project_id = storage_project_id or constants.STORAGE_PROJECT.value
     credential_bucket = credential_bucket or constants.CREDENTIAL_BUCKET.value
     source_dataset_id = source_dataset_id or constants.SOURCE_DATASET.value
     source_table_id = source_table_id or constants.SOURCE_TABLE.value
@@ -78,10 +80,11 @@ def rj_iplanrio__sisbicho_images(
             target_table=target_table,
             identifier_field=identifier_field,
             offset=offset,
-            batch_size=batch_size,
-            storage_bucket=storage_bucket,
-            storage_prefix=storage_prefix,
-            billing_project_id=billing_project_id,
+        batch_size=batch_size,
+        storage_bucket=storage_bucket,
+        storage_prefix=storage_prefix,
+        billing_project_id=billing_project_id,
+        storage_project_id=storage_project_id,
         )
 
         if not batch_output.empty:

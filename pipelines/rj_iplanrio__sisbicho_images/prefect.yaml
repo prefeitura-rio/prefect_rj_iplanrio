@@ -43,8 +43,9 @@ deployments:
       dump_mode: append
       materialize_after_dump: false
       storage_bucket: portal-do-cidadao
-      storage_prefix: animal/fotos/
-      billing_project_id: rj-iplanrio-dia
+      storage_prefix: animal/fotos
+      billing_project_id: rj-iplanrio
+      storage_project_id: rj-iplanrio-dia
   - name: rj_iplanrio__sisbicho_imagem--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__sisbicho_images/flow.py:rj_iplanrio__sisbicho_images
@@ -64,8 +65,9 @@ deployments:
       dump_mode: append
       materialize_after_dump: false
       storage_bucket: portal-do-cidadao
-      storage_prefix: animal/fotos/
-      billing_project_id: rj-iplanrio-dia
+      storage_prefix: animal/fotos
+      billing_project_id: rj-iplanrio
+      storage_project_id: rj-iplanrio-dia
     schedule:
       cron: "0 6 * * *"
       timezone: America/Sao_Paulo

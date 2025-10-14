@@ -413,7 +413,7 @@ def upload_pet_images_task(
     dataframe: pd.DataFrame,
     storage_bucket: str,
     storage_prefix: str,
-    billing_project_id: str,
+    storage_project_id: str,
 ) -> pd.DataFrame:
     """Faz o upload das imagens dos pets para o GCS e retorna a URL final."""
 
@@ -422,7 +422,7 @@ def upload_pet_images_task(
             foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
         )
 
-    storage_client = storage.Client(project=billing_project_id)
+    storage_client = storage.Client(project=storage_project_id)
     bucket = storage_client.bucket(storage_bucket)
 
     foto_urls: list[str | None] = []
@@ -528,6 +528,7 @@ def process_single_batch(
     storage_bucket: str,
     storage_prefix: str,
     billing_project_id: str,
+    storage_project_id: str,
 ) -> pd.DataFrame:
     """
     Processa um único lote: busca dados, extrai QR code, faz upload de imagens.
@@ -551,7 +552,7 @@ def process_single_batch(
         batch_df,
         storage_bucket,
         storage_prefix,
-        billing_project_id,
+        storage_project_id,
     )
 
     # Build output
@@ -574,7 +575,7 @@ def _upload_batch_images(
     dataframe: pd.DataFrame,
     storage_bucket: str,
     storage_prefix: str,
-    billing_project_id: str,
+    storage_project_id: str,
 ) -> pd.DataFrame:
     """Versão sem @task para upload de imagens em lote."""
     if dataframe.empty:
@@ -582,7 +583,7 @@ def _upload_batch_images(
             foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
         )
 
-    storage_client = storage.Client(project=billing_project_id)
+    storage_client = storage.Client(project=storage_project_id)
     bucket = storage_client.bucket(storage_bucket)
 
     foto_urls: list[str | None] = []

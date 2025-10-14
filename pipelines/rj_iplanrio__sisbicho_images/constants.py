@@ -25,6 +25,7 @@ class SisbichoImagesConstants(Enum):
     CREDENTIAL_BUCKET = "rj-iplanrio"
     IMAGE_BUCKET = "rj-iplanrio"
     IMAGE_PREFIX = "raw/sisbicho/fotos"
+    STORAGE_PROJECT = "rj-iplanrio"
 
     # Projeto de faturamento do BigQuery / Storage
     BILLING_PROJECT = "rj-iplanrio"
