@@ -351,6 +351,7 @@ def fetch_batch(
                 ON src.{identifier_field} = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
               AND tgt.id_animal IS NULL
+              AND animal_cpf.cpf = '56398972287'
             ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
@@ -374,6 +375,7 @@ def fetch_batch(
             LEFT JOIN animal_cpf
                 ON animal_cpf.id_animal = src.{identifier_field}
             WHERE src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL
+            AND animal_cpf.cpf = '56398972287'
             ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
