@@ -42,7 +42,7 @@ deployments:
       table_id: animal_imagem
       dump_mode: append
       materialize_after_dump: false
-      storage_bucket: rj-iplanrio
+      storage_bucket: portal-do-cidadao
       storage_prefix: raw/sisbicho/animal_imagem_fotos_staging
   - name: rj_iplanrio__sisbicho_imagem--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -62,7 +62,7 @@ deployments:
       table_id: animal_imagem
       dump_mode: append
       materialize_after_dump: false
-      storage_bucket: rj-iplanrio
+      storage_bucket: portal-do-cidadao
       storage_prefix: raw/sisbicho/animal_imagem_fotos
     schedule:
       cron: "0 6 * * *"
