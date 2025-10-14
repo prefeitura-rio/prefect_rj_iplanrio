@@ -47,6 +47,8 @@ def pre_treatment_br_rj_riodejaneiro_brt_gps(status: dict, timestamp):
     if status["error"] is not None:
         print("Skipped due to previous error.")
         return {"data": pd.DataFrame(), "error": status["error"]}
+    
+    print(status)
 
     error = None
     data = status["data"]["veiculos"]
@@ -293,7 +295,8 @@ def get_raw(  # pylint: disable=R0912
             #     constants.GPS_SPPO_API_BASE_URL.value,
             # ]:
             #     error = "Dados de GPS vazios"
-
+            print(f"Response OK. Status code: {response.status_code}")
+            
             if filetype == "json":
                 data = response.json()
 
