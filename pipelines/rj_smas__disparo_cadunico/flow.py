@@ -113,7 +113,7 @@ def rj_smas__disparo_cadunico(
         partitions_path = create_date_partitions(
             dataframe=dfr,
             partition_column="dispatch_date",
-            file_format="parquet",
+            file_format="csv",
             root_folder="./data_dispatch/",
         )
 
