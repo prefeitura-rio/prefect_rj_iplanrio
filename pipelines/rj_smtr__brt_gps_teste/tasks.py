@@ -48,7 +48,8 @@ def pre_treatment_br_rj_riodejaneiro_brt_gps(status: dict, timestamp):
         print("Skipped due to previous error.")
         return {"data": pd.DataFrame(), "error": status["error"]}
     
-    print(status)
+    print(f"{len(status['data']['veiculos'])} vehicles received from API")   
+    print(status['data']['veiculos'][:10])
 
     error = None
     data = status["data"]["veiculos"]
