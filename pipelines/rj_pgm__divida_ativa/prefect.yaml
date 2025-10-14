@@ -382,3 +382,38 @@ deployments:
             admPublica,
             admPublicaIndireta
           FROM DAM_PRD.dbo.VWPESSOA
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: DevedorCDA
+      parameters:
+        table_id: DevedorCDA
+        execute_query: |
+          SELECT numCDA, 
+            idPessoa, 
+            descSituacaoDevedor, 
+            datSituacao, 
+            TipVinculo
+          FROM DAM_PRD.dbo.DevedorCDA
+    - interval: 86400
+      anchor_date: "2022-01-01T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: PagamentosCDA
+      parameters:
+        table_id: PagamentosCDA
+        execute_query: |
+          SELECT IDPagamentosCDA, 
+            ObjPago, 
+            codTipoPagamento, 
+            NumCDA, 
+            numGuiaPagamento, 
+            numCotaPagamento, 
+            ValJurosGuiaPG, 
+            DatPagamento, 
+            ValTotalPG, 
+            ValJurosPG, 
+            ValMultaPG, 
+            ValMoraPG, 
+            ValMoraJurosPG, 
+            ValPrincipalPG
+          FROM DAM_PRD.dbo.PagamentosCDA
