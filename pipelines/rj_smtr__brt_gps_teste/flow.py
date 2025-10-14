@@ -90,5 +90,5 @@ def rj_smtr__gps_brt() -> list[str]:
         timestamp=timestamp,
         error=error,
     )
-    rj_smtr__gps_brt.set_dependencies(task=rename_flow_run, upstream_tasks=[timestamp])
-    rj_smtr__gps_brt.set_dependencies(task=partitions, upstream_tasks=[rename_flow_run])
+    # rj_smtr__gps_brt.set_dependencies(task=rename_flow_run, upstream_tasks=[timestamp])
+    # rj_smtr__gps_brt.set_dependencies(task=partitions, upstream_tasks=[rename_flow_run])
