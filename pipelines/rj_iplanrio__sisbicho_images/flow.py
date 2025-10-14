@@ -80,11 +80,11 @@ def rj_iplanrio__sisbicho_images(
             target_table=target_table,
             identifier_field=identifier_field,
             offset=offset,
-        batch_size=batch_size,
-        storage_bucket=storage_bucket,
-        storage_prefix=storage_prefix,
-        billing_project_id=billing_project_id,
-        storage_project_id=storage_project_id,
+            batch_size=batch_size,
+            storage_bucket=storage_bucket,
+            storage_prefix=storage_prefix,
+            billing_project_id=billing_project_id,
+            storage_project_id=storage_project_id,
         )
 
         if not batch_output.empty:
