@@ -279,7 +279,7 @@ def fetch_sisbicho_media_task(
     source_table_id: str,
     target_dataset_id: str,
     target_table_id: str,
-    batch_size: int = 10,
+    batch_size: int = 1000,
     max_records: int | None = None,
 ) -> tuple[bigquery.Client, str, str, str, int]:
     """
