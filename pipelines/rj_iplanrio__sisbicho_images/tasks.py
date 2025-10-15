@@ -17,14 +17,10 @@ from google.cloud.exceptions import NotFound
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
-from pipelines.rj_iplanrio__sisbicho_images.constants import SisbichoImagesConstants
 from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
     MAGIC_NUMBERS,
     detect_and_decode,
 )
-
-
-CPF_FILTER = SisbichoImagesConstants.CPF_FILTER.value
 
 
 def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
@@ -253,42 +249,22 @@ def _get_total_count(
         )
         table_exists = False
 
-    cpf_filter = CPF_FILTER
-
-    base_cte = """
-        WITH animal_cpf AS (
-            SELECT
-                p.id_animal,
-                pet_master.cpf
-            FROM `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master,
-            UNNEST(pet_master.pet) AS p
-        )
-    """.strip()
-
     if table_exists:
         # Query incremental com LEFT JOIN
         count_query = f"""
-            {base_cte}
             SELECT COUNT(*) as total
             FROM `{source_table}` AS src
-            LEFT JOIN animal_cpf
-                ON animal_cpf.id_animal = src.{identifier_field}
             LEFT JOIN `{target_table}` AS tgt
                 ON src.{identifier_field} = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
               AND tgt.id_animal IS NULL
-              AND animal_cpf.cpf = '{cpf_filter}'
         """
     else:
         # Query completa (primeira carga)
         count_query = f"""
-            {base_cte}
             SELECT COUNT(*) as total
             FROM `{source_table}` AS src
-            LEFT JOIN animal_cpf
-                ON animal_cpf.id_animal = src.{identifier_field}
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-              AND animal_cpf.cpf = '{cpf_filter}'
         """
 
     result = client.query(count_query).result()
@@ -353,35 +329,18 @@ def fetch_batch(
     except NotFound:
         table_exists = False
 
-    cpf_filter = CPF_FILTER
-
-    base_cte = """
-        WITH animal_cpf AS (
-            SELECT
-                p.id_animal,
-                pet_master.cpf
-            FROM `rj-crm-registry.rmi_dados_mestres.pet` AS pet_master,
-            UNNEST(pet_master.pet) AS p
-        )
-    """.strip()
-
     if table_exists:
         # Query incremental com LEFT JOIN
         query = f"""
-            {base_cte}
             SELECT
                 src.{identifier_field} AS animal_identifier,
-                animal_cpf.cpf,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
-            LEFT JOIN animal_cpf
-                ON animal_cpf.id_animal = src.{identifier_field}
             LEFT JOIN `{target_table}` AS tgt
                 ON src.{identifier_field} = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
               AND tgt.id_animal IS NULL
-              AND animal_cpf.cpf = '{cpf_filter}'
             ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
@@ -389,17 +348,12 @@ def fetch_batch(
     else:
         # Query completa (primeira carga)
         query = f"""
-            {base_cte}
             SELECT
                 src.{identifier_field} AS animal_identifier,
-                animal_cpf.cpf,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
-            LEFT JOIN animal_cpf
-                ON animal_cpf.id_animal = src.{identifier_field}
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-              AND animal_cpf.cpf = '{cpf_filter}'
             ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
@@ -683,7 +637,6 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
     if dataframe.empty:
         return dataframe.assign(
             id_animal=pd.Series(dtype="string"),
-            cpf=pd.Series(dtype="string"),
             foto_url=pd.Series(dtype="string"),
             qrcode_payload=pd.Series(dtype="string"),
             ingestao_data=pd.Series(dtype="datetime64[ns]"),
@@ -697,7 +650,6 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
 
     selected_columns = [
         "id_animal",
-        "cpf",
         "qrcode_payload",
         "foto_url",
         "ingestao_data",
