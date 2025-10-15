@@ -43,7 +43,7 @@ deployments:
       dump_mode: append
       materialize_after_dump: false
       storage_bucket: portal-do-cidadao
-      storage_prefix: animal/fotos
+      storage_prefix: animal/fotos_staging
       billing_project_id: rj-iplanrio
       storage_project_id: rj-iplanrio-dia
   - name: rj_iplanrio__sisbicho_imagem--prod
