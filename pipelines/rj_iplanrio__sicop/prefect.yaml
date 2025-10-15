@@ -136,3 +136,15 @@ deployments:
           dump_mode: overwrite
           execute_query: |
             SELECT NUM_PROCESSO AS ID_PROCESSO, NUM_PLACA AS ID_PLACA FROM SICOP.VW_VEICULO_DLK
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: tramitacao_processo
+        parameters:
+          table_id: tramitacao_processo
+          dump_mode: overwrite
+          execute_query: |
+            SELECT NUM_PROCESSO, SEQ, NUM_GUIA, MAT_DESPACHO, MAT_LOGADO, MAT_RECEBEDOR, OD_DESPACHO,
+                DATA_DESPACHO, DATA_SAIDA, ORG_ORIGEM, ORG_DESTINO, ORG_TRANSCRITOR
+            FROM SICOP.VW_TRAMITACAO_PROCESSO_DLK
