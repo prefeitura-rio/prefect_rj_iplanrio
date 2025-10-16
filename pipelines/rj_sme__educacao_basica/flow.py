@@ -24,7 +24,7 @@ def rj_sme__educacao_basica(
     db_type: str = "sql_server",
     db_charset: Optional[str] = "utf8",
     execute_query: str = "execute_query",
-    dataset_id: str = "educacao_basica",
+    dataset_id: str = "brutos_educacao_basica",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-gestao-escolar",
     dump_mode: str = "overwrite",
