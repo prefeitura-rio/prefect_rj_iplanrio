@@ -312,6 +312,10 @@ def fetch_batch(
 ) -> pd.DataFrame:
     """Busca um lote específico de dados do BigQuery, excluindo animais já processados."""
 
+    # Extrai dataset e project da source_table para montar as outras tabelas
+    parts = source_table.split('.')
+    project_dataset = '.'.join(parts[:-1])
+
     # Verifica se a tabela de destino existe
     try:
         client.get_table(target_table)
@@ -324,9 +328,15 @@ def fetch_batch(
         query = f"""
             SELECT
                 src.{identifier_field} AS animal_identifier,
+                prop.cpf_numero AS cpf,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
+            LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
+                ON src.{identifier_field} = ap.id_animal
+                AND ap.fim_datahora IS NULL
+            LEFT JOIN `{project_dataset}.proprietario` AS prop
+                ON ap.id_proprietario = prop.id_proprietario
             LEFT JOIN `{target_table}` AS tgt
                 ON src.{identifier_field} = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
@@ -340,9 +350,15 @@ def fetch_batch(
         query = f"""
             SELECT
                 src.{identifier_field} AS animal_identifier,
+                prop.cpf_numero AS cpf,
                 src.qrcode_dados,
                 src.foto_dados
             FROM `{source_table}` AS src
+            LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
+                ON src.{identifier_field} = ap.id_animal
+                AND ap.fim_datahora IS NULL
+            LEFT JOIN `{project_dataset}.proprietario` AS prop
+                ON ap.id_proprietario = prop.id_proprietario
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
             ORDER BY src.{identifier_field}
             LIMIT {batch_size}
@@ -609,6 +625,7 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
     if dataframe.empty:
         return dataframe.assign(
             id_animal=pd.Series(dtype="string"),
+            cpf=pd.Series(dtype="string"),
             foto_url=pd.Series(dtype="string"),
             qrcode_payload=pd.Series(dtype="string"),
             ingestao_data=pd.Series(dtype="datetime64[ns]"),
@@ -622,6 +639,7 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
 
     selected_columns = [
         "id_animal",
+        "cpf",
         "qrcode_payload",
         "foto_url",
         "ingestao_data",
