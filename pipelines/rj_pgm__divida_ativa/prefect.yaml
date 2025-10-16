@@ -389,10 +389,10 @@ deployments:
       parameters:
         table_id: DevedorCDA
         execute_query: |
-          SELECT numCDA, 
-            idPessoa, 
-            descSituacaoDevedor, 
-            datSituacao, 
+          SELECT numCDA,
+            idPessoa,
+            descSituacaoDevedor,
+            datSituacao,
             TipVinculo
           FROM DAM_PRD.dbo.DevedorCDA
     - interval: 86400
@@ -402,18 +402,18 @@ deployments:
       parameters:
         table_id: PagamentosCDA
         execute_query: |
-          SELECT IDPagamentosCDA, 
-            ObjPago, 
-            codTipoPagamento, 
-            NumCDA, 
-            numGuiaPagamento, 
-            numCotaPagamento, 
-            ValJurosGuiaPG, 
-            DatPagamento, 
-            ValTotalPG, 
-            ValJurosPG, 
-            ValMultaPG, 
-            ValMoraPG, 
-            ValMoraJurosPG, 
+          SELECT IDPagamentosCDA,
+            ObjPago,
+            codTipoPagamento,
+            NumCDA,
+            numGuiaPagamento,
+            numCotaPagamento,
+            ValJurosGuiaPG,
+            DatPagamento,
+            ValTotalPG,
+            ValJurosPG,
+            ValMultaPG,
+            ValMoraPG,
+            ValMoraJurosPG,
             ValPrincipalPG
           FROM DAM_PRD.dbo.PagamentosCDA
