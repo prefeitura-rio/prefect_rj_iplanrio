@@ -28,8 +28,8 @@ def rj_iplanrio__sisbicho_images(
     billing_project_id: str | None = None,
     storage_project_id: str | None = None,
     credential_bucket: str | None = None,
-    batch_size: int = 10,
-    max_records: int | None = 10,
+    batch_size: int = 100,
+    max_records: int | None = 1000,
 ):
     constants = SisbichoImagesConstants
 
