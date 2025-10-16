@@ -326,8 +326,8 @@ def fetch_batch(
     """Busca um lote específico de dados do BigQuery, excluindo animais já processados."""
 
     # Extrai dataset e project da source_table para montar as outras tabelas
-    parts = source_table.split('.')
-    project_dataset = '.'.join(parts[:-1])
+    parts = source_table.split(".")
+    project_dataset = ".".join(parts[:-1])
 
     # Verifica se a tabela de destino existe
     try:
