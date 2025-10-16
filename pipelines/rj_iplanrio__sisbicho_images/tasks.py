@@ -245,7 +245,7 @@ def _get_total_count(
             SELECT COUNT(*) as total
             FROM `{source_table}` AS src
             LEFT JOIN `{target_table}` AS tgt
-                ON src.{identifier_field} = tgt.id_animal
+                ON CAST(src.{identifier_field} AS STRING) = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
               AND tgt.id_animal IS NULL
         """
@@ -327,7 +327,7 @@ def fetch_batch(
         # Query incremental com LEFT JOIN
         query = f"""
             SELECT
-                src.{identifier_field} AS animal_identifier,
+                CAST(src.{identifier_field} AS STRING) AS animal_identifier,
                 prop.cpf_numero AS cpf,
                 src.qrcode_dados,
                 src.foto_dados
@@ -338,7 +338,7 @@ def fetch_batch(
             LEFT JOIN `{project_dataset}.proprietario` AS prop
                 ON ap.id_proprietario = prop.id_proprietario
             LEFT JOIN `{target_table}` AS tgt
-                ON src.{identifier_field} = tgt.id_animal
+                ON CAST(src.{identifier_field} AS STRING) = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
               AND tgt.id_animal IS NULL
             ORDER BY src.{identifier_field}
@@ -349,7 +349,7 @@ def fetch_batch(
         # Query completa (primeira carga)
         query = f"""
             SELECT
-                src.{identifier_field} AS animal_identifier,
+                CAST(src.{identifier_field} AS STRING) AS animal_identifier,
                 prop.cpf_numero AS cpf,
                 src.qrcode_dados,
                 src.foto_dados
