@@ -249,13 +249,26 @@ def _get_total_count(
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
               AND tgt.id_animal IS NULL
         """
-    else:
-        # Query completa (primeira carga)
-        count_query = f"""
-            SELECT COUNT(*) as total
-            FROM `{source_table}` AS src
-            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-        """
+
+        try:
+            result = client.query(count_query).result()
+            return next(result).total
+        except Exception as exc:
+            error_msg = str(exc).lower()
+            # Detecta tabela vazia (Hive partition sem arquivos)
+            if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
+                log(f"[INFO] Tabela {target_table} existe mas está vazia. Processando como primeira carga.")
+                table_exists = False
+            else:
+                # Outro tipo de erro - propaga
+                raise
+
+    # Query completa (primeira carga ou tabela vazia)
+    count_query = f"""
+        SELECT COUNT(*) as total
+        FROM `{source_table}` AS src
+        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+    """
 
     result = client.query(count_query).result()
     return next(result).total
@@ -345,25 +358,47 @@ def fetch_batch(
             LIMIT {batch_size}
             OFFSET {offset}
         """.strip()
-    else:
-        # Query completa (primeira carga)
-        query = f"""
-            SELECT
-                CAST(src.{identifier_field} AS STRING) AS animal_identifier,
-                prop.cpf_numero AS cpf,
-                src.qrcode_dados,
-                src.foto_dados
-            FROM `{source_table}` AS src
-            LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-                ON src.{identifier_field} = ap.id_animal
-                AND ap.fim_datahora IS NULL
-            LEFT JOIN `{project_dataset}.proprietario` AS prop
-                ON ap.id_proprietario = prop.id_proprietario
-            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-            ORDER BY src.{identifier_field}
-            LIMIT {batch_size}
-            OFFSET {offset}
-        """.strip()
+
+        log(f"Buscando lote: offset={offset}, limit={batch_size}")
+
+        job_config = bigquery.QueryJobConfig(
+            use_query_cache=True,
+            use_legacy_sql=False,
+        )
+
+        try:
+            query_job = client.query(query, job_config=job_config)
+            dataframe = query_job.result().to_dataframe()
+            log(f"Lote carregado: {len(dataframe)} registros")
+            return dataframe
+        except Exception as exc:
+            error_msg = str(exc).lower()
+            # Detecta tabela vazia (Hive partition sem arquivos)
+            if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
+                log(f"[INFO] Tabela {target_table} existe mas está vazia. Usando query sem JOIN.")
+                table_exists = False
+            else:
+                # Outro tipo de erro - propaga
+                raise
+
+    # Query completa (primeira carga ou tabela vazia)
+    query = f"""
+        SELECT
+            CAST(src.{identifier_field} AS STRING) AS animal_identifier,
+            prop.cpf_numero AS cpf,
+            src.qrcode_dados,
+            src.foto_dados
+        FROM `{source_table}` AS src
+        LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
+            ON src.{identifier_field} = ap.id_animal
+            AND ap.fim_datahora IS NULL
+        LEFT JOIN `{project_dataset}.proprietario` AS prop
+            ON ap.id_proprietario = prop.id_proprietario
+        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+        ORDER BY src.{identifier_field}
+        LIMIT {batch_size}
+        OFFSET {offset}
+    """.strip()
 
     log(f"Buscando lote: offset={offset}, limit={batch_size}")
 
