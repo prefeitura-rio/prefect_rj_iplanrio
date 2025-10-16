@@ -60,8 +60,8 @@ deployments:
           bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
-            prod: "rj-iplanrio_dbt"
-            dev: "rj-iplanrio-dev_dbt"
+            prod: "rj-crm-registry_dbt"
+            dev: "rj-crm-registry-dev_dbt"
       # Schedule 2: Daily build with daily and freshness tags
       - interval: 86400
         anchor_date: "2023-01-01T09:15:00"
@@ -69,14 +69,14 @@ deployments:
         slug: dbt_daily_build
         parameters:
           command: "build"
-          select: "tag:daily"
+          select: "+tag:daily"
           send_discord_report: true
           github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
           bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
-            prod: "rj-iplanrio_dbt"
-            dev: "rj-iplanrio-dev_dbt"
+            prod: "rj-crm-registry_dbt"
+            dev: "rj-crm-registry-dev_dbt"
       # Weekly schedules (604800 seconds = 7 days)
       # Schedule 3: Weekly build with weekly tags
       - interval: 604800
@@ -85,12 +85,28 @@ deployments:
         slug: dbt_weekly_build
         parameters:
           command: "build"
-          select: "tag:weekly"
+          select: "+tag:weekly"
           send_discord_report: true
           github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
           bigquery_project: "rj-crm-registry"
           target: "prod"
           gcs_buckets:
-            prod: "rj-iplanrio_dbt"
-            dev: "rj-iplanrio-dev_dbt"
+            prod: "rj-crm-registry_dbt"
+            dev: "rj-crm-registry-dev_dbt"
+      # Quarterly hour (900 seconds = 15 minutes)
+      # Schedule 4: run each 15 minutes
+      - interval: 900
+        anchor_date: "2024-03-17T09:15:00"
+        timezone: America/Sao_Paulo
+        slug: dbt_quarter_hourly_build
+        parameters:
+          command: "build"
+          select: "+tag:quarter_hourly"
+          send_discord_report: true
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+          bigquery_project: "rj-crm-registry"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-crm-registry_dbt"
+            dev: "rj-crm-registry-dev_dbt"
 
