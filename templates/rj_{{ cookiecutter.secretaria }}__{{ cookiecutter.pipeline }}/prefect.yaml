@@ -38,8 +38,6 @@ deployments:
   - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--prod
     version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
     entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
-    schedules:
-      - cron: "0 0 * * *"
     work_pool:
       name: k3s-pool
       work_queue_name: default
