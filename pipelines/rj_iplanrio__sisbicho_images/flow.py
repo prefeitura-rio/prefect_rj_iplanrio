@@ -96,14 +96,39 @@ def rj_iplanrio__sisbicho_images(
                 append_mode=True,
             )
 
-            create_table_and_upload_to_gcs_task(
-                data_path=partitions_path,
-                dataset_id=dataset_id,
-                table_id=table_id,
-                dump_mode=dump_mode,
-                source_format=constants.FILE_FORMAT.value,
-                biglake_table=False,
-            )
+            # Tenta criar tabela e fazer upload, com recovery para tabela vazia
+            try:
+                create_table_and_upload_to_gcs_task(
+                    data_path=partitions_path,
+                    dataset_id=dataset_id,
+                    table_id=table_id,
+                    dump_mode=dump_mode,
+                    source_format=constants.FILE_FORMAT.value,
+                    biglake_table=False,
+                )
+            except Exception as exc:
+                error_msg = str(exc).lower()
+                # Detecta tabela vazia que causa erro no basedosdados
+                if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
+                    log(f"[RECOVERY] Erro de tabela vazia detectado em create_table. Deletando tabela...")
+                    try:
+                        client.delete_table(target_table, not_found_ok=True)
+                        log(f"[RECOVERY] Tabela {target_table} deletada. Tentando criar novamente...")
+                        create_table_and_upload_to_gcs_task(
+                            data_path=partitions_path,
+                            dataset_id=dataset_id,
+                            table_id=table_id,
+                            dump_mode=dump_mode,
+                            source_format=constants.FILE_FORMAT.value,
+                            biglake_table=False,
+                        )
+                        log(f"[RECOVERY] Tabela criada com sucesso após recovery.")
+                    except Exception as retry_exc:
+                        log(f"[ERRO] Falha no retry após deletar tabela: {retry_exc}")
+                        raise
+                else:
+                    # Outro tipo de erro - propaga
+                    raise
 
             total_processed += len(batch_output)
 
