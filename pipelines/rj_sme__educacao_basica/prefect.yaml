@@ -1,0 +1,704 @@
+name: rj_sme__educacao_basica
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_sme__educacao_basica-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_sme__educacao_basica/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-sme--educacao_basica--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_sme__educacao_basica/flow.py:rj_sme__educacao_basica
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sme__educacao_basica -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+    schedules:
+    # Schedule para tabela aluno (overwrite)
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T05:10:00" # 02:10 BRT = 05:10 UTC
+      timezone: America/Sao_Paulo
+      slug: aluno
+      parameters:
+        table_id: aluno
+        execute_query: |
+          SELECT
+            [Ano],
+            [Matricula],
+            [Nome],
+            [Sexo],
+            [Endereco],
+            [Bairro],
+            [CEP],
+            [Filiacao_1],
+            [Filiacao_2],
+            [Mora_com_Filiacao],
+            [CPF],
+            [NIS_Aluno],
+            [NIS_Resp],
+            [Raça_Cor] as Raca_Cor,
+            [Cod_def],
+            [Deficiência] as Deficiencia,
+            [Tipo_Transporte],
+            [Bolsa_Familia],
+            [CFC],
+            [Territorios_Sociais],
+            [Clube_Escolar],
+            [Nucleo_Artes],
+            [Mais_Educacao],
+            [DataNascimento],
+            [Idade_Atual],
+            [Idade_3112],
+            [Turma],
+            [UP_Aval],
+            [Situacao],
+            [Cod_Ult_Mov],
+            [Ult_Movimentação] as Ult_Movimentacao,
+            [Tot_Aluno],
+            [alu_id],
+            [tur_id]
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_lgpd
+
+    # Schedule para tabela aluno_historico_2025 (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: aluno_historico_2025
+      parameters:
+        table_id: aluno_historico_2025
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [Matricula],
+            [Nome],
+            [Sexo],
+            [Naturalidade],
+            [Nacionalidade],
+            [Endereco],
+            [Bairro],
+            [CEP],
+            [Filiacao_1],
+            [Filiacao_1_Profissão],
+            [Filiacao_1_Escolaridade],
+            [Filiacao_2],
+            [Filiacao_2_Profissão],
+            [Filiacao_2_Escolaridade],
+            [Mora_com_Filiacao],
+            [CPF],
+            [NIS_Aluno],
+            [NIS_Resp],
+            [Raça_Cor],
+            [Cod_def],
+            [Deficiência],
+            [Tipo_Transporte],
+            [Tempo_Deslocamento],
+            [Regressa_Sozinho],
+            [Religião],
+            [Bolsa_Familia],
+            [CFC],
+            [Territorios_Sociais],
+            [Clube_Escolar],
+            [Nucleo_Artes],
+            [Mais_Educacao],
+            [DataNascimento],
+            [Idade_Atual],
+            [Idade_3112],
+            [Situacao],
+            [Cod_Ult_Mov],
+            [Ult_Movimentação],
+            [Tot_Aluno],
+            [alu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_Todos_lgpd
+
+    # Schedule para tabela aluno_turma (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: aluno_turma
+      parameters:
+        table_id: aluno_turma
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [tur_id],
+            [alu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_Turma
+
+    # Schedule para tabela avaliacao (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: avaliacao
+      parameters:
+        table_id: avaliacao
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [COC],
+            [tpc_nome],
+            [tur_codigo],
+            [Reunião_Pais],
+            [Frequencia],
+            [Conceito],
+            [GLB],
+            [MAT],
+            [POR],
+            [CIE],
+            [GEO],
+            [HIS],
+            [EFI],
+            [ING],
+            [ESP],
+            [FRA],
+            [ALE],
+            [AVI],
+            [APL],
+            [ACE],
+            [TEA],
+            [MUS],
+            [cur_id],
+            [crp_id],
+            [tur_id],
+            [alu_id],
+            [mtu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Avaliacao
+
+    # Schedule para tabela coc (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: coc
+      parameters:
+        table_id: coc
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano] AS Ano,
+            [CRE] AS CRE,
+            [Unidade] AS Unidade,
+            [Grupamento] AS Grupamento,
+            [Turma] AS Turma,
+            [Turno] AS Turno,
+            [COC] AS COC,
+            [Turmas] AS Turmas,
+            [Alunos] AS Alunos,
+            [Masculinos] AS Masculinos,
+            [Femininos] AS Femininos,
+            [Não_Def] AS Nao_Def,
+            [Def] AS Def,
+            [Masculinos_Não_Def] AS Masculinos_Nao_Def,
+            [Masculinos_Def] AS Masculinos_Def,
+            [Femininos_Não_Def] AS Femininos_Nao_Def,
+            [Femininos_Def] AS Femininos_Def,
+            [Vagas] AS Vagas,
+            [capacidade] AS capacidade,
+            [tur_id] AS tur_id,
+            [pft_capacidade] AS pft_capacidade
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_Turma_com_COC0
+
+    # Schedule para tabela dependencia (overwrite)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: dependencia
+      parameters:
+        table_id: dependencia
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            [Dependencia],
+            [Area_Dep],
+            [Capac_Dep],
+            [Tipo_Dep],
+            [Dep_Aloc_Turma],
+            [Dep_Util_Como],
+            [Dep_Util_Como_Aloc_Turma],
+            [Tot_Dep],
+            [esc_id],
+            [dep_id]
+          FROM GestaoEscolar.dbo.VW_BI_Dependencia
+
+    # Schedule para tabela escola (overwrite)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: escola
+      parameters:
+        table_id: escola
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            [CRE],
+            [Designacao],
+            [Denominacao],
+            [Endereco],
+            [Bairro],
+            [CEP],
+            [eMail],
+            [Telefone],
+            [Direçao] as Direcao,
+            [MicroArea],
+            [Polo],
+            [Tipo_Unidade],
+            [INEP],
+            [SICI],
+            [Salas_Recurso],
+            [Salas_Aula],
+            [Salas_Aula_Utilizadas],
+            [Tot_Escola],
+            [esc_id]
+          FROM GestaoEscolar.dbo.VW_BI_Escola
+
+    # Schedule para tabela frequencia (append com particionamento por mês)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: frequencia
+      parameters:
+        table_id: frequencia
+        dump_mode: append
+        partition_columns: datainicio
+        partition_date_format: "%Y-%m-%d"
+        break_query_frequency: month
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [esc_id] AS esc_id,
+            [tur_id] AS tur_id,
+            [turma] AS turma,
+            [alu_id] AS alu_id,
+            [coc] AS coc,
+            [dataInicio] AS datainicio,
+            [dataFim] AS datafim,
+            [diasLetivos] AS diasletivos,
+            [temposLetivos] AS temposletivos,
+            [faltasGlb] AS faltasglb,
+            [dis_id] AS dis_id,
+            [disciplinaCodigo] AS disciplinacodigo,
+            [disciplina] AS disciplina,
+            [faltasDis] AS faltasdis,
+            [cargaHorariaSemanal] AS cargahorariasemanal
+          FROM GestaoEscolar.dbo.VW_BI_Frequencia
+
+    # Schedule para tabela movimentacao (append com particionamento por mês)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: movimentacao
+      parameters:
+        table_id: movimentacao
+        dump_mode: append
+        partition_columns: Data_mov
+        partition_date_format: "%Y-%m-%d"
+        break_query_frequency: month
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [Coc],
+            [Aluno],
+            [Cre],
+            [Unidade],
+            [Grupamento],
+            [Turma],
+            [Cod_mov],
+            [Movimentação],
+            [Data_mov],
+            [Sexo],
+            [Cod_def],
+            [Deficiência],
+            [DataNascimento],
+            [Idade_Atual],
+            [Idade_3112],
+            [Mov_ordem],
+            [Tipo_mov],
+            [Tot_Mov],
+            [alu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Movimentacao_lgpd
+
+  - name: rj-sme--educacao_basica--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_sme__educacao_basica/flow.py:rj_sme__educacao_basica
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sme__educacao_basica -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # Schedule para tabela aluno (overwrite)
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T05:10:00" # 02:10 BRT = 05:10 UTC
+      timezone: America/Sao_Paulo
+      slug: aluno
+      parameters:
+        table_id: aluno
+        execute_query: |
+          SELECT
+            [Ano],
+            [Matricula],
+            [Nome],
+            [Sexo],
+            [Endereco],
+            [Bairro],
+            [CEP],
+            [Filiacao_1],
+            [Filiacao_2],
+            [Mora_com_Filiacao],
+            [CPF],
+            [NIS_Aluno],
+            [NIS_Resp],
+            [Raça_Cor] as Raca_Cor,
+            [Cod_def],
+            [Deficiência] as Deficiencia,
+            [Tipo_Transporte],
+            [Bolsa_Familia],
+            [CFC],
+            [Territorios_Sociais],
+            [Clube_Escolar],
+            [Nucleo_Artes],
+            [Mais_Educacao],
+            [DataNascimento],
+            [Idade_Atual],
+            [Idade_3112],
+            [Turma],
+            [UP_Aval],
+            [Situacao],
+            [Cod_Ult_Mov],
+            [Ult_Movimentação] as Ult_Movimentacao,
+            [Tot_Aluno],
+            [alu_id],
+            [tur_id]
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_lgpd
+
+    # Schedule para tabela aluno_historico_2025 (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: aluno_historico_2025
+      parameters:
+        table_id: aluno_historico_2025
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [Matricula],
+            [Nome],
+            [Sexo],
+            [Naturalidade],
+            [Nacionalidade],
+            [Endereco],
+            [Bairro],
+            [CEP],
+            [Filiacao_1],
+            [Filiacao_1_Profissão],
+            [Filiacao_1_Escolaridade],
+            [Filiacao_2],
+            [Filiacao_2_Profissão],
+            [Filiacao_2_Escolaridade],
+            [Mora_com_Filiacao],
+            [CPF],
+            [NIS_Aluno],
+            [NIS_Resp],
+            [Raça_Cor],
+            [Cod_def],
+            [Deficiência],
+            [Tipo_Transporte],
+            [Tempo_Deslocamento],
+            [Regressa_Sozinho],
+            [Religião],
+            [Bolsa_Familia],
+            [CFC],
+            [Territorios_Sociais],
+            [Clube_Escolar],
+            [Nucleo_Artes],
+            [Mais_Educacao],
+            [DataNascimento],
+            [Idade_Atual],
+            [Idade_3112],
+            [Situacao],
+            [Cod_Ult_Mov],
+            [Ult_Movimentação],
+            [Tot_Aluno],
+            [alu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_Todos_lgpd
+
+    # Schedule para tabela aluno_turma (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: aluno_turma
+      parameters:
+        table_id: aluno_turma
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [tur_id],
+            [alu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_Turma
+
+    # Schedule para tabela avaliacao (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: avaliacao
+      parameters:
+        table_id: avaliacao
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [COC],
+            [tpc_nome],
+            [tur_codigo],
+            [Reunião_Pais],
+            [Frequencia],
+            [Conceito],
+            [GLB],
+            [MAT],
+            [POR],
+            [CIE],
+            [GEO],
+            [HIS],
+            [EFI],
+            [ING],
+            [ESP],
+            [FRA],
+            [ALE],
+            [AVI],
+            [APL],
+            [ACE],
+            [TEA],
+            [MUS],
+            [cur_id],
+            [crp_id],
+            [tur_id],
+            [alu_id],
+            [mtu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Avaliacao
+
+    # Schedule para tabela coc (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: coc
+      parameters:
+        table_id: coc
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano] AS Ano,
+            [CRE] AS CRE,
+            [Unidade] AS Unidade,
+            [Grupamento] AS Grupamento,
+            [Turma] AS Turma,
+            [Turno] AS Turno,
+            [COC] AS COC,
+            [Turmas] AS Turmas,
+            [Alunos] AS Alunos,
+            [Masculinos] AS Masculinos,
+            [Femininos] AS Femininos,
+            [Não_Def] AS Nao_Def,
+            [Def] AS Def,
+            [Masculinos_Não_Def] AS Masculinos_Nao_Def,
+            [Masculinos_Def] AS Masculinos_Def,
+            [Femininos_Não_Def] AS Femininos_Nao_Def,
+            [Femininos_Def] AS Femininos_Def,
+            [Vagas] AS Vagas,
+            [capacidade] AS capacidade,
+            [tur_id] AS tur_id,
+            [pft_capacidade] AS pft_capacidade
+          FROM GestaoEscolar.dbo.VW_BI_Aluno_Turma_com_COC0
+
+    # Schedule para tabela dependencia (overwrite)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: dependencia
+      parameters:
+        table_id: dependencia
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            [Dependencia],
+            [Area_Dep],
+            [Capac_Dep],
+            [Tipo_Dep],
+            [Dep_Aloc_Turma],
+            [Dep_Util_Como],
+            [Dep_Util_Como_Aloc_Turma],
+            [Tot_Dep],
+            [esc_id],
+            [dep_id]
+          FROM GestaoEscolar.dbo.VW_BI_Dependencia
+
+    # Schedule para tabela escola (overwrite)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: escola
+      parameters:
+        table_id: escola
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            [CRE],
+            [Designacao],
+            [Denominacao],
+            [Endereco],
+            [Bairro],
+            [CEP],
+            [eMail],
+            [Telefone],
+            [Direçao] as Direcao,
+            [MicroArea],
+            [Polo],
+            [Tipo_Unidade],
+            [INEP],
+            [SICI],
+            [Salas_Recurso],
+            [Salas_Aula],
+            [Salas_Aula_Utilizadas],
+            [Tot_Escola],
+            [esc_id]
+          FROM GestaoEscolar.dbo.VW_BI_Escola
+
+    # Schedule para tabela frequencia (append com particionamento por mês)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: frequencia
+      parameters:
+        table_id: frequencia
+        dump_mode: append
+        partition_columns: datainicio
+        partition_date_format: "%Y-%m-%d"
+        break_query_frequency: month
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [esc_id] AS esc_id,
+            [tur_id] AS tur_id,
+            [turma] AS turma,
+            [alu_id] AS alu_id,
+            [coc] AS coc,
+            [dataInicio] AS datainicio,
+            [dataFim] AS datafim,
+            [diasLetivos] AS diasletivos,
+            [temposLetivos] AS temposletivos,
+            [faltasGlb] AS faltasglb,
+            [dis_id] AS dis_id,
+            [disciplinaCodigo] AS disciplinacodigo,
+            [disciplina] AS disciplina,
+            [faltasDis] AS faltasdis,
+            [cargaHorariaSemanal] AS cargahorariasemanal
+          FROM GestaoEscolar.dbo.VW_BI_Frequencia
+
+    # Schedule para tabela movimentacao (append com particionamento por mês)
+    - interval: 86400
+      anchor_date: "2022-01-01T05:10:00"
+      timezone: America/Sao_Paulo
+      slug: movimentacao
+      parameters:
+        table_id: movimentacao
+        dump_mode: append
+        partition_columns: Data_mov
+        partition_date_format: "%Y-%m-%d"
+        break_query_frequency: month
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+          SELECT
+            [Ano],
+            [Coc],
+            [Aluno],
+            [Cre],
+            [Unidade],
+            [Grupamento],
+            [Turma],
+            [Cod_mov],
+            [Movimentação],
+            [Data_mov],
+            [Sexo],
+            [Cod_def],
+            [Deficiência],
+            [DataNascimento],
+            [Idade_Atual],
+            [Idade_3112],
+            [Mov_ordem],
+            [Tipo_mov],
+            [Tot_Mov],
+            [alu_id]
+          FROM GestaoEscolar.dbo.VW_BI_Movimentacao_lgpd
