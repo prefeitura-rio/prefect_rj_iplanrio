@@ -110,7 +110,7 @@ def rj_iplanrio__sisbicho_images(
                 error_msg = str(exc).lower()
                 # Detecta tabela vazia que causa erro no basedosdados
                 if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
-                    log(f"[RECOVERY] Erro de tabela vazia detectado em create_table. Deletando tabela...")
+                    log("[RECOVERY] Erro de tabela vazia detectado em create_table. Deletando tabela...")
                     try:
                         client.delete_table(target_table, not_found_ok=True)
                         log(f"[RECOVERY] Tabela {target_table} deletada. Tentando criar novamente...")
@@ -122,7 +122,7 @@ def rj_iplanrio__sisbicho_images(
                             source_format=constants.FILE_FORMAT.value,
                             biglake_table=False,
                         )
-                        log(f"[RECOVERY] Tabela criada com sucesso após recovery.")
+                        log("[RECOVERY] Tabela criada com sucesso após recovery.")
                     except Exception as retry_exc:
                         log(f"[ERRO] Falha no retry após deletar tabela: {retry_exc}")
                         raise
