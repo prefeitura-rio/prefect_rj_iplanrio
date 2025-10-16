@@ -19,7 +19,7 @@ from prefect import flow
 @flow(log_prints=True)
 def rj_sme__educacao_basica(
     db_database: str = "GestaoEscolar",
-    db_host: str = "10.70.6.103",
+    db_host: str = "clustersqlsme2.rio.rj.gov.br",
     db_port: str = "1433",
     db_type: str = "sql_server",
     db_charset: Optional[str] = "utf8",
