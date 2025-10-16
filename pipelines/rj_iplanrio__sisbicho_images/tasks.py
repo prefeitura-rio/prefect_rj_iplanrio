@@ -228,10 +228,17 @@ def _get_total_count(
     source_table: str,
     target_table: str,
     identifier_field: str,
-) -> int:
-    """Retorna o número total de registros com mídia disponível que ainda não foram processados."""
+) -> tuple[int, bool]:
+    """Retorna o número total de registros com mídia disponível que ainda não foram processados.
+
+    Returns:
+        tuple: (total_count, table_is_empty)
+            - total_count: número de registros a processar
+            - table_is_empty: True se a tabela existe mas está vazia
+    """
 
     # Verifica se a tabela de destino existe
+    table_is_empty = False
     try:
         client.get_table(target_table)
         table_exists = True
@@ -252,13 +259,14 @@ def _get_total_count(
 
         try:
             result = client.query(count_query).result()
-            return next(result).total
+            return next(result).total, table_is_empty
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
             if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
-                log(f"[INFO] Tabela {target_table} existe mas está vazia. Processando como primeira carga.")
+                log(f"[INFO] Tabela {target_table} existe mas está vazia. Será deletada e recriada.")
                 table_exists = False
+                table_is_empty = True
             else:
                 # Outro tipo de erro - propaga
                 raise
@@ -271,7 +279,7 @@ def _get_total_count(
     """
 
     result = client.query(count_query).result()
-    return next(result).total
+    return next(result).total, table_is_empty
 
 
 @task
@@ -304,7 +312,17 @@ def fetch_sisbicho_media_task(
     table = client.get_table(source_table)
     identifier_field = _infer_identifier_field(table.schema)
 
-    total_count = _get_total_count(client, source_table, target_table, identifier_field)
+    total_count, table_is_empty = _get_total_count(client, source_table, target_table, identifier_field)
+
+    # Se a tabela está vazia (corrompida), deleta para o basedosdados recriar do zero
+    if table_is_empty:
+        log(f"[RECOVERY] Deletando tabela vazia {target_table}...")
+        try:
+            client.delete_table(target_table, not_found_ok=True)
+            log(f"[RECOVERY] Tabela {target_table} deletada com sucesso. Será recriada na primeira gravação.")
+        except Exception as exc:
+            log(f"[ERRO] Falha ao deletar tabela vazia: {exc}")
+            raise
 
     if max_records:
         total_count = min(total_count, max_records)
