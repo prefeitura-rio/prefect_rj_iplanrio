@@ -1,5 +1,8 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
+
 from typing import Any, Dict, Optional
+
 import requests
 
 
@@ -84,9 +87,7 @@ class ApiHandler:
     # Public interface
     # -------------------------
 
-    def get(
-        self, path: str, params: Optional[Dict[str, Any]] = None, **kwargs
-    ) -> requests.Response:
+    def get(self, path: str, params: Optional[Dict[str, Any]] = None, **kwargs) -> requests.Response:
         return self._request("GET", path, params=params, **kwargs)
 
     def post(

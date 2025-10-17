@@ -68,26 +68,20 @@ def send_to_api(
     )
 
     total = len(destinations)
-    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S")
 
     if total == 0:
         raise RuntimeError("No destinations to dispatch")
 
     total_batches = ceil(total / chunk_size)
-    log(
-        f"Starting dispatch of {total} destinations in {total_batches} batches of size {chunk_size}"
-    )
+    log(f"Starting dispatch of {total} destinations in {total_batches} batches of size {chunk_size}")
 
     for i, start in enumerate(range(0, total, chunk_size), 1):
         end = start + chunk_size
         batch = destinations[start:end]
 
         # Append batch information to campaign name
-        batch_campaign_name = (
-            f"{campaign_name}-{dispatch_date[:10]}-lote{i}"
-        )
+        batch_campaign_name = f"{campaign_name}-{dispatch_date[:10]}-lote{i}"
 
         # Cria payload no formato esperado pelo endpoint
         payload = {
@@ -104,13 +98,9 @@ def send_to_api(
 
         if response.status_code >= 400:
             log(f"Batch {i} dispatch failed: {response.text}")
-            raise RuntimeError(
-                f"Dispatch API batch {i} returned {response.status_code}: {response.text}"
-            )
+            raise RuntimeError(f"Dispatch API batch {i} returned {response.status_code}: {response.text}")
 
         log(f"Batch {i} dispatched successfully")
 
-    log(
-        f"All {total} destinations dispatched successfully in {total_batches} batches"
-    )
+    log(f"All {total} destinations dispatched successfully in {total_batches} batches")
     return dispatch_date

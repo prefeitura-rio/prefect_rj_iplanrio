@@ -1,6 +1,9 @@
-import pandas as pd
+# -*- coding: utf-8 -*-
 import json
+
+import pandas as pd
 from prefect import task
+
 from pipelines.rj_smas__disparo_cadunico.tasks import remove_duplicate_phones
 
 

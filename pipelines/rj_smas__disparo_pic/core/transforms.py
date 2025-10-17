@@ -1,5 +1,7 @@
-import pandas as pd
+# -*- coding: utf-8 -*-
 import json
+
+import pandas as pd
 from core.base import TransformStrategy
 from core.registry import TransformerRegistry
 
@@ -29,9 +31,7 @@ class NormalizeCPFTransform(TransformStrategy):
         self.column = column
 
     def transform(self, df: pd.DataFrame) -> pd.DataFrame:
-        df[self.column] = (
-            df[self.column].astype("string").str.replace(r"\D", "", regex=True)
-        )
+        df[self.column] = df[self.column].astype("string").str.replace(r"\D", "", regex=True)
         return df
 
 
