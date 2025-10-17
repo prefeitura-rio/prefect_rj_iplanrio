@@ -81,4 +81,5 @@ def rj_cvl__osinfo(  # noqa
         charset=db_charset,
         max_concurrency=max_concurrency,
         only_staging_dataset=only_staging_dataset,
+        add_timestamp_column=add_timestamp_column
     )
