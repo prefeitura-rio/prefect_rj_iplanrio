@@ -1,0 +1,14 @@
+transformations:
+  - method: Rename
+    args:
+      telefone: "to"
+  - method: BuildDestinationJSON
+    args:
+      template:
+        to: "{to}"
+        vars:
+          NOME_SOBRENOME: "{nome_sobrenome}"
+          CPF: "{cpf}"
+          ENDERECO: "{endereco}"
+          DATA: "{data}"
+          HORARIO: "{horario}"
