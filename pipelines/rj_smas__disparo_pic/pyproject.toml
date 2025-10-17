@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "google-cloud-bigquery>=3.29.0",
+    "prefeitura-rio[actions] @ git+https://github.com/prefeitura-rio/prefeitura-rio@54593ddff444158b0ecbab5514c5cde4d44012c0",
     "pandas>=2.3.3",
     "prefect>=3.4.9",
     "pyyaml>=6.0.3",
