@@ -1,10 +1,12 @@
-from flows.whatsapp_flow import whatsapp_flow
+# -*- coding: utf-8 -*-
+"""
+Main flow entry point for rj_smas__disparo_pic pipeline
 
-whatsapp_flow(
-    sql="SELECT celular_disparo, nome_completo, cpf, uf FROM dataset.tabela WHERE campanha='2025Q1'",
-    config_path="config/example_transform.yaml",
-    id_hsm=12345,
-    campaign_name="Cadastro Único RJ",
-    cost_center_id=42,
-    infisical_secret_path="/wetalkie",
-)
+Executa pipeline completa de disparo PIC SMAS com todos os parâmetros
+usando valores padrão definidos nas constantes.
+"""
+
+from pipelines.rj_smas__disparo_pic.flows.whatsapp_flow import whatsapp_flow
+
+# Execute flow with all defaults from PicConstants
+whatsapp_flow()
