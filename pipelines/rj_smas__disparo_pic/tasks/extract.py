@@ -78,10 +78,7 @@ def extract_with_processors(
             final_query = processor_func(query)
             log(f"Query after processing:\n{final_query}")
         else:
-            log(
-                f"Warning: Query processor '{query_processor_name}' not found, "
-                "using original query"
-            )
+            log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
 
     # Execute query using robust BigQuery method
     log(f"Extracting data from BigQuery (project: {billing_project_id})")

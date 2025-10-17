@@ -1,11 +1,10 @@
+# -*- coding: utf-8 -*-
 import pandas as pd
 from prefect import task
 
 
 @task
-def validate_data(
-    df: pd.DataFrame, required_columns: list[str] | None = None
-) -> pd.DataFrame:
+def validate_data(df: pd.DataFrame, required_columns: list[str] | None = None) -> pd.DataFrame:
     """
     Executa validações básicas no DataFrame:
     - Confere se colunas obrigatórias existem.

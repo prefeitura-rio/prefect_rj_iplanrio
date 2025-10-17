@@ -98,10 +98,10 @@ def whatsapp_flow(
     log(f"Extracted {len(df)} rows from BigQuery")
 
     df_validated = validate_data(df)
-    log(f"Data validation completed")
+    log("Data validation completed")
 
     df_transformed = transform_data(df_validated, config_path)
-    log(f"Data transformation completed")
+    log("Data transformation completed")
 
     destinations = prepare_destinations(df_transformed)
     log(f"Prepared {len(destinations)} destinations for API dispatch")
