@@ -259,13 +259,15 @@ def _get_total_count(
               AND tgt.id_animal IS NULL
         """
 
-        log(f"[DEBUG COUNT] Query incremental:")
+        log("[DEBUG COUNT] Query incremental:")
         log(f"[DEBUG COUNT] {count_query}")
 
         try:
             result = client.query(count_query).result()
             total = next(result).total
-            log(f"[DEBUG COUNT] Resultado: {total} registros NOVOS a processar (LEFT JOIN filtrou registros existentes)")
+            log(
+                f"[DEBUG COUNT] Resultado: {total} registros NOVOS a processar (LEFT JOIN filtrou registros existentes)"
+            )
             return total, table_is_empty
         except Exception as exc:
             error_msg = str(exc).lower()
@@ -286,7 +288,7 @@ def _get_total_count(
         WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
     """
 
-    log(f"[DEBUG COUNT] Query completa (sem filtro incremental):")
+    log("[DEBUG COUNT] Query completa (sem filtro incremental):")
     log(f"[DEBUG COUNT] {count_query}")
 
     result = client.query(count_query).result()
@@ -413,7 +415,7 @@ def fetch_batch(
             dataframe = query_job.result().to_dataframe()
             log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
             if len(dataframe) > 0:
-                sample_ids = dataframe['animal_identifier'].head(3).tolist()
+                sample_ids = dataframe["animal_identifier"].head(3).tolist()
                 log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
             return dataframe
         except Exception as exc:
@@ -467,7 +469,7 @@ def fetch_batch(
 
     log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
     if len(dataframe) > 0:
-        sample_ids = dataframe['animal_identifier'].head(3).tolist()
+        sample_ids = dataframe["animal_identifier"].head(3).tolist()
         log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
     return dataframe
 
@@ -743,10 +745,10 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
     # Log de debug para verificar dados que serão gravados
     log(f"[DEBUG OUTPUT] Preparando {len(output_df)} registros para gravação")
     if len(output_df) > 0:
-        sample_ids = output_df['id_animal'].head(3).tolist()
+        sample_ids = output_df["id_animal"].head(3).tolist()
         log(f"[DEBUG OUTPUT] Sample IDs que serão gravados: {sample_ids}")
         # Verificar se há NULLs
-        null_count = output_df['id_animal'].isna().sum()
+        null_count = output_df["id_animal"].isna().sum()
         if null_count > 0:
             log(f"[AVISO OUTPUT] {null_count} registros com id_animal NULL!")
 
