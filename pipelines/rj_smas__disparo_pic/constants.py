@@ -12,13 +12,13 @@ class PicConstants(Enum):
     """
 
     # HSM Template ID para mensagens PIC
-    PIC_ID_HSM = 138
+    PIC_ID_HSM = 180
 
     # Nome da campanha
-    PIC_CAMPAIGN_NAME = "smas-pic-prod"
+    PIC_CAMPAIGN_NAME = "jp-teste-pipeline-whatsapp-pic"
 
     # Cost Center ID
-    PIC_COST_CENTER_ID = 38
+    PIC_COST_CENTER_ID = 1
 
     # Billing Project ID
     PIC_BILLING_PROJECT_ID = "rj-smas"
@@ -27,8 +27,8 @@ class PicConstants(Enum):
     PIC_QUERY_PROCESSOR_NAME = "pic"
 
     # Configuracoes de dataset
-    PIC_DATASET_ID = "brutos_pic_disparo"
-    PIC_TABLE_ID = "disparos"
+    PIC_DATASET_ID = "brutos_wetalkie"
+    PIC_TABLE_ID = "disparos_efetuados"
     PIC_DUMP_MODE = "append"
     PIC_CHUNK_SIZE = 1000
 
@@ -37,7 +37,7 @@ class PicConstants(Enum):
     PIC_QUERY = r"""
         SELECT
             '5521985573582' AS telefone,
-            'João Pedro Oliveira' AS nome,
+            'João Pedro Oliveira' AS nome_sobrenome,
             '12345678901' AS cpf,
             'Rua Teste, 123 - Centro (Espaço de Teste)' AS endereco,
             FORMAT_DATE('%d/%m/%Y', DATE_ADD(CURRENT_DATE(), INTERVAL 2 DAY)) AS data,
