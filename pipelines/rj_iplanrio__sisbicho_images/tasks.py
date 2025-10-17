@@ -372,6 +372,7 @@ def fetch_batch(
                 ON CAST(src.{identifier_field} AS STRING) = tgt.id_animal
             WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
               AND tgt.id_animal IS NULL
+            QUALIFY ROW_NUMBER() OVER (PARTITION BY src.{identifier_field} ORDER BY src.datalake_loaded_at DESC) = 1
             ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
@@ -413,6 +414,7 @@ def fetch_batch(
         LEFT JOIN `{project_dataset}.proprietario` AS prop
             ON ap.id_proprietario = prop.id_proprietario
         WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY src.{identifier_field} ORDER BY src.datalake_loaded_at DESC) = 1
         ORDER BY src.{identifier_field}
         LIMIT {batch_size}
         OFFSET {offset}
