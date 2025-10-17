@@ -13,7 +13,7 @@ from prefect import flow
 
 from pipelines.rj_smas__disparo_pic.constants import PicConstants
 from pipelines.rj_smas__disparo_pic.tasks.dispatch import send_to_api
-from pipelines.rj_smas__disparo_pic.tasks.extract import extract_from_bigquery
+from pipelines.rj_smas__disparo_pic.tasks.extract import extract_with_processors
 from pipelines.rj_smas__disparo_pic.tasks.prepare import prepare_destinations
 from pipelines.rj_smas__disparo_pic.tasks.record import create_dispatch_record
 from pipelines.rj_smas__disparo_pic.tasks.transform import transform_data
@@ -32,16 +32,17 @@ def whatsapp_flow(
     dataset_id: str | None = None,
     table_id: str | None = None,
     dump_mode: str | None = None,
+    billing_project_id: str | None = None,
+    query_processor_name: str | None = None,
     infisical_secret_path: str = "/wetalkie",
     dispatch_route: str = "dispatch",
     login_route: str = "users/login",
-    params: dict | None = None,
 ):
     """
     Pipeline completa de disparo WhatsApp (BigQuery → Transform → API → BigQuery).
 
     Executa fluxo completo:
-    1. Extrai dados do BigQuery usando query (com suporte a processadores)
+    1. Extrai dados do BigQuery usando query com processor D+2
     2. Valida e transforma os dados
     3. Prepara destinatários para API
     4. Envia em lotes via API WeTalkie
@@ -62,14 +63,15 @@ def whatsapp_flow(
         dataset_id: Dataset do BigQuery (default: usar constante PIC_DATASET_ID)
         table_id: Tabela do BigQuery (default: usar constante PIC_TABLE_ID)
         dump_mode: Modo de dump (default: usar constante PIC_DUMP_MODE)
+        billing_project_id: GCP project ID for billing (default: usar constante PIC_BILLING_PROJECT_ID)
+        query_processor_name: Nome do processor para query (default: usar constante PIC_QUERY_PROCESSOR_NAME)
         infisical_secret_path: Path das credenciais no Infisical
         dispatch_route: Rota da API para dispatch (padrão para PIC: "dispatch")
         login_route: Rota da API para login
-        params: Parâmetros opcionais para substituição na query SQL
     """
     # Load defaults from constants
     sql = sql or PicConstants.PIC_QUERY.value
-    config_path = config_path or "config/example_transform.yaml"
+    config_path = config_path or "pipelines/rj_smas__disparo_pic/config/pic_transform.yaml"
     id_hsm = id_hsm or PicConstants.PIC_ID_HSM.value
     campaign_name = campaign_name or PicConstants.PIC_CAMPAIGN_NAME.value
     cost_center_id = cost_center_id or PicConstants.PIC_COST_CENTER_ID.value
@@ -77,6 +79,8 @@ def whatsapp_flow(
     dataset_id = dataset_id or PicConstants.PIC_DATASET_ID.value
     table_id = table_id or PicConstants.PIC_TABLE_ID.value
     dump_mode = dump_mode or PicConstants.PIC_DUMP_MODE.value
+    billing_project_id = billing_project_id or PicConstants.PIC_BILLING_PROJECT_ID.value
+    query_processor_name = query_processor_name or PicConstants.PIC_QUERY_PROCESSOR_NAME.value
 
     # Rename flow run for easier tracking in Prefect UI
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
@@ -85,8 +89,12 @@ def whatsapp_flow(
     crd = inject_bd_credentials_task(environment="prod")
 
     # Extract, validate, transform
-    log(f"Extracting data from BigQuery with query")
-    df = extract_from_bigquery(sql, params)
+    log(f"Extracting data from BigQuery with query processor: {query_processor_name}")
+    df = extract_with_processors(
+        query=sql,
+        billing_project_id=billing_project_id,
+        query_processor_name=query_processor_name,
+    )
     log(f"Extracted {len(df)} rows from BigQuery")
 
     df_validated = validate_data(df)

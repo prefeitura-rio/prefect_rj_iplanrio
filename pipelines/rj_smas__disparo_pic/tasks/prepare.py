@@ -6,5 +6,10 @@ from pipelines.rj_smas__disparo_cadunico.tasks import remove_duplicate_phones
 
 @task
 def prepare_destinations(df: pd.DataFrame) -> list[dict]:
-    df = remove_duplicate_phones(df)
-    return [json.loads(j) for j in df["destination_data"].tolist()]
+    # Deserialize JSON from destination_data column
+    destinations = [json.loads(j) for j in df["destination_data"].tolist()]
+
+    # Remove duplicates
+    destinations = remove_duplicate_phones(destinations)
+
+    return destinations

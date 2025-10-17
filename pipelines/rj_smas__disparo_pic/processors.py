@@ -10,36 +10,59 @@ Each processor is a callable that takes a query string and returns a
 transformed query string.
 """
 
+from datetime import datetime, timedelta
+
 from iplanrio.pipelines_utils.logging import log
 
+from pipelines.rj_smas__disparo_pic.constants import PicConstants
 
-def process_example_query(query: str) -> str:
+
+def process_pic_query(query: str = None) -> str:
     """
-    Example query processor.
+    Processes the PIC query by substituting dynamic date values.
 
-    This is a placeholder processor demonstrating the pattern. Replace or
-    extend with actual business logic as needed.
+    Calculates the event date as D+2 (2 days ahead from today) and substitutes
+    the {data_evento} placeholder in the query. This allows the pipeline to
+    dynamically dispatch messages for events happening 2 days in the future.
 
     Args:
-        query: SQL query string
+        query: Optional query string with {data_evento} placeholder.
+               If None, uses query from PicConstants.
 
     Returns:
-        str: Transformed query string
+        str: The processed query with substituted date value
+
+    Raises:
+        ValueError: If {data_evento} placeholder is not found in query
 
     Example:
-        >>> transformed = process_example_query("SELECT * FROM table")
-        >>> print(transformed)
-        "SELECT * FROM table"
+        >>> # For a query with placeholder:
+        >>> query = "SELECT * FROM table WHERE event_date = '{data_evento}'"
+        >>> result = process_pic_query(query)
+        >>> # Result will have '{data_evento}' replaced with 'YYYY-MM-DD' (D+2)
     """
-    log("Processing query with example processor")
-    return query
+    # Use query from constants if none provided
+    if query is None:
+        query = PicConstants.PIC_QUERY.value
+
+    if "{data_evento}" not in query:
+        raise ValueError("Query must contain {data_evento} placeholder for dynamic substitution")
+
+    # Calculate D+2 (2 days ahead)
+    data_evento = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
+
+    log(f"PIC: Calculated event date (D+2): {data_evento}")
+
+    # Format query with calculated date
+    formatted_query = query.format(data_evento=data_evento)
+
+    return formatted_query
 
 
 # Registry of query processors
 # Add new processors here following the same pattern
 QUERY_PROCESSORS = {
-    "example": process_example_query,
-    # Future processors can be added here
+    "pic": process_pic_query,
 }
 
 
