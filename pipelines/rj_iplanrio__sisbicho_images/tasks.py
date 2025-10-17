@@ -240,10 +240,12 @@ def _get_total_count(
     # Verifica se a tabela de destino existe
     table_is_empty = False
     try:
-        client.get_table(target_table)
+        target_table_ref = client.get_table(target_table)
         table_exists = True
+        log(f"[DEBUG COUNT] Tabela target EXISTE: {target_table}")
+        log(f"[DEBUG COUNT] Tabela tem {target_table_ref.num_rows} linhas")
     except NotFound:
-        log(f"Tabela {target_table} não existe. Primeira execução: processando todos os registros.")
+        log(f"[DEBUG COUNT] Tabela {target_table} NÃO EXISTE. Primeira execução: processando todos os registros.")
         table_exists = False
 
     if table_exists:
@@ -257,9 +259,14 @@ def _get_total_count(
               AND tgt.id_animal IS NULL
         """
 
+        log(f"[DEBUG COUNT] Query incremental:")
+        log(f"[DEBUG COUNT] {count_query}")
+
         try:
             result = client.query(count_query).result()
-            return next(result).total, table_is_empty
+            total = next(result).total
+            log(f"[DEBUG COUNT] Resultado: {total} registros NOVOS a processar (LEFT JOIN filtrou registros existentes)")
+            return total, table_is_empty
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
@@ -269,6 +276,7 @@ def _get_total_count(
                 table_is_empty = True
             else:
                 # Outro tipo de erro - propaga
+                log(f"[ERRO] Falha ao executar query incremental: {exc}")
                 raise
 
     # Query completa (primeira carga ou tabela vazia)
@@ -278,8 +286,13 @@ def _get_total_count(
         WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
     """
 
+    log(f"[DEBUG COUNT] Query completa (sem filtro incremental):")
+    log(f"[DEBUG COUNT] {count_query}")
+
     result = client.query(count_query).result()
-    return next(result).total, table_is_empty
+    total = next(result).total
+    log(f"[DEBUG COUNT] Resultado: {total} registros TOTAIS (primeira carga ou tabela vazia)")
+    return total, table_is_empty
 
 
 @task
@@ -349,31 +362,41 @@ def fetch_batch(
 
     # Verifica se a tabela de destino existe
     try:
-        client.get_table(target_table)
+        target_table_ref = client.get_table(target_table)
         table_exists = True
+        log(f"[DEBUG FETCH] Tabela target EXISTE: {target_table} com {target_table_ref.num_rows} linhas")
     except NotFound:
+        log(f"[DEBUG FETCH] Tabela target NÃO EXISTE: {target_table}")
         table_exists = False
 
     if table_exists:
         # Query incremental com LEFT JOIN
         query = f"""
+            WITH animal_unico AS (
+                SELECT
+                    {identifier_field},
+                    qrcode_dados,
+                    foto_dados,
+                    ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
+                FROM `{source_table}`
+                WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
+            )
             SELECT
-                CAST(src.{identifier_field} AS STRING) AS animal_identifier,
+                CAST(a.{identifier_field} AS STRING) AS animal_identifier,
                 prop.cpf_numero AS cpf,
-                src.qrcode_dados,
-                src.foto_dados
-            FROM `{source_table}` AS src
+                a.qrcode_dados,
+                a.foto_dados
+            FROM animal_unico a
+            LEFT JOIN `{target_table}` AS tgt
+                ON CAST(a.{identifier_field} AS STRING) = tgt.id_animal
             LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-                ON src.{identifier_field} = ap.id_animal
+                ON a.{identifier_field} = ap.id_animal
                 AND ap.fim_datahora IS NULL
             LEFT JOIN `{project_dataset}.proprietario` AS prop
                 ON ap.id_proprietario = prop.id_proprietario
-            LEFT JOIN `{target_table}` AS tgt
-                ON CAST(src.{identifier_field} AS STRING) = tgt.id_animal
-            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+            WHERE a.rn = 1
               AND tgt.id_animal IS NULL
-            QUALIFY ROW_NUMBER() OVER (PARTITION BY src.{identifier_field} ORDER BY src.datalake_loaded_at DESC) = 1
-            ORDER BY src.{identifier_field}
+            ORDER BY a.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
         """.strip()
@@ -388,7 +411,10 @@ def fetch_batch(
         try:
             query_job = client.query(query, job_config=job_config)
             dataframe = query_job.result().to_dataframe()
-            log(f"Lote carregado: {len(dataframe)} registros")
+            log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
+            if len(dataframe) > 0:
+                sample_ids = dataframe['animal_identifier'].head(3).tolist()
+                log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
             return dataframe
         except Exception as exc:
             error_msg = str(exc).lower()
@@ -402,25 +428,34 @@ def fetch_batch(
 
     # Query completa (primeira carga ou tabela vazia)
     query = f"""
+        WITH animal_unico AS (
+            SELECT
+                {identifier_field},
+                qrcode_dados,
+                foto_dados,
+                ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
+            FROM `{source_table}`
+            WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
+        )
         SELECT
-            CAST(src.{identifier_field} AS STRING) AS animal_identifier,
+            CAST(a.{identifier_field} AS STRING) AS animal_identifier,
             prop.cpf_numero AS cpf,
-            src.qrcode_dados,
-            src.foto_dados
-        FROM `{source_table}` AS src
+            a.qrcode_dados,
+            a.foto_dados
+        FROM animal_unico a
         LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-            ON src.{identifier_field} = ap.id_animal
+            ON a.{identifier_field} = ap.id_animal
             AND ap.fim_datahora IS NULL
         LEFT JOIN `{project_dataset}.proprietario` AS prop
             ON ap.id_proprietario = prop.id_proprietario
-        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY src.{identifier_field} ORDER BY src.datalake_loaded_at DESC) = 1
-        ORDER BY src.{identifier_field}
+        WHERE a.rn = 1
+        ORDER BY a.{identifier_field}
         LIMIT {batch_size}
         OFFSET {offset}
     """.strip()
 
-    log(f"Buscando lote: offset={offset}, limit={batch_size}")
+    log(f"[DEBUG FETCH] Buscando lote COMPLETO (primeira carga): offset={offset}, limit={batch_size}")
+    log(f"[DEBUG FETCH] Query: {query[:500]}...")
 
     job_config = bigquery.QueryJobConfig(
         use_query_cache=True,
@@ -430,7 +465,10 @@ def fetch_batch(
     query_job = client.query(query, job_config=job_config)
     dataframe = query_job.result().to_dataframe()
 
-    log(f"Lote carregado: {len(dataframe)} registros")
+    log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
+    if len(dataframe) > 0:
+        sample_ids = dataframe['animal_identifier'].head(3).tolist()
+        log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
     return dataframe
 
 
@@ -699,4 +737,17 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
         "foto_url",
         "ingestao_data",
     ]
-    return df[selected_columns]
+
+    output_df = df[selected_columns]
+
+    # Log de debug para verificar dados que serão gravados
+    log(f"[DEBUG OUTPUT] Preparando {len(output_df)} registros para gravação")
+    if len(output_df) > 0:
+        sample_ids = output_df['id_animal'].head(3).tolist()
+        log(f"[DEBUG OUTPUT] Sample IDs que serão gravados: {sample_ids}")
+        # Verificar se há NULLs
+        null_count = output_df['id_animal'].isna().sum()
+        if null_count > 0:
+            log(f"[AVISO OUTPUT] {null_count} registros com id_animal NULL!")
+
+    return output_df
