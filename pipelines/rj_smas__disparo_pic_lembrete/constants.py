@@ -69,6 +69,7 @@ class PicLembreteConstants(Enum):
           SELECT
             TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
             LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
+            SAFE.PARSE_DATE('%Y-%m-%d', TRIM(t1.DATA_ENTREGA_PREVISTA)) AS data_evento_date,
             TRIM(
               CONCAT(
                 t1.LOCAL_ENTREGA_PREVISTO,
@@ -96,7 +97,7 @@ class PicLembreteConstants(Enum):
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-          WHERE t1.DATA_ENTREGA_PREVISTA = DATE('{data_evento}')
+          WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(t1.DATA_ENTREGA_PREVISTA)) = DATE('{data_evento}')
         ),
         formatted AS (
           SELECT
@@ -114,10 +115,11 @@ class PicLembreteConstants(Enum):
             ) AS nome_sobrenome,
             cpf,
             endereco_evento,
-            FORMAT_DATE('%d/%m/%Y', data_evento) AS data_formatada,
+            FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
             horario_evento
           FROM joined_status_cpi
           WHERE celular_disparo IS NOT NULL
+            AND data_evento_date IS NOT NULL
         )
         SELECT
           TO_JSON_STRING(
@@ -125,9 +127,9 @@ class PicLembreteConstants(Enum):
               celular_disparo AS celular_disparo,
               STRUCT(
                 nome_sobrenome AS NOME_SOBRENOME,
-                cpf AS CPF,
+                cpf AS CC_WT_CPF_CIDADAO,
                 endereco_evento AS ENDERECO,
-                data_formatada AS DATA,
+                data_formatada AS DIA,
                 horario_evento AS HORARIO
               ) AS vars,
               cpf AS externalId
