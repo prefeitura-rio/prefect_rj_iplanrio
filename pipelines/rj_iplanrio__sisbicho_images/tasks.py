@@ -401,7 +401,8 @@ def fetch_batch(
             OFFSET {offset}
         """.strip()
 
-        log(f"Buscando lote: offset={offset}, limit={batch_size}")
+        log(f"[DEBUG FETCH] Buscando lote INCREMENTAL: offset={offset}, limit={batch_size}")
+        log(f"[DEBUG FETCH] Query: {query[:500]}...")
 
         job_config = bigquery.QueryJobConfig(
             use_query_cache=True,
