@@ -1,8 +1,6 @@
 [project]
 name = "rj-smas-disparo-pic"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
 dependencies = [
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",

@@ -46,7 +46,14 @@ def rj_smas__disparo_pic_lembrete(
     cost_center_id = cost_center_id or PicLembreteConstants.PIC_LEMBRETE_COST_CENTER_ID.value
     chunk_size = chunk_size or PicLembreteConstants.PIC_LEMBRETE_CHUNK_SIZE.value
     query = query or PicLembreteConstants.PIC_LEMBRETE_QUERY.value
-    query_processor_name = query_processor_name or PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
+
+    default_processor = PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
+    if query_processor_name:
+        if "{data_evento}" not in query:
+            print("Query without {data_evento} placeholder detected; skipping query processor.")
+            query_processor_name = ""
+    else:
+        query_processor_name = default_processor if "{data_evento}" in query else ""
 
     billing_project_id = PicLembreteConstants.PIC_LEMBRETE_BILLING_PROJECT_ID.value
 
