@@ -36,7 +36,7 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
-      source_dataset_id: brutos_sisbicho_staging
+      source_dataset_id: brutos_sisbicho
       source_table_id: animal
       dataset_id: brutos_sisbicho_staging
       table_id: animal_imagem
@@ -58,7 +58,7 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
-      source_dataset_id: brutos_sisbicho_staging
+      source_dataset_id: brutos_sisbicho
       source_table_id: animal
       dataset_id: brutos_sisbicho_staging
       table_id: animal_imagem
