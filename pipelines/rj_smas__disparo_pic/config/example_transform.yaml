@@ -1,0 +1,17 @@
+transformations:
+  - method: Rename
+    args:
+      celular_disparo: "to"
+  - method: TitleCase
+    args:
+      column: "nome_completo"
+  - method: NormalizeCPF
+    args:
+      column: "cpf"
+  - method: BuildDestinationJSON
+    args:
+      template:
+        to: "{to}"
+        vars:
+          NOME: "{nome_completo}"
+          UF: "{uf}"

@@ -1,0 +1,73 @@
+name: rj_smas__pic_disparos
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smas__disparo_pic-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smas__disparo_pic/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-smas--disparo-pic--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smas__disparo_pic/flow.py:rj_smas__disparo_pic
+    work_pool:
+      name: datario-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smas__disparo_pic -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+      # Valores padrão (podem ser alterados na UI)
+      id_hsm: 101
+      campaign_name: smas-lembretecadunico-prod
+      cost_center_id: 4
+      chunk_size: 1000
+      dataset_id: brutos_disparos
+      table_id: disparos
+      dump_mode: append
+      infisical_secret_path: /wetalkie
+  - name: rj-smas--disparo-pic--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smas__disparo_pic/flow.py:rj_smas__disparo_pic
+    work_pool:
+      name: datario-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smas__disparo_pic -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+      # Valores padrão (podem ser alterados na UI)
+      id_hsm: 101
+      campaign_name: smas-lembretecadunico-prod
+      cost_center_id: 4
+      chunk_size: 1000
+      dataset_id: brutos_disparos
+      table_id: disparos
+      dump_mode: append
+      infisical_secret_path: /wetalkie
+    # schedules:
+    #   - interval: 86400
+    #     anchor_date: "2021-01-01T09:00:00"
+    #     timezone: America/Sao_Paulo
+    #     slug: disparo_pic_daily
