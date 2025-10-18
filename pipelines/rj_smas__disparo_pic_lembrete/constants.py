@@ -33,7 +33,7 @@ class PicLembreteConstants(Enum):
         SELECT
           TO_JSON_STRING(
             STRUCT(
-              '5521980000000' AS celular_disparo,
+              '5521985573582' AS celular_disparo,
               STRUCT(
                 'Cidadã Teste' AS NOME_SOBRENOME,
                 '12345678901' AS CPF,
@@ -53,7 +53,7 @@ class PicLembreteConstants(Enum):
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-          FROM `rj-smas.brutos_data_metrica_staging.agendamentos_cadunico`
+          FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
         telefones_alternativos_rmi AS (
@@ -69,7 +69,7 @@ class PicLembreteConstants(Enum):
           SELECT
             TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
             LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
-            SAFE.PARSE_DATE('%Y-%m-%d', TRIM(t1.DATA_ENTREGA_PREVISTA)) AS data_evento_date,
+            SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
             TRIM(
               CONCAT(
                 t1.LOCAL_ENTREGA_PREVISTO,
@@ -97,7 +97,7 @@ class PicLembreteConstants(Enum):
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-          WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(t1.DATA_ENTREGA_PREVISTA)) = DATE('{data_evento}')
+          WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = DATE('{data_evento}')
         ),
         formatted AS (
           SELECT
