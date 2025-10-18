@@ -8,13 +8,13 @@ class PicLembreteConstants(Enum):
     """Constantes do pipeline de disparo PIC lembrete SMAS."""
 
     # HSM Template ID para mensagens PIC
-    PIC_LEMBRETE_ID_HSM = 180
+    PIC_LEMBRETE_ID_HSM = 185
 
     # Nome da campanha
-    PIC_LEMBRETE_CAMPAIGN_NAME = "smas-lembrete-pic"
+    PIC_LEMBRETE_CAMPAIGN_NAME = "smas-cartaopic-lembrete"
 
     # Cost Center ID
-    PIC_LEMBRETE_COST_CENTER_ID = 1
+    PIC_LEMBRETE_COST_CENTER_ID = 38
 
     # Billing Project ID
     PIC_LEMBRETE_BILLING_PROJECT_ID = "rj-smas"
