@@ -37,9 +37,9 @@ deployments:
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
-      id_hsm: 180
-      campaign_name: smas-lembrete-pic
-      cost_center_id: 1
+      id_hsm: 185
+      campaign_name: smas-cartaopic-lembrete
+      cost_center_id: 38
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
@@ -59,9 +59,9 @@ deployments:
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
-      id_hsm: 180
-      campaign_name: smas-lembrete-pic
-      cost_center_id: 1
+      id_hsm: 185
+      campaign_name: smas-cartaopic-lembrete
+      cost_center_id: 38
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
