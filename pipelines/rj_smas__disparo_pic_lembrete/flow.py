@@ -35,7 +35,7 @@ def rj_smas__disparo_pic_lembrete(
     table_id: str | None = None,
     dump_mode: str | None = None,
     query: str | None = None,
-    query_processor_name: str | None = "pic_lembrete",
+    query_processor_name: str | None = None,
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_LEMBRETE_DATASET_ID.value
@@ -46,14 +46,9 @@ def rj_smas__disparo_pic_lembrete(
     cost_center_id = cost_center_id or PicLembreteConstants.PIC_LEMBRETE_COST_CENTER_ID.value
     chunk_size = chunk_size or PicLembreteConstants.PIC_LEMBRETE_CHUNK_SIZE.value
     query = query or PicLembreteConstants.PIC_LEMBRETE_QUERY.value
-
-    default_processor = PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
-    if query_processor_name:
-        if "{data_evento}" not in query:
-            print("Query without {data_evento} placeholder detected; skipping query processor.")
-            query_processor_name = ""
-    else:
-        query_processor_name = default_processor if "{data_evento}" in query else ""
+    query_processor_name = (
+        query_processor_name or PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
+    )
 
     billing_project_id = PicLembreteConstants.PIC_LEMBRETE_BILLING_PROJECT_ID.value
 

@@ -19,8 +19,8 @@ class PicLembreteConstants(Enum):
     # Billing Project ID
     PIC_LEMBRETE_BILLING_PROJECT_ID = "rj-smas"
 
-    # Query processor name - aplica D+2 no placeholder {data_evento}
-    PIC_LEMBRETE_QUERY_PROCESSOR_NAME = "pic_lembrete"
+    # Query processor name (mantido vazio para desativar processadores dinâmicos)
+    PIC_LEMBRETE_QUERY_PROCESSOR_NAME = ""
 
     # Configurações de dataset / tabela para registro dos disparos
     PIC_LEMBRETE_DATASET_ID = "brutos_wetalkie"
@@ -30,6 +30,9 @@ class PicLembreteConstants(Enum):
 
     # Query mock para testes rápidos (não dispara para base real)
     PIC_LEMBRETE_QUERY_MOCK = r"""
+        WITH config AS (
+          SELECT DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 2 DAY) AS target_date
+        )
         SELECT
           TO_JSON_STRING(
             STRUCT(
@@ -38,17 +41,21 @@ class PicLembreteConstants(Enum):
                 'Cidadã Teste' AS NOME_SOBRENOME,
                 '12345678901' AS CPF,
                 'Endereço Exemplo, 123 - Centro' AS ENDERECO,
-                FORMAT_DATE('%d/%m/%Y', DATE('{data_evento}')) AS DIA,
+                FORMAT_DATE('%d/%m/%Y', config.target_date) AS DATA,
                 '10:00' AS HORARIO
               ) AS vars,
               '12345678901' AS externalId
             )
           ) AS destination_data
+        FROM config
     """
 
     # Query principal do PIC lembrete com saída em JSON (destination_data)
     PIC_LEMBRETE_QUERY = r"""
-        WITH agendamentos_unicos AS (
+        WITH config AS (
+          SELECT DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 2 DAY) AS target_date
+        ),
+        agendamentos_unicos AS (
           SELECT
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
@@ -97,7 +104,8 @@ class PicLembreteConstants(Enum):
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-          WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = DATE('{data_evento}')
+          CROSS JOIN config
+          WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
         ),
         formatted AS (
           SELECT
