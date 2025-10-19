@@ -38,65 +38,143 @@ deployments:
       - interval: 86400
         anchor_date: '2025-07-15T01:00:00'
         timezone: America/Sao_Paulo
-        slug: IPL_PT_FICHAS
+        slug: sancao_fornecedor
         parameters:
-          table_id: IPL_PT_FICHAS
-          dump_mode: append
-          break_query_frequency: month
-          break_query_start: current_month
-          break_query_end: current_month
-          partition_columns: MES_ANO_FOLHA
-          execute_query: SELECT MES_ANO_FOLHA,NUM_FOLHA,NUMFUNC,NUMVINC,NUMPENS,SETOR,SECRETARIA,TIPO_FUNC, ATI_INAT_PENS,DETALHA,RUBRICA,TIPO_RUBRICA,MES_ANO_DIREITO,DESC_VANT,VALOR,COMPLEMENTO,
-            TIPO_CLASSIF,CLASSIFICACAO,TIPO_CLASSIF_FR,CLASSIF_FR,ELEMDESP,TIPORUB,EMP_CODIGO FROM ERGON.IPL_PT_FICHAS
+          table_id: sancao_fornecedor
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CPF_CNPJ, RAZAO_SOCIAL, NR_ORDEM, PROCESSO_ORIGEM, PROCESSO_INSTRUTIVO, PROCESSO_FATURA, CD_SANCAO,
+              DS_SANCAO, DT_SANCAO, DT_EXTINCAO_SANCAO  
+            FROM SIGMA.VW_SANCAO_ADMINISTRATIVA
+      
       - interval: 86400
         anchor_date: '2025-07-15T01:10:00'
         timezone: America/Sao_Paulo
-        slug: FICHAS_FINANCEIRAS
+        slug: movimentacao
         parameters:
-          table_id: FICHAS_FINANCEIRAS
-          dump_mode: append
-          break_query_frequency: month
-          break_query_start: current_month
-          break_query_end: current_month
-          partition_columns: MES_ANO_FOLHA
-          execute_query: SELECT MES_ANO_FOLHA,NUM_FOLHA,LANCAMENTO,NUMFUNC,NUMVINC,NUMPENS,MES_ANO_DIREITO, RUBRICA,TIPO_RUBRICA,DESC_VANT,COMPLEMENTO,VALOR,CORRECAO,EXECUCAO,EMP_CODIGO
-            FROM ERGON.FICHAS_FINANCEIRAS
-      - interval: 86400
-        anchor_date: '2025-07-15T01:20:00'
-        timezone: America/Sao_Paulo
-        slug: VW_DLK_ERG_FITA_BANCO
-        parameters:
-          table_id: VW_DLK_ERG_FITA_BANCO
-          partition_columns: MES_ANO
-          dump_mode: append
-          break_query_frequency: month
-          break_query_start: current_month
-          break_query_end: current_month
-          execute_query: SELECT LANCAMENTO, NUMFUNC, NUMVINC, MES_ANO, NUMERO, RUBRICA, SETOR, VALORVAN, VALORDES, NUMPENS, NUMDEPEN,
-            AGENCIA, BANCO, CONTA, VALORLIQ, TIPOPAG, CARGO, REFERENCIA, CENTRO_CUSTO, FUNCAO, NOME, SINDICATO, LOTE, EMP_CODIGO,
-            FICHA, REGIMEJUR, TIPOVINC, DTEXERC, DTAPOSENT, DTVAC, CATEGORIA, SUBEMP_CODIGO, DATA_CREDITO, NUMREP, EMP_CODIGO_VINC,
-            JORNADA, SUBCATEGORIA, CPF, SUBEMP_CODIGO_GFIP, FLEX_CAMPO_01, FLEX_CAMPO_02, FLEX_CAMPO_05, NUMJUR, ID_PESSOA, TIPO_PESSOA,
-            SUB_CC, NOME_REP, CPF_REP, TIPOPAG_REP, BANCO_REP, AGENCIA_REP, CONTA_REP FROM C_ERGON.VW_DLK_ERG_FITA_BANCO
-      - interval: 604800
-        anchor_date: '2025-08-28T01:30:00'
-        timezone: America/Sao_Paulo
-        slug: TOTAL_CONTA
-        parameters:
-          table_id: TOTAL_CONTA
+          table_id: movimentacao
           dump_mode: overwrite
-          execute_query: SELECT CHAVE, NUMFUNC,NUMVINC,FINALIDADE,DIASTOT,DIASFPUB,DIASFPUBESP,TOTAL_PERIODOS,
-            TOTAL_ANOS,DATA_PROXIMO,NOME_PROXIMO,EMP_CODIGO FROM ERGON.TOTAL_CONTA
+          execute_query: |
+            SELECT CD_MATERIAL, CNPJ_FORNECEDOR, NOTA_FISCAL, SERIE, DATA_NOTA_FISCAL, QUANTIDADE_ITEM, PRECO_ITEM, TOTAL_ITEM, DATA_ULTIMA_ATUALIZACAO,
+              CD_MOVIMENTACAO, DS_MOVIMENTACAO, TP_ALMOXARIFADO, CD_SECRETARIA, DS_SECRETARIA, CD_ALMOXARIFADO_DESTINO, DS_ALMOXARIFADO_DESTINO,
+              CD_ALMOXARIFADO_ORIGEM, DS_ALMOXARIFADO_ORIGEM, CD_OS, DT_INI_CONTRATO_OS, DT_FIM_CONTRATO_OS, NR_EMPENHO, CNPJ_FABRICANTE
+            FROM SIGMA.VW_MOVIMENTACAO
+
       - interval: 86400
-        anchor_date: '2025-07-15T01:40:00'
+        anchor_date: '2025-07-15T01:10:00'
         timezone: America/Sao_Paulo
-        slug: VANTAGENS
+        slug: fornecedor
         parameters:
-          table_id: VANTAGENS
-          partition_columns: DTINI
-          dump_mode: append
-          break_query_frequency: month
-          break_query_start: current_month
-          break_query_end: current_month
-          execute_query: SELECT NUMFUNC,NUMVINC,VANTAGEM,DTINI,DTFIM,VALOR,INFO,TIPO_INCORPORACAO,PERC_INC_FUNCAO,
-            INC_TABELAVENC,INC_REFERENCIA,OBS,VALOR2,INFO2,VALOR3,INFO3,VALOR4,INFO4,VALOR5,INFO5,
-            VALOR6,INFO6,FLEX_CAMPO_05,EMP_CODIGO,CHAVEVANT FROM ERGON.VANTAGENS
+          table_id: fornecedor
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CPF_CNPJ, TIPO_CPF_CNPJ, INSCRICAO_MUNICIPAL, INSCRICAO_ESTADUAL, RAZAO_SOCIAL, NOME_FANTASIA, NOME_CONTATO, EMAIL, EMAIL_CONTATO, FAX, DDD, DDI, RAMAL,
+              TELEFONE, LOGRADOURO, NUMERO_PORTA, COMPLEMENTO, BAIRRO, MUNICIPIO, UF, CEP, ATIVO_INATIVO_BLOQUEADO, CD_NATUREZA_JURIDICA, DS_NATUREZA_JURIDICA, CD_RAMO_ATIVIDADE,
+              DS_RAMO_ATIVIDADE, CD_PORTE_EMPRESA, DS_PORTE_EMPRESA, DATA_ULTIMA_ATUALIZACAO, TIPO_FORNECEDOR
+            FROM SIGMA.VW_FORNECEDOR
+
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: grupo
+        parameters:
+          table_id: grupo
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_GRUPO,DS_GRUPO,ST_STATUS FROM SIGMA.VW_GRUPO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: subclasse
+        parameters:
+          table_id: subclasse
+          dump_mode: overwrite
+          execute_query: |
+            SELECT  CD_GRUPO, CD_CLASSE, CD_SUBCLASSE, DS_SUBCLASSE, ST_STATUS FROM SIGMA.VW_SUBCLASSE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: ramo_atividade
+        parameters:
+          table_id: ramo_atividade
+          dump_mode: overwrite
+          execute_query: |
+            SELECT  CD_RAMO, DS_RAMO, ST_RAMO FROM SIGMA.VW_RAMO_ATIVIDADE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: material
+        parameters:
+          table_id: material
+          dump_mode: overwrite
+          execute_query: |
+            SELECT  CD_MATERIAL, CD_GRUPO, CD_CLASSE, CD_SUBCLASSE, SEQUENCIAL, DV1, DV2, NM_PADRONIZADO, NM_COMPLEMENTAR_MATERIAL,
+              UNIDADE, DS_DETALHE_MATERIAL, DT_DESATIVACAO, ST_STATUS, REMUME, ACONDICIONAMENTO, TP_GENERO, CD_MATERIAL_SUBSTITUTO,
+              NM_FANTASIA, CD_COMPRASNET, TP_MATERIAL, ST_REFERENCIA, ST_SISTEMA_REGISTRO_PRECO, TERMOLABEL, ST_CONTROLADO, ST_PADRONIZADO
+              ST_USO_GERAL, ST_CONTINUADO, ST_TABELADO, ST_ITEM_SUSTENTAVEL, OBSERVACAO
+            FROM SIGMA.VW_MATERIAL
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: material_referencia
+        parameters:
+          table_id: material_referencia
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_MATERIAL, CD_GRUPO, CD_CLASSE, CD_SUBCLASSE, SEQUENCIAL, DV1, DV2, CD_REFERENCIA, DS_REFERENCIA, ST_STATUS 
+            FROM SIGMA.VW_MATERIAL_REFERENCIA
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: servico
+        parameters:
+          table_id: servico
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_SERV, CD_SEQ, DV, CD_SERVICO, DS_SERVICO, ST_STATUS, CD_COMPRASNET, NM_PADRONIZADO, UNIDADE_SERVICO, ST_RESPONSAVEL_TECNICO,
+              ST_SISTEMA_REGISTRO_PRECO, CD_ATIVIDADE_ECONOMICA, CD_GRUPO_CAE, CD_SUBGRUPO_CAE, CD_ATIVIDADE_CAE, DS_ATIVIDADE_ECONOMICA, DS_SUBGRUPO_CAE,
+              ST_TABELADO, ST_CADASTRO_FORNECEDOR 
+            FROM SIGMA.VW_SERVICO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: servico
+        parameters:
+          table_id: servico
+          dump_mode: overwrite
+          execute_query: |
+            SELECT NM_PRESTADOR_SERVICO, CPF, MATRICULA, NM_FUNCIONARIO, EMAIL_INSTITUCIONAL, EMAIL_ALTERNATIVO, TEL_CORPORATIVO1, TEL_CORPORATIVO2,
+              TEL_ALTERNATIVO1, TEL_ALTERNATIVO2, CD_ORGAO_DESIGNACAO, DS_ORGAO_DESIGNACAO, CD_PERFIL, DS_PERFIL, PRIVILEGIO_ALMOXARIFADO, HORA_ACESSO_INI
+              MINUTO_ACESSO_INI, HORA_ACESSO_FIM, MINUTO_ACESSO_FIM, DT_INCLUSAO, ST_STATUS, ST_SITUACAO, CD_TERMINAL, DT_ULTIMA_SESSAO, HORA_ULTIMA_SESSAO
+            FROM SIGMA.VW_USUARIO_SISTEMA
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: servico
+        parameters:
+          table_id: servico
+          dump_mode: overwrite
+          execute_query: |
+            SELECT cd_orgao, tp_orgao, ds_tipo_orgao, cd_orgao_pai, cd_secretaria_sdi, descricao, endereco, complemento, cep, numero_porta, fax1, fax2,
+              tel1, tel2, sigla, email, tp_unidade, st_status, cnes, matricula_responsavel, nm_responsavel, dt_responsavel
+            FROM SIGMA.VW_ORGAO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: servico
+        parameters:
+          table_id: servico
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_ORGAO, DS_ORGAO, MATRICULA, NM_FUNCIONARIO, TP_FUNCIONARIO, DT_INICIO, DT_TERMINO, DT_TERMO_RESPONSABILIDADE, DT_EXCEPCIONALIDADE,
+              DT_PUBLICACAO_DESIGNACAO, ESCOLARIDADE, ST_CURSO_GESTAO_MATERIAL 
+            FROM SIGMA.VW_USUARIO_RESPONSAVEL_AUXILIAR
