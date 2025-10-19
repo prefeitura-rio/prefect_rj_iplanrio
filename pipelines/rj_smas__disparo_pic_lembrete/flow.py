@@ -27,9 +27,9 @@ from pipelines.rj_smas__disparo_pic_lembrete.utils.tasks import (
 @flow(log_prints=True)
 def rj_smas__disparo_pic_lembrete(
     # Parâmetros opcionais para override manual na UI.
-    id_hsm: int | None = None,
+    id_hsm: int | None = 185,
     campaign_name: str | None = None,
-    cost_center_id: int | None = None,
+    cost_center_id: int | None = 38,
     chunk_size: int | None = None,
     dataset_id: str | None = None,
     table_id: str | None = None,
@@ -42,15 +42,21 @@ def rj_smas__disparo_pic_lembrete(
     table_id = table_id or PicLembreteConstants.PIC_LEMBRETE_TABLE_ID.value
     dump_mode = dump_mode or PicLembreteConstants.PIC_LEMBRETE_DUMP_MODE.value
     id_hsm = id_hsm or PicLembreteConstants.PIC_LEMBRETE_ID_HSM.value
-    campaign_name = campaign_name or PicLembreteConstants.PIC_LEMBRETE_CAMPAIGN_NAME.value
-    cost_center_id = cost_center_id or PicLembreteConstants.PIC_LEMBRETE_COST_CENTER_ID.value
+    campaign_name = (
+        campaign_name or PicLembreteConstants.PIC_LEMBRETE_CAMPAIGN_NAME.value
+    )
+    cost_center_id = (
+        cost_center_id or PicLembreteConstants.PIC_LEMBRETE_COST_CENTER_ID.value
+    )
     chunk_size = chunk_size or PicLembreteConstants.PIC_LEMBRETE_CHUNK_SIZE.value
     query = query or PicLembreteConstants.PIC_LEMBRETE_QUERY.value
 
     default_processor = PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
     if query_processor_name:
         if "{data_evento}" not in query:
-            print("Query without {data_evento} placeholder detected; skipping query processor.")
+            print(
+                "Query without {data_evento} placeholder detected; skipping query processor."
+            )
             query_processor_name = ""
     else:
         query_processor_name = default_processor if "{data_evento}" in query else ""
@@ -105,7 +111,9 @@ def rj_smas__disparo_pic_lembrete(
             chunk=chunk_size,
         )
 
-        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+        print(
+            f"Dispatch completed successfully for {len(unique_destinations)} destinations"
+        )
 
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
