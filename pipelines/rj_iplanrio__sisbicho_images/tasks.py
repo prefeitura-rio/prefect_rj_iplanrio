@@ -23,6 +23,13 @@ from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
 )
 
 
+def _ensure_staging_dataset(dataset_id: str) -> str:
+    """Garante que o dataset termine com _staging."""
+
+    dataset_id = (dataset_id or "").strip()
+    return dataset_id if dataset_id.endswith("_staging") else f"{dataset_id}_staging"
+
+
 def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
     """Identifica o campo que será usado como chave do animal."""
 
@@ -322,7 +329,8 @@ def fetch_sisbicho_media_task(
     client = bigquery.Client(credentials=credentials, project=billing_project_id)
 
     source_table = f"{billing_project_id}.{source_dataset_id}.{source_table_id}"
-    target_table = f"{billing_project_id}.{target_dataset_id}.{target_table_id}"
+    effective_target_dataset = _ensure_staging_dataset(target_dataset_id)
+    target_table = f"{billing_project_id}.{effective_target_dataset}.{target_table_id}"
 
     table = client.get_table(source_table)
     identifier_field = _infer_identifier_field(table.schema)
