@@ -17,6 +17,9 @@ from pipelines.rj_smas__disparo_pic_lembrete.tasks import (
     printar,
     remove_duplicate_phones,
 )
+from pipelines.rj_smas__disparo_pic_lembrete.utils.discord import (
+    send_dispatch_success_notification,
+)
 from pipelines.rj_smas__disparo_pic_lembrete.utils.tasks import (
     access_api,
     create_date_partitions,
@@ -99,6 +102,22 @@ def rj_smas__disparo_pic_lembrete(
         )
 
         print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+
+        # Calculate total batches
+        from math import ceil
+
+        total_batches = ceil(len(unique_destinations) / chunk_size)
+
+        # Send Discord notification
+        send_dispatch_success_notification(
+            total_dispatches=len(unique_destinations),
+            dispatch_date=dispatch_date,
+            id_hsm=id_hsm,
+            campaign_name=campaign_name,
+            cost_center_id=cost_center_id,
+            total_batches=total_batches,
+            sample_destination=unique_destinations[0] if unique_destinations else None,
+        )
 
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
