@@ -24,7 +24,7 @@ def rj_smfp__sigma(  # noqa
     db_type: str = "oracle",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "brutos_sigma",
+    dataset_id: str = "brutos_compras_materiais_servicos_sigma",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-sigma",
     dump_mode: str = "overwrite",
