@@ -26,7 +26,7 @@ def rj_sme_gestao_creche(
     execute_query: str = "execute_query",
     dataset_id: str = "brutos_gestao_creche",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-gestao-creche",
+    infisical_secret_path: str = "/db-gestao-escolar",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
