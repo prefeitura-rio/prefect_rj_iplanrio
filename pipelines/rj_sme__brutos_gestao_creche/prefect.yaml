@@ -1,4 +1,4 @@
-name: rj_sme__brutos_fila_creche
+name: rj_sme__brutos_gestao_creche
 prefect-version: 3.4.3
 
 build:
@@ -10,8 +10,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_sme__brutos_fila_creche-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_sme__brutos_fila_creche/Dockerfile
+      tag: "rj_sme__brutos_gestao_creche-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_sme__brutos_gestao_creche/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -24,25 +24,25 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-sme--brutos_fila_creche--staging
+  - name: rj-sme--brutos_gestao_creche--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_sme__brutos_fila_creche/flow.py:rj_sme__brutos_fila_creche
+    entrypoint: pipelines/rj_sme__brutos_gestao_creche/flow.py:rj_sme__brutos_gestao_creche
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_sme__brutos_fila_creche -- prefect flow-run execute
+        command: uv run --package rj_sme__brutos_gestao_creche -- prefect flow-run execute
         image_pull_policy: Always
-  - name: rj-sme--brutos_fila_creche--prod
+  - name: rj-sme--brutos_gestao_creche--prod
     version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_sme__brutos_fila_creche/flow.py:rj_sme__brutos_fila_creche
+    entrypoint: pipelines/rj_sme__brutos_gestao_creche/flow.py:rj_sme__brutos_gestao_creche
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_sme__brutos_fila_creche -- prefect flow-run execute
+        command: uv run --package rj_sme__brutos_gestao_creche -- prefect flow-run execute
         image_pull_policy: Always
     schedules:
       - interval: 86400
