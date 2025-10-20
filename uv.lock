@@ -7,7 +7,6 @@ members = [
     "pipelines-v3",
     "rj-smtr-brt-gps-teste",
     "rj-smtr-default-capture",
-    "rj-test-example",
 ]
 
 [[package]]
@@ -2471,11 +2470,6 @@ requires-dist = [{ name = "pendulum", specifier = ">=3.1.0" }]
 name = "rj-smtr-default-capture"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_smtr__default_capture" }
-
-[[package]]
-name = "rj-test-example"
-version = "0.1.0"
-source = { virtual = "pipelines/test__example" }
 
 [[package]]
 name = "rpds-py"
