@@ -44,6 +44,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      
+      - name: Set build dependencies
+        run: |
+          apt-get update && apt-get install -y git curl gnupg2 libaio1 ca-certificates build-essential
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
