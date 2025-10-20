@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY....
+This flow is used to dump the database to the BIGQUERY
 """
 
 from typing import Optional
@@ -11,22 +11,22 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
     get_database_username_and_password_from_secret_task,
     parse_comma_separated_string_to_list_task,
 )
-from iplanrio.pipelines_utils.env import inject_bd_credentials_taskgit 
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_sme_gestao_creche(
+def rj_sme__brutos_gestao_creche(
     db_database: str = "GestaoEscolarInscricaoCreche",
     db_host: str = "clustersqlsme2.rio.rj.gov.br",
     db_port: str = "1433",
     db_type: str = "sql_server",
-    db_charset: Optional[str] = "NOT_SET",
+    db_charset: Optional[str] = "utf8",
     execute_query: str = "execute_query",
     dataset_id: str = "brutos_gestao_creche",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-gestao-creche",
+    infisical_secret_path: str = "/db-gestao-escolar",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
