@@ -432,7 +432,6 @@ def fetch_batch(
                 ON ap.id_proprietario = prop.id_proprietario
             WHERE a.rn = 1
               AND tgt.id_animal IS NULL
-            ORDER BY a.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
         """.strip()
@@ -486,7 +485,6 @@ def fetch_batch(
         LEFT JOIN `{project_dataset}.proprietario` AS prop
             ON ap.id_proprietario = prop.id_proprietario
         WHERE a.rn = 1
-        ORDER BY a.{identifier_field}
         LIMIT {batch_size}
         OFFSET {offset}
     """.strip()
