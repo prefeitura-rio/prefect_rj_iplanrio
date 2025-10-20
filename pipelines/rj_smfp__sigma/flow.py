@@ -26,7 +26,7 @@ def rj_smfp__sigma(  # noqa
     execute_query: str = "execute_query",
     dataset_id: str = "brutos_sigma",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-sigma-prod",
+    infisical_secret_path: str = "/db-sigma",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
