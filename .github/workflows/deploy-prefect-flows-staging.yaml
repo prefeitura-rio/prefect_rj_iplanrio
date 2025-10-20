@@ -7,6 +7,7 @@ on:
       - devops/*
     paths:
       - pipelines/**
+      - .github/**
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -47,7 +48,7 @@ jobs:
       
       - name: Set build dependencies
         run: |
-          apt-get update && apt-get install -y git curl gnupg2 libaio1 ca-certificates build-essential
+          sudo apt-get update && sudo apt-get install -y git curl gnupg2 libaio1 ca-certificates build-essential
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
