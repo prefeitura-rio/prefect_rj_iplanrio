@@ -1,4 +1,5 @@
 {
   "flow_type": "capture",
+  "secretaria": "smtr",
   "pipeline": "example"
 }

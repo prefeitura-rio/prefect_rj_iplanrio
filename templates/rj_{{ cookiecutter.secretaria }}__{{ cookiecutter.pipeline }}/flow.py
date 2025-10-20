@@ -22,7 +22,7 @@ def process_customer(customer_id: str) -> str:
 
 
 @flow(log_prints=True)
-def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}() -> list[str]:
+def rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}() -> list[str]:
     use_pandas()
     customer_ids = get_customer_ids()
     results = process_customer.map(customer_ids)
