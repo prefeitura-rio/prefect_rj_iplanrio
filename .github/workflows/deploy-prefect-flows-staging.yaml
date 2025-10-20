@@ -49,6 +49,9 @@ jobs:
       - name: Set build dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y git curl gnupg2 libaio1 ca-certificates build-essential
+      
+      - name: 🔧 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
