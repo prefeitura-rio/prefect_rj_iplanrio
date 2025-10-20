@@ -1,4 +1,4 @@
-name: rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
+name: rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}
 prefect-version: 3.4.3
 
 build:
@@ -9,9 +9,9 @@ build:
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
       requires: prefect-docker>=0.6.5
-      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}-{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
-      dockerfile: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/Dockerfile
+      image_name: ghcr.io/rj-smtr/pipelines_v3/deployments
+      tag: "rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}-{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+      dockerfile: pipelines/rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -21,30 +21,30 @@ push:
 
 pull:
   - prefect.deployments.steps.set_working_directory:
-      directory: /opt/prefect/prefect_rj_iplanrio
+      directory: /opt/prefect/pipelines_v3
 
 deployments:
-  - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--staging
+  - name: rj-{{ cookiecutter.flow_type | lower }}--{{ cookiecutter.pipeline }}--staging
     version: "{% raw %}{{ build-image.tag }}{% endraw %}"
-    entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
+    entrypoint: pipelines/rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}
     work_pool:
-      name: default-pool
+      name: smtr-pool
       work_queue_name: default
       job_variables:
         image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
-        command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
+        command: uv run --package rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-  - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--prod
+  - name: rj-{{ cookiecutter.flow_type | lower }}--{{ cookiecutter.pipeline }}--prod
     version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
-    entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
+    entrypoint: pipelines/rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}
     schedules:
       - cron: "0 0 * * *"
     work_pool:
-      name: default-pool
+      name: smtr-pool
       work_queue_name: default
       job_variables:
         image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
-        command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
+        command: uv run --package rj_{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
