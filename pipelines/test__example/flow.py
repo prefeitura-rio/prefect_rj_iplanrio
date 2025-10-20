@@ -26,4 +26,5 @@ def rj_test__example() -> list[str]:
     use_pandas()
     customer_ids = get_customer_ids()
     results = process_customer.map(customer_ids)
+    print("I'm deploying")
     return results
