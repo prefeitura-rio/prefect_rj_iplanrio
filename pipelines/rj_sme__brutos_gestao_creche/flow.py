@@ -11,7 +11,6 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
     get_database_username_and_password_from_secret_task,
     parse_comma_separated_string_to_list_task,
 )
-from iplanrio.pipelines_utils.env import inject_bd_credentials_taskgit 
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
