@@ -6,6 +6,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
-COPY ./pipelines/rj_sme__brutos_gestao_escolar ./pipelines/rj_sme__brutos_gestao_escolar/
+COPY ./pipelines/rj_sme__brutos_gestao_creche ./pipelines/rj_sme__brutos_gestao_creche/
 
 RUN uv sync --all-packages
