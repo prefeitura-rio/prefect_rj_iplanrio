@@ -23,6 +23,30 @@ from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
 )
 
 
+def _ensure_staging_dataset(dataset_id: str) -> str:
+    """Garante que o dataset termine com _staging."""
+
+    dataset_id = (dataset_id or "").strip()
+    return dataset_id if dataset_id.endswith("_staging") else f"{dataset_id}_staging"
+
+
+def _try_query_row_count(client: bigquery.Client, table: str) -> int | None:
+    """Executa SELECT COUNT(*) para obter contagem real de linhas."""
+
+    query = f"SELECT COUNT(*) AS total FROM `{table}`"
+    job_config = bigquery.QueryJobConfig(
+        use_query_cache=True,
+        use_legacy_sql=False,
+    )
+
+    try:
+        result = client.query(query, job_config=job_config).result()
+        return next(result).total
+    except Exception as exc:
+        log(f"[DEBUG COUNT] Falha ao obter contagem precisa para {table}: {exc}")
+        return None
+
+
 def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
     """Identifica o campo que será usado como chave do animal."""
 
@@ -240,10 +264,21 @@ def _get_total_count(
     # Verifica se a tabela de destino existe
     table_is_empty = False
     try:
-        client.get_table(target_table)
+        target_table_ref = client.get_table(target_table)
         table_exists = True
+        log(f"[DEBUG COUNT] Tabela target EXISTE: {target_table}")
+        row_count = target_table_ref.num_rows
+        if row_count == 0 and getattr(target_table_ref, "external_data_configuration", None) is not None:
+            precise_count = _try_query_row_count(client, target_table)
+            if precise_count is not None:
+                row_count = precise_count
+                log(f"[DEBUG COUNT] Tabela tem {row_count} linhas (contagem precisa)")
+            else:
+                log("[DEBUG COUNT] Tabela reporta 0 linhas (metadados da tabela externa)")
+        else:
+            log(f"[DEBUG COUNT] Tabela tem {row_count} linhas")
     except NotFound:
-        log(f"Tabela {target_table} não existe. Primeira execução: processando todos os registros.")
+        log(f"[DEBUG COUNT] Tabela {target_table} NÃO EXISTE. Primeira execução: processando todos os registros.")
         table_exists = False
 
     if table_exists:
@@ -257,9 +292,16 @@ def _get_total_count(
               AND tgt.id_animal IS NULL
         """
 
+        log("[DEBUG COUNT] Query incremental:")
+        log(f"[DEBUG COUNT] {count_query}")
+
         try:
             result = client.query(count_query).result()
-            return next(result).total, table_is_empty
+            total = next(result).total
+            log(
+                f"[DEBUG COUNT] Resultado: {total} registros NOVOS a processar (LEFT JOIN filtrou registros existentes)"
+            )
+            return total, table_is_empty
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
@@ -269,6 +311,7 @@ def _get_total_count(
                 table_is_empty = True
             else:
                 # Outro tipo de erro - propaga
+                log(f"[ERRO] Falha ao executar query incremental: {exc}")
                 raise
 
     # Query completa (primeira carga ou tabela vazia)
@@ -278,8 +321,13 @@ def _get_total_count(
         WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
     """
 
+    log("[DEBUG COUNT] Query completa (sem filtro incremental):")
+    log(f"[DEBUG COUNT] {count_query}")
+
     result = client.query(count_query).result()
-    return next(result).total, table_is_empty
+    total = next(result).total
+    log(f"[DEBUG COUNT] Resultado: {total} registros TOTAIS (primeira carga ou tabela vazia)")
+    return total, table_is_empty
 
 
 @task
@@ -307,7 +355,8 @@ def fetch_sisbicho_media_task(
     client = bigquery.Client(credentials=credentials, project=billing_project_id)
 
     source_table = f"{billing_project_id}.{source_dataset_id}.{source_table_id}"
-    target_table = f"{billing_project_id}.{target_dataset_id}.{target_table_id}"
+    effective_target_dataset = _ensure_staging_dataset(target_dataset_id)
+    target_table = f"{billing_project_id}.{effective_target_dataset}.{target_table_id}"
 
     table = client.get_table(source_table)
     identifier_field = _infer_identifier_field(table.schema)
@@ -349,30 +398,40 @@ def fetch_batch(
 
     # Verifica se a tabela de destino existe
     try:
-        client.get_table(target_table)
+        target_table_ref = client.get_table(target_table)
         table_exists = True
+        log(f"[DEBUG FETCH] Tabela target EXISTE: {target_table} com {target_table_ref.num_rows} linhas")
     except NotFound:
+        log(f"[DEBUG FETCH] Tabela target NÃO EXISTE: {target_table}")
         table_exists = False
 
     if table_exists:
         # Query incremental com LEFT JOIN
         query = f"""
+            WITH animal_unico AS (
+                SELECT
+                    {identifier_field},
+                    qrcode_dados,
+                    foto_dados,
+                    ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
+                FROM `{source_table}`
+                WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
+            )
             SELECT
-                CAST(src.{identifier_field} AS STRING) AS animal_identifier,
+                CAST(a.{identifier_field} AS STRING) AS animal_identifier,
                 prop.cpf_numero AS cpf,
-                src.qrcode_dados,
-                src.foto_dados
-            FROM `{source_table}` AS src
+                a.qrcode_dados,
+                a.foto_dados
+            FROM animal_unico a
+            LEFT JOIN `{target_table}` AS tgt
+                ON CAST(a.{identifier_field} AS STRING) = tgt.id_animal
             LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-                ON src.{identifier_field} = ap.id_animal
+                ON a.{identifier_field} = ap.id_animal
                 AND ap.fim_datahora IS NULL
             LEFT JOIN `{project_dataset}.proprietario` AS prop
                 ON ap.id_proprietario = prop.id_proprietario
-            LEFT JOIN `{target_table}` AS tgt
-                ON CAST(src.{identifier_field} AS STRING) = tgt.id_animal
-            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+            WHERE a.rn = 1
               AND tgt.id_animal IS NULL
-            ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
         """.strip()
@@ -387,7 +446,10 @@ def fetch_batch(
         try:
             query_job = client.query(query, job_config=job_config)
             dataframe = query_job.result().to_dataframe()
-            log(f"Lote carregado: {len(dataframe)} registros")
+            log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
+            if len(dataframe) > 0:
+                sample_ids = dataframe["animal_identifier"].head(3).tolist()
+                log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
             return dataframe
         except Exception as exc:
             error_msg = str(exc).lower()
@@ -401,24 +463,33 @@ def fetch_batch(
 
     # Query completa (primeira carga ou tabela vazia)
     query = f"""
+        WITH animal_unico AS (
+            SELECT
+                {identifier_field},
+                qrcode_dados,
+                foto_dados,
+                ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
+            FROM `{source_table}`
+            WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
+        )
         SELECT
-            CAST(src.{identifier_field} AS STRING) AS animal_identifier,
+            CAST(a.{identifier_field} AS STRING) AS animal_identifier,
             prop.cpf_numero AS cpf,
-            src.qrcode_dados,
-            src.foto_dados
-        FROM `{source_table}` AS src
+            a.qrcode_dados,
+            a.foto_dados
+        FROM animal_unico a
         LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-            ON src.{identifier_field} = ap.id_animal
+            ON a.{identifier_field} = ap.id_animal
             AND ap.fim_datahora IS NULL
         LEFT JOIN `{project_dataset}.proprietario` AS prop
             ON ap.id_proprietario = prop.id_proprietario
-        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-        ORDER BY src.{identifier_field}
+        WHERE a.rn = 1
         LIMIT {batch_size}
         OFFSET {offset}
     """.strip()
 
-    log(f"Buscando lote: offset={offset}, limit={batch_size}")
+    log(f"[DEBUG FETCH] Buscando lote COMPLETO (primeira carga): offset={offset}, limit={batch_size}")
+    log(f"[DEBUG FETCH] Query: {query[:500]}...")
 
     job_config = bigquery.QueryJobConfig(
         use_query_cache=True,
@@ -428,7 +499,10 @@ def fetch_batch(
     query_job = client.query(query, job_config=job_config)
     dataframe = query_job.result().to_dataframe()
 
-    log(f"Lote carregado: {len(dataframe)} registros")
+    log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
+    if len(dataframe) > 0:
+        sample_ids = dataframe["animal_identifier"].head(3).tolist()
+        log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
     return dataframe
 
 
@@ -697,4 +771,17 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
         "foto_url",
         "ingestao_data",
     ]
-    return df[selected_columns]
+
+    output_df = df[selected_columns]
+
+    # Log de debug para verificar dados que serão gravados
+    log(f"[DEBUG OUTPUT] Preparando {len(output_df)} registros para gravação")
+    if len(output_df) > 0:
+        sample_ids = output_df["id_animal"].head(3).tolist()
+        log(f"[DEBUG OUTPUT] Sample IDs que serão gravados: {sample_ids}")
+        # Verificar se há NULLs
+        null_count = output_df["id_animal"].isna().sum()
+        if null_count > 0:
+            log(f"[AVISO OUTPUT] {null_count} registros com id_animal NULL!")
+
+    return output_df
