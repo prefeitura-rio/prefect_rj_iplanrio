@@ -30,6 +30,23 @@ def _ensure_staging_dataset(dataset_id: str) -> str:
     return dataset_id if dataset_id.endswith("_staging") else f"{dataset_id}_staging"
 
 
+def _try_query_row_count(client: bigquery.Client, table: str) -> int | None:
+    """Executa SELECT COUNT(*) para obter contagem real de linhas."""
+
+    query = f"SELECT COUNT(*) AS total FROM `{table}`"
+    job_config = bigquery.QueryJobConfig(
+        use_query_cache=True,
+        use_legacy_sql=False,
+    )
+
+    try:
+        result = client.query(query, job_config=job_config).result()
+        return next(result).total
+    except Exception as exc:
+        log(f"[DEBUG COUNT] Falha ao obter contagem precisa para {table}: {exc}")
+        return None
+
+
 def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
     """Identifica o campo que será usado como chave do animal."""
 
@@ -250,7 +267,16 @@ def _get_total_count(
         target_table_ref = client.get_table(target_table)
         table_exists = True
         log(f"[DEBUG COUNT] Tabela target EXISTE: {target_table}")
-        log(f"[DEBUG COUNT] Tabela tem {target_table_ref.num_rows} linhas")
+        row_count = target_table_ref.num_rows
+        if row_count == 0 and getattr(target_table_ref, "external_data_configuration", None) is not None:
+            precise_count = _try_query_row_count(client, target_table)
+            if precise_count is not None:
+                row_count = precise_count
+                log(f"[DEBUG COUNT] Tabela tem {row_count} linhas (contagem precisa)")
+            else:
+                log("[DEBUG COUNT] Tabela reporta 0 linhas (metadados da tabela externa)")
+        else:
+            log(f"[DEBUG COUNT] Tabela tem {row_count} linhas")
     except NotFound:
         log(f"[DEBUG COUNT] Tabela {target_table} NÃO EXISTE. Primeira execução: processando todos os registros.")
         table_exists = False
