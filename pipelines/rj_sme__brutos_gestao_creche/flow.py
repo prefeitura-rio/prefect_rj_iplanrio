@@ -18,15 +18,15 @@ from prefect import flow
 
 @flow(log_prints=True)
 def rj_sme__brutos_gestao_creche(
-    db_database: str = "database",
-    db_host: str = "host",
-    db_port: str = "port",
-    db_type: str = "db_type",
+    db_database: str = "GestaoEscolarInscricaoCreche",
+    db_host: str = "clustersqlsme2.rio.rj.gov.br",
+    db_port: str = "1433",
+    db_type: str = "sql_server",
     db_charset: Optional[str] = "utf8",
     execute_query: str = "execute_query",
-    dataset_id: str = "dataset_id",
+    dataset_id: str = "brutos_gestao_creche",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-secret_path",
+    infisical_secret_path: str = "/db-gestao-escolar",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
