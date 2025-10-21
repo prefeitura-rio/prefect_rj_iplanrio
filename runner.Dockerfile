@@ -1,6 +1,6 @@
 FROM ghcr.io/actions/actions-runner:latest
 
-ENV PYTHON_VERSION=3.13
+ENV PYTHON_VERSION=3.13.7
 
 # installing global dependecies
 RUN sudo apt update \
@@ -17,8 +17,8 @@ RUN curl https://www.python.org/ftp/python/$PYTHON_VERSION/Python-$PYTHON_VERSIO
     && make -j$(nproc) \
     && sudo make altinstall \
     && sudo rm -r /tmp/Python-$PYTHON_VERSION* \
-    && sudo ln -s /usr/local/bin/python3.10 /usr/local/bin/python \
-    && sudo ln -s /usr/local/bin/pip3.10 /usr/local/bin/pip
+    && sudo ln -s /usr/local/bin/python3.13 /usr/local/bin/python \
+    && sudo ln -s /usr/local/bin/pip3.13 /usr/local/bin/pip
 
 ENV PATH=$PATH:/home/runner/.local/bin
 
