@@ -56,36 +56,36 @@ deployments:
       parameters:
         table_id: ICH_InscricaoCreche # Nome da tabela no BigQuery
         execute_query: |
-          SELECT prm_id 
-                ,plm_id 
-                ,ipl_id 
-                ,ich_id 
-                ,esc_id 
-                ,uni_id 
-                ,ich_preferenciaCreche 
-                ,ich_picAnoAnterior 
-                ,ich_listaAnoAnterior 
-                ,ich_dataConvocacao 
-                ,ich_observacao 
-                ,ich_situacao 
-                ,ich_dataCriacao 
-                ,ich_dataAlteracao 
-                ,ich_justificativaConvocacaoExcepcional 
-                ,ich_statusConvocacaoExcepcional 
-                ,ich_dataConvocacaoExcepcional 
-                ,ich_dataCancelamentoConvocacaoExcepcional 
-                ,ich_horarioIntegral 
-                ,ich_horarioParcial 
-                ,ich_situacaoIntegral 
-                ,ich_situacaoParcial 
-                ,ich_dataConvocacao2 
-                ,ich_dataLimiteConvocacao 
-                ,ich_comprovanteConvocacaoArq 
-                ,ich_comprovanteConvocacaoNome 
-                ,ich_EscolaAnteriorId 
-                ,ich_TipoJustificativaAlocacaoOutraListaDeEspera 
-                ,ich_JustificativaAlocacaoOutraListaDeEspera 
-                ,ich_dataSaida 
+          SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,ich_id
+                ,esc_id
+                ,uni_id
+                ,ich_preferenciaCreche
+                ,ich_picAnoAnterior
+                ,ich_listaAnoAnterior
+                ,ich_dataConvocacao
+                ,ich_observacao
+                ,ich_situacao
+                ,ich_dataCriacao
+                ,ich_dataAlteracao
+                ,ich_justificativaConvocacaoExcepcional
+                ,ich_statusConvocacaoExcepcional
+                ,ich_dataConvocacaoExcepcional
+                ,ich_dataCancelamentoConvocacaoExcepcional
+                ,ich_horarioIntegral
+                ,ich_horarioParcial
+                ,ich_situacaoIntegral
+                ,ich_situacaoParcial
+                ,ich_dataConvocacao2
+                ,ich_dataLimiteConvocacao
+                ,ich_comprovanteConvocacaoArq
+                ,ich_comprovanteConvocacaoNome
+                ,ich_EscolaAnteriorId
+                ,ich_TipoJustificativaAlocacaoOutraListaDeEspera
+                ,ich_JustificativaAlocacaoOutraListaDeEspera
+                ,ich_dataSaida
             FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoCreche
 
     - interval: 86400 # executa a cada 24h
@@ -95,20 +95,20 @@ deployments:
       parameters:
         table_id: ICH_InscricaoCrianca # Nome da tabela no BigQuery
         execute_query: |
-          SELECT prm_id 
-                ,plm_id 
-                ,ipl_id 
-                ,icr_nome 
-                ,icr_DNV 
-                ,icr_dataNascimento 
-                ,icr_sexo 
-                ,icr_situacao 
-                ,icr_dataCriacao 
-                ,icr_dataAlteracao 
-                ,icr_gemeoID 
-                ,icr_NIS 
-                ,icr_CPF 
-            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoCrianca 
+          SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,icr_nome
+                ,icr_DNV
+                ,icr_dataNascimento
+                ,icr_sexo
+                ,icr_situacao
+                ,icr_dataCriacao
+                ,icr_dataAlteracao
+                ,icr_gemeoID
+                ,icr_NIS
+                ,icr_CPF
+            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoCrianca
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -117,25 +117,25 @@ deployments:
       parameters:
         table_id: ICH_InscricaoPolo # Nome da tabela no BigQuery
         execute_query: |
-          SELECT prm_id 
-                ,plm_id 
-                ,ipl_id 
-                ,cur_id 
-                ,crr_id 
-                ,crp_id 
-                ,ipl_codigoFicha 
-                ,ipl_grauVulnerabilidade 
-                ,ipl_numeroSorteio 
-                ,ipl_classificacaoPolo 
-                ,ipl_esc_id 
-                ,ipl_uni_id 
-                ,ipl_situacao 
-                ,ipl_dataCriacao 
-                ,ipl_dataAlteracao 
-                ,ipl_participarPIC 
-                ,ipl_grup_Saida_Parceira 
+          SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,cur_id
+                ,crr_id
+                ,crp_id
+                ,ipl_codigoFicha
+                ,ipl_grauVulnerabilidade
+                ,ipl_numeroSorteio
+                ,ipl_classificacaoPolo
+                ,ipl_esc_id
+                ,ipl_uni_id
+                ,ipl_situacao
+                ,ipl_dataCriacao
+                ,ipl_dataAlteracao
+                ,ipl_participarPIC
+                ,ipl_grup_Saida_Parceira
             FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoPolo
-            
+
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
@@ -143,19 +143,19 @@ deployments:
       parameters:
         table_id: ICH_InscricaoResponsavel # Nome da tabela no BigQuery
         execute_query: |
-          SELECT prm_id 
-                ,plm_id 
-                ,ipl_id 
-                ,ire_id 
-                ,ire_nome 
-                ,ire_dataNascimento 
-                ,ire_NIS 
-                ,ire_tipo 
-                ,ire_responsavel 
-                ,ire_situacao 
-                ,ire_dataCriacao 
-                ,ire_dataAlteracao 
-            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoResponsavel 
+          SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,ire_id
+                ,ire_nome
+                ,ire_dataNascimento
+                ,ire_NIS
+                ,ire_tipo
+                ,ire_responsavel
+                ,ire_situacao
+                ,ire_dataCriacao
+                ,ire_dataAlteracao
+            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoResponsavel
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -164,13 +164,13 @@ deployments:
       parameters:
         table_id: ICH_ResponsavelEndereco # Nome da tabela no BigQuery
         execute_query: |
-          SELECT prm_id 
-                ,plm_id 
-                ,ipl_id 
-                ,ire_id 
-                ,end_id 
-                ,ren_numero 
-                ,ren_situacao 
-                ,ren_dataCriacao 
-                ,ren_dataAlteracao 
+          SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,ire_id
+                ,end_id
+                ,ren_numero
+                ,ren_situacao
+                ,ren_dataCriacao
+                ,ren_dataAlteracao
             FROM GestaoEscolarInscricaoCreche.dbo.ICH_ResponsavelEndereco
