@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - staging/*
-      - devops/*
     paths:
       - pipelines/**
       - .github/**
