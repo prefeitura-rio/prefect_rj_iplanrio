@@ -40,7 +40,7 @@ def rj_pgm__divida_ativa(
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
     max_concurrency: int = 1,
-    only_staging_dataset: bool = True,
+    only_staging_dataset: bool = False,
     add_timestamp_column: bool = True,
 ):
     rename_current_flow_run_task(new_name=table_id)
