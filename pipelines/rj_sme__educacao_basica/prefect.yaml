@@ -98,9 +98,9 @@ deployments:
     - interval: 86400
       anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
-      slug: aluno_historico_2025
+      slug: aluno_historico
       parameters:
-        table_id: aluno_historico_2025
+        table_id: aluno_historico
         dump_mode: append
         partition_columns: Ano
         partition_date_format: "%Y"
