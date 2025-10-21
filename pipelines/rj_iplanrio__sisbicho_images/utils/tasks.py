@@ -15,7 +15,13 @@ MAGIC_NUMBERS = {
     b"\xff\xd8\xff": "jpeg",
     b"GIF87a": "gif",
     b"GIF89a": "gif",
+    b"%PDF": "pdf",
 }
+
+
+class PdfDetectedError(Exception):
+    """Exceção lançada quando um PDF é detectado no lugar de uma imagem."""
+    pass
 
 
 def detect_and_decode(data_b64: str | bytes) -> bytes:
@@ -24,7 +30,6 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
         try:
             data_b64 = data_b64.decode("ascii")
         except UnicodeDecodeError as exc:
-            log("[DEBUG] detect_and_decode: bytes não ASCII recebidos")
             raise ValueError("Bytes recebidos não representam Base64 ASCII válido.") from exc
 
     data_b64 = data_b64.strip()
@@ -34,33 +39,29 @@ def detect_and_decode(data_b64: str | bytes) -> bytes:
     if missing_padding:
         data_b64 += "=" * (4 - missing_padding)
 
-    log(f"[DEBUG] detect_and_decode: dados recebidos comprimento={len(data_b64)} prefixo={data_b64[:32]}")
-
     try:
         step1 = base64.b64decode(data_b64, validate=False)
     except Exception:
-        log(
-            f"[DEBUG] detect_and_decode: falha na primeira decodificação comprimento={len(data_b64)} prefixo={data_b64[:32]}"
-        )
         raise ValueError("Base64 inválido na primeira tentativa")
 
     # Checa se bate com algum magic number
     if any(step1.startswith(m) for m in MAGIC_NUMBERS):
-        log("Decodificação única suficiente.")
+        # Verifica se é PDF
+        if step1.startswith(b"%PDF"):
+            raise PdfDetectedError("PDF detectado no lugar de imagem")
         return step1
 
     # Segunda tentativa
     try:
         step2 = base64.b64decode(step1, validate=False)
     except Exception:
-        log(f"[DEBUG] detect_and_decode: falha na segunda decodificação primeiros_bytes={step1[:16].hex()}")
         raise ValueError("Base64 inválido na segunda tentativa")
 
     if any(step2.startswith(m) for m in MAGIC_NUMBERS):
-        log("Decodificação dupla necessária.")
+        # Verifica se é PDF
+        if step2.startswith(b"%PDF"):
+            raise PdfDetectedError("PDF detectado no lugar de imagem")
         return step2
-
-    log(f"[DEBUG] detect_and_decode: nenhum magic number encontrado step1={step1[:16].hex()} step2={step2[:16].hex()}")
 
     raise ValueError("Não foi possível identificar o tipo de arquivo após 1 ou 2 decodificações.")
 
