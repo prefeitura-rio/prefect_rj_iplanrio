@@ -51,7 +51,7 @@ deployments:
     schedules:
     # Schedule para tabela aluno (overwrite)
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T05:10:00" # 02:10 BRT = 05:10 UTC
+      anchor_date: "2022-01-01T02:10:00" # 02:10 BRT = 05:10 UTC
       timezone: America/Sao_Paulo
       slug: aluno
       parameters:
@@ -96,11 +96,11 @@ deployments:
 
     # Schedule para tabela aluno_historico_2025 (append com particionamento por ano)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
-      slug: aluno_historico_2025
+      slug: aluno_historico
       parameters:
-        table_id: aluno_historico_2025
+        table_id: aluno_historico
         dump_mode: append
         partition_columns: Ano
         partition_date_format: "%Y"
@@ -153,7 +153,7 @@ deployments:
 
     # Schedule para tabela aluno_turma (append com particionamento por ano)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
       slug: aluno_turma
       parameters:
@@ -173,7 +173,7 @@ deployments:
 
     # Schedule para tabela avaliacao (append com particionamento por ano)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
       slug: avaliacao
       parameters:
@@ -218,7 +218,7 @@ deployments:
 
     # Schedule para tabela coc (append com particionamento por ano)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
       slug: coc
       parameters:
@@ -256,7 +256,7 @@ deployments:
 
     # Schedule para tabela dependencia (overwrite)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
       slug: dependencia
       parameters:
@@ -278,7 +278,7 @@ deployments:
 
     # Schedule para tabela escola (overwrite)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
       slug: escola
       parameters:
@@ -309,7 +309,7 @@ deployments:
 
     # Schedule para tabela frequencia (append com particionamento por mês)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
       slug: frequencia
       parameters:
@@ -341,7 +341,7 @@ deployments:
 
     # Schedule para tabela movimentacao (append com particionamento por mês)
     - interval: 86400
-      anchor_date: "2022-01-01T05:10:00"
+      anchor_date: "2022-01-01T02:10:00"
       timezone: America/Sao_Paulo
       slug: movimentacao
       parameters:
