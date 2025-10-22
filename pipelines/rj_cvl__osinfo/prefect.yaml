@@ -28,7 +28,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cvl__osinfo/flow.py:rj_cvl__osinfo
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
