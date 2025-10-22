@@ -21,6 +21,7 @@ MAGIC_NUMBERS = {
 
 class PdfDetectedError(Exception):
     """Exceção lançada quando um PDF é detectado no lugar de uma imagem."""
+
     pass
 
 
