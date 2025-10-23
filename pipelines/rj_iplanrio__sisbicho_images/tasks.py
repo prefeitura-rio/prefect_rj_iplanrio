@@ -19,8 +19,32 @@ from prefect import task
 
 from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
     MAGIC_NUMBERS,
+    PdfDetectedError,
     detect_and_decode,
 )
+
+
+def _ensure_staging_dataset(dataset_id: str) -> str:
+    """Garante que o dataset termine com _staging."""
+
+    dataset_id = (dataset_id or "").strip()
+    return dataset_id if dataset_id.endswith("_staging") else f"{dataset_id}_staging"
+
+
+def _try_query_row_count(client: bigquery.Client, table: str) -> int | None:
+    """Executa SELECT COUNT(*) para obter contagem real de linhas."""
+
+    query = f"SELECT COUNT(*) AS total FROM `{table}`"
+    job_config = bigquery.QueryJobConfig(
+        use_query_cache=True,
+        use_legacy_sql=False,
+    )
+
+    try:
+        result = client.query(query, job_config=job_config).result()
+        return next(result).total
+    except Exception:
+        return None
 
 
 def _infer_identifier_field(schema: Iterable[bigquery.SchemaField]) -> str:
@@ -179,13 +203,15 @@ def _extract_qrcode_payload(value: str) -> str | None:
 
     cleaned = _strip_data_uri_prefix(candidate)
     if not _looks_like_base64(cleaned):
-        log("[ERRO] Valor de QR Code não está em Base64 válido.")
         return None
 
     try:
         image_bytes = detect_and_decode(cleaned)
+    except PdfDetectedError:
+        log("[QRCode] PDF detectado - registro ignorado")
+        return None
     except ValueError as exc:
-        log(f"[ERRO] Falha ao decodificar imagem Base64 do QR Code: {exc}")
+        log(f"[QRCode] Falha ao decodificar: {exc}")
         return None
 
     payload = _decode_qrcode_bytes(image_bytes)
@@ -194,13 +220,16 @@ def _extract_qrcode_payload(value: str) -> str | None:
         if normalized_payload:
             return normalized_payload
 
+    # Verifica se é imagem antes de tentar converter para texto
+    if _contains_magic_number(image_bytes):
+        return None
+
     decoded_text = _bytes_to_text(image_bytes)
     if decoded_text:
         normalized_payload = _normalize_qrcode_payload(decoded_text)
         if normalized_payload:
             return normalized_payload
 
-    log("[ERRO] QR Code não pôde ser interpretado.")
     return None
 
 
@@ -240,8 +269,13 @@ def _get_total_count(
     # Verifica se a tabela de destino existe
     table_is_empty = False
     try:
-        client.get_table(target_table)
+        target_table_ref = client.get_table(target_table)
         table_exists = True
+        row_count = target_table_ref.num_rows
+        if row_count == 0 and getattr(target_table_ref, "external_data_configuration", None) is not None:
+            precise_count = _try_query_row_count(client, target_table)
+            if precise_count is not None:
+                row_count = precise_count
     except NotFound:
         log(f"Tabela {target_table} não existe. Primeira execução: processando todos os registros.")
         table_exists = False
@@ -259,7 +293,8 @@ def _get_total_count(
 
         try:
             result = client.query(count_query).result()
-            return next(result).total, table_is_empty
+            total = next(result).total
+            return total, table_is_empty
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
@@ -269,6 +304,7 @@ def _get_total_count(
                 table_is_empty = True
             else:
                 # Outro tipo de erro - propaga
+                log(f"[ERRO] Falha ao executar query incremental: {exc}")
                 raise
 
     # Query completa (primeira carga ou tabela vazia)
@@ -279,7 +315,9 @@ def _get_total_count(
     """
 
     result = client.query(count_query).result()
-    return next(result).total, table_is_empty
+    total = next(result).total
+    log(f"Total de registros a processar (primeira carga): {total}")
+    return total, table_is_empty
 
 
 @task
@@ -307,7 +345,8 @@ def fetch_sisbicho_media_task(
     client = bigquery.Client(credentials=credentials, project=billing_project_id)
 
     source_table = f"{billing_project_id}.{source_dataset_id}.{source_table_id}"
-    target_table = f"{billing_project_id}.{target_dataset_id}.{target_table_id}"
+    effective_target_dataset = _ensure_staging_dataset(target_dataset_id)
+    target_table = f"{billing_project_id}.{effective_target_dataset}.{target_table_id}"
 
     table = client.get_table(source_table)
     identifier_field = _infer_identifier_field(table.schema)
@@ -349,7 +388,7 @@ def fetch_batch(
 
     # Verifica se a tabela de destino existe
     try:
-        client.get_table(target_table)
+        target_table_ref = client.get_table(target_table)
         table_exists = True
     except NotFound:
         table_exists = False
@@ -357,27 +396,33 @@ def fetch_batch(
     if table_exists:
         # Query incremental com LEFT JOIN
         query = f"""
+            WITH animal_unico AS (
+                SELECT
+                    {identifier_field},
+                    qrcode_dados,
+                    foto_dados,
+                    ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
+                FROM `{source_table}`
+                WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
+            )
             SELECT
-                CAST(src.{identifier_field} AS STRING) AS animal_identifier,
+                CAST(a.{identifier_field} AS STRING) AS animal_identifier,
                 prop.cpf_numero AS cpf,
-                src.qrcode_dados,
-                src.foto_dados
-            FROM `{source_table}` AS src
+                a.qrcode_dados,
+                a.foto_dados
+            FROM animal_unico a
+            LEFT JOIN `{target_table}` AS tgt
+                ON CAST(a.{identifier_field} AS STRING) = tgt.id_animal
             LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-                ON src.{identifier_field} = ap.id_animal
+                ON a.{identifier_field} = ap.id_animal
                 AND ap.fim_datahora IS NULL
             LEFT JOIN `{project_dataset}.proprietario` AS prop
                 ON ap.id_proprietario = prop.id_proprietario
-            LEFT JOIN `{target_table}` AS tgt
-                ON CAST(src.{identifier_field} AS STRING) = tgt.id_animal
-            WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
+            WHERE a.rn = 1
               AND tgt.id_animal IS NULL
-            ORDER BY src.{identifier_field}
             LIMIT {batch_size}
             OFFSET {offset}
         """.strip()
-
-        log(f"Buscando lote: offset={offset}, limit={batch_size}")
 
         job_config = bigquery.QueryJobConfig(
             use_query_cache=True,
@@ -387,7 +432,6 @@ def fetch_batch(
         try:
             query_job = client.query(query, job_config=job_config)
             dataframe = query_job.result().to_dataframe()
-            log(f"Lote carregado: {len(dataframe)} registros")
             return dataframe
         except Exception as exc:
             error_msg = str(exc).lower()
@@ -401,24 +445,30 @@ def fetch_batch(
 
     # Query completa (primeira carga ou tabela vazia)
     query = f"""
+        WITH animal_unico AS (
+            SELECT
+                {identifier_field},
+                qrcode_dados,
+                foto_dados,
+                ROW_NUMBER() OVER (PARTITION BY {identifier_field} ORDER BY datalake_loaded_at DESC) as rn
+            FROM `{source_table}`
+            WHERE qrcode_dados IS NOT NULL OR foto_dados IS NOT NULL
+        )
         SELECT
-            CAST(src.{identifier_field} AS STRING) AS animal_identifier,
+            CAST(a.{identifier_field} AS STRING) AS animal_identifier,
             prop.cpf_numero AS cpf,
-            src.qrcode_dados,
-            src.foto_dados
-        FROM `{source_table}` AS src
+            a.qrcode_dados,
+            a.foto_dados
+        FROM animal_unico a
         LEFT JOIN `{project_dataset}.animal_proprietario` AS ap
-            ON src.{identifier_field} = ap.id_animal
+            ON a.{identifier_field} = ap.id_animal
             AND ap.fim_datahora IS NULL
         LEFT JOIN `{project_dataset}.proprietario` AS prop
             ON ap.id_proprietario = prop.id_proprietario
-        WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
-        ORDER BY src.{identifier_field}
+        WHERE a.rn = 1
         LIMIT {batch_size}
         OFFSET {offset}
     """.strip()
-
-    log(f"Buscando lote: offset={offset}, limit={batch_size}")
 
     job_config = bigquery.QueryJobConfig(
         use_query_cache=True,
@@ -427,8 +477,6 @@ def fetch_batch(
 
     query_job = client.query(query, job_config=job_config)
     dataframe = query_job.result().to_dataframe()
-
-    log(f"Lote carregado: {len(dataframe)} registros")
     return dataframe
 
 
@@ -462,6 +510,9 @@ def upload_pet_images_task(
 
     foto_urls: list[str | None] = []
     blob_paths: list[str | None] = []
+    uploaded_count = 0
+    skipped_count = 0
+    pdf_count = 0
 
     for _, row in dataframe.iterrows():
         raw_value = row.get("foto_dados")
@@ -476,18 +527,16 @@ def upload_pet_images_task(
         raw_text = _coerce_to_base64_text(raw_value)
         cleaned = _strip_data_uri_prefix(raw_text)
 
-        raw_preview = raw_text.strip().replace("\n", " ")
-        cleaned_preview = cleaned.strip().replace("\n", " ")
-        log(
-            f"[DEBUG] Preparando decode (task) animal={identifier} tipo={type(raw_value).__name__} "
-            f"len_original={len(raw_text)} "
-            f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
-        )
-
         try:
             image_bytes = detect_and_decode(cleaned)
+        except PdfDetectedError:
+            log(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
+            foto_urls.append(None)
+            blob_paths.append(None)
+            pdf_count += 1
+            continue
         except ValueError as exc:
-            log(f"[ERRO CRÍTICO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            log(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
             raise ValueError(
                 f"Decode de Base64 falhou para animal {identifier}. "
                 f"Batch abortado para evitar transferência de dados incompletos."
@@ -505,16 +554,18 @@ def upload_pet_images_task(
             exists = False
 
         if not exists:
-            log(f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}")
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
+            uploaded_count += 1
         else:
-            log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+            skipped_count += 1
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
+
+    log(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls
@@ -613,6 +664,9 @@ def _upload_batch_images(
 
     foto_urls: list[str | None] = []
     blob_paths: list[str | None] = []
+    uploaded_count = 0
+    skipped_count = 0
+    pdf_count = 0
 
     for _, row in dataframe.iterrows():
         raw_value = row.get("foto_dados")
@@ -627,18 +681,16 @@ def _upload_batch_images(
         raw_text = _coerce_to_base64_text(raw_value)
         cleaned = _strip_data_uri_prefix(raw_text)
 
-        raw_preview = raw_text.strip().replace("\n", " ")
-        cleaned_preview = cleaned.strip().replace("\n", " ")
-        log(
-            f"[DEBUG] Preparando decode (batch) animal={identifier} tipo={type(raw_value).__name__} "
-            f"len_original={len(raw_text)} "
-            f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
-        )
-
         try:
             image_bytes = detect_and_decode(cleaned)
+        except PdfDetectedError:
+            log(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
+            foto_urls.append(None)
+            blob_paths.append(None)
+            pdf_count += 1
+            continue
         except ValueError as exc:
-            log(f"[ERRO CRÍTICO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            log(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
             raise ValueError(
                 f"Decode de Base64 falhou para animal {identifier}. "
                 f"Batch abortado para evitar transferência de dados incompletos."
@@ -656,16 +708,18 @@ def _upload_batch_images(
             exists = False
 
         if not exists:
-            log(f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}")
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
+            uploaded_count += 1
         else:
-            log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+            skipped_count += 1
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
+
+    log(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls
@@ -697,4 +751,6 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
         "foto_url",
         "ingestao_data",
     ]
-    return df[selected_columns]
+
+    output_df = df[selected_columns]
+    return output_df

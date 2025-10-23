@@ -28,12 +28,12 @@ def rj_iplanrio__sisbicho_images(
     billing_project_id: str | None = None,
     storage_project_id: str | None = None,
     credential_bucket: str | None = None,
-    batch_size: int = 100,
-    max_records: int | None = 1000,
+    batch_size: int = 1000,
+    max_records: int | None = None,
 ):
     constants = SisbichoImagesConstants
 
-    log("Fluxo rj_iplanrio__sisbicho_images – versão pós-93432b5")
+    log("Fluxo rj_iplanrio__sisbicho_images – versão OCT-20")
 
     dataset_id = dataset_id or constants.TARGET_DATASET.value
     table_id = table_id or constants.TARGET_TABLE.value
@@ -49,7 +49,10 @@ def rj_iplanrio__sisbicho_images(
         materialize_after_dump if materialize_after_dump is not None else constants.MATERIALIZE_AFTER_DUMP.value
     )
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
+    target_dataset_for_queries = dataset_id if dataset_id.endswith("_staging") else f"{dataset_id}_staging"
+    dataset_id_for_upload = dataset_id[:-8] if dataset_id.endswith("_staging") else dataset_id
+
+    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{target_dataset_for_queries}")
     credentials = inject_bd_credentials_task(environment="prod", wait_for=[rename_flow_run])
 
     client, source_table, target_table, identifier_field, total_count = fetch_sisbicho_media_task(
@@ -95,12 +98,10 @@ def rj_iplanrio__sisbicho_images(
                 root_folder=constants.ROOT_FOLDER.value,
                 append_mode=True,
             )
-
-            # Tenta criar tabela e fazer upload, com recovery para tabela vazia
             try:
                 create_table_and_upload_to_gcs_task(
                     data_path=partitions_path,
-                    dataset_id=dataset_id,
+                    dataset_id=dataset_id_for_upload,
                     table_id=table_id,
                     dump_mode=dump_mode,
                     source_format=constants.FILE_FORMAT.value,
@@ -116,7 +117,7 @@ def rj_iplanrio__sisbicho_images(
                         log(f"[RECOVERY] Tabela {target_table} deletada. Tentando criar novamente...")
                         create_table_and_upload_to_gcs_task(
                             data_path=partitions_path,
-                            dataset_id=dataset_id,
+                            dataset_id=dataset_id_for_upload,
                             table_id=table_id,
                             dump_mode=dump_mode,
                             source_format=constants.FILE_FORMAT.value,
@@ -127,7 +128,6 @@ def rj_iplanrio__sisbicho_images(
                         log(f"[ERRO] Falha no retry após deletar tabela: {retry_exc}")
                         raise
                 else:
-                    # Outro tipo de erro - propaga
                     raise
 
             total_processed += len(batch_output)
