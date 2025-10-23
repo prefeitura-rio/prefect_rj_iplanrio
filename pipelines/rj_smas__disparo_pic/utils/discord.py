@@ -9,6 +9,9 @@ import os
 import aiohttp
 from discord import Webhook
 from iplanrio.pipelines_utils.logging import log
+from pipelines.rj_smas__disparo_pic.utils.tasks import (
+    download_data_from_bigquery,
+)
 
 
 async def _send_discord_webhook(webhook_url: str, message: str):
@@ -20,7 +23,9 @@ async def _send_discord_webhook(webhook_url: str, message: str):
         message: Mensagem de texto a ser enviada
     """
     if len(message) > 2000:
-        raise ValueError(f"Message content is too long: {len(message)} > 2000 characters.")
+        raise ValueError(
+            f"Message content is too long: {len(message)} > 2000 characters."
+        )
 
     async with aiohttp.ClientSession() as session:
         webhook = Webhook.from_url(webhook_url, session=session)
@@ -63,7 +68,11 @@ def send_dispatch_success_notification(
         return
 
     # Adicionar indicador [TESTE] no título se test_mode=True
-    title = "✅ **[TESTE] Disparo Realizado com Sucesso**" if test_mode else "✅ **Disparo Realizado com Sucesso**"
+    title = (
+        "✅ **[TESTE] Disparo Realizado com Sucesso**"
+        if test_mode
+        else "✅ **Disparo Realizado com Sucesso**"
+    )
 
     message = f"""{title}
 
@@ -117,9 +126,6 @@ def send_dispatch_result_notification(
         sample_destination: Exemplo de destinatário (opcional, não usado aqui)
         test_mode: Indica se é um disparo de teste (opcional)
     """
-    from pipelines.rj_smas__disparo_pic_lembrete.utils.tasks import (
-        download_data_from_bigquery,
-    )
 
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
 
@@ -168,7 +174,11 @@ def send_dispatch_result_notification(
         )
 
         # Adicionar indicador [TESTE] no título se test_mode=True
-        title = "📊 **[TESTE] Resultados do Disparo**" if test_mode else "📊 **Resultados do Disparo**"
+        title = (
+            "📊 **[TESTE] Resultados do Disparo**"
+            if test_mode
+            else "📊 **Resultados do Disparo**"
+        )
 
         # Formatar mensagem com contexto e resultados
         message = f"""{title}
