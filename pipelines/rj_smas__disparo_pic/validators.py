@@ -9,14 +9,16 @@ from typing import Dict, List, Tuple
 from iplanrio.pipelines_utils.logging import log
 from pydantic import ValidationError
 
-from pipelines.rj_smas__disparo_pic_lembrete.schemas import (
+from pipelines.rj_smas__disparo_pic.schemas import (
     DestinationInput,
     DispatchPayload,
     ValidationStats,
 )
 
 
-def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInput], ValidationStats]:
+def validate_destinations(
+    destinations: List[Dict],
+) -> Tuple[List[DestinationInput], ValidationStats]:
     """
     Valida lista de destinatários usando schemas Pydantic
 
@@ -34,7 +36,10 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
     if not destinations:
         log("Lista de destinatários vazia fornecida para validação")
         return [], ValidationStats(
-            total_input=0, valid_records=0, invalid_records=0, validation_errors=["Lista de destinatários vazia"]
+            total_input=0,
+            valid_records=0,
+            invalid_records=0,
+            validation_errors=["Lista de destinatários vazia"],
         )
 
     valid_destinations = []
@@ -66,7 +71,9 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
                 to_partial = to_partial[:8] + "****"
 
             external_id = destination.get("externalId", "N/A")
-            log(f"Destinatário inválido - to: {to_partial}, externalId: {external_id}, erros: {error_msg}")
+            log(
+                f"Destinatário inválido - to: {to_partial}, externalId: {external_id}, erros: {error_msg}"
+            )
 
         except Exception as e:
             # Erro inesperado durante validação
@@ -86,10 +93,14 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
     )
 
     # Logs de resumo
-    log(f"Validação concluída: {valid_count}/{total_input} destinatários válidos ({stats.success_rate:.1f}%)")
+    log(
+        f"Validação concluída: {valid_count}/{total_input} destinatários válidos ({stats.success_rate:.1f}%)"
+    )
 
     if invalid_count > 0:
-        log(f"ATENÇÃO: {invalid_count} destinatários rejeitados por problemas de validação")
+        log(
+            f"ATENÇÃO: {invalid_count} destinatários rejeitados por problemas de validação"
+        )
 
         # Log detalhado dos primeiros erros (máximo 5 para não poluir)
         for error in validation_errors[:5]:
@@ -104,7 +115,9 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
 
     # Warning se taxa de sucesso for baixa
     if stats.success_rate < 90.0:
-        log(f"WARNING: Taxa de validação baixa ({stats.success_rate:.1f}%). Verificar qualidade dos dados.")
+        log(
+            f"WARNING: Taxa de validação baixa ({stats.success_rate:.1f}%). Verificar qualidade dos dados."
+        )
 
     return valid_destinations, stats
 
@@ -132,9 +145,15 @@ def validate_dispatch_payload(
             f"Validando payload de dispatch: campaign='{campaign_name}', cost_center={cost_center_id}, destinations={len(destinations)}"
         )
 
-        payload = DispatchPayload(campaignName=campaign_name, costCenterId=cost_center_id, destinations=destinations)
+        payload = DispatchPayload(
+            campaignName=campaign_name,
+            costCenterId=cost_center_id,
+            destinations=destinations,
+        )
 
-        log(f"Payload de dispatch validado com sucesso para {len(destinations)} destinatários")
+        log(
+            f"Payload de dispatch validado com sucesso para {len(destinations)} destinatários"
+        )
         return payload
 
     except ValidationError as e:
@@ -171,12 +190,16 @@ def log_validation_summary(stats: ValidationStats, context: str = ""):
             log(f"{context_prefix}  - {error}")
 
         if len(stats.validation_errors) > 3:
-            log(f"{context_prefix}  ... e mais {len(stats.validation_errors) - 3} erros")
+            log(
+                f"{context_prefix}  ... e mais {len(stats.validation_errors) - 3} erros"
+            )
 
     log(f"{context_prefix}=== FIM DO RESUMO ===")
 
 
-def validate_single_destination(destination_dict: Dict) -> Tuple[bool, DestinationInput, str]:
+def validate_single_destination(
+    destination_dict: Dict,
+) -> Tuple[bool, DestinationInput, str]:
     """
     Valida um único destinatário
 
