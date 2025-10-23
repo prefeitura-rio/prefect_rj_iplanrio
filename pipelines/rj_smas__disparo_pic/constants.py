@@ -29,7 +29,7 @@ class PicLembreteConstants(Enum):
     PIC_CHUNK_SIZE = 1000
 
     # Modo de teste - ativar por padrão para segurança
-    PIC_TEST_MODE = True
+    PIC_TEST_MODE = False
 
     # Query mock para testes rápidos (não dispara para base real)
     PIC_QUERY_MOCK = r"""
