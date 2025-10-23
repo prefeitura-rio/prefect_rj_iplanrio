@@ -50,7 +50,7 @@ class PicLembreteConstants(Enum):
                 nome AS NOME_SOBRENOME,
                 cpf AS CC_WT_CPF_CIDADAO,
                 'Endereço Teste, 123 - Centro' AS ENDERECO,
-                FORMAT_DATE('%d/%m/%Y', config.target_date) AS DIA,
+                FORMAT_DATE('%d/%m/%Y', config.target_date) AS DATA,
                 '10:00' AS HORARIO
               ) AS vars,
               cpf AS externalId
@@ -148,7 +148,7 @@ class PicLembreteConstants(Enum):
                 nome_sobrenome AS NOME_SOBRENOME,
                 cpf AS CC_WT_CPF_CIDADAO,
                 endereco_evento AS ENDERECO,
-                data_formatada AS DIA,
+                data_formatada AS DATA,
                 horario_evento AS HORARIO
               ) AS vars,
               cpf AS externalId
