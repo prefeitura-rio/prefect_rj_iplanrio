@@ -1,0 +1,4 @@
+[project]
+name = "rj_smfp__sigma"
+version = "0.1.0"
+description = "Pipeline sigma da secretaria smfp"
