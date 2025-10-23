@@ -1,7 +1,6 @@
 [project]
-name = "rj_smas__disparo_pic_lembrete"
+name = "rj-smas-disparo-pic"
 version = "0.1.0"
-description = "Pipeline de disparo PIC lembrete da secretaria SMAS"
 dependencies = [
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",
@@ -22,4 +21,7 @@ dependencies = [
     "gitpython==3.1.44",
     "discord-py==2.5.2",
     "pydantic>=2.0.0",
+    "google-cloud-bigquery>=3.29.0",
+    "pandas>=2.3.3",
+    "pyyaml>=6.0.3",
 ]

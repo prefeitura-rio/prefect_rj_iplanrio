@@ -28,26 +28,38 @@ class PicLembreteConstants(Enum):
     PIC_LEMBRETE_DUMP_MODE = "append"
     PIC_LEMBRETE_CHUNK_SIZE = 1000
 
+    # Modo de teste - ativar por padrão para segurança
+    PIC_LEMBRETE_TEST_MODE = True
+
     # Query mock para testes rápidos (não dispara para base real)
     PIC_LEMBRETE_QUERY_MOCK = r"""
         WITH config AS (
           SELECT DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 2 DAY) AS target_date
+        ),
+        test_data AS (
+          SELECT 1 AS id, '5521900000001' AS phone, 'Teste Um' AS nome, '11111111111' AS cpf UNION ALL
+          SELECT 2, '5521900000002', 'Teste Dois', '22222222222' UNION ALL
+          SELECT 3, '5521900000003', 'Teste Três', '33333333333'
         )
         SELECT
           TO_JSON_STRING(
             STRUCT(
-              '5521985573582' AS celular_disparo,
+              phone AS celular_disparo,
               STRUCT(
-                'Cidadã Teste' AS NOME_SOBRENOME,
-                '12345678901' AS CPF,
-                'Endereço Exemplo, 123 - Centro' AS ENDERECO,
-                FORMAT_DATE('%d/%m/%Y', config.target_date) AS DATA,
+                nome AS NOME_SOBRENOME,
+                cpf AS CC_WT_CPF_CIDADAO,
+                'Endereço Teste, 123 - Centro' AS ENDERECO,
+                CONCAT(
+                  FORMAT_DATE('%d/%m/%Y', config.target_date),
+                  ' (CURRENT_DATE + 2 dias)'
+                ) AS DIA,
                 '10:00' AS HORARIO
               ) AS vars,
-              '12345678901' AS externalId
+              cpf AS externalId
             )
           ) AS destination_data
-        FROM config
+        FROM test_data
+        CROSS JOIN config
     """
 
     # Query principal do PIC lembrete com saída em JSON (destination_data)

@@ -41,6 +41,7 @@ def rj_smas__disparo_pic_lembrete(
     dump_mode: str | None = None,
     query: str | None = None,
     query_processor_name: str | None = None,
+    test_mode: bool | None = None,
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_LEMBRETE_DATASET_ID.value
@@ -59,6 +60,14 @@ def rj_smas__disparo_pic_lembrete(
         query_processor_name
         or PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
     )
+    test_mode = (
+        test_mode if test_mode is not None else PicLembreteConstants.PIC_LEMBRETE_TEST_MODE.value
+    )
+
+    # Se test_mode ativado, usar query mock ao invés da query real
+    if test_mode:
+        query = PicLembreteConstants.PIC_LEMBRETE_QUERY_MOCK.value
+        print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
 
     billing_project_id = PicLembreteConstants.PIC_LEMBRETE_BILLING_PROJECT_ID.value
 
@@ -128,6 +137,7 @@ def rj_smas__disparo_pic_lembrete(
             cost_center_id=cost_center_id,
             total_batches=total_batches,
             sample_destination=unique_destinations[0] if unique_destinations else None,
+            test_mode=test_mode,
         )
 
         dfr = create_dispatch_dfr(
@@ -180,4 +190,5 @@ def rj_smas__disparo_pic_lembrete(
             campaign_name=campaign_name,
             cost_center_id=cost_center_id,
             total_batches=total_batches,
+            test_mode=test_mode,
         )

@@ -1,4 +1,4 @@
-name: rj_smas__disparo_pic
+name: rj_smas__pic_disparos
 prefect-version: 3.4.3
 
 build:
@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-smas--disparo-pic-lembrete--staging
+  - name: rj-smas--disparo-pic--staging
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smas__disparo_pic/flow.py:rj_smas__disparo_pic
     work_pool:
@@ -37,15 +37,15 @@ deployments:
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
-      id_hsm: 185
-      campaign_name: smas-cartaopic-lembrete
-      cost_center_id: 38
+      id_hsm: 101
+      campaign_name: smas-lembretecadunico-prod
+      cost_center_id: 4
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
-      table_id: disparos_efetuados
+      dataset_id: brutos_disparos
+      table_id: disparos
       dump_mode: append
       infisical_secret_path: /wetalkie
-  - name: rj-smas--disparo-pic-lembrete--prod
+  - name: rj-smas--disparo-pic--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__disparo_pic/flow.py:rj_smas__disparo_pic
     work_pool:
@@ -58,12 +58,12 @@ deployments:
         image_pull_policy: Always
     parameters:
       # Valores padrão (podem ser alterados na UI)
-      id_hsm: 185
-      campaign_name: smas-cartaopic-lembrete
-      cost_center_id: 38
+      id_hsm: 101
+      campaign_name: smas-lembretecadunico-prod
+      cost_center_id: 4
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
-      table_id: disparos_efetuados
+      dataset_id: brutos_disparos
+      table_id: disparos
       dump_mode: append
       infisical_secret_path: /wetalkie
     # schedules:
