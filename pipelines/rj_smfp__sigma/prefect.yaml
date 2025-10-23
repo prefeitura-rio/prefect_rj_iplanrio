@@ -306,10 +306,6 @@ deployments:
             FROM SIGMA.VW_USUARIO_SISTEMA
 
 
-
-
-
-
   - name: rj-smfp--sigma--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smfp__sigma/flow.py:rj_smfp__sigma

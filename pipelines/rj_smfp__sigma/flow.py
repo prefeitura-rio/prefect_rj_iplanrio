@@ -18,7 +18,7 @@ from prefect import flow
 
 @flow(log_prints=True)
 def rj_smfp__sigma(
-    db_database: str = "P01.PCRJ",
+    db_database: str = "CP01.SMF",
     db_host: str = "10.90.31.22",
     db_port: str = "1521",
     db_type: str = "oracle",
