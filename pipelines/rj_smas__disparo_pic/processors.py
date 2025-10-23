@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from iplanrio.pipelines_utils.logging import log
 
-from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
+from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 
 
 def process_pic_lembrete_query(query: str | None = None) -> str:
@@ -24,7 +24,9 @@ def process_pic_lembrete_query(query: str | None = None) -> str:
     final_query = query or PicLembreteConstants.PIC_LEMBRETE_QUERY.value
 
     if "{data_evento}" not in final_query:
-        raise ValueError("Query must contain {data_evento} placeholder for dynamic substitution")
+        raise ValueError(
+            "Query must contain {data_evento} placeholder for dynamic substitution"
+        )
 
     data_evento = (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d")
     log(f"PIC_LEMBRETE: Calculated D+2 event date -> {data_evento}")
