@@ -19,6 +19,7 @@ from prefect import task
 
 from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (
     MAGIC_NUMBERS,
+    PdfDetectedError,
     detect_and_decode,
 )
 
@@ -42,8 +43,7 @@ def _try_query_row_count(client: bigquery.Client, table: str) -> int | None:
     try:
         result = client.query(query, job_config=job_config).result()
         return next(result).total
-    except Exception as exc:
-        log(f"[DEBUG COUNT] Falha ao obter contagem precisa para {table}: {exc}")
+    except Exception:
         return None
 
 
@@ -99,7 +99,9 @@ def _looks_like_base64(value: str) -> bool:
     value = value.strip()
     if not value:
         return False
-    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r")
+    allowed = set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r"
+    )
     return set(value) <= allowed and len(value) % 4 == 0
 
 
@@ -162,7 +164,9 @@ def _normalize_qrcode_payload(text: str) -> str | None:
     if isinstance(parsed, str):
         cleaned = parsed.strip()
 
-    lines = [line.strip() for line in cleaned.replace("\r", "\n").split("\n") if line.strip()]
+    lines = [
+        line.strip() for line in cleaned.replace("\r", "\n").split("\n") if line.strip()
+    ]
     payload_dict: dict[str, str] = {}
     current_key: str | None = None
 
@@ -180,11 +184,15 @@ def _normalize_qrcode_payload(text: str) -> str | None:
             extra = line.strip()
             if extra:
                 existing = payload_dict.get(current_key, "")
-                payload_dict[current_key] = f"{existing} {extra}".strip() if existing else extra
+                payload_dict[current_key] = (
+                    f"{existing} {extra}".strip() if existing else extra
+                )
         else:
             payload_dict.setdefault("observacao", "")
             payload_dict["observacao"] = (
-                f"{payload_dict['observacao']} {line}".strip() if payload_dict["observacao"] else line
+                f"{payload_dict['observacao']} {line}".strip()
+                if payload_dict["observacao"]
+                else line
             )
 
     if payload_dict:
@@ -203,13 +211,15 @@ def _extract_qrcode_payload(value: str) -> str | None:
 
     cleaned = _strip_data_uri_prefix(candidate)
     if not _looks_like_base64(cleaned):
-        log("[ERRO] Valor de QR Code não está em Base64 válido.")
         return None
 
     try:
         image_bytes = detect_and_decode(cleaned)
+    except PdfDetectedError:
+        log("[QRCode] PDF detectado - registro ignorado")
+        return None
     except ValueError as exc:
-        log(f"[ERRO] Falha ao decodificar imagem Base64 do QR Code: {exc}")
+        log(f"[QRCode] Falha ao decodificar: {exc}")
         return None
 
     payload = _decode_qrcode_bytes(image_bytes)
@@ -218,13 +228,16 @@ def _extract_qrcode_payload(value: str) -> str | None:
         if normalized_payload:
             return normalized_payload
 
+    # Verifica se é imagem antes de tentar converter para texto
+    if _contains_magic_number(image_bytes):
+        return None
+
     decoded_text = _bytes_to_text(image_bytes)
     if decoded_text:
         normalized_payload = _normalize_qrcode_payload(decoded_text)
         if normalized_payload:
             return normalized_payload
 
-    log("[ERRO] QR Code não pôde ser interpretado.")
     return None
 
 
@@ -266,19 +279,19 @@ def _get_total_count(
     try:
         target_table_ref = client.get_table(target_table)
         table_exists = True
-        log(f"[DEBUG COUNT] Tabela target EXISTE: {target_table}")
         row_count = target_table_ref.num_rows
-        if row_count == 0 and getattr(target_table_ref, "external_data_configuration", None) is not None:
+        if (
+            row_count == 0
+            and getattr(target_table_ref, "external_data_configuration", None)
+            is not None
+        ):
             precise_count = _try_query_row_count(client, target_table)
             if precise_count is not None:
                 row_count = precise_count
-                log(f"[DEBUG COUNT] Tabela tem {row_count} linhas (contagem precisa)")
-            else:
-                log("[DEBUG COUNT] Tabela reporta 0 linhas (metadados da tabela externa)")
-        else:
-            log(f"[DEBUG COUNT] Tabela tem {row_count} linhas")
     except NotFound:
-        log(f"[DEBUG COUNT] Tabela {target_table} NÃO EXISTE. Primeira execução: processando todos os registros.")
+        log(
+            f"Tabela {target_table} não existe. Primeira execução: processando todos os registros."
+        )
         table_exists = False
 
     if table_exists:
@@ -292,21 +305,20 @@ def _get_total_count(
               AND tgt.id_animal IS NULL
         """
 
-        log("[DEBUG COUNT] Query incremental:")
-        log(f"[DEBUG COUNT] {count_query}")
-
         try:
             result = client.query(count_query).result()
             total = next(result).total
-            log(
-                f"[DEBUG COUNT] Resultado: {total} registros NOVOS a processar (LEFT JOIN filtrou registros existentes)"
-            )
             return total, table_is_empty
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
-            if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
-                log(f"[INFO] Tabela {target_table} existe mas está vazia. Será deletada e recriada.")
+            if (
+                "cannot query hive partitioned data" in error_msg
+                and "without any associated files" in error_msg
+            ):
+                log(
+                    f"[INFO] Tabela {target_table} existe mas está vazia. Será deletada e recriada."
+                )
                 table_exists = False
                 table_is_empty = True
             else:
@@ -321,12 +333,9 @@ def _get_total_count(
         WHERE (src.qrcode_dados IS NOT NULL OR src.foto_dados IS NOT NULL)
     """
 
-    log("[DEBUG COUNT] Query completa (sem filtro incremental):")
-    log(f"[DEBUG COUNT] {count_query}")
-
     result = client.query(count_query).result()
     total = next(result).total
-    log(f"[DEBUG COUNT] Resultado: {total} registros TOTAIS (primeira carga ou tabela vazia)")
+    log(f"Total de registros a processar (primeira carga): {total}")
     return total, table_is_empty
 
 
@@ -361,14 +370,18 @@ def fetch_sisbicho_media_task(
     table = client.get_table(source_table)
     identifier_field = _infer_identifier_field(table.schema)
 
-    total_count, table_is_empty = _get_total_count(client, source_table, target_table, identifier_field)
+    total_count, table_is_empty = _get_total_count(
+        client, source_table, target_table, identifier_field
+    )
 
     # Se a tabela está vazia (corrompida), deleta para o basedosdados recriar do zero
     if table_is_empty:
         log(f"[RECOVERY] Deletando tabela vazia {target_table}...")
         try:
             client.delete_table(target_table, not_found_ok=True)
-            log(f"[RECOVERY] Tabela {target_table} deletada com sucesso. Será recriada na primeira gravação.")
+            log(
+                f"[RECOVERY] Tabela {target_table} deletada com sucesso. Será recriada na primeira gravação."
+            )
         except Exception as exc:
             log(f"[ERRO] Falha ao deletar tabela vazia: {exc}")
             raise
@@ -400,9 +413,7 @@ def fetch_batch(
     try:
         target_table_ref = client.get_table(target_table)
         table_exists = True
-        log(f"[DEBUG FETCH] Tabela target EXISTE: {target_table} com {target_table_ref.num_rows} linhas")
     except NotFound:
-        log(f"[DEBUG FETCH] Tabela target NÃO EXISTE: {target_table}")
         table_exists = False
 
     if table_exists:
@@ -436,9 +447,6 @@ def fetch_batch(
             OFFSET {offset}
         """.strip()
 
-        log(f"[DEBUG FETCH] Buscando lote INCREMENTAL: offset={offset}, limit={batch_size}")
-        log(f"[DEBUG FETCH] Query: {query[:500]}...")
-
         job_config = bigquery.QueryJobConfig(
             use_query_cache=True,
             use_legacy_sql=False,
@@ -447,16 +455,17 @@ def fetch_batch(
         try:
             query_job = client.query(query, job_config=job_config)
             dataframe = query_job.result().to_dataframe()
-            log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
-            if len(dataframe) > 0:
-                sample_ids = dataframe["animal_identifier"].head(3).tolist()
-                log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
             return dataframe
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
-            if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
-                log(f"[INFO] Tabela {target_table} existe mas está vazia. Usando query sem JOIN.")
+            if (
+                "cannot query hive partitioned data" in error_msg
+                and "without any associated files" in error_msg
+            ):
+                log(
+                    f"[INFO] Tabela {target_table} existe mas está vazia. Usando query sem JOIN."
+                )
                 table_exists = False
             else:
                 # Outro tipo de erro - propaga
@@ -489,9 +498,6 @@ def fetch_batch(
         OFFSET {offset}
     """.strip()
 
-    log(f"[DEBUG FETCH] Buscando lote COMPLETO (primeira carga): offset={offset}, limit={batch_size}")
-    log(f"[DEBUG FETCH] Query: {query[:500]}...")
-
     job_config = bigquery.QueryJobConfig(
         use_query_cache=True,
         use_legacy_sql=False,
@@ -499,11 +505,6 @@ def fetch_batch(
 
     query_job = client.query(query, job_config=job_config)
     dataframe = query_job.result().to_dataframe()
-
-    log(f"[DEBUG FETCH] Lote carregado: {len(dataframe)} registros")
-    if len(dataframe) > 0:
-        sample_ids = dataframe["animal_identifier"].head(3).tolist()
-        log(f"[DEBUG FETCH] Sample IDs retornados: {sample_ids}")
     return dataframe
 
 
@@ -530,13 +531,18 @@ def upload_pet_images_task(
     """Faz o upload das imagens dos pets para o GCS e retorna a URL final."""
 
     if dataframe.empty:
-        return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
+        return dataframe.assign(
+            foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
+        )
 
     storage_client = storage.Client(project=storage_project_id)
     bucket = storage_client.bucket(storage_bucket)
 
     foto_urls: list[str | None] = []
     blob_paths: list[str | None] = []
+    uploaded_count = 0
+    skipped_count = 0
+    pdf_count = 0
 
     for _, row in dataframe.iterrows():
         raw_value = row.get("foto_dados")
@@ -551,18 +557,16 @@ def upload_pet_images_task(
         raw_text = _coerce_to_base64_text(raw_value)
         cleaned = _strip_data_uri_prefix(raw_text)
 
-        raw_preview = raw_text.strip().replace("\n", " ")
-        cleaned_preview = cleaned.strip().replace("\n", " ")
-        log(
-            f"[DEBUG] Preparando decode (task) animal={identifier} tipo={type(raw_value).__name__} "
-            f"len_original={len(raw_text)} "
-            f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
-        )
-
         try:
             image_bytes = detect_and_decode(cleaned)
+        except PdfDetectedError:
+            log(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
+            foto_urls.append(None)
+            blob_paths.append(None)
+            pdf_count += 1
+            continue
         except ValueError as exc:
-            log(f"[ERRO CRÍTICO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            log(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
             raise ValueError(
                 f"Decode de Base64 falhou para animal {identifier}. "
                 f"Batch abortado para evitar transferência de dados incompletos."
@@ -580,16 +584,20 @@ def upload_pet_images_task(
             exists = False
 
         if not exists:
-            log(f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}")
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
+            uploaded_count += 1
         else:
-            log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+            skipped_count += 1
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
+
+    log(
+        f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados"
+    )
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls
@@ -640,7 +648,9 @@ def process_single_batch(
     Retorna o DataFrame processado pronto para gravar no BigQuery.
     """
     # Fetch batch
-    batch_df = fetch_batch(client, source_table, target_table, identifier_field, offset, batch_size)
+    batch_df = fetch_batch(
+        client, source_table, target_table, identifier_field, offset, batch_size
+    )
 
     if batch_df.empty:
         log(f"Lote vazio no offset {offset}. Pulando.")
@@ -681,13 +691,18 @@ def _upload_batch_images(
 ) -> pd.DataFrame:
     """Versão sem @task para upload de imagens em lote."""
     if dataframe.empty:
-        return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
+        return dataframe.assign(
+            foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
+        )
 
     storage_client = storage.Client(project=storage_project_id)
     bucket = storage_client.bucket(storage_bucket)
 
     foto_urls: list[str | None] = []
     blob_paths: list[str | None] = []
+    uploaded_count = 0
+    skipped_count = 0
+    pdf_count = 0
 
     for _, row in dataframe.iterrows():
         raw_value = row.get("foto_dados")
@@ -702,18 +717,16 @@ def _upload_batch_images(
         raw_text = _coerce_to_base64_text(raw_value)
         cleaned = _strip_data_uri_prefix(raw_text)
 
-        raw_preview = raw_text.strip().replace("\n", " ")
-        cleaned_preview = cleaned.strip().replace("\n", " ")
-        log(
-            f"[DEBUG] Preparando decode (batch) animal={identifier} tipo={type(raw_value).__name__} "
-            f"len_original={len(raw_text)} "
-            f"len_limpo={len(cleaned)} preview_original={raw_preview[:60]} preview_limpo={cleaned_preview[:60]}"
-        )
-
         try:
             image_bytes = detect_and_decode(cleaned)
+        except PdfDetectedError:
+            log(f"[Foto] PDF detectado para animal {identifier} - registro ignorado")
+            foto_urls.append(None)
+            blob_paths.append(None)
+            pdf_count += 1
+            continue
         except ValueError as exc:
-            log(f"[ERRO CRÍTICO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
+            log(f"[ERRO] Falha ao decodificar Base64 do animal {identifier}: {exc}")
             raise ValueError(
                 f"Decode de Base64 falhou para animal {identifier}. "
                 f"Batch abortado para evitar transferência de dados incompletos."
@@ -731,16 +744,20 @@ def _upload_batch_images(
             exists = False
 
         if not exists:
-            log(f"Upload da imagem do animal {identifier} para gs://{storage_bucket}/{blob_name}")
             blob.upload_from_string(image_bytes, content_type=content_type)
             blob.metadata = {"sha1": digest}
             blob.patch()
+            uploaded_count += 1
         else:
-            log(f"Imagem do animal {identifier} já existe em gs://{storage_bucket}/{blob_name}")
+            skipped_count += 1
 
         public_url = f"https://storage.googleapis.com/{storage_bucket}/{blob_name}"
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
+
+    log(
+        f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados"
+    )
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls
@@ -774,15 +791,4 @@ def _build_batch_output(dataframe: pd.DataFrame) -> pd.DataFrame:
     ]
 
     output_df = df[selected_columns]
-
-    # Log de debug para verificar dados que serão gravados
-    log(f"[DEBUG OUTPUT] Preparando {len(output_df)} registros para gravação")
-    if len(output_df) > 0:
-        sample_ids = output_df["id_animal"].head(3).tolist()
-        log(f"[DEBUG OUTPUT] Sample IDs que serão gravados: {sample_ids}")
-        # Verificar se há NULLs
-        null_count = output_df["id_animal"].isna().sum()
-        if null_count > 0:
-            log(f"[AVISO OUTPUT] {null_count} registros com id_animal NULL!")
-
     return output_df
