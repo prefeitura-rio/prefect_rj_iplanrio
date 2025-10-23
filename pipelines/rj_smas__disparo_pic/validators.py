@@ -71,9 +71,7 @@ def validate_destinations(
                 to_partial = to_partial[:8] + "****"
 
             external_id = destination.get("externalId", "N/A")
-            log(
-                f"Destinatário inválido - to: {to_partial}, externalId: {external_id}, erros: {error_msg}"
-            )
+            log(f"Destinatário inválido - to: {to_partial}, externalId: {external_id}, erros: {error_msg}")
 
         except Exception as e:
             # Erro inesperado durante validação
@@ -93,14 +91,10 @@ def validate_destinations(
     )
 
     # Logs de resumo
-    log(
-        f"Validação concluída: {valid_count}/{total_input} destinatários válidos ({stats.success_rate:.1f}%)"
-    )
+    log(f"Validação concluída: {valid_count}/{total_input} destinatários válidos ({stats.success_rate:.1f}%)")
 
     if invalid_count > 0:
-        log(
-            f"ATENÇÃO: {invalid_count} destinatários rejeitados por problemas de validação"
-        )
+        log(f"ATENÇÃO: {invalid_count} destinatários rejeitados por problemas de validação")
 
         # Log detalhado dos primeiros erros (máximo 5 para não poluir)
         for error in validation_errors[:5]:
@@ -115,9 +109,7 @@ def validate_destinations(
 
     # Warning se taxa de sucesso for baixa
     if stats.success_rate < 90.0:
-        log(
-            f"WARNING: Taxa de validação baixa ({stats.success_rate:.1f}%). Verificar qualidade dos dados."
-        )
+        log(f"WARNING: Taxa de validação baixa ({stats.success_rate:.1f}%). Verificar qualidade dos dados.")
 
     return valid_destinations, stats
 
@@ -151,9 +143,7 @@ def validate_dispatch_payload(
             destinations=destinations,
         )
 
-        log(
-            f"Payload de dispatch validado com sucesso para {len(destinations)} destinatários"
-        )
+        log(f"Payload de dispatch validado com sucesso para {len(destinations)} destinatários")
         return payload
 
     except ValidationError as e:
@@ -190,9 +180,7 @@ def log_validation_summary(stats: ValidationStats, context: str = ""):
             log(f"{context_prefix}  - {error}")
 
         if len(stats.validation_errors) > 3:
-            log(
-                f"{context_prefix}  ... e mais {len(stats.validation_errors) - 3} erros"
-            )
+            log(f"{context_prefix}  ... e mais {len(stats.validation_errors) - 3} erros")
 
     log(f"{context_prefix}=== FIM DO RESUMO ===")
 
