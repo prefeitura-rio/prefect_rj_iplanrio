@@ -1,0 +1,172 @@
+name: rj_sme__brutos_gestao_creche
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_sme__brutos_gestao_creche-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_sme__brutos_gestao_creche/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-sme--brutos_gestao_creche--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_sme__brutos_gestao_creche/flow.py:rj_sme__brutos_gestao_creche
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sme__brutos_gestao_creche -- prefect flow-run execute
+        image_pull_policy: Always
+  - name: rj-sme--brutos_gestao_creche--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_sme__brutos_gestao_creche/flow.py:rj_sme__brutos_gestao_creche
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sme__brutos_gestao_creche -- prefect flow-run execute
+        image_pull_policy: Always
+    schedules:
+      - interval: 86400
+        anchor_date: "2022-01-01T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: ICH_InscricaoCreche
+        parameters:
+          table_id: ICH_InscricaoCreche
+          execute_query: |
+            SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,ich_id
+                ,esc_id
+                ,uni_id
+                ,ich_preferenciaCreche
+                ,ich_picAnoAnterior
+                ,ich_listaAnoAnterior
+                ,ich_dataConvocacao
+                ,ich_observacao
+                ,ich_situacao
+                ,ich_dataCriacao
+                ,ich_dataAlteracao
+                ,ich_justificativaConvocacaoExcepcional
+                ,ich_statusConvocacaoExcepcional
+                ,ich_dataConvocacaoExcepcional
+                ,ich_dataCancelamentoConvocacaoExcepcional
+                ,ich_horarioIntegral
+                ,ich_horarioParcial
+                ,ich_situacaoIntegral
+                ,ich_situacaoParcial
+                ,ich_dataConvocacao2
+                ,ich_dataLimiteConvocacao
+                ,ich_comprovanteConvocacaoArq
+                ,ich_comprovanteConvocacaoNome
+                ,ich_EscolaAnteriorId
+                ,ich_TipoJustificativaAlocacaoOutraListaDeEspera
+                ,ich_JustificativaAlocacaoOutraListaDeEspera
+                ,ich_dataSaida
+            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoCreche
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:32:00"
+        timezone: America/Sao_Paulo
+        slug: ICH_InscricaoCrianca
+        parameters:
+          table_id: ICH_InscricaoCrianca
+          execute_query: |
+            SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,icr_nome
+                ,icr_DNV
+                ,icr_dataNascimento
+                ,icr_sexo
+                ,icr_situacao
+                ,icr_dataCriacao
+                ,icr_dataAlteracao
+                ,icr_gemeoID
+                ,icr_NIS
+                ,icr_CPF
+            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoCrianca
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:34:00"
+        timezone: America/Sao_Paulo
+        slug: ICH_InscricaoPolo
+        parameters:
+          table_id: ICH_InscricaoPolo
+          execute_query: |
+            SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,cur_id
+                ,crr_id
+                ,crp_id
+                ,ipl_codigoFicha
+                ,ipl_grauVulnerabilidade
+                ,ipl_numeroSorteio
+                ,ipl_classificacaoPolo
+                ,ipl_esc_id
+                ,ipl_uni_id
+                ,ipl_situacao
+                ,ipl_dataCriacao
+                ,ipl_dataAlteracao
+                ,ipl_participarPIC
+                ,ipl_grup_Saida_Parceira
+            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoPolo
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:36:00"
+        timezone: America/Sao_Paulo
+        slug: ICH_InscricaoResponsavel
+        parameters:
+          table_id: ICH_InscricaoResponsavel
+          execute_query: |
+            SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,ire_id
+                ,ire_nome
+                ,ire_dataNascimento
+                ,ire_NIS
+                ,ire_tipo
+                ,ire_responsavel
+                ,ire_situacao
+                ,ire_dataCriacao
+                ,ire_dataAlteracao
+            FROM GestaoEscolarInscricaoCreche.dbo.ICH_InscricaoResponsavel
+
+      - interval: 86400
+        anchor_date: "2022-01-01T02:38:00"
+        timezone: America/Sao_Paulo
+        slug: ICH_ResponsavelEndereco
+        parameters:
+          table_id: ICH_ResponsavelEndereco
+          execute_query: |
+            SELECT prm_id
+                ,plm_id
+                ,ipl_id
+                ,ire_id
+                ,end_id
+                ,ren_numero
+                ,ren_situacao
+                ,ren_dataCriacao
+                ,ren_dataAlteracao
+            FROM GestaoEscolarInscricaoCreche.dbo.ICH_ResponsavelEndereco
