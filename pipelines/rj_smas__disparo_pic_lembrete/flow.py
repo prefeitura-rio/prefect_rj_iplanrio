@@ -47,18 +47,11 @@ def rj_smas__disparo_pic_lembrete(
     table_id = table_id or PicLembreteConstants.PIC_LEMBRETE_TABLE_ID.value
     dump_mode = dump_mode or PicLembreteConstants.PIC_LEMBRETE_DUMP_MODE.value
     id_hsm = id_hsm or PicLembreteConstants.PIC_LEMBRETE_ID_HSM.value
-    campaign_name = (
-        campaign_name or PicLembreteConstants.PIC_LEMBRETE_CAMPAIGN_NAME.value
-    )
-    cost_center_id = (
-        cost_center_id or PicLembreteConstants.PIC_LEMBRETE_COST_CENTER_ID.value
-    )
+    campaign_name = campaign_name or PicLembreteConstants.PIC_LEMBRETE_CAMPAIGN_NAME.value
+    cost_center_id = cost_center_id or PicLembreteConstants.PIC_LEMBRETE_COST_CENTER_ID.value
     chunk_size = chunk_size or PicLembreteConstants.PIC_LEMBRETE_CHUNK_SIZE.value
     query = query or PicLembreteConstants.PIC_LEMBRETE_QUERY.value
-    query_processor_name = (
-        query_processor_name
-        or PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
-    )
+    query_processor_name = query_processor_name or PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
 
     billing_project_id = PicLembreteConstants.PIC_LEMBRETE_BILLING_PROJECT_ID.value
 
@@ -110,9 +103,7 @@ def rj_smas__disparo_pic_lembrete(
             chunk=chunk_size,
         )
 
-        print(
-            f"Dispatch completed successfully for {len(unique_destinations)} destinations"
-        )
+        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
 
         # Calculate total batches
         from math import ceil

@@ -99,9 +99,7 @@ def _looks_like_base64(value: str) -> bool:
     value = value.strip()
     if not value:
         return False
-    allowed = set(
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r"
-    )
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r")
     return set(value) <= allowed and len(value) % 4 == 0
 
 
@@ -164,9 +162,7 @@ def _normalize_qrcode_payload(text: str) -> str | None:
     if isinstance(parsed, str):
         cleaned = parsed.strip()
 
-    lines = [
-        line.strip() for line in cleaned.replace("\r", "\n").split("\n") if line.strip()
-    ]
+    lines = [line.strip() for line in cleaned.replace("\r", "\n").split("\n") if line.strip()]
     payload_dict: dict[str, str] = {}
     current_key: str | None = None
 
@@ -184,15 +180,11 @@ def _normalize_qrcode_payload(text: str) -> str | None:
             extra = line.strip()
             if extra:
                 existing = payload_dict.get(current_key, "")
-                payload_dict[current_key] = (
-                    f"{existing} {extra}".strip() if existing else extra
-                )
+                payload_dict[current_key] = f"{existing} {extra}".strip() if existing else extra
         else:
             payload_dict.setdefault("observacao", "")
             payload_dict["observacao"] = (
-                f"{payload_dict['observacao']} {line}".strip()
-                if payload_dict["observacao"]
-                else line
+                f"{payload_dict['observacao']} {line}".strip() if payload_dict["observacao"] else line
             )
 
     if payload_dict:
@@ -280,18 +272,12 @@ def _get_total_count(
         target_table_ref = client.get_table(target_table)
         table_exists = True
         row_count = target_table_ref.num_rows
-        if (
-            row_count == 0
-            and getattr(target_table_ref, "external_data_configuration", None)
-            is not None
-        ):
+        if row_count == 0 and getattr(target_table_ref, "external_data_configuration", None) is not None:
             precise_count = _try_query_row_count(client, target_table)
             if precise_count is not None:
                 row_count = precise_count
     except NotFound:
-        log(
-            f"Tabela {target_table} não existe. Primeira execução: processando todos os registros."
-        )
+        log(f"Tabela {target_table} não existe. Primeira execução: processando todos os registros.")
         table_exists = False
 
     if table_exists:
@@ -312,13 +298,8 @@ def _get_total_count(
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
-            if (
-                "cannot query hive partitioned data" in error_msg
-                and "without any associated files" in error_msg
-            ):
-                log(
-                    f"[INFO] Tabela {target_table} existe mas está vazia. Será deletada e recriada."
-                )
+            if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
+                log(f"[INFO] Tabela {target_table} existe mas está vazia. Será deletada e recriada.")
                 table_exists = False
                 table_is_empty = True
             else:
@@ -370,18 +351,14 @@ def fetch_sisbicho_media_task(
     table = client.get_table(source_table)
     identifier_field = _infer_identifier_field(table.schema)
 
-    total_count, table_is_empty = _get_total_count(
-        client, source_table, target_table, identifier_field
-    )
+    total_count, table_is_empty = _get_total_count(client, source_table, target_table, identifier_field)
 
     # Se a tabela está vazia (corrompida), deleta para o basedosdados recriar do zero
     if table_is_empty:
         log(f"[RECOVERY] Deletando tabela vazia {target_table}...")
         try:
             client.delete_table(target_table, not_found_ok=True)
-            log(
-                f"[RECOVERY] Tabela {target_table} deletada com sucesso. Será recriada na primeira gravação."
-            )
+            log(f"[RECOVERY] Tabela {target_table} deletada com sucesso. Será recriada na primeira gravação.")
         except Exception as exc:
             log(f"[ERRO] Falha ao deletar tabela vazia: {exc}")
             raise
@@ -459,13 +436,8 @@ def fetch_batch(
         except Exception as exc:
             error_msg = str(exc).lower()
             # Detecta tabela vazia (Hive partition sem arquivos)
-            if (
-                "cannot query hive partitioned data" in error_msg
-                and "without any associated files" in error_msg
-            ):
-                log(
-                    f"[INFO] Tabela {target_table} existe mas está vazia. Usando query sem JOIN."
-                )
+            if "cannot query hive partitioned data" in error_msg and "without any associated files" in error_msg:
+                log(f"[INFO] Tabela {target_table} existe mas está vazia. Usando query sem JOIN.")
                 table_exists = False
             else:
                 # Outro tipo de erro - propaga
@@ -531,9 +503,7 @@ def upload_pet_images_task(
     """Faz o upload das imagens dos pets para o GCS e retorna a URL final."""
 
     if dataframe.empty:
-        return dataframe.assign(
-            foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
-        )
+        return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
 
     storage_client = storage.Client(project=storage_project_id)
     bucket = storage_client.bucket(storage_bucket)
@@ -595,9 +565,7 @@ def upload_pet_images_task(
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
 
-    log(
-        f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados"
-    )
+    log(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls
@@ -648,9 +616,7 @@ def process_single_batch(
     Retorna o DataFrame processado pronto para gravar no BigQuery.
     """
     # Fetch batch
-    batch_df = fetch_batch(
-        client, source_table, target_table, identifier_field, offset, batch_size
-    )
+    batch_df = fetch_batch(client, source_table, target_table, identifier_field, offset, batch_size)
 
     if batch_df.empty:
         log(f"Lote vazio no offset {offset}. Pulando.")
@@ -691,9 +657,7 @@ def _upload_batch_images(
 ) -> pd.DataFrame:
     """Versão sem @task para upload de imagens em lote."""
     if dataframe.empty:
-        return dataframe.assign(
-            foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string")
-        )
+        return dataframe.assign(foto_url=pd.Series(dtype="string"), foto_blob_path=pd.Series(dtype="string"))
 
     storage_client = storage.Client(project=storage_project_id)
     bucket = storage_client.bucket(storage_bucket)
@@ -755,9 +719,7 @@ def _upload_batch_images(
         foto_urls.append(public_url)
         blob_paths.append(blob_name)
 
-    log(
-        f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados"
-    )
+    log(f"[Upload] {uploaded_count} imagens enviadas, {skipped_count} já existiam, {pdf_count} PDFs ignorados")
 
     df = dataframe.copy()
     df["foto_url"] = foto_urls
