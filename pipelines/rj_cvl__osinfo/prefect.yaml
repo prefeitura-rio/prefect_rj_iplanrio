@@ -24,6 +24,29 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
+
+  - name: rj-cvl--osinfo--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_cvl__osinfo/flow.py:rj_cvl__osinfo
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cvl__osinfo -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+      - interval: 86400
+        anchor_date: '2025-07-15T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: usuario
+        parameters:
+          table_id: usuario
+          dump_mode: overwrite
+          execute_query: SELECT `COD_USUARIO`, `COD_UNIDADE`, `LOGIN`, `NOME`, `DATA_CADASTRO`, `DATA_ATUALIZACAO`, `DATA_EXCLUSAO`,
+            `EXCLUIDO` as `FLG_EXCLUIDO`, `CARGO` FROM `adm_osinfo`.`usuario`;
   - name: rj-cvl--osinfo--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cvl__osinfo/flow.py:rj_cvl__osinfo
