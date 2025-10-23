@@ -45,8 +45,7 @@ deployments:
           table_id: classe
           dump_mode: overwrite
           execute_query: |
-            SELECT CD_GRUPO, CD_CLASSE, DS_CLASSE, ST_STATUS
-          FROM SIGMA.VW_CLASSE
+            SELECT CD_GRUPO, CD_CLASSE, DS_CLASSE, ST_STATUS  FROM SIGMA.VW_CLASSE
 
       - interval: 86400
         anchor_date: '2025-07-15T01:10:00'
