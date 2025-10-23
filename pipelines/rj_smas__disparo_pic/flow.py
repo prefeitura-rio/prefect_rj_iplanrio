@@ -52,12 +52,8 @@ def rj_smas__disparo_pic(
     cost_center_id = cost_center_id or PicLembreteConstants.PIC_COST_CENTER_ID.value
     chunk_size = chunk_size or PicLembreteConstants.PIC_CHUNK_SIZE.value
     query = query or PicLembreteConstants.PIC_QUERY.value
-    query_processor_name = (
-        query_processor_name or PicLembreteConstants.PIC_QUERY_PROCESSOR_NAME.value
-    )
-    test_mode = (
-        test_mode if test_mode is not None else PicLembreteConstants.PIC_TEST_MODE.value
-    )
+    query_processor_name = query_processor_name or PicLembreteConstants.PIC_QUERY_PROCESSOR_NAME.value
+    test_mode = test_mode if test_mode is not None else PicLembreteConstants.PIC_TEST_MODE.value
 
     # Se test_mode ativado, usar query mock ao invés da query real
     if test_mode:
@@ -114,9 +110,7 @@ def rj_smas__disparo_pic(
             chunk=chunk_size,
         )
 
-        print(
-            f"Dispatch completed successfully for {len(unique_destinations)} destinations"
-        )
+        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
 
         from math import ceil
 
