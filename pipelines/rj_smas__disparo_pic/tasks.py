@@ -216,7 +216,7 @@ def get_destinations(
         # Apply query processor if name provided
         final_query = query
         if query_processor_name:
-            from pipelines.rj_smas__disparo_pic_lembrete.processors import (
+            from pipelines.rj_smas__disparo_pic.processors import (
                 get_query_processor,
             )
 

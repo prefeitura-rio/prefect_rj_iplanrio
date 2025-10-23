@@ -20,7 +20,7 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task
 from prefect.exceptions import PrefectException
 
-from pipelines.rj_smas__disparo_pic_lembrete.utils.api_handler import ApiHandler
+from pipelines.rj_smas__disparo_pic.utils.api_handler import ApiHandler
 
 
 @task
@@ -52,7 +52,9 @@ def access_api(
     password = getenv_or_action(infisical_password)
 
     # Create and return authenticated API handler
-    api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
+    api = ApiHandler(
+        base_url=url, username=username, password=password, login_route=login_route
+    )
 
     return api
 
@@ -111,7 +113,9 @@ def create_date_partitions(
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
     else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
+        dataframe[partition_column] = pd.to_datetime(
+            dataframe[partition_column], errors="coerce"
+        )
         dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
         if dataframe["data_particao"].isnull().any():
             raise ValueError("Some dates in the partition column could not be parsed.")
@@ -120,7 +124,9 @@ def create_date_partitions(
     dataframes = [
         (
             date,
-            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
+            dataframe[dataframe["data_particao"] == date].drop(
+                columns=["data_particao"]
+            ),
         )
         for date in dates
     ]
@@ -153,7 +159,9 @@ def task_download_data_from_bigquery(
     """
     Create task to download data from bigquery
     """
-    return download_data_from_bigquery(query=query, billing_project_id=billing_project_id, bucket_name=bucket_name)
+    return download_data_from_bigquery(
+        query=query, billing_project_id=billing_project_id, bucket_name=bucket_name
+    )
 
 
 @task
@@ -175,7 +183,9 @@ def skip_flow_if_empty(
     return data
 
 
-def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
+def download_data_from_bigquery(
+    query: str, billing_project_id: str, bucket_name: str
+) -> pd.DataFrame:
     """
     Execute a BigQuery SQL query and return results as a pandas DataFrame.
 
