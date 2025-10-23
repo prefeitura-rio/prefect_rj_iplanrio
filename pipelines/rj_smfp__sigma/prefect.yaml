@@ -1,0 +1,358 @@
+name: rj_smfp__sigma
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smfp__sigma-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smfp__sigma/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-smfp--sigma--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smfp__sigma/flow.py:rj_smfp__sigma
+    work_pool:
+      name: datario-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__sigma -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+
+    schedules:
+      - interval: 86400
+        anchor_date: '2025-07-15T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: classe
+        parameters:
+          table_id: classe
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_GRUPO, CD_CLASSE, DS_CLASSE, ST_STATUS
+          FROM SIGMA.VW_CLASSE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: devolucao_material
+        parameters:
+          table_id: devolucao_material
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ORIGEM, ANO_MES_REFERENCIA, CD_MATERIAL, TIPO_MOVIMENTACAO, DT_MOVIMENTO, CD_UNIDADE_DESTINO,
+              TP_DOCUMENTO, NUM_DOC_UNIDADE_ORIGEM, QUANT, VALOR_UNITARIO, VL_TOTAL
+            FROM SIGMA.VW_DEVOLUCAO_MATERIAL
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: fechamento_estoque
+        parameters:
+          table_id: fechamento_estoque
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ARMAZENADORA, ANO_MES_REFERENCIA, SALDO_ANTERIOR, ENTRADA_POR_ALIENACAO, ENTRADA_POR_COMPRA, ENTRADA_POR_DEVOLUCAO, ENTRADA_POR_AJUSTE_CONTABIL, ENTRADA_POR_INCORPORACAO, ENTRADA_POR_TRANSFERENCIA, SAIDA_POR_CONSUMO, SAIDA_POR_TRANSFERENCIA, SAIDA_POR_AJUSTE_CONTABIL, SAIDA_POR_DEGASTE_NATURAL, SAIDA_POR_ALIENACAO,
+              SAIDA_POR_BAIXA, TOTAL_ESTORNO, ACERTO_POR_PMU, RESIDUO_CONTABIL, SALTO_ATUAL
+            FROM SIGMA.VW_FECHAMENTO_ESTOQUE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: fornecedor
+        parameters:
+          table_id: fornecedor
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CPF_CNPJ, TIPO_CPF_CNPJ, INSCRICAO_MUNICIPAL, INSCRICAO_ESTADUAL, RAZAO_SOCIAL, NOME_FANTASIA, NOME_CONTATO, EMAIL, EMAIL_CONTATO, FAX, DDD, DDI, RAMAL,
+              TELEFONE, LOGRADOURO, NUMERO_PORTA, COMPLEMENTO, BAIRRO, MUNICIPIO, UF, CEP, ATIVO_INATIVO_BLOQUEADO, CD_NATUREZA_JURIDICA, DS_NATUREZA_JURIDICA, CD_RAMO_ATIVIDADE,
+              DS_RAMO_ATIVIDADE, CD_PORTE_EMPRESA, DS_PORTE_EMPRESA, DATA_ULTIMA_ATUALIZACAO, TIPO_FORNECEDOR
+            FROM SIGMA.VW_FORNECEDOR
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: grupo
+        parameters:
+          table_id: grupo
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_GRUPO,DS_GRUPO,ST_STATUS FROM SIGMA.VW_GRUPO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: material
+        parameters:
+          table_id: material
+          dump_mode: overwrite
+          execute_query: |
+            SELECT  CD_MATERIAL, CD_GRUPO, CD_CLASSE, CD_SUBCLASSE, SEQUENCIAL, DV1, DV2, NM_PADRONIZADO, NM_COMPLEMENTAR_MATERIAL,
+              UNIDADE, DS_DETALHE_MATERIAL, DT_DESATIVACAO, ST_STATUS, REMUME, ACONDICIONAMENTO, TP_GENERO, CD_MATERIAL_SUBSTITUTO,
+              NM_FANTASIA, CD_COMPRASNET, TP_MATERIAL, ST_REFERENCIA, ST_SISTEMA_REGISTRO_PRECO, TERMOLABEL, ST_CONTROLADO, ST_PADRONIZADO,
+              ST_USO_GERAL, ST_CONTINUADO, ST_TABELADO, ST_ITEM_SUSTENTAVEL, OBSERVACAO
+            FROM SIGMA.VW_MATERIAL
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: material_em_transito
+        parameters:
+          table_id: material_em_transito
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ORIGEM, ANO_MES_REFERENCIA, CD_UNIDADE_DESTINO, TP_DOCUMENTO,
+              NUM_DOC_UNIDADE_ORIGEM, CD_MATERIAL, ST_MOVIMENTACAO, QUANTIDADE, VALOR_UNITARIO
+            FROM SIGMA.VW_MATERIAL_EM_TRANSITO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: material_referencia
+        parameters:
+          table_id: material_referencia
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_MATERIAL, CD_GRUPO, CD_CLASSE, CD_SUBCLASSE, SEQUENCIAL, DV1, DV2, CD_REFERENCIA, DS_REFERENCIA, ST_STATUS
+            FROM SIGMA.VW_MATERIAL_REFERENCIA
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: movimentacao
+        parameters:
+          table_id: movimentacao
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_MATERIAL, CNPJ_FORNECEDOR, NOTA_FISCAL, SERIE, DATA_NOTA_FISCAL, QUANTIDADE_ITEM, PRECO_ITEM, TOTAL_ITEM, DATA_ULTIMA_ATUALIZACAO,
+              CD_MOVIMENTACAO, DS_MOVIMENTACAO, TP_ALMOXARIFADO, CD_SECRETARIA, DS_SECRETARIA, CD_ALMOXARIFADO_DESTINO, DS_ALMOXARIFADO_DESTINO,
+              CD_ALMOXARIFADO_ORIGEM, DS_ALMOXARIFADO_ORIGEM, CD_OS, DT_INI_CONTRATO_OS, DT_FIM_CONTRATO_OS, NR_EMPENHO, CNPJ_FABRICANTE
+            FROM SIGMA.VW_MOVIMENTACAO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: movimento_estoque
+        parameters:
+          table_id: movimento_estoque
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ORIGEM, ANO_MES_REFERENCIA, CD_MATERIAL, TIPO_MOVIMENTACAO, DT_MOVIMENTO, CD_UNIDADE_DESTINO, TP_DOCUMENTO, NOTA_FISCAL, CNPJ_FORNECEDOR,
+              NUM_DOC_UNIDADE_DESTINO, NUM_DOC_UNIDADE_ORIGEM, QUANT, VALOR_UNITARIO, VL_TOTAL, ACERTO_PMU
+            FROM SIGMA.VW_MOV_ESTOQUE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: orgao
+        parameters:
+          table_id: orgao
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_ORGAO, TP_ORGAO, DS_TIPO_ORGAO, CD_ORGAO_PAI, CD_SECRETARIA_SDI, DESCRICAO, ENDERECO, COMPLEMENTO, CEP, NUMERO_PORTA, FAX1, FAX2, TEL1, TEL2, SIGLA, EMAIL, TP_UNIDADE, ST_STATUS, CNES, MATRICULA_RESPONSAVEL, NM_RESPONSAVEL, DT_RESPONSAVEL
+            FROM SIGMA.VW_ORGAO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: posicao_fechada_estoque
+        parameters:
+          table_id: posicao_fechada_estoque
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ARMAZENADORA, ANO_MES_REFERENCIA, CD_MATERIAL, ESTOQUE_MES, PRECO_MEDIO,VALOR_ESTOQUE
+            FROM SIGMA.VW_POSICAO_FECHADA_ESTOQUE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: ramo_atividade
+        parameters:
+          table_id: ramo_atividade
+          dump_mode: overwrite
+          execute_query: |
+            SELECT  CD_RAMO, DS_RAMO, ST_RAMO FROM SIGMA.VW_RAMO_ATIVIDADE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: responsavel_unidade_armazenadora
+        parameters:
+          table_id: responsavel_unidade_armazenadora
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ARMAZENADORA, MATRICULA_RESPONSAVEL, NM_RESPONSAVEL, DT_RESPONSAVEL, MATRICULA_SUBSTITUTO1, NM_SUBSTITUTO1, DT_SUBSTITUTO1,
+              MATRICULA_SUBSTITUTO2, NM_SUBSTITUTO2, DT_SUBSTITUTO2
+            FROM SIGMA.VW_RESPONSAVEL_UNIDADE_ARMAZENADORA
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: saldo_mensal_estoque
+        parameters:
+          table_id: saldo_mensal_estoque
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ARMAZENADORA, ANO_MES_REFERENCIA, CD_MATERIAL, VALOR, QTD_BAIXAS, QUANTIDADE, QTD_ENTRADA, QTD_SAIDA
+            FROM SIGMA.VW_SALDO_MENSAL_ESTOQUE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: sancao_fornecedor
+        parameters:
+          table_id: sancao_fornecedor
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CPF_CNPJ, RAZAO_SOCIAL, NR_ORDEM, PROCESSO_ORIGEM, PROCESSO_INSTRUTIVO, PROCESSO_FATURA, CD_SANCAO,
+              DS_SANCAO, DT_SANCAO, DT_EXTINCAO_SANCAO
+            FROM SIGMA.VW_SANCAO_ADMINISTRATIVA
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: servico
+        parameters:
+          table_id: servico
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_SERV, CD_SEQ, DV, CD_SERVICO, DS_SERVICO, ST_STATUS, CD_COMPRASNET, NM_PADRONIZADO, UNIDADE_SERVICO, ST_RESPONSAVEL_TECNICO,
+              ST_SISTEMA_REGISTRO_PRECO, CD_ATIVIDADE_ECONOMICA, CD_GRUPO_CAE, CD_SUBGRUPO_CAE, CD_ATIVIDADE_CAE, DS_ATIVIDADE_ECONOMICA, DS_SUBGRUPO_CAE,
+              ST_TABELADO, ST_CADASTRO_FORNECEDOR
+            FROM SIGMA.VW_SERVICO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: subclasse
+        parameters:
+          table_id: subclasse
+          dump_mode: overwrite
+          execute_query: |
+            SELECT  CD_GRUPO, CD_CLASSE, CD_SUBCLASSE, DS_SUBCLASSE, ST_STATUS FROM SIGMA.VW_SUBCLASSE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: unidade
+        parameters:
+          table_id: unidade
+          dump_mode: overwrite
+          execute_query: |
+            SELECT UNIDADE as ID_UNIDADE, DS_UNIDADE
+            FROM SIGMA.VW_UNIDADE
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: unidade_armazenadora
+        parameters:
+          table_id: unidade_armazenadora
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_UNIDADE_ARMAZENADORA, DS_UNIDADE_ARMAZENADORA, TP_ALMOXARIFADO, CD_UNIDADE_ADMINISTRATIVA, DS_UNIDADE_ADMINISTRATIVA, ST_STATUS,
+              CD_PROGRAMA_TRABALHO, CNES, ST_EXPR_MONETARIA_OITO_CASAS, TP_UNIDADE_ARMAZENADORA
+            FROM SIGMA.VW_UNIDADE_ARMAZENADORA
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: unidade_servico
+        parameters:
+          table_id: unidade_servico
+          dump_mode: overwrite
+          execute_query: |
+            SELECT NR_UNIDADE, DS_UNIDADE_SERVICO  FROM SIGMA.VW_UNIDADE_SERVICO
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: usuario_responsavel_auxiliar
+        parameters:
+          table_id: usuario_responsavel_auxiliar
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_ORGAO, DS_ORGAO, MATRICULA, NM_FUNCIONARIO, TP_FUNCIONARIO, DT_INICIO, DT_TERMINO, DT_TERMO_RESPONSABILIDADE, DT_EXCEPCIONALIDADE,
+              DT_PUBLICACAO_DESIGNACAO, ESCOLARIDADE, ST_CURSO_GESTAO_MATERIAL
+            FROM SIGMA.VW_USUARIO_RESPONSAVEL_AUXILIAR
+
+
+      - interval: 86400
+        anchor_date: '2025-07-15T01:10:00'
+        timezone: America/Sao_Paulo
+        slug: usuario_sistema
+        parameters:
+          table_id: usuario_sistema
+          dump_mode: overwrite
+          execute_query: |
+            SELECT NM_PRESTADOR_SERVICO, CPF, MATRICULA, NM_FUNCIONARIO, EMAIL_INSTITUCIONAL, EMAIL_ALTERNATIVO, TEL_CORPORATIVO1, TEL_CORPORATIVO2,
+              TEL_ALTERNATIVO1, TEL_ALTERNATIVO2, CD_ORGAO_DESIGNACAO, DS_ORGAO_DESIGNACAO, CD_PERFIL, DS_PERFIL, PRIVILEGIO_ALMOXARIFADO, HORA_ACESSO_INI,
+              MINUTO_ACESSO_INI, HORA_ACESSO_FIM, MINUTO_ACESSO_FIM, DT_INCLUSAO, ST_STATUS, ST_SITUACAO, CD_TERMINAL, DT_ULTIMA_SESSAO, HORA_ULTIMA_SESSAO
+            FROM SIGMA.VW_USUARIO_SISTEMA
+
+
+
+
+
+
+  - name: rj-smfp--sigma--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smfp__sigma/flow.py:rj_smfp__sigma
+    work_pool:
+      name: datario-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__sigma -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # Exemplo de schedule overwrite
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: slug # slug do schedule
+      parameters:
+        table_id: table_id # Nome da tabela no BigQuery
+        execute_query: |
+          SELECT
+            column1,
+            column2,
+            column3
+          FROM database.table_name
+    # Exemplo de schedule incremental
+    - interval: 86400
+      anchor_date: "2022-01-01T02:32:00"
+      timezone: America/Sao_Paulo
+      slug: slug
+      parameters:
+        table_id: table_id
+        dump_mode: append
+        partition_columns: partition_column # Coluna de particionamento
+        partition_date_format: "%Y-%m-%d" # Formato da data de particionamento
+        break_query_frequency: day # Frequencia de particionamento
+        break_query_start: current_day # Data de inicio do particionamento
+        break_query_end: current_day # Data de fim do particionamento
+        execute_query: |
+          SELECT
+            column1,
+            column2,
+            column3
+          FROM database.table_name
