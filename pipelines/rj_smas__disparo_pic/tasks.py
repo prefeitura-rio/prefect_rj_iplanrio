@@ -14,8 +14,8 @@ from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from pytz import timezone
 
-from pipelines.rj_smas__disparo_pic_lembrete.utils.tasks import task_download_data_from_bigquery
-from pipelines.rj_smas__disparo_pic_lembrete.validators import (
+from pipelines.rj_smas__disparo_pic.utils.tasks import task_download_data_from_bigquery
+from pipelines.rj_smas__disparo_pic.validators import (
     log_validation_summary,
     validate_destinations,
     validate_dispatch_payload,
@@ -23,7 +23,9 @@ from pipelines.rj_smas__disparo_pic_lembrete.validators import (
 
 
 @task
-def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
+def create_dispatch_payload(
+    campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]
+) -> Dict:
     """
     Cria o payload para o dispatch com validação rigorosa
 
@@ -48,10 +50,14 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
 
     # Validate complete payload
     payload = validate_dispatch_payload(
-        campaign_name=campaign_name, cost_center_id=cost_center_id, destinations=validated_destinations
+        campaign_name=campaign_name,
+        cost_center_id=cost_center_id,
+        destinations=validated_destinations,
     )
 
-    log(f"Payload created successfully for {len(validated_destinations)} validated destinations")
+    log(
+        f"Payload created successfully for {len(validated_destinations)} validated destinations"
+    )
 
     # Return as dict for backward compatibility
     return payload.dict()
@@ -67,14 +73,18 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
     total = len(destinations)
     original_campaign_name = dispatch_payload["campaignName"]
 
-    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S")
+    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
     if total == 0:
         log("Total de números é igual a zero. Nenhum disparo será feito.")
         raise Exception("No destinations to dispatch")
 
     total_batches = ceil(total / chunk)
-    log(f"Starting dispatch of {total} destinations in {total_batches} batches of size {chunk}")
+    log(
+        f"Starting dispatch of {total} destinations in {total_batches} batches of size {chunk}"
+    )
 
     for i, start in enumerate(range(0, total, chunk), 1):
         end = start + chunk
@@ -83,7 +93,9 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         # Create a copy of payload for each batch to avoid mutation
         batch_payload = dispatch_payload.copy()
         batch_payload["destinations"] = batch
-        batch_payload["campaignName"] = f"{original_campaign_name}-{dispatch_date[:10]}-lote{i}"
+        batch_payload["campaignName"] = (
+            f"{original_campaign_name}-{dispatch_date[:10]}-lote{i}"
+        )
 
         log(f"Disparando lote {i} de {total_batches} com {len(batch)} destinos")
 
@@ -96,7 +108,9 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
 
         log(f"Disparo do lote {i} realizado com sucesso!")
 
-    log(f"Disparo realizado com sucesso! Total de {total} destinations processadas em {total_batches} lotes")
+    log(
+        f"Disparo realizado com sucesso! Total de {total} destinations processadas em {total_batches} lotes"
+    )
     return dispatch_date
 
 
@@ -113,7 +127,9 @@ def create_dispatch_dfr(
     Agora inclui validação para garantir integridade dos dados salvos
     """
     # Validate destinations before creating DataFrame
-    validated_destinations, validation_stats = validate_destinations(original_destinations)
+    validated_destinations, validation_stats = validate_destinations(
+        original_destinations
+    )
     log_validation_summary(validation_stats, "create_dispatch_dfr")
 
     if not validated_destinations:
@@ -152,7 +168,9 @@ def create_dispatch_dfr(
     # Validate that no externalId is None (should not happen with our validation)
     null_external_ids = dfr["externalId"].isnull().sum()
     if null_external_ids > 0:
-        log(f"WARNING: Found {null_external_ids} records with null externalId after validation")
+        log(
+            f"WARNING: Found {null_external_ids} records with null externalId after validation"
+        )
 
     return dfr
 
@@ -198,14 +216,18 @@ def get_destinations(
         # Apply query processor if name provided
         final_query = query
         if query_processor_name:
-            from pipelines.rj_smas__disparo_pic_lembrete.processors import get_query_processor
+            from pipelines.rj_smas__disparo_pic_lembrete.processors import (
+                get_query_processor,
+            )
 
             processor_func = get_query_processor(query_processor_name)
             if processor_func:
                 log(f"Applying query processor: {query_processor_name}")
                 final_query = processor_func(query)
             else:
-                log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
+                log(
+                    f"Warning: Query processor '{query_processor_name}' not found, using original query"
+                )
 
         destinations = task_download_data_from_bigquery(
             query=final_query,
@@ -214,7 +236,10 @@ def get_destinations(
         )
         log(f"response from query {destinations.head()}")
         destinations = destinations.iloc[:, 0].tolist()
-        destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
+        destinations = [
+            json.loads(str(item).replace("celular_disparo", "to"))
+            for item in destinations
+        ]
     elif isinstance(destinations, str):
         destinations = json.loads(destinations)
 
