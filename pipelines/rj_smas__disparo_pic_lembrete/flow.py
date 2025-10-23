@@ -61,7 +61,9 @@ def rj_smas__disparo_pic_lembrete(
         or PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value
     )
     test_mode = (
-        test_mode if test_mode is not None else PicLembreteConstants.PIC_LEMBRETE_TEST_MODE.value
+        test_mode
+        if test_mode is not None
+        else PicLembreteConstants.PIC_LEMBRETE_TEST_MODE.value
     )
 
     # Se test_mode ativado, usar query mock ao invés da query real
