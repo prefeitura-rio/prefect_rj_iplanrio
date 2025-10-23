@@ -1,7 +1,7 @@
 [project]
-name = "rj_smas__disparo_pic_lembrete"
+name = "rj_smas__disparo_pic"
 version = "0.1.0"
-description = "Pipeline de disparo PIC lembrete da secretaria SMAS"
+description = "Pipeline de disparo PIC da secretaria SMAS"
 dependencies = [
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",
