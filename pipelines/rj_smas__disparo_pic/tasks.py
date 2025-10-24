@@ -315,8 +315,5 @@ def change_query_date(query: str, new_date: str) -> str:
 def format_query(raw_query: str, event_date: str, id_hsm: int) -> str:
     if event_date is None:
         raise ValueError("event_date cannot be None when formatting query.")
-    formatted_query = raw_query.format(
-        event_date_placeholder=event_date,
-        id_hsm_placeholder=id_hsm
-    )
+    formatted_query = raw_query.format(event_date_placeholder=event_date, id_hsm_placeholder=id_hsm)
     return formatted_query
