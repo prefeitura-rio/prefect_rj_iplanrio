@@ -31,21 +31,31 @@ class PicLembreteConstants(Enum):
     # Modo de teste - ativar por padrão para segurança
     PIC_TEST_MODE = True
 
+    # Day that the event will occour, keep None here so flow will have an error if there is no event_date
+    EVENT_DATE = None
+
     # Query mock para testes rápidos (não dispara para base real)
-    PIC_QUERY_MOCK = r"""
+    PIC_QUERY_MOCK = f"""
         WITH config AS (
-          DATA_EVENTO AS target_date
+          date({str(EVENT_DATE)}) AS target_date
         ),
         test_data AS (
-          SELECT 1 AS id, '5521985573582' AS phone, 'Joao Santos' AS nome, '11111111111' AS cpf UNION ALL
+          SELECT 1 AS id, '5521985573582' AS celular_disparo, 'Joao Santos' AS nome, '11111111111' AS cpf UNION ALL
           SELECT 2, '5521992132305', 'Bruno Mesquita', '22222222222' UNION ALL
           SELECT 3, '5511984677798', 'Patricia Catandi', '33333333333' UNION ALL
           SELECT 4, '559284212629', 'Francisco Leon', '44444444444'
+        ),
+        filtra_quem_nao_recebeu_hsm as (
+          select test_data.*
+          from test_data
+          left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+            on fl.flattarget = test_data.celular_disparo and fl.templateId = {int(PIC_ID_HSM)}
+          where fl.flattarget is null
         )
         SELECT
           TO_JSON_STRING(
             STRUCT(
-              phone AS celular_disparo,
+              celular_disparo,
               STRUCT(
                 nome AS NOME_SOBRENOME,
                 cpf AS CC_WT_CPF_CIDADAO,
@@ -56,14 +66,14 @@ class PicLembreteConstants(Enum):
               cpf AS externalId
             )
           ) AS destination_data
-        FROM test_data
+        FROM filtra_quem_nao_recebeu_hsm
         CROSS JOIN config
     """
 
     # Query principal do PIC lembrete com saída em JSON (destination_data)
-    PIC_QUERY = r"""
-        WITH config AS (
-          SELECT DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 2 DAY) AS target_date
+    PIC_QUERY = f"""
+                WITH config AS (
+          date({str(EVENT_DATE)}) AS target_date
         ),
         agendamentos_unicos AS (
           SELECT
@@ -115,8 +125,15 @@ class PicLembreteConstants(Enum):
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
           CROSS JOIN config
-          WHERE -- SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
-            t1.DATA_ENTREGA_PREVISTA = '2025-10-28'
+          WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
+            -- t1.DATA_ENTREGA_PREVISTA = '2025-10-29'
+        ),
+        filtra_quem_nao_recebeu_hsm as (
+          select joined_status_cpi.*
+          from joined_status_cpi
+          left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+            on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = {int(PIC_ID_HSM)}
+          where fl.flattarget is null
         ),
         formatted AS (
           SELECT
@@ -136,7 +153,7 @@ class PicLembreteConstants(Enum):
             endereco_evento,
             FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
             horario_evento
-          FROM joined_status_cpi
+          FROM filtra_quem_nao_recebeu_hsm
           WHERE celular_disparo IS NOT NULL
             AND data_evento_date IS NOT NULL
         )
