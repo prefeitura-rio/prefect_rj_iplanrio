@@ -47,7 +47,7 @@ class PicLembreteConstants(Enum):
           select test_data.*
           from test_data
           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-            on fl.flattarget = test_data.celular_disparo and fl.templateId = {id_hsm_placeholder}
+            on fl.flattarget = test_data.celular_disparo and fl.templateId = 500  # {id_hsm_placeholder}
           where fl.flattarget is null
         )
         SELECT
