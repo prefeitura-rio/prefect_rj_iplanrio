@@ -115,8 +115,7 @@ class PicLembreteConstants(Enum):
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
           CROSS JOIN config
-          WHERE -- SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
-            t1.DATA_ENTREGA_PREVISTA = '2025-10-29'
+          WHERE t1.DATA_ENTREGA_PREVISTA = '2025-10-29'
         ),
         formatted AS (
           SELECT
