@@ -73,7 +73,7 @@ def rj_smas__disparo_pic(
         query = PicLembreteConstants.PIC_QUERY_MOCK.value
         query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
-    
+
     print(f"\nQuery citizen:\n{query}")
     print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
 
