@@ -99,7 +99,7 @@ def rj_smas__disparo_pic(
         query = format_query(raw_query=query, event_date=event_date, id_hsm=id_hsm)
         print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
         print("Sleep 5 minutes to check")
-        time.sleep(sleep_minutes*60)
+        time.sleep(sleep_minutes * 60)
 
         api = access_api(
             infisical_secret_path,
@@ -136,10 +136,12 @@ def rj_smas__disparo_pic(
             )
 
             printar(id_hsm)
-            print(f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}")
+            print(
+                f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}"
+            )
             # TODO: adicionar print da hsm
-            print(f"⚠️  Sleep {sleep_minutes*3} minutes before dispatch. Check if event date and id_hsm is correct!!")
-            time.sleep(sleep_minutes *3 * 60)  # 15 minutes in seconds
+            print(f"⚠️  Sleep {sleep_minutes * 3} minutes before dispatch. Check if event date and id_hsm is correct!!")
+            time.sleep(sleep_minutes * 3 * 60)  # 15 minutes in seconds
 
             dispatch_date = dispatch(
                 api=api,
