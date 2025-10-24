@@ -24,7 +24,9 @@ async def _send_discord_webhook(webhook_url: str, message: str):
         message: Mensagem de texto a ser enviada
     """
     if len(message) > 2000:
-        raise ValueError(f"Message content is too long: {len(message)} > 2000 characters.")
+        raise ValueError(
+            f"Message content is too long: {len(message)} > 2000 characters."
+        )
 
     async with aiohttp.ClientSession() as session:
         webhook = Webhook.from_url(webhook_url, session=session)
@@ -67,7 +69,11 @@ def send_dispatch_success_notification(
         return
 
     # Adicionar indicador [TESTE] no título se test_mode=True
-    title = "✅ **[TESTE] Disparo Realizado com Sucesso**" if test_mode else "✅ **Disparo Realizado com Sucesso**"
+    title = (
+        "✅ **[TESTE] Disparo Realizado com Sucesso**"
+        if test_mode
+        else "✅ **Disparo Realizado com Sucesso**"
+    )
 
     message = f"""{title}
 
@@ -147,7 +153,7 @@ def send_dispatch_result_notification(
         ) as rn
       FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_2025_10`
       WHERE templateId = {id_hsm}
-        AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR)
+        AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE)
     )
     SELECT
       status,
@@ -169,7 +175,11 @@ def send_dispatch_result_notification(
         )
 
         # Adicionar indicador [TESTE] no título se test_mode=True
-        title = "📊 **[TESTE] Resultados do Disparo**" if test_mode else "📊 **Resultados do Disparo**"
+        title = (
+            "📊 **[TESTE] Resultados do Disparo**"
+            if test_mode
+            else "📊 **Resultados do Disparo**"
+        )
 
         # Formatar mensagem com contexto e resultados
         message = f"""{title}
@@ -179,7 +189,7 @@ def send_dispatch_result_notification(
 🕐 **Disparo realizado em:** {dispatch_date}
 📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
-**Status dos Disparos (últimas 3 horas):**
+**Status dos Disparos:**
 """
 
         # Adicionar resultados da query formatados
