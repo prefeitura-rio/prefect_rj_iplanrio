@@ -37,7 +37,7 @@ class PicLembreteConstants(Enum):
     # Query mock para testes rápidos (não dispara para base real)
     PIC_QUERY_MOCK = f"""
         WITH config AS (
-          date({str(EVENT_DATE)}) AS target_date
+          date({EVENT_DATE!s}) AS target_date
         ),
         test_data AS (
           SELECT 1 AS id, '5521985573582' AS celular_disparo, 'Joao Santos' AS nome, '11111111111' AS cpf UNION ALL
@@ -73,7 +73,7 @@ class PicLembreteConstants(Enum):
     # Query principal do PIC lembrete com saída em JSON (destination_data)
     PIC_QUERY = f"""
                 WITH config AS (
-          date({str(EVENT_DATE)}) AS target_date
+          date({EVENT_DATE!s}) AS target_date
         ),
         agendamentos_unicos AS (
           SELECT
