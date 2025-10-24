@@ -219,6 +219,8 @@ def get_destinations(
             bucket_name=billing_project_id,
         )
         log(f"response from query {destinations.head()}")
+        # TODO: flow quebra na prox linha se query não retorna ngm
+        # separar a query do get destinations e verificar se tem retorno da query
         destinations = destinations.iloc[:, 0].tolist()
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
@@ -302,13 +304,6 @@ def check_if_dispatch_approved(
 
     log(f"\nDispatch was not approved for today: {today_str}.")
     return None, False
-
-
-@task
-def change_query_date(query: str, new_date: str) -> str:
-    query = re.sub(r"data_evento", new_date, query, flags=re.IGNORECASE)
-    log(f"\nChange date filter in query:\n{query}\n")
-    return query
 
 
 @task

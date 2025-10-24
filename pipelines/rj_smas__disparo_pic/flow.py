@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-
+# noqa: flake8=E501
 import os
 import time
 from math import ceil
@@ -48,9 +48,9 @@ def rj_smas__disparo_pic(
     query_processor_name: str | None = None,
     test_mode: bool | None = True,
     sleep_minutes: int | None = 5,
-    dispatch_approved_col: str | None = "aprovacao_disparo",
-    dispatch_date_col: str | None = "data_primeiro_disparo",
-    event_date_col: str | None = "data_evento",
+    dispatch_approved_col: str | None = "APROVACAO_DISPARO_AVISO",
+    dispatch_date_col: str | None = "DATA_DISPARO_AVISO",
+    event_date_col: str | None = "DATA_ENTREGA",
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_DATASET_ID.value
@@ -68,17 +68,24 @@ def rj_smas__disparo_pic(
     dispatch_date_col = dispatch_date_col or PicLembreteConstants.DISPATCH_DATE_COL.value
     event_date_col = event_date_col or PicLembreteConstants.EVENT_DATE_COL.value
 
+    billing_project_id = PicLembreteConstants.PIC_BILLING_PROJECT_ID.value
+
     test_mode = True  # TODO: remove
     # Se test_mode ativado, usar query mock ao invés da query real
     if test_mode:
         query = PicLembreteConstants.PIC_QUERY_MOCK.value
         query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
+        query_create_mock_tables = PicLembreteConstants.CREATE_MOCK_TABLES.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
+        df_create_mock_tables = task_download_data_from_bigquery(
+            query=query_create_mock_tables,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id,
+        )
+        print("Mock tables were created")
 
     print(f"\nQuery citizen:\n{query}")
     print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
-
-    billing_project_id = PicLembreteConstants.PIC_BILLING_PROJECT_ID.value
 
     destinations = getenv_or_action("PIC__DESTINATIONS", action="ignore")
 
