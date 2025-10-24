@@ -29,12 +29,12 @@ class PicLembreteConstants(Enum):
     PIC_CHUNK_SIZE = 1000
 
     # Modo de teste - ativar por padrão para segurança
-    PIC_TEST_MODE = False
+    PIC_TEST_MODE = True
 
     # Query mock para testes rápidos (não dispara para base real)
     PIC_QUERY_MOCK = r"""
         WITH config AS (
-          SELECT DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 2 DAY) AS target_date
+          DATA_EVENTO AS target_date
         ),
         test_data AS (
           SELECT 1 AS id, '5521985573582' AS phone, 'Joao Santos' AS nome, '11111111111' AS cpf UNION ALL
@@ -156,3 +156,18 @@ class PicLembreteConstants(Enum):
           ) AS destination_data
         FROM formatted
     """
+
+    DISPATCH_APPROVED_COL = (
+        "aprovacao_disparo"  # column that says if the dispatch was approved
+    )
+    DISPATCH_DATE_COL = (
+        "data_primeiro_disparo"  # column that contains the date to be made the dispatch
+    )
+    EVENT_DATE_COL = "data_evento"  # columns with the event date (date to get the PIC)
+    PIC_QUERY_MOCK_DISPATCH_APPROVED = r"""
+      select * from `rj-crm-registry-dev.brutos_wetalkie_staging.aprovacao_evento`
+    """
+
+    # PIC_QUERY_DISPATCH_APPROVED = r"""
+
+    # """

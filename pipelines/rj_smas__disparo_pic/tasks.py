@@ -7,9 +7,11 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py.
 import json
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
+import re
 
 import pandas as pd
+import pendulum
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from pytz import timezone
@@ -23,7 +25,9 @@ from pipelines.rj_smas__disparo_pic.validators import (
 
 
 @task
-def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
+def create_dispatch_payload(
+    campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]
+) -> Dict:
     """
     Cria o payload para o dispatch com validação rigorosa
 
@@ -53,7 +57,9 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
         destinations=validated_destinations,
     )
 
-    log(f"Payload created successfully for {len(validated_destinations)} validated destinations")
+    log(
+        f"Payload created successfully for {len(validated_destinations)} validated destinations"
+    )
 
     # Return as dict for backward compatibility
     return payload.dict()
@@ -69,14 +75,18 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
     total = len(destinations)
     original_campaign_name = dispatch_payload["campaignName"]
 
-    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime("%Y-%m-%d %H:%M:%S")
+    dispatch_date = datetime.now(timezone("America/Sao_Paulo")).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
     if total == 0:
         log("Total de números é igual a zero. Nenhum disparo será feito.")
         raise Exception("No destinations to dispatch")
 
     total_batches = ceil(total / chunk)
-    log(f"Starting dispatch of {total} destinations in {total_batches} batches of size {chunk}")
+    log(
+        f"Starting dispatch of {total} destinations in {total_batches} batches of size {chunk}"
+    )
 
     for i, start in enumerate(range(0, total, chunk), 1):
         end = start + chunk
@@ -85,7 +95,9 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         # Create a copy of payload for each batch to avoid mutation
         batch_payload = dispatch_payload.copy()
         batch_payload["destinations"] = batch
-        batch_payload["campaignName"] = f"{original_campaign_name}-{dispatch_date[:10]}-lote{i}"
+        batch_payload["campaignName"] = (
+            f"{original_campaign_name}-{dispatch_date[:10]}-lote{i}"
+        )
 
         log(f"Disparando lote {i} de {total_batches} com {len(batch)} destinos")
 
@@ -98,7 +110,9 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
 
         log(f"Disparo do lote {i} realizado com sucesso!")
 
-    log(f"Disparo realizado com sucesso! Total de {total} destinations processadas em {total_batches} lotes")
+    log(
+        f"Disparo realizado com sucesso! Total de {total} destinations processadas em {total_batches} lotes"
+    )
     return dispatch_date
 
 
@@ -115,7 +129,9 @@ def create_dispatch_dfr(
     Agora inclui validação para garantir integridade dos dados salvos
     """
     # Validate destinations before creating DataFrame
-    validated_destinations, validation_stats = validate_destinations(original_destinations)
+    validated_destinations, validation_stats = validate_destinations(
+        original_destinations
+    )
     log_validation_summary(validation_stats, "create_dispatch_dfr")
 
     if not validated_destinations:
@@ -154,7 +170,9 @@ def create_dispatch_dfr(
     # Validate that no externalId is None (should not happen with our validation)
     null_external_ids = dfr["externalId"].isnull().sum()
     if null_external_ids > 0:
-        log(f"WARNING: Found {null_external_ids} records with null externalId after validation")
+        log(
+            f"WARNING: Found {null_external_ids} records with null externalId after validation"
+        )
 
     return dfr
 
@@ -209,7 +227,9 @@ def get_destinations(
                 log(f"Applying query processor: {query_processor_name}")
                 final_query = processor_func(query)
             else:
-                log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
+                log(
+                    f"Warning: Query processor '{query_processor_name}' not found, using original query"
+                )
 
         destinations = task_download_data_from_bigquery(
             query=final_query,
@@ -218,7 +238,10 @@ def get_destinations(
         )
         log(f"response from query {destinations.head()}")
         destinations = destinations.iloc[:, 0].tolist()
-        destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
+        destinations = [
+            json.loads(str(item).replace("celular_disparo", "to"))
+            for item in destinations
+        ]
     elif isinstance(destinations, str):
         destinations = json.loads(destinations)
 
@@ -268,3 +291,43 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     log(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
+
+
+@task
+def check_if_dispatch_approved(
+    dfr: pd.DataFrame,
+    dispatch_approved_col: str,
+    dispatch_date_col: str,
+    event_date_col: str,
+) -> Tuple[str, bool]:
+    if dfr.empty:
+        log("\nApproval dataframe is empty.")
+        return None, False
+
+    today_str = str(pendulum.today().date())
+    filtered_df = dfr[dfr[dispatch_date_col] == today_str]
+
+    if filtered_df.empty:
+        log(f"\nNo dispatch approval found for today: {today_str}.")
+        return None, False
+
+    dispatch_status = filtered_df[dispatch_approved_col].iloc[0]
+
+    log(
+        f"\nChecking dispatch approval for today ({today_str}): Status='{dispatch_status}'"
+    )
+
+    if dispatch_status == "aprovado":
+        event_date = filtered_df[event_date_col].astype(str).iloc[0]
+        log(f"\nDispatch approved for event day: {event_date}.")
+        return event_date, True
+
+    log(f"\nDispatch was not approved for today: {today_str}.")
+    return None, False
+
+
+@task
+def change_query_date(query: str, new_date: str) -> str:
+    query = re.sub(r"data_evento", new_date, query, flags=re.IGNORECASE)
+    log(f"\nChange date filter in query:\n{query}\n")
+    return query
