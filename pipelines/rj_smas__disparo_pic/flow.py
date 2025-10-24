@@ -97,9 +97,9 @@ def rj_smas__disparo_pic(
 
     if dispatch_approved:
         query = format_query(raw_query=query, event_date=event_date, id_hsm=id_hsm)
-        print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
-        print("Sleep 5 minutes to check")
-        time.sleep(sleep_minutes*60)
+        print(f"\nQuery dispatch approval:\n{query}")
+        print(f"Sleep {sleep_minutes*2} minutes to check")
+        time.sleep(sleep_minutes*2*60)
 
         api = access_api(
             infisical_secret_path,

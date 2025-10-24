@@ -37,10 +37,11 @@ class PicLembreteConstants(Enum):
           date({event_date_placeholder}) AS target_date
         ),
         test_data AS (
-          SELECT 1 AS id, '5521985573582' AS celular_disparo, 'Joao Santos' AS nome, '11111111111' AS cpf UNION ALL
-          SELECT 2, '5521992132305', 'Bruno Mesquita', '22222222222' UNION ALL
-          SELECT 3, '5511984677798', 'Patricia Catandi', '33333333333' UNION ALL
-          SELECT 4, '559284212629', 'Francisco Leon', '44444444444'
+          SELECT 1 AS id, '5511984677798' AS celular_disparo, 'Joao Santos' AS nome, '11111111111' AS cpf
+          # UNION ALL SELECT 2, '5521992132305', 'Bruno Mesquita', '22222222222'
+           UNION ALL SELECT 3, '5511984677798', 'Patricia Catandi', '33333333333'
+          #  UNION ALL SELECT 4, '559284212629', 'Francisco Leon', '44444444444'
+          #  UNION ALL SELECT 5, '5521985573582', 'Joao Santos', '555555555555'
         ),
         filtra_quem_nao_recebeu_hsm as (
           select test_data.*
