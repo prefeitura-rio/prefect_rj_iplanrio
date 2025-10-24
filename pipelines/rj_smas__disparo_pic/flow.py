@@ -133,6 +133,7 @@ def rj_smas__disparo_pic(
                 destinations=unique_destinations,
             )
 
+            printar(id_hsm)
             print(f"Starting dispatch for id_hsm={id_hsm}, example data {unique_destinations}")
             time.sleep(15 * 60)  # 15 minutes in seconds
 
