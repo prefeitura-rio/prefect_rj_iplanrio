@@ -67,6 +67,7 @@ def rj_smas__disparo_pic(
     dispatch_date_col = dispatch_date_col or PicLembreteConstants.DISPATCH_DATE_COL.value
     event_date_col = event_date_col or PicLembreteConstants.EVENT_DATE_COL.value
 
+    test_mode = True  # TODO: remove
     # Se test_mode ativado, usar query mock ao invés da query real
     if test_mode:
         query = PicLembreteConstants.PIC_QUERY_MOCK.value
