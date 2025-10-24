@@ -31,13 +31,10 @@ class PicLembreteConstants(Enum):
     # Modo de teste - ativar por padrão para segurança
     PIC_TEST_MODE = True
 
-    # Day that the event will occour, keep None here so flow will have an error if there is no event_date
-    EVENT_DATE = None
-
     # Query mock para testes rápidos (não dispara para base real)
-    PIC_QUERY_MOCK = f"""
+    PIC_QUERY_MOCK = r"""
         WITH config AS (
-          date({EVENT_DATE!s}) AS target_date
+          date({event_date_placeholder}) AS target_date
         ),
         test_data AS (
           SELECT 1 AS id, '5521985573582' AS celular_disparo, 'Joao Santos' AS nome, '11111111111' AS cpf UNION ALL
@@ -49,7 +46,7 @@ class PicLembreteConstants(Enum):
           select test_data.*
           from test_data
           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-            on fl.flattarget = test_data.celular_disparo and fl.templateId = {int(PIC_ID_HSM)}
+            on fl.flattarget = test_data.celular_disparo and fl.templateId = {id_hsm_placeholder}
           where fl.flattarget is null
         )
         SELECT
@@ -71,9 +68,9 @@ class PicLembreteConstants(Enum):
     """
 
     # Query principal do PIC lembrete com saída em JSON (destination_data)
-    PIC_QUERY = f"""
+    PIC_QUERY = r"""
                 WITH config AS (
-          date({EVENT_DATE!s}) AS target_date
+          date({event_date_placeholder}) AS target_date
         ),
         agendamentos_unicos AS (
           SELECT
@@ -132,7 +129,7 @@ class PicLembreteConstants(Enum):
           select joined_status_cpi.*
           from joined_status_cpi
           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-            on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = {int(PIC_ID_HSM)}
+            on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = {id_hsm_placeholder}
           where fl.flattarget is null
         ),
         formatted AS (

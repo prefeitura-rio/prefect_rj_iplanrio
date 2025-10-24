@@ -285,6 +285,7 @@ def check_if_dispatch_approved(
 
     today_str = str(pendulum.today().date())
     filtered_df = dfr[dfr[dispatch_date_col] == today_str]
+    log(f"Dispatch approval df for today: {filtered_df.head()}")
 
     if filtered_df.empty:
         log(f"\nNo dispatch approval found for today: {today_str}.")
@@ -308,3 +309,14 @@ def change_query_date(query: str, new_date: str) -> str:
     query = re.sub(r"data_evento", new_date, query, flags=re.IGNORECASE)
     log(f"\nChange date filter in query:\n{query}\n")
     return query
+
+
+@task
+def format_query(raw_query: str, event_date: str, id_hsm: int) -> str:
+    if event_date is None:
+        raise ValueError("event_date cannot be None when formatting query.")
+    formatted_query = raw_query.format(
+        event_date_placeholder=event_date,
+        id_hsm_placeholder=id_hsm
+    )
+    return formatted_query

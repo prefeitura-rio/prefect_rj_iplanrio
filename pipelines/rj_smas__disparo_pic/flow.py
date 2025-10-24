@@ -11,12 +11,12 @@ from prefect import flow
 
 from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 from pipelines.rj_smas__disparo_pic.tasks import (
-    # change_query_date,
     check_api_status,
     check_if_dispatch_approved,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
+    format_query,
     get_destinations,
     printar,
     remove_duplicate_phones,
@@ -47,6 +47,7 @@ def rj_smas__disparo_pic(
     query_dispatch_approved: str | None = None,
     query_processor_name: str | None = None,
     test_mode: bool | None = True,
+    sleep_minutes: int | None = 5,
     dispatch_approved_col: str | None = "aprovacao_disparo",
     dispatch_date_col: str | None = "data_primeiro_disparo",
     event_date_col: str | None = "data_evento",
@@ -94,11 +95,12 @@ def rj_smas__disparo_pic(
         df_dispatch_approved, dispatch_approved_col, dispatch_date_col, event_date_col
     )
 
-    # query = change_query_date(query, new_date=event_date)
-
-    dispatch_approved = False  # TODO: remove
-
     if dispatch_approved:
+        query = format_query(raw_query=query, event_date=event_date, id_hsm=id_hsm)
+        print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
+        print("Sleep 5 minutes to check")
+        time.sleep(sleep_minutes*60)
+
         api = access_api(
             infisical_secret_path,
             "wetalkie_url",
@@ -134,8 +136,10 @@ def rj_smas__disparo_pic(
             )
 
             printar(id_hsm)
-            print(f"Starting dispatch for id_hsm={id_hsm}, example data {unique_destinations}")
-            time.sleep(15 * 60)  # 15 minutes in seconds
+            print(f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}")
+            # TODO: adicionar print da hsm
+            print(f"⚠️  Sleep {sleep_minutes*3} minutes before dispatch. Check if event date and id_hsm is correct!!")
+            time.sleep(sleep_minutes *3 * 60)  # 15 minutes in seconds
 
             dispatch_date = dispatch(
                 api=api,
@@ -199,7 +203,7 @@ def rj_smas__disparo_pic(
             )
 
             # Wait 15 minutes before querying results
-            print("Waiting 15 minutes before checking dispatch results...")
+            print("⚠️  Waiting 15 minutes before checking dispatch results...")
             time.sleep(15 * 60)  # 15 minutes in seconds
 
             # Send results notification with BigQuery data
