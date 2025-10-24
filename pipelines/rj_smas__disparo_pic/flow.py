@@ -11,7 +11,7 @@ from prefect import flow
 
 from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 from pipelines.rj_smas__disparo_pic.tasks import (
-    change_query_date,
+    # change_query_date,
     check_api_status,
     check_if_dispatch_approved,
     create_dispatch_dfr,
@@ -73,6 +73,9 @@ def rj_smas__disparo_pic(
         query = PicLembreteConstants.PIC_QUERY_MOCK.value
         query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
+    
+    print(f"\nQuery citizen:\n{query}")
+    print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
 
     billing_project_id = PicLembreteConstants.PIC_BILLING_PROJECT_ID.value
 
@@ -91,7 +94,7 @@ def rj_smas__disparo_pic(
         df_dispatch_approved, dispatch_approved_col, dispatch_date_col, event_date_col
     )
 
-    query = change_query_date(query, new_date=event_date)
+    # query = change_query_date(query, new_date=event_date)
 
     dispatch_approved = False  # TODO: remove
 
@@ -130,7 +133,7 @@ def rj_smas__disparo_pic(
                 destinations=unique_destinations,
             )
 
-            printar(f"Starting dispatch for id_hsm={id_hsm}, example data {unique_destinations}")
+            print(f"Starting dispatch for id_hsm={id_hsm}, example data {unique_destinations}")
             time.sleep(15 * 60)  # 15 minutes in seconds
 
             dispatch_date = dispatch(
