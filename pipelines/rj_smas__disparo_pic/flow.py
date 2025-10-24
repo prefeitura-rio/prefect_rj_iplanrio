@@ -147,8 +147,8 @@ def rj_smas__disparo_pic(
                 f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}"
             )
             # TODO: adicionar print da hsm
-            print(f"⚠️  Sleep {sleep_minutes * 3} minutes before dispatch. Check if event date and id_hsm is correct!!")
-            time.sleep(sleep_minutes * 3 * 60)  # 15 minutes in seconds
+            print(f"⚠️  Sleep {sleep_minutes * 2} minutes before dispatch. Check if event date and id_hsm is correct!!")
+            time.sleep(sleep_minutes * 2 * 60)  # 15 minutes in seconds
 
             dispatch_date = dispatch(
                 api=api,
@@ -183,33 +183,34 @@ def rj_smas__disparo_pic(
 
             print(f"DataFrame created with {len(dfr)} records for BigQuery upload")
 
-            partitions_path = create_date_partitions(
-                dataframe=dfr,
-                partition_column="dispatch_date",
-                file_format="csv",
-                root_folder="./data_dispatch/",
-            )
+            if not test_mode:
+                partitions_path = create_date_partitions(
+                    dataframe=dfr,
+                    partition_column="dispatch_date",
+                    file_format="csv",
+                    root_folder="./data_dispatch/",
+                )
 
-            if not partitions_path:
-                raise ValueError("partitions_path is None - partition creation failed")
+                if not partitions_path:
+                    raise ValueError("partitions_path is None - partition creation failed")
 
-            if not os.path.exists(partitions_path):
-                raise ValueError(f"partitions_path does not exist: {partitions_path}")
+                if not os.path.exists(partitions_path):
+                    raise ValueError(f"partitions_path does not exist: {partitions_path}")
 
-            print(f"Generated partitions_path: {partitions_path}")
-            if os.path.exists(partitions_path):
-                files_in_path = []
-                for root, dirs, files in os.walk(partitions_path):
-                    files_in_path.extend([os.path.join(root, f) for f in files])
-                print(f"Files in partitions path: {files_in_path}")
+                print(f"Generated partitions_path: {partitions_path}")
+                if os.path.exists(partitions_path):
+                    files_in_path = []
+                    for root, dirs, files in os.walk(partitions_path):
+                        files_in_path.extend([os.path.join(root, f) for f in files])
+                    print(f"Files in partitions path: {files_in_path}")
 
-            create_table = create_table_and_upload_to_gcs_task(
-                data_path=partitions_path,
-                dataset_id=dataset_id,
-                table_id=table_id,
-                dump_mode=dump_mode,
-                biglake_table=False,
-            )
+                create_table = create_table_and_upload_to_gcs_task(
+                    data_path=partitions_path,
+                    dataset_id=dataset_id,
+                    table_id=table_id,
+                    dump_mode=dump_mode,
+                    biglake_table=False,
+                )
 
             # Wait 15 minutes before querying results
             print("⚠️  Waiting 15 minutes before checking dispatch results...")

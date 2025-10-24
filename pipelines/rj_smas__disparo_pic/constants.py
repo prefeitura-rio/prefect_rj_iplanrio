@@ -150,8 +150,8 @@ class PicLembreteConstants(Enum):
     # Query mock para testes rápidos (não dispara para base real)
     PIC_QUERY_MOCK = r"""
         WITH config AS (
-        select date('2026-11-28') AS target_date
-        -- select date('{event_date_placeholder}') AS target_date
+        -- select date('2026-11-28') AS target_date
+        select date('{event_date_placeholder}') AS target_date
         ),
         agendamentos_unicos AS (
           SELECT
