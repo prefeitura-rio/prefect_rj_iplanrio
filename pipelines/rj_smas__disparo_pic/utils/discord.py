@@ -146,8 +146,8 @@ def send_dispatch_result_notification(
           ORDER BY datarelay_timestamp DESC
         ) as rn
       FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_2025_10`
-      WHERE templateId = '{id_hsm}'
-        AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 HOUR)
+      WHERE templateId = {id_hsm}
+        AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE)
     )
     SELECT
       status,
@@ -179,7 +179,7 @@ def send_dispatch_result_notification(
 🕐 **Disparo realizado em:** {dispatch_date}
 📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
-**Status dos Disparos (últimas 3 horas):**
+**Status dos Disparos:**
 """
 
         # Adicionar resultados da query formatados
