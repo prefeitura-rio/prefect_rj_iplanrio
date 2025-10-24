@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from math import ceil
 import os
 import time
+from math import ceil
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
@@ -12,8 +12,8 @@ from prefect import flow
 from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 from pipelines.rj_smas__disparo_pic.tasks import (
     change_query_date,
-    check_if_dispatch_approved,
     check_api_status,
+    check_if_dispatch_approved,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
@@ -60,30 +60,17 @@ def rj_smas__disparo_pic(
     cost_center_id = cost_center_id or PicLembreteConstants.PIC_COST_CENTER_ID.value
     chunk_size = chunk_size or PicLembreteConstants.PIC_CHUNK_SIZE.value
     query = query or PicLembreteConstants.PIC_QUERY.value
-    query_dispatch_approved = (
-        query_dispatch_approved
-        or PicLembreteConstants.PIC_QUERY_DISPATCH_APPROVED.value
-    )
-    query_processor_name = (
-        query_processor_name or PicLembreteConstants.PIC_QUERY_PROCESSOR_NAME.value
-    )
-    test_mode = (
-        test_mode if test_mode is not None else PicLembreteConstants.PIC_TEST_MODE.value
-    )
-    dispatch_approved_col = (
-        dispatch_approved_col or PicLembreteConstants.DISPATCH_APPROVED_COL.value
-    )
-    dispatch_date_col = (
-        dispatch_date_col or PicLembreteConstants.DISPATCH_DATE_COL.value
-    )
+    query_dispatch_approved = query_dispatch_approved or PicLembreteConstants.PIC_QUERY_DISPATCH_APPROVED.value
+    query_processor_name = query_processor_name or PicLembreteConstants.PIC_QUERY_PROCESSOR_NAME.value
+    test_mode = test_mode if test_mode is not None else PicLembreteConstants.PIC_TEST_MODE.value
+    dispatch_approved_col = dispatch_approved_col or PicLembreteConstants.DISPATCH_APPROVED_COL.value
+    dispatch_date_col = dispatch_date_col or PicLembreteConstants.DISPATCH_DATE_COL.value
     event_date_col = event_date_col or PicLembreteConstants.EVENT_DATE_COL.value
 
     # Se test_mode ativado, usar query mock ao invés da query real
     if test_mode:
         query = PicLembreteConstants.PIC_QUERY_MOCK.value
-        query_dispatch_approved = (
-            PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
-        )
+        query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
 
     billing_project_id = PicLembreteConstants.PIC_BILLING_PROJECT_ID.value
@@ -142,9 +129,7 @@ def rj_smas__disparo_pic(
                 destinations=unique_destinations,
             )
 
-            printar(
-                f"Starting dispatch for id_hsm={id_hsm}, example data {unique_destinations}"
-            )
+            printar(f"Starting dispatch for id_hsm={id_hsm}, example data {unique_destinations}")
             time.sleep(15 * 60)  # 15 minutes in seconds
 
             dispatch_date = dispatch(
@@ -154,9 +139,7 @@ def rj_smas__disparo_pic(
                 chunk=chunk_size,
             )
 
-            print(
-                f"Dispatch completed successfully for {len(unique_destinations)} destinations"
-            )
+            print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
 
             total_batches = ceil(len(unique_destinations) / chunk_size)
 
@@ -168,9 +151,7 @@ def rj_smas__disparo_pic(
                 campaign_name=campaign_name,
                 cost_center_id=cost_center_id,
                 total_batches=total_batches,
-                sample_destination=(
-                    unique_destinations[0] if unique_destinations else None
-                ),
+                sample_destination=(unique_destinations[0] if unique_destinations else None),
                 test_mode=test_mode,
             )
 

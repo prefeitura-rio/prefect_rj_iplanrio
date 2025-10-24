@@ -174,12 +174,8 @@ class PicLembreteConstants(Enum):
         FROM formatted
     """
 
-    DISPATCH_APPROVED_COL = (
-        "aprovacao_disparo"  # column that says if the dispatch was approved
-    )
-    DISPATCH_DATE_COL = (
-        "data_primeiro_disparo"  # column that contains the date to be made the dispatch
-    )
+    DISPATCH_APPROVED_COL = "aprovacao_disparo"  # column that says if the dispatch was approved
+    DISPATCH_DATE_COL = "data_primeiro_disparo"  # column that contains the date to be made the dispatch
     EVENT_DATE_COL = "data_evento"  # columns with the event date (date to get the PIC)
     PIC_QUERY_MOCK_DISPATCH_APPROVED = r"""
       select * from `rj-crm-registry-dev.brutos_wetalkie_staging.aprovacao_evento`
