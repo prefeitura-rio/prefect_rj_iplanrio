@@ -36,7 +36,7 @@ from pipelines.rj_smas__disparo_pic.utils.tasks import (
 @flow(log_prints=True)
 def rj_smas__disparo_pic(
     # Parâmetros opcionais para override manual na UI.
-    id_hsm: int | None = 185,
+    id_hsm: int | None = 184,
     campaign_name: str | None = None,
     cost_center_id: int | None = 38,
     chunk_size: int | None = None,
@@ -47,9 +47,9 @@ def rj_smas__disparo_pic(
     query_dispatch_approved: str | None = None,
     query_processor_name: str | None = None,
     test_mode: bool | None = True,
-    dispatch_approved_col: str | None = None,
-    dispatch_date_col: str | None = None,
-    event_date_col: str | None = None,
+    dispatch_approved_col: str | None = "aprovacao_disparo",
+    dispatch_date_col: str | None = "data_primeiro_disparo",
+    event_date_col: str | None = "data_evento",
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_DATASET_ID.value

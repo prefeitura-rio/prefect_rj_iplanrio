@@ -181,6 +181,6 @@ class PicLembreteConstants(Enum):
       select * from `rj-crm-registry-dev.brutos_wetalkie_staging.aprovacao_evento`
     """
 
-    # PIC_QUERY_DISPATCH_APPROVED = r"""
-
-    # """
+    PIC_QUERY_DISPATCH_APPROVED = r"""
+      select * from `rj-crm-registry-dev.brutos_wetalkie_staging.aprovacao_evento`
+    """
