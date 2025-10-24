@@ -1,0 +1,25 @@
+[project]
+name = "rj_smas__disparo_pic"
+version = "0.1.0"
+description = "Pipeline de disparo PIC da secretaria SMAS"
+dependencies = [
+    "dbt-bigquery>=1.6.1",
+    "google-cloud-storage==2.10.0",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
+    "prefeitura-rio[actions] @ git+https://github.com/prefeitura-rio/prefeitura-rio@54593ddff444158b0ecbab5514c5cde4d44012c0",
+    "geopy==2.4.1",
+    "opencage==3.0.4",
+    "python-dotenv==1.0.1",
+    "unidecode==1.3.8",
+    "pendulum==3.0.0",
+    "simplejson==3.20.1",
+    "openlocationcode==1.0.1",
+    "dbt-core>=1.8.0",
+    "mutagen==1.47.0",
+    "google-cloud-speech==2.32.0",
+    "marshmallow==3.26.1",
+    "gitpython==3.1.44",
+    "discord-py==2.5.2",
+    "pydantic>=2.0.0",
+]
