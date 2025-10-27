@@ -10,7 +10,7 @@ from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
-from pipelines.rj_smas__disparo_pic_lembrete.tasks import (
+from pipelines.rj_smas__disparo_pic.tasks import (
     check_api_status,
     check_if_dispatch_approved,
     create_dispatch_dfr,
@@ -21,11 +21,11 @@ from pipelines.rj_smas__disparo_pic_lembrete.tasks import (
     printar,
     remove_duplicate_phones,
 )
-from pipelines.rj_smas__disparo_pic_lembrete.utils.discord import (
+from pipelines.rj_smas__disparo_pic.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
-from pipelines.rj_smas__disparo_pic_lembrete.utils.tasks import (
+from pipelines.rj_smas__disparo_pic.utils.tasks import (
     access_api,
     create_date_partitions,
     skip_flow_if_empty,
