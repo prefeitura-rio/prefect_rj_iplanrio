@@ -330,7 +330,7 @@ class PicLembreteConstants(Enum):
         FLAG_ENTREGA
       )
       VALUES
-        ('111111111111', 'patricia catandi', '5511984677798', null, 'Cras Vila Isabel', 'Rua Torres Homem, 120 - Vila Isabel', date_add(current_date(), interval 400 day), '10:00', 'CRAS Vila Isabel', 'Rua Torres Homem, 120 - Vila Isabel', date_add(current_date(), interval 400 day), '10:15', 'E001', 'xxx 99999-1111', 'Maria S.', date_add(current_date(), interval 400 day), 'retirada no CRAS', 'CRAS Vila Isabel', 'MARIA DA SILVA', 'aguardando evento', TRUE),
+        ('111111111111', 'patricia catandi', '5511984677798', null, 'Cras Vila Isabel', 'Rua Torres Homem, 120 - Vila Isabel', date_add(current_date(), interval 500 day), '10:00', 'CRAS Vila Isabel', 'Rua Torres Homem, 120 - Vila Isabel', date_add(current_date(), interval 400 day), '10:15', 'E001', 'xxx 99999-1111', 'Maria S.', date_add(current_date(), interval 400 day), 'retirada no CRAS', 'CRAS Vila Isabel', 'MARIA DA SILVA', 'aguardando evento', TRUE),
 
         ('xx765432100', 'JOÃO PEREIRA', 'xxx 97777-3333', 'xxx 96666-4444', 'Cras Bangu', 'Rua Fonseca, 300 - Bangu', DATE '2024-10-28', '14:00', 'CRAS Bangu', 'Rua Fonseca, 300 - Bangu', NULL, NULL, 'E002', 'xxx 97777-3333', NULL, NULL, 'entrega domiciliar', 'Endereço familiar', NULL, 'aguardando evento', FALSE),
 
