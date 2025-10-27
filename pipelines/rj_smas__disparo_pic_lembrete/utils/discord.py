@@ -20,9 +20,7 @@ async def _send_discord_webhook(webhook_url: str, message: str):
         message: Mensagem de texto a ser enviada
     """
     if len(message) > 2000:
-        raise ValueError(
-            f"Message content is too long: {len(message)} > 2000 characters."
-        )
+        raise ValueError(f"Message content is too long: {len(message)} > 2000 characters.")
 
     async with aiohttp.ClientSession() as session:
         webhook = Webhook.from_url(webhook_url, session=session)
