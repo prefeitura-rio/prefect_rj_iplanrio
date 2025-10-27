@@ -1,4 +1,0 @@
-[project]
-name = "rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}"
-version = "0.1.0"
-description = "Pipeline {{ cookiecutter.pipeline }} da secretaria {{ cookiecutter.secretaria }}"

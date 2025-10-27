@@ -6,6 +6,6 @@ WORKDIR /opt/prefect/pipelines_v3
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/pipelines_v3/
 
-COPY ./pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} ./pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/
+COPY ./pipelines/test__runner_deployment ./pipelines/test__runner_deployment/
 
 RUN uv sync --all-packages

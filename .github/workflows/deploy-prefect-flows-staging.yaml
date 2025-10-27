@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - staging/*
+      - devops/*
     paths:
       - pipelines/**
+      - .github/**
   workflow_dispatch:
     inputs:
       force_deploy:
@@ -37,19 +39,47 @@ on:
 jobs:
   deploy-prefect-staging-flows:
     name: Deploy Prefect staging flows
-    runs-on: ubuntu-latest
+    runs-on: k8s
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      
+      # - name: Set build dependencies
+      #   run: |
+      #     sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+      #       ca-certificates \
+      #       curl \
+      #       wget \
+      #       gnupg \
+      #       lsb-release \
+      #       apt-transport-https \
+      #       software-properties-common \
+      #       build-essential \
+      #       git \
+      #       sudo \
+      #       jq \
+      #       unzip \
+      #       zip \
+      #       python3 \
+      #       python3-pip \
+      #       openjdk-11-jdk \
+      #       golang-go \
+      #       ruby-full \
+      #       make \
+      #       docker.io \
+      #       && sudo rm -rf /var/lib/apt/lists/*
+
+      # - name: 🔧 Set up Docker Buildx
+      #   uses: docker/setup-buildx-action@v3
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
         with:
           environment: staging
           pipelines_path: ./pipelines
-          prefect_api_url: https://prefect.mobilidade.rio/api
+          prefect_api_url: ${{ secrets.PREFECT_API_URL }}
           gh_token: ${{ secrets.GITHUB_TOKEN }}
           force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
           debug: ${{ github.event.inputs.debug }}

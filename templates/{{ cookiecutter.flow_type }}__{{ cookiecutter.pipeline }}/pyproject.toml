@@ -1,0 +1,4 @@
+[project]
+name = "{{ cookiecutter.flow_type }}__{{ cookiecutter.pipeline }}"
+version = "0.1.0"
+description = "Pipeline {{ cookiecutter.pipeline }} da secretaria rj-smtr"

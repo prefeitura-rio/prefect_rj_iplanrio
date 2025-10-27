@@ -1,7 +1,7 @@
 [project]
-name = "prefect_rj_iplanrio"
+name = "pipelines_v3"
 version = "0.1.0"
-description = "Prefect pipelines for the Rio de Janeiro City Hall."
+description = "Prefect pipelines for the Rio de Janeiro Department of Transportation."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
