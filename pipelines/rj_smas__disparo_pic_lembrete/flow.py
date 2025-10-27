@@ -143,12 +143,11 @@ def rj_smas__disparo_pic_lembrete(
 
             printar(id_hsm)
             print(
-                    f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}"
-                )
+                f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}"
+            )
             # TODO: adicionar print da hsm
             print(f"⚠️  Sleep {sleep_minutes * 2} minutes before dispatch. Check if event date and id_hsm is correct!!")
             time.sleep(sleep_minutes * 2 * 60)  # 15 minutes in seconds
-
 
             dispatch_date = dispatch(
                 api=api,
