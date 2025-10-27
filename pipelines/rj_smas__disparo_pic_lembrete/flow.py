@@ -72,7 +72,7 @@ def rj_smas__disparo_pic_lembrete(
 
     # Se test_mode ativado, usar query mock ao invés da query real
     if test_mode:
-        query = PicLembreteConstants.PIC_LEMBRETE_QUERY_MOCK.value
+        query = PicLembreteConstants.PIC_QUERY_MOCK.value
 
         query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
         query_create_mock_tables = PicLembreteConstants.CREATE_MOCK_TABLES.value
