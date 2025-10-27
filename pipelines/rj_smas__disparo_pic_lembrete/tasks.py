@@ -7,7 +7,7 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py.
 import json
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Tuple, Union
 
 import pandas as pd
 import pendulum
@@ -49,7 +49,9 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
 
     # Validate complete payload
     payload = validate_dispatch_payload(
-        campaign_name=campaign_name, cost_center_id=cost_center_id, destinations=validated_destinations
+        campaign_name=campaign_name,
+        cost_center_id=cost_center_id,
+        destinations=validated_destinations,
     )
 
     log(f"Payload created successfully for {len(validated_destinations)} validated destinations")
@@ -199,7 +201,9 @@ def get_destinations(
         # Apply query processor if name provided
         final_query = query
         if query_processor_name:
-            from pipelines.rj_smas__disparo_pic_lembrete.processors import get_query_processor
+            from pipelines.rj_smas__disparo_pic_lembrete.processors import (
+                get_query_processor,
+            )
 
             processor_func = get_query_processor(query_processor_name)
             if processor_func:
@@ -214,6 +218,8 @@ def get_destinations(
             bucket_name=billing_project_id,
         )
         log(f"response from query {destinations.head()}")
+        # TODO: flow quebra na prox linha se query não retorna ngm
+        # separar a query do get destinations e verificar se tem retorno da query
         destinations = destinations.iloc[:, 0].tolist()
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
@@ -265,6 +271,7 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     log(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
+
 
 @task
 def check_if_dispatch_approved(
