@@ -269,7 +269,7 @@ class PicLembreteConstants(Enum):
         DATA_ENTREGA
       )
       VALUES
-        ("aprovado", "aprovado", cast(current_date() as string), cast(current_date() as string), cast(date_add(current_date(), interval 500 day) as string)),
+        ("aprovado", "aprovado", cast(date_sub(current_date(), interval 5 day) as string), cast(current_date() as string), cast(date_add(current_date(), interval 500 day) as string)),
         -- ("nao aprovado",  "nao aprovado", cast(current_date() as string), cast(date_add(current_date(), interval 4 day) as string), cast(date_add(current_date(), interval 5 day) as string)),
         ("nao aprovado", "nao aprovado", '2025-09-25', '2025-09-27', '2025-09-28'),
         ("aprovado", "aprovado", '2025-09-26','2025-09-29', '2025-09-30'),
