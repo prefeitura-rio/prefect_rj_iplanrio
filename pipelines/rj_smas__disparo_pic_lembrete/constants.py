@@ -336,5 +336,5 @@ class PicLembreteConstants(Enum):
         ('xx296374100', 'CARLOS SOUZA', 'xxx 94444-6666', 'xxx 93333-7777', 'Cras Campo Grande', 'Av. Cesário de Melo, 3200 - Campo Grande', DATE '2024-10-30', '13:00', 'CRAS Campo Grande', 'Av. Cesário de Melo, 3200 - Campo Grande', NULL, NULL, 'E004', 'xxx 94444-6666', NULL, NULL, 'entrega domiciliar', 'Endereço familiar', NULL, 'não retirado', FALSE),
 
         ('xx223344556', 'PAULA MENDES', 'xxx 92222-8888', NULL, 'Cras Tijuca', 'Rua Conde de Bonfim, 900 - Tijuca', DATE '2024-10-29', '11:00', 'CRAS Tijuca', 'Rua Conde de Bonfim, 900 - Tijuca', DATE '2024-10-29', '11:10', 'E005', 'xxx 92222-8888', 'Paula M.', DATE '2024-10-29', 'retirada no CRAS', 'CRAS Tijuca', 'PAULA MENDES', 'retirado', TRUE);
-    
+
     """

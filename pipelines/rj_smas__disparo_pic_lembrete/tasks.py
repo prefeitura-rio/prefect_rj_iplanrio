@@ -7,7 +7,7 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py.
 import json
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Tuple, Union
 
 import pandas as pd
 import pendulum
@@ -265,6 +265,7 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     log(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
+
 
 @task
 def check_if_dispatch_approved(
