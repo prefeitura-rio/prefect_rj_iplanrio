@@ -9,7 +9,6 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
 from pipelines.rj_smas__disparo_pic.tasks import (
     check_api_status,
     check_if_dispatch_approved,
@@ -31,6 +30,7 @@ from pipelines.rj_smas__disparo_pic.utils.tasks import (
     skip_flow_if_empty,
     task_download_data_from_bigquery,
 )
+from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
 
 
 @flow(log_prints=True)
