@@ -5,7 +5,6 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py.
 """
 
 import json
-import re
 from datetime import datetime
 from math import ceil
 from typing import Dict, List, Tuple, Union
