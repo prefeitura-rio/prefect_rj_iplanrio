@@ -70,14 +70,13 @@ def rj_smas__disparo_pic(
 
     billing_project_id = PicLembreteConstants.PIC_BILLING_PROJECT_ID.value
 
-    test_mode = True  # TODO: remove
     # Se test_mode ativado, usar query mock ao invés da query real
     if test_mode:
         query = PicLembreteConstants.PIC_QUERY_MOCK.value
         query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
         query_create_mock_tables = PicLembreteConstants.CREATE_MOCK_TABLES.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
-        df_create_mock_tables = task_download_data_from_bigquery(
+        task_download_data_from_bigquery(
             query=query_create_mock_tables,
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,

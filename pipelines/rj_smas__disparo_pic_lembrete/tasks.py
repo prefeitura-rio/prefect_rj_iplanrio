@@ -7,9 +7,10 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py.
 import json
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Tuple
 
 import pandas as pd
+import pendulum
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from pytz import timezone
@@ -264,3 +265,42 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     log(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
+
+@task
+def check_if_dispatch_approved(
+    dfr: pd.DataFrame,
+    dispatch_approved_col: str,
+    dispatch_date_col: str,
+    event_date_col: str,
+) -> Tuple[str, bool]:
+    if dfr.empty:
+        log("\nApproval dataframe is empty.")
+        return None, False
+
+    today_str = str(pendulum.today().date())
+    filtered_df = dfr[dfr[dispatch_date_col] == today_str]
+    log(f"Dispatch approval df for today: {filtered_df.head()}")
+
+    if filtered_df.empty:
+        log(f"\nNo dispatch approval found for today: {today_str}.")
+        return None, False
+
+    dispatch_status = filtered_df[dispatch_approved_col].iloc[0]
+
+    log(f"\nChecking dispatch approval for today ({today_str}): Status='{dispatch_status}'")
+
+    if dispatch_status == "aprovado":
+        event_date = filtered_df[event_date_col].astype(str).iloc[0]
+        log(f"\nDispatch approved for event day: {event_date}.")
+        return event_date, True
+
+    log(f"\nDispatch was not approved for today: {today_str}.")
+    return None, False
+
+
+@task
+def format_query(raw_query: str, event_date: str, id_hsm: int) -> str:
+    if event_date is None:
+        raise ValueError("event_date cannot be None when formatting query.")
+    formatted_query = raw_query.format(event_date_placeholder=event_date, id_hsm_placeholder=id_hsm)
+    return formatted_query
