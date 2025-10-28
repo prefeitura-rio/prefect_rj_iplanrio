@@ -36,10 +36,6 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
-
-
-
-
     schedules:
     # Exemplo de schedule overwrite
     - interval: 86400 # executa a cada 24h
@@ -213,8 +209,6 @@ deployments:
         table_id: fatores_rubricas														 # Nome da tabela no BigQuery
         execute_query: |
           select FATOR, RUBRICA from FATORES_RUBRICA;
-
-
 
   - name: rj-sma--contracheques--prod
     version: "{{ get-commit-hash.stdout }}"
