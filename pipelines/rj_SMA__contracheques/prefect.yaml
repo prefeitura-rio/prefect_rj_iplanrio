@@ -10,8 +10,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_SMA__contracheques-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_SMA__contracheques/Dockerfile
+      tag: "rj_sma__contracheques-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_sma__contracheques/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -26,13 +26,13 @@ pull:
 deployments:
   - name: rj-sma--contracheques--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_SMA__contracheques/flow.py:rj_SMA__contracheques
+    entrypoint: pipelines/rj_sma__contracheques/flow.py:rj_sma__contracheques
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_SMA__contracheques -- prefect flow-run execute
+        command: uv run --package rj_sma__contracheques -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 

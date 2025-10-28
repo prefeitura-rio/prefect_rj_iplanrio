@@ -6,6 +6,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
-COPY ./pipelines/rj_SMA__contracheques ./pipelines/rj_SMA__contracheques/
+COPY ./pipelines/rj_sma__contracheques ./pipelines/rj_sma__contracheques/
 
 RUN uv sync --all-packages
