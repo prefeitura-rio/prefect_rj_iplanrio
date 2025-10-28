@@ -59,7 +59,7 @@ deployments:
         table_id: fichas_vinculos # Nome da tabela no BigQuery
         execute_query: |
           select NUMFUNC, NUMVINC, MES_ANO_FOLHA, NUM_FOLHA, EMP_CODIGO, FICHA, NUMPENS from FICHAS_VINCULOS;
-      
+
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
@@ -85,7 +85,7 @@ deployments:
       parameters:
         table_id: vinculos # Nome da tabela no BigQuery
         execute_query: |
-          select NUMERO, NUMFUNC, EMP_CODIGO, MATRIC, DTEXERC, DTAPOSENT, REGIMEJUR, DTVAC from VINCULOS; 
+          select NUMERO, NUMFUNC, EMP_CODIGO, MATRIC, DTEXERC, DTAPOSENT, REGIMEJUR, DTVAC from VINCULOS;
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -138,7 +138,7 @@ deployments:
       slug: historico_dependentes		 # slug do schedule
       parameters:
         table_id: historico_dependentes		 # Nome da tabela no BigQuery
-        execute_query: 
+        execute_query:
           select NUMFUNC, INVALIDO, DTINI, DTFIM from HIST_DEPEN;
 
     - interval: 86400 # executa a cada 24h
@@ -147,7 +147,7 @@ deployments:
       slug: cargos				 # slug do schedule
       parameters:
         table_id: cargos				 # Nome da tabela no BigQuery
-        execute_query: 
+        execute_query:
           select NUMFUNC, CARGO, NOME from cargos;
 
     - interval: 86400 # executa a cada 24h
