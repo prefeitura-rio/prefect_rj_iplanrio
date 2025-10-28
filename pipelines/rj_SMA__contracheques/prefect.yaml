@@ -144,29 +144,29 @@ deployments:
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: cargos				 # slug do schedule
+      slug: cargos # slug do schedule
       parameters:
-        table_id: cargos				 # Nome da tabela no BigQuery
-        execute_query:
+        table_id: cargos # Nome da tabela no BigQuery
+        execute_query: |
           select NUMFUNC, CARGO, NOME from cargos;
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: provimentos_ev				 # slug do schedule
+      slug: provimentos_ev # slug do schedule
       parameters:
-        table_id: provimentos_ev				 # Nome da tabela no BigQuery
+        table_id: provimentos_ev # Nome da tabela no BigQuery
         execute_query: |
           select NUMFUNC, NUMVINC, DTINI, DTFIM, CARGO, SETOR, JORNADA from provimentos_ev;
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: iplanrio_mensagem_setor_cargo						 # slug do schedule
+      slug: iplanrio_mensagem_setor_cargo # slug do schedule
       parameters:
-        table_id: iplanrio_mensagem_setor_cargo						 # Nome da tabela no BigQuery
+        table_id: iplanrio_mensagem_setor_cargo # Nome da tabela no BigQuery
         execute_query: |
-         select MES_ANO_FOLHA, NUM_FOLHA, CARGO, SETOR, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_setcarg;
+          select MES_ANO_FOLHA, NUM_FOLHA, CARGO, SETOR, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_setcarg;
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
