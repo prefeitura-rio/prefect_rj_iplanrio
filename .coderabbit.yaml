@@ -145,11 +145,11 @@ reviews:
 
   # Path Instructions - Provide specific additional guidelines for code review based on file paths.
   # Default: []
-  path_instructions:    
+  path_instructions:
     - path: "**/pipelines/**/flow.py"
       instructions: |
         "ALWAYS review Prefect flow files THOROUGHLY with the following criteria:
-        
+
         FOR INGESTION FLOWS (flows that dump database to BigQuery):
         - MUST import and use format_partitioned_query_task and dump_upload_batch_task from iplanrio.pipelines_templates.dump_db.tasks
         - MUST have add_timestamp_column parameter set to True by default
@@ -161,12 +161,12 @@ reviews:
         - MUST have proper docstring explaining the flow purpose
         - MUST use @flow(log_prints=True) decorator
         - MUST pass all required parameters to dump_upload_batch_task including secrets, database connection details, and configuration options
-        
+
         FOR NON-INGESTION FLOWS (flows with custom data processing):
         - These flows do NOT need to follow the ingestion flow requirements above
         - Should have clear documentation explaining their specific purpose
         - Should follow general Prefect best practices for flow design
-        
+
         GENERAL REQUIREMENTS FOR ALL FLOWS:
         - Ensure proper imports are organized and necessary
         - Verify all task calls have correct parameter names and types
@@ -175,25 +175,25 @@ reviews:
         - Verify flow follows naming conventions (rj_{secretaria}__{pipeline})
         - Check that all referenced tasks actually exist and are properly imported
         "
-    
+
     - path: "**/pipelines/**/prefect.yaml"
       instructions: |
         "ALWAYS review Prefect deployment YAML files THOROUGHLY with the following criteria:
-        
+
         GENERAL STRUCTURE:
         - MUST have proper YAML syntax and indentation
         - MUST define both staging and prod deployments
         - MUST use k3s-pool as work_pool name (suggest changing from datario-pool if found)
         - MUST have proper build, push, and pull steps configured
         - MUST use correct image naming convention with commit hash tags
-        
+
         DEPLOYMENT CONFIGURATION:
         - Staging deployment MUST NOT have schedules defined
         - Prod deployment MUST have schedules defined for ingestion flows
         - Both deployments MUST use secretName: prefect-jobs-secrets
         - Both deployments MUST use image_pull_policy: Always
         - Entrypoint MUST follow pattern: pipelines/rj_{secretaria}__{pipeline}/flow.py:rj_{secretaria}__{pipeline}
-        
+
         FOR OVERWRITE SCHEDULES (dump_mode: overwrite):
         - MUST have interval: 86400 (24 hours)
         - MUST have anchor_date in UTC format (e.g., '2022-01-01T01:00:00')
@@ -205,7 +205,7 @@ reviews:
         - SQL query MUST be properly formatted with correct indentation
         - SQL query MUST use proper SELECT syntax (no SELECT * unless justified)
         - SQL query MUST reference actual database.table_name structure
-        
+
         FOR INCREMENTAL SCHEDULES (dump_mode: append):
         - MUST have interval: 86400 (24 hours)
         - MUST have anchor_date in UTC format (e.g., '2022-01-01T02:32:00')
@@ -222,7 +222,7 @@ reviews:
         - SQL query MUST be properly formatted with correct indentation
         - SQL query MUST use proper SELECT syntax (no SELECT * unless justified)
         - SQL query MUST reference actual database.table_name structure
-        
+
         SCHEDULE VALIDATION:
         - Verify that all schedule parameters match the flow function parameters
         - Check that SQL queries are syntactically correct
