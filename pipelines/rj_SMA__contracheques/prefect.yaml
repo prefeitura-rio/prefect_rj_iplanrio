@@ -72,15 +72,6 @@ deployments:
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: folhas_emp # slug do schedule
-      parameters:
-        table_id: folhas_emp # Nome da tabela no BigQuery
-        execute_query: |
-          select NUMFUNC, NUMVINC, MES_ANO_FOLHA, NUM_FOLHA, EMP_CODIGO, FICHA, NUMPENS from FICHAS_VINCULOS;
-
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
       slug: fitabanco # slug do schedule
       parameters:
         table_id: fitabanco # Nome da tabela no BigQuery
