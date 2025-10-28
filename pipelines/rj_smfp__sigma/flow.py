@@ -16,6 +16,7 @@ from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 
+
 @flow(log_prints=True)
 def rj_smfp__sigma(
     db_database: str = "CP01.SMF",
