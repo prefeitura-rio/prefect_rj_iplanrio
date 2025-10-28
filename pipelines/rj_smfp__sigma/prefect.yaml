@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smfp__sigma/flow.py:rj_smfp__sigma
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -36,11 +36,22 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
+    schedules:
+      - interval: 86400
+        anchor_date: '2025-07-15T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: classe
+        parameters:
+          table_id: classe
+          dump_mode: overwrite
+          execute_query: |
+            SELECT CD_GRUPO, CD_CLASSE, DS_CLASSE, ST_STATUS  FROM SIGMA.VW_CLASSE
+
   - name: rj-smfp--sigma--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smfp__sigma/flow.py:rj_smfp__sigma
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
