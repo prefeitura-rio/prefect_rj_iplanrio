@@ -1,4 +1,4 @@
 [project]
-name = "rj_SMA__contracheques"
+name = "rj_sma__contracheques"
 version = "0.1.0"
 description = "Pipeline contracheques da secretaria SMA"

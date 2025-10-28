@@ -17,7 +17,7 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_SMA__contracheques(
+def rj_sma__contracheques(
     db_database: str = "H01.SMF",
     db_host: str = "srv000251.infra.rio.gov.br",
     db_port: str = "1521",
