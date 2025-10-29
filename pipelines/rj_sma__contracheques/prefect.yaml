@@ -204,9 +204,9 @@ deployments:
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: fatores_rubricas														 # slug do schedule
+      slug: fatores_rubricas # slug do schedule
       parameters:
-        table_id: fatores_rubricas														 # Nome da tabela no BigQuery
+        table_id: fatores_rubricas # Nome da tabela no BigQuery
         execute_query: |
           select FATOR, RUBRICA from FATORES_RUBRICA;
 
