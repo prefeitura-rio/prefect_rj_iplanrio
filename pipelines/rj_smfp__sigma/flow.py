@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY....
+This flow is used to dump the database to the BIGQUERY
 """
 
 from typing import Optional
@@ -17,16 +17,16 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_pgm__divida_ativa(
-    db_database: str = "DAM_PRD",
-    db_host: str = "10.2.221.127",
-    db_port: str = "1433",
-    db_type: str = "sql_server",
+def rj_smfp__sigma(
+    db_database: str = "CP01.SMF",
+    db_host: str = "10.90.31.22",
+    db_port: str = "1521",
+    db_type: str = "oracle",
     db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "brutos_divida_ativa",
+    dataset_id: str = "brutos_compras_materiais_servicos_sigma",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-divida-ativa",
+    infisical_secret_path: str = "/db-sigma",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
@@ -34,7 +34,7 @@ def rj_pgm__divida_ativa(
     break_query_frequency: Optional[str] = None,
     break_query_start: Optional[str] = None,
     break_query_end: Optional[str] = None,
-    retry_dump_upload_attempts: int = 3,
+    retry_dump_upload_attempts: int = 2,
     batch_size: int = 50000,
     batch_data_type: str = "csv",
     biglake_table: bool = True,
