@@ -149,7 +149,6 @@ deployments:
                 DATA_DESPACHO, DATA_SAIDA, ORG_ORIGEM, ORG_DESTINO, ORG_TRANSCRITOR
             FROM SICOP.VW_TRAMITACAO_PROCESSO_DLK
 
-<<<<<<< HEAD
       - interval: 86400
         anchor_date: '2025-07-20T05:01:00'
         timezone: America/Sao_Paulo
@@ -213,14 +212,4 @@ deployments:
           dump_mode: overwrite
           execute_query: |
             SELECT IDENT,SEQ_REM,SEQ,DESCRICAO FROM SICOP.VW_DESPACHO_DLK
-=======
-  - interval: 86400
-    anchor_date: '2025-07-15T01:01:00'
-    timezone: America/Sao_Paulo
-    slug: localiza_processo
-    parameters:
-      table_id: localiza_processo
-      dump_mode: overwrite
-      execute_query: |
-        SELECT NUM_PROCESSO, LOCALIZACAO_PROCESSO FROM SICOP.VW_LOCALIZA_PROCESSO_DLK
->>>>>>> 55f91d0 (incluir a tabela localiza_processo)
+
