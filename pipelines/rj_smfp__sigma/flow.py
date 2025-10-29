@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the CVL server to the BIGQUERY.
+This flow is used to dump the database to the BIGQUERY
 """
 
 from typing import Optional
@@ -17,16 +17,16 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_cvl__osinfo(  # noqa
-    db_database: str = "osinfo_V2",
-    db_host: str = "10.70.4.188",
-    db_port: str = "3306",
-    db_type: str = "mysql",
-    db_charset: Optional[str] = "utf8",
+def rj_smfp__sigma(
+    db_database: str = "CP01.SMF",
+    db_host: str = "10.90.31.22",
+    db_port: str = "1521",
+    db_type: str = "oracle",
+    db_charset: Optional[str] = "NOT_SET",
     execute_query: str = "execute_query",
-    dataset_id: str = "brutos_osinfo",
+    dataset_id: str = "brutos_compras_materiais_servicos_sigma",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db-osinfo",
+    infisical_secret_path: str = "/db-sigma",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
@@ -40,7 +40,7 @@ def rj_cvl__osinfo(  # noqa
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
     max_concurrency: int = 1,
-    only_staging_dataset: bool = True,
+    only_staging_dataset: bool = False,
     add_timestamp_column: bool = True,
 ):
     rename_current_flow_run_task(new_name=table_id)

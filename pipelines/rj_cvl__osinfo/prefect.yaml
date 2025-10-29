@@ -295,8 +295,17 @@ deployments:
         timezone: America/Sao_Paulo
         slug: contrato_processo_instrutivo
         parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
           table_id: contrato_processo_instrutivo
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT  `ID_CONTRATO`, `COD_ORGAO`, `PROCESSO_INSTRUTIVO`, `COD_UNIDADE` FROM `osinfo`.`contrato_processo_instrutivo`
 
@@ -305,8 +314,17 @@ deployments:
         timezone: America/Sao_Paulo
         slug: bem_patrimoniado
         parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
           table_id: bem_patrimoniado
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
               `ID_BEM`,
@@ -338,8 +356,17 @@ deployments:
         timezone: America/Sao_Paulo
         slug: bem_patrimoniado_tipo
         parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
           table_id: bem_patrimoniado_tipo
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
               `ID_BEM_TIPO`,
@@ -353,8 +380,17 @@ deployments:
         timezone: America/Sao_Paulo
         slug: contrato_resumo_cronograma
         parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
           table_id: contrato_resumo_cronograma
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
               `ID_CONTRATO_MES`,
@@ -369,8 +405,17 @@ deployments:
         timezone: America/Sao_Paulo
         slug: termo_aditivo
         parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
           table_id: termo_aditivo
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
               `ID_TERMO_ADITIVO`,
@@ -397,8 +442,17 @@ deployments:
         timezone: America/Sao_Paulo
         slug: termo_aditivo_resumo_cronograma
         parameters:
+          db_type: mysql
+          db_database: osinfo
+          db_host: 10.70.4.188
+          db_port: 3306
+          dataset_id: adm_contrato_gestao
+          infisical_secret_path: /db-osinfo
+          biglake_table: true
+          batch_size: 50000
           table_id: termo_aditivo_resumo_cronograma
           dump_mode: overwrite
+          materialize_after_dump: true
           execute_query: |
             SELECT
               `ID_TERMO_ADITIVO_MES`,
@@ -406,17 +460,3 @@ deployments:
               `MES`,
               `VALOR`
             FROM `osinfo`.`termo_aditivo_mes`;
-
-      - interval: 86400
-        anchor_date: '2025-07-15T05:10:00'
-        timezone: America/Sao_Paulo
-        slug: tipo_entrega
-        parameters:
-          table_id: tipo_entrega
-          dump_mode: overwrite
-          execute_query: |
-            SELECT
-              `tiet_cd_tipo_entrega`,
-              `tiet_ds_tipo_entrega`,
-              `tiet_tabela_tipo_entrega`
-            FROM `osinfo_V2`.`tb_tipo_entrega`;
