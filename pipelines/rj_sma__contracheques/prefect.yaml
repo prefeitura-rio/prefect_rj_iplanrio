@@ -186,18 +186,18 @@ deployments:
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: iplanrio_mensagem_externo												 # slug do schedule
+      slug: iplanrio_mensagem_externo # slug do schedule
       parameters:
-        table_id: iplanrio_mensagem_externo												 # Nome da tabela no BigQuery
+        table_id: iplanrio_mensagem_externo # Nome da tabela no BigQuery
         execute_query: |
           select NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_ext;
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: dependentes												 # slug do schedule
+      slug: dependentes # slug do schedule
       parameters:
-        table_id: dependentes												 # Nome da tabela no BigQuery
+        table_id: dependentes # Nome da tabela no BigQuery
         execute_query: |
           select NUMERO, NUMFUNC, CPF, NOME from dependentes;
 
