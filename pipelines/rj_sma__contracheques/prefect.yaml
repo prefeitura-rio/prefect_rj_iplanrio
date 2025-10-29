@@ -134,7 +134,7 @@ deployments:
       slug: historico_dependentes		 # slug do schedule
       parameters:
         table_id: historico_dependentes		 # Nome da tabela no BigQuery
-        execute_query:
+        execute_query: | 
           select NUMFUNC, INVALIDO, DTINI, DTFIM from HIST_DEPEN;
 
     - interval: 86400 # executa a cada 24h
