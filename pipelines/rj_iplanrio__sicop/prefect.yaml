@@ -157,4 +157,4 @@ deployments:
       table_id: localiza_processo
       dump_mode: overwrite
       execute_query: |
-        SELECT NUM_PROCESSO, LOCALIZACAO_PROCESSO FROM SICOP.VW_LOCALIZA_PROCESSO_DLK
+        SELECT NUM_PROCESSO, LOCALIZA_PROCESSO FROM SICOP.VW_LOCALIZA_PROCESSO_DLK
