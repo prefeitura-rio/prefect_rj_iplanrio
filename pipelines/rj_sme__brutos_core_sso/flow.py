@@ -34,7 +34,7 @@ def rj_sme__brutos_core_sso(
     break_query_frequency: Optional[str] = None,
     break_query_start: Optional[str] = None,
     break_query_end: Optional[str] = None,
-    retry_dump_upload_attempts: int = 1,
+    retry_dump_upload_attempts: int = 2,
     batch_size: int = 50000,
     batch_data_type: str = "csv",
     biglake_table: bool = True,
