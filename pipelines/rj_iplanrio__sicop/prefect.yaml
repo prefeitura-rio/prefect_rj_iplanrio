@@ -148,3 +148,13 @@ deployments:
             SELECT NUM_PROCESSO, SEQ, NUM_GUIA, MAT_DESPACHO, MAT_LOGADO, MAT_RECEBEDOR, COD_DESPACHO,
                 DATA_DESPACHO, DATA_SAIDA, ORG_ORIGEM, ORG_DESTINO, ORG_TRANSCRITOR
             FROM SICOP.VW_TRAMITACAO_PROCESSO_DLK
+
+      - interval: 86400
+        anchor_date: '2025-07-20T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: localiza_processo
+        parameters:
+          table_id: localiza_processo
+          dump_mode: overwrite
+          execute_query: |
+            SELECT NUM_PROCESSO, LOCALIZA_PROCESSO FROM SICOP.VW_LOCALIZA_PROCESSO_DLK
