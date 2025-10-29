@@ -131,10 +131,10 @@ deployments:
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: historico_dependentes	# slug do schedule
+      slug: historico_dependentes # slug do schedule
       parameters:
-        table_id: historico_dependentes	# Nome da tabela no BigQuery
-        execute_query: | 
+        table_id: historico_dependentes # Nome da tabela no BigQuery
+        execute_query: |
           select NUMFUNC, INVALIDO, DTINI, DTFIM from hist_depen;
 
     - interval: 86400 # executa a cada 24h
@@ -167,18 +167,18 @@ deployments:
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: iplanrio_mensagem_prefixo										 # slug do schedule
+      slug: iplanrio_mensagem_prefixo # slug do schedule
       parameters:
-        table_id: iplanrio_mensagem_prefixo										 # Nome da tabela no BigQuery
+        table_id: iplanrio_mensagem_prefixo # Nome da tabela no BigQuery
         execute_query: |
           select PREFIXO, NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_prefixo;
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: iplanrio_registro_prefixo										 # slug do schedule
+      slug: iplanrio_registro_prefixo # slug do schedule
       parameters:
-        table_id: iplanrio_registro_prefixo										 # Nome da tabela no BigQuery
+        table_id: iplanrio_registro_prefixo # Nome da tabela no BigQuery
         execute_query: |
           select NUMFUNC, NUMVINC, MESANO, PREFIXO from IPL_PREFIXOS;
 
