@@ -129,6 +129,9 @@ def execute_dbt(
             command_args.extend(["--state", state])
         if flag:
             command_args.extend([flag])
+    elif command == "retry":
+        command_args = ["retry"]
+        command_args.extend(["--state", state])
 
     log(f"Executing dbt command: {' '.join(command_args)}", level="info")
 
