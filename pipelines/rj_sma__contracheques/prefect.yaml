@@ -125,7 +125,7 @@ deployments:
       slug: dependencias # slug do schedule
       parameters:
         table_id: dependencias # Nome da tabela no BigQuery
-        execute_query: | 
+        execute_query: |
           select NUMFUNC, TIPODEPEN, DTINI, DTFIM from dependencias;
 
     - interval: 86400 # executa a cada 24h
@@ -143,7 +143,7 @@ deployments:
       slug: cargos # slug do schedule
       parameters:
         table_id: cargos # Nome da tabela no BigQuery
-        execute_query: | 
+        execute_query: |
           select NUMFUNC, CARGO, NOME from cargos;
 
     - interval: 86400 # executa a cada 24h
@@ -152,7 +152,7 @@ deployments:
       slug: provimentos_ev # slug do schedule
       parameters:
         table_id: provimentos_ev # Nome da tabela no BigQuery
-        execute_query: | 
+        execute_query: |
           select NUMFUNC, NUMVINC, DTINI, DTFIM, CARGO, SETOR, JORNADA from provimentos_ev;
 
     - interval: 86400 # executa a cada 24h
