@@ -4,6 +4,7 @@
 """
 Dispatch Flow for agendamento cadunico
 """
+from math import ceil
 import os
 import time
 
