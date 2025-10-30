@@ -1,0 +1,4 @@
+[project]
+name = "rj_sme__brutos_gestao_creche"
+version = "0.1.0"
+description = "Pipeline brutos_gestao_creche da secretaria sme"
