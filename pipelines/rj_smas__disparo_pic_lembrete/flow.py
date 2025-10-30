@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+"""
+Dispatch Flow for pic
+"""
 import os
 import time
 from math import ceil
@@ -9,27 +13,34 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
+# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_pic.tasks import (
-    check_api_status,
     check_if_dispatch_approved,
+    format_query,
+)
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.dispatch import (
+    check_api_status,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
-    format_query,
     get_destinations,
-    printar,
     remove_duplicate_phones,
 )
-from pipelines.rj_smas__disparo_pic.utils.discord import (
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
-from pipelines.rj_smas__disparo_pic.utils.tasks import (
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
+    printar,
     skip_flow_if_empty,
     task_download_data_from_bigquery,
 )
+# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
 
 

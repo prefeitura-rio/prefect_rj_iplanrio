@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-# flake8: noqa:E501
-# pylint: disable='line-too-long'
 """
 Constantes específicas para pipeline CadÚnico SMAS
 """
@@ -8,34 +6,34 @@ Constantes específicas para pipeline CadÚnico SMAS
 from enum import Enum
 
 
-class CadunicoConstants(Enum):
+class TemplateConstants(Enum):
     """
     Constantes para o pipeline de disparo CadÚnico SMAS
     """
 
     # HSM Template ID para mensagens CadÚnico
-    CADUNICO_ID_HSM = 101
+    ID_HSM = 101
 
     # Nome da campanha
-    CADUNICO_CAMPAIGN_NAME = "smas-lembretecadunico-prod"
+    CAMPAIGN_NAME = "smas-lembretecadunico-prod"
 
     # Cost Center ID
-    CADUNICO_COST_CENTER_ID = 4
+    COST_CENTER_ID = 4
 
     # Billing Project ID
-    CADUNICO_BILLING_PROJECT_ID = "rj-crm-registry"
+    BILLING_PROJECT_ID = "rj-crm-registry"
 
     # Query processor name
-    CADUNICO_QUERY_PROCESSOR_NAME = ""
+    QUERY_PROCESSOR_NAME = ""
 
     # Configurações de dataset
-    CADUNICO_DATASET_ID = "brutos_cadunico"
-    CADUNICO_TABLE_ID = "disparos"
-    CADUNICO_DUMP_MODE = "append"
-    CADUNICO_CHUNK_SIZE = 1000
+    DATASET_ID = "brutos_cadunico"
+    TABLE_ID = "disparos"
+    DUMP_MODE = "append"
+    CHUNK_SIZE = 1000
 
     # Query principal do CadÚnico
-    CADUNICO_QUERY = r"""
+    QUERY = r"""
         SELECT
             TO_JSON_STRING(STRUCT(
                 REGEXP_REPLACE(telefone, r'[^\d]', '') as celular_disparo,

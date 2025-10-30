@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
 """
 Tasks migradas do template disparo do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
 Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
@@ -10,12 +12,14 @@ from math import ceil
 from typing import Dict, List, Union
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
-from prefect import task
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from prefect import task  # pylint: disable=E0611, E0401
 from pytz import timezone
 
-from pipelines.rj_smas__disparo_cadunico.utils.tasks import task_download_data_from_bigquery
-from pipelines.rj_smas__disparo_cadunico.validators import (
+from pipelines.rj_smas__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.tasks import task_download_data_from_bigquery  # pylint: disable=E0611, E0401
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.validators import (
     log_validation_summary,
     validate_destinations,
     validate_dispatch_payload,
@@ -174,12 +178,6 @@ def check_api_status(api: object) -> bool:
 
 
 @task
-def printar(text):
-    """exibe o texto passado como parâmetro"""
-    log(f"Printando {text}")
-
-
-@task
 def get_destinations(
     destinations: Union[None, List[str]],
     query: str,
@@ -198,8 +196,6 @@ def get_destinations(
         # Apply query processor if name provided
         final_query = query
         if query_processor_name:
-            from pipelines.rj_smas__disparo_cadunico.processors import get_query_processor
-
             processor_func = get_query_processor(query_processor_name)
             if processor_func:
                 log(f"Applying query processor: {query_processor_name}")

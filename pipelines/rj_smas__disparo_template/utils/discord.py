@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+
 """
 Módulo de notificações Discord para pipeline de disparo PIC lembrete.
 """
 
 import asyncio
+import json
 import os
 
-import aiohttp
-from discord import Webhook
-from iplanrio.pipelines_utils.logging import log
+import aiohttp  # pylint: disable=E0611, E0401
+from discord import Webhook  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.tasks import (
+    download_data_from_bigquery,
+)
 
 
 async def _send_discord_webhook(webhook_url: str, message: str):
@@ -26,8 +35,8 @@ async def _send_discord_webhook(webhook_url: str, message: str):
         webhook = Webhook.from_url(webhook_url, session=session)
         try:
             await webhook.send(content=message)
-        except Exception as e:
-            raise ValueError(f"Error sending message to Discord webhook: {e}")
+        except Exception as error:
+            raise ValueError(f"Error sending message to Discord webhook: {error}")
 
 
 def send_dispatch_success_notification(
@@ -87,8 +96,8 @@ def send_dispatch_success_notification(
     try:
         asyncio.run(_send_discord_webhook(webhook_url, message))
         log("Discord notification sent successfully")
-    except Exception as e:
-        log(f"Failed to send Discord notification: {e}", level="error")
+    except Exception as error:
+        log(f"Failed to send Discord notification: {error}", level="error")
 
 
 def send_dispatch_result_notification(
@@ -117,9 +126,6 @@ def send_dispatch_result_notification(
         sample_destination: Exemplo de destinatário (opcional, não usado aqui)
         test_mode: Indica se é um disparo de teste (opcional)
     """
-    from pipelines.rj_smas__disparo_pic_lembrete.utils.tasks import (
-        download_data_from_bigquery,
-    )
 
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
 
@@ -178,7 +184,7 @@ def send_dispatch_result_notification(
 🕐 **Disparo realizado em:** {dispatch_date}
 📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
-**Status dos Disparos (últimas 3 horas):**
+**Status dos Disparos:**
 """
 
         # Adicionar resultados da query formatados
@@ -198,8 +204,8 @@ def send_dispatch_result_notification(
         asyncio.run(_send_discord_webhook(webhook_url, message))
         log("Discord results notification sent successfully")
 
-    except Exception as e:
-        log(f"Failed to send Discord results notification: {e}", level="error")
+    except Exception as error:
+        log(f"Failed to send Discord results notification: {error}", level="error")
 
 
 def _format_sample_destination(destination: dict) -> str:
@@ -212,7 +218,6 @@ def _format_sample_destination(destination: dict) -> str:
     Returns:
         String formatada em JSON
     """
-    import json
 
     # Create a clean sample with only relevant fields
     sample = {

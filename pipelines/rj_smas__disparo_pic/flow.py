@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-# noqa: flake8=E501
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+"""
+Flow para o disparo do cartão pic
+"""
 import os
 import time
 from math import ceil
@@ -11,23 +15,25 @@ from prefect import flow
 
 from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 from pipelines.rj_smas__disparo_pic.tasks import (
-    check_api_status,
     check_if_dispatch_approved,
+    format_query,
+)
+from pipelines.rj_smas__disparo_template.utils.dispatch import (
+    check_api_status,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
-    format_query,
     get_destinations,
-    printar,
     remove_duplicate_phones,
 )
-from pipelines.rj_smas__disparo_pic.utils.discord import (
+from pipelines.rj_smas__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
-from pipelines.rj_smas__disparo_pic.utils.tasks import (
+from pipelines.rj_smas__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
+    printar,
     skip_flow_if_empty,
     task_download_data_from_bigquery,
 )

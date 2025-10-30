@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
 """
 Custom query processors for disparo template - migrado do Prefect 1.4
 Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/processors.py
@@ -7,9 +9,9 @@ Registry of functions that process queries at runtime
 
 from datetime import datetime
 
-from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
+from pipelines.rj_smas__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 
 
 def process_cadunico_query(query: str = None) -> str:
@@ -28,7 +30,7 @@ def process_cadunico_query(query: str = None) -> str:
     """
     # Use query from constants if none provided
     if query is None:
-        query = CadunicoConstants.CADUNICO_QUERY.value
+        query = TemplateConstants.QUERY.value
 
     if "{days_ahead}" not in query:
         raise ValueError("Query must contain {days_ahead} placeholder for dynamic substitution")
@@ -54,7 +56,7 @@ def process_cadunico_query(query: str = None) -> str:
         days_ahead = 2
         log(f"CADUNICO: Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
 
-    hsm_id = CadunicoConstants.CADUNICO_ID_HSM.value
+    hsm_id = TemplateConstants.ID_HSM.value
     formatted_query = query.format(days_ahead=int(days_ahead), hsm_id=str(hsm_id))
     print(formatted_query)
     return formatted_query

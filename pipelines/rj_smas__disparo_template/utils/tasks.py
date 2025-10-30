@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
 """
 Utility tasks for prefect_rj_iplanrio pipelines
 Migrated and adapted from pipelines_rj_crm_registry
@@ -15,12 +17,12 @@ import pandas as pd
 # import seaborn as sns
 from basedosdados import Base  # pylint: disable=E0611, E0401
 from google.cloud import bigquery  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.env import getenv_or_action
+from iplanrio.pipelines_utils.env import getenv_or_action  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
-from prefect import task
-from prefect.exceptions import PrefectException
+from prefect import task  # pylint: disable=E0611, E0401
+from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_cadunico.utils.api_handler import ApiHandler
+from pipelines.rj_smas__disparo_template.utils.api_handler import ApiHandler  # pylint: disable=E0611, E0401
 
 
 @task
@@ -205,3 +207,9 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
     dfr = results.to_dataframe()
     log("End download data from bigquery")
     return dfr
+
+
+@task
+def printar(text):
+    """exibe o texto passado como parâmetro"""
+    log(f"Printando {text}")
