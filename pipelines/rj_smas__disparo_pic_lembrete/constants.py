@@ -141,14 +141,14 @@ class PicLembreteConstants(Enum):
     PIC_QUERY_DISPATCH_APPROVED = r"""
       SELECT *
       FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
-      WHERE 
+      WHERE
         lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
         AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
     """
 
     PIC_QUERY_MOCK_DISPATCH_APPROVED = r"""
       select * from `rj-crm-registry-dev.brutos_wetalkie_staging.aprovacao_evento`
-      WHERE 
+      WHERE
         lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
         AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
     """
