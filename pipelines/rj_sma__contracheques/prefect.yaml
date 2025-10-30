@@ -45,7 +45,7 @@ deployments:
       parameters:
         table_id: folhas_emp # Nome da tabela no BigQuery
         execute_query: |
-          select NUMERO, MES_ANO, TIPO_FOLHA, EMP_CODIGO, DATA_CONSOLIDADA from FOLHAS_EMP
+          select NUMERO, MES_ANO, TIPO_FOLHA, EMP_CODIGO, DATA_CONSOL from FOLHAS_EMP
     # Exemplo de schedule incremental
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -144,7 +144,7 @@ deployments:
       parameters:
         table_id: cargos # Nome da tabela no BigQuery
         execute_query: |
-          select NUMFUNC, CARGO, NOME from cargos
+          select  CARGO, NOME from cargos_
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
