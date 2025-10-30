@@ -98,7 +98,7 @@ def rj_smas__disparo_pic(
     )
 
     event_date, dispatch_approved = check_if_dispatch_approved(
-        df_dispatch_approved, dispatch_approved_col, dispatch_date_col, event_date_col
+        df_dispatch_approved, dispatch_approved_col, event_date_col
     )
 
     if dispatch_approved:

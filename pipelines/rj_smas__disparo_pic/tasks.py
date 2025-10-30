@@ -277,34 +277,36 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
 def check_if_dispatch_approved(
     dfr: pd.DataFrame,
     dispatch_approved_col: str,
-    dispatch_date_col: str,
     event_date_col: str,
 ) -> Tuple[str, bool]:
     if dfr.empty:
-        log("\nApproval dataframe is empty.")
+        log("\n⚠️  Approval dataframe is empty.")
         return None, False
 
-    log_this = dfr.dropna(subset=["dispatch_date_col"]).sort_values("dispatch_date_col").iloc[0]
-    log(f"df: {log_this}")
-    log(type(dfr.dispatch_date_col))
-    today_str = str(pendulum.today().date())
-    filtered_df = dfr[dfr[dispatch_date_col] == today_str]
-    log(f"Dispatch approval df for today {today_str}: {filtered_df.head()}")
+    log(f"Dataframe for today: {dfr.iloc[0]}")
 
-    if filtered_df.empty:
-        log(f"\nNo dispatch approval found for today: {today_str}.")
+    normalized_status_col = (
+        dfr[dispatch_approved_col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    if normalized_status_col.empty:
+        log("\n⚠️  No valid values found in dispatch approval column.")
         return None, False
 
-    dispatch_status = filtered_df[dispatch_approved_col].iloc[0]
+    dispatch_status = normalized_status_col.sort_values().iloc[0]
 
-    log(f"\nChecking dispatch approval for today ({today_str}): Status='{dispatch_status}'")
+    log(f"\nChecking dispatch approval for today: Status='{dispatch_status}'")
 
     if dispatch_status == "aprovado":
-        event_date = filtered_df[event_date_col].astype(str).iloc[0]
-        log(f"\nDispatch approved for event day: {event_date}.")
+        event_date = dfr[event_date_col].astype(str).iloc[0]
+        log(f"\n✅  Dispatch approved for event day: {event_date}.")
         return event_date, True
 
-    log(f"\nDispatch was not approved for today: {today_str}.")
+    log("\n⚠️  Dispatch was not approved for today.")
     return None, False
 
 

@@ -140,17 +140,23 @@ class PicLembreteConstants(Enum):
     EVENT_DATE_COL = "DATA_ENTREGA"  # columns with the event date (date to get the PIC)
 
     PIC_QUERY_DISPATCH_APPROVED = r"""
-      select * from `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+      SELECT *
+      FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+      WHERE 
+        lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
+        AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
     """
 
     PIC_QUERY_MOCK_DISPATCH_APPROVED = r"""
       select * from `rj-crm-registry-dev.brutos_wetalkie_staging.aprovacao_evento`
+      WHERE 
+        lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
+        AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
     """
 
     # Query mock para testes rápidos (não dispara para base real)
     PIC_QUERY_MOCK = r"""
         WITH config AS (
-        -- select date('2026-11-28') AS target_date
         select date('{event_date_placeholder}') AS target_date
         ),
         agendamentos_unicos AS (
