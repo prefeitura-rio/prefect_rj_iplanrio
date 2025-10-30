@@ -7,9 +7,10 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py.
 import json
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import pandas as pd
+import pendulum
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from pytz import timezone
@@ -217,6 +218,8 @@ def get_destinations(
             bucket_name=billing_project_id,
         )
         log(f"response from query {destinations.head()}")
+        # TODO: flow quebra na prox linha se query não retorna ngm
+        # separar a query do get destinations e verificar se tem retorno da query
         destinations = destinations.iloc[:, 0].tolist()
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
@@ -268,3 +271,48 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     log(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
+
+
+@task
+def check_if_dispatch_approved(
+    dfr: pd.DataFrame,
+    dispatch_approved_col: str,
+    event_date_col: str,
+) -> Tuple[str, bool]:
+    if dfr.empty:
+        log("\n⚠️  Approval dataframe is empty.")
+        return None, False
+
+    log(f"Dataframe for today: {dfr.iloc[0]}")
+
+    normalized_status_col = (
+        dfr[dispatch_approved_col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    if normalized_status_col.empty:
+        log("\n⚠️  No valid values found in dispatch approval column.")
+        return None, False
+
+    dispatch_status = normalized_status_col.sort_values().iloc[0]
+
+    log(f"\nChecking dispatch approval for today: Status='{dispatch_status}'")
+
+    if dispatch_status == "aprovado":
+        event_date = dfr[event_date_col].astype(str).iloc[0]
+        log(f"\n✅  Dispatch approved for event day: {event_date}.")
+        return event_date, True
+
+    log("\n⚠️  Dispatch was not approved for today.")
+    return None, False
+
+
+@task
+def format_query(raw_query: str, event_date: str, id_hsm: int) -> str:
+    if event_date is None:
+        raise ValueError("event_date cannot be None when formatting query.")
+    formatted_query = raw_query.format(event_date_placeholder=event_date, id_hsm_placeholder=id_hsm)
+    return formatted_query
