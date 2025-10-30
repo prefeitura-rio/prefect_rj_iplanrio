@@ -284,9 +284,12 @@ def check_if_dispatch_approved(
         log("\nApproval dataframe is empty.")
         return None, False
 
+    log_this = dfr.dropna(subset=["dispatch_date_col"]).sort_values("dispatch_date_col").iloc[0]
+    log(f"df: {log_this}")
+    log(type(dfr.dispatch_date_col))
     today_str = str(pendulum.today().date())
     filtered_df = dfr[dfr[dispatch_date_col] == today_str]
-    log(f"Dispatch approval df for today: {filtered_df.head()}")
+    log(f"Dispatch approval df for today {today_str}: {filtered_df.head()}")
 
     if filtered_df.empty:
         log(f"\nNo dispatch approval found for today: {today_str}.")
