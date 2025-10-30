@@ -45,7 +45,7 @@ deployments:
       parameters:
         table_id: folhas_emp # Nome da tabela no BigQuery
         execute_query: |
-          select NUMERO, MES_ANO, TIPO_FOLHA, EMP_CODIGO, DATA_CONSOLIDADA from FOLHAS_EMP;
+          select NUMERO, MES_ANO, TIPO_FOLHA, EMP_CODIGO, DATA_CONSOLIDADA from FOLHAS_EMP
     # Exemplo de schedule incremental
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -54,7 +54,7 @@ deployments:
       parameters:
         table_id: fichas_vinculos # Nome da tabela no BigQuery
         execute_query: |
-          select NUMFUNC, NUMVINC, MES_ANO_FOLHA, NUM_FOLHA, EMP_CODIGO, FICHA, NUMPENS from FICHAS_VINCULOS;
+          select NUMFUNC, NUMVINC, MES_ANO_FOLHA, NUM_FOLHA, EMP_CODIGO, FICHA, NUMPENS from FICHAS_VINCULOS
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -63,7 +63,7 @@ deployments:
       parameters:
         table_id: fichas_rubricas # Nome da tabela no BigQuery
         execute_query: |
-          select RUBRICA, FICHA, LINHA, VALOR, DESC_VANT, COMPLEMENTO, MES_ANO_DIREITO, INFO from FICHAS_RUBRICAS;
+          select RUBRICA, FICHA, LINHA, VALOR, DESC_VANT, COMPLEMENTO, MES_ANO_DIREITO, INFO from FICHAS_RUBRICAS
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -72,7 +72,7 @@ deployments:
       parameters:
         table_id: fitabanco # Nome da tabela no BigQuery
         execute_query: |
-          select FICHA, NUMDEPEN, BANCO, AGENCIA, CONTA, SETOR, MES_ANO, CARGO, REFERENCIA, CPF from FITABANCO;
+          select FICHA, NUMDEPEN, BANCO, AGENCIA, CONTA, SETOR, MES_ANO, CARGO, REFERENCIA, CPF from FITABANCO
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -81,7 +81,7 @@ deployments:
       parameters:
         table_id: vinculos # Nome da tabela no BigQuery
         execute_query: |
-          select NUMERO, NUMFUNC, EMP_CODIGO, MATRIC, DTEXERC, DTAPOSENT, REGIMEJUR, DTVAC from VINCULOS;
+          select NUMERO, NUMFUNC, EMP_CODIGO, MATRIC, DTEXERC, DTAPOSENT, REGIMEJUR, DTVAC from VINCULOS
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -90,7 +90,7 @@ deployments:
       parameters:
         table_id: funcionarios # Nome da tabela no BigQuery
         execute_query: |
-          select NUMERO, NOME, CPF from funcionarios;
+          select NUMERO, NOME, CPF from funcionarios
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -99,7 +99,7 @@ deployments:
       parameters:
         table_id: hsetor # Nome da tabela no BigQuery
         execute_query: |
-          select SETOR, EMP_CODIGO, DATAINI, DATAFIM, FLEX_CAMPO_01, FLEX_CAMPO_05 from hsetor;
+          select SETOR, EMP_CODIGO, DATAINI, DATAFIM, FLEX_CAMPO_01, FLEX_CAMPO_05 from hsetor
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -108,7 +108,7 @@ deployments:
       parameters:
         table_id: pensionistas # Nome da tabela no BigQuery
         execute_query: |
-          select NUMERO, NUMFUNC, NUMVINC, EMP_CODIGO from PENSIONISTAS;
+          select NUMERO, NUMFUNC, NUMVINC, EMP_CODIGO from PENSIONISTAS
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -117,7 +117,7 @@ deployments:
       parameters:
         table_id: rubricas # Nome da tabela no BigQuery
         execute_query: |
-          select RUBRICA, TIPORUBR, NOME_ABREV, NOME from rubricas;
+          select RUBRICA, TIPORUBR, NOME_ABREV, NOME from rubricas
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -126,7 +126,7 @@ deployments:
       parameters:
         table_id: dependencias # Nome da tabela no BigQuery
         execute_query: |
-          select NUMFUNC, TIPODEPEN, DTINI, DTFIM from dependencias;
+          select NUMFUNC, TIPODEPEN, DTINI, DTFIM from dependencias
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -135,7 +135,7 @@ deployments:
       parameters:
         table_id: historico_dependentes # Nome da tabela no BigQuery
         execute_query: |
-          select NUMFUNC, INVALIDO, DTINI, DTFIM from hist_depen;
+          select NUMFUNC, INVALIDO, DTINI, DTFIM from hist_depen
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -144,7 +144,7 @@ deployments:
       parameters:
         table_id: cargos # Nome da tabela no BigQuery
         execute_query: |
-          select NUMFUNC, CARGO, NOME from cargos;
+          select NUMFUNC, CARGO, NOME from cargos
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -153,7 +153,7 @@ deployments:
       parameters:
         table_id: provimentos_ev # Nome da tabela no BigQuery
         execute_query: |
-          select NUMFUNC, NUMVINC, DTINI, DTFIM, CARGO, SETOR, JORNADA from provimentos_ev;
+          select NUMFUNC, NUMVINC, DTINI, DTFIM, CARGO, SETOR, JORNADA from provimentos_ev
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -162,7 +162,7 @@ deployments:
       parameters:
         table_id: iplanrio_mensagem_setor_cargo # Nome da tabela no BigQuery
         execute_query: |
-          select MES_ANO_FOLHA, NUM_FOLHA, CARGO, SETOR, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_setcarg;
+          select MES_ANO_FOLHA, NUM_FOLHA, CARGO, SETOR, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_setcarg
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -171,7 +171,7 @@ deployments:
       parameters:
         table_id: iplanrio_mensagem_prefixo # Nome da tabela no BigQuery
         execute_query: |
-          select PREFIXO, NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_prefixo;
+          select PREFIXO, NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_prefixo
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -180,7 +180,7 @@ deployments:
       parameters:
         table_id: iplanrio_registro_prefixo # Nome da tabela no BigQuery
         execute_query: |
-          select NUMFUNC, NUMVINC, MESANO, PREFIXO from IPL_PREFIXOS;
+          select NUMFUNC, NUMVINC, MESANO, PREFIXO from IPL_PREFIXOS
 
 
     - interval: 86400 # executa a cada 24h
@@ -190,7 +190,7 @@ deployments:
       parameters:
         table_id: iplanrio_mensagem_externo # Nome da tabela no BigQuery
         execute_query: |
-          select NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_ext;
+          select NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_ext
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -199,7 +199,7 @@ deployments:
       parameters:
         table_id: dependentes # Nome da tabela no BigQuery
         execute_query: |
-          select NUMERO, NUMFUNC, CPF, NOME from dependentes;
+          select NUMERO, NUMFUNC, CPF, NOME from dependentes
 
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -208,7 +208,7 @@ deployments:
       parameters:
         table_id: fatores_rubricas # Nome da tabela no BigQuery
         execute_query: |
-          select FATOR, RUBRICA from FATORES_RUBRICA;
+          select FATOR, RUBRICA from FATORES_RUBRICA
 
   - name: rj-sma--contracheques--prod
     version: "{{ get-commit-hash.stdout }}"
