@@ -1,19 +1,24 @@
 # -*- coding: utf-8 -*-
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
-"""
-Dispatch Flow for agendamento cadunico
-"""
+
+# TODO: rodar teste no prefect no cadunico, pic e template
+# adicionar whitelist aqui, no cadunico e no pic
+
 import os
 import time
+from math import ceil
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
-from prefect import flow  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from prefect import flow
 
-from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
-# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.constants import TemplateConstants
+from pipelines.rj_smas__disparo_template.utils.discord import (
+    send_dispatch_result_notification,
+    send_dispatch_success_notification,
+)
 from pipelines.rj_smas__disparo_template.utils.dispatch import (
     check_api_status,
     create_dispatch_dfr,
@@ -22,20 +27,16 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     get_destinations,
     remove_duplicate_phones,
 )
-# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
+    printar,
     skip_flow_if_empty,
 )
-# pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.discord import (
-    send_dispatch_result_notification,
-    send_dispatch_success_notification,
-)
+
 
 @flow(log_prints=True)
-def rj_smas__disparo_cadunico(
+def rj_smas__disparo_template(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
     campaign_name: str | None = None,
@@ -46,22 +47,23 @@ def rj_smas__disparo_cadunico(
     dump_mode: str | None = None,
     test_mode: bool | None = True,
     query: str | None = None,
-    query_processor_name: str | None = "cadunico",
+    query_processor_name: str | None = "template",
+    sleep_minutes: int | None = 5,
     infisical_secret_path: str = "/wetalkie",
 ):
-    dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
-    table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
-    dump_mode = dump_mode or CadunicoConstants.CADUNICO_DUMP_MODE.value
-    id_hsm = id_hsm or CadunicoConstants.CADUNICO_ID_HSM.value
-    campaign_name = campaign_name or CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
-    cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
-    chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
-    query = query or CadunicoConstants.CADUNICO_QUERY.value
-    query_processor_name = query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
+    dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
+    table_id = table_id or TemplateConstants.TABLE_ID.value
+    dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value
+    id_hsm = id_hsm or TemplateConstants.ID_HSM.value
+    campaign_name = campaign_name or TemplateConstants.CAMPAIGN_NAME.value
+    cost_center_id = cost_center_id or TemplateConstants.COST_CENTER_ID.value
+    chunk_size = chunk_size or TemplateConstants.CHUNK_SIZE.value
+    query = query or TemplateConstants.QUERY.value
+    query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
 
-    billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
+    billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
 
-    destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
+    destinations = getenv_or_action("TEMPLATE__DESTINATIONS", action="ignore")
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
@@ -99,6 +101,14 @@ def rj_smas__disparo_cadunico(
             cost_center_id=cost_center_id,
             destinations=unique_destinations,
         )
+
+        printar(id_hsm)
+        print(
+            f"\nStarting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}\n"
+        )
+        # TODO: adicionar print da hsm
+        print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
+        time.sleep(sleep_minutes * 60)
 
         dispatch_date = dispatch(
             api=api,
