@@ -95,6 +95,14 @@ class PicLembreteConstants(Enum):
             on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = {id_hsm_placeholder}
           where fl.flattarget is null
         ),
+        filtra_celulares_sem_whats as (
+          SELECT distinct f.*
+          FROM filtra_quem_nao_recebeu_hsm AS f
+          LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+            ON f.celular_disparo = tel.telefone_numero_completo
+          LEFT JOIN UNNEST(tel.consentimento) AS c
+          WHERE c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO"
+        ),
         formatted AS (
           SELECT
             celular_disparo,
@@ -113,7 +121,7 @@ class PicLembreteConstants(Enum):
             endereco_evento,
             FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
             horario_evento
-          FROM filtra_quem_nao_recebeu_hsm
+          FROM filtra_celulares_sem_whats
           WHERE celular_disparo IS NOT NULL
             AND data_evento_date IS NOT NULL
         )
@@ -125,7 +133,7 @@ class PicLembreteConstants(Enum):
                 nome_sobrenome AS NOME_SOBRENOME,
                 cpf AS CC_WT_CPF_CIDADAO,
                 endereco_evento AS ENDERECO,
-                data_formatada AS DATA,
+                data_formatada AS DIA,
                 horario_evento AS HORARIO
               ) AS vars,
               cpf AS externalId
