@@ -33,6 +33,7 @@ from pipelines.rj_smas__disparo_pic.utils.tasks import (
 from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
 
 
+# forçar registry do flow
 @flow(log_prints=True)
 def rj_smas__disparo_pic_lembrete(
     # Parâmetros opcionais para override manual na UI.
