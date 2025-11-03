@@ -76,22 +76,22 @@ def send_dispatch_success_notification(
 
     message = f"""{title}
 
-📊 **Quantidade:** {total_dispatches} disparos
-📦 **Lotes:** {total_batches} lotes
-🕐 **Hora:** {dispatch_date}
-🆔 **ID HSM:** {id_hsm}
-📋 **Campanha:** {campaign_name}
-💰 **Centro de Custo:** {cost_center_id}
-"""
+    📊 **Quantidade:** {total_dispatches} disparos
+    📦 **Lotes:** {total_batches} lotes
+    🕐 **Hora:** {dispatch_date}
+    🆔 **ID HSM:** {id_hsm}
+    📋 **Campanha:** {campaign_name}
+    💰 **Centro de Custo:** {cost_center_id}
+    """
 
     # Add sample destination if provided
     if sample_destination:
         message += f"""
-📱 **Exemplo de Disparo:**
-```json
-{_format_sample_destination(sample_destination)}
-```
-"""
+        📱 **Exemplo de Disparo:**
+        ```json
+        {_format_sample_destination(sample_destination)}
+        ```
+        """
 
     try:
         asyncio.run(_send_discord_webhook(webhook_url, message))
@@ -138,31 +138,48 @@ def send_dispatch_result_notification(
 
     # Query para obter resultados do disparo
     results_query = f"""
-    WITH ranked_messages AS (
-      SELECT
-        targetExternalId,
-        templateId,
-        triggerId,
-        status,
-        datarelay_timestamp,
-        sendDate,
-        ROW_NUMBER() OVER (
-          PARTITION BY targetExternalId, triggerId
-          ORDER BY datarelay_timestamp DESC
-        ) as rn
-      FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_2025_10`
-      WHERE templateId = {id_hsm}
-        AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE)
-    )
-    SELECT
-      status,
-      COUNT(DISTINCT targetExternalId) as quantidade_cpfs,
-      COUNT(*) as quantidade_disparos,
-      ROUND(COUNT(DISTINCT targetExternalId) * 100.0 / SUM(COUNT(DISTINCT targetExternalId)) OVER(), 2) as percentual
-    FROM ranked_messages
-    WHERE rn = 1
-    GROUP BY status
-    ORDER BY quantidade_cpfs DESC
+        WITH ranked_messages AS (
+            SELECT
+                targetExternalId,
+                templateId,
+                triggerId,
+                status,
+                datarelay_timestamp,
+                sendDate
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE templateId = {id_hsm}
+                AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 minute)
+            ),
+            total as (
+            select COUNT(DISTINCT targetExternalId) AS total_disparos
+            FROM ranked_messages
+            ),
+            aggregated AS (
+            SELECT
+                status,
+                CASE
+                WHEN status = "PROCESSING" THEN 1
+                WHEN status = "SENT" THEN 2
+                WHEN status = "DELIVERED" THEN 3
+                WHEN status = "READ" THEN 4
+                WHEN status = "FAILED" THEN 5
+                END AS status_ranking,
+                COUNT(DISTINCT targetExternalId) AS quantidade_cpfs,
+                COUNT(*) AS quantidade_disparos
+            FROM ranked_messages
+            GROUP BY status, status_ranking
+            )
+            SELECT
+            status,
+            quantidade_cpfs,
+            quantidade_disparos,
+            ROUND(
+                quantidade_cpfs * 100.0 / total_disparos,
+                1
+            ) AS percentual
+            FROM aggregated
+            cross join total
+            ORDER BY status_ranking;
     """
 
     try:
@@ -179,13 +196,13 @@ def send_dispatch_result_notification(
         # Formatar mensagem com contexto e resultados
         message = f"""{title}
 
-📋 **Campanha:** {campaign_name}
-🆔 **Template ID:** {id_hsm}
-🕐 **Disparo realizado em:** {dispatch_date}
-📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
+    📋 **Campanha:** {campaign_name}
+    🆔 **Template ID:** {id_hsm}
+    🕐 **Disparo realizado em:** {dispatch_date}
+    📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
-**Status dos Disparos:**
-"""
+    **Status dos Disparos:**
+    """
 
         # Adicionar resultados da query formatados
         if len(results_df) > 0:
@@ -195,7 +212,7 @@ def send_dispatch_result_notification(
                 disparos = int(row["quantidade_disparos"])
                 percent = float(row["percentual"])
 
-                message += f"• **{status}**: {cpfs} CPFs ({disparos} disparos) - {percent:.2f}%\n"
+                message += f"• **{status}**: {cpfs} CPFs ({disparos} disparos) - {percent:.1f}%\n"
         else:
             message += "⚠️ Nenhum resultado encontrado ainda.\n"
             message += "Os dados podem ainda não ter sido processados pelo webhook."

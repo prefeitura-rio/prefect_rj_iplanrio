@@ -149,7 +149,7 @@ def rj_smas__disparo_pic(
 
             printar(id_hsm)
             print(
-                f"\nStarting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}\n"
+                f"\nStarting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}\n"
             )
             # TODO: adicionar print da hsm
             print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")

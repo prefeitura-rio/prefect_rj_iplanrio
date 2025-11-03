@@ -87,7 +87,6 @@ class PicLembreteConstants(Enum):
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
           CROSS JOIN config
           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
-            -- t1.DATA_ENTREGA_PREVISTA = '2025-10-29'
         ),
         filtra_quem_nao_recebeu_hsm as (
           select joined_status_cpi.*
@@ -95,6 +94,15 @@ class PicLembreteConstants(Enum):
           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = {id_hsm_placeholder}
           where fl.flattarget is null
+        ),
+        filtra_celulares_sem_whats as (
+          SELECT distinct f.*
+          FROM filtra_quem_nao_recebeu_hsm AS f
+          LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+            ON f.celular_disparo = tel.telefone_numero_completo
+          LEFT JOIN UNNEST(tel.consentimento) AS c
+          WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+            or tel.telefone_numero_completo is null
         ),
         formatted AS (
           SELECT
@@ -114,7 +122,7 @@ class PicLembreteConstants(Enum):
             endereco_evento,
             FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
             horario_evento
-          FROM filtra_quem_nao_recebeu_hsm
+          FROM filtra_celulares_sem_whats
           WHERE celular_disparo IS NOT NULL
             AND data_evento_date IS NOT NULL
         )
