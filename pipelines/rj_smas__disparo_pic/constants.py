@@ -101,7 +101,7 @@ class PicLembreteConstants(Enum):
           LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
             ON f.celular_disparo = tel.telefone_numero_completo
           LEFT JOIN UNNEST(tel.consentimento) AS c
-          WHERE c.indicador_quarentena = FALSE or tel.telefone_qualidade= "INVALIDO"
+          WHERE c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO"
         ),
         formatted AS (
           SELECT
