@@ -149,12 +149,12 @@ def send_dispatch_result_notification(
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             WHERE templateId = {id_hsm}
                 AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 minute)
-            ),
-            total as (
+        ),
+        total as (
             select COUNT(DISTINCT targetExternalId) AS total_disparos
             FROM ranked_messages
-            ),
-            aggregated AS (
+        ),
+        aggregated AS (
             SELECT
                 status,
                 CASE

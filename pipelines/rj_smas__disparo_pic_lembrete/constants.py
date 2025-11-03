@@ -134,7 +134,7 @@ class PicLembreteConstants(Enum):
                 nome_sobrenome AS NOME_SOBRENOME,
                 cpf AS CC_WT_CPF_CIDADAO,
                 endereco_evento AS ENDERECO,
-                data_formatada AS DATA,
+                data_formatada AS DIA,
                 horario_evento AS HORARIO
               ) AS vars,
               cpf AS externalId
