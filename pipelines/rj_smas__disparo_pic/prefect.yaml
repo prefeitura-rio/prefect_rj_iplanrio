@@ -39,7 +39,7 @@ deployments:
       # Valores padrão (podem ser alterados na UI)
       id_hsm: 184
       campaign_name: smas-cartaopic-disparoevento
-      cost_center_id: 38
+      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
@@ -60,7 +60,7 @@ deployments:
       # Valores padrão (podem ser alterados na UI)
       id_hsm: 184
       campaign_name: smas-cartaopic-disparoevento
-      cost_center_id: 38
+      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados

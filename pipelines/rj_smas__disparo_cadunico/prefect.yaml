@@ -39,7 +39,7 @@ deployments:
       # Valores padrão (podem ser alterados na UI)
       id_hsm: 101
       campaign_name: smas-lembretecadunico-prod
-      cost_center_id: 4
+      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos
@@ -60,7 +60,7 @@ deployments:
       # Valores padrão (podem ser alterados na UI)
       id_hsm: 101
       campaign_name: smas-lembretecadunico-prod
-      cost_center_id: 4
+      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos

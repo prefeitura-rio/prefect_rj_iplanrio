@@ -47,7 +47,7 @@ def rj_smas__disparo_pic_lembrete(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = 185,
     campaign_name: str | None = None,
-    cost_center_id: int | None = 38,
+    cost_center_id: int | None = 71,
     chunk_size: int | None = None,
     dataset_id: str | None = None,
     table_id: str | None = None,
