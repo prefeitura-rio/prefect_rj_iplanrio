@@ -70,6 +70,10 @@ def rj_smas__disparo_cadunico(
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
+    if test_mode:
+        campaign_name = "teste-"+campaign_name
+        print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
+
     api = access_api(
         infisical_secret_path,
         "wetalkie_url",
