@@ -33,6 +33,7 @@ from pipelines.rj_smas__disparo_pic.utils.tasks import (
 )
 
 
+# forçando deploy
 @flow(log_prints=True)
 def rj_smas__disparo_pic(
     # Parâmetros opcionais para override manual na UI.
