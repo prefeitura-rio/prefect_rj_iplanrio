@@ -133,31 +133,48 @@ def send_dispatch_result_notification(
 
     # Query para obter resultados do disparo
     results_query = f"""
-    WITH ranked_messages AS (
-      SELECT
-        targetExternalId,
-        templateId,
-        triggerId,
-        status,
-        datarelay_timestamp,
-        sendDate,
-        ROW_NUMBER() OVER (
-          PARTITION BY targetExternalId, triggerId
-          ORDER BY datarelay_timestamp DESC
-        ) as rn
-      FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_2025_10`
-      WHERE templateId = {id_hsm}
-        AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE)
-    )
-    SELECT
-      status,
-      COUNT(DISTINCT targetExternalId) as quantidade_cpfs,
-      COUNT(*) as quantidade_disparos,
-      ROUND(COUNT(DISTINCT targetExternalId) * 100.0 / SUM(COUNT(DISTINCT targetExternalId)) OVER(), 2) as percentual
-    FROM ranked_messages
-    WHERE rn = 1
-    GROUP BY status
-    ORDER BY quantidade_cpfs DESC
+        WITH ranked_messages AS (
+            SELECT
+                targetExternalId,
+                templateId,
+                triggerId,
+                status,
+                datarelay_timestamp,
+                sendDate
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE templateId = 185
+                AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)
+        ),
+        total as (
+            select COUNT(DISTINCT targetExternalId) AS total_disparos
+            FROM ranked_messages
+        ),
+        aggregated AS (
+            SELECT
+                status,
+                CASE
+                WHEN status = "PROCESSING" THEN 1
+                WHEN status = "SENT" THEN 2
+                WHEN status = "DELIVERED" THEN 3
+                WHEN status = "READ" THEN 4
+                WHEN status = "FAILED" THEN 5
+                END AS status_ranking,
+                COUNT(DISTINCT targetExternalId) AS quantidade_cpfs,
+                COUNT(*) AS quantidade_disparos
+            FROM ranked_messages
+            GROUP BY status, status_ranking
+        )
+        SELECT
+            status,
+            quantidade_cpfs,
+            quantidade_disparos,
+            ROUND(
+                quantidade_cpfs * 100.0 / total_disparos,
+                1
+            ) AS percentual
+        FROM aggregated
+            cross join total
+        ORDER BY status_ranking;
     """
 
     try:
