@@ -142,7 +142,7 @@ def send_dispatch_result_notification(
                 datarelay_timestamp,
                 sendDate
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-            WHERE templateId = 185
+            WHERE templateId = {id_hsm}
                 AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)
         ),
         total as (
