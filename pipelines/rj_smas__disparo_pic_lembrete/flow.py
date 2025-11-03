@@ -8,22 +8,19 @@ import os
 import time
 from math import ceil
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow
 
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_pic.tasks import (
-    check_if_dispatch_approved,
-    format_query,
-)
-# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_template.utils.dispatch import (
     check_api_status,
+    check_if_dispatch_approved,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
+    format_query,
     get_destinations,
     remove_duplicate_phones,
 )
@@ -115,8 +112,9 @@ def rj_smas__disparo_pic_lembrete(
     )
 
     if dispatch_approved:
-        query = format_query(raw_query=query, event_date=event_date, id_hsm=id_hsm)
-        print(f"\nQuery dispatch approval:\n{query}")
+        query_replacements = {"event_date_placeholder": event_date, "id_hsm_placeholder": id_hsm}
+        query_complete = format_query(raw_query=query, replacements=query_replacements)
+        print(f"\nQuery dispatch approval:\n{query_complete}")
         print(f"Sleep {sleep_minutes} minutes to check")
         time.sleep(sleep_minutes * 60)
         api = access_api(
@@ -131,7 +129,7 @@ def rj_smas__disparo_pic_lembrete(
 
         destinations_result = get_destinations(
             destinations=destinations,
-            query=query,
+            query=query_complete,
             billing_project_id=billing_project_id,
             query_processor_name=query_processor_name,
         )
@@ -168,7 +166,7 @@ def rj_smas__disparo_pic_lembrete(
                 chunk=chunk_size,
             )
 
-            print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+            print(f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations")
 
             # Calculate total batches
             total_batches = ceil(len(unique_destinations) / chunk_size)

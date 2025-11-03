@@ -20,6 +20,7 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
+    format_query,
     get_destinations,
     remove_duplicate_phones,
 )
@@ -48,6 +49,8 @@ def rj_smas__disparo_cadunico(
     test_mode: bool | None = True,
     query: str | None = None,
     query_processor_name: str | None = "cadunico",
+    sleep_minutes: int | None = 5,
+    days_ahead: str | None = 3,
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
@@ -76,10 +79,13 @@ def rj_smas__disparo_cadunico(
     )
 
     api_status = check_api_status(api)
+    query_replacements = {"days_ahead_placeholder": days_ahead}
+    query_complete = format_query(raw_query=query, replacements=query_replacements)
+    print(f"\n⚠️  Query dispatch:\n{query_complete}")
 
     destinations_result = get_destinations(
         destinations=destinations,
-        query=query,
+        query=query_complete,
         billing_project_id=billing_project_id,
         query_processor_name=query_processor_name,
     )
@@ -101,6 +107,13 @@ def rj_smas__disparo_cadunico(
             destinations=unique_destinations,
         )
 
+        print(
+            f"\n⚠️  Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}\n"
+        )
+        # TODO: adicionar print da hsm
+        print(f"\n⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
+        time.sleep(sleep_minutes * 60)
+
         dispatch_date = dispatch(
             api=api,
             id_hsm=id_hsm,
@@ -108,7 +121,7 @@ def rj_smas__disparo_cadunico(
             chunk=chunk_size,
         )
 
-        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+        print(f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations")
 
         total_batches = ceil(len(unique_destinations) / chunk_size)
 

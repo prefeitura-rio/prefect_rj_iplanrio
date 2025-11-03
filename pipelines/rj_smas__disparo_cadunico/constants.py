@@ -20,7 +20,7 @@ class CadunicoConstants(Enum):
     CADUNICO_CAMPAIGN_NAME = "smas-lembretecadunico-prod"
 
     # Cost Center ID
-    CADUNICO_COST_CENTER_ID = 4
+    CADUNICO_COST_CENTER_ID = 71
 
     # Billing Project ID
     CADUNICO_BILLING_PROJECT_ID = "rj-crm-registry"
@@ -52,7 +52,7 @@ class CadunicoConstants(Enum):
         WHERE
             DATE(data_hora) = DATE_ADD(
             CURRENT_DATE("America/Sao_Paulo"),
-            INTERVAL {days_ahead} DAY)
+            INTERVAL cast({days_ahead_placeholder} as int64) DAY)
             AND telefone NOT IN (
                 SELECT contato_telefone
                 FROM `rj-crm-registry.crm_whatsapp.telefone_sem_whatsapp`

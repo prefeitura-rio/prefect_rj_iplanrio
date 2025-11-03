@@ -9,7 +9,7 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 import json
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
@@ -260,3 +260,66 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     log(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
+
+
+@task
+def check_if_dispatch_approved(
+    dfr: pd.DataFrame,
+    dispatch_approved_col: str,
+    event_date_col: str,
+) -> Tuple[str, bool]:
+    """
+    Check if dispatch was approved using a specific table in BQ
+    """
+    if dfr.empty:
+        log("\n⚠️  Approval dataframe is empty.")
+        return None, False
+
+    log(f"Dataframe for today: {dfr.iloc[0]}")
+
+    normalized_status_col = (
+        dfr[dispatch_approved_col]
+        .dropna()
+        .astype(str)
+        .str.strip()
+        .str.lower()
+    )
+
+    if normalized_status_col.empty:
+        log("\n⚠️  No valid values found in dispatch approval column.")
+        return None, False
+
+    dispatch_status = normalized_status_col.sort_values().iloc[0]
+
+    log(f"\nChecking dispatch approval for today: Status='{dispatch_status}'")
+
+    if dispatch_status == "aprovado":
+        event_date = dfr[event_date_col].astype(str).iloc[0]
+        log(f"\n✅  Dispatch approved for event day: {event_date}.")
+        return event_date, True
+
+    log("\n⚠️  Dispatch was not approved for today.")
+    return None, False
+
+
+@task
+def format_query(raw_query: str, replacements: dict) -> str:
+    """
+    Formata a query substituindo placeholders pelo dicionário `replacements`.
+    Os placeholders em raw_query devem estar no formato do método str.format, ex: {event_date}.
+    Exemplo:
+      format_query("... WHERE date = {event_date} AND id = {id_hsm}", {"event_date": "2025-11-03", "id_hsm": 123})
+    """
+    if raw_query is None:
+        raise ValueError("raw_query cannot be None")
+    if not isinstance(replacements, dict):
+        raise TypeError("replacements must be a dict")
+
+    # Garantir que todos os valores sejam strings para evitar erros inesperados
+    safe_map = {k: "" if v is None else str(v) for k, v in replacements.items()}
+
+    try:
+        return raw_query.format_map(safe_map)
+    except KeyError as error:
+        missing = error.args[0] if error.args else str(error)
+        raise ValueError(f"Missing replacement for placeholder '{missing}'") from error
