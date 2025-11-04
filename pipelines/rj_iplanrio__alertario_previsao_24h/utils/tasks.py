@@ -43,7 +43,7 @@ def create_date_partitions(
         (
             date,
             dataframe[dataframe[partition_aux_column] == date].drop(
-                columns=[partition_aux_column]
+                columns=[partition_aux_column, partition_column]
             ),
         )
         for date in dates
