@@ -39,15 +39,11 @@ def create_date_partitions(
     dataframe[partition_aux_column] = partition_datetimes.dt.strftime("%Y-%m-%d")
 
     dates = dataframe[partition_aux_column].unique()
-    dataframes = [
-        (
-            date,
-            dataframe[dataframe[partition_aux_column] == date].drop(
-                columns=[partition_aux_column, partition_column]
-            ),
-        )
-        for date in dates
-    ]
+    dataframes = []
+    for date in dates:
+        partition_df = dataframe[dataframe[partition_aux_column] == date].copy()
+        partition_df = partition_df.drop(columns=[partition_aux_column])
+        dataframes.append((date, partition_df))
 
     for _date, _dataframe in dataframes:
         partition_folder = os.path.join(
