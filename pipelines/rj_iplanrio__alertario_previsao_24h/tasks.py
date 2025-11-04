@@ -88,7 +88,13 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
 
         # Extrair quadro sinótico
         quadro_sinotico_elem = root.find("quadroSinotico")
-        quadro_sinotico = quadro_sinotico_elem.text if quadro_sinotico_elem is not None else ""
+        if quadro_sinotico_elem is not None:
+            quadro_sinotico = (
+                quadro_sinotico_elem.get("sinotico")
+                or (quadro_sinotico_elem.text or "")
+            )
+        else:
+            quadro_sinotico = ""
 
         # Extrair temperaturas por zona
         temperaturas = []
