@@ -24,20 +24,27 @@ def create_date_partitions(
     Create date partitions for a DataFrame and save them to disk.
     """
 
+    dataframe = dataframe.copy()
+    partition_aux_column = "_data_particao_path"
+
     if partition_column is None:
         partition_column = "data_particao"
-        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
-    else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
-        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
-        if dataframe["data_particao"].isnull().any():
-            raise ValueError("Some dates in the partition column could not be parsed.")
+        if partition_column not in dataframe.columns:
+            dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
 
-    dates = dataframe["data_particao"].unique()
+    partition_datetimes = pd.to_datetime(dataframe[partition_column], errors="coerce")
+    if partition_datetimes.isnull().any():
+        raise ValueError("Some dates in the partition column could not be parsed.")
+
+    dataframe[partition_aux_column] = partition_datetimes.dt.strftime("%Y-%m-%d")
+
+    dates = dataframe[partition_aux_column].unique()
     dataframes = [
         (
             date,
-            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
+            dataframe[dataframe[partition_aux_column] == date].drop(
+                columns=[partition_aux_column]
+            ),
         )
         for date in dates
     ]

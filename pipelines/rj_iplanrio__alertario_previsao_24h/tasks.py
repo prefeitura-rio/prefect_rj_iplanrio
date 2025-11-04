@@ -84,22 +84,27 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
 
         # Extrair temperaturas por zona
         temperaturas = []
-        for temp in root.findall("Temperatura"):
-            temperaturas.append({
-                "zona": temp.find("zona").text if temp.find("zona") is not None else None,
-                "temp_maxima": float(temp.find("max").text) if temp.find("max") is not None and temp.find("max").text else None,
-                "temp_minima": float(temp.find("min").text) if temp.find("min") is not None and temp.find("min").text else None,
-                "data": temp.find("data").text if temp.find("data") is not None else None,
-            })
+        temperatura_elem = root.find("Temperatura")
+        if temperatura_elem is not None:
+            data_temp = temperatura_elem.get("data")
+            for zona in temperatura_elem.findall("Zona"):
+                temperaturas.append({
+                    "zona": zona.get("zona"),
+                    "temp_maxima": float(zona.get("maxima")) if zona.get("maxima") else None,
+                    "temp_minima": float(zona.get("minima")) if zona.get("minima") else None,
+                    "data": data_temp,
+                })
 
         # Extrair tábua de marés
         mares = []
-        for mare in root.findall("TabuasMares"):
-            mares.append({
-                "elevacao": mare.find("Elevacao").text if mare.find("Elevacao") is not None else None,
-                "horario": mare.find("Horario").text if mare.find("Horario") is not None else None,
-                "altura": float(mare.find("Altura").text) if mare.find("Altura") is not None and mare.find("Altura").text else None,
-            })
+        tabuas_mares_elem = root.find("TabuasMares")
+        if tabuas_mares_elem is not None:
+            for tabua in tabuas_mares_elem.findall("tabua"):
+                mares.append({
+                    "elevacao": tabua.get("elevacao"),
+                    "horario": tabua.get("date"),
+                    "altura": float(tabua.get("altura")) if tabua.get("altura") else None,
+                })
 
         parsed_data = {
             "create_date": create_date,
@@ -215,6 +220,7 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
             "precipitacao": prev["precipitacao"],
             "dir_vento": prev["dirVento"],
             "vel_vento": prev["velVento"],
+            "temperatura": prev["temperatura"],
             "data_particao": create_date.date(),
         })
 
