@@ -39,7 +39,7 @@ def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -
     if "days_ahead_placeholder" not in replacements:
         raise ValueError("Key 'days_ahead_placeholder' must exist on 'replacements' dictionary")
 
-    days_ahead = replacements["days_ahead_placeholder"]
+    days_ahead = int(replacements["days_ahead_placeholder"])
 
     # Get dynamic days_ahead based on current weekday
     current_weekday = datetime.now().weekday()  # 0=Monday, 6=Sunday
