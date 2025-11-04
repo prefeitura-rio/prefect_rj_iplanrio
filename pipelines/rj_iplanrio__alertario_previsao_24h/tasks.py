@@ -185,11 +185,13 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
             for prev in previsoes_dia
         )
 
+        data_referencia_date = datetime.strptime(data_referencia, "%Y-%m-%d").date()
+
         registros.append({
             "id_previsao": id_previsao,
             "create_date": create_date,
-            "data_referencia": datetime.strptime(data_referencia, "%Y-%m-%d").date(),
-            "sinotico": quadro_sinotico,
+            "data_referencia": data_referencia_date,
+            "sinotico": quadro_sinotico if data_referencia_date == create_date.date() else None,
             "temp_min_geral": temp_min_geral,
             "temp_max_geral": temp_max_geral,
             "teve_chuva": teve_chuva,
