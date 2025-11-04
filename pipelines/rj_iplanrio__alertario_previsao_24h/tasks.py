@@ -172,9 +172,20 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         id_string = f"{create_date.isoformat()}_{data_referencia}"
         id_previsao = hashlib.md5(id_string.encode()).hexdigest()
 
-        # Calcular temp_min_geral e temp_max_geral (min/max de todas as zonas)
-        temps_minimas = [t["temp_minima"] for t in temperaturas if t["temp_minima"] is not None]
-        temps_maximas = [t["temp_maxima"] for t in temperaturas if t["temp_maxima"] is not None]
+        # Calcular temp_min_geral e temp_max_geral apenas com temperaturas do dia
+        temperaturas_do_dia = [
+            t for t in temperaturas if t.get("data") == data_referencia
+        ]
+        temps_minimas = [
+            t["temp_minima"]
+            for t in temperaturas_do_dia
+            if t.get("temp_minima") is not None
+        ]
+        temps_maximas = [
+            t["temp_maxima"]
+            for t in temperaturas_do_dia
+            if t.get("temp_maxima") is not None
+        ]
 
         temp_min_geral = min(temps_minimas) if temps_minimas else None
         temp_max_geral = max(temps_maximas) if temps_maximas else None
