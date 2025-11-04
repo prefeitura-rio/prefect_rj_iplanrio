@@ -1,0 +1,53 @@
+name: rj_iplanrio__alertario_previsao_24h
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__alertario_previsao_24h-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__alertario_previsao_24h/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--alertario-previsao-24h--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__alertario_previsao_24h -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  - name: rj-iplanrio--alertario-previsao-24h--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__alertario_previsao_24h -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+      - cron: "0 7 * * *"  # Executa diariamente às 7h
+        timezone: America/Sao_Paulo
