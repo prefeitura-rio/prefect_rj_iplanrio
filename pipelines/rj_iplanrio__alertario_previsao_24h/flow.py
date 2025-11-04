@@ -5,6 +5,7 @@ Flow para extrair previsões meteorológicas do AlertaRio e carregar no BigQuery
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
