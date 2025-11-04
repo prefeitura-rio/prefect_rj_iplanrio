@@ -35,10 +35,10 @@ def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -
 
     if "{days_ahead_placeholder}" not in query:
         raise ValueError("Query must contain {days_ahead_placeholder} placeholder for dynamic substitution")
-    
+
     if "days_ahead_placeholder" not in replacements:
         raise ValueError("Key 'days_ahead_placeholder' must exist on 'replacements' dictionary")
-    
+
     days_ahead = replacements["days_ahead_placeholder"]
 
     # Get dynamic days_ahead based on current weekday
@@ -60,7 +60,7 @@ def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -
         log(f"Current day is {weekday_names[current_weekday]} - Skipping to {weekday_names[current_weekday+days_ahead]}.")
 
     log(f"Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
- 
+
     formatted_query = query.format_map(replacements)
     print(f"formatted_query: {formatted_query}")
     return formatted_query

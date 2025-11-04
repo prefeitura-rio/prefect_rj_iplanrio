@@ -296,10 +296,10 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
     Formats a SQL query by replacing placeholders with values from a dictionary.
 
     Args:
-        raw_query (str): The SQL query template containing placeholders in str.format style 
+        raw_query (str): The SQL query template containing placeholders in str.format style
             (e.g., {event_date_placeholders}, {id_hsm_placeholders}).
         replacements (dict): A dictionary mapping placeholder names to their values.
-        query_processor_name (str, optional): Name of a custom query processor to apply 
+        query_processor_name (str, optional): Name of a custom query processor to apply
             additional formatting. Defaults to None.
 
     Returns:
