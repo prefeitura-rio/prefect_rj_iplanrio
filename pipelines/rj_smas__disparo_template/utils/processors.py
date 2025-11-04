@@ -57,7 +57,8 @@ def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -
     if current_weekday+days_ahead in [5, 6]:  # sábado, domingo
         days_ahead += 2
         replacements["days_ahead_placeholder"] = days_ahead
-        log(f"Current day is {weekday_names[current_weekday]} - Skipping to {weekday_names[current_weekday+days_ahead]}.")
+        new_day = (current_weekday+days_ahead)%7-1
+        log(f"Current day is {weekday_names[current_weekday]} - Skipping to {weekday_names[new_day]}.")
 
     log(f"Current day is {weekday_names[current_weekday]} - {days_ahead} days ahead")
 
