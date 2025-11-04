@@ -311,13 +311,19 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         horario_str = mare.get("horario")
         if horario_str:
             try:
-                data_hora = datetime.strptime(horario_str, "%Y-%m-%d %H:%M:%S")
+                # Primeiro tenta ISO 8601 format (YYYY-MM-DDTHH:MM:SS)
+                data_hora = datetime.fromisoformat(horario_str)
             except ValueError:
                 try:
-                    data_hora = datetime.strptime(horario_str, "%d/%m/%Y %H:%M:%S")
+                    # Fallback para formato com espaço (YYYY-MM-DD HH:MM:SS)
+                    data_hora = datetime.strptime(horario_str, "%Y-%m-%d %H:%M:%S")
                 except ValueError:
-                    log(f"Formato de horário não reconhecido: {horario_str}")
-                    data_hora = None
+                    try:
+                        # Fallback para formato brasileiro (DD/MM/YYYY HH:MM:SS)
+                        data_hora = datetime.strptime(horario_str, "%d/%m/%Y %H:%M:%S")
+                    except ValueError:
+                        log(f"Formato de horário não reconhecido: {horario_str}")
+                        data_hora = None
         else:
             data_hora = None
 
