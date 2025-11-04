@@ -34,6 +34,8 @@ class CadunicoConstants(Enum):
     CADUNICO_DUMP_MODE = "append"
     CADUNICO_CHUNK_SIZE = 1000
 
+    DAYS_AHEAD = 2
+
     # Query principal do CadÚnico
     CADUNICO_QUERY = r"""
         WITH

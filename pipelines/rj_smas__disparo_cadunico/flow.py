@@ -60,6 +60,7 @@ def rj_smas__disparo_cadunico(
     campaign_name = campaign_name or CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
     cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
     chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
+    days_ahead = days_ahead or CadunicoConstants.DAYS_AHEAD.value
     query = query or CadunicoConstants.CADUNICO_QUERY.value
     query_processor_name = query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
 
