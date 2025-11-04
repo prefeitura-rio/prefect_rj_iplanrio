@@ -90,6 +90,7 @@ def rj_iplanrio__alertario_previsao_24h(
         table_id=AlertaRioConstants.TABLE_PREVISAO_DIARIA.value,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
+        materialize_after_dump=materialize_after_dump,
     )
 
     # Upload tabela 2: dim_previsao_periodo
@@ -106,6 +107,7 @@ def rj_iplanrio__alertario_previsao_24h(
         table_id=AlertaRioConstants.TABLE_DIM_PREVISAO_PERIODO.value,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
+        materialize_after_dump=materialize_after_dump,
     )
 
     # Upload tabela 3: dim_temperatura_zona
@@ -122,6 +124,7 @@ def rj_iplanrio__alertario_previsao_24h(
         table_id=AlertaRioConstants.TABLE_DIM_TEMPERATURA_ZONA.value,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
+        materialize_after_dump=materialize_after_dump,
     )
 
     # Upload tabela 4: dim_mares
@@ -138,4 +141,5 @@ def rj_iplanrio__alertario_previsao_24h(
         table_id=AlertaRioConstants.TABLE_DIM_MARES.value,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
+        materialize_after_dump=materialize_after_dump,
     )
