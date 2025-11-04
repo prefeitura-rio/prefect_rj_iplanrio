@@ -62,7 +62,15 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
 
         # Extrair data de criação
         create_date_str = root.get("Createdate")
-        create_date = datetime.fromisoformat(create_date_str)
+        if create_date_str:
+            try:
+                create_date = datetime.fromisoformat(create_date_str)
+            except (ValueError, TypeError) as e:
+                log(f"AVISO: Createdate inválido '{create_date_str}': {e}. Usando datetime.utcnow() como fallback.")
+                create_date = datetime.utcnow()
+        else:
+            log(f"AVISO: Createdate ausente no XML. Usando datetime.utcnow() como fallback.")
+            create_date = datetime.utcnow()
 
         # Extrair previsões meteorológicas
         previsoes = []
