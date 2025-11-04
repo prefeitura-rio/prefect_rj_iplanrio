@@ -70,6 +70,8 @@ def rj_iplanrio__alertario_previsao_24h(
     # Fazer parsing do XML
     parsed_data = parse_xml_to_dict(xml_content)
 
+    log("Versao 0411")
+    print("0411")
     # Criar DataFrames para cada tabela
     df_previsao_diaria = create_previsao_diaria_df(parsed_data)
     df_dim_periodo = create_dim_previsao_periodo_df(parsed_data)
