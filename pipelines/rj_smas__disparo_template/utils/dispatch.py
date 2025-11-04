@@ -318,6 +318,8 @@ def format_query(raw_query: str, replacements: dict) -> str:
     # Garantir que todos os valores sejam strings para evitar erros inesperados
     safe_map = {k: "" if v is None else str(v) for k, v in replacements.items()}
 
+    log(f"raw_query: {raw_query}")
+    log(f"replacements: {replacements}")
     try:
         return raw_query.format_map(safe_map)
     except KeyError as error:
