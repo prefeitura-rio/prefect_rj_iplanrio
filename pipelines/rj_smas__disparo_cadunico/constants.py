@@ -17,7 +17,7 @@ class CadunicoConstants(Enum):
     CADUNICO_ID_HSM = 101
 
     # Nome da campanha
-    CADUNICO_CAMPAIGN_NAME = "smas-lembretecadunico-prod"
+    CADUNICO_CAMPAIGN_NAME = "smas-cadunico-prod"
 
     # Cost Center ID
     CADUNICO_COST_CENTER_ID = 71
@@ -42,11 +42,22 @@ class CadunicoConstants(Enum):
         source_ AS (
         SELECT
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(telefone, r'[^\d]', '')) AS celular_disparo,
-            primeiro_nome,
-            data_hora,
+            INITCAP(
+              IF(
+                ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+                CONCAT(
+                  SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+                  ' ',
+                  SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+                ),
+                nome_completo
+              )
+            ) AS nome_sobrenome,
+            id,
+            FORMAT_DATETIME('%d/%m/%Y', DATETIME(data_hora)) AS DATA,
+            FORMAT_DATETIME('%H:%M', DATETIME(data_hora)) AS HORA,
             unidade_nome,
-            unidade_endereco,
-            unidade_bairro,
+            CONCAT(unidade_endereco, ' - ', unidade_bairro) as unidade_endereco,
             cpf
         FROM `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`
         WHERE
@@ -79,13 +90,22 @@ class CadunicoConstants(Enum):
             AND tel.telefone_qualidade != "INVALIDO")
             OR tel.telefone_numero_completo IS NULL )
         SELECT
-        TO_JSON_STRING(STRUCT( celular_disparo,
-            STRUCT( primeiro_nome AS NOME,
-                FORMAT_DATETIME('%d/%m/%Y', DATETIME(data_hora)) AS DATA,
-                FORMAT_DATETIME('%H:%M', DATETIME(data_hora)) AS HORA,
+        TO_JSON_STRING(
+          STRUCT(
+            celular_disparo,
+            STRUCT( nome_sobrenome AS NOME_SOBRENOME,
+                DATA,
+                HORA,
                 unidade_nome AS LOCAL,
-                CONCAT(unidade_endereco, ' - ', unidade_bairro) AS ENDERECO,
-            cpf as CC_WT_CPF_CIDADAO ) AS vars,
+                unidade_endereco AS ENDERECO,
+                cpf as CC_WT_CPF_CIDADAO,
+                nome_sobrenome as CC_WT_NOME_SOBRENOME,
+                unidade_nome as CC_WT_LOCAL,
+                unidade_endereco as CC_WT_ENDERECO,
+                DATA as CC_WT_DATA,
+                HORA AS CC_WT_HORA,
+                id as CC_WT_ID_AGENDAMENTO
+            ) AS vars,
             cpf AS externalId )
         ) AS destination_data
         FROM filtra_celulares_sem_whats

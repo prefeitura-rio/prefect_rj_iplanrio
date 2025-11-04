@@ -86,7 +86,7 @@ def rj_smas__disparo_cadunico(
 
     api_status = check_api_status(api)
 
-    query_replacements = {"id_hsm_placeholder": id_hsm, "days_ahead_placeholder": 2}
+    query_replacements = {"id_hsm_placeholder": id_hsm, "days_ahead_placeholder": days_ahead}
     query_complete = format_query(
         raw_query=query,
         replacements=query_replacements,
