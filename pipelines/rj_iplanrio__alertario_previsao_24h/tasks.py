@@ -4,7 +4,7 @@ Tasks para pipeline AlertaRio Previsão 24h
 """
 
 import hashlib
-import xml.etree.ElementTree as ET
+from defusedxml import ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, List
 
