@@ -44,7 +44,6 @@ deployments:
       dataset_id: brutos_wetalkie
       table_id: disparos
       dump_mode: append
-      days_ahead: 2
       infisical_secret_path: /wetalkie
   - name: rj-smas--disparo-cadunico--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -66,7 +65,6 @@ deployments:
       dataset_id: brutos_wetalkie
       table_id: disparos
       dump_mode: append
-      days_ahead: 2
       infisical_secret_path: /wetalkie
     # schedules:
     #   - interval: 86400
