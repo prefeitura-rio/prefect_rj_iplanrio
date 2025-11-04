@@ -43,12 +43,14 @@ def create_date_partitions(
     for date in dates:
         partition_df = dataframe[dataframe[partition_aux_column] == date].copy()
         partition_df = partition_df.drop(columns=[partition_aux_column])
+        if partition_column in partition_df.columns:
+            partition_df = partition_df.drop(columns=[partition_column])
         dataframes.append((date, partition_df))
 
     for _date, _dataframe in dataframes:
         partition_folder = os.path.join(
             root_folder,
-            f"data_particao={_date}/ano_particao={_date[:4]}/mes_particao={_date[5:7]}",
+            f"ano_particao={_date[:4]}/mes_particao={_date[5:7]}/data_particao={_date}",
         )
         os.makedirs(partition_folder, exist_ok=True)
 
