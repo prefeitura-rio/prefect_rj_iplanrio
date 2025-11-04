@@ -48,7 +48,7 @@ def rj_smas__disparo_cadunico(
     dump_mode: str | None = None,
     test_mode: bool | None = True,
     query: str | None = None,
-    query_processor_name: str | None = "cadunico",
+    query_processor_name: str | None = "skip_weekends",
     sleep_minutes: int | None = 5,
     days_ahead: str | None = 2,
     infisical_secret_path: str = "/wetalkie",
@@ -85,15 +85,19 @@ def rj_smas__disparo_cadunico(
     )
 
     api_status = check_api_status(api)
-    query_replacements = {"days_ahead_placeholder": days_ahead, "id_hsm_placeholder": id_hsm}
-    query_complete = format_query(raw_query=query, replacements=query_replacements)
+
+    query_replacements = {"id_hsm_placeholder": id_hsm, "days_ahead_placeholder": 2}
+    query_complete = format_query(
+        raw_query=query,
+        replacements=query_replacements,
+        query_processor_name=query_processor_name,
+    )
     print(f"\n⚠️  Query dispatch:\n{query_complete}")
 
     destinations_result = get_destinations(
         destinations=destinations,
         query=query_complete,
         billing_project_id=billing_project_id,
-        query_processor_name=query_processor_name,
     )
 
     validated_destinations = skip_flow_if_empty(
