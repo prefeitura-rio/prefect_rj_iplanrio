@@ -52,7 +52,7 @@ def create_date_partitions(
     for _date, _dataframe in dataframes:
         partition_folder = os.path.join(
             root_folder,
-            f"ano_particao={_date[:4]}/mes_particao={_date[5:7]}/data_particao={_date}",
+            f"data_particao={_date}/ano_particao={_date[:4]}/mes_particao={_date[5:7]}",
         )
         os.makedirs(partition_folder, exist_ok=True)
 

@@ -5,8 +5,8 @@ Tasks para pipeline AlertaRio Previsão 24h
 
 import hashlib
 from defusedxml import ElementTree as ET
-from datetime import datetime
-from typing import Any, Dict, List
+from datetime import datetime, timezone
+from typing import Any, Dict
 
 import pandas as pd
 import requests
@@ -66,11 +66,11 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
             try:
                 create_date = datetime.fromisoformat(create_date_str)
             except (ValueError, TypeError) as e:
-                log(f"AVISO: Createdate inválido '{create_date_str}': {e}. Usando datetime.utcnow() como fallback.")
-                create_date = datetime.utcnow()
+                log(f"AVISO: Createdate inválido '{create_date_str}': {e}. Usando datetime.now(timezone.utc) como fallback.")
+                create_date = datetime.now(timezone.utc)
         else:
-            log(f"AVISO: Createdate ausente no XML. Usando datetime.utcnow() como fallback.")
-            create_date = datetime.utcnow()
+            log(f"AVISO: Createdate ausente no XML. Usando datetime.now(timezone.utc) como fallback.")
+            create_date = datetime.now(timezone.utc)
 
         # Extrair previsões meteorológicas
         previsoes = []
