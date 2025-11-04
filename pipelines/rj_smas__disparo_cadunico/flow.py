@@ -50,7 +50,7 @@ def rj_smas__disparo_cadunico(
     query: str | None = None,
     query_processor_name: str | None = "cadunico",
     sleep_minutes: int | None = 5,
-    days_ahead: str | None = 3,
+    days_ahead: str | None = 2,
     infisical_secret_path: str = "/wetalkie",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
@@ -72,6 +72,7 @@ def rj_smas__disparo_cadunico(
 
     if test_mode:
         campaign_name = "teste-"+campaign_name
+        query = CadunicoConstants.QUERY_MOCK.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
 
     api = access_api(
@@ -83,7 +84,7 @@ def rj_smas__disparo_cadunico(
     )
 
     api_status = check_api_status(api)
-    query_replacements = {"days_ahead_placeholder": days_ahead}
+    query_replacements = {"days_ahead_placeholder": days_ahead, "id_hsm_placeholder": id_hsm}
     query_complete = format_query(raw_query=query, replacements=query_replacements)
     print(f"\n⚠️  Query dispatch:\n{query_complete}")
 
