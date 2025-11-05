@@ -1,24 +1,26 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+
 """
-Funções centralizadas de validação para pipeline SMAS Disparo PIC Lembrete.
-Implementa validação robusta com logs detalhados e métricas de qualidade.
+Funções centralizadas de validação para pipeline SMAS Disparo CADUNICO
+Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 
 from typing import Dict, List, Tuple
 
-from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from pydantic import ValidationError
 
-from pipelines.rj_smas__disparo_pic.schemas import (
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.schemas import (
     DestinationInput,
     DispatchPayload,
     ValidationStats,
 )
 
 
-def validate_destinations(
-    destinations: List[Dict],
-) -> Tuple[List[DestinationInput], ValidationStats]:
+def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInput], ValidationStats]:
     """
     Valida lista de destinatários usando schemas Pydantic
 
@@ -36,10 +38,7 @@ def validate_destinations(
     if not destinations:
         log("Lista de destinatários vazia fornecida para validação")
         return [], ValidationStats(
-            total_input=0,
-            valid_records=0,
-            invalid_records=0,
-            validation_errors=["Lista de destinatários vazia"],
+            total_input=0, valid_records=0, invalid_records=0, validation_errors=["Lista de destinatários vazia"]
         )
 
     valid_destinations = []
@@ -137,11 +136,7 @@ def validate_dispatch_payload(
             f"Validando payload de dispatch: campaign='{campaign_name}', cost_center={cost_center_id}, destinations={len(destinations)}"
         )
 
-        payload = DispatchPayload(
-            campaignName=campaign_name,
-            costCenterId=cost_center_id,
-            destinations=destinations,
-        )
+        payload = DispatchPayload(campaignName=campaign_name, costCenterId=cost_center_id, destinations=destinations)
 
         log(f"Payload de dispatch validado com sucesso para {len(destinations)} destinatários")
         return payload
@@ -185,9 +180,7 @@ def log_validation_summary(stats: ValidationStats, context: str = ""):
     log(f"{context_prefix}=== FIM DO RESUMO ===")
 
 
-def validate_single_destination(
-    destination_dict: Dict,
-) -> Tuple[bool, DestinationInput, str]:
+def validate_single_destination(destination_dict: Dict) -> Tuple[bool, DestinationInput, str]:
     """
     Valida um único destinatário
 
