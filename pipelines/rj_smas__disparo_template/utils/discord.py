@@ -76,22 +76,22 @@ def send_dispatch_success_notification(
 
     message = f"""{title}
 
-    📊 **Quantidade:** {total_dispatches} disparos
-    📦 **Lotes:** {total_batches} lotes
-    🕐 **Hora:** {dispatch_date}
-    🆔 **ID HSM:** {id_hsm}
-    📋 **Campanha:** {campaign_name}
-    💰 **Centro de Custo:** {cost_center_id}
-    """
+📊 **Quantidade:** {total_dispatches} disparos
+📦 **Lotes:** {total_batches} lotes
+🕐 **Hora:** {dispatch_date}
+🆔 **ID HSM:** {id_hsm}
+📋 **Campanha:** {campaign_name}
+💰 **Centro de Custo:** {cost_center_id}
+"""
 
     # Add sample destination if provided
     if sample_destination:
         message += f"""
-        📱 **Exemplo de Disparo:**
-        ```json
-        {_format_sample_destination(sample_destination)}
-        ```
-        """
+📱 **Exemplo de Disparo:**
+```json
+{_format_sample_destination(sample_destination)}
+```
+"""
 
     try:
         asyncio.run(_send_discord_webhook(webhook_url, message))
@@ -196,13 +196,13 @@ def send_dispatch_result_notification(
         # Formatar mensagem com contexto e resultados
         message = f"""{title}
 
-    📋 **Campanha:** {campaign_name}
-    🆔 **Template ID:** {id_hsm}
-    🕐 **Disparo realizado em:** {dispatch_date}
-    📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
+📋 **Campanha:** {campaign_name}
+🆔 **Template ID:** {id_hsm}
+🕐 **Disparo realizado em:** {dispatch_date}
+📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
-    **Status dos Disparos:**
-    """
+**Status dos Disparos:**
+"""
 
         # Adicionar resultados da query formatados
         if len(results_df) > 0:

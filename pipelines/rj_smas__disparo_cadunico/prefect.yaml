@@ -38,7 +38,7 @@ deployments:
     parameters:
       # Valores padrão (podem ser alterados na UI)
       id_hsm: 101
-      campaign_name: smas-lembretecadunico-prod
+      campaign_name: smas-cadunico-prod
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
@@ -59,7 +59,7 @@ deployments:
     parameters:
       # Valores padrão (podem ser alterados na UI)
       id_hsm: 101
-      campaign_name: smas-lembretecadunico-prod
+      campaign_name: smas-cadunico-prod
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
