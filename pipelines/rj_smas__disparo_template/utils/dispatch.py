@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
 """
-Tasks migradas do template disparo do Prefect 1.4 para 3.0 - SMAS Disparo PIC Lembrete.
-Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py.
+Tasks migradas do template disparo do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
+Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 """
 
 import json
@@ -10,13 +12,14 @@ from math import ceil
 from typing import Dict, List, Tuple, Union
 
 import pandas as pd
-import pendulum
-from iplanrio.pipelines_utils.logging import log
-from prefect import task
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from prefect import task  # pylint: disable=E0611, E0401
 from pytz import timezone
 
-from pipelines.rj_smas__disparo_pic.utils.tasks import task_download_data_from_bigquery
-from pipelines.rj_smas__disparo_pic.validators import (
+from pipelines.rj_smas__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.validators import (
     log_validation_summary,
     validate_destinations,
     validate_dispatch_payload,
@@ -49,9 +52,7 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
 
     # Validate complete payload
     payload = validate_dispatch_payload(
-        campaign_name=campaign_name,
-        cost_center_id=cost_center_id,
-        destinations=validated_destinations,
+        campaign_name=campaign_name, cost_center_id=cost_center_id, destinations=validated_destinations
     )
 
     log(f"Payload created successfully for {len(validated_destinations)} validated destinations")
@@ -177,49 +178,25 @@ def check_api_status(api: object) -> bool:
 
 
 @task
-def printar(text):
-    """exibe o texto passado como parâmetro"""
-    log(f"Printando {text}")
-
-
-@task
 def get_destinations(
     destinations: Union[None, List[str]],
     query: str,
     billing_project_id: str = "rj-smas",
-    query_processor_name: str = None,
 ) -> List[Dict]:
     """
     Get destinations from the query or from the parameter with validation.
-    If query_processor_name is provided, it will look up and apply the corresponding processor.
 
     Returns validated destinations with mandatory externalId field.
     """
     if query:
         log("\nQuery was found")
 
-        # Apply query processor if name provided
-        final_query = query
-        if query_processor_name:
-            from pipelines.rj_smas__disparo_pic.processors import (
-                get_query_processor,
-            )
-
-            processor_func = get_query_processor(query_processor_name)
-            if processor_func:
-                log(f"Applying query processor: {query_processor_name}")
-                final_query = processor_func(query)
-            else:
-                log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
-
-        destinations = task_download_data_from_bigquery(
-            query=final_query,
+        destinations = download_data_from_bigquery(
+            query=query,
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
         )
         log(f"response from query {destinations.head()}")
-        # TODO: flow quebra na prox linha se query não retorna ngm
-        # separar a query do get destinations e verificar se tem retorno da query
         destinations = destinations.iloc[:, 0].tolist()
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
     elif isinstance(destinations, str):
@@ -279,6 +256,9 @@ def check_if_dispatch_approved(
     dispatch_approved_col: str,
     event_date_col: str,
 ) -> Tuple[str, bool]:
+    """
+    Check if dispatch was approved using a specific table in BQ
+    """
     if dfr.empty:
         log("\n⚠️  Approval dataframe is empty.")
         return None, False
@@ -311,8 +291,51 @@ def check_if_dispatch_approved(
 
 
 @task
-def format_query(raw_query: str, event_date: str, id_hsm: int) -> str:
-    if event_date is None:
-        raise ValueError("event_date cannot be None when formatting query.")
-    formatted_query = raw_query.format(event_date_placeholder=event_date, id_hsm_placeholder=id_hsm)
-    return formatted_query
+def format_query(raw_query: str, replacements: dict, query_processor_name: str = None) -> str:
+    """
+    Formats a SQL query by replacing placeholders with values from a dictionary.
+
+    Args:
+        raw_query (str): The SQL query template containing placeholders in str.format style
+            (e.g., {event_date_placeholders}, {id_hsm_placeholders}).
+        replacements (dict): A dictionary mapping placeholder names to their values.
+        query_processor_name (str, optional): Name of a custom query processor to apply
+            additional formatting. Defaults to None.
+
+    Returns:
+        str: The formatted query with all placeholders replaced by their corresponding values.
+
+    Raises:
+        ValueError: If raw_query is None or if a placeholder is missing from replacements.
+        TypeError: If replacements is not a dictionary.
+
+    Examples:
+        >>> query = "SELECT * FROM table WHERE date = {event_date_placeholders} AND id = {id_hsm_placeholders}"
+        >>> replacements = {"event_date_placeholders": "2025-11-03", "id_hsm_placeholders": 123}
+        >>> format_query(query, replacements)
+        "SELECT * FROM table WHERE date = 2025-11-03 AND id = 123"
+
+    Notes:
+        - Placeholders in raw_query must follow Python's str.format syntax (e.g., {placeholder_name})
+        - If query_processor_name is provided, the function will attempt to apply the specified
+          processor before formatting the query
+    """
+    if raw_query is None:
+        raise ValueError("Query cannot be None")
+    if not isinstance(replacements, dict):
+        raise TypeError("replacements must be a dict")
+
+    # Apply query processor if provided
+    if query_processor_name:
+        processor_func = get_query_processor(query_processor_name)
+        if processor_func:
+            log(f"Applying query processor: {query_processor_name}")
+            return processor_func(raw_query, replacements)
+        else:
+            log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
+
+    try:
+        return raw_query.format_map(replacements)
+    except KeyError as error:
+        missing = error.args[0] if error.args else str(error)
+        raise ValueError(f"Missing replacement for placeholder '{missing}'") from error

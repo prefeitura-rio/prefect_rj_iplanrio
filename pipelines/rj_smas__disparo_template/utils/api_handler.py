@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+
 """
 API Handler for managing authenticated API requests with automatic token management
 Migrated from pipelines_rj_crm_registry for prefect_rj_iplanrio
@@ -7,7 +10,7 @@ Migrated from pipelines_rj_crm_registry for prefect_rj_iplanrio
 from typing import Any, Dict, Optional
 
 import requests
-from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 
 class ApiHandler:
@@ -69,9 +72,9 @@ class ApiHandler:
                 log("Warning: No token found in login response")
                 log(f"Response keys: {list(response_data.keys())}")
 
-        except requests.RequestException as e:
-            log(f"Login failed: {e}")
-            raise Exception(f"Failed to authenticate with API: {e}")
+        except requests.RequestException as error:
+            log(f"Login failed: {error}")
+            raise Exception(f"Failed to authenticate with API: {error}")
 
     def _refresh_token_if_needed(self, response):
         """Check if token needs refresh based on response status"""
