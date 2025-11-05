@@ -17,6 +17,7 @@ from prefect import flow
 from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 # pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_template.utils.dispatch import (
+    add_contacts_to_whitelist,
     check_api_status,
     check_if_dispatch_approved,
     create_dispatch_dfr,
@@ -61,6 +62,9 @@ def rj_smas__disparo_pic(
     dispatch_date_col: str | None = "DATA_DISPARO_AVISO",
     event_date_col: str | None = "DATA_ENTREGA",
     infisical_secret_path: str = "/wetalkie",
+    whitelist_percentage: int = 30,
+    whitelist_group_name: str = "pic_beta",
+    whitelist_environment: str = "staging",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_DATASET_ID.value
     table_id = table_id or PicLembreteConstants.PIC_TABLE_ID.value
@@ -144,6 +148,18 @@ def rj_smas__disparo_pic(
 
         # Log destination counts for tracking!!
         print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
+
+        # Add contacts to whitelist if percentage is set
+        if whitelist_percentage > 0:
+            add_contacts_to_whitelist(
+                destinations=unique_destinations,
+                percentage_to_insert=whitelist_percentage,
+                group_name=whitelist_group_name,
+                environment=whitelist_environment,
+            )
+            print(f"{whitelist_percentage}% ({len(unique_destinations)*whitelist_percentage/100}) \
+                of numbers where add to whitelist on group {whitelist_group_name} inside \
+                environment {whitelist_environment}.")
 
         if api_status:
             dispatch_payload = create_dispatch_payload(
