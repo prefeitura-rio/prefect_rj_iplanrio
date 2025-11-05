@@ -1,14 +1,23 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+
 """
 Módulo de notificações Discord para pipeline de disparo PIC lembrete.
 """
 
 import asyncio
+import json
 import os
 
-import aiohttp
-from discord import Webhook
-from iplanrio.pipelines_utils.logging import log
+import aiohttp  # pylint: disable=E0611, E0401
+from discord import Webhook  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.tasks import (
+    download_data_from_bigquery,
+)
 
 
 async def _send_discord_webhook(webhook_url: str, message: str):
@@ -26,8 +35,8 @@ async def _send_discord_webhook(webhook_url: str, message: str):
         webhook = Webhook.from_url(webhook_url, session=session)
         try:
             await webhook.send(content=message)
-        except Exception as e:
-            raise ValueError(f"Error sending message to Discord webhook: {e}")
+        except Exception as error:
+            raise ValueError(f"Error sending message to Discord webhook: {error}")
 
 
 def send_dispatch_success_notification(
@@ -87,8 +96,8 @@ def send_dispatch_success_notification(
     try:
         asyncio.run(_send_discord_webhook(webhook_url, message))
         log("Discord notification sent successfully")
-    except Exception as e:
-        log(f"Failed to send Discord notification: {e}", level="error")
+    except Exception as error:
+        log(f"Failed to send Discord notification: {error}", level="error")
 
 
 def send_dispatch_result_notification(
@@ -117,9 +126,6 @@ def send_dispatch_result_notification(
         sample_destination: Exemplo de destinatário (opcional, não usado aqui)
         test_mode: Indica se é um disparo de teste (opcional)
     """
-    from pipelines.rj_smas__disparo_pic_lembrete.utils.tasks import (
-        download_data_from_bigquery,
-    )
 
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
 
@@ -132,31 +138,48 @@ def send_dispatch_result_notification(
 
     # Query para obter resultados do disparo
     results_query = f"""
-    WITH ranked_messages AS (
-      SELECT
-        targetExternalId,
-        templateId,
-        triggerId,
-        status,
-        datarelay_timestamp,
-        sendDate,
-        ROW_NUMBER() OVER (
-          PARTITION BY targetExternalId, triggerId
-          ORDER BY datarelay_timestamp DESC
-        ) as rn
-      FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_2025_10`
-      WHERE templateId = {id_hsm}
-        AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 MINUTE)
-    )
-    SELECT
-      status,
-      COUNT(DISTINCT targetExternalId) as quantidade_cpfs,
-      COUNT(*) as quantidade_disparos,
-      ROUND(COUNT(DISTINCT targetExternalId) * 100.0 / SUM(COUNT(DISTINCT targetExternalId)) OVER(), 2) as percentual
-    FROM ranked_messages
-    WHERE rn = 1
-    GROUP BY status
-    ORDER BY quantidade_cpfs DESC
+        WITH ranked_messages AS (
+            SELECT
+                targetExternalId,
+                templateId,
+                triggerId,
+                status,
+                datarelay_timestamp,
+                sendDate
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE templateId = {id_hsm}
+                AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 minute)
+        ),
+        total as (
+            select COUNT(DISTINCT targetExternalId) AS total_disparos
+            FROM ranked_messages
+        ),
+        aggregated AS (
+            SELECT
+                status,
+                CASE
+                WHEN status = "PROCESSING" THEN 1
+                WHEN status = "SENT" THEN 2
+                WHEN status = "DELIVERED" THEN 3
+                WHEN status = "READ" THEN 4
+                WHEN status = "FAILED" THEN 5
+                END AS status_ranking,
+                COUNT(DISTINCT targetExternalId) AS quantidade_cpfs,
+                COUNT(*) AS quantidade_disparos
+            FROM ranked_messages
+            GROUP BY status, status_ranking
+            )
+            SELECT
+            status,
+            quantidade_cpfs,
+            quantidade_disparos,
+            ROUND(
+                quantidade_cpfs * 100.0 / total_disparos,
+                1
+            ) AS percentual
+            FROM aggregated
+            cross join total
+            ORDER BY status_ranking;
     """
 
     try:
@@ -178,7 +201,7 @@ def send_dispatch_result_notification(
 🕐 **Disparo realizado em:** {dispatch_date}
 📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
-**Status dos Disparos (últimas 3 horas):**
+**Status dos Disparos:**
 """
 
         # Adicionar resultados da query formatados
@@ -189,7 +212,7 @@ def send_dispatch_result_notification(
                 disparos = int(row["quantidade_disparos"])
                 percent = float(row["percentual"])
 
-                message += f"• **{status}**: {cpfs} CPFs ({disparos} disparos) - {percent:.2f}%\n"
+                message += f"• **{status}**: {cpfs} CPFs ({disparos} disparos) - {percent:.1f}%\n"
         else:
             message += "⚠️ Nenhum resultado encontrado ainda.\n"
             message += "Os dados podem ainda não ter sido processados pelo webhook."
@@ -198,8 +221,8 @@ def send_dispatch_result_notification(
         asyncio.run(_send_discord_webhook(webhook_url, message))
         log("Discord results notification sent successfully")
 
-    except Exception as e:
-        log(f"Failed to send Discord results notification: {e}", level="error")
+    except Exception as error:
+        log(f"Failed to send Discord results notification: {error}", level="error")
 
 
 def _format_sample_destination(destination: dict) -> str:
@@ -212,7 +235,6 @@ def _format_sample_destination(destination: dict) -> str:
     Returns:
         String formatada em JSON
     """
-    import json
 
     # Create a clean sample with only relevant fields
     sample = {

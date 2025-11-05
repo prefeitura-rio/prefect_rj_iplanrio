@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
 """Constantes específicas para pipeline PIC lembrete SMAS."""
 
 from enum import Enum
@@ -14,7 +16,7 @@ class PicLembreteConstants(Enum):
     PIC_LEMBRETE_CAMPAIGN_NAME = "smas-cartaopic-lembrete"
 
     # Cost Center ID
-    PIC_LEMBRETE_COST_CENTER_ID = 38
+    PIC_LEMBRETE_COST_CENTER_ID = 71
 
     # Billing Project ID
     PIC_LEMBRETE_BILLING_PROJECT_ID = "rj-smas"
@@ -92,7 +94,7 @@ class PicLembreteConstants(Enum):
           select joined_status_cpi.*
           from joined_status_cpi
           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-            on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = {id_hsm_placeholder}
+            on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
           where fl.flattarget is null
         ),
         filtra_celulares_sem_whats as (
@@ -101,7 +103,8 @@ class PicLembreteConstants(Enum):
           LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
             ON f.celular_disparo = tel.telefone_numero_completo
           LEFT JOIN UNNEST(tel.consentimento) AS c
-          WHERE c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO"
+          WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+            or tel.telefone_numero_completo is null
         ),
         formatted AS (
           SELECT
