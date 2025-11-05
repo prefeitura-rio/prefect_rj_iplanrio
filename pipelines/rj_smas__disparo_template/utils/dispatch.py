@@ -434,7 +434,7 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
         if processor_func:
             log(f"Applying query processor: {query_processor_name}")
             return processor_func(raw_query, replacements)
-        
+
         log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
 
     try:
