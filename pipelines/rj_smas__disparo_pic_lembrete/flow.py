@@ -1,15 +1,20 @@
 # -*- coding: utf-8 -*-
-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+"""
+Dispatch Flow for pic
+"""
 import os
 import time
 from math import ceil
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow
 
-from pipelines.rj_smas__disparo_pic.tasks import (
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.dispatch import (
     check_api_status,
     check_if_dispatch_approved,
     create_dispatch_dfr,
@@ -17,19 +22,22 @@ from pipelines.rj_smas__disparo_pic.tasks import (
     dispatch,
     format_query,
     get_destinations,
-    printar,
     remove_duplicate_phones,
 )
-from pipelines.rj_smas__disparo_pic.utils.discord import (
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
-from pipelines.rj_smas__disparo_pic.utils.tasks import (
+# pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
+    printar,
     skip_flow_if_empty,
     task_download_data_from_bigquery,
 )
+# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
 
 
@@ -39,7 +47,7 @@ def rj_smas__disparo_pic_lembrete(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = 185,
     campaign_name: str | None = None,
-    cost_center_id: int | None = 38,
+    cost_center_id: int | None = 71,
     chunk_size: int | None = None,
     dataset_id: str | None = None,
     table_id: str | None = None,
@@ -73,6 +81,7 @@ def rj_smas__disparo_pic_lembrete(
 
     # Se test_mode ativado, usar query mock ao invés da query real
     if test_mode:
+        campaign_name = "teste-"+campaign_name
         query = PicLembreteConstants.PIC_QUERY_MOCK.value
 
         query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
@@ -104,8 +113,9 @@ def rj_smas__disparo_pic_lembrete(
     )
 
     if dispatch_approved:
-        query = format_query(raw_query=query, event_date=event_date, id_hsm=id_hsm)
-        print(f"\nQuery dispatch approval:\n{query}")
+        query_replacements = {"event_date_placeholder": event_date, "id_hsm_placeholder": id_hsm}
+        query_complete = format_query(raw_query=query, replacements=query_replacements)
+        print(f"\nQuery dispatch approval:\n{query_complete}")
         print(f"Sleep {sleep_minutes} minutes to check")
         time.sleep(sleep_minutes * 60)
         api = access_api(
@@ -120,7 +130,7 @@ def rj_smas__disparo_pic_lembrete(
 
         destinations_result = get_destinations(
             destinations=destinations,
-            query=query,
+            query=query_complete,
             billing_project_id=billing_project_id,
             query_processor_name=query_processor_name,
         )
@@ -144,7 +154,7 @@ def rj_smas__disparo_pic_lembrete(
 
             printar(id_hsm)
             print(
-                f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations}"
+                f"Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}"
             )
             # TODO: adicionar print da hsm
             print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
@@ -157,7 +167,7 @@ def rj_smas__disparo_pic_lembrete(
                 chunk=chunk_size,
             )
 
-            print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+            print(f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations")
 
             # Calculate total batches
             total_batches = ceil(len(unique_destinations) / chunk_size)
