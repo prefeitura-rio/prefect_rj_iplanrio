@@ -34,7 +34,7 @@ from pipelines.rj_smas__disparo_template.utils.whitelist import (
 
 @task
 def add_contacts_to_whitelist(
-    destinations: List[str],
+    destinations: List[Dict],
     percentage_to_insert: int,
     group_name: str,
     environment: str,
@@ -53,14 +53,13 @@ def add_contacts_to_whitelist(
         return
 
     phone_numbers = []
-    for dest_str in destinations:
+    for dest_json in destinations:
         try:
-            dest_json = json.loads(dest_str)
-            phone = dest_json.get("celular_disparo")
+            phone = dest_json.get("to")
             if phone:
                 phone_numbers.append(phone)
-        except json.JSONDecodeError:
-            print(f"Warning: Could not decode destination string: {dest_str}")
+        except Exception as e:
+            print(f"Warning: Could not process destination: {dest_json}, error: {e}")
 
     if not phone_numbers:
         print("No valid phone numbers found in destinations to add on whitelist.")

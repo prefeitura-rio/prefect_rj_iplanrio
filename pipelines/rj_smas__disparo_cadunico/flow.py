@@ -227,3 +227,4 @@ def rj_smas__disparo_cadunico(
             total_batches=total_batches,
             test_mode=test_mode,
         )
+# force deploy
