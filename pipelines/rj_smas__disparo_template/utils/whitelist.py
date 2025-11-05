@@ -10,6 +10,9 @@ import requests
 from iplanrio.pipelines_utils.env import getenv_or_action  # pylint: disable=E0611, E0401
 
 
+TIMEOUT_SECONDS = 60
+
+
 def get_environment_config(env: str = "staging") -> Dict[str, str]:
     """
     Returns the configuration for the specified environment.
@@ -79,7 +82,7 @@ class BetaGroupManager:
         }
 
         try:
-            response = requests.post(url, data=payload)
+            response = requests.post(url, data=payload, timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
 
             token_data = response.json()
@@ -92,7 +95,7 @@ class BetaGroupManager:
             print("Authentication successful!")
             return True
 
-        except requests.exceptions.RequestException as err:
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
             print(f"Authentication error: {err}")
             return False
 
@@ -111,7 +114,7 @@ class BetaGroupManager:
         url = f"{self.api_base_url}/groups"
 
         try:
-            response = requests.get(url, headers=self.get_headers())
+            response = requests.get(url, headers=self.get_headers(), timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
 
             data = response.json()
@@ -126,7 +129,7 @@ class BetaGroupManager:
 
             return groups
 
-        except requests.exceptions.RequestException as err:
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
             print(f"Error listing groups: {err}")
             return None
 
@@ -149,7 +152,9 @@ class BetaGroupManager:
         payload = {"name": group_name}
 
         try:
-            response = requests.post(url, json=payload, headers=self.get_headers())
+            response = requests.post(
+                url, json=payload, headers=self.get_headers(), timeout=TIMEOUT_SECONDS
+            )
             response.raise_for_status()
 
             group_data = response.json()
@@ -157,7 +162,7 @@ class BetaGroupManager:
 
             return group_data
 
-        except requests.exceptions.RequestException as err:
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
             print(f"Error creating group: {err}")
             return None
 
@@ -177,7 +182,9 @@ class BetaGroupManager:
             params = {"page": page, "per_page": per_page}
 
             try:
-                response = requests.get(url, headers=self.get_headers(), params=params)
+                response = requests.get(
+                    url, headers=self.get_headers(), params=params, timeout=TIMEOUT_SECONDS
+                )
                 response.raise_for_status()
 
                 data = response.json()
@@ -200,7 +207,7 @@ class BetaGroupManager:
 
                 page += 1
 
-            except requests.exceptions.RequestException as err:
+            except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
                 print(f"Error getting whitelist (page {page}): {err}")
                 if page == 1:
                     return None
@@ -249,13 +256,15 @@ class BetaGroupManager:
         }
 
         try:
-            response = requests.post(url, json=payload, headers=headers)
+            response = requests.post(
+                url, json=payload, headers=headers, timeout=TIMEOUT_SECONDS
+            )
             response.raise_for_status()
 
             print(f"Numbers added to group {group_id} successfully")
             return True
 
-        except requests.exceptions.RequestException as err:
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
             print(f"Error adding numbers to group: {err}")
             if hasattr(err, "response") and err.response is not None:
                 print(f"Server response: {err.response.text}")
