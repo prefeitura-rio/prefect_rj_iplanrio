@@ -46,7 +46,6 @@ deployments:
       dump_mode: append
       infisical_secret_path: /wetalkie
       whitelist_percentage: 30
-      whitelist_group_name: "cadunico_beta"
       whitelist_environment: "staging"
   - name: rj-smas--disparo-cadunico--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -70,7 +69,6 @@ deployments:
       dump_mode: append
       infisical_secret_path: /wetalkie
       whitelist_percentage: 30
-      whitelist_group_name: "cadunico_beta"
       whitelist_environment: "staging"
     # schedules:
     #   - interval: 86400
