@@ -39,7 +39,7 @@ def rj_smas__disparo_pic_lembrete_dp(
     com parâmetros específicos para o envio de lembretes.
     """
     print("Iniciando fluxo wrapper para disparo de lembrete PIC.")
-    
+
     # Chama o fluxo original passando todos os parâmetros
     default_flow(
         id_hsm=id_hsm,
