@@ -118,7 +118,7 @@ class CadunicoConstants(Enum):
             {days_ahead_placeholder} AS days_ahead,
             {id_hsm_placeholder} AS id_hsm
         )
-        select '{{"celular_disparo":"5511984677798","vars":{{"NOME":"Patricia","DATA":"05/11/2025","HORA":"11:00","LOCAL":"Cras Tijuca","ENDERECO":"Rua Guapiara - Nº 43 - Tijuca","CC_WT_CPF_CIDADAO":"06347059876"}},"externalId":"06347059876"}}'
+        select '{{"celular_disparo":"5519983256486","vars":{{"NOME":"Patricia","DATA":"05/11/2025","HORA":"11:00","LOCAL":"Cras Tijuca","ENDERECO":"Rua Guapiara - Nº 43 - Tijuca","CC_WT_CPF_CIDADAO":"06347059876"}},"externalId":"06347059876"}}'
     """
 
     # CREATE_CADUNICO_MOCK_TABLES = r"""
