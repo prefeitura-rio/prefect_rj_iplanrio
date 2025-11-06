@@ -57,6 +57,7 @@ def rj_smas__disparo_cadunico(
     whitelist_group_name: str = "cadunico_beta",
     whitelist_environment: str = "staging",
 ):
+    print(f"query antes:{query}")
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
     table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
     dump_mode = dump_mode or CadunicoConstants.CADUNICO_DUMP_MODE.value
@@ -69,6 +70,7 @@ def rj_smas__disparo_cadunico(
     query_processor_name = (
         query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
     )
+    print(f"query depois {query}")
 
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
 
@@ -124,9 +126,9 @@ def rj_smas__disparo_cadunico(
             group_name=whitelist_group_name,
             environment=whitelist_environment,
         )
-        print(f"{whitelist_percentage}% ({len(unique_destinations)*whitelist_percentage/100}) \
-              of numbers where add to whitelist on group {whitelist_group_name} inside \
-              environment {whitelist_environment}.")
+        print(f"{whitelist_percentage}% ({int(len(unique_destinations)*whitelist_percentage/100)}) \
+             of numbers were added to whitelist on group {whitelist_group_name} inside \
+             environment {whitelist_environment}.")
 
     # Log destination counts for tracking
     print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
