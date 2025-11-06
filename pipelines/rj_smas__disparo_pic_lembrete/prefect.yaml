@@ -47,7 +47,7 @@ deployments:
       infisical_secret_path: /wetalkie
   - name: rj-smas--disparo-pic-lembrete-dp--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_smas__disparo_pic_lembrete/flow_dp.py:rj_smas__disparo_pic_lembrete_dp
+    entrypoint: pipelines/rj_smas__disparo_pic_lembrete/flow_dp.py:rj_smas__disparo_pic_lembrete_dp_wrapper
     work_pool:
       name: default-pool
       work_queue_name: default

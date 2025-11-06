@@ -24,11 +24,10 @@ rj_smas__disparo_pic_lembrete_dp.parameters = {
     "dataset_id": PicLembreteConstants.PIC_LEMBRETE_DATASET_ID.value,
     "table_id": PicLembreteConstants.PIC_LEMBRETE_TABLE_ID.value,
     "dump_mode": PicLembreteConstants.PIC_LEMBRETE_DUMP_MODE.value,
-    "query": PicLembreteConstants.PIC_LEMBRETE_QUERY.value,
-    "query_dispatch_approved": PicLembreteConstants.PIC_LEMBRETE_QUERY_DISPATCH_APPROVED.value,
+    "query": PicLembreteConstants.PIC_QUERY.value,
+    "query_dispatch_approved": PicLembreteConstants.PIC_QUERY_DISPATCH_APPROVED.value,
     "query_processor_name": PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value,
     "test_mode": PicLembreteConstants.PIC_LEMBRETE_TEST_MODE.value,
-    "sleep_minutes": PicLembreteConstants.PIC_LEMBRETE_SLEEP_MINUTES.value,
     "dispatch_approved_col": PicLembreteConstants.DISPATCH_APPROVED_COL.value,
     "dispatch_date_col": PicLembreteConstants.DISPATCH_DATE_COL.value,
     "event_date_col": PicLembreteConstants.EVENT_DATE_COL.value,
@@ -66,16 +65,15 @@ def rj_smas__disparo_pic_lembrete_dp_wrapper(
         dataset_id=dataset_id or PicLembreteConstants.PIC_LEMBRETE_DATASET_ID.value,
         table_id=table_id or PicLembreteConstants.PIC_LEMBRETE_TABLE_ID.value,
         dump_mode=dump_mode or PicLembreteConstants.PIC_LEMBRETE_DUMP_MODE.value,
-        query=query or PicLembreteConstants.PIC_LEMBRETE_QUERY.value,
-        query_dispatch_approved=query_dispatch_approved or PicLembreteConstants.PIC_LEMBRETE_QUERY_DISPATCH_APPROVED.value,
+        query=query or PicLembreteConstants.PIC_QUERY.value,
+        query_dispatch_approved=query_dispatch_approved or PicLembreteConstants.PIC_QUERY_DISPATCH_APPROVED.value,
         query_processor_name=query_processor_name or PicLembreteConstants.PIC_LEMBRETE_QUERY_PROCESSOR_NAME.value,
         test_mode=test_mode if test_mode is not None else PicLembreteConstants.PIC_LEMBRETE_TEST_MODE.value,
-        sleep_minutes=sleep_minutes or PicLembreteConstants.PIC_LEMBRETE_SLEEP_MINUTES.value,
         dispatch_approved_col=dispatch_approved_col or PicLembreteConstants.DISPATCH_APPROVED_COL.value,
         dispatch_date_col=dispatch_date_col or PicLembreteConstants.DISPATCH_DATE_COL.value,
         event_date_col=event_date_col or PicLembreteConstants.EVENT_DATE_COL.value,
         infisical_secret_path=infisical_secret_path,
+        sleep_minutes=sleep_minutes,
     )
 # force deploy
 # force deploy
-
