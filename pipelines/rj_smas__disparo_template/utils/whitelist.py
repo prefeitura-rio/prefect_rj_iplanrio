@@ -26,6 +26,7 @@ def get_environment_config(env: str = "staging") -> Dict[str, str]:
     Raises:
         ValueError: If the environment is not valid
     """
+    # pylint: disable='no-else-return'
     if env == "staging":
         return {
             "api_base_url": getenv_or_action("WHITELIST_API_BASE_URL_STAGING"),
@@ -58,7 +59,7 @@ def validate_environment_config(config: Dict[str, str]) -> None:
     missing_keys = [key for key in required_keys if not config.get(key)]
 
     if missing_keys:
-        raise ValueError(f"Missing configurations: {missing_keys}. Check your environment variables.")
+        raise ValueError(f"\n⚠️  Missing configurations: {missing_keys}. Check your environment variables.")
 
 
 class BetaGroupManager:
@@ -80,7 +81,7 @@ class BetaGroupManager:
             "grant_type": "client_credentials",
             "scope": "profile email",
         }
-
+        print(f"Authenticating with URL {url} using payload {payload}") ## TODO: remover
         try:
             response = requests.post(url, data=payload, timeout=TIMEOUT_SECONDS)
             response.raise_for_status()
@@ -89,14 +90,14 @@ class BetaGroupManager:
             self.access_token = token_data.get("access_token")
 
             if not self.access_token:
-                print("Error: access_token not found in response")
+                print("\n⚠️  Error: access_token not found in response")
                 return False
 
-            print("Authentication successful!")
+            print("\n✅  Authentication successful!")
             return True
 
         except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
-            print(f"Authentication error: {err}")
+            print(f"\n⚠️  Authentication error: {err}")
             return False
 
     def get_headers(self) -> Dict[str, str]:

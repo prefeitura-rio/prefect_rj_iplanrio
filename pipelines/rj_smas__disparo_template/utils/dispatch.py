@@ -49,7 +49,7 @@ def add_contacts_to_whitelist(
         environment (str): The environment to run on ('staging' or 'production').
     """
     if not destinations:
-        print("No destinations to add on whitelist.")
+        print("\n⚠️  No destinations to add on whitelist.")
         return
 
     phone_numbers = []
@@ -58,11 +58,11 @@ def add_contacts_to_whitelist(
             phone = dest_json.get("to")
             if phone:
                 phone_numbers.append(phone)
-        except Exception as e:
-            print(f"Warning: Could not process destination: {dest_json}, error: {e}")
+        except Exception as err:
+            print(f"\n⚠️  Warning: Could not process destination: {dest_json}, error: {err}")
 
     if not phone_numbers:
-        print("No valid phone numbers found in destinations to add on whitelist.")
+        print("\n⚠️  No valid phone numbers found in destinations to add on whitelist.")
         return
 
     # Remove duplicates
@@ -72,7 +72,7 @@ def add_contacts_to_whitelist(
     number_to_select = int(len(unique_phone_numbers) * (percentage_to_insert / 100))
 
     if number_to_select == 0:
-        print(f"Percentage {percentage_to_insert}% results in 0 contacts to insert on whitelist. Skipping.")
+        print(f"\n⚠️  Percentage {percentage_to_insert}% results in 0 contacts to insert on whitelist. Skipping.")
         return
 
     # Select a random sample
@@ -86,8 +86,9 @@ def add_contacts_to_whitelist(
     try:
         config = get_environment_config(environment)
         validate_environment_config(config)
-    except ValueError as e:
-        print(f"Configuration error: {e}")
+        print(f"Whitelist config {config}")
+    except ValueError as err:
+        print(f"\n⚠️  Configuration error: {err}")
         return
 
     manager = BetaGroupManager(
@@ -98,7 +99,7 @@ def add_contacts_to_whitelist(
     )
 
     if not manager.authenticate():
-        print("Authentication failed. Cannot add contacts to whitelist.")
+        print("\n⚠️  Authentication failed. Cannot add contacts to whitelist.")
         return
 
     # Find or create the group
@@ -107,7 +108,7 @@ def add_contacts_to_whitelist(
         group = manager.create_group(group_name)
 
     if not group:
-        print(f"Could not find or create group '{group_name}'. Aborting.")
+        print(f"\n⚠️  Could not find or create group '{group_name}'. Aborting.")
         return
 
     group_id = group["id"]
@@ -117,15 +118,15 @@ def add_contacts_to_whitelist(
     new_numbers_to_add = [num for num in selected_numbers if num not in existing_numbers_set]
 
     if not new_numbers_to_add:
-        print(f"All selected numbers are already in the whitelist for group '{group_name}'.")
+        print(f"\n✅  All selected numbers are already in the whitelist for group '{group_name}'.")
         return
 
     print(f"Adding {len(new_numbers_to_add)} new contacts to group '{group_name}' (ID: {group_id}).")
 
     if manager.add_numbers_to_group(group_id, new_numbers_to_add):
-        print("Successfully added contacts to the whitelist.")
+        print("\n✅  Successfully added contacts to the whitelist.")
     else:
-        print("Failed to add contacts to the whitelist.")
+        print("\n⚠️  Failed to add contacts to the whitelist.")
 
 
 @task
