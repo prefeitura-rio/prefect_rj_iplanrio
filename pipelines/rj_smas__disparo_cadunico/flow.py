@@ -8,6 +8,7 @@ from math import ceil
 import os
 import time
 
+import pendulum
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
@@ -23,6 +24,7 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     format_query,
     get_destinations,
     remove_duplicate_phones,
+    add_contacts_to_whitelist,
 )
 # pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_template.utils.tasks import (
@@ -52,6 +54,8 @@ def rj_smas__disparo_cadunico(
     sleep_minutes: int | None = 5,
     days_ahead: str | None = 2,
     infisical_secret_path: str = "/wetalkie",
+    whitelist_percentage: int = 30,
+    whitelist_environment: str = "staging",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
     table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
@@ -62,8 +66,9 @@ def rj_smas__disparo_cadunico(
     chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
     days_ahead = days_ahead or CadunicoConstants.DAYS_AHEAD.value
     query = query or CadunicoConstants.CADUNICO_QUERY.value
-    query_processor_name = query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
-
+    query_processor_name = (
+        query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
+    )
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
 
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
@@ -72,7 +77,7 @@ def rj_smas__disparo_cadunico(
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     if test_mode:
-        campaign_name = "teste-"+campaign_name
+        campaign_name = "teste-" + campaign_name
         query = CadunicoConstants.QUERY_MOCK.value
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
 
@@ -86,7 +91,10 @@ def rj_smas__disparo_cadunico(
 
     api_status = check_api_status(api)
 
-    query_replacements = {"id_hsm_placeholder": id_hsm, "days_ahead_placeholder": days_ahead}
+    query_replacements = {
+        "id_hsm_placeholder": id_hsm,
+        "days_ahead_placeholder": days_ahead,
+    }
     query_complete = format_query(
         raw_query=query,
         replacements=query_replacements,
@@ -107,6 +115,19 @@ def rj_smas__disparo_cadunico(
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
 
+    # Add contacts to whitelist if percentage is set
+    if whitelist_percentage > 0:
+        whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
+        add_contacts_to_whitelist(
+            destinations=unique_destinations,
+            percentage_to_insert=whitelist_percentage,
+            group_name=whitelist_group_name,
+            environment=whitelist_environment,
+        )
+        print(f"{whitelist_percentage}% ({int(len(unique_destinations)*whitelist_percentage/100)}) \
+             of numbers were added to whitelist on group {whitelist_group_name} inside \
+             environment {whitelist_environment}.")
+
     # Log destination counts for tracking
     print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
 
@@ -121,7 +142,9 @@ def rj_smas__disparo_cadunico(
             f"\n⚠️  Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}\n"
         )
         # TODO: adicionar print da hsm
-        print(f"\n⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
+        print(
+            f"\n⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!"
+        )
         time.sleep(sleep_minutes * 60)
 
         dispatch_date = dispatch(
@@ -131,7 +154,9 @@ def rj_smas__disparo_cadunico(
             chunk=chunk_size,
         )
 
-        print(f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations")
+        print(
+            f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations"
+        )
 
         total_batches = ceil(len(unique_destinations) / chunk_size)
 
@@ -143,7 +168,9 @@ def rj_smas__disparo_cadunico(
             campaign_name=campaign_name,
             cost_center_id=cost_center_id,
             total_batches=total_batches,
-            sample_destination=(unique_destinations[0] if unique_destinations else None),
+            sample_destination=(
+                unique_destinations[0] if unique_destinations else None
+            ),
             test_mode=test_mode,
         )
 
@@ -200,4 +227,4 @@ def rj_smas__disparo_cadunico(
             total_batches=total_batches,
             test_mode=test_mode,
         )
-# force deploy
+# force deploy####

@@ -7,6 +7,7 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 """
 
 import json
+import random
 from datetime import datetime
 from math import ceil
 from typing import Dict, List, Tuple, Union
@@ -24,6 +25,108 @@ from pipelines.rj_smas__disparo_template.utils.validators import (
     validate_destinations,
     validate_dispatch_payload,
 )
+from pipelines.rj_smas__disparo_template.utils.whitelist import (
+    BetaGroupManager,
+    get_environment_config,
+    validate_environment_config,
+)
+
+
+@task
+def add_contacts_to_whitelist(
+    destinations: List[Dict],
+    percentage_to_insert: int,
+    group_name: str,
+    environment: str,
+) -> None:
+    """
+    Adds a random percentage of contacts to a whitelist group.
+
+    Args:
+        destinations (List[str]): List of destination data as JSON strings.
+        percentage_to_insert (int): The percentage of contacts to insert (0-100).
+        group_name (str): The name of the group to add contacts to.
+        environment (str): The environment to run on ('staging' or 'production').
+    """
+    if not destinations:
+        print("\n⚠️  No destinations to add on whitelist.")
+        return
+
+    phone_numbers = []
+    for dest_json in destinations:
+        try:
+            phone = dest_json.get("to")
+            if phone:
+                phone_numbers.append(phone)
+        except Exception as err:
+            print(f"\n⚠️  Warning: Could not process destination: {dest_json}, error: {err}")
+
+    if not phone_numbers:
+        print("\n⚠️  No valid phone numbers found in destinations to add on whitelist.")
+        return
+
+    # Remove duplicates
+    unique_phone_numbers = list(set(phone_numbers))
+
+    # Calculate the number of contacts to select
+    number_to_select = int(len(unique_phone_numbers) * (percentage_to_insert / 100))
+
+    if number_to_select == 0:
+        print(f"\n⚠️  Percentage {percentage_to_insert}% results in 0 contacts to insert on whitelist. Skipping.")
+        return
+
+    # Select a random sample
+    if number_to_select < len(unique_phone_numbers):
+        selected_numbers = random.sample(unique_phone_numbers, number_to_select)
+    else:
+        selected_numbers = unique_phone_numbers  # Insert all if percentage is 100 or more
+
+    print(f"Selected {len(selected_numbers)} contacts to add to group '{group_name}'.")
+
+    try:
+        config = get_environment_config(environment)
+        validate_environment_config(config)
+        print(f"Whitelist config {config}")
+    except ValueError as err:
+        print(f"\n⚠️  Configuration error: {err}")
+        return
+
+    manager = BetaGroupManager(
+        config["issuer"],
+        config["client_id"],
+        config["client_secret"],
+        config["api_base_url"],
+    )
+
+    if not manager.authenticate():
+        print("\n⚠️  Authentication failed. Cannot add contacts to whitelist.")
+        return
+
+    # Find or create the group
+    group = manager.find_group_by_name(group_name)
+    if not group:
+        group = manager.create_group(group_name)
+
+    if not group:
+        print(f"\n⚠️  Could not find or create group '{group_name}'. Aborting.")
+        return
+
+    group_id = group["id"]
+
+    # Get existing numbers to avoid duplicates
+    existing_numbers_set = manager.get_existing_numbers_set()
+    new_numbers_to_add = [num for num in selected_numbers if num not in existing_numbers_set]
+
+    if not new_numbers_to_add:
+        print(f"\n✅  All selected numbers are already in the whitelist for group '{group_name}'.")
+        return
+
+    print(f"Adding {len(new_numbers_to_add)} new contacts to group '{group_name}' (ID: {group_id}).")
+
+    if manager.add_numbers_to_group(group_id, new_numbers_to_add):
+        print("\n✅  Successfully added contacts to the whitelist.")
+    else:
+        print("\n⚠️  Failed to add contacts to the whitelist.")
 
 
 @task
@@ -331,8 +434,8 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
         if processor_func:
             log(f"Applying query processor: {query_processor_name}")
             return processor_func(raw_query, replacements)
-        else:
-            log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
+
+        log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
 
     try:
         return raw_query.format_map(replacements)
