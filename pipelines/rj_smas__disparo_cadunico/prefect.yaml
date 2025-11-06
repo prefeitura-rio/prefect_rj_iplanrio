@@ -45,6 +45,8 @@ deployments:
       table_id: disparos
       dump_mode: append
       infisical_secret_path: /wetalkie
+      whitelist_percentage: 30
+      whitelist_environment: "staging"
   - name: rj-smas--disparo-cadunico--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__disparo_cadunico/flow.py:rj_smas__disparo_cadunico
@@ -66,6 +68,8 @@ deployments:
       table_id: disparos
       dump_mode: append
       infisical_secret_path: /wetalkie
+      whitelist_percentage: 30
+      whitelist_environment: "staging"
     # schedules:
     #   - interval: 86400
     #     anchor_date: "2021-01-01T09:00:00"
