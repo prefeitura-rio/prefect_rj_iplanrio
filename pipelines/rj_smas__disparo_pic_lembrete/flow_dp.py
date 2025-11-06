@@ -77,3 +77,5 @@ def rj_smas__disparo_pic_lembrete_dp_wrapper(
         infisical_secret_path=infisical_secret_path,
     )
 # force deploy
+# force deploy
+
