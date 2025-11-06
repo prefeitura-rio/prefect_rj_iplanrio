@@ -8,6 +8,7 @@ from math import ceil
 import os
 import time
 
+import pendulum
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
@@ -54,10 +55,8 @@ def rj_smas__disparo_cadunico(
     days_ahead: str | None = 2,
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
-    whitelist_group_name: str = "cadunico_beta",
     whitelist_environment: str = "staging",
 ):
-    print(f"query antes:{query}")
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
     table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
     dump_mode = dump_mode or CadunicoConstants.CADUNICO_DUMP_MODE.value
@@ -70,8 +69,6 @@ def rj_smas__disparo_cadunico(
     query_processor_name = (
         query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
     )
-    print(f"query depois {query}")
-
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
 
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
@@ -120,6 +117,7 @@ def rj_smas__disparo_cadunico(
 
     # Add contacts to whitelist if percentage is set
     if whitelist_percentage > 0:
+        whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
         add_contacts_to_whitelist(
             destinations=unique_destinations,
             percentage_to_insert=whitelist_percentage,

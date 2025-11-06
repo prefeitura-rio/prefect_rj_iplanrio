@@ -8,6 +8,7 @@ import os
 import time
 from math import ceil
 
+import pendulum
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
@@ -63,7 +64,6 @@ def rj_smas__disparo_pic_lembrete(
     event_date_col: str | None = "DATA_ENTREGA",
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
-    whitelist_group_name: str = "pic_beta",
     whitelist_environment: str = "staging",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_LEMBRETE_DATASET_ID.value
@@ -151,6 +151,7 @@ def rj_smas__disparo_pic_lembrete(
 
         # Add contacts to whitelist if percentage is set
         if whitelist_percentage > 0:
+            whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
             add_contacts_to_whitelist(
                 destinations=unique_destinations,
                 percentage_to_insert=whitelist_percentage,
