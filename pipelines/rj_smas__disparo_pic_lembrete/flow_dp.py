@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
-# noqa: flake8=E501
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+"""
+Dispatch Flow for pic lembrete using deepcopy
+"""
 from copy import deepcopy
 
-from prefect import flow
+from prefect import flow  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_pic.flow import rj_smas__disparo_pic as default_flow
-from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants
+from pipelines.rj_smas__disparo_pic.flow import rj_smas__disparo_pic as default_flow  # pylint: disable=E0611, E0401
+from pipelines.rj_smas__disparo_pic_lembrete.constants import PicLembreteConstants  # pylint: disable=E0611, E0401
 
 
 rj_smas__disparo_pic_lembrete_dp = deepcopy(default_flow)
@@ -32,6 +36,7 @@ rj_smas__disparo_pic_lembrete_dp.parameters = {
 }
 
 rj_smas__disparo_pic_lembrete_dp.description = "Flow para disparo de lembretes do PIC"
+
 
 # This wrapper flow is needed to allow overriding parameters from the UI
 @flow(log_prints=True)
@@ -71,3 +76,4 @@ def rj_smas__disparo_pic_lembrete_dp_wrapper(
         event_date_col=event_date_col or PicLembreteConstants.EVENT_DATE_COL.value,
         infisical_secret_path=infisical_secret_path,
     )
+# force deploy
