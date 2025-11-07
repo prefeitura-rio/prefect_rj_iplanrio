@@ -93,7 +93,6 @@ def rj_smas__disparo_template(
         destinations=destinations,
         query=query,
         billing_project_id=billing_project_id,
-        query_processor_name=query_processor_name,
     )
 
     validated_destinations = skip_flow_if_empty(
