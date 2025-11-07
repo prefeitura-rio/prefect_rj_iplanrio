@@ -8,18 +8,22 @@
 import os
 import time
 from math import ceil
+import pendulum
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect import flow
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
+from prefect import flow  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_template.constants import TemplateConstants
+from pipelines.rj_smas__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
+# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
+# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_template.utils.dispatch import (
+    add_contacts_to_whitelist,
     check_api_status,
     create_dispatch_dfr,
     create_dispatch_payload,
@@ -27,6 +31,7 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     get_destinations,
     remove_duplicate_phones,
 )
+# pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
@@ -50,6 +55,8 @@ def rj_smas__disparo_template(
     query_processor_name: str | None = "template",
     sleep_minutes: int | None = 5,
     infisical_secret_path: str = "/wetalkie",
+    whitelist_percentage: int = 30,
+    whitelist_environment: str = "staging",
 ):
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
@@ -65,8 +72,8 @@ def rj_smas__disparo_template(
 
     destinations = getenv_or_action("TEMPLATE__DESTINATIONS", action="ignore")
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
+    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
+    crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
 
     if test_mode:
         campaign_name = "teste-"+campaign_name
@@ -98,6 +105,16 @@ def rj_smas__disparo_template(
 
     # Log destination counts for tracking
     print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
+
+    # Add contacts to whitelist if percentage is set
+    if whitelist_percentage > 0:
+        whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
+        add_contacts_to_whitelist(
+            destinations=unique_destinations,
+            percentage_to_insert=whitelist_percentage,
+            group_name=whitelist_group_name,
+            environment=whitelist_environment,
+        )
 
     if api_status:
         dispatch_payload = create_dispatch_payload(
@@ -164,11 +181,11 @@ def rj_smas__disparo_template(
             print(f"Generated partitions_path: {partitions_path}")
             if os.path.exists(partitions_path):
                 files_in_path = []
-                for root, dirs, files in os.walk(partitions_path):
+                for root, dirs, files in os.walk(partitions_path):  # pylint: disable=unused-variable
                     files_in_path.extend([os.path.join(root, f) for f in files])
                 print(f"Files in partitions path: {files_in_path}")
 
-            create_table = create_table_and_upload_to_gcs_task(
+            create_table_and_upload_to_gcs_task(
                 data_path=partitions_path,
                 dataset_id=dataset_id,
                 table_id=table_id,
