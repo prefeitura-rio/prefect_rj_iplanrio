@@ -136,7 +136,6 @@ def rj_smas__disparo_pic(
             destinations=destinations,
             query=query_complete,
             billing_project_id=billing_project_id,
-            query_processor_name=query_processor_name,
         )
 
         validated_destinations = skip_flow_if_empty(
