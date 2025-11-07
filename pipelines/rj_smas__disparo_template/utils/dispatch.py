@@ -291,7 +291,10 @@ def get_destinations(
 
     Returns validated destinations with mandatory externalId field.
     """
-    if query:
+    if not query:
+        if isinstance(destinations, str):
+            destinations = json.loads(destinations)
+    else:
         log("\nQuery was found")
 
         destinations = download_data_from_bigquery(
@@ -302,8 +305,6 @@ def get_destinations(
         log(f"response from query {destinations.head()}")
         destinations = destinations.iloc[:, 0].tolist()
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
-    elif isinstance(destinations, str):
-        destinations = json.loads(destinations)
 
     # Validate destinations using centralized validation
     if destinations:
@@ -313,7 +314,7 @@ def get_destinations(
         # Convert back to dict format for backward compatibility
         return [dest.dict() for dest in validated_destinations]
 
-    return destinations
+    return []
 
 
 @task
