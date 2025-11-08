@@ -55,6 +55,7 @@ def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -
 
     # Saturday (5) or Sunday (6) = skip flow
     if current_weekday in [5, 6]:  # sábado, domingo
+        log(f"Current day is {weekday_names[current_weekday]}. Skipping flow.")
         return None
 
     # Thursday (3) or Friday (4) = 4 days ahead
