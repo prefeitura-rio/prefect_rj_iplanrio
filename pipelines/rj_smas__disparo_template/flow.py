@@ -38,6 +38,7 @@ from pipelines.rj_smas__disparo_template.utils.tasks import (
     printar,
     skip_flow_if_empty,
 )
+# force deploy
 
 
 @flow(log_prints=True)
@@ -93,7 +94,6 @@ def rj_smas__disparo_template(
         destinations=destinations,
         query=query,
         billing_project_id=billing_project_id,
-        query_processor_name=query_processor_name,
     )
 
     validated_destinations = skip_flow_if_empty(
@@ -207,4 +207,3 @@ def rj_smas__disparo_template(
             total_batches=total_batches,
             test_mode=test_mode,
         )
-# force deploy
