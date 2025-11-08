@@ -10,7 +10,7 @@ import json
 import random
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
@@ -282,7 +282,7 @@ def check_api_status(api: object) -> bool:
 
 @task
 def get_destinations(
-    destinations: Union[None, List[str]],
+    destinations: Union[None, List[Dict], str],
     query: str,
     billing_project_id: str = "rj-smas",
 ) -> List[Dict]:
@@ -302,18 +302,19 @@ def get_destinations(
         log(f"response from query {destinations.head()}")
         destinations = destinations.iloc[:, 0].tolist()
         destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
-    elif isinstance(destinations, str):
-        destinations = json.loads(destinations)
+    else:
+        if isinstance(destinations, str):
+            destinations = json.loads(destinations)
+        else: return []
 
     # Validate destinations using centralized validation
     if destinations:
         validated_destinations, validation_stats = validate_destinations(destinations)
         log_validation_summary(validation_stats, "get_destinations")
-
         # Convert back to dict format for backward compatibility
         return [dest.dict() for dest in validated_destinations]
 
-    return destinations
+    return []
 
 
 @task
@@ -394,7 +395,7 @@ def check_if_dispatch_approved(
 
 
 @task
-def format_query(raw_query: str, replacements: dict, query_processor_name: str = None) -> str:
+def format_query(raw_query: str, replacements: dict, query_processor_name: str = None) -> Optional[str]:
     """
     Formats a SQL query by replacing placeholders with values from a dictionary.
 
