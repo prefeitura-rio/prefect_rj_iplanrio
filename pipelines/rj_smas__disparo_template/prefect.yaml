@@ -66,8 +66,167 @@ deployments:
       table_id: disparos
       dump_mode: append
       infisical_secret_path: /wetalkie
-    # schedules:
-    #   - interval: 86400
-    #     anchor_date: "2021-01-01T09:00:00"
-    #     timezone: America/Sao_Paulo
-    #     slug: disparo_cadunico_daily
+    schedules:
+      # Schedule para flow cvl-pesquisa1746-prod
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        slug: cvl-pesquisa1746-prod
+        parameters:
+          id_hsm: 192
+          campaign_name: cvl-pesquisa1746-prod
+          cost_center_id: 71
+          chunk_size: 1000
+          dataset_id: brutos_wetalkie
+          table_id: disparos
+          dump_mode: append
+          test_mode: false
+          chunk_size: 1000
+          sleep_minutes: 5
+          whitelist_percentage: 30
+          infisical_secret_path: "/wetalkie"
+          whitelist_environment: "production"
+          query: |
+            with base_bruta as
+              (SELECT
+              t1.id_chamado,
+              t5.no_origem_ocorrencia as canal_atendimento,
+              CASE
+                  WHEN t1.id_origem_ocorrencia = '1' THEN 'Central 1746'
+                  WHEN t1.id_origem_ocorrencia = '11' THEN 'Aplicativo 1746'
+                  WHEN t1.id_origem_ocorrencia = '12' THEN 'Agência 1746'
+                  WHEN t1.id_origem_ocorrencia = '13' THEN 'Site 1746'
+                  WHEN t1.id_origem_ocorrencia = '16' THEN 'Carioca Digital'
+                  WHEN t1.id_origem_ocorrencia = '17' THEN 'WhatsApp 1746'
+                  WHEN t1.id_origem_ocorrencia = '18' THEN 'Van 1746'
+                  WHEN t1.id_origem_ocorrencia = '26' THEN 'Agência 1746'
+                  WHEN t1.id_origem_ocorrencia = '28' THEN 'WhatsApp 1746'
+                  ELSE t1.id_origem_ocorrencia
+              END AS canal_tratado,
+              t3.cpf,
+              t4.nome,
+              COALESCE(
+                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(t4.telefone_1, r'[^\\d]', '')),
+                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(t4.telefone_2, r'[^\\d]', '')),
+                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(t4.telefone_3, r'[^\\d]', ''))
+                ) AS telefone,
+              t1.data_inicio,
+              t1.data_fim,
+              t1.categoria,
+              t1.subtipo,
+              CASE
+                  WHEN t1.id_subtipo = '1274' THEN 'Verificação de frequência irregular da coleta domiciliar'
+                  WHEN t1.id_subtipo = '1242' THEN 'Verificação de ar condicionado inoperante no ônibus'
+                  WHEN t1.id_subtipo = '1287' THEN 'Varrição de logradouro'
+                  WHEN t1.id_subtipo = '2178' THEN 'Reposição de tampão ou grelha'
+                  WHEN t1.id_subtipo = '3139' THEN 'Reparo de sinal de trânsito apagado'
+                  WHEN t1.id_subtipo = '5799' THEN 'Reparo de Luminária'
+                  WHEN t1.id_subtipo = '78' THEN 'Reparo de buraco na pista'
+                  WHEN t1.id_subtipo = '1298' THEN 'Remoção de resíduos no logradouro'
+                  WHEN t1.id_subtipo = '1325' THEN 'Remoção de entulho e bens inservíveis'
+                  WHEN t1.id_subtipo = '1319' THEN 'Poda de árvore em logradouro'
+                  WHEN t1.id_subtipo = '5071' THEN 'Fiscalização de perturbação do sossego'
+                  WHEN t1.id_subtipo = '114' THEN 'Fiscalização de obstáculo fixo na calçada'
+                  WHEN t1.id_subtipo = '2966' THEN 'Fiscalização de estacionamento irregular de veículo'
+                  WHEN t1.id_subtipo = '1101' THEN 'Fiscalização de comércio ambulante'
+                  WHEN t1.id_subtipo = '5841' THEN 'Fiscalização da ocupação de área pública'
+                  WHEN t1.id_subtipo = '100' THEN 'Desobstrução de ramais e ralos'
+                  WHEN t1.id_subtipo = '1316' THEN 'Controle de roedores e caramujos africanos'
+                  WHEN t1.id_subtipo = '1279' THEN 'Capina em logradouro'
+                  ELSE t1.subtipo
+              END AS subtipo_tratado,
+              t1.id_subtipo,
+              t2.bairro,
+              t2.no_subprefeitura as subprefeitura,
+              t1.status,
+              t1.situacao,
+              t1.tipo_situacao
+              FROM rj-segovi.adm_central_atendimento_1746.chamado t1
+              LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura t2 on t1.id_bairro = t2.id_bairro
+              LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf t3 on t1.id_chamado = t3.id_chamado
+              LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa t4 on t3.cpf = t4.cpf
+              LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_origem_ocorrencia t5 on t1.id_origem_ocorrencia = t5.id_origem_ocorrencia
+              WHERE 1=1
+              AND t1.data_fim >= '2025-01-01 00:00:00.000' --chamados fechados a partir de 01/Jan/25
+              AND t1.id_subtipo in (
+              '2966',
+              '1325',
+              '5799',
+              '78',
+              '100',
+              '1298',
+              '1319',
+              '1316',
+              '1274',
+              '1242',
+              '1287',
+              '5071',
+              '1279',
+              '2178',
+              '3139',
+              '114',
+              '5841',
+              '1101'
+              ) --Considera somente 18 serviços selecionados pela SUBTD
+              AND t2.id_bairro is not null --considera somente atendimentos com bairro classificado
+              AND t1.categoria in ("Serviço") --desconsidera chamados de ouvidoria
+              AND t1.id_origem_ocorrencia NOT IN ("23", "25", "27") --Desconsidera canais = Táxi.Rio, Facebook e Conservação
+              AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) is not null --desconsidera chamados sem telefone
+              GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17
+              ORDER BY data_fim desc),
+
+              visao_chamados_fechados_dia AS
+              (
+              SELECT
+              date(data_fim) as data_ref,
+              count(id_chamado) as qtd_chamados_fechados
+              FROM base_bruta
+              GROUP BY 1
+              ),
+
+              --Select * from visao_chamados_fechados_dia order by data_ref asc
+              dados_finais as (
+              Select
+              id_chamado,
+              canal_tratado,
+              cpf,
+              INITCAP(
+                            IF(
+                              ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                              CONCAT(
+                                SPLIT(nome, ' ')[SAFE_OFFSET(0)],
+                                ' ',
+                                SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                              ),
+                              nome
+                            )
+                          ) as nome,
+              telefone,
+              data_inicio,
+              data_fim,
+              subtipo_tratado,
+              id_subtipo
+              from base_bruta
+              WHERE 1=1
+              AND DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) --somente os chamados fechados ontem
+              and telefone is not null)
+
+              select 
+              TO_JSON_STRING(
+                  STRUCT(
+                    telefone AS celular_disparo,
+                    STRUCT(
+                      nome AS NOME_SOBRENOME,
+                      nome AS CC_WT_NOME_SOBRENOME,
+                      subtipo_tratado AS SOLICITACAO,
+                      subtipo_tratado AS CC_WT_SOLICITACAO,
+                      canal_tratado AS CANAL,
+                      canal_tratado AS CC_WT_CANAL,
+                      cpf AS CC_WT_CPF_CIDADAO,
+                      CAST(id_chamado AS STRING) AS CC_WT_ID_CHAMADO,
+                      CAST(id_subtipo AS STRING) AS CC_WT_ID_SUBTIPO
+                    ) AS vars,
+                    CAST(cpf AS STRING) AS externalId
+                  )
+                ) AS destination_data
+              from dados_finais
