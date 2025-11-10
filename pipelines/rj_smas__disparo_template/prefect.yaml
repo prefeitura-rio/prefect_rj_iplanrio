@@ -211,7 +211,7 @@ deployments:
               AND DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) --somente os chamados fechados ontem
               and telefone is not null)
 
-              select 
+              select
               TO_JSON_STRING(
                   STRUCT(
                     telefone AS celular_disparo,
