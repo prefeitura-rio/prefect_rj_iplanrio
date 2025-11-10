@@ -134,10 +134,14 @@ class PicLembreteConstants(Enum):
               celular_disparo AS celular_disparo,
               STRUCT(
                 nome_sobrenome AS NOME_SOBRENOME,
-                cpf AS CC_WT_CPF_CIDADAO,
                 endereco_evento AS ENDERECO,
                 data_formatada AS DIA,
-                horario_evento AS HORARIO
+                horario_evento AS HORARIO,
+                cpf AS CC_WT_CPF_CIDADAO,
+                nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+                endereco_evento AS CC_WT_ENDERECO,
+                data_formatada AS CC_WT_DIA,
+                horario_evento AS CC_WT_HORARIO
               ) AS vars,
               cpf AS externalId
             )
