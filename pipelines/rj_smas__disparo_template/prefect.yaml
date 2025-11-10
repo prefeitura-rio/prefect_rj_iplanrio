@@ -81,7 +81,6 @@ deployments:
           table_id: disparos
           dump_mode: append
           test_mode: false
-          chunk_size: 1000
           sleep_minutes: 5
           whitelist_percentage: 30
           infisical_secret_path: "/wetalkie"
