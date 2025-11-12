@@ -66,4 +66,4 @@ deployments:
       table_id: disparos_efetuados
       dump_mode: append
       infisical_secret_path: /wetalkie
-    
+
