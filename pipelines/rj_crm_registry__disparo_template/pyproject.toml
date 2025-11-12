@@ -1,5 +1,5 @@
 [project]
-name = "rj_smas__disparo_template"
+name = "rj_crm_registry__disparo_template"
 version = "0.1.0"
 description = "Pipeline de disparo de template"
 dependencies = [
