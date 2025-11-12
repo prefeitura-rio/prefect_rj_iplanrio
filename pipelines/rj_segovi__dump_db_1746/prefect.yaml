@@ -34,48 +34,48 @@ deployments:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute
         image_pull_policy: Always
-  - name: rj-segovi--dump-db-1746--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_segovi__dump_db_1746/flow.py:rj_segovi__dump_db_1746
-    work_pool:
-      name: datario-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute
-        image_pull_policy: Always
-    schedules:
-      - interval: 86400
-        anchor_date: '2025-07-15T00:10:00'
-        timezone: America/Sao_Paulo
-        slug: chamado_cpf
-        parameters:
-          table_id: chamado_cpf
-          dataset_id: brutos_1746
-          dump_mode: overwrite
-          execute_query: SELECT pc.id_chamado_fk AS id_chamado, CASE WHEN p.ds_cpf IS NOT NULL THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(p.ds_cpf,
-            '-', ''), '.', ''), '/', ''), '(', ''), ')', ''), ' ', ''), ',', ''), '+', ''), ';', '') ELSE NULL END AS cpf FROM tb_protocolo_chamado
-            pc LEFT JOIN tb_protocolo pr ON pc.id_protocolo_fk = pr.id_protocolo LEFT JOIN tb_pessoa p ON pr.id_pessoa_fk = p.id_pessoa
-      - interval: 86400
-        anchor_date: '2025-07-15T00:20:00'
-        timezone: America/Sao_Paulo
-        slug: origem_ocorrencia
-        parameters:
-          table_id: origem_ocorrencia
-          dataset_id: brutos_1746
-          dump_mode: overwrite
-          execute_query: SELECT id_origem_ocorrencia, no_origem_ocorrencia FROM tb_origem_ocorrencia
-      - interval: 86400
-        anchor_date: '2025-07-15T00:30:00'
-        timezone: America/Sao_Paulo
-        slug: pessoa
-        parameters:
-          table_id: pessoa
-          dataset_id: brutos_1746
-          dump_mode: overwrite
-          execute_query: select id_pessoa, no_pessoa, ds_email, ds_endereco, ds_endereco_numero, ds_endereco_cep, ds_endereco_complemento,
-            ds_endereco_referencia, ds_telefone_1, ds_telefone_2, ds_telefone_3, dt_nascimento, ic_sexo, ds_cpf, ds_identidade,
-            dt_insercao, dt_atualizacao, no_mae, id_escolaridade_fk, ds_atividade_profissional from tb_pessoa
+  # - name: rj-segovi--dump-db-1746--prod
+  #   version: "{{ get-commit-hash.stdout }}"
+  #   entrypoint: pipelines/rj_segovi__dump_db_1746/flow.py:rj_segovi__dump_db_1746
+  #   work_pool:
+  #     name: datario-pool
+  #     work_queue_name: default
+  #     job_variables:
+  #       image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+  #       command: uv run --package rj_segovi__dump_db_1746 -- prefect flow-run execute
+  #       image_pull_policy: Always
+  #   schedules:
+  #     - interval: 86400
+  #       anchor_date: '2025-07-15T00:10:00'
+  #       timezone: America/Sao_Paulo
+  #       slug: chamado_cpf
+  #       parameters:
+  #         table_id: chamado_cpf
+  #         dataset_id: brutos_1746
+  #         dump_mode: overwrite
+  #         execute_query: SELECT pc.id_chamado_fk AS id_chamado, CASE WHEN p.ds_cpf IS NOT NULL THEN REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(p.ds_cpf,
+  #           '-', ''), '.', ''), '/', ''), '(', ''), ')', ''), ' ', ''), ',', ''), '+', ''), ';', '') ELSE NULL END AS cpf FROM tb_protocolo_chamado
+  #           pc LEFT JOIN tb_protocolo pr ON pc.id_protocolo_fk = pr.id_protocolo LEFT JOIN tb_pessoa p ON pr.id_pessoa_fk = p.id_pessoa
+  #     - interval: 86400
+  #       anchor_date: '2025-07-15T00:20:00'
+  #       timezone: America/Sao_Paulo
+  #       slug: origem_ocorrencia
+  #       parameters:
+  #         table_id: origem_ocorrencia
+  #         dataset_id: brutos_1746
+  #         dump_mode: overwrite
+  #         execute_query: SELECT id_origem_ocorrencia, no_origem_ocorrencia FROM tb_origem_ocorrencia
+  #     - interval: 86400
+  #       anchor_date: '2025-07-15T00:30:00'
+  #       timezone: America/Sao_Paulo
+  #       slug: pessoa
+  #       parameters:
+  #         table_id: pessoa
+  #         dataset_id: brutos_1746
+  #         dump_mode: overwrite
+  #         execute_query: select id_pessoa, no_pessoa, ds_email, ds_endereco, ds_endereco_numero, ds_endereco_cep, ds_endereco_complemento,
+  #           ds_endereco_referencia, ds_telefone_1, ds_telefone_2, ds_telefone_3, dt_nascimento, ic_sexo, ds_cpf, ds_identidade,
+  #           dt_insercao, dt_atualizacao, no_mae, id_escolaridade_fk, ds_atividade_profissional from tb_pessoa
       # - interval: 86400
       #   anchor_date: '2025-07-15T20:00:00'
       #   timezone: America/Sao_Paulo
