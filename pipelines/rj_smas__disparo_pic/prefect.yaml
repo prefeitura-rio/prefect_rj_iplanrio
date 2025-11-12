@@ -399,15 +399,13 @@ deployments:
                 TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
                 LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
                 SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) AS data_evento_date,
+                t1.CRAS,
                 TRIM(
-                  CONCAT(
-                    t1.CRAS,
-                    IF(
-                      t1.ENDERECO_CRAS IS NOT NULL
-                      AND t1.ENDERECO_CRAS != '',
-                      CONCAT(' (', t1.ENDERECO_CRAS, ')'),
-                      ''
-                    )
+                  IF(
+                    t1.ENDERECO_CRAS IS NOT NULL
+                    AND t1.ENDERECO_CRAS != '',
+                    CONCAT(' (', t1.ENDERECO_CRAS, ')'),
+                    ''
                   )
                 ) AS endereco_evento,
                 t1.DATA_RETIRADA_CRAS AS data_evento,
@@ -460,6 +458,7 @@ deployments:
                   )
                 ) AS nome_sobrenome,
                 cpf,
+                cras,
                 endereco_evento,
                 FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
                 horario_evento
@@ -541,15 +540,13 @@ deployments:
                 TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
                 LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
                 SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) AS data_evento_date,
+                t1.CRAS,
                 TRIM(
-                  CONCAT(
-                    t1.CRAS,
-                    IF(
-                      t1.ENDERECO_CRAS IS NOT NULL
-                      AND t1.ENDERECO_CRAS != '',
-                      CONCAT(' (', t1.ENDERECO_CRAS, ')'),
-                      ''
-                    )
+                  IF(
+                    t1.ENDERECO_CRAS IS NOT NULL
+                    AND t1.ENDERECO_CRAS != '',
+                    CONCAT(' (', t1.ENDERECO_CRAS, ')'),
+                    ''
                   )
                 ) AS endereco_evento,
                 t1.DATA_RETIRADA_CRAS AS data_evento,
@@ -603,6 +600,7 @@ deployments:
                   )
                 ) AS nome_sobrenome,
                 cpf,
+                cras,
                 endereco_evento,
                 FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
                 horario_evento
@@ -616,6 +614,7 @@ deployments:
                   celular_disparo AS celular_disparo,
                   STRUCT(
                     nome_sobrenome AS NOME_SOBRENOME,
+                    cras AS NOMECRAS,
                     endereco_evento AS ENDERECO,
                     data_formatada AS DATA,
                     horario_evento AS HORARIO,
@@ -635,3 +634,4 @@ deployments:
             WHERE
               lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
               AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
+              -- TODO: ver que filtros adicionar
