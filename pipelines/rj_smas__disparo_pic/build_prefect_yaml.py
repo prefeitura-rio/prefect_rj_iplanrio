@@ -2,10 +2,11 @@
 import warnings
 from pathlib import Path
 import yaml
+import os
 
 # Ignora warnings do Pydantic/Python 3.14
 warnings.filterwarnings("ignore")
-
+print("Current Working Directory:", os.getcwd())
 # Caminhos relativos ao WORKDIR do Dockerfile (/opt/prefect/prefect_rj_iplanrio)
 # base_path = Path("prefect_base.yaml")
 base_path = Path("pipelines/rj_smas__disparo_pic/prefect.yaml")
