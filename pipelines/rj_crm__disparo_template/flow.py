@@ -15,14 +15,14 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 
-from pipelines.rj_crm_registry__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm_registry__disparo_template.utils.discord import (
+from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm_registry__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
     create_dispatch_dfr,
@@ -33,7 +33,7 @@ from pipelines.rj_crm_registry__disparo_template.utils.dispatch import (
     remove_duplicate_phones,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm_registry__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     printar,
@@ -43,7 +43,7 @@ from pipelines.rj_crm_registry__disparo_template.utils.tasks import (
 
 
 @flow(log_prints=True)
-def rj_crm_registry__disparo_template(
+def rj_crm__disparo_template(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
     campaign_name: str | None = None,

@@ -15,7 +15,7 @@ from discord import Webhook  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm_registry__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     download_data_from_bigquery,
 )
 
