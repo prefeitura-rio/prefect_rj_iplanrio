@@ -34,10 +34,11 @@
                 );
               in
               [
+                duckdb
                 gcloud
                 infisical
-                uv
                 python313
+                uv
               ];
 
             shellHook = ''
