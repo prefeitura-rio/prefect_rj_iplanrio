@@ -15,7 +15,7 @@ from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pyl
 from prefect import flow
 
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.dispatch import (
+from pipelines.rj_crm_registry__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
     check_if_dispatch_approved,
@@ -27,12 +27,12 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     remove_duplicate_phones,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.discord import (
+from pipelines.rj_crm_registry__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import (
+from pipelines.rj_crm_registry__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     printar,

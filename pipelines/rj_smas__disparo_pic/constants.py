@@ -33,7 +33,7 @@ class PicLembreteConstants(Enum):
     # Modo de teste - ativar por padrão para segurança
     PIC_TEST_MODE = True
 
-    # Query principal do PIC lembrete com saída em JSON (destination_data)
+    # Query principal do PIC com saída em JSON (destination_data)
     PIC_QUERY = r"""
         WITH config AS (
         select date('{event_date_placeholder}') AS target_date

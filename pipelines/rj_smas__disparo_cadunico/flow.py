@@ -16,7 +16,7 @@ from prefect import flow  # pylint: disable=E0611, E0401
 
 from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.dispatch import (
+from pipelines.rj_crm_registry__disparo_template.utils.dispatch import (
     check_api_status,
     create_dispatch_dfr,
     create_dispatch_payload,
@@ -27,13 +27,13 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import (
+from pipelines.rj_crm_registry__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     skip_flow_if_empty,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.discord import (
+from pipelines.rj_crm_registry__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
