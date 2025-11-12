@@ -19,4 +19,5 @@ COPY ./pipelines/rj_crm_registry__disparo_template ./pipelines/rj_crm_registry__
 
 RUN uv sync --all-packages
 
+RUN pwd && ls -R
 RUN python pipelines/rj_smas__disparo_pic/build_prefect_yaml.py
