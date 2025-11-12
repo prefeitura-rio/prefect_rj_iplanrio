@@ -17,15 +17,15 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from pytz import timezone
 
-from pipelines.rj_crm_registry__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
-from pipelines.rj_crm_registry__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_crm_registry__disparo_template.utils.validators import (
+from pipelines.rj_crm__disparo_template.utils.validators import (
     log_validation_summary,
     validate_destinations,
     validate_dispatch_payload,
 )
-from pipelines.rj_crm_registry__disparo_template.utils.whitelist import (
+from pipelines.rj_crm__disparo_template.utils.whitelist import (
     BetaGroupManager,
     get_environment_config,
     validate_environment_config,
