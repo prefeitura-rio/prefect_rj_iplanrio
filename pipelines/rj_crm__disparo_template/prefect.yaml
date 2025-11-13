@@ -50,10 +50,10 @@ deployments:
       - interval: 86400
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
-        slug: cvl-pesquisa1746-prod
+        slug: daily-cvl-pesquisa1746-prod
         parameters:
           id_hsm: 192
-          campaign_name: daily-cvl-pesquisa1746-prod
+          campaign_name: cvl-pesquisa1746-prod
           cost_center_id: 71
           chunk_size: 1000
           dataset_id: brutos_wetalkie
