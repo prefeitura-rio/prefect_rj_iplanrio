@@ -163,6 +163,7 @@ def rj_crm__disparo_template(
             total_batches=total_batches,
             sample_destination=(unique_destinations[0] if unique_destinations else None),
             test_mode=test_mode,
+            whitelist_percentage=whitelist_percentage,
         )
 
         dfr = create_dispatch_dfr(

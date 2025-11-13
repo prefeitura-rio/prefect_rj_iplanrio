@@ -172,6 +172,7 @@ def rj_smas__disparo_cadunico(
                 unique_destinations[0] if unique_destinations else None
             ),
             test_mode=test_mode,
+            whitelist_percentage=whitelist_percentage,
         )
 
         dfr = create_dispatch_dfr(

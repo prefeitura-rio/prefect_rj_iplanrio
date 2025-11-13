@@ -18,7 +18,6 @@ COPY ./pipelines/rj_smas__disparo_pic ./pipelines/rj_smas__disparo_pic/
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
 
 RUN pip install pyyaml
-RUN pwd && ls -R
-RUN python pipelines/rj_smas__disparo_pic/build_prefect_yaml.py
 
 RUN uv sync --all-packages
+RUN uv run pipelines/rj_smas__disparo_pic/build_prefect_yaml.py
