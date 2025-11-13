@@ -17,7 +17,7 @@ schedules:
       event_date_col: "DATA_ENTREGA"
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 50
+      whitelist_percentage: 100
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
       query: |
@@ -160,7 +160,7 @@ schedules:
       event_date_col: "DATA_ENTREGA"
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 50
+      whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
       query: |
@@ -302,7 +302,7 @@ schedules:
       event_date_col: "DATA_ENTREGA"
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 0
+      whitelist_percentage: 100
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
       query: |
