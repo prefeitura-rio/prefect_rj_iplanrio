@@ -45,7 +45,7 @@ deployments:
       table_id: disparos
       dump_mode: append
       infisical_secret_path: /wetalkie
-      whitelist_percentage: 30
+      whitelist_percentage: 50
       whitelist_environment: "staging"
   - name: rj-smas--disparo-cadunico--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -68,7 +68,7 @@ deployments:
       table_id: disparos
       dump_mode: append
       infisical_secret_path: /wetalkie
-      whitelist_percentage: 30
+      whitelist_percentage: 50
       whitelist_environment: "staging"
     # schedules:
     #   - interval: 86400
