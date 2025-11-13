@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import subprocess
 from json import dumps, loads
 from os import environ
