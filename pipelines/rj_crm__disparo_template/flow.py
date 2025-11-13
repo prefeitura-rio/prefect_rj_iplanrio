@@ -39,7 +39,6 @@ from pipelines.rj_crm__disparo_template.utils.tasks import (
     printar,
     skip_flow_if_empty,
 )
-# force deploy
 
 
 @flow(log_prints=True)
