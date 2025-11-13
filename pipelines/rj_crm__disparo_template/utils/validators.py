@@ -3,7 +3,7 @@
 # pylint: disable='line-too-long'
 
 """
-Funções centralizadas de validação para pipeline SMAS Disparo CADUNICO
+Funções centralizadas de validação para pipeline de template
 Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 

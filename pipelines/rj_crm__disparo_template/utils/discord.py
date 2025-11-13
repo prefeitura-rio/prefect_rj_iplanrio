@@ -190,7 +190,7 @@ def send_dispatch_result_notification(
 
         # Executar query no BigQuery
         results_df = download_data_from_bigquery(
-            query=results_query, billing_project_id="rj-smas", bucket_name="rj-smas"
+            query=results_query, billing_project_id="rj-crm-registry", bucket_name="rj-crm-registry"
         )
 
         # Adicionar indicador [TESTE] no título se test_mode=True

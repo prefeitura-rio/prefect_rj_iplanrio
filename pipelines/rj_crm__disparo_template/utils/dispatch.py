@@ -2,7 +2,7 @@
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 """
-Tasks migradas do template disparo do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
+Tasks migradas do template disparo do Prefect 1.4 para 3.0
 Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 """
 
@@ -284,7 +284,7 @@ def check_api_status(api: object) -> bool:
 def get_destinations(
     destinations: Union[None, List[Dict], str],
     query: str,
-    billing_project_id: str = "rj-smas",
+    billing_project_id: str = "rj-crm-registry",
 ) -> List[Dict]:
     """
     Get destinations from the query or from the parameter with validation.
