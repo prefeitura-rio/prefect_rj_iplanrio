@@ -32,12 +32,26 @@ schedules:
           FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
+        dados_rmi as (
+          SELECT
+            cpf,
+            telefone
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          WHERE menor_idade is False
+          and obito.indicador is False),
+        telefone_principal_rmi AS (
+          SELECT
+            cpf,
+            CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_pricipal,
+          FROM dados_rmi AS rmi         
+          WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+        ),
         telefones_alternativos_rmi AS (
           SELECT
             cpf,
-            CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+            CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
+          FROM dados_rmi AS rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
         ),
@@ -63,13 +77,13 @@ schedules:
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)),
-              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", tel_alt.telefone_alternativo))
+              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
             ) AS celular_disparo
           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
           LEFT JOIN agendamentos_unicos AS a
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-          LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+          LEFT JOIN telefone_principal_rmi AS rmi
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
@@ -175,15 +189,29 @@ schedules:
             FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
             WHERE cpf IS NOT NULL
           ),
-          telefones_alternativos_rmi AS (
-            SELECT
-              cpf,
-              CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
-              ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-            FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
-            UNNEST(rmi.telefone.alternativo) AS tel_alt
-            WHERE tel_alt.valor IS NOT NULL
-          ),
+        dados_rmi as (
+          SELECT
+            cpf,
+            telefone
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          WHERE menor_idade is False
+          and obito.indicador is False),
+        telefone_principal_rmi AS (
+          SELECT
+            cpf,
+            CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+          FROM dados_rmi AS rmi         
+          WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+        ),
+        telefones_alternativos_rmi AS (
+          SELECT
+            cpf,
+            CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+            ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
+          FROM dados_rmi AS rmi,
+          UNNEST(rmi.telefone.alternativo) AS tel_alt
+          WHERE tel_alt.valor IS NOT NULL
+        ),
           joined_status_cpi AS (
             SELECT
               TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
@@ -206,13 +234,13 @@ schedules:
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)),
-                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", tel_alt.telefone_alternativo))
+                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
               ) AS celular_disparo
             FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
             LEFT JOIN agendamentos_unicos AS a
               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-            LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+            LEFT JOIN telefone_principal_rmi AS rmi
               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
             LEFT JOIN telefones_alternativos_rmi AS tel_alt
               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
@@ -317,12 +345,27 @@ schedules:
           FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
+        dados_rmi as (
+          SELECT
+            cpf,
+            telefone
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          WHERE menor_idade is False
+          and obito.indicador is False
+        ),
+        telefone_principal_rmi AS (
+          SELECT
+            cpf,
+            CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+          FROM dados_rmi AS rmi         
+          WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+        ),
         telefones_alternativos_rmi AS (
           SELECT
             cpf,
-            CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+            CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
+          FROM dados_rmi AS rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
         ),
@@ -346,13 +389,13 @@ schedules:
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)),
-              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", tel_alt.telefone_alternativo))
+              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(telefone_principal),
+              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
             ) AS celular_disparo
           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
           LEFT JOIN agendamentos_unicos AS a
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-          LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+          LEFT JOIN telefone_principal_rmi AS rmi
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
@@ -458,12 +501,26 @@ schedules:
           FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
+        dados_rmi as (
+          SELECT
+            cpf,
+            telefone
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          WHERE menor_idade is False
+          and obito.indicador is False),
+        telefone_principal_rmi AS (
+          SELECT
+            cpf,
+            CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+          FROM dados_rmi AS rmi         
+          WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+        ),
         telefones_alternativos_rmi AS (
           SELECT
             cpf,
-            CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+            CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
+          FROM dados_rmi AS rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
         ),
@@ -487,13 +544,13 @@ schedules:
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)),
-              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(CONCAT("55", tel_alt.telefone_alternativo))
+              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+              `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
             ) AS celular_disparo
           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
           LEFT JOIN agendamentos_unicos AS a
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-          LEFT JOIN `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+          LEFT JOIN telefone_principal_rmi AS rmi
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
           LEFT JOIN telefones_alternativos_rmi AS tel_alt
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
