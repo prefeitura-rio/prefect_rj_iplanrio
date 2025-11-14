@@ -15,7 +15,7 @@ from discord import Webhook  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     download_data_from_bigquery,
 )
 
@@ -48,6 +48,7 @@ def send_dispatch_success_notification(
     total_batches: int,
     sample_destination: dict = None,
     test_mode: bool = False,
+    whitelist_percentage: int = 0,
 ):
     """
     Envia notificação de sucesso de disparo para Discord.
@@ -82,6 +83,8 @@ def send_dispatch_success_notification(
 🆔 **ID HSM:** {id_hsm}
 📋 **Campanha:** {campaign_name}
 💰 **Centro de Custo:** {cost_center_id}
+📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
+📖 **Quantidade de pessoas na Whitelist:** {int(whitelist_percentage*total_dispatches/100)}
 """
 
     # Add sample destination if provided
@@ -187,7 +190,7 @@ def send_dispatch_result_notification(
 
         # Executar query no BigQuery
         results_df = download_data_from_bigquery(
-            query=results_query, billing_project_id="rj-smas", bucket_name="rj-smas"
+            query=results_query, billing_project_id="rj-crm-registry", bucket_name="rj-crm-registry"
         )
 
         # Adicionar indicador [TESTE] no título se test_mode=True

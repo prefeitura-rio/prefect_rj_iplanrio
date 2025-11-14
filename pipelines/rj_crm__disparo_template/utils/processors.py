@@ -11,7 +11,7 @@ from datetime import datetime
 
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 
 
 def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -> str:

@@ -15,34 +15,34 @@ from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.discord import (
+from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
+    format_query,
     get_destinations,
     remove_duplicate_phones,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     printar,
     skip_flow_if_empty,
 )
-# force deploy
 
 
 @flow(log_prints=True)
-def rj_smas__disparo_template(
+def rj_crm__disparo_template(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
     campaign_name: str | None = None,
@@ -53,12 +53,36 @@ def rj_smas__disparo_template(
     dump_mode: str | None = None,
     test_mode: bool | None = True,
     query: str | None = None,
-    query_processor_name: str | None = "template",
+    query_processor_name: str | None = None,
+    query_replacements: dict | None = None,
     sleep_minutes: int | None = 5,
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
     whitelist_environment: str = "staging",
 ):
+    """
+    Orchestrates the dispatch of templated messages via Wetalkie API.
+
+    This flow handles fetching destinations, preparing dispatch payloads,
+    sending messages, and logging dispatch results to BigQuery.
+
+    Args:
+        id_hsm (int, optional): The ID of the HSM (Highly Structured Message) template to be used.
+        campaign_name (str, optional): The name of the dispatch campaign.
+        cost_center_id (int, optional): The ID of the cost center associated with the dispatch.
+        chunk_size (int, optional): The number of destinations to include in each dispatch batch.
+        dataset_id (str, optional): The BigQuery dataset ID where dispatch results will be stored.
+        table_id (str, optional): The BigQuery table ID where dispatch results will be stored.
+        dump_mode (str, optional): The mode for dumping data to BigQuery (e.g., "append", "overwrite").
+        test_mode (bool, optional): If True, the flow runs in test mode, dispatching only to test numbers. Defaults to True.
+        query (str, optional): The SQL query used to retrieve the list of destinations for dispatch.
+        query_processor_name (str, optional): The name of the processor to format the query.
+        query_replacements (dict, optional): A dictionary of key-value pairs to replace placeholders in the `query`. Defaults to None.
+        sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
+        infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
+        whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
+        whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
+    """
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
     dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value
@@ -90,9 +114,19 @@ def rj_smas__disparo_template(
 
     api_status = check_api_status(api)
 
+    if query_replacements:
+        query_complete = format_query(
+            raw_query=query,
+            replacements=query_replacements,
+            query_processor_name=query_processor_name,
+        )
+    else:
+        query_complete = query
+    print(f"\n⚠️  Query dispatch:\n{query_complete}")
+
     destinations_result = get_destinations(
         destinations=destinations,
-        query=query,
+        query=query_complete,
         billing_project_id=billing_project_id,
     )
 
@@ -152,6 +186,7 @@ def rj_smas__disparo_template(
             total_batches=total_batches,
             sample_destination=(unique_destinations[0] if unique_destinations else None),
             test_mode=test_mode,
+            whitelist_percentage=whitelist_percentage,
         )
 
         dfr = create_dispatch_dfr(

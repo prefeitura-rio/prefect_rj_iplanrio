@@ -2,7 +2,7 @@
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 """
-Tasks migradas do template disparo do Prefect 1.4 para 3.0 - SMAS Disparo CADUNICO
+Tasks migradas do template disparo do Prefect 1.4 para 3.0
 Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 """
 
@@ -17,15 +17,15 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from pytz import timezone
 
-from pipelines.rj_smas__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.validators import (
+from pipelines.rj_crm__disparo_template.utils.validators import (
     log_validation_summary,
     validate_destinations,
     validate_dispatch_payload,
 )
-from pipelines.rj_smas__disparo_template.utils.whitelist import (
+from pipelines.rj_crm__disparo_template.utils.whitelist import (
     BetaGroupManager,
     get_environment_config,
     validate_environment_config,
@@ -284,7 +284,7 @@ def check_api_status(api: object) -> bool:
 def get_destinations(
     destinations: Union[None, List[Dict], str],
     query: str,
-    billing_project_id: str = "rj-smas",
+    billing_project_id: str = "rj-crm-registry",
 ) -> List[Dict]:
     """
     Get destinations from the query or from the parameter with validation.
@@ -438,8 +438,7 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
 
         log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
 
-    try:
-        return raw_query.format_map(replacements)
-    except KeyError as error:
-        missing = error.args[0] if error.args else str(error)
-        raise ValueError(f"Missing replacement for placeholder '{missing}'") from error
+    if isinstance(replacements, dict) and "value" in replacements and "__prefect_kind" in replacements:
+        replacements = json.loads(replacements["value"])
+        print(f"replacements modificado: {replacements}")
+    return raw_query.format_map(replacements)

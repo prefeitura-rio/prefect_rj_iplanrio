@@ -3,7 +3,7 @@
 # pylint: disable='line-too-long'
 
 """
-Funções centralizadas de validação para pipeline SMAS Disparo CADUNICO
+Funções centralizadas de validação para pipeline de template
 Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 
@@ -13,7 +13,7 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from pydantic import ValidationError
 
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.schemas import (
+from pipelines.rj_crm__disparo_template.utils.schemas import (
     DestinationInput,
     DispatchPayload,
     ValidationStats,

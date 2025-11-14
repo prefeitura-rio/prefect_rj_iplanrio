@@ -2,7 +2,7 @@
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 """
-Schemas de validação para payload do pipeline SMAS Disparo CADUNICO
+Schemas de validação para payload do pipeline de template
 Define estruturas de dados padronizadas com validação rigorosa usando Pydantic
 """
 

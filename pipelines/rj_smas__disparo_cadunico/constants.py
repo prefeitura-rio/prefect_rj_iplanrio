@@ -29,7 +29,7 @@ class CadunicoConstants(Enum):
     CADUNICO_QUERY_PROCESSOR_NAME = "skip_weekends"
 
     # Configurações de dataset
-    CADUNICO_DATASET_ID = "brutos_cadunico"
+    CADUNICO_DATASET_ID = "brutos_wetalkie"
     CADUNICO_TABLE_ID = "disparos"
     CADUNICO_DUMP_MODE = "append"
     CADUNICO_CHUNK_SIZE = 1000
