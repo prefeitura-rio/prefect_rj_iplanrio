@@ -51,6 +51,7 @@ deployments:
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
         slug: daily-smas-cartaopic-disparoevento
+        flow_run_name: smas-cartaopic-disparoevento
         parameters:
           id_hsm: 184
           campaign_name: "smas-cartaopic-disparoevento"
@@ -89,7 +90,7 @@ deployments:
             telefone_principal_rmi AS (
               SELECT
                 cpf,
-                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_pricipal,
+                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
               FROM dados_rmi AS rmi         
               WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
             ),
@@ -208,6 +209,7 @@ deployments:
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
         slug: daily-smas-cartaopic-lembrete
+        flow_run_name: smas-cartaopic-lembrete
         parameters:
           id_hsm: 185
           campaign_name: "smas-cartaopic-lembrete"
