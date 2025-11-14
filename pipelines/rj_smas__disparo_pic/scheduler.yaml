@@ -36,14 +36,14 @@ schedules:
           SELECT
             cpf,
             telefone
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
           WHERE menor_idade is False
           and obito.indicador is False),
         telefone_principal_rmi AS (
           SELECT
             cpf,
             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_pricipal,
-          FROM dados_rmi AS rmi         
+          FROM dados_rmi AS rmi
           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
         ),
         telefones_alternativos_rmi AS (
@@ -193,14 +193,14 @@ schedules:
           SELECT
             cpf,
             telefone
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
           WHERE menor_idade is False
           and obito.indicador is False),
         telefone_principal_rmi AS (
           SELECT
             cpf,
             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-          FROM dados_rmi AS rmi         
+          FROM dados_rmi AS rmi
           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
         ),
         telefones_alternativos_rmi AS (
@@ -349,7 +349,7 @@ schedules:
           SELECT
             cpf,
             telefone
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
           WHERE menor_idade is False
           and obito.indicador is False
         ),
@@ -357,7 +357,7 @@ schedules:
           SELECT
             cpf,
             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-          FROM dados_rmi AS rmi         
+          FROM dados_rmi AS rmi
           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
         ),
         telefones_alternativos_rmi AS (
@@ -505,14 +505,14 @@ schedules:
           SELECT
             cpf,
             telefone
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi         
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
           WHERE menor_idade is False
           and obito.indicador is False),
         telefone_principal_rmi AS (
           SELECT
             cpf,
             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-          FROM dados_rmi AS rmi         
+          FROM dados_rmi AS rmi
           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
         ),
         telefones_alternativos_rmi AS (
