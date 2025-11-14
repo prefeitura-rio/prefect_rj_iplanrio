@@ -238,7 +238,7 @@ deployments:
         slug: daily-pgm-divida-ativa-prod
         parameters:
           id_hsm: 196
-          query_replacements: {"id_hsm_placeholder": 196}  
+          query_replacements: {"id_hsm_placeholder": 196}
           campaign_name: pgm-divida-ativa-prod-v1
           cost_center_id: 71
           chunk_size: 1000
@@ -507,7 +507,7 @@ deployments:
         slug: daily-pgm-divida-ativa-prod
         parameters:
           id_hsm: 196
-          query_replacements: {"id_hsm_placeholder": 196}  
+          query_replacements: {"id_hsm_placeholder": 196}
           campaign_name: pgm-divida-ativa-prod-v1
           cost_center_id: 71
           chunk_size: 1000
