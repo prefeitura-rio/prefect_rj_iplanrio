@@ -439,6 +439,8 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
         log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
 
     try:
+        print(raw_query)
+        print(replacements)
         return raw_query.format_map(replacements)
     except KeyError as error:
         missing = error.args[0] if error.args else str(error)
