@@ -60,6 +60,29 @@ def rj_crm__disparo_template(
     whitelist_percentage: int = 30,
     whitelist_environment: str = "staging",
 ):
+    """
+    Orchestrates the dispatch of templated messages via Wetalkie API.
+
+    This flow handles fetching destinations, preparing dispatch payloads,
+    sending messages, and logging dispatch results to BigQuery.
+
+    Args:
+        id_hsm (int, optional): The ID of the HSM (Highly Structured Message) template to be used.
+        campaign_name (str, optional): The name of the dispatch campaign.
+        cost_center_id (int, optional): The ID of the cost center associated with the dispatch.
+        chunk_size (int, optional): The number of destinations to include in each dispatch batch.
+        dataset_id (str, optional): The BigQuery dataset ID where dispatch results will be stored.
+        table_id (str, optional): The BigQuery table ID where dispatch results will be stored.
+        dump_mode (str, optional): The mode for dumping data to BigQuery (e.g., "append", "overwrite").
+        test_mode (bool, optional): If True, the flow runs in test mode, dispatching only to test numbers. Defaults to True.
+        query (str, optional): The SQL query used to retrieve the list of destinations for dispatch.
+        query_processor_name (str, optional): The name of the processor to format the query.
+        query_replacements (dict, optional): A dictionary of key-value pairs to replace placeholders in the `query`. Defaults to None.
+        sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
+        infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
+        whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
+        whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
+    """
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
     dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value
