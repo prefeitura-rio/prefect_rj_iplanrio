@@ -438,10 +438,7 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
 
         log(f"Warning: Query processor '{query_processor_name}' not found, using original query")
 
-    try:
-        print(raw_query)
-        print(replacements)
-        return raw_query.format_map(replacements)
-    except KeyError as error:
-        missing = error.args[0] if error.args else str(error)
-        raise ValueError(f"Missing replacement for placeholder '{missing}'") from error
+    if isinstance(replacements, dict) and "value" in replacements and "__prefect_kind" in replacements:
+        replacements = json.loads(replacements["value"])
+        print(f"replacements modificado: {replacements}")
+    return raw_query.format_map(replacements)
