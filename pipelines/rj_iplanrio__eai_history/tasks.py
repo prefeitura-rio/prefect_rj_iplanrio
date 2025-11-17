@@ -24,7 +24,9 @@ def get_last_update(
     Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
     """
     if last_update or last_checkpoint_id:
-        log(f"'last_update' fornecido via parametro: {last_update}")
+        log(
+            f"'last_update' fornecido via parametro: {last_update}\n'last_checkpoint_id' fornecido via parametro: {last_checkpoint_id}"
+        )
         return last_update or "2025-07-25T00:00:00", last_checkpoint_id or "0"
 
     if environment == "staging":
@@ -37,7 +39,7 @@ def get_last_update(
     else:
         raise (ValueError("environment must be prod or staging"))
 
-    log(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
+    log(f"Buscando último 'last_checkpoint_id' para {dataset_id}.{table_id}")
     bd.config.billing_project_id = "rj-iplanrio"
     bd.config.from_file = True
     query = f"""

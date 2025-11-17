@@ -39,7 +39,7 @@ def rj_iplanrio__eai_history(  # noqa
 
     data_path = fetch_history_data(
         last_update=last_update_task,
-        last_checkpoint_id_task=last_checkpoint_id_task,
+        last_checkpoint_id=last_checkpoint_id_task,
         session_timeout_seconds=session_timeout_seconds,
         use_whatsapp_format=use_whatsapp_format,
         max_user_save_limit=max_user_save_limit,
