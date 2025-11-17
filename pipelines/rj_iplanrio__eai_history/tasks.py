@@ -23,9 +23,9 @@ def get_last_update(
     Busca a data da última atualização da tabela no BigQuery.
     Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
     """
-    if last_update:
+    if last_update or last_checkpoint_id:
         log(f"'last_update' fornecido via parametro: {last_update}")
-        return last_update, last_checkpoint_id or "0"
+        return last_update or "2025-07-25T00:00:00", last_checkpoint_id or "0"
 
     if environment == "staging":
         project_id = env.PROJECT_ID
