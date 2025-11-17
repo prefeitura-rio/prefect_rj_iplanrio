@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 from typing import Optional
+from pathlib import Path
 
 import basedosdados as bd
 from iplanrio.pipelines_utils.logging import log
@@ -114,64 +115,19 @@ def fetch_history_data(
         )
 
         return data_path
-[
-
-        {
-
-"name"
-
-:
-
-"TEA"
-
-,
-
-"description"
-
-:
-
-"transtorno do espectro altista"
-
-},
-
-        {
-
-"name"
-
-:
-
-"TEA2"
-
-,
-
-"description"
-
-:
-
-"transtorno do espectro altista 2"
-
-},
-
-        {
-
-"name"
-
-:
-
-"TEA3"
-
-,
-
-"description"
-
-:
-
-"transtorno do espectro altista 3"
-
-},
-
-    ]
-
 
     final_data_path = asyncio.run(_main_async_runner())
+
+    # check it the path has files
+    if final_data_path:
+        final_path = Path(final_data_path)
+        files_fond = list(final_path.rglob("*"))
+        if not files_fond:
+            log(f"Nenhum arquivo encontrado em {final_data_path}. Retornando None.")
+            return None
+        else:
+            log(
+                f"Arquivos encontrados em {final_data_path}: {len(files_fond)}\n{files_fond[:10]}"
+            )
+
     return final_data_path
