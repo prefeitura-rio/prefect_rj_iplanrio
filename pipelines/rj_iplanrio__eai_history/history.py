@@ -214,8 +214,12 @@ class GoogleAgentEngineHistory:
             return None
         else:
             log(f"Found {len(users_infos)} users to process")
+            log(
+                f"First 5 users: {json.dumps(users_infos[:3], ensure_ascii=False, indent=2)}"
+            )
 
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
+        log(f"Data will be saved to: {save_path}")
         batch_size = max_user_save_limit
         user_id_chunks = [
             users_infos[i : i + batch_size]
@@ -257,5 +261,5 @@ class GoogleAgentEngineHistory:
             )
         else:
             log("Finished processing all batches successfully.")
-
+        log(f"Data fetching and processing complete. Returning save path: {save_path}")
         return str(save_path)

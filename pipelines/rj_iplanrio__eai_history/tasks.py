@@ -123,8 +123,10 @@ def fetch_history_data(
         final_path = Path(final_data_path)
         files_fond = list(final_path.rglob("*"))
         if not files_fond:
-            log(f"Nenhum arquivo encontrado em {final_data_path}. Retornando None.")
-            return None
+            log(
+                f"Nenhum arquivo encontrado em {final_data_path}. Retornando None.",
+                level="warning",
+            )
         else:
             log(
                 f"Arquivos encontrados em {final_data_path}: {len(files_fond)}\n{files_fond[:10]}"
