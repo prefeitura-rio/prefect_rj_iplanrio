@@ -45,7 +45,7 @@ def get_last_update(
     query = f"""
         WITH tb AS (
             SELECT
-                max(chekpoint_id) AS last_checkpoint_id,
+                max(checkpoint_id) AS last_checkpoint_id,
             FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
             WHERE environment = '{environment}'
             )
