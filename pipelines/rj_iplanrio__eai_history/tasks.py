@@ -54,7 +54,14 @@ def get_last_update(
     """
     log(msg=f"Runing query:\n{query}")
 
-    result = bd.read_sql(query=query)
+    tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
+    tb_exists = tb.table_exists(mode="staging")
+
+    if tb_exists:
+        result = bd.read_sql(query=query)
+    else:
+        log(f"Tabela não existe `{project_id}.{dataset_id}.{table_id}`")
+        return "2025-07-25T00:00:00", "0"
 
     if result is None or result.empty:
         log("Nenhum 'last_update' encontrado.")
