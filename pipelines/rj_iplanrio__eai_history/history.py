@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
+import traceback
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log
@@ -69,13 +70,13 @@ class GoogleAgentEngineHistory:
         """Método auxiliar para processar histórico de um único usuário"""
 
         if user_id in ["", " ", "/"]:
-            log(f"Invalid user_id: {user_id}", level="warning")
+            log(f"Invalid user_id: {user_id}", level="  warning")
             return
 
         config = RunnableConfig(configurable={"thread_id": user_id})
 
         state = await self._checkpointer.aget(config=config)
-        # state = self._checkpointer._loads(checkpoint_bytes)
+        # state = self._checkpointer.serde.loads(checkpoint_bytes)
         if not state:
             log(f"No state found for user_id: {user_id}", level="warning")
             return
@@ -239,7 +240,7 @@ class GoogleAgentEngineHistory:
                     user_id=user_info["user_id"],
                     last_update=user_info["last_update"],
                     checkpoint_id=user_info["checkpoint_id"],
-                    # checkpoint_bytes=user_info["checkpoint_bytes"],s
+                    # checkpoint_bytes=user_info["checkpoint_bytes"],
                     save_path=save_path,
                     session_timeout_seconds=session_timeout_seconds,
                     use_whatsapp_format=use_whatsapp_format,
@@ -257,11 +258,20 @@ class GoogleAgentEngineHistory:
 
         errors = [res for res in all_results if isinstance(res, Exception)]
         if errors:
-            log(f"First 5 exceptions encountered: {errors[:5]}", level="critical")
             log(
-                msg=f"Finished processing with {len(errors)} errors out of {len(users_infos)} users.",
+                msg=f"Finished processing with {len(errors)} errors out of {len(users_infos)} users. Logging details for the first 3 errors:",
                 level="warning",
             )
+            log(f"First 3 exceptions encountered: {errors[:3]}", level="critical")
+
+            for i, err in enumerate(errors[:3], 1):
+                # Formata a exceção completa (tipo, mensagem e traceback) em uma string
+                tb_str = "".join(
+                    traceback.format_exception(type(err), err, err.__traceback__)
+                )
+
+                # Loga a string formatada
+                log(f"--- Error #{i} Details ---\n{tb_str}", level="error")
         else:
             log("Finished processing all batches successfully.")
         log(f"Data fetching and processing complete. Returning save path: {save_path}")
