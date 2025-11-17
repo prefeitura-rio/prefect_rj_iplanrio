@@ -2,7 +2,7 @@
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 """
-Whitelist utility functions for SMAS pipelines.
+Whitelist utility functions for template pipelines.
 """
 from typing import Dict, List, Optional
 import requests

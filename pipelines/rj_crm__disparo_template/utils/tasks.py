@@ -22,7 +22,7 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_template.utils.api_handler import ApiHandler  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.api_handler import ApiHandler  # pylint: disable=E0611, E0401
 
 
 @task
