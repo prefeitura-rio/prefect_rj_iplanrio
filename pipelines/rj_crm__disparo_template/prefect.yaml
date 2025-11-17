@@ -51,6 +51,7 @@ deployments:
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
         slug: daily-cvl-pesquisa1746-prod
+        flow_run_name: cvl-pesquisa1746
         parameters:
           id_hsm: 192
           campaign_name: cvl-pesquisa1746-prod
@@ -236,6 +237,7 @@ deployments:
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
         slug: daily-pgm-divida-ativa-prod
+        flow_run_name: pgm-divida-ativa
         parameters:
           id_hsm: 196
           query_replacements: {"id_hsm_placeholder": 196}
@@ -319,6 +321,7 @@ deployments:
         anchor_date: "2021-01-01T12:00:00"
         timezone: America/Sao_Paulo
         slug: cvl-pesquisa1746-prod
+        flow_run_name: cvl-pesquisa1746
         parameters:
           id_hsm: 192
           campaign_name: daily-cvl-pesquisa1746-prod
@@ -505,6 +508,7 @@ deployments:
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
         slug: daily-pgm-divida-ativa-prod
+        flow_run_name: pgm-divida-ativa
         parameters:
           id_hsm: 196
           query_replacements: {"id_hsm_placeholder": 196}
