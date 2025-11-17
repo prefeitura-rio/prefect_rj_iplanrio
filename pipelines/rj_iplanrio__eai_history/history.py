@@ -63,6 +63,7 @@ class GoogleAgentEngineHistory:
         save_path: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
+        checkpoint_id: Optional[str] = None,
     ):
         """Método auxiliar para processar histórico de um único usuário"""
 
@@ -91,6 +92,7 @@ class GoogleAgentEngineHistory:
             {
                 "environment": self._environment,
                 "last_update": last_update,
+                "checkpoint_id": checkpoint_id,
                 "user_id": user_id,
                 "messages": json.dumps(messages, ensure_ascii=False, indent=2),
             }
@@ -99,13 +101,14 @@ class GoogleAgentEngineHistory:
         dataframe = pd.DataFrame(data=bq_payload)
         to_partitions(
             data=dataframe,
-            partition_columns=["environment", "user_id"],
+            partition_columns=["environment", "user_id", "checkpoint_id"],
             savepath=str(save_path),
         )
 
     async def get_history_bulk_from_last_update(
         self,
         last_update: str = "2025-07-25",
+        last_checkpoint_id: str = "1f0725af-89be-6068-bfff-9664465a3c66",
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
         max_user_save_limit: int = 100,
@@ -144,11 +147,50 @@ class GoogleAgentEngineHistory:
         """
 
         query = f"""
+        WITH new_checkpoints AS (
+            -- Passo 1: Busca SUPER RÁPIDA usando o índice da chave primária.
+            -- Retorna apenas os registros inseridos desde a última execução.
             SELECT
                 thread_id,
-                checkpoint_ts::text
-            FROM "public"."thread_ids"
-            WHERE checkpoint_ts >='{last_update}'
+                checkpoint,
+                checkpoint_id -- Precisamos do ID para a lógica de watermark
+            FROM "public"."checkpoints"
+            WHERE checkpoint_id > '{last_checkpoint_id}'
+        ),
+        extracted_data AS (
+            -- Passo 2: Executa a extração pesada APENAS no pequeno conjunto de dados novos.
+            SELECT
+                thread_id,
+                checkpoint_id,
+                (convert_from(
+                    decode(
+                        (regexp_matches(
+                            encode(checkpoint, 'hex'),
+                            '((3[0-9]){{4}}2d(3[0-9]){{2}}2d(3[0-9]){{2}}54(3[0-9]){{2}}3a(3[0-9]){{2}}3a(3[0-9]){{2}}2e(3[0-9])+(2b|2d)(3[0-9]){{2}}3a(3[0-9]){{2}})'
+                        ))[1],
+                        'hex'
+                    ),
+                    'UTF8'
+                ))::timestamptz AS checkpoint_ts
+            FROM new_checkpoints
+        ),
+        final_selection AS (
+            -- Passo 3: Garante que só temos o último checkpoint por thread NESTE LOTE NOVO.
+            SELECT DISTINCT ON (thread_id)
+                thread_id,
+                checkpoint_ts,
+                checkpoint_id
+            FROM extracted_data
+            WHERE checkpoint_ts IS NOT NULL
+            ORDER BY thread_id, checkpoint_ts DESC
+        )
+        -- Passo 4: Aplica o filtro final de data e seleciona os campos desejados.
+        SELECT
+            thread_id,
+            checkpoint_ts::text,
+            checkpoint_id
+        FROM final_selection
+        WHERE checkpoint_ts >= '{last_update}'
         """
 
         engine = self._checkpointer._engine
@@ -158,6 +200,7 @@ class GoogleAgentEngineHistory:
             {
                 "user_id": doc.page_content,
                 "last_update": doc.metadata["checkpoint_ts"][:19].replace(" ", "T"),
+                "checkpoint_id": doc.metadata["checkpoint_id"],
             }
             for doc in docs
         ]
@@ -169,7 +212,10 @@ class GoogleAgentEngineHistory:
 
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
         batch_size = max_user_save_limit
-        user_id_chunks = [users_infos[i : i + batch_size] for i in range(0, len(users_infos), batch_size)]
+        user_id_chunks = [
+            users_infos[i : i + batch_size]
+            for i in range(0, len(users_infos), batch_size)
+        ]
         total_batches = len(user_id_chunks)
         all_results = []
 
@@ -189,7 +235,9 @@ class GoogleAgentEngineHistory:
                 for user_info in user_chunk
             ]
 
-            results_of_batch = await asyncio.gather(*tasks_for_this_batch, return_exceptions=True)
+            results_of_batch = await asyncio.gather(
+                *tasks_for_this_batch, return_exceptions=True
+            )
             all_results.extend(results_of_batch)
 
             progress = 100 * (batch_num / total_batches)
