@@ -61,6 +61,7 @@ class GoogleAgentEngineHistory:
         user_id: str,
         last_update: str,
         checkpoint_id: str,
+        checkpoint_bytes,
         save_path: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
@@ -71,9 +72,10 @@ class GoogleAgentEngineHistory:
             log(f"Invalid user_id: {user_id}", level="warning")
             return
 
-        config = RunnableConfig(configurable={"thread_id": user_id})
+        # config = RunnableConfig(configurable={"thread_id": user_id})
 
-        state = await self._checkpointer.aget(config=config)
+        # state = await self._checkpointer.aget(config=config)
+        state = self._checkpointer._loads(checkpoint_bytes)
         if not state:
             log(f"No state found for user_id: {user_id}", level="warning")
             return
@@ -174,6 +176,7 @@ class GoogleAgentEngineHistory:
         SELECT
             thread_id,
             checkpoint_id,
+            checkpoint,
             (convert_from(
                 decode(
                     (regexp_matches(
@@ -191,7 +194,8 @@ class GoogleAgentEngineHistory:
     SELECT
         thread_id,
         checkpoint_ts::text,
-        checkpoint_id
+        checkpoint_id,
+        checkpoint
     FROM extracted_data
     WHERE
         checkpoint_ts IS NOT NULL
@@ -206,6 +210,7 @@ class GoogleAgentEngineHistory:
                 "user_id": doc.page_content,
                 "last_update": doc.metadata["checkpoint_ts"][:19].replace(" ", "T"),
                 "checkpoint_id": doc.metadata["checkpoint_id"],
+                "checkpoint_bytes": doc.metadata["checkpoint"],  # <<< EXTRAIA OS BYTES
             }
             for doc in docs
         ]
@@ -231,13 +236,13 @@ class GoogleAgentEngineHistory:
         log(
             msg=f"Starting processing of {len(users_infos)} users in {total_batches} batches of up to {batch_size} users each."  # noqa
         )
-
         for batch_num, user_chunk in enumerate(user_id_chunks, 1):
             tasks_for_this_batch = [
                 self._get_single_user_history(
                     user_id=user_info["user_id"],
                     last_update=user_info["last_update"],
                     checkpoint_id=user_info["checkpoint_id"],
+                    checkpoint_bytes=user_info["checkpoint_bytes"],
                     save_path=save_path,
                     session_timeout_seconds=session_timeout_seconds,
                     use_whatsapp_format=use_whatsapp_format,
