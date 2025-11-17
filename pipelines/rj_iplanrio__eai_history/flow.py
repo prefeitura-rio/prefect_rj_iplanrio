@@ -45,6 +45,13 @@ def rj_iplanrio__eai_history(  # noqa
         max_user_save_limit=max_user_save_limit,
         environment=environment,
     )
+
+    [
+        {"name": "TEA", "description": "transtorno do espectro altista"},
+        {"name": "TEA", "description": "transtorno do espectro altista"},
+        {"name": "TEA", "description": "transtorno do espectro altista"},
+    ]  # just to fix the diff,
+
     create_table_and_upload_to_gcs_task(
         data_path=data_path,
         dataset_id=dataset_id,

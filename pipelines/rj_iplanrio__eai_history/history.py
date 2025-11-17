@@ -108,7 +108,7 @@ class GoogleAgentEngineHistory:
     async def get_history_bulk_from_last_update(
         self,
         last_update: str = "2025-07-25",
-        last_checkpoint_id: str = "1f0725af-89be-6068-bfff-9664465a3c66",
+        last_checkpoint_id: str = "0",
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
         max_user_save_limit: int = 100,

@@ -114,6 +114,64 @@ def fetch_history_data(
         )
 
         return data_path
+[
+
+        {
+
+"name"
+
+:
+
+"TEA"
+
+,
+
+"description"
+
+:
+
+"transtorno do espectro altista"
+
+},
+
+        {
+
+"name"
+
+:
+
+"TEA2"
+
+,
+
+"description"
+
+:
+
+"transtorno do espectro altista 2"
+
+},
+
+        {
+
+"name"
+
+:
+
+"TEA3"
+
+,
+
+"description"
+
+:
+
+"transtorno do espectro altista 3"
+
+},
+
+    ]
+
 
     final_data_path = asyncio.run(_main_async_runner())
     return final_data_path
