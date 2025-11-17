@@ -45,6 +45,28 @@ deployments:
       table_id: disparos_efetuados
       dump_mode: append
       infisical_secret_path: /wetalkie
+
+  - name: rj-smas--disparo-pic--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smas__disparo_pic/flow.py:rj_smas__disparo_pic
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smas__disparo_pic -- prefect flow-run execute
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    parameters:
+      # Valores padrão (podem ser alterados na UI)
+      id_hsm: 184
+      campaign_name: smas-cartaopic-disparoevento
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      infisical_secret_path: /wetalkie
     schedules:
       # Daily schedule for smas-cartaopic-disparoevento
       - interval: 86400
@@ -361,26 +383,4 @@ deployments:
               lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
               AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
               AND TIPO_ENTREGA != 'CRAS'
-
-  - name: rj-smas--disparo-pic--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_smas__disparo_pic/flow.py:rj_smas__disparo_pic
-    work_pool:
-      name: default-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smas__disparo_pic -- prefect flow-run execute
-        secretName: prefect-jobs-crm-registry-secrets
-        image_pull_policy: Always
-    parameters:
-      # Valores padrão (podem ser alterados na UI)
-      id_hsm: 184
-      campaign_name: smas-cartaopic-disparoevento
-      cost_center_id: 71
-      chunk_size: 1000
-      dataset_id: brutos_wetalkie
-      table_id: disparos_efetuados
-      dump_mode: append
-      infisical_secret_path: /wetalkie
 

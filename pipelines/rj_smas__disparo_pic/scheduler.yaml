@@ -42,7 +42,7 @@ schedules:
         telefone_principal_rmi AS (
           SELECT
             cpf,
-            CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_pricipal,
+            CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
           FROM dados_rmi AS rmi
           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
         ),
