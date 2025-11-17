@@ -60,10 +60,10 @@ class GoogleAgentEngineHistory:
         self,
         user_id: str,
         last_update: str,
+        checkpoint_id: str,
         save_path: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
-        checkpoint_id: Optional[str] = None,
     ):
         """Método auxiliar para processar histórico de um único usuário"""
 
@@ -101,7 +101,7 @@ class GoogleAgentEngineHistory:
         dataframe = pd.DataFrame(data=bq_payload)
         to_partitions(
             data=dataframe,
-            partition_columns=["environment", "user_id", "checkpoint_id"],
+            partition_columns=["environment", "user_id"],
             savepath=str(save_path),
         )
 
@@ -228,6 +228,7 @@ class GoogleAgentEngineHistory:
                 self._get_single_user_history(
                     user_id=user_info["user_id"],
                     last_update=user_info["last_update"],
+                    checkpoint_id=user_info["checkpoint_id"],
                     save_path=save_path,
                     session_timeout_seconds=session_timeout_seconds,
                     use_whatsapp_format=use_whatsapp_format,
