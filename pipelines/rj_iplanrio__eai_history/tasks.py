@@ -102,7 +102,9 @@ def fetch_history_data(
             environment=environment
         )
 
-        log(f"Buscando histórico a partir de: {last_update or 'início dos tempos'}.")
+        log(
+            f"Buscando histórico a partir de:\nlast_update: {last_update}\nlast_checkpoint_id: {last_checkpoint_id}."
+        )
         data_path = await history_instance.get_history_bulk_from_last_update(
             last_update=last_update,
             last_checkpoint_id=last_checkpoint_id,
