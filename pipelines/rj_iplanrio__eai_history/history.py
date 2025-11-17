@@ -147,50 +147,55 @@ class GoogleAgentEngineHistory:
         """
 
         query = f"""
-        WITH new_checkpoints AS (
-            -- Passo 1: Busca SUPER RÁPIDA usando o índice da chave primária.
-            -- Retorna apenas os registros inseridos desde a última execução.
-            SELECT
-                thread_id,
-                checkpoint,
-                checkpoint_id -- Precisamos do ID para a lógica de watermark
-            FROM "public"."checkpoints"
-            WHERE checkpoint_id > '{last_checkpoint_id}'
-        ),
-        extracted_data AS (
-            -- Passo 2: Executa a extração pesada APENAS no pequeno conjunto de dados novos.
-            SELECT
-                thread_id,
-                checkpoint_id,
-                (convert_from(
-                    decode(
-                        (regexp_matches(
-                            encode(checkpoint, 'hex'),
-                            '((3[0-9]){{4}}2d(3[0-9]){{2}}2d(3[0-9]){{2}}54(3[0-9]){{2}}3a(3[0-9]){{2}}3a(3[0-9]){{2}}2e(3[0-9])+(2b|2d)(3[0-9]){{2}}3a(3[0-9]){{2}})'
-                        ))[1],
-                        'hex'
-                    ),
-                    'UTF8'
-                ))::timestamptz AS checkpoint_ts
-            FROM new_checkpoints
-        ),
-        final_selection AS (
-            -- Passo 3: Garante que só temos o último checkpoint por thread NESTE LOTE NOVO.
-            SELECT DISTINCT ON (thread_id)
-                thread_id,
-                checkpoint_ts,
-                checkpoint_id
-            FROM extracted_data
-            WHERE checkpoint_ts IS NOT NULL
-            ORDER BY thread_id, checkpoint_ts DESC
-        )
-        -- Passo 4: Aplica o filtro final de data e seleciona os campos desejados.
+    WITH new_checkpoints AS (
+        -- Passo 1: Busca SUPER RÁPIDA usando o índice para pegar todas as linhas novas.
+        -- Esta parte continua igual.
         SELECT
             thread_id,
-            checkpoint_ts::text,
+            checkpoint,
             checkpoint_id
-        FROM final_selection
-        WHERE checkpoint_ts >= '{last_update}'
+        FROM "public"."checkpoints"
+        WHERE checkpoint_id > '{last_checkpoint_id}'
+    ),
+    latest_new_checkpoints_per_thread AS (
+        -- Dentro do lote de novidades, seleciona APENAS o checkpoint mais recente
+        -- de cada thread ANTES de qualquer processamento pesado.
+        -- Esta operação é muito rápida.
+        SELECT DISTINCT ON (thread_id)
+            thread_id,
+            checkpoint,
+            checkpoint_id
+        FROM new_checkpoints
+        ORDER BY thread_id, checkpoint_id DESC
+    ),
+    extracted_data AS (
+        -- Passo 3: Executa a extração pesada SOMENTE no conjunto mínimo de dados.
+        -- Agora, esta CTE processa no máximo uma linha por thread_id.
+        SELECT
+            thread_id,
+            checkpoint_id,
+            (convert_from(
+                decode(
+                    (regexp_matches(
+                        encode(checkpoint, 'hex'),
+                        '((3[0-9]){{4}}2d(3[0-9]){{2}}2d(3[0-9]){{2}}54(3[0-9]){{2}}3a(3[0-9]){{2}}3a(3[0-9]){{2}}2e(3[0-9])+(2b|2d)(3[0-9]){{2}}3a(3[0-9]){{2}})'
+                    ))[1],
+                    'hex'
+                ),
+                'UTF8'
+            ))::timestamptz AS checkpoint_ts
+        FROM latest_new_checkpoints_per_thread
+    )
+    -- Passo 4: Aplica o filtro final de data e seleciona os campos desejados.
+    -- Não precisamos mais de DISTINCT aqui, pois já garantimos a unicidade.
+    SELECT
+        thread_id,
+        checkpoint_ts::text,
+        checkpoint_id
+    FROM extracted_data
+    WHERE
+        checkpoint_ts IS NOT NULL
+        AND checkpoint_ts >= '{last_update}'
         """
 
         engine = self._checkpointer._engine
