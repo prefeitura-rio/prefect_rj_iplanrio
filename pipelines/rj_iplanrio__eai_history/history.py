@@ -61,7 +61,7 @@ class GoogleAgentEngineHistory:
         user_id: str,
         last_update: str,
         checkpoint_id: str,
-        checkpoint_bytes,
+        # checkpoint_bytes,
         save_path: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
@@ -72,10 +72,10 @@ class GoogleAgentEngineHistory:
             log(f"Invalid user_id: {user_id}", level="warning")
             return
 
-        # config = RunnableConfig(configurable={"thread_id": user_id})
+        config = RunnableConfig(configurable={"thread_id": user_id})
 
-        # state = await self._checkpointer.aget(config=config)
-        state = self._checkpointer._loads(checkpoint_bytes)
+        state = await self._checkpointer.aget(config=config)
+        # state = self._checkpointer._loads(checkpoint_bytes)
         if not state:
             log(f"No state found for user_id: {user_id}", level="warning")
             return
@@ -176,7 +176,6 @@ class GoogleAgentEngineHistory:
         SELECT
             thread_id,
             checkpoint_id,
-            checkpoint,
             (convert_from(
                 decode(
                     (regexp_matches(
@@ -195,7 +194,6 @@ class GoogleAgentEngineHistory:
         thread_id,
         checkpoint_ts::text,
         checkpoint_id,
-        checkpoint
     FROM extracted_data
     WHERE
         checkpoint_ts IS NOT NULL
@@ -210,7 +208,7 @@ class GoogleAgentEngineHistory:
                 "user_id": doc.page_content,
                 "last_update": doc.metadata["checkpoint_ts"][:19].replace(" ", "T"),
                 "checkpoint_id": doc.metadata["checkpoint_id"],
-                "checkpoint_bytes": doc.metadata["checkpoint"],  # <<< EXTRAIA OS BYTES
+                # "checkpoint_bytes": doc.metadata["checkpoint"],  # <<< EXTRAIA OS BYTES
             }
             for doc in docs
         ]
@@ -219,9 +217,9 @@ class GoogleAgentEngineHistory:
             return None
         else:
             log(f"Found {len(users_infos)} users to process")
-            log(
-                f"First 5 users: {json.dumps(users_infos[:3], ensure_ascii=False, indent=2)}"
-            )
+            user_info_log = json.dumps(users_infos[:3], ensure_ascii=False, indent=2)
+
+            log(f"First 5 users: {user_info_log}")
 
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
         log(f"Data will be saved to: {save_path}")
@@ -242,7 +240,7 @@ class GoogleAgentEngineHistory:
                     user_id=user_info["user_id"],
                     last_update=user_info["last_update"],
                     checkpoint_id=user_info["checkpoint_id"],
-                    checkpoint_bytes=user_info["checkpoint_bytes"],
+                    # checkpoint_bytes=user_info["checkpoint_bytes"],
                     save_path=save_path,
                     session_timeout_seconds=session_timeout_seconds,
                     use_whatsapp_format=use_whatsapp_format,
@@ -260,6 +258,7 @@ class GoogleAgentEngineHistory:
 
         errors = [res for res in all_results if isinstance(res, Exception)]
         if errors:
+            log(f"First 5 exceptions encountered: {errors[:5]}", level="critical")
             log(
                 msg=f"Finished processing with {len(errors)} errors out of {len(users_infos)} users.",
                 level="warning",
