@@ -62,7 +62,8 @@ class GoogleAgentEngineHistory:
         user_id: str,
         last_update: str,
         checkpoint_id: str,
-        # checkpoint_bytes,
+        checkpoint_bytes,
+        checkpoint_type,
         save_path: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
@@ -70,13 +71,16 @@ class GoogleAgentEngineHistory:
         """Método auxiliar para processar histórico de um único usuário"""
 
         if user_id in ["", " ", "/"]:
-            log(f"Invalid user_id: {user_id}", level="  warning")
+            log(f"Invalid user_id: {user_id}", level="warning")
             return
 
-        config = RunnableConfig(configurable={"thread_id": user_id})
+        # config = RunnableConfig(configurable={"thread_id": user_id})
 
-        state = await self._checkpointer.aget(config=config)
-        # state = self._checkpointer.serde.loads(checkpoint_bytes)
+        # state = await self._checkpointer.aget(config=config)
+        state = await self._checkpointer.serde.loads_typed(
+            (checkpoint_type, checkpoint_bytes)
+        )
+
         if not state:
             log(f"No state found for user_id: {user_id}", level="warning")
             return
@@ -155,6 +159,7 @@ class GoogleAgentEngineHistory:
         -- Esta parte continua igual.
         SELECT
             thread_id,
+            type,
             checkpoint,
             checkpoint_id
         FROM "public"."checkpoints"
@@ -166,6 +171,7 @@ class GoogleAgentEngineHistory:
         -- Esta operação é muito rápida.
         SELECT DISTINCT ON (thread_id)
             thread_id,
+            type,
             checkpoint,
             checkpoint_id
         FROM new_checkpoints
@@ -177,6 +183,8 @@ class GoogleAgentEngineHistory:
         SELECT
             thread_id,
             checkpoint_id,
+            type,
+            checkpoint,
             (convert_from(
                 decode(
                     (regexp_matches(
@@ -194,7 +202,9 @@ class GoogleAgentEngineHistory:
     SELECT
         thread_id,
         checkpoint_ts::text,
-        checkpoint_id
+        checkpoint_id,
+        type,
+        checkpoint
     FROM extracted_data
     WHERE
         checkpoint_ts IS NOT NULL
@@ -209,7 +219,8 @@ class GoogleAgentEngineHistory:
                 "user_id": doc.page_content,
                 "last_update": doc.metadata["checkpoint_ts"][:19].replace(" ", "T"),
                 "checkpoint_id": doc.metadata["checkpoint_id"],
-                # "checkpoint_bytes": doc.metadata["checkpoint"],  # <<< EXTRAIA OS BYTES
+                "checkpoint_bytes": doc.metadata["checkpoint"],  # <<< EXTRAIA OS BYTES
+                "checkpoint_type": doc.metadata["type"],  # <<< EXTRAIA O TYPE
             }
             for doc in docs
         ]
@@ -240,7 +251,8 @@ class GoogleAgentEngineHistory:
                     user_id=user_info["user_id"],
                     last_update=user_info["last_update"],
                     checkpoint_id=user_info["checkpoint_id"],
-                    # checkpoint_bytes=user_info["checkpoint_bytes"],
+                    checkpoint_bytes=user_info["checkpoint_bytes"],
+                    checkpoint_type=user_info["checkpoint_type"],
                     save_path=save_path,
                     session_timeout_seconds=session_timeout_seconds,
                     use_whatsapp_format=use_whatsapp_format,
@@ -271,7 +283,7 @@ class GoogleAgentEngineHistory:
                 )
 
                 # Loga a string formatada
-                log(f"--- Error #{i} Details ---\n{tb_str}", level="error")
+                log(f"--- Error #{i} Details ---\n{tb_str}", level="critical")
         else:
             log("Finished processing all batches successfully.")
         log(f"Data fetching and processing complete. Returning save path: {save_path}")
