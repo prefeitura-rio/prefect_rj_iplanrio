@@ -253,7 +253,7 @@ deployments:
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
           query: |
-            with with 
+            with with
             divida_ativa as (
                 select * except(cpf, telefone),
                 cast(telefone as string) as telefone,
@@ -531,7 +531,7 @@ deployments:
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
           query: |
-            with with 
+            with with
             divida_ativa as (
                 select * except(cpf, telefone),
                 cast(telefone as string) as telefone,
