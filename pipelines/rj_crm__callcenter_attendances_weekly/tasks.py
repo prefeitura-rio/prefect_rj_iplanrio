@@ -319,6 +319,7 @@ def create_date_partitions(
 def calculate_date_range(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    interval: Optional[int] = 7,
 ) -> Dict[str, str]:
     """
     Calculate date range for attendances query.
@@ -334,10 +335,9 @@ def calculate_date_range(
     tz = timezone("America/Sao_Paulo")
 
     if start_date is None or end_date is None:
-        # Calculate last 7 days (from 8 days ago to 1 day ago)
         today = datetime.now(tz).date()
-        calculated_end_date = today - timedelta(days=1)
-        calculated_start_date = calculated_end_date - timedelta(days=6)
+        calculated_end_date = today
+        calculated_start_date = calculated_end_date - timedelta(days=interval)
 
         result = {
             "start_date": calculated_start_date.strftime("%Y-%m-%d"),

@@ -179,6 +179,7 @@ deployments:
                     AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
                     AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
                     AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
+                    AND t1.status IN ('Fechado com providências', 'Fechado com solução') --desconsidera chamados onde a equipe de campo não conseguiu atender
                 ),
 
                 dados_finais AS (
@@ -253,13 +254,20 @@ deployments:
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
           query: |
-            with final as (
+            with with
+            divida_ativa as (
+                select * except(cpf, telefone),
+                cast(telefone as string) as telefone,
+                lpad(cast(cpf as string) , 11, '0') as cpf
+                from `rj-crm-registry-dev.staging__ab_test.divida_ativa`
+            ),
+            final as (
                 select *
-                FROM `rj-crm-registry-dev.staging__ab_test.divida_ativa` da
+                FROM divida_ativa da
                 left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
                         on fl.flattarget = da.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
-                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 DAY)
-                    where fl.flattarget is null and grupo="tratamento"
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)
+                    where fl.flattarget is null and grupo like "%tratamento%"
             )
             SELECT
                 TO_JSON_STRING(
@@ -292,7 +300,7 @@ deployments:
                         )
                     ) AS destination_data
             from final
-            limit 200
+            limit 400
 
   - name: rj-crm--disparo-template--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -449,6 +457,7 @@ deployments:
                 AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
                 AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
                 AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
+                AND t1.status IN ('Fechado com providências', 'Fechado com solução') --desconsidera chamados onde a equipe de campo não conseguiu atender
             ),
 
             dados_finais AS (
@@ -524,13 +533,20 @@ deployments:
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
           query: |
-            with final as (
+            with with
+            divida_ativa as (
+                select * except(cpf, telefone),
+                cast(telefone as string) as telefone,
+                lpad(cast(cpf as string) , 11, '0') as cpf
+                from `rj-crm-registry-dev.staging__ab_test.divida_ativa`
+            ),
+            final as (
                 select *
-                FROM `rj-crm-registry-dev.staging__ab_test.divida_ativa` da
+                FROM divida_ativa da
                 left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
                         on fl.flattarget = da.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
-                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 DAY)
-                    where fl.flattarget is null and grupo="tratamento"
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)
+                    where fl.flattarget is null and grupo like "%tratamento%"
             )
             SELECT
                 TO_JSON_STRING(
@@ -563,4 +579,4 @@ deployments:
                         )
                     ) AS destination_data
             from final
-            limit 200
+            limit 400
