@@ -30,6 +30,7 @@ def rj_crm__callcenter_attendances_weekly(
     start_date: str | None = None,
     end_date: str | None = None,
     infisical_secret_path: str = "/wetalkie",
+    date_interval: int = 7,
 ):
     """
     Flow para extrair dados de atendimentos da API Wetalkie em janelas semanais e carregar no BigQuery.
@@ -62,12 +63,13 @@ def rj_crm__callcenter_attendances_weekly(
     root_folder = CallCenterAttendancesConstants.ROOT_FOLDER.value
     biglake_table = CallCenterAttendancesConstants.BIGLAKE_TABLE.value
     billing_project_id = CallCenterAttendancesConstants.BILLING_PROJECT_ID.value
+    date_interval = date_interval or CallCenterAttendancesConstants.DATE_INTERVAL.value
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
 
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
-    date_range = calculate_date_range(start_date=start_date, end_date=end_date)
+    date_range = calculate_date_range(start_date=start_date, end_date=end_date, interval=date_interval)
 
     api = access_api(
         infisical_secret_path,

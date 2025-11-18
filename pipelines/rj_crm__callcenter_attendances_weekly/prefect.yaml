@@ -65,16 +65,17 @@ deployments:
       start_date: null
       end_date: null
       infisical_secret_path: /wetalkie
-#    schedules:
-#      # Schedule semanal (604800 segundos = 7 dias)
-#      - interval: 604800
-#        anchor_date: "2024-01-01T09:00:00"
-#        timezone: America/Sao_Paulo
-#        slug: callcenter_attendances_weekly
-#        parameters:
-#          dataset_id: brutos_wetalkie
-#          table_id: fluxos_ura
-#          dump_mode: append
-#          materialize_after_dump: true
-#          start_date: null
-#          end_date: null
+    schedules:
+     # Schedule semanal (604800 segundos = 7 dias)
+     - interval: 604800
+       anchor_date: "2024-01-01T09:00:00"
+       timezone: America/Sao_Paulo
+       slug: callcenter_attendances_weekly
+       parameters:
+         dataset_id: brutos_wetalkie
+         table_id: fluxos_ura
+         dump_mode: append
+         materialize_after_dump: false
+         start_date: null
+         end_date: null
+         date_interval: 7 

@@ -253,13 +253,20 @@ deployments:
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
           query: |
-            with final as (
+            with with 
+            divida_ativa as (
+                select * except(cpf, telefone),
+                cast(telefone as string) as telefone,
+                lpad(cast(cpf as string) , 11, '0') as cpf
+                from `rj-crm-registry-dev.staging__ab_test.divida_ativa`
+            ),
+            final as (
                 select *
-                FROM `rj-crm-registry-dev.staging__ab_test.divida_ativa` da
+                FROM divida_ativa da
                 left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
                         on fl.flattarget = da.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
-                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 DAY)
-                    where fl.flattarget is null and grupo="tratamento"
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)
+                    where fl.flattarget is null and grupo like "%tratamento%"
             )
             SELECT
                 TO_JSON_STRING(
@@ -292,7 +299,7 @@ deployments:
                         )
                     ) AS destination_data
             from final
-            limit 200
+            limit 400
 
   - name: rj-crm--disparo-template--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -524,13 +531,20 @@ deployments:
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
           query: |
-            with final as (
+            with with 
+            divida_ativa as (
+                select * except(cpf, telefone),
+                cast(telefone as string) as telefone,
+                lpad(cast(cpf as string) , 11, '0') as cpf
+                from `rj-crm-registry-dev.staging__ab_test.divida_ativa`
+            ),
+            final as (
                 select *
-                FROM `rj-crm-registry-dev.staging__ab_test.divida_ativa` da
+                FROM divida_ativa da
                 left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
                         on fl.flattarget = da.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
-                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 15 DAY)
-                    where fl.flattarget is null and grupo="tratamento"
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)
+                    where fl.flattarget is null and grupo like "%tratamento%"
             )
             SELECT
                 TO_JSON_STRING(
@@ -563,4 +577,4 @@ deployments:
                         )
                     ) AS destination_data
             from final
-            limit 200
+            limit 400
