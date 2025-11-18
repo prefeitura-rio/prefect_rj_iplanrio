@@ -78,4 +78,4 @@ deployments:
          materialize_after_dump: false
          start_date: null
          end_date: null
-         date_interval: 7 
+         date_interval: 7
