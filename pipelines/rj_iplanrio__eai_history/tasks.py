@@ -42,7 +42,7 @@ def get_last_checkpoint_id(
     bd.config.from_file = True
     query = f"""
         SELECT
-            max(checkpoint_id) AS last_checkpoint_id,
+            max(checkpoint_id) AS checkpoint_id,
         FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
         WHERE environment = '{environment}'
     """
