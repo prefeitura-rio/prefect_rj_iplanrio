@@ -179,6 +179,7 @@ deployments:
                     AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
                     AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
                     AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
+                    AND t1.status IN ('Fechado com providências', 'Fechado com solução') --desconsidera chamados onde a equipe de campo não conseguiu atender
                 ),
 
                 dados_finais AS (
@@ -456,6 +457,7 @@ deployments:
                 AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
                 AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
                 AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
+                AND t1.status IN ('Fechado com providências', 'Fechado com solução') --desconsidera chamados onde a equipe de campo não conseguiu atender
             ),
 
             dados_finais AS (
