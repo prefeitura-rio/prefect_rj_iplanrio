@@ -1682,11 +1682,12 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#4e4f8a2a7ad04d5f8bbe47dff49f6305fa6b7859" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git#6d8061b838ecb9178708198817ec7d45a4c65be1" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
     { name = "cx-oracle" },
+    { name = "dbt-bigquery" },
     { name = "geopandas" },
     { name = "gitpython" },
     { name = "google-api-python-client" },

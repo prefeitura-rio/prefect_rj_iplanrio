@@ -26,7 +26,7 @@ def rj_iplanrio__eai_history(  # noqa
     table_id: str = "history",
     max_user_save_limit: int = 100,
     environment: str = "staging",
-    dbt_select: str = "--select raw_eai_logs_history",
+    dbt_select: str = "raw_eai_logs_history",
 ):
     rename_current_flow_run_task(new_name=environment)
     inject_bd_credentials_task()
