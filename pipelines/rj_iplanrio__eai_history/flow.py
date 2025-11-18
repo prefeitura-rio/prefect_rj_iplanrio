@@ -54,4 +54,4 @@ def rj_iplanrio__eai_history(  # noqa
             biglake_table=True,
             dump_mode="append",
         )
-    execute_dbt_task(select=dbt_select, target="prod")
+        execute_dbt_task(select=dbt_select, target="prod")
