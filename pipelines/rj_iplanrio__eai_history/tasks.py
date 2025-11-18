@@ -13,22 +13,19 @@ from pipelines.rj_iplanrio__eai_history.history import GoogleAgentEngineHistory
 
 # A anotação @task deve estar na função que o Prefect irá chamar diretamente.
 @task
-def get_last_update(
+def get_last_checkpoint_id(
     dataset_id: str,
     table_id: str,
-    last_update: Optional[str] = None,
     last_checkpoint_id: Optional[str] = None,
     environment: str = "staging",
-) -> tuple[str, str]:
+) -> str:
     """
     Busca a data da última atualização da tabela no BigQuery.
     Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
     """
-    if last_update or last_checkpoint_id:
-        log(
-            f"'last_update' fornecido via parametro: {last_update}\n'last_checkpoint_id' fornecido via parametro: {last_checkpoint_id}"
-        )
-        return last_update or "2025-07-25T00:00:00", last_checkpoint_id or "0"
+    if last_checkpoint_id:
+        log(f"'last_checkpoint_id' fornecido via parametro: {last_checkpoint_id}")
+        return last_checkpoint_id
 
     if environment == "staging":
         project_id = env.PROJECT_ID
@@ -44,16 +41,10 @@ def get_last_update(
     bd.config.billing_project_id = "rj-iplanrio"
     bd.config.from_file = True
     query = f"""
-        WITH tb AS (
-            SELECT
-                max(checkpoint_id) AS last_checkpoint_id,
-            FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
-            WHERE environment = '{environment}'
-            )
-
-        SELECT checkpoint_id, last_update
-        FROM `rj-iplanrio.{dataset_id}_staging.{table_id}` AS main
-        WHERE environment = '{environment}' AND checkpoint_id = (SELECT last_checkpoint_id FROM tb)
+        SELECT
+            max(checkpoint_id) AS last_checkpoint_id,
+        FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
+        WHERE environment = '{environment}'
     """
     log(msg=f"Runing query:\n{query}")
 
@@ -64,27 +55,25 @@ def get_last_update(
         result = bd.read_sql(query=query)
     else:
         log(f"Tabela não existe `{project_id}.{dataset_id}.{table_id}`")
-        return "2025-07-25T00:00:00", "0"
+        return "0"
 
     if result is None or result.empty:
-        log("Nenhum 'last_update' encontrado.")
-        return "2025-07-25T00:00:00", "0"
+        log("Nenhum 'last_checkpoint_id' encontrado.")
+        return "0"
 
-    last_update = result["last_update"][0]
     last_checkpoint_id = result["checkpoint_id"][0]
-    if last_update:
+    if last_checkpoint_id:
         log(
-            f"Últimos parametros encontrados\n'last_update: {last_update}\n'last_checkpoint_id: {last_checkpoint_id}'"
+            f"Últimos parametros encontrados 'last_checkpoint_id: {last_checkpoint_id}'"
         )
-        return last_update, str(last_checkpoint_id)
+        return str(last_checkpoint_id)
     else:
-        log("Nenhum 'last_update' encontrado.")
-        return "2025-07-25T00:00:00", "0"
+        log("Nenhum 'last_checkpoint_id' encontrado.")
+        return "0"
 
 
 @task
 def fetch_history_data(
-    last_update: str,
     last_checkpoint_id: str,
     session_timeout_seconds: Optional[int] = 3600,
     use_whatsapp_format: bool = True,
@@ -104,10 +93,9 @@ def fetch_history_data(
         )
 
         log(
-            f"Buscando histórico a partir de:\nlast_update: {last_update}\nlast_checkpoint_id: {last_checkpoint_id}."
+            f"Buscando histórico a partir de 'last_checkpoint_id': {last_checkpoint_id}."
         )
-        data_path = await history_instance.get_history_bulk_from_last_update(
-            last_update=last_update,
+        data_path = await history_instance.get_history_bulk_from_last_checkpoint_id(
             last_checkpoint_id=last_checkpoint_id,
             session_timeout_seconds=session_timeout_seconds,
             use_whatsapp_format=use_whatsapp_format,

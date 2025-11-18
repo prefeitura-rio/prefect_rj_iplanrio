@@ -3,8 +3,8 @@ name = "rj_iplanrio__eai_history"
 version = "0.1.0"
 description = "Pipeline eai_history da secretaria iplanrio"
 dependencies = [
-    "langchain==0.3.27",
-    "langchain-google-cloud-sql-pg==0.14.1",
-    "langgraph==0.6.10",
+    "langchain>=0.3.27",
+    "langchain-google-cloud-sql-pg>=0.14.1",
+    "langgraph>=1.0.1",
 ]
 

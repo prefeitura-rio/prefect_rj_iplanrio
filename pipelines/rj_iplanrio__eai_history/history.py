@@ -7,10 +7,15 @@ from uuid import uuid4
 import traceback
 
 import pandas as pd
+
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.pandas import to_partitions
-from langchain_core.runnables import RunnableConfig
+
+# from langchain_core.runnables import RunnableConfig
+from langgraph.version import __version__ as langraph_version
 from langchain_google_cloud_sql_pg import PostgresEngine, PostgresLoader, PostgresSaver
+from langchain_google_cloud_sql_pg.version import __version__ as gc_sql_pg_version
+from langchain_core.version import VERSION as langchain_version
 
 from pipelines.rj_iplanrio__eai_history import env
 from pipelines.rj_iplanrio__eai_history.message_formatter import to_gateway_format
@@ -52,6 +57,9 @@ class GoogleAgentEngineHistory:
         )
         checkpointer = await PostgresSaver.create(engine=engine)
         log(f"Checkpointer inicializado para project_id: {environment} | {project_id}")
+        log(
+            f"Version Control\nlanggraph: {langraph_version}\nlangchain-google-cloud-sql-pg: {gc_sql_pg_version}\nlangchain: {langchain_version}"
+        )
         return cls(checkpointer=checkpointer, environment=environment)
 
     async def get_checkpointer(self) -> PostgresSaver:
@@ -60,10 +68,9 @@ class GoogleAgentEngineHistory:
     async def _get_single_user_history(
         self,
         user_id: str,
-        last_update: str,
         checkpoint_id: str,
-        checkpoint_bytes,
-        checkpoint_type,
+        checkpoint_bytes: bytes,
+        checkpoint_type: str,
         save_path: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
@@ -75,18 +82,18 @@ class GoogleAgentEngineHistory:
             return
 
         # config = RunnableConfig(configurable={"thread_id": user_id})
-
         # state = await self._checkpointer.aget(config=config)
-        state = await self._checkpointer.serde.loads_typed(
+
+        # use checkpoint_bytes from the query instead of making multiple aget requests
+        state = self._checkpointer.serde.loads_typed(
             (checkpoint_type, checkpoint_bytes)
         )
-
         if not state:
             log(f"No state found for user_id: {user_id}", level="warning")
             return
 
         messages = state.get("channel_values", {}).get("messages", [])
-        # logger.info(messages)
+        last_update = state.get("ts", None)
 
         payload = to_gateway_format(
             messages=messages,
@@ -98,7 +105,7 @@ class GoogleAgentEngineHistory:
         bq_payload = [
             {
                 "environment": self._environment,
-                "last_update": last_update,
+                "last_update": str(last_update),
                 "checkpoint_id": checkpoint_id,
                 "user_id": user_id,
                 "messages": json.dumps(messages, ensure_ascii=False, indent=2),
@@ -112,60 +119,30 @@ class GoogleAgentEngineHistory:
             savepath=str(save_path),
         )
 
-    async def get_history_bulk_from_last_update(
+    async def get_history_bulk_from_last_checkpoint_id(
         self,
-        last_update: str = "2025-07-25",
         last_checkpoint_id: str = "0",
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
         max_user_save_limit: int = 100,
     ) -> Optional[str]:
         """
-        CREATE VIEW "public"."thread_ids" AS (
-                    WITH tb AS (
-                    SELECT
-                        thread_id,
-                        encode(checkpoint, 'hex') as checkpoint_hex
-                    FROM "public"."checkpoints"
-                    ),
-                    extracted_hex AS (
-                    SELECT
-                        thread_id,
-                        (regexp_matches(
-                        checkpoint_hex,
-                        '((3[0-9]){4}2d(3[0-9]){2}2d(3[0-9]){2}54(3[0-9]){2}3a(3[0-9]){2}3a(3[0-9]){2}2e(3[0-9])+(2b|2d)(3[0-9]){2}3a(3[0-9]){2})'
-                        ))[1] AS timestamp_hex
-                    FROM tb
-                    ),
-                    final_tb AS (
-                    SELECT DISTINCT
-                    thread_id,
-                    (convert_from(decode(timestamp_hex, 'hex'), 'UTF8'))::timestamptz AS checkpoint_ts
-                    FROM extracted_hex
-                    WHERE timestamp_hex IS NOT NULL
-                    )
-
-                    SELECT DISTINCT ON (thread_id)
-                    thread_id,
-                    checkpoint_ts
-                    FROM final_tb
-                    ORDER BY thread_id, checkpoint_ts DESC
-        );
+        Get history bulk from last update.
         """
 
         query = f"""
-    WITH new_checkpoints AS (
-        -- Passo 1: Busca SUPER RÁPIDA usando o índice para pegar todas as linhas novas.
-        -- Esta parte continua igual.
-        SELECT
-            thread_id,
-            type,
-            checkpoint,
-            checkpoint_id
-        FROM "public"."checkpoints"
-        WHERE checkpoint_id > '{last_checkpoint_id}'
-    ),
-    latest_new_checkpoints_per_thread AS (
+        WITH new_checkpoints AS (
+            -- Passo 1: Busca SUPER RÁPIDA usando o índice para pegar todas as linhas novas.
+            -- Esta parte continua igual.
+            SELECT
+                thread_id,
+                type,
+                checkpoint,
+                checkpoint_id
+            FROM "public"."checkpoints"
+            WHERE checkpoint_id > '{last_checkpoint_id}'
+        )
+
         -- Dentro do lote de novidades, seleciona APENAS o checkpoint mais recente
         -- de cada thread ANTES de qualquer processamento pesado.
         -- Esta operação é muito rápida.
@@ -176,39 +153,6 @@ class GoogleAgentEngineHistory:
             checkpoint_id
         FROM new_checkpoints
         ORDER BY thread_id, checkpoint_id DESC
-    ),
-    extracted_data AS (
-        -- Passo 3: Executa a extração pesada SOMENTE no conjunto mínimo de dados.
-        -- Agora, esta CTE processa no máximo uma linha por thread_id.
-        SELECT
-            thread_id,
-            checkpoint_id,
-            type,
-            checkpoint,
-            (convert_from(
-                decode(
-                    (regexp_matches(
-                        encode(checkpoint, 'hex'),
-                        '((3[0-9]){{4}}2d(3[0-9]){{2}}2d(3[0-9]){{2}}54(3[0-9]){{2}}3a(3[0-9]){{2}}3a(3[0-9]){{2}}2e(3[0-9])+(2b|2d)(3[0-9]){{2}}3a(3[0-9]){{2}})'
-                    ))[1],
-                    'hex'
-                ),
-                'UTF8'
-            ))::timestamptz AS checkpoint_ts
-        FROM latest_new_checkpoints_per_thread
-    )
-    -- Passo 4: Aplica o filtro final de data e seleciona os campos desejados.
-    -- Não precisamos mais de DISTINCT aqui, pois já garantimos a unicidade.
-    SELECT
-        thread_id,
-        checkpoint_ts::text,
-        checkpoint_id,
-        type,
-        checkpoint
-    FROM extracted_data
-    WHERE
-        checkpoint_ts IS NOT NULL
-        AND checkpoint_ts >= '{last_update}'
         """
 
         engine = self._checkpointer._engine
@@ -217,7 +161,6 @@ class GoogleAgentEngineHistory:
         users_infos = [
             {
                 "user_id": doc.page_content,
-                "last_update": doc.metadata["checkpoint_ts"][:19].replace(" ", "T"),
                 "checkpoint_id": doc.metadata["checkpoint_id"],
                 "checkpoint_bytes": doc.metadata["checkpoint"],  # <<< EXTRAIA OS BYTES
                 "checkpoint_type": doc.metadata["type"],  # <<< EXTRAIA O TYPE
@@ -229,8 +172,17 @@ class GoogleAgentEngineHistory:
             return None
         else:
             log(f"Found {len(users_infos)} users to process")
-            # user_info_log = json.dumps(users_infos[:3], ensure_ascii=False, indent=2)
-            # log(f"First 5 users: {user_info_log}")
+            user_info_log = [
+                {
+                    "user_id": doc["user_id"],
+                    "checkpoint_id": doc["checkpoint_id"],
+                    "checkpoint_type": doc["checkpoint_type"],
+                }
+                for doc in users_infos[:3]
+            ]
+            log(
+                f"First 3 users: {json.dumps(user_info_log, ensure_ascii=False, indent=2)}"
+            )
 
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
         log(f"Data will be saved to: {save_path}")
@@ -249,7 +201,6 @@ class GoogleAgentEngineHistory:
             tasks_for_this_batch = [
                 self._get_single_user_history(
                     user_id=user_info["user_id"],
-                    last_update=user_info["last_update"],
                     checkpoint_id=user_info["checkpoint_id"],
                     checkpoint_bytes=user_info["checkpoint_bytes"],
                     checkpoint_type=user_info["checkpoint_type"],
