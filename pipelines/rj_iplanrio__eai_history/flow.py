@@ -46,11 +46,12 @@ def rj_iplanrio__eai_history(  # noqa
         environment=environment,
     )
 
-    create_table_and_upload_to_gcs_task(
-        data_path=data_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        biglake_table=True,
-        dump_mode="append",
-    )
-    execute_dbt_task(select=dbt_select, target="prod")
+    if data_path:
+        create_table_and_upload_to_gcs_task(
+            data_path=data_path,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            biglake_table=True,
+            dump_mode="append",
+        )
+        execute_dbt_task(select=dbt_select, target="prod")
