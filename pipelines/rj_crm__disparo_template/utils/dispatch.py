@@ -281,7 +281,7 @@ def check_api_status(api: object) -> bool:
 
 
 def filter_already_dispatched_phones(
-    destinations: List[Dict], billing_project_id: str, bucket_name: str
+    destinations: List[Dict], billing_project_id: str, bucket_name: str, field: str = "cpf"
 ) -> List[Dict]:
     """
     Filters out CPFs that have already been dispatched today.
@@ -290,6 +290,8 @@ def filter_already_dispatched_phones(
         destinations (List[Dict]): A list of destination dictionaries.
         billing_project_id (str): GCP project ID for billing purposes.
         bucket_name (str): GCS bucket name for credential loading.
+        field (str): The field in the destination dict that contains the phone number.
+            Field must be "cpf" or "phone_number"
 
     Returns:
         List[Dict]: A list of destination dictionaries that have not yet been dispatched.
@@ -297,12 +299,19 @@ def filter_already_dispatched_phones(
     if not destinations:
         return []
 
-    phone_numbers = [d.get("externalId") for d in destinations if d.get("externalId")]
+    if field not in ["cpf", "phone_number"]:
+        log(f"\n⚠️  Invalid field '{field}' for filtering dispatched phones. Must be 'cpf' or 'phone_number'")
+        return destinations
+
+    destinations_field = "externalId" if field == "cpf" else "to"
+    # query_field = "targetExternalId" if field == "cpf" else "flatTarget"
+
+    phone_numbers = [d.get(destinations_field) for d in destinations if d.get(destinations_field)]
     if not phone_numbers:
         return destinations
 
-    query = """
-        SELECT DISTINCT flattarget
+    query = f"""
+        SELECT DISTINCT targetExternalId as externalID, flatTarget as celular_disparo
         FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
         WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo") AND status = "PROCESSING"
     """
@@ -312,14 +321,15 @@ def filter_already_dispatched_phones(
         already_dispatched_df = download_data_from_bigquery(
             query=query, billing_project_id=billing_project_id, bucket_name=bucket_name
         )
-        if "flattarget" not in already_dispatched_df.columns:
-            log("Column 'flattarget' not found in BigQuery result. Returning original destinations.")
+        already_dispatched_df.rename(columns={"celular_disparo": "to"}, inplace=True)
+        if destinations_field not in already_dispatched_df.columns:
+            log(f"Column {destinations_field} not found in BigQuery result. Returning original destinations.")
             return destinations
-        already_dispatched_phones = set(already_dispatched_df["flattarget"].tolist())
+        already_dispatched_phones = set(already_dispatched_df[destinations_field].tolist())
         log(f"Found {len(already_dispatched_phones)} phones already dispatched today.")
 
         filtered_destinations = [
-            dest for dest in destinations if dest.get("externalId") not in already_dispatched_phones
+            dest for dest in destinations if dest.get(destinations_field) not in already_dispatched_phones
         ]
         log(f"Filtered {len(phone_numbers) - len(filtered_destinations)} destinations.")
         return filtered_destinations
