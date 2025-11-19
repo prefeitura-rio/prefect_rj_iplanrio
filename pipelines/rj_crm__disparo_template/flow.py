@@ -103,7 +103,6 @@ def rj_crm__disparo_template(
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
     crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
-    bucket_name = crd.result().bucket_name
 
     if test_mode:
         campaign_name = "teste-"+campaign_name
