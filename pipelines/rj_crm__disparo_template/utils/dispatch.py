@@ -280,11 +280,61 @@ def check_api_status(api: object) -> bool:
         return False
 
 
+def filter_already_dispatched_phones(
+    destinations: List[Dict], billing_project_id: str, bucket_name: str
+) -> List[Dict]:
+    """
+    Filters out phone numbers that have already been dispatched today.
+
+    Args:
+        destinations (List[Dict]): A list of destination dictionaries.
+        billing_project_id (str): GCP project ID for billing purposes.
+        bucket_name (str): GCS bucket name for credential loading.
+
+    Returns:
+        List[Dict]: A list of destination dictionaries that have not yet been dispatched.
+    """
+    if not destinations:
+        return []
+
+    phone_numbers = [d.get("to") for d in destinations if d.get("to")]
+    if not phone_numbers:
+        return destinations
+
+    query = """
+        SELECT DISTINCT flattarget
+        FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+        WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo") AND status = "PROCESSING"
+    """
+
+    log(f"Executing BigQuery query to find already dispatched phones:\n{query}")
+    try:
+        already_dispatched_df = download_data_from_bigquery(
+            query=query, billing_project_id=billing_project_id, bucket_name=bucket_name
+        )
+        if "flattarget" not in already_dispatched_df.columns:
+            log("Column 'flattarget' not found in BigQuery result. Returning original destinations.")
+            return destinations
+        already_dispatched_phones = set(already_dispatched_df["flattarget"].tolist())
+        log(f"Found {len(already_dispatched_phones)} phones already dispatched today.")
+
+        filtered_destinations = [
+            dest for dest in destinations if dest.get("to") not in already_dispatched_phones
+        ]
+        log(f"Filtered {len(phone_numbers) - len(filtered_destinations)} destinations.")
+        return filtered_destinations
+    except Exception as err:
+        log(f"\n⚠️  Error filtering already dispatched phones: {err}")
+        log("Returning original destinations due to error in filtering.")
+        return destinations
+
+
 @task
 def get_destinations(
     destinations: Union[None, List[Dict], str],
     query: str,
     billing_project_id: str = "rj-crm-registry",
+    filter_dispatched_phones: bool = True,
 ) -> List[Dict]:
     """
     Get destinations from the query or from the parameter with validation.
@@ -306,6 +356,13 @@ def get_destinations(
         if isinstance(destinations, str):
             destinations = json.loads(destinations)
         else: return []
+
+    if filter_dispatched_phones:
+        destinations = filter_already_dispatched_phones(
+            destinations=destinations,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id,
+        )
 
     # Validate destinations using centralized validation
     if destinations:

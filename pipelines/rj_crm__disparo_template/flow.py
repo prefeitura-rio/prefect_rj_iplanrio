@@ -5,6 +5,9 @@
 # TODO: rodar teste no prefect no cadunico, pic e template
 # adicionar whitelist aqui, no cadunico e no pic
 
+"""
+Flow to dispatch templated messages via Wetalkie API
+"""
 import os
 import time
 from math import ceil
@@ -55,6 +58,7 @@ def rj_crm__disparo_template(
     query: str | None = None,
     query_processor_name: str | None = None,
     query_replacements: dict | None = None,
+    filter_dispatched_phones: bool | None = True,
     sleep_minutes: int | None = 5,
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
@@ -99,6 +103,7 @@ def rj_crm__disparo_template(
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
     crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
+    bucket_name = crd.result().bucket_name
 
     if test_mode:
         campaign_name = "teste-"+campaign_name
@@ -128,6 +133,7 @@ def rj_crm__disparo_template(
         destinations=destinations,
         query=query_complete,
         billing_project_id=billing_project_id,
+        filter_dispatched_phones=filter_dispatched_phones,
     )
 
     validated_destinations = skip_flow_if_empty(
