@@ -304,14 +304,13 @@ def filter_already_dispatched_phones(
         return destinations
 
     destinations_field = "externalId" if field == "cpf" else "to"
-    # query_field = "targetExternalId" if field == "cpf" else "flatTarget"
 
     phone_numbers = [d.get(destinations_field) for d in destinations if d.get(destinations_field)]
     if not phone_numbers:
         return destinations
 
     query = f"""
-        SELECT DISTINCT targetExternalId as externalID, flatTarget as celular_disparo
+        SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo
         FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
         WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo") AND status = "PROCESSING"
     """
@@ -331,7 +330,7 @@ def filter_already_dispatched_phones(
         filtered_destinations = [
             dest for dest in destinations if dest.get(destinations_field) not in already_dispatched_phones
         ]
-        log(f"Filtered {len(phone_numbers) - len(filtered_destinations)} destinations.")
+        log(f"Filtered {len(destinations) - len(filtered_destinations)} destinations.")
         return filtered_destinations
     except Exception as err:
         log(f"\n⚠️  Error filtering already dispatched phones: {err}")
