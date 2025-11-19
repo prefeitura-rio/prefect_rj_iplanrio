@@ -284,7 +284,7 @@ def filter_already_dispatched_phones(
     destinations: List[Dict], billing_project_id: str, bucket_name: str
 ) -> List[Dict]:
     """
-    Filters out phone numbers that have already been dispatched today.
+    Filters out CPFs that have already been dispatched today.
 
     Args:
         destinations (List[Dict]): A list of destination dictionaries.
@@ -297,7 +297,7 @@ def filter_already_dispatched_phones(
     if not destinations:
         return []
 
-    phone_numbers = [d.get("to") for d in destinations if d.get("to")]
+    phone_numbers = [d.get("externalId") for d in destinations if d.get("externalId")]
     if not phone_numbers:
         return destinations
 
@@ -319,7 +319,7 @@ def filter_already_dispatched_phones(
         log(f"Found {len(already_dispatched_phones)} phones already dispatched today.")
 
         filtered_destinations = [
-            dest for dest in destinations if dest.get("to") not in already_dispatched_phones
+            dest for dest in destinations if dest.get("externalId") not in already_dispatched_phones
         ]
         log(f"Filtered {len(phone_numbers) - len(filtered_destinations)} destinations.")
         return filtered_destinations
