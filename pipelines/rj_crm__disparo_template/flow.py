@@ -5,6 +5,9 @@
 # TODO: rodar teste no prefect no cadunico, pic e template
 # adicionar whitelist aqui, no cadunico e no pic
 
+"""
+Flow to dispatch templated messages via Wetalkie API
+"""
 import os
 import time
 from math import ceil
@@ -55,6 +58,7 @@ def rj_crm__disparo_template(
     query: str | None = None,
     query_processor_name: str | None = None,
     query_replacements: dict | None = None,
+    filter_dispatched_phones: bool = True,
     sleep_minutes: int | None = 5,
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
@@ -78,6 +82,7 @@ def rj_crm__disparo_template(
         query (str, optional): The SQL query used to retrieve the list of destinations for dispatch.
         query_processor_name (str, optional): The name of the processor to format the query.
         query_replacements (dict, optional): A dictionary of key-value pairs to replace placeholders in the `query`. Defaults to None.
+        filter_dispatched_phones (bool, optional): If True, filters out phone numbers that have already been dispatched today. Defaults to True.
         sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
         whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
@@ -128,6 +133,7 @@ def rj_crm__disparo_template(
         destinations=destinations,
         query=query_complete,
         billing_project_id=billing_project_id,
+        filter_dispatched_phones=filter_dispatched_phones,
     )
 
     validated_destinations = skip_flow_if_empty(
