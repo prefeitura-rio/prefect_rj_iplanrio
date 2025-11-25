@@ -8,6 +8,7 @@ Flow:
  - Call certbot with dns-google plugin to issue cert for DOMAINS
  - Upload new cert (fullchain) and privkey to FTP
 """
+import base64
 import datetime
 import hashlib
 import os
@@ -19,6 +20,7 @@ from typing import Optional, Tuple
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
+from iplanrio.pipelines_utils.env import getenv_or_action
 from prefect import flow, task
 
 
@@ -26,14 +28,10 @@ from prefect import flow, task
 def renew_certificate(
     domains: list[str],
     email: str,
-    ftp_host: str,
-    ftp_user: str,
-    ftp_pass: str,
-    ftp_cert_path: str,
-    ftp_key_path: str,
-    threshold_days: int,
-    google_credentials_path: str,
-    certbot_propagation_seconds: int,
+    ftp_cert_path: str = "cert/fullchain.pem",
+    ftp_key_path: str = "cert/privkey.pem",
+    threshold_days: int = 30,
+    certbot_propagation_seconds: int = 120,
 ) -> None:
     """
     Main certificate renewal flow.
@@ -41,59 +39,92 @@ def renew_certificate(
     Args:
         domains: List of domains for certificate
         email: Contact email for ACME
-        ftp_host: FTP server hostname
-        ftp_user: FTP username
-        ftp_pass: FTP password
-        ftp_cert_path: Remote path for certificate
-        ftp_key_path: Remote path for private key
-        threshold_days: Renew if cert expires within this many days
-        google_credentials_path: Path to Google service account JSON
-        certbot_propagation_seconds: DNS propagation wait time
+        ftp_cert_path: Remote path for certificate (default: /cert/fullchain.pem)
+        ftp_key_path: Remote path for private key (default: /cert/privkey.pem)
+        threshold_days: Renew if cert expires within this many days (default: 30)
+        certbot_propagation_seconds: DNS propagation wait time in seconds (default: 120)
     """
+    # Get credentials from environment variables
+    ftp_host = getenv_or_action("POSTFIX_CERTIFICATE_FTP_HOST")
+    ftp_user = getenv_or_action("POSTFIX_CERTIFICATE_FTP_USER")
+    ftp_pass = getenv_or_action("POSTFIX_CERTIFICATE_FTP_PASS")
+    google_credentials_b64 = getenv_or_action("POSTFIX_CERTIFICATE_GOOGLE_CREDENTIALS_B64")
+
     print("Starting certificate renewal process")
     print(f"Domains: {', '.join(domains)}")
     print(f"Renewal threshold: {threshold_days} days")
     print(f"FTP server: {ftp_host}")
 
-    # Check current certificate
-    current_cert, days_left = fetch_current_certificate(
-        ftp_host, ftp_user, ftp_pass, ftp_cert_path
-    )
+    # Decode service account key
+    google_credentials_path = decode_service_account_key(google_credentials_b64)
 
-    if days_left > threshold_days:
-        print(
-            f"Certificate expires in {days_left} days (threshold: {threshold_days}). "
-            "No renewal needed."
-        )
-        return
-
-    print(
-        f"Certificate renewal required: {days_left} days left <= {threshold_days} day threshold"
-    )
-
-    # Issue new certificate
-    with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"Using temporary directory: {tmpdir}")
-
-        fullchain_path, privkey_path = issue_certificate_with_certbot(
-            domains, email, google_credentials_path, certbot_propagation_seconds, tmpdir
+    try:
+        # Check current certificate
+        current_cert, days_left = fetch_current_certificate(
+            ftp_host, ftp_user, ftp_pass, ftp_cert_path
         )
 
-        new_fullchain, new_privkey = read_certificate_files(fullchain_path, privkey_path)
-
-        # Check if certificate changed
-        if current_cert and compare_certificates(current_cert, new_fullchain):
-            print("New certificate identical to existing. Skipping upload.")
+        if days_left > threshold_days:
+            print(
+                f"Certificate expires in {days_left} days (threshold: {threshold_days}). "
+                "No renewal needed."
+            )
             return
 
-        # Upload new certificates
-        upload_certificates_to_ftp(
-            ftp_host, ftp_user, ftp_pass,
-            ftp_cert_path, ftp_key_path,
-            new_fullchain, new_privkey
+        print(
+            f"Certificate renewal required: {days_left} days left <= {threshold_days} day threshold"
         )
 
-    print("Certificate renewal completed successfully")
+        # Issue new certificate
+        with tempfile.TemporaryDirectory() as tmpdir:
+            print(f"Using temporary directory: {tmpdir}")
+
+            fullchain_path, privkey_path = issue_certificate_with_certbot(
+                domains, email, google_credentials_path, certbot_propagation_seconds, tmpdir
+            )
+
+            new_fullchain, new_privkey = read_certificate_files(fullchain_path, privkey_path)
+
+            # Check if certificate changed
+            if current_cert and compare_certificates(current_cert, new_fullchain):
+                print("New certificate identical to existing. Skipping upload.")
+                return
+
+            # Upload new certificates
+            upload_certificates_to_ftp(
+                ftp_host, ftp_user, ftp_pass,
+                ftp_cert_path, ftp_key_path,
+                new_fullchain, new_privkey
+            )
+
+        print("Certificate renewal completed successfully")
+    finally:
+        # Clean up temporary credentials file
+        if os.path.exists(google_credentials_path):
+            os.unlink(google_credentials_path)
+            print(f"Cleaned up temporary credentials file: {google_credentials_path}")
+
+
+@task
+def decode_service_account_key(encoded_key: str) -> str:
+    """
+    Decode base64-encoded service account key and save to temporary file.
+
+    Args:
+        encoded_key: Base64-encoded JSON service account key
+
+    Returns:
+        Path to temporary file containing decoded credentials
+    """
+    print("Decoding service account key")
+    decoded_key = base64.b64decode(encoded_key)
+
+    temp_file = tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.json')
+    temp_file.write(decoded_key)
+    temp_file.close()
+
+    print(f"Service account key saved to temporary file: {temp_file.name}")
+    return temp_file.name
 
 
 @task
@@ -455,75 +486,3 @@ def upload_certificates_to_ftp(
     print("Certificates uploaded successfully")
 
 
-@task
-def renew_certificate(
-    domains: list[str],
-    email: str,
-    ftp_host: str,
-    ftp_user: str,
-    ftp_pass: str,
-    ftp_cert_path: str,
-    ftp_key_path: str,
-    threshold_days: int,
-    google_credentials_path: str,
-    certbot_propagation_seconds: int,
-) -> None:
-    """
-    Main certificate renewal flow.
-
-    Args:
-        domains: List of domains for certificate
-        email: Contact email for ACME
-        ftp_host: FTP server hostname
-        ftp_user: FTP username
-        ftp_pass: FTP password
-        ftp_cert_path: Remote path for certificate
-        ftp_key_path: Remote path for private key
-        threshold_days: Renew if cert expires within this many days
-        google_credentials_path: Path to Google service account JSON
-        certbot_propagation_seconds: DNS propagation wait time
-    """
-    print("Starting certificate renewal process")
-    print(f"Domains: {', '.join(domains)}")
-    print(f"Renewal threshold: {threshold_days} days")
-    print(f"FTP server: {ftp_host}")
-
-    # Check current certificate
-    current_cert, days_left = fetch_current_certificate(
-        ftp_host, ftp_user, ftp_pass, ftp_cert_path
-    )
-
-    if days_left > threshold_days:
-        print(
-            f"Certificate expires in {days_left} days (threshold: {threshold_days}). "
-            "No renewal needed."
-        )
-        return
-
-    print(
-        f"Certificate renewal required: {days_left} days left <= {threshold_days} day threshold"
-    )
-
-    # Issue new certificate
-    with tempfile.TemporaryDirectory() as tmpdir:
-        print(f"Using temporary directory: {tmpdir}")
-
-        fullchain_path, privkey_path = issue_certificate_with_certbot(
-            domains, email, google_credentials_path, certbot_propagation_seconds, tmpdir
-        )
-
-        new_fullchain, new_privkey = read_certificate_files(fullchain_path, privkey_path)
-
-        # Check if certificate changed
-        if current_cert and compare_certificates(current_cert, new_fullchain):
-            print("New certificate identical to existing. Skipping upload.")
-            return
-
-        # Upload new certificates
-        upload_certificates_to_ftp(
-            ftp_host, ftp_user, ftp_pass,
-            ftp_cert_path, ftp_key_path,
-            new_fullchain, new_privkey
-        )
-
-    print("Certificate renewal completed successfully")
