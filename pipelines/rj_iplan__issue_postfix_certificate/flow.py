@@ -59,6 +59,11 @@ def renew_certificate(
     google_credentials_path = decode_service_account_key(google_credentials_b64)
 
     try:
+        # Validate FTP credentials first to avoid unnecessary certbot API calls
+        print("Validating FTP credentials...")
+        validate_ftp_connection(ftp_host, ftp_user, ftp_pass)
+        print("FTP credentials validated successfully")
+
         # Check current certificate
         current_cert, days_left = fetch_current_certificate(
             ftp_host, ftp_user, ftp_pass, ftp_cert_path
@@ -131,6 +136,36 @@ def decode_service_account_key(encoded_key: str) -> str:
 def calculate_sha256(data: bytes) -> str:
     """Calculate SHA256 hash of bytes."""
     return hashlib.sha256(data).hexdigest()
+
+
+@task
+def validate_ftp_connection(host: str, user: str, password: str, timeout: int = 60) -> None:
+    """
+    Validate FTP credentials by attempting to connect and login.
+
+    Args:
+        host: FTP server hostname
+        user: FTP username
+        password: FTP password
+        timeout: Connection timeout in seconds
+
+    Raises:
+        RuntimeError: If FTP authentication fails
+    """
+    try:
+        ftp = FTP(host, timeout=timeout)
+        ftp.login(user, password)
+        ftp.quit()
+    except error_perm as e:
+        error_msg = str(e)
+        if "530" in error_msg or "Login" in error_msg:
+            raise RuntimeError(
+                f"FTP authentication failed: {error_msg}. "
+                "Please check POSTFIX_CERTIFICATE_FTP_USER and POSTFIX_CERTIFICATE_FTP_PASS environment variables."
+            ) from e
+        raise RuntimeError(f"FTP permission error: {error_msg}") from e
+    except Exception as e:
+        raise RuntimeError(f"Failed to connect to FTP server {host}: {e}") from e
 
 
 @task
