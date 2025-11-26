@@ -334,6 +334,15 @@ def fetch_current_certificate(
         cert_data = download_file_from_ftp(ftp_host, ftp_user, ftp_pass, cert_path)
         days_left = calculate_days_until_expiry(cert_data)
         return cert_data, days_left
+    except error_perm as e:
+        error_msg = str(e)
+        if "550" in error_msg and "No such file" in error_msg:
+            print(f"Certificate file does not exist at {cert_path} (first run)")
+            print("Will proceed to issue new certificate")
+            return None, 0
+        print(f"FTP permission error while fetching certificate: {e}")
+        print("Will proceed to issue new certificate")
+        return None, 0
     except Exception as e:
         print(f"Could not fetch existing certificate: {e}")
         print("Assuming no certificate exists or renewal needed")
