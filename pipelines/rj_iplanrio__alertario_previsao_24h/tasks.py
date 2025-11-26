@@ -196,6 +196,7 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         registros.append({
             "id_previsao": id_previsao,
             "create_date": create_date,
+            "hora_execucao": create_date.time(),
             "data_referencia": data_referencia_date,
             "sinotico": quadro_sinotico if data_referencia_date == create_date.date() else None,
             "temp_min_geral": temp_min_geral,
@@ -236,6 +237,7 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
 
         registros.append({
             "id_previsao": id_previsao,
+            "hora_execucao": create_date.time(),
             "data_periodo": datetime.strptime(data_periodo, "%Y-%m-%d").date(),
             "periodo": prev["periodo"],
             "ceu": prev["ceu"],
@@ -287,6 +289,7 @@ def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
 
         registros.append({
             "id_previsao": id_previsao,
+            "hora_execucao": create_date.time(),
             "zona": temp["zona"],
             "temp_minima": temp["temp_minima"],
             "temp_maxima": temp["temp_maxima"],
@@ -343,6 +346,7 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
 
         registros.append({
             "id_previsao": id_previsao,
+            "hora_execucao": create_date.time(),
             "data_hora": data_hora,
             "elevacao": mare["elevacao"],
             "altura": mare["altura"],
