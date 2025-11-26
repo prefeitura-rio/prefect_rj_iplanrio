@@ -371,8 +371,26 @@ def issue_certificate_with_certbot(
         Tuple of (fullchain_path, privkey_path)
 
     Raises:
+        ValueError: If domain validation fails
         RuntimeError: If certbot fails or certificates not found
     """
+    # Validate domains to prevent command injection
+    import re
+    dns_pattern = re.compile(r'^(\*\.)?[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$')
+
+    for domain in domains:
+        if not domain or not isinstance(domain, str):
+            raise ValueError(f"Invalid domain: domain must be a non-empty string, got {type(domain).__name__}")
+
+        if not dns_pattern.match(domain):
+            raise ValueError(
+                f"Invalid domain format: '{domain}'. "
+                "Domains must contain only letters, digits, hyphens, dots, and optionally start with '*.' for wildcards"
+            )
+
+        if len(domain) > 253:
+            raise ValueError(f"Invalid domain: '{domain}' exceeds maximum length of 253 characters")
+
     print(f"Issuing certificate for domains: {', '.join(domains)}")
 
     # Setup directories
