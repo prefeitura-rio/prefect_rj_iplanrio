@@ -176,12 +176,7 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         temperaturas_do_dia = [
             t for t in temperaturas if t.get("data") == data_referencia
         ]
-        if not temperaturas_do_dia:
-            log(
-                f"Sem bloco de temperatura para data {data_referencia}; "
-                "omitindo linha na previsao_diaria."
-            )
-            continue
+
         temps_minimas = [
             t["temp_minima"]
             for t in temperaturas_do_dia
@@ -205,6 +200,7 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
             "sinotico": quadro_sinotico if data_referencia_date == create_date.date() else None,
             "temp_min_geral": temp_min_geral,
             "temp_max_geral": temp_max_geral,
+            "teve_chuva": None,
             "data_particao": create_date.date(),
         })
 

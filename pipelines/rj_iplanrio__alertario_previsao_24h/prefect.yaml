@@ -49,5 +49,5 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-      - cron: "0 7 * * *"  # Executa diariamente às 7h
+      - cron: "*/30 * * * *"  # Executa a cada 30 minutos
         timezone: America/Sao_Paulo
