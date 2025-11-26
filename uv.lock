@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'darwin'",
@@ -3912,9 +3912,9 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "acme", specifier = ">=5.1.0" },
-    { name = "certbot-dns-google", specifier = ">=5.1.0" },
-    { name = "cryptography", specifier = ">=46.0.3" },
+    { name = "acme", specifier = "~=5.1.0" },
+    { name = "certbot-dns-google", specifier = "~=5.1.0" },
+    { name = "cryptography", specifier = "~=46.0.3" },
 ]
 
 [[package]]

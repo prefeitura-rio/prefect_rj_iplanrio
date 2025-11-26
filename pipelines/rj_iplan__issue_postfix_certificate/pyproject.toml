@@ -3,7 +3,7 @@ name = "rj_iplan__issue_postfix_certificate"
 version = "0.1.0"
 description = "Pipeline issue_postfix_certificate da secretaria iplan"
 dependencies = [
-    "acme>=5.1.0",
-    "certbot-dns-google>=5.1.0",
-    "cryptography>=46.0.3",
+    "acme~=5.1.0",
+    "certbot-dns-google~=5.1.0",
+    "cryptography~=46.0.3",
 ]
