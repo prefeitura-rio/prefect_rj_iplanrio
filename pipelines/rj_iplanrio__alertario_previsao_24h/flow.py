@@ -15,8 +15,8 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
 from pipelines.rj_iplanrio__alertario_previsao_24h.tasks import (
     create_dim_mares_df,
     create_dim_previsao_periodo_df,
+    create_dim_quadro_sinotico_df,
     create_dim_temperatura_zona_df,
-    create_previsao_diaria_df,
     fetch_xml_from_url,
     parse_xml_to_dict,
 )
@@ -34,11 +34,13 @@ def rj_iplanrio__alertario_previsao_24h(
     """
     Flow para extrair previsões meteorológicas do AlertaRio e carregar no BigQuery.
 
-    Busca o XML de previsão do AlertaRio, faz parsing e carrega em 4 tabelas:
-    - previsao_diaria: Tabela fato com dados agregados
-    - dim_previsao_periodo: Detalhes por período do dia
-    - dim_temperatura_zona: Temperaturas por zona da cidade
-    - dim_mares: Informações de tábua de marés
+    Busca o XML de previsão do AlertaRio, faz parsing e carrega em 4 tabelas simples:
+    - dim_quadro_sinotico: Uma linha por execução (quadro sinótico)
+    - dim_previsao_periodo: Uma linha por previsão
+    - dim_temperatura_zona: Uma linha por zona
+    - dim_mares: Uma linha por tábua de maré
+
+    Todas as tabelas compartilham o mesmo id_execucao (UUID) para permitir joins.
 
     Args:
         dataset_id: ID do dataset no BigQuery (default: brutos_alertario)
@@ -71,18 +73,16 @@ def rj_iplanrio__alertario_previsao_24h(
     # Fazer parsing do XML
     parsed_data = parse_xml_to_dict(xml_content)
 
-    log("Versao 0411")
-    print("0411")
     # Criar DataFrames para cada tabela
-    df_previsao_diaria = create_previsao_diaria_df(parsed_data)
+    df_dim_sinotico = create_dim_quadro_sinotico_df(parsed_data)
     df_dim_periodo = create_dim_previsao_periodo_df(parsed_data)
     df_dim_temperatura = create_dim_temperatura_zona_df(parsed_data)
     df_dim_mares = create_dim_mares_df(parsed_data)
 
-    # Upload tabela 1: previsao_diaria
-    root_folder_1 = AlertaRioConstants.ROOT_FOLDER.value + "previsao_diaria/"
+    # Upload tabela 1: dim_quadro_sinotico
+    root_folder_1 = AlertaRioConstants.ROOT_FOLDER.value + "dim_quadro_sinotico/"
     partitions_path_1 = create_date_partitions(
-        dataframe=df_previsao_diaria,
+        dataframe=df_dim_sinotico,
         partition_column=partition_column,
         file_format=file_format,
         root_folder=root_folder_1,
@@ -90,7 +90,7 @@ def rj_iplanrio__alertario_previsao_24h(
     create_table_and_upload_to_gcs_task(
         data_path=partitions_path_1,
         dataset_id=dataset_id,
-        table_id=AlertaRioConstants.TABLE_PREVISAO_DIARIA.value,
+        table_id=AlertaRioConstants.TABLE_DIM_QUADRO_SINOTICO.value,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
     )
