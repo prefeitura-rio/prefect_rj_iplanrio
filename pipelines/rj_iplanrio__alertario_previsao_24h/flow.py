@@ -127,7 +127,6 @@ def rj_iplanrio__alertario_previsao_24h(
         biglake_table=biglake_table,
     )
 
-    # Upload tabela 4: dim_mares
     root_folder_4 = AlertaRioConstants.ROOT_FOLDER.value + "dim_mares/"
     partitions_path_4 = create_date_partitions(
         dataframe=df_dim_mares,
