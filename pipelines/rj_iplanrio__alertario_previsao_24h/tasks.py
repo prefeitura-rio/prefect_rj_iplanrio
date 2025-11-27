@@ -78,7 +78,6 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
         for previsao in root.findall("previsao"):
             previsoes.append({
                 "ceu": previsao.get("ceu"),
-                "condicaoIcon": previsao.get("condicaoIcon"),
                 "datePeriodo": previsao.get("datePeriodo"),
                 "dirVento": previsao.get("dirVento"),
                 "periodo": previsao.get("periodo"),
@@ -101,14 +100,16 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
         temperaturas = []
         temperatura_elem = root.find("Temperatura")
         if temperatura_elem is not None:
-            # HARDCODE: usar data do create_date, ignorar data do XML
-            data_temp = create_date.date().isoformat()
+            # Extrair data da temperatura do atributo "data" do XML
+            data_temperatura_str = temperatura_elem.get("data")
+            data_temperatura = data_temperatura_str if data_temperatura_str else create_date.date().isoformat()
+
             for zona in temperatura_elem.findall("Zona"):
                 temperaturas.append({
                     "zona": zona.get("zona"),
                     "temp_maxima": float(zona.get("maxima")) if zona.get("maxima") else None,
                     "temp_minima": float(zona.get("minima")) if zona.get("minima") else None,
-                    "data": data_temp,
+                    "data_temperatura": data_temperatura,
                 })
 
         # Extrair tábua de marés
@@ -217,7 +218,6 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
             "dir_vento": prev["dirVento"],
             "vel_vento": prev["velVento"],
             "temperatura": prev["temperatura"],
-            "condicao_icon": prev["condicaoIcon"],
             "data_alertario": create_date,
             "data_particao": data_execucao,
         })
@@ -259,6 +259,7 @@ def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
             "zona": temp["zona"],
             "temp_minima": temp["temp_minima"],
             "temp_maxima": temp["temp_maxima"],
+            "data_temperatura": temp["data_temperatura"],
             "data_alertario": create_date,
             "data_particao": data_execucao,
         })
