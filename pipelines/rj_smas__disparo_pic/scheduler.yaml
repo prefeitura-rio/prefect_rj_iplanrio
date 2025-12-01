@@ -12,6 +12,9 @@ schedules:
       dataset_id: "brutos_wetalkie"
       table_id: "disparos_efetuados"
       dump_mode: "append"
+      filter_dispatched_phones_or_cpfs: None
+      filter_duplicated_phones: False
+      filter_duplicated_cpfs: False
       dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
       dispatch_date_col: "DATA_DISPARO_AVISO"
       event_date_col: "DATA_ENTREGA"
@@ -90,6 +93,7 @@ schedules:
           CROSS JOIN config
           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
             AND STATUS != 'não retirado'
+            and TIPO_ENTREGA_PREVISTA != 'CRAS'
         ),
         filtra_quem_nao_recebeu_hsm as (
           select joined_status_cpi.*
@@ -169,6 +173,9 @@ schedules:
       dataset_id: "brutos_wetalkie"
       table_id: "disparos_efetuados"
       dump_mode: "append"
+      filter_dispatched_phones_or_cpfs: None
+      filter_duplicated_phones: False
+      filter_duplicated_cpfs: False
       dispatch_approved_col: "APROVACAO_DISPARO_LEMBRETE"
       dispatch_date_col: "DATA_DISPARO_LEMBRETE"
       event_date_col: "DATA_ENTREGA"
@@ -247,6 +254,7 @@ schedules:
             CROSS JOIN config
             WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
             AND STATUS != 'não retirado'
+            and TIPO_ENTREGA_PREVISTA != 'CRAS'
           ),
           filtra_quem_nao_recebeu_hsm as (
             select joined_status_cpi.*
@@ -312,6 +320,7 @@ schedules:
           lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
           AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
           AND TIPO_ENTREGA != 'CRAS'
+
   # Daily schedule for smas-cartaopic-disparocras
   - interval: 86400
     anchor_date: "2021-01-01T12:00:00"
@@ -325,9 +334,12 @@ schedules:
       dataset_id: "brutos_wetalkie"
       table_id: "disparos_efetuados"
       dump_mode: "append"
-      dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
-      dispatch_date_col: "DATA_DISPARO_AVISO"
-      event_date_col: "DATA_ENTREGA"
+      filter_dispatched_phones_or_cpfs: None
+      filter_duplicated_phones: False
+      filter_duplicated_cpfs: False
+      dispatch_approved_col: "APROVACAO_DISPARO_CRAS"
+      dispatch_date_col: "DATA_DISPARO_CRAS"
+      event_date_col: "DATA_RETIRADA_CRAS"
       test_mode: false
       sleep_minutes: 5
       whitelist_percentage: 100
@@ -401,6 +413,9 @@ schedules:
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
           CROSS JOIN config
           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) = config.target_date
+          and trim(status) = "não retirado"
+          and TIPO_ENTREGA_PREVISTA = 'CRAS'
+          and t1.ENDERECO_CRAS is not null
         ),
         filtra_quem_nao_recebeu_hsm as (
           select joined_status_cpi.*
@@ -465,9 +480,10 @@ schedules:
         SELECT *
         FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
         WHERE
-          lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
-          AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
+          lower(TRIM(APROVACAO_DISPARO_CRAS)) = "aprovado"
+          AND DATE(DATA_DISPARO_CRAS) = CURRENT_DATE("America/Sao_Paulo")
           AND TIPO_ENTREGA = 'CRAS'
+
   # Daily schedule for smas-cartaopic-disparofaltouevento
   - interval: 86400
     anchor_date: "2021-01-01T12:00:00"
@@ -481,9 +497,12 @@ schedules:
       dataset_id: "brutos_wetalkie"
       table_id: "disparos_efetuados"
       dump_mode: "append"
-      dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
-      dispatch_date_col: "DATA_DISPARO_AVISO"
-      event_date_col: "DATA_ENTREGA"
+      filter_dispatched_phones_or_cpfs: None
+      filter_duplicated_phones: False
+      filter_duplicated_cpfs: False
+      dispatch_approved_col: "APROVACAO_DISPARO_CRAS"
+      dispatch_date_col: "DATA_DISPARO_CRAS"
+      event_date_col: "DATA_RETIRADA_CRAS"
       test_mode: false
       sleep_minutes: 5
       whitelist_percentage: 0
@@ -557,6 +576,8 @@ schedules:
           CROSS JOIN config
           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) = config.target_date
           AND STATUS = 'não retirado'
+          and TIPO_ENTREGA_PREVISTA != 'CRAS'
+          and t1.ENDERECO_CRAS is not null
         ),
         filtra_quem_nao_recebeu_hsm as (
           select joined_status_cpi.*
@@ -621,6 +642,6 @@ schedules:
         SELECT *
         FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
         WHERE
-          lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
-          AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
-          -- TODO: ver que filtros adicionar
+          lower(TRIM(APROVACAO_DISPARO_CRAS)) = "aprovado"
+          AND DATE(DATA_DISPARO_CRAS) = CURRENT_DATE("America/Sao_Paulo")
+          AND TIPO_ENTREGA != 'CRAS'

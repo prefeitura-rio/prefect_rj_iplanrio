@@ -339,7 +339,7 @@ deployments:
         parameters:
           id_hsm: 192
           query_replacements: {"id_hsm_placeholder": 192}
-          campaign_name: daily-cvl-pesquisa1746-prod
+          campaign_name: cvl-pesquisa1746-prod
           cost_center_id: 71
           chunk_size: 1000
           dataset_id: brutos_wetalkie
