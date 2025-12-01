@@ -43,9 +43,9 @@ deployments:
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
-      filter_dispatched_phones_or_cpfs: None
-      filter_duplicated_phones: False
-      filter_duplicated_cpfs: False
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
       dump_mode: append
       infisical_secret_path: /wetalkie
 
@@ -68,9 +68,9 @@ deployments:
       chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
-      filter_dispatched_phones_or_cpfs: None
-      filter_duplicated_phones: False
-      filter_duplicated_cpfs: False
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
       dump_mode: append
       infisical_secret_path: /wetalkie
     schedules:
@@ -88,9 +88,9 @@ deployments:
           dataset_id: "brutos_wetalkie"
           table_id: "disparos_efetuados"
           dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: None
-          filter_duplicated_phones: False
-          filter_duplicated_cpfs: False
+          filter_dispatched_phones_or_cpfs: null
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
           dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
           dispatch_date_col: "DATA_DISPARO_AVISO"
           event_date_col: "DATA_ENTREGA"
@@ -249,9 +249,9 @@ deployments:
           dataset_id: "brutos_wetalkie"
           table_id: "disparos_efetuados"
           dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: None
-          filter_duplicated_phones: False
-          filter_duplicated_cpfs: False
+          filter_dispatched_phones_or_cpfs: null
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
           dispatch_approved_col: "APROVACAO_DISPARO_LEMBRETE"
           dispatch_date_col: "DATA_DISPARO_LEMBRETE"
           event_date_col: "DATA_ENTREGA"
