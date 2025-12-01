@@ -27,6 +27,7 @@ class AlertaRioConstants(Enum):
 
     # Tabelas
     TABLE_PREVISAO_DIARIA = "previsao_diaria"
+    TABLE_DIM_QUADRO_SINOTICO = "dim_quadro_sinotico"
     TABLE_DIM_PREVISAO_PERIODO = "dim_previsao_periodo"
     TABLE_DIM_TEMPERATURA_ZONA = "dim_temperatura_zona"
     TABLE_DIM_MARES = "dim_mares"
