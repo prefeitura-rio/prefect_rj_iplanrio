@@ -1,0 +1,73 @@
+name: rj_iplan__issue_postfix_certificate
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplan__issue_postfix_certificate-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplan__issue_postfix_certificate/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplan--issue-postfix-certificate--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplan__issue_postfix_certificate/flow.py:renew_certificate
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplan__issue_postfix_certificate -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      # Required parameters (must be set in UI or deployment)
+      domains: ["pref.rio"]
+      email: "gabriel.milan@prefeitura.rio"
+      # Optional parameters with defaults
+      ftp_cert_path: "cert/fullchain.pem"
+      ftp_key_path: "cert/privkey.pem"
+      threshold_days: 30
+      certbot_propagation_seconds: 120
+
+  - name: rj-iplan--issue-postfix-certificate--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplan__issue_postfix_certificate/flow.py:renew_certificate
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplan__issue_postfix_certificate -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+      # Required parameters (must be set in UI or deployment)
+      domains: ["pref.rio"]
+      email: "gabriel.milan@prefeitura.rio"
+      # Optional parameters with defaults
+      ftp_cert_path: "cert/fullchain.pem"
+      ftp_key_path: "cert/privkey.pem"
+      threshold_days: 30
+      certbot_propagation_seconds: 120
+
+    schedules:
+      # Check daily for certificate renewal (will only renew if needed)
+      - cron: "0 3 * * *"  # Runs daily at 3 AM
+        timezone: America/Sao_Paulo
+        slug: daily-certificate-check
