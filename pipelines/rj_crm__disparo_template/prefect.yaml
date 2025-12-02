@@ -328,6 +328,9 @@ deployments:
       dataset_id: brutos_wetalkie
       table_id: disparos
       dump_mode: append
+      filter_dispatched_phones_or_cpfs: cpf
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
       infisical_secret_path: /wetalkie
     schedules:
       # Daily schedule para flow cvl-pesquisa1746-prod
@@ -346,6 +349,9 @@ deployments:
           table_id: disparos
           dump_mode: append
           test_mode: false
+          filter_dispatched_phones_or_cpfs: cpf
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: true
           sleep_minutes: 5
           whitelist_percentage: 100
           infisical_secret_path: "/wetalkie"
