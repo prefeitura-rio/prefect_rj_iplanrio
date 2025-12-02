@@ -12,6 +12,10 @@ build:
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
       tag: "rj_smas__disparo_pic-{{ get-commit-hash.stdout }}"
       dockerfile: pipelines/rj_smas__disparo_pic/Dockerfile
+  - prefect.deployments.steps.run_shell_script:
+      id: build-yaml
+      script: python pipelines/rj_smas__disparo_pic/build_prefect_yaml.py
+      stream_output: true
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -48,647 +52,647 @@ deployments:
       filter_duplicated_cpfs: false
       dump_mode: append
       infisical_secret_path: /wetalkie
-    schedules:
-      # Daily schedule for smas-cartaopic-disparoevento
-      - interval: 86400
-        anchor_date: "2021-01-01T12:00:00"
-        timezone: America/Sao_Paulo
-        slug: daily-smas-cartaopic-disparoevento
-        parameters:
-          id_hsm: 184
-          campaign_name: "smas-cartaopic-disparoevento"
-          cost_center_id: 71
-          chunk_size: 1000
-          dataset_id: "brutos_wetalkie"
-          table_id: "disparos_efetuados"
-          dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: null
-          filter_duplicated_phones: false
-          filter_duplicated_cpfs: false
-          dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
-          dispatch_date_col: "DATA_DISPARO_AVISO"
-          event_date_col: "DATA_ENTREGA"
-          test_mode: false
-          sleep_minutes: 5
-          whitelist_percentage: 100
-          infisical_secret_path: "/wetalkie"
-          whitelist_environment: "production"
-          query: |
-            WITH config AS (
-            select date('{event_date_placeholder}') AS target_date
-            ),
-            agendamentos_unicos AS (
-              SELECT
-                LPAD(cpf, 11, '0') AS cpf,
-                telefone,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-              FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
-              WHERE cpf IS NOT NULL
-            ),
-            dados_rmi as (
-              SELECT
-                cpf,
-                telefone
-              FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
-              WHERE menor_idade is False
-              and obito.indicador is False),
-            telefone_principal_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-              FROM dados_rmi AS rmi
-              WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
-            ),
-            telefones_alternativos_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-              FROM dados_rmi AS rmi,
-              UNNEST(rmi.telefone.alternativo) AS tel_alt
-              WHERE tel_alt.valor IS NOT NULL
-            ),
-            joined_status_cpi AS (
-              SELECT
-                TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
-                LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
-                SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
-                TRIM(
-                  CONCAT(
-                    t1.LOCAL_ENTREGA_PREVISTO,
-                    IF(
-                      t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
-                      AND t1.ENDERECO_ENTREGA_PREVISTO != '',
-                      CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
-                      ''
-                    )
-                  )
-                ) AS endereco_evento,
-                t1.DATA_ENTREGA_PREVISTA AS data_evento,
-                t1.HORA_ENTREGA_PREVISTA AS horario_evento,
-                COALESCE(
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
-                ) AS celular_disparo
-              FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
-              LEFT JOIN agendamentos_unicos AS a
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-              LEFT JOIN telefone_principal_rmi AS rmi
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
-              LEFT JOIN telefones_alternativos_rmi AS tel_alt
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-              CROSS JOIN config
-              WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
-                AND STATUS != 'não retirado'
-                and TIPO_ENTREGA_PREVISTA != 'CRAS'
-            ),
-            filtra_quem_nao_recebeu_hsm as (
-              select joined_status_cpi.*
-              from joined_status_cpi
-              left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-                on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
-              where fl.flattarget is null
-            ),
-            filtra_celulares_sem_whats as (
-              SELECT distinct f.*
-              FROM filtra_quem_nao_recebeu_hsm AS f
-              LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
-                ON f.celular_disparo = tel.telefone_numero_completo
-              LEFT JOIN UNNEST(tel.consentimento) AS c
-              WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
-                or tel.telefone_numero_completo is null
-            ),
-            formatted AS (
-              SELECT
-                celular_disparo,
-                INITCAP(
-                  IF(
-                    ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
-                    CONCAT(
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
-                      ' ',
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
-                    ),
-                    nome_completo
-                  )
-                ) AS nome_sobrenome,
-                cpf,
-                endereco_evento,
-                FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
-                horario_evento
-              FROM filtra_celulares_sem_whats
-              WHERE celular_disparo IS NOT NULL
-                AND data_evento_date IS NOT NULL
-            )
-            SELECT
-              TO_JSON_STRING(
-                STRUCT(
-                  celular_disparo AS celular_disparo,
-                  STRUCT(
-                    nome_sobrenome AS NOME_SOBRENOME,
-                    endereco_evento AS ENDERECO,
-                    data_formatada AS DATA,
-                    horario_evento AS HORARIO,
-                    cpf AS CC_WT_CPF_CIDADAO,
-                    nome_sobrenome AS CC_WT_NOME_SOBRENOME,
-                    endereco_evento AS CC_WT_ENDERECO,
-                    data_formatada AS CC_WT_DATA,
-                    horario_evento AS CC_WT_HORARIO
-                  ) AS vars,
-                  cpf AS externalId
-                )
-              ) AS destination_data
-            FROM formatted
-          query_dispatch_approved: |
-            SELECT *
-            FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
-            WHERE
-              lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
-              AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
-              AND TIPO_ENTREGA != 'CRAS'
+    # schedules:
+    #   # Daily schedule for smas-cartaopic-disparoevento
+    #   - interval: 86400
+    #     anchor_date: "2021-01-01T12:00:00"
+    #     timezone: America/Sao_Paulo
+    #     slug: daily-smas-cartaopic-disparoevento
+    #     parameters:
+    #       id_hsm: 184
+    #       campaign_name: "smas-cartaopic-disparoevento"
+    #       cost_center_id: 71
+    #       chunk_size: 1000
+    #       dataset_id: "brutos_wetalkie"
+    #       table_id: "disparos_efetuados"
+    #       dump_mode: "append"
+    #       filter_dispatched_phones_or_cpfs: null
+    #       filter_duplicated_phones: false
+    #       filter_duplicated_cpfs: false
+    #       dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
+    #       dispatch_date_col: "DATA_DISPARO_AVISO"
+    #       event_date_col: "DATA_ENTREGA"
+    #       test_mode: false
+    #       sleep_minutes: 5
+    #       whitelist_percentage: 100
+    #       infisical_secret_path: "/wetalkie"
+    #       whitelist_environment: "production"
+    #       query: |
+    #         WITH config AS (
+    #         select date('{event_date_placeholder}') AS target_date
+    #         ),
+    #         agendamentos_unicos AS (
+    #           SELECT
+    #             LPAD(cpf, 11, '0') AS cpf,
+    #             telefone,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
+    #           FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+    #           WHERE cpf IS NOT NULL
+    #         ),
+    #         dados_rmi as (
+    #           SELECT
+    #             cpf,
+    #             telefone
+    #           FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+    #           WHERE menor_idade is False
+    #           and obito.indicador is False),
+    #         telefone_principal_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+    #           FROM dados_rmi AS rmi
+    #           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+    #         ),
+    #         telefones_alternativos_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
+    #           FROM dados_rmi AS rmi,
+    #           UNNEST(rmi.telefone.alternativo) AS tel_alt
+    #           WHERE tel_alt.valor IS NOT NULL
+    #         ),
+    #         joined_status_cpi AS (
+    #           SELECT
+    #             TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
+    #             LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
+    #             SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
+    #             TRIM(
+    #               CONCAT(
+    #                 t1.LOCAL_ENTREGA_PREVISTO,
+    #                 IF(
+    #                   t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
+    #                   AND t1.ENDERECO_ENTREGA_PREVISTO != '',
+    #                   CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
+    #                   ''
+    #                 )
+    #               )
+    #             ) AS endereco_evento,
+    #             t1.DATA_ENTREGA_PREVISTA AS data_evento,
+    #             t1.HORA_ENTREGA_PREVISTA AS horario_evento,
+    #             COALESCE(
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
+    #             ) AS celular_disparo
+    #           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+    #           LEFT JOIN agendamentos_unicos AS a
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
+    #           LEFT JOIN telefone_principal_rmi AS rmi
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
+    #           LEFT JOIN telefones_alternativos_rmi AS tel_alt
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
+    #           CROSS JOIN config
+    #           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
+    #             AND STATUS != 'não retirado'
+    #             and TIPO_ENTREGA_PREVISTA != 'CRAS'
+    #         ),
+    #         filtra_quem_nao_recebeu_hsm as (
+    #           select joined_status_cpi.*
+    #           from joined_status_cpi
+    #           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+    #             on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
+    #           where fl.flattarget is null
+    #         ),
+    #         filtra_celulares_sem_whats as (
+    #           SELECT distinct f.*
+    #           FROM filtra_quem_nao_recebeu_hsm AS f
+    #           LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+    #             ON f.celular_disparo = tel.telefone_numero_completo
+    #           LEFT JOIN UNNEST(tel.consentimento) AS c
+    #           WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+    #             or tel.telefone_numero_completo is null
+    #         ),
+    #         formatted AS (
+    #           SELECT
+    #             celular_disparo,
+    #             INITCAP(
+    #               IF(
+    #                 ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+    #                 CONCAT(
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+    #                   ' ',
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+    #                 ),
+    #                 nome_completo
+    #               )
+    #             ) AS nome_sobrenome,
+    #             cpf,
+    #             endereco_evento,
+    #             FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
+    #             horario_evento
+    #           FROM filtra_celulares_sem_whats
+    #           WHERE celular_disparo IS NOT NULL
+    #             AND data_evento_date IS NOT NULL
+    #         )
+    #         SELECT
+    #           TO_JSON_STRING(
+    #             STRUCT(
+    #               celular_disparo AS celular_disparo,
+    #               STRUCT(
+    #                 nome_sobrenome AS NOME_SOBRENOME,
+    #                 endereco_evento AS ENDERECO,
+    #                 data_formatada AS DATA,
+    #                 horario_evento AS HORARIO,
+    #                 cpf AS CC_WT_CPF_CIDADAO,
+    #                 nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+    #                 endereco_evento AS CC_WT_ENDERECO,
+    #                 data_formatada AS CC_WT_DATA,
+    #                 horario_evento AS CC_WT_HORARIO
+    #               ) AS vars,
+    #               cpf AS externalId
+    #             )
+    #           ) AS destination_data
+    #         FROM formatted
+    #       query_dispatch_approved: |
+    #         SELECT *
+    #         FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+    #         WHERE
+    #           lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
+    #           AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
+    #           AND TIPO_ENTREGA != 'CRAS'
 
-      # Daily schedule for smas-cartaopic-lembrete
-      - interval: 86400
-        anchor_date: "2021-01-01T12:00:00"
-        timezone: America/Sao_Paulo
-        slug: daily-smas-cartaopic-lembrete
-        parameters:
-          id_hsm: 185
-          campaign_name: "smas-cartaopic-lembrete"
-          cost_center_id: 71
-          chunk_size: 1000
-          dataset_id: "brutos_wetalkie"
-          table_id: "disparos_efetuados"
-          dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: null
-          filter_duplicated_phones: false
-          filter_duplicated_cpfs: false
-          dispatch_approved_col: "APROVACAO_DISPARO_LEMBRETE"
-          dispatch_date_col: "DATA_DISPARO_LEMBRETE"
-          event_date_col: "DATA_ENTREGA"
-          test_mode: false
-          sleep_minutes: 5
-          whitelist_percentage: 0
-          infisical_secret_path: "/wetalkie"
-          whitelist_environment: "production"
-          query: |
-            WITH config AS (
-              select date('{event_date_placeholder}') AS target_date
-              ),
-              agendamentos_unicos AS (
-                SELECT
-                  LPAD(cpf, 11, '0') AS cpf,
-                  telefone,
-                  ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-                FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
-                WHERE cpf IS NOT NULL
-              ),
-            dados_rmi as (
-              SELECT
-                cpf,
-                telefone
-              FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
-              WHERE menor_idade is False
-              and obito.indicador is False),
-            telefone_principal_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-              FROM dados_rmi AS rmi
-              WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
-            ),
-            telefones_alternativos_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-              FROM dados_rmi AS rmi,
-              UNNEST(rmi.telefone.alternativo) AS tel_alt
-              WHERE tel_alt.valor IS NOT NULL
-            ),
-              joined_status_cpi AS (
-                SELECT
-                  TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
-                  LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
-                  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
-                  TRIM(
-                    CONCAT(
-                      t1.LOCAL_ENTREGA_PREVISTO,
-                      IF(
-                        t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
-                        AND t1.ENDERECO_ENTREGA_PREVISTO != '',
-                        CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
-                        ''
-                      )
-                    )
-                  ) AS endereco_evento,
-                  t1.DATA_ENTREGA_PREVISTA AS data_evento,
-                  t1.HORA_ENTREGA_PREVISTA AS horario_evento,
-                  COALESCE(
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
-                  ) AS celular_disparo
-                FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
-                LEFT JOIN agendamentos_unicos AS a
-                  ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-                LEFT JOIN telefone_principal_rmi AS rmi
-                  ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
-                LEFT JOIN telefones_alternativos_rmi AS tel_alt
-                  ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-                CROSS JOIN config
-                WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
-                AND STATUS != 'não retirado'
-                and TIPO_ENTREGA_PREVISTA != 'CRAS'
-              ),
-              filtra_quem_nao_recebeu_hsm as (
-                select joined_status_cpi.*
-                from joined_status_cpi
-                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-                  on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
-                where fl.flattarget is null
-              ),
-              filtra_celulares_sem_whats as (
-                SELECT distinct f.*
-                FROM filtra_quem_nao_recebeu_hsm AS f
-                LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
-                  ON f.celular_disparo = tel.telefone_numero_completo
-                LEFT JOIN UNNEST(tel.consentimento) AS c
-                WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
-                  or tel.telefone_numero_completo is null
-              ),
-              formatted AS (
-                SELECT
-                  celular_disparo,
-                  INITCAP(
-                    IF(
-                      ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
-                      CONCAT(
-                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
-                        ' ',
-                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
-                      ),
-                      nome_completo
-                    )
-                  ) AS nome_sobrenome,
-                  cpf,
-                  endereco_evento,
-                  FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
-                  horario_evento
-                FROM filtra_celulares_sem_whats
-                WHERE celular_disparo IS NOT NULL
-                  AND data_evento_date IS NOT NULL
-              )
-              SELECT
-                TO_JSON_STRING(
-                  STRUCT(
-                    celular_disparo AS celular_disparo,
-                    STRUCT(
-                      nome_sobrenome AS NOME_SOBRENOME,
-                      endereco_evento AS ENDERECO,
-                      data_formatada AS DIA,
-                      horario_evento AS HORARIO,
-                      cpf AS CC_WT_CPF_CIDADAO,
-                      nome_sobrenome AS CC_WT_NOME_SOBRENOME,
-                      endereco_evento AS CC_WT_ENDERECO,
-                      data_formatada AS CC_WT_DIA,
-                      horario_evento AS CC_WT_HORARIO
-                    ) AS vars,
-                    cpf AS externalId
-                  )
-                ) AS destination_data
-              FROM formatted
-          query_dispatch_approved: |
-            SELECT *
-            FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
-            WHERE
-              lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
-              AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
-              AND TIPO_ENTREGA != 'CRAS'
+    #   # Daily schedule for smas-cartaopic-lembrete
+    #   - interval: 86400
+    #     anchor_date: "2021-01-01T12:00:00"
+    #     timezone: America/Sao_Paulo
+    #     slug: daily-smas-cartaopic-lembrete
+    #     parameters:
+    #       id_hsm: 185
+    #       campaign_name: "smas-cartaopic-lembrete"
+    #       cost_center_id: 71
+    #       chunk_size: 1000
+    #       dataset_id: "brutos_wetalkie"
+    #       table_id: "disparos_efetuados"
+    #       dump_mode: "append"
+    #       filter_dispatched_phones_or_cpfs: null
+    #       filter_duplicated_phones: false
+    #       filter_duplicated_cpfs: false
+    #       dispatch_approved_col: "APROVACAO_DISPARO_LEMBRETE"
+    #       dispatch_date_col: "DATA_DISPARO_LEMBRETE"
+    #       event_date_col: "DATA_ENTREGA"
+    #       test_mode: false
+    #       sleep_minutes: 5
+    #       whitelist_percentage: 0
+    #       infisical_secret_path: "/wetalkie"
+    #       whitelist_environment: "production"
+    #       query: |
+    #         WITH config AS (
+    #           select date('{event_date_placeholder}') AS target_date
+    #           ),
+    #           agendamentos_unicos AS (
+    #             SELECT
+    #               LPAD(cpf, 11, '0') AS cpf,
+    #               telefone,
+    #               ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
+    #             FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+    #             WHERE cpf IS NOT NULL
+    #           ),
+    #         dados_rmi as (
+    #           SELECT
+    #             cpf,
+    #             telefone
+    #           FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+    #           WHERE menor_idade is False
+    #           and obito.indicador is False),
+    #         telefone_principal_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+    #           FROM dados_rmi AS rmi
+    #           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+    #         ),
+    #         telefones_alternativos_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
+    #           FROM dados_rmi AS rmi,
+    #           UNNEST(rmi.telefone.alternativo) AS tel_alt
+    #           WHERE tel_alt.valor IS NOT NULL
+    #         ),
+    #           joined_status_cpi AS (
+    #             SELECT
+    #               TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
+    #               LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
+    #               SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
+    #               TRIM(
+    #                 CONCAT(
+    #                   t1.LOCAL_ENTREGA_PREVISTO,
+    #                   IF(
+    #                     t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
+    #                     AND t1.ENDERECO_ENTREGA_PREVISTO != '',
+    #                     CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
+    #                     ''
+    #                   )
+    #                 )
+    #               ) AS endereco_evento,
+    #               t1.DATA_ENTREGA_PREVISTA AS data_evento,
+    #               t1.HORA_ENTREGA_PREVISTA AS horario_evento,
+    #               COALESCE(
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
+    #               ) AS celular_disparo
+    #             FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+    #             LEFT JOIN agendamentos_unicos AS a
+    #               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
+    #             LEFT JOIN telefone_principal_rmi AS rmi
+    #               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
+    #             LEFT JOIN telefones_alternativos_rmi AS tel_alt
+    #               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
+    #             CROSS JOIN config
+    #             WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
+    #             AND STATUS != 'não retirado'
+    #             and TIPO_ENTREGA_PREVISTA != 'CRAS'
+    #           ),
+    #           filtra_quem_nao_recebeu_hsm as (
+    #             select joined_status_cpi.*
+    #             from joined_status_cpi
+    #             left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+    #               on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
+    #             where fl.flattarget is null
+    #           ),
+    #           filtra_celulares_sem_whats as (
+    #             SELECT distinct f.*
+    #             FROM filtra_quem_nao_recebeu_hsm AS f
+    #             LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+    #               ON f.celular_disparo = tel.telefone_numero_completo
+    #             LEFT JOIN UNNEST(tel.consentimento) AS c
+    #             WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+    #               or tel.telefone_numero_completo is null
+    #           ),
+    #           formatted AS (
+    #             SELECT
+    #               celular_disparo,
+    #               INITCAP(
+    #                 IF(
+    #                   ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+    #                   CONCAT(
+    #                     SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+    #                     ' ',
+    #                     SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+    #                   ),
+    #                   nome_completo
+    #                 )
+    #               ) AS nome_sobrenome,
+    #               cpf,
+    #               endereco_evento,
+    #               FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
+    #               horario_evento
+    #             FROM filtra_celulares_sem_whats
+    #             WHERE celular_disparo IS NOT NULL
+    #               AND data_evento_date IS NOT NULL
+    #           )
+    #           SELECT
+    #             TO_JSON_STRING(
+    #               STRUCT(
+    #                 celular_disparo AS celular_disparo,
+    #                 STRUCT(
+    #                   nome_sobrenome AS NOME_SOBRENOME,
+    #                   endereco_evento AS ENDERECO,
+    #                   data_formatada AS DIA,
+    #                   horario_evento AS HORARIO,
+    #                   cpf AS CC_WT_CPF_CIDADAO,
+    #                   nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+    #                   endereco_evento AS CC_WT_ENDERECO,
+    #                   data_formatada AS CC_WT_DIA,
+    #                   horario_evento AS CC_WT_HORARIO
+    #                 ) AS vars,
+    #                 cpf AS externalId
+    #               )
+    #             ) AS destination_data
+    #           FROM formatted
+    #       query_dispatch_approved: |
+    #         SELECT *
+    #         FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+    #         WHERE
+    #           lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
+    #           AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
+    #           AND TIPO_ENTREGA != 'CRAS'
 
-      # Daily schedule for smas-cartaopic-disparocras
-      - interval: 86400
-        anchor_date: "2021-01-01T12:00:00"
-        timezone: America/Sao_Paulo
-        slug: daily-smas-cartaopic-disparocras
-        parameters:
-          id_hsm: 195
-          campaign_name: "smas-cartaopic-disparocras"
-          cost_center_id: 71
-          chunk_size: 1000
-          dataset_id: "brutos_wetalkie"
-          table_id: "disparos_efetuados"
-          dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: null
-          filter_duplicated_phones: false
-          filter_duplicated_cpfs: false
-          dispatch_approved_col: "APROVACAO_DISPARO_CRAS"
-          dispatch_date_col: "DATA_DISPARO_CRAS"
-          event_date_col: "DATA_RETIRADA_CRAS"
-          test_mode: false
-          sleep_minutes: 5
-          whitelist_percentage: 100
-          infisical_secret_path: "/wetalkie"
-          whitelist_environment: "production"
-          query: |
-            WITH config AS (
-            select date('{event_date_placeholder}') AS target_date
-            ),
-            agendamentos_unicos AS (
-              SELECT
-                LPAD(cpf, 11, '0') AS cpf,
-                telefone,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-              FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
-              WHERE cpf IS NOT NULL
-            ),
-            dados_rmi as (
-              SELECT
-                cpf,
-                telefone
-              FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
-              WHERE menor_idade is False
-              and obito.indicador is False
-            ),
-            telefone_principal_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-              FROM dados_rmi AS rmi
-              WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
-            ),
-            telefones_alternativos_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-              FROM dados_rmi AS rmi,
-              UNNEST(rmi.telefone.alternativo) AS tel_alt
-              WHERE tel_alt.valor IS NOT NULL
-            ),
-            joined_status_cpi AS (
-              SELECT
-                TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
-                LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
-                SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) AS data_evento_date,
-                t1.CRAS,
-                TRIM(
-                  IF(
-                    t1.ENDERECO_CRAS IS NOT NULL
-                    AND t1.ENDERECO_CRAS != '',
-                    CONCAT(' (', t1.ENDERECO_CRAS, ')'),
-                    ''
-                  )
-                ) AS endereco_evento,
-                t1.DATA_RETIRADA_CRAS AS data_evento,
-                t1.HORA_RETIRADA_CRAS AS horario_evento,
-                COALESCE(
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(telefone_principal),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
-                ) AS celular_disparo
-              FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
-              LEFT JOIN agendamentos_unicos AS a
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-              LEFT JOIN telefone_principal_rmi AS rmi
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
-              LEFT JOIN telefones_alternativos_rmi AS tel_alt
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-              CROSS JOIN config
-              WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) = config.target_date
-              and trim(status) = "não retirado"
-              and TIPO_ENTREGA_PREVISTA = 'CRAS'
-              and t1.ENDERECO_CRAS is not null
-            ),
-            filtra_quem_nao_recebeu_hsm as (
-              select joined_status_cpi.*
-              from joined_status_cpi
-              left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-                on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
-              where fl.flattarget is null
-            ),
-            filtra_celulares_sem_whats as (
-              SELECT distinct f.*
-              FROM filtra_quem_nao_recebeu_hsm AS f
-              LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
-                ON f.celular_disparo = tel.telefone_numero_completo
-              LEFT JOIN UNNEST(tel.consentimento) AS c
-              WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
-                or tel.telefone_numero_completo is null
-            ),
-            formatted AS (
-              SELECT
-                celular_disparo,
-                INITCAP(
-                  IF(
-                    ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
-                    CONCAT(
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
-                      ' ',
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
-                    ),
-                    nome_completo
-                  )
-                ) AS nome_sobrenome,
-                cpf,
-                cras,
-                endereco_evento,
-                FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
-                horario_evento
-              FROM filtra_celulares_sem_whats
-              WHERE celular_disparo IS NOT NULL
-                AND data_evento_date IS NOT NULL
-            )
-            SELECT
-              TO_JSON_STRING(
-                STRUCT(
-                  celular_disparo AS celular_disparo,
-                  STRUCT(
-                    nome_sobrenome AS NOME_SOBRENOME,
-                    cras AS NOMECRAS,
-                    endereco_evento AS ENDERECO,
-                    data_formatada AS DATA,
-                    horario_evento AS HORARIO,
-                    cpf AS CC_WT_CPF_CIDADAO,
-                    nome_sobrenome AS CC_WT_NOME_SOBRENOME,
-                    endereco_evento AS CC_WT_ENDERECO,
-                    data_formatada AS CC_WT_DATA,
-                    horario_evento AS CC_WT_HORARIO
-                  ) AS vars,
-                  cpf AS externalId
-                )
-              ) AS destination_data
-            FROM formatted
-          query_dispatch_approved: |
-            SELECT *
-            FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
-            WHERE
-              lower(TRIM(APROVACAO_DISPARO_CRAS)) = "aprovado"
-              AND DATE(DATA_DISPARO_CRAS) = CURRENT_DATE("America/Sao_Paulo")
-              AND TIPO_ENTREGA = 'CRAS'
+    #   # Daily schedule for smas-cartaopic-disparocras
+    #   - interval: 86400
+    #     anchor_date: "2021-01-01T12:00:00"
+    #     timezone: America/Sao_Paulo
+    #     slug: daily-smas-cartaopic-disparocras
+    #     parameters:
+    #       id_hsm: 195
+    #       campaign_name: "smas-cartaopic-disparocras"
+    #       cost_center_id: 71
+    #       chunk_size: 1000
+    #       dataset_id: "brutos_wetalkie"
+    #       table_id: "disparos_efetuados"
+    #       dump_mode: "append"
+    #       filter_dispatched_phones_or_cpfs: null
+    #       filter_duplicated_phones: false
+    #       filter_duplicated_cpfs: false
+    #       dispatch_approved_col: "APROVACAO_DISPARO_CRAS"
+    #       dispatch_date_col: "DATA_DISPARO_CRAS"
+    #       event_date_col: "DATA_RETIRADA_CRAS"
+    #       test_mode: false
+    #       sleep_minutes: 5
+    #       whitelist_percentage: 100
+    #       infisical_secret_path: "/wetalkie"
+    #       whitelist_environment: "production"
+    #       query: |
+    #         WITH config AS (
+    #         select date('{event_date_placeholder}') AS target_date
+    #         ),
+    #         agendamentos_unicos AS (
+    #           SELECT
+    #             LPAD(cpf, 11, '0') AS cpf,
+    #             telefone,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
+    #           FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+    #           WHERE cpf IS NOT NULL
+    #         ),
+    #         dados_rmi as (
+    #           SELECT
+    #             cpf,
+    #             telefone
+    #           FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+    #           WHERE menor_idade is False
+    #           and obito.indicador is False
+    #         ),
+    #         telefone_principal_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+    #           FROM dados_rmi AS rmi
+    #           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+    #         ),
+    #         telefones_alternativos_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
+    #           FROM dados_rmi AS rmi,
+    #           UNNEST(rmi.telefone.alternativo) AS tel_alt
+    #           WHERE tel_alt.valor IS NOT NULL
+    #         ),
+    #         joined_status_cpi AS (
+    #           SELECT
+    #             TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
+    #             LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
+    #             SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) AS data_evento_date,
+    #             t1.CRAS,
+    #             TRIM(
+    #               IF(
+    #                 t1.ENDERECO_CRAS IS NOT NULL
+    #                 AND t1.ENDERECO_CRAS != '',
+    #                 CONCAT(' (', t1.ENDERECO_CRAS, ')'),
+    #                 ''
+    #               )
+    #             ) AS endereco_evento,
+    #             t1.DATA_RETIRADA_CRAS AS data_evento,
+    #             t1.HORA_RETIRADA_CRAS AS horario_evento,
+    #             COALESCE(
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(telefone_principal),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
+    #             ) AS celular_disparo
+    #           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+    #           LEFT JOIN agendamentos_unicos AS a
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
+    #           LEFT JOIN telefone_principal_rmi AS rmi
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
+    #           LEFT JOIN telefones_alternativos_rmi AS tel_alt
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
+    #           CROSS JOIN config
+    #           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) = config.target_date
+    #           and trim(status) = "não retirado"
+    #           and TIPO_ENTREGA_PREVISTA = 'CRAS'
+    #           and t1.ENDERECO_CRAS is not null
+    #         ),
+    #         filtra_quem_nao_recebeu_hsm as (
+    #           select joined_status_cpi.*
+    #           from joined_status_cpi
+    #           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+    #             on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
+    #           where fl.flattarget is null
+    #         ),
+    #         filtra_celulares_sem_whats as (
+    #           SELECT distinct f.*
+    #           FROM filtra_quem_nao_recebeu_hsm AS f
+    #           LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+    #             ON f.celular_disparo = tel.telefone_numero_completo
+    #           LEFT JOIN UNNEST(tel.consentimento) AS c
+    #           WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+    #             or tel.telefone_numero_completo is null
+    #         ),
+    #         formatted AS (
+    #           SELECT
+    #             celular_disparo,
+    #             INITCAP(
+    #               IF(
+    #                 ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+    #                 CONCAT(
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+    #                   ' ',
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+    #                 ),
+    #                 nome_completo
+    #               )
+    #             ) AS nome_sobrenome,
+    #             cpf,
+    #             cras,
+    #             endereco_evento,
+    #             FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
+    #             horario_evento
+    #           FROM filtra_celulares_sem_whats
+    #           WHERE celular_disparo IS NOT NULL
+    #             AND data_evento_date IS NOT NULL
+    #         )
+    #         SELECT
+    #           TO_JSON_STRING(
+    #             STRUCT(
+    #               celular_disparo AS celular_disparo,
+    #               STRUCT(
+    #                 nome_sobrenome AS NOME_SOBRENOME,
+    #                 cras AS NOMECRAS,
+    #                 endereco_evento AS ENDERECO,
+    #                 data_formatada AS DATA,
+    #                 horario_evento AS HORARIO,
+    #                 cpf AS CC_WT_CPF_CIDADAO,
+    #                 nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+    #                 endereco_evento AS CC_WT_ENDERECO,
+    #                 data_formatada AS CC_WT_DATA,
+    #                 horario_evento AS CC_WT_HORARIO
+    #               ) AS vars,
+    #               cpf AS externalId
+    #             )
+    #           ) AS destination_data
+    #         FROM formatted
+    #       query_dispatch_approved: |
+    #         SELECT *
+    #         FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+    #         WHERE
+    #           lower(TRIM(APROVACAO_DISPARO_CRAS)) = "aprovado"
+    #           AND DATE(DATA_DISPARO_CRAS) = CURRENT_DATE("America/Sao_Paulo")
+    #           AND TIPO_ENTREGA = 'CRAS'
 
-      # Daily schedule for smas-cartaopic-disparofaltouevento
-      - interval: 86400
-        anchor_date: "2021-01-01T12:00:00"
-        timezone: America/Sao_Paulo
-        slug: daily-smas-cartaopic-disparofaltouevento
-        parameters:
-          id_hsm: 197
-          campaign_name: "smas-cartaopic-disparofaltouevento"
-          cost_center_id: 71
-          chunk_size: 1000
-          dataset_id: "brutos_wetalkie"
-          table_id: "disparos_efetuados"
-          dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: null
-          filter_duplicated_phones: false
-          filter_duplicated_cpfs: false
-          dispatch_approved_col: "APROVACAO_DISPARO_CRAS"
-          dispatch_date_col: "DATA_DISPARO_CRAS"
-          event_date_col: "DATA_RETIRADA_CRAS"
-          test_mode: false
-          sleep_minutes: 5
-          whitelist_percentage: 0
-          infisical_secret_path: "/wetalkie"
-          whitelist_environment: "production"
-          query: |
-            WITH config AS (
-            select date('{event_date_placeholder}') AS target_date
-            ),
-            agendamentos_unicos AS (
-              SELECT
-                LPAD(cpf, 11, '0') AS cpf,
-                telefone,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-              FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
-              WHERE cpf IS NOT NULL
-            ),
-            dados_rmi as (
-              SELECT
-                cpf,
-                telefone
-              FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
-              WHERE menor_idade is False
-              and obito.indicador is False),
-            telefone_principal_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-              FROM dados_rmi AS rmi
-              WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
-            ),
-            telefones_alternativos_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-              FROM dados_rmi AS rmi,
-              UNNEST(rmi.telefone.alternativo) AS tel_alt
-              WHERE tel_alt.valor IS NOT NULL
-            ),
-            joined_status_cpi AS (
-              SELECT
-                TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
-                LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
-                SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) AS data_evento_date,
-                t1.CRAS,
-                TRIM(
-                  IF(
-                    t1.ENDERECO_CRAS IS NOT NULL
-                    AND t1.ENDERECO_CRAS != '',
-                    CONCAT(' (', t1.ENDERECO_CRAS, ')'),
-                    ''
-                  )
-                ) AS endereco_evento,
-                t1.DATA_RETIRADA_CRAS AS data_evento,
-                t1.HORA_RETIRADA_CRAS AS horario_evento,
-                COALESCE(
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
-                ) AS celular_disparo
-              FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
-              LEFT JOIN agendamentos_unicos AS a
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-              LEFT JOIN telefone_principal_rmi AS rmi
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
-              LEFT JOIN telefones_alternativos_rmi AS tel_alt
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-              CROSS JOIN config
-              WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) = config.target_date
-              AND STATUS = 'não retirado'
-              and TIPO_ENTREGA_PREVISTA != 'CRAS'
-              and t1.ENDERECO_CRAS is not null
-            ),
-            filtra_quem_nao_recebeu_hsm as (
-              select joined_status_cpi.*
-              from joined_status_cpi
-              left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-                on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
-              where fl.flattarget is null
-            ),
-            filtra_celulares_sem_whats as (
-              SELECT distinct f.*
-              FROM filtra_quem_nao_recebeu_hsm AS f
-              LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
-                ON f.celular_disparo = tel.telefone_numero_completo
-              LEFT JOIN UNNEST(tel.consentimento) AS c
-              WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
-                or tel.telefone_numero_completo is null
-            ),
-            formatted AS (
-              SELECT
-                celular_disparo,
-                INITCAP(
-                  IF(
-                    ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
-                    CONCAT(
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
-                      ' ',
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
-                    ),
-                    nome_completo
-                  )
-                ) AS nome_sobrenome,
-                cpf,
-                cras,
-                endereco_evento,
-                FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
-                horario_evento
-              FROM filtra_celulares_sem_whats
-              WHERE celular_disparo IS NOT NULL
-                AND data_evento_date IS NOT NULL
-            )
-            SELECT
-              TO_JSON_STRING(
-                STRUCT(
-                  celular_disparo AS celular_disparo,
-                  STRUCT(
-                    nome_sobrenome AS NOME_SOBRENOME,
-                    cras AS NOMECRAS,
-                    endereco_evento AS ENDERECO,
-                    data_formatada AS DATA,
-                    horario_evento AS HORARIO,
-                    cpf AS CC_WT_CPF_CIDADAO,
-                    nome_sobrenome AS CC_WT_NOME_SOBRENOME,
-                    endereco_evento AS CC_WT_ENDERECO,
-                    data_formatada AS CC_WT_DATA,
-                    horario_evento AS CC_WT_HORARIO
-                  ) AS vars,
-                  cpf AS externalId
-                )
-              ) AS destination_data
-            FROM formatted
-          query_dispatch_approved: |
+    #   # Daily schedule for smas-cartaopic-disparofaltouevento
+    #   - interval: 86400
+    #     anchor_date: "2021-01-01T12:00:00"
+    #     timezone: America/Sao_Paulo
+    #     slug: daily-smas-cartaopic-disparofaltouevento
+    #     parameters:
+    #       id_hsm: 197
+    #       campaign_name: "smas-cartaopic-disparofaltouevento"
+    #       cost_center_id: 71
+    #       chunk_size: 1000
+    #       dataset_id: "brutos_wetalkie"
+    #       table_id: "disparos_efetuados"
+    #       dump_mode: "append"
+    #       filter_dispatched_phones_or_cpfs: null
+    #       filter_duplicated_phones: false
+    #       filter_duplicated_cpfs: false
+    #       dispatch_approved_col: "APROVACAO_DISPARO_CRAS"
+    #       dispatch_date_col: "DATA_DISPARO_CRAS"
+    #       event_date_col: "DATA_RETIRADA_CRAS"
+    #       test_mode: false
+    #       sleep_minutes: 5
+    #       whitelist_percentage: 0
+    #       infisical_secret_path: "/wetalkie"
+    #       whitelist_environment: "production"
+    #       query: |
+    #         WITH config AS (
+    #         select date('{event_date_placeholder}') AS target_date
+    #         ),
+    #         agendamentos_unicos AS (
+    #           SELECT
+    #             LPAD(cpf, 11, '0') AS cpf,
+    #             telefone,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
+    #           FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+    #           WHERE cpf IS NOT NULL
+    #         ),
+    #         dados_rmi as (
+    #           SELECT
+    #             cpf,
+    #             telefone
+    #           FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+    #           WHERE menor_idade is False
+    #           and obito.indicador is False),
+    #         telefone_principal_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+    #           FROM dados_rmi AS rmi
+    #           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+    #         ),
+    #         telefones_alternativos_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
+    #           FROM dados_rmi AS rmi,
+    #           UNNEST(rmi.telefone.alternativo) AS tel_alt
+    #           WHERE tel_alt.valor IS NOT NULL
+    #         ),
+    #         joined_status_cpi AS (
+    #           SELECT
+    #             TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
+    #             LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
+    #             SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) AS data_evento_date,
+    #             t1.CRAS,
+    #             TRIM(
+    #               IF(
+    #                 t1.ENDERECO_CRAS IS NOT NULL
+    #                 AND t1.ENDERECO_CRAS != '',
+    #                 CONCAT(' (', t1.ENDERECO_CRAS, ')'),
+    #                 ''
+    #               )
+    #             ) AS endereco_evento,
+    #             t1.DATA_RETIRADA_CRAS AS data_evento,
+    #             t1.HORA_RETIRADA_CRAS AS horario_evento,
+    #             COALESCE(
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
+    #             ) AS celular_disparo
+    #           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+    #           LEFT JOIN agendamentos_unicos AS a
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
+    #           LEFT JOIN telefone_principal_rmi AS rmi
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
+    #           LEFT JOIN telefones_alternativos_rmi AS tel_alt
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
+    #           CROSS JOIN config
+    #           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_RETIRADA_CRAS AS STRING))) = config.target_date
+    #           AND STATUS = 'não retirado'
+    #           and TIPO_ENTREGA_PREVISTA != 'CRAS'
+    #           and t1.ENDERECO_CRAS is not null
+    #         ),
+    #         filtra_quem_nao_recebeu_hsm as (
+    #           select joined_status_cpi.*
+    #           from joined_status_cpi
+    #           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+    #             on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
+    #           where fl.flattarget is null
+    #         ),
+    #         filtra_celulares_sem_whats as (
+    #           SELECT distinct f.*
+    #           FROM filtra_quem_nao_recebeu_hsm AS f
+    #           LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+    #             ON f.celular_disparo = tel.telefone_numero_completo
+    #           LEFT JOIN UNNEST(tel.consentimento) AS c
+    #           WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+    #             or tel.telefone_numero_completo is null
+    #         ),
+    #         formatted AS (
+    #           SELECT
+    #             celular_disparo,
+    #             INITCAP(
+    #               IF(
+    #                 ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+    #                 CONCAT(
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+    #                   ' ',
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+    #                 ),
+    #                 nome_completo
+    #               )
+    #             ) AS nome_sobrenome,
+    #             cpf,
+    #             cras,
+    #             endereco_evento,
+    #             FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
+    #             horario_evento
+    #           FROM filtra_celulares_sem_whats
+    #           WHERE celular_disparo IS NOT NULL
+    #             AND data_evento_date IS NOT NULL
+    #         )
+    #         SELECT
+    #           TO_JSON_STRING(
+    #             STRUCT(
+    #               celular_disparo AS celular_disparo,
+    #               STRUCT(
+    #                 nome_sobrenome AS NOME_SOBRENOME,
+    #                 cras AS NOMECRAS,
+    #                 endereco_evento AS ENDERECO,
+    #                 data_formatada AS DATA,
+    #                 horario_evento AS HORARIO,
+    #                 cpf AS CC_WT_CPF_CIDADAO,
+    #                 nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+    #                 endereco_evento AS CC_WT_ENDERECO,
+    #                 data_formatada AS CC_WT_DATA,
+    #                 horario_evento AS CC_WT_HORARIO
+    #               ) AS vars,
+    #               cpf AS externalId
+    #             )
+    #           ) AS destination_data
+    #         FROM formatted
+    #       query_dispatch_approved: |
             SELECT *
             FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
             WHERE
@@ -721,324 +725,324 @@ deployments:
       filter_duplicated_cpfs: false
       dump_mode: append
       infisical_secret_path: /wetalkie
-    schedules:
-      # Daily schedule for smas-cartaopic-disparoevento
-      - interval: 86400
-        anchor_date: "2021-01-01T19:00:00"
-        timezone: America/Sao_Paulo
-        slug: daily-smas-cartaopic-disparoevento
-        flow_run_name: smas-cartaopic-disparoevento
-        parameters:
-          id_hsm: 184
-          campaign_name: "smas-cartaopic-disparoevento"
-          cost_center_id: 71
-          chunk_size: 1000
-          dataset_id: "brutos_wetalkie"
-          table_id: "disparos_efetuados"
-          dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: null
-          filter_duplicated_phones: false
-          filter_duplicated_cpfs: false
-          dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
-          dispatch_date_col: "DATA_DISPARO_AVISO"
-          event_date_col: "DATA_ENTREGA"
-          test_mode: false
-          sleep_minutes: 5
-          whitelist_percentage: 100
-          infisical_secret_path: "/wetalkie"
-          whitelist_environment: "production"
-          query: |
-            WITH config AS (
-            select date('{event_date_placeholder}') AS target_date
-            ),
-            agendamentos_unicos AS (
-              SELECT
-                LPAD(cpf, 11, '0') AS cpf,
-                telefone,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-              FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
-              WHERE cpf IS NOT NULL
-            ),
-            dados_rmi as (
-              SELECT
-                cpf,
-                telefone
-              FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
-              WHERE menor_idade is False
-              and obito.indicador is False),
-            telefone_principal_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-              FROM dados_rmi AS rmi
-              WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
-            ),
-            telefones_alternativos_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-              FROM dados_rmi AS rmi,
-              UNNEST(rmi.telefone.alternativo) AS tel_alt
-              WHERE tel_alt.valor IS NOT NULL
-            ),
-            joined_status_cpi AS (
-              SELECT
-                TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
-                LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
-                SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
-                TRIM(
-                  CONCAT(
-                    t1.LOCAL_ENTREGA_PREVISTO,
-                    IF(
-                      t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
-                      AND t1.ENDERECO_ENTREGA_PREVISTO != '',
-                      CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
-                      ''
-                    )
-                  )
-                ) AS endereco_evento,
-                t1.DATA_ENTREGA_PREVISTA AS data_evento,
-                t1.HORA_ENTREGA_PREVISTA AS horario_evento,
-                COALESCE(
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
-                  `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
-                ) AS celular_disparo
-              FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
-              LEFT JOIN agendamentos_unicos AS a
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-              LEFT JOIN telefone_principal_rmi AS rmi
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
-              LEFT JOIN telefones_alternativos_rmi AS tel_alt
-                ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-              CROSS JOIN config
-              WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
-                AND STATUS != 'não retirado'
-                and TIPO_ENTREGA_PREVISTA != 'CRAS'
-            ),
-            filtra_quem_nao_recebeu_hsm as (
-              select joined_status_cpi.*
-              from joined_status_cpi
-              left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-                on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
-              where fl.flattarget is null
-            ),
-            filtra_celulares_sem_whats as (
-              SELECT distinct f.*
-              FROM filtra_quem_nao_recebeu_hsm AS f
-              LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
-                ON f.celular_disparo = tel.telefone_numero_completo
-              LEFT JOIN UNNEST(tel.consentimento) AS c
-              WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
-                or tel.telefone_numero_completo is null
-            ),
-            formatted AS (
-              SELECT
-                celular_disparo,
-                INITCAP(
-                  IF(
-                    ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
-                    CONCAT(
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
-                      ' ',
-                      SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
-                    ),
-                    nome_completo
-                  )
-                ) AS nome_sobrenome,
-                cpf,
-                endereco_evento,
-                FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
-                horario_evento
-              FROM filtra_celulares_sem_whats
-              WHERE celular_disparo IS NOT NULL
-                AND data_evento_date IS NOT NULL
-            )
-            SELECT
-              TO_JSON_STRING(
-                STRUCT(
-                  celular_disparo AS celular_disparo,
-                  STRUCT(
-                    nome_sobrenome AS NOME_SOBRENOME,
-                    endereco_evento AS ENDERECO,
-                    data_formatada AS DATA,
-                    horario_evento AS HORARIO,
-                    cpf AS CC_WT_CPF_CIDADAO,
-                    nome_sobrenome AS CC_WT_NOME_SOBRENOME,
-                    endereco_evento AS CC_WT_ENDERECO,
-                    data_formatada AS CC_WT_DATA,
-                    horario_evento AS CC_WT_HORARIO
-                  ) AS vars,
-                  cpf AS externalId
-                )
-              ) AS destination_data
-            FROM formatted
-          query_dispatch_approved: |
-            SELECT *
-            FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
-            WHERE
-              lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
-              AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
-              AND TIPO_ENTREGA != 'CRAS'
+    # schedules:
+    #   # Daily schedule for smas-cartaopic-disparoevento
+    #   - interval: 86400
+    #     anchor_date: "2021-01-01T19:00:00"
+    #     timezone: America/Sao_Paulo
+    #     slug: daily-smas-cartaopic-disparoevento
+    #     flow_run_name: smas-cartaopic-disparoevento
+    #     parameters:
+    #       id_hsm: 184
+    #       campaign_name: "smas-cartaopic-disparoevento"
+    #       cost_center_id: 71
+    #       chunk_size: 1000
+    #       dataset_id: "brutos_wetalkie"
+    #       table_id: "disparos_efetuados"
+    #       dump_mode: "append"
+    #       filter_dispatched_phones_or_cpfs: null
+    #       filter_duplicated_phones: false
+    #       filter_duplicated_cpfs: false
+    #       dispatch_approved_col: "APROVACAO_DISPARO_AVISO"
+    #       dispatch_date_col: "DATA_DISPARO_AVISO"
+    #       event_date_col: "DATA_ENTREGA"
+    #       test_mode: false
+    #       sleep_minutes: 5
+    #       whitelist_percentage: 100
+    #       infisical_secret_path: "/wetalkie"
+    #       whitelist_environment: "production"
+    #       query: |
+    #         WITH config AS (
+    #         select date('{event_date_placeholder}') AS target_date
+    #         ),
+    #         agendamentos_unicos AS (
+    #           SELECT
+    #             LPAD(cpf, 11, '0') AS cpf,
+    #             telefone,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
+    #           FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+    #           WHERE cpf IS NOT NULL
+    #         ),
+    #         dados_rmi as (
+    #           SELECT
+    #             cpf,
+    #             telefone
+    #           FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+    #           WHERE menor_idade is False
+    #           and obito.indicador is False),
+    #         telefone_principal_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+    #           FROM dados_rmi AS rmi
+    #           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+    #         ),
+    #         telefones_alternativos_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
+    #           FROM dados_rmi AS rmi,
+    #           UNNEST(rmi.telefone.alternativo) AS tel_alt
+    #           WHERE tel_alt.valor IS NOT NULL
+    #         ),
+    #         joined_status_cpi AS (
+    #           SELECT
+    #             TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
+    #             LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
+    #             SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
+    #             TRIM(
+    #               CONCAT(
+    #                 t1.LOCAL_ENTREGA_PREVISTO,
+    #                 IF(
+    #                   t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
+    #                   AND t1.ENDERECO_ENTREGA_PREVISTO != '',
+    #                   CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
+    #                   ''
+    #                 )
+    #               )
+    #             ) AS endereco_evento,
+    #             t1.DATA_ENTREGA_PREVISTA AS data_evento,
+    #             t1.HORA_ENTREGA_PREVISTA AS horario_evento,
+    #             COALESCE(
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+    #               `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
+    #             ) AS celular_disparo
+    #           FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+    #           LEFT JOIN agendamentos_unicos AS a
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
+    #           LEFT JOIN telefone_principal_rmi AS rmi
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
+    #           LEFT JOIN telefones_alternativos_rmi AS tel_alt
+    #             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
+    #           CROSS JOIN config
+    #           WHERE  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
+    #             AND STATUS != 'não retirado'
+    #             and TIPO_ENTREGA_PREVISTA != 'CRAS'
+    #         ),
+    #         filtra_quem_nao_recebeu_hsm as (
+    #           select joined_status_cpi.*
+    #           from joined_status_cpi
+    #           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+    #             on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
+    #           where fl.flattarget is null
+    #         ),
+    #         filtra_celulares_sem_whats as (
+    #           SELECT distinct f.*
+    #           FROM filtra_quem_nao_recebeu_hsm AS f
+    #           LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+    #             ON f.celular_disparo = tel.telefone_numero_completo
+    #           LEFT JOIN UNNEST(tel.consentimento) AS c
+    #           WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+    #             or tel.telefone_numero_completo is null
+    #         ),
+    #         formatted AS (
+    #           SELECT
+    #             celular_disparo,
+    #             INITCAP(
+    #               IF(
+    #                 ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+    #                 CONCAT(
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+    #                   ' ',
+    #                   SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+    #                 ),
+    #                 nome_completo
+    #               )
+    #             ) AS nome_sobrenome,
+    #             cpf,
+    #             endereco_evento,
+    #             FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
+    #             horario_evento
+    #           FROM filtra_celulares_sem_whats
+    #           WHERE celular_disparo IS NOT NULL
+    #             AND data_evento_date IS NOT NULL
+    #         )
+    #         SELECT
+    #           TO_JSON_STRING(
+    #             STRUCT(
+    #               celular_disparo AS celular_disparo,
+    #               STRUCT(
+    #                 nome_sobrenome AS NOME_SOBRENOME,
+    #                 endereco_evento AS ENDERECO,
+    #                 data_formatada AS DATA,
+    #                 horario_evento AS HORARIO,
+    #                 cpf AS CC_WT_CPF_CIDADAO,
+    #                 nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+    #                 endereco_evento AS CC_WT_ENDERECO,
+    #                 data_formatada AS CC_WT_DATA,
+    #                 horario_evento AS CC_WT_HORARIO
+    #               ) AS vars,
+    #               cpf AS externalId
+    #             )
+    #           ) AS destination_data
+    #         FROM formatted
+    #       query_dispatch_approved: |
+    #         SELECT *
+    #         FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+    #         WHERE
+    #           lower(TRIM(APROVACAO_DISPARO_AVISO)) = "aprovado"
+    #           AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE("America/Sao_Paulo")
+    #           AND TIPO_ENTREGA != 'CRAS'
 
-      # Daily schedule for smas-cartaopic-lembrete
-      - interval: 86400
-        anchor_date: "2021-01-01T19:00:00"
-        timezone: America/Sao_Paulo
-        slug: daily-smas-cartaopic-lembrete
-        flow_run_name: smas-cartaopic-lembrete
-        parameters:
-          id_hsm: 185
-          campaign_name: "smas-cartaopic-lembrete"
-          cost_center_id: 71
-          chunk_size: 1000
-          dataset_id: "brutos_wetalkie"
-          table_id: "disparos_efetuados"
-          dump_mode: "append"
-          filter_dispatched_phones_or_cpfs: null
-          filter_duplicated_phones: false
-          filter_duplicated_cpfs: false
-          dispatch_approved_col: "APROVACAO_DISPARO_LEMBRETE"
-          dispatch_date_col: "DATA_DISPARO_LEMBRETE"
-          event_date_col: "DATA_ENTREGA"
-          test_mode: false
-          sleep_minutes: 5
-          whitelist_percentage: 0
-          infisical_secret_path: "/wetalkie"
-          whitelist_environment: "production"
-          query: |
-            WITH config AS (
-              select date('{event_date_placeholder}') AS target_date
-              ),
-              agendamentos_unicos AS (
-                SELECT
-                  LPAD(cpf, 11, '0') AS cpf,
-                  telefone,
-                  ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-                FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
-                WHERE cpf IS NOT NULL
-              ),
-            dados_rmi as (
-              SELECT
-                cpf,
-                telefone
-              FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
-              WHERE menor_idade is False
-              and obito.indicador is False),
-            telefone_principal_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
-              FROM dados_rmi AS rmi
-              WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
-            ),
-            telefones_alternativos_rmi AS (
-              SELECT
-                cpf,
-                CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
-                ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
-              FROM dados_rmi AS rmi,
-              UNNEST(rmi.telefone.alternativo) AS tel_alt
-              WHERE tel_alt.valor IS NOT NULL
-            ),
-              joined_status_cpi AS (
-                SELECT
-                  TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
-                  LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
-                  SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
-                  TRIM(
-                    CONCAT(
-                      t1.LOCAL_ENTREGA_PREVISTO,
-                      IF(
-                        t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
-                        AND t1.ENDERECO_ENTREGA_PREVISTO != '',
-                        CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
-                        ''
-                      )
-                    )
-                  ) AS endereco_evento,
-                  t1.DATA_ENTREGA_PREVISTA AS data_evento,
-                  t1.HORA_ENTREGA_PREVISTA AS horario_evento,
-                  COALESCE(
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
-                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
-                  ) AS celular_disparo
-                FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
-                LEFT JOIN agendamentos_unicos AS a
-                  ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
-                LEFT JOIN telefone_principal_rmi AS rmi
-                  ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
-                LEFT JOIN telefones_alternativos_rmi AS tel_alt
-                  ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
-                CROSS JOIN config
-                WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
-                AND STATUS != 'não retirado'
-                and TIPO_ENTREGA_PREVISTA != 'CRAS'
-              ),
-              filtra_quem_nao_recebeu_hsm as (
-                select joined_status_cpi.*
-                from joined_status_cpi
-                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-                  on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
-                where fl.flattarget is null
-              ),
-              filtra_celulares_sem_whats as (
-                SELECT distinct f.*
-                FROM filtra_quem_nao_recebeu_hsm AS f
-                LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
-                  ON f.celular_disparo = tel.telefone_numero_completo
-                LEFT JOIN UNNEST(tel.consentimento) AS c
-                WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
-                  or tel.telefone_numero_completo is null
-              ),
-              formatted AS (
-                SELECT
-                  celular_disparo,
-                  INITCAP(
-                    IF(
-                      ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
-                      CONCAT(
-                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
-                        ' ',
-                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
-                      ),
-                      nome_completo
-                    )
-                  ) AS nome_sobrenome,
-                  cpf,
-                  endereco_evento,
-                  FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
-                  horario_evento
-                FROM filtra_celulares_sem_whats
-                WHERE celular_disparo IS NOT NULL
-                  AND data_evento_date IS NOT NULL
-              )
-              SELECT
-                TO_JSON_STRING(
-                  STRUCT(
-                    celular_disparo AS celular_disparo,
-                    STRUCT(
-                      nome_sobrenome AS NOME_SOBRENOME,
-                      endereco_evento AS ENDERECO,
-                      data_formatada AS DIA,
-                      horario_evento AS HORARIO,
-                      cpf AS CC_WT_CPF_CIDADAO,
-                      nome_sobrenome AS CC_WT_NOME_SOBRENOME,
-                      endereco_evento AS CC_WT_ENDERECO,
-                      data_formatada AS CC_WT_DIA,
-                      horario_evento AS CC_WT_HORARIO
-                    ) AS vars,
-                    cpf AS externalId
-                  )
-                ) AS destination_data
-              FROM formatted
-          query_dispatch_approved: |
+    #   # Daily schedule for smas-cartaopic-lembrete
+    #   - interval: 86400
+    #     anchor_date: "2021-01-01T19:00:00"
+    #     timezone: America/Sao_Paulo
+    #     slug: daily-smas-cartaopic-lembrete
+    #     flow_run_name: smas-cartaopic-lembrete
+    #     parameters:
+    #       id_hsm: 185
+    #       campaign_name: "smas-cartaopic-lembrete"
+    #       cost_center_id: 71
+    #       chunk_size: 1000
+    #       dataset_id: "brutos_wetalkie"
+    #       table_id: "disparos_efetuados"
+    #       dump_mode: "append"
+    #       filter_dispatched_phones_or_cpfs: null
+    #       filter_duplicated_phones: false
+    #       filter_duplicated_cpfs: false
+    #       dispatch_approved_col: "APROVACAO_DISPARO_LEMBRETE"
+    #       dispatch_date_col: "DATA_DISPARO_LEMBRETE"
+    #       event_date_col: "DATA_ENTREGA"
+    #       test_mode: false
+    #       sleep_minutes: 5
+    #       whitelist_percentage: 0
+    #       infisical_secret_path: "/wetalkie"
+    #       whitelist_environment: "production"
+    #       query: |
+    #         WITH config AS (
+    #           select date('{event_date_placeholder}') AS target_date
+    #           ),
+    #           agendamentos_unicos AS (
+    #             SELECT
+    #               LPAD(cpf, 11, '0') AS cpf,
+    #               telefone,
+    #               ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
+    #             FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+    #             WHERE cpf IS NOT NULL
+    #           ),
+    #         dados_rmi as (
+    #           SELECT
+    #             cpf,
+    #             telefone
+    #           FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+    #           WHERE menor_idade is False
+    #           and obito.indicador is False),
+    #         telefone_principal_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+    #           FROM dados_rmi AS rmi
+    #           WHERE telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+    #         ),
+    #         telefones_alternativos_rmi AS (
+    #           SELECT
+    #             cpf,
+    #             CONCAT(ifnull(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,
+    #             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn
+    #           FROM dados_rmi AS rmi,
+    #           UNNEST(rmi.telefone.alternativo) AS tel_alt
+    #           WHERE tel_alt.valor IS NOT NULL
+    #         ),
+    #           joined_status_cpi AS (
+    #             SELECT
+    #               TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,
+    #               LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS cpf,
+    #               SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) AS data_evento_date,
+    #               TRIM(
+    #                 CONCAT(
+    #                   t1.LOCAL_ENTREGA_PREVISTO,
+    #                   IF(
+    #                     t1.ENDERECO_ENTREGA_PREVISTO IS NOT NULL
+    #                     AND t1.ENDERECO_ENTREGA_PREVISTO != '',
+    #                     CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),
+    #                     ''
+    #                   )
+    #                 )
+    #               ) AS endereco_evento,
+    #               t1.DATA_ENTREGA_PREVISTA AS data_evento,
+    #               t1.HORA_ENTREGA_PREVISTA AS horario_evento,
+    #               COALESCE(
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
+    #                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
+    #               ) AS celular_disparo
+    #             FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+    #             LEFT JOIN agendamentos_unicos AS a
+    #               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
+    #             LEFT JOIN telefone_principal_rmi AS rmi
+    #               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = rmi.cpf
+    #             LEFT JOIN telefones_alternativos_rmi AS tel_alt
+    #               ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = tel_alt.cpf AND tel_alt.rn = 1
+    #             CROSS JOIN config
+    #             WHERE SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = config.target_date
+    #             AND STATUS != 'não retirado'
+    #             and TIPO_ENTREGA_PREVISTA != 'CRAS'
+    #           ),
+    #           filtra_quem_nao_recebeu_hsm as (
+    #             select joined_status_cpi.*
+    #             from joined_status_cpi
+    #             left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+    #               on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
+    #             where fl.flattarget is null
+    #           ),
+    #           filtra_celulares_sem_whats as (
+    #             SELECT distinct f.*
+    #             FROM filtra_quem_nao_recebeu_hsm AS f
+    #             LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+    #               ON f.celular_disparo = tel.telefone_numero_completo
+    #             LEFT JOIN UNNEST(tel.consentimento) AS c
+    #             WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+    #               or tel.telefone_numero_completo is null
+    #           ),
+    #           formatted AS (
+    #             SELECT
+    #               celular_disparo,
+    #               INITCAP(
+    #                 IF(
+    #                   ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+    #                   CONCAT(
+    #                     SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+    #                     ' ',
+    #                     SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+    #                   ),
+    #                   nome_completo
+    #                 )
+    #               ) AS nome_sobrenome,
+    #               cpf,
+    #               endereco_evento,
+    #               FORMAT_DATE('%d/%m/%Y', data_evento_date) AS data_formatada,
+    #               horario_evento
+    #             FROM filtra_celulares_sem_whats
+    #             WHERE celular_disparo IS NOT NULL
+    #               AND data_evento_date IS NOT NULL
+    #           )
+    #           SELECT
+    #             TO_JSON_STRING(
+    #               STRUCT(
+    #                 celular_disparo AS celular_disparo,
+    #                 STRUCT(
+    #                   nome_sobrenome AS NOME_SOBRENOME,
+    #                   endereco_evento AS ENDERECO,
+    #                   data_formatada AS DIA,
+    #                   horario_evento AS HORARIO,
+    #                   cpf AS CC_WT_CPF_CIDADAO,
+    #                   nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+    #                   endereco_evento AS CC_WT_ENDERECO,
+    #                   data_formatada AS CC_WT_DIA,
+    #                   horario_evento AS CC_WT_HORARIO
+    #                 ) AS vars,
+    #                 cpf AS externalId
+    #               )
+    #             ) AS destination_data
+    #           FROM formatted
+    #       query_dispatch_approved: |
             SELECT *
             FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
             WHERE
