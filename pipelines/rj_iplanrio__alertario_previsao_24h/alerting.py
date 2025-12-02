@@ -62,7 +62,11 @@ def extract_precipitation_alerts(dataframe: pd.DataFrame) -> list[PrecipitationA
     return alerts
 
 
-def format_precipitation_alert_message(alerts: Sequence[PrecipitationAlert]) -> str:
+def format_precipitation_alert_message(
+    alerts: Sequence[PrecipitationAlert],
+    synoptic_summary: Optional[str] = None,
+    synoptic_reference_date: Optional[date] = None,
+) -> str:
     """
     Monta o payload de mensagem seguindo o layout combinado.
     """
@@ -73,10 +77,26 @@ def format_precipitation_alert_message(alerts: Sequence[PrecipitationAlert]) -> 
     for alert in alerts:
         grouped.setdefault(alert.forecast_date, []).append(alert)
 
+    synoptic_summary = (synoptic_summary or "").strip()
     lines: list[str] = ["⚠️ Previsão de chuva – próximos dias (AlertaRio)", ""]
+    if synoptic_summary:
+        synoptic_reference_date = (
+            synoptic_reference_date.date()
+            if isinstance(synoptic_reference_date, datetime)
+            else synoptic_reference_date
+        )
+        if isinstance(synoptic_reference_date, date):
+            synoptic_date_str = synoptic_reference_date.strftime("%d/%m/%Y")
+            lines.extend(
+                [f"Quadro sinótico – {synoptic_date_str}", synoptic_summary, ""]
+            )
+        else:
+            lines.extend(["Quadro sinótico", synoptic_summary, ""])
+
     for forecast_date in sorted(grouped):
         items = grouped[forecast_date]
-        lines.append(forecast_date.isoformat())
+        formatted_date = forecast_date.strftime("%d/%m/%Y")
+        lines.append(formatted_date)
         for alert in items:
             lines.append(f"• {alert.periodo or '-'}: {alert.precipitacao}")
         lines.append("")

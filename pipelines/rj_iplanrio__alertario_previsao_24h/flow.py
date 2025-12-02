@@ -133,7 +133,9 @@ def rj_iplanrio__alertario_previsao_24h(
         else:
             try:
                 discord_message = format_precipitation_alert_message(
-                    precipitation_alerts
+                    precipitation_alerts,
+                    synoptic_summary=parsed_data.get("quadro_sinotico"),
+                    synoptic_reference_date=parsed_data.get("create_date"),
                 )
                 message_hash = compute_message_hash(discord_message)
                 now_utc = datetime.now(timezone.utc)
