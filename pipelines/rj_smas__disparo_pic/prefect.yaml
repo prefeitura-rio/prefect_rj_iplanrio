@@ -693,12 +693,12 @@ deployments:
     #           ) AS destination_data
     #         FROM formatted
     #       query_dispatch_approved: |
-            SELECT *
-            FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
-            WHERE
-              lower(TRIM(APROVACAO_DISPARO_CRAS)) = "aprovado"
-              AND DATE(DATA_DISPARO_CRAS) = CURRENT_DATE("America/Sao_Paulo")
-              AND TIPO_ENTREGA != 'CRAS'
+            # SELECT *
+            # FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+            # WHERE
+            #   lower(TRIM(APROVACAO_DISPARO_CRAS)) = "aprovado"
+            #   AND DATE(DATA_DISPARO_CRAS) = CURRENT_DATE("America/Sao_Paulo")
+            #   AND TIPO_ENTREGA != 'CRAS'
 
 
   - name: rj-smas--disparo-pic--prod
@@ -1043,10 +1043,10 @@ deployments:
     #             ) AS destination_data
     #           FROM formatted
     #       query_dispatch_approved: |
-            SELECT *
-            FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
-            WHERE
-              lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
-              AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
-              AND TIPO_ENTREGA != 'CRAS'
+            # SELECT *
+            # FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+            # WHERE
+            #   lower(TRIM(APROVACAO_DISPARO_LEMBRETE)) = "aprovado"
+            #   AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE("America/Sao_Paulo")
+            #   AND TIPO_ENTREGA != 'CRAS'
 
