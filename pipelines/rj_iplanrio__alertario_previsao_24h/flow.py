@@ -70,7 +70,6 @@ def rj_iplanrio__alertario_previsao_24h(
         min_alert_interval_hours: Intervalo mínimo em horas entre alertas.
     """
 
-    # Usar valores dos constants como padrão
     dataset_id = dataset_id or AlertaRioConstants.DATASET_ID.value
     dump_mode = dump_mode or AlertaRioConstants.DUMP_MODE.value
     materialize_after_dump = (
@@ -133,7 +132,9 @@ def rj_iplanrio__alertario_previsao_24h(
             )
         else:
             try:
-                discord_message = format_precipitation_alert_message(precipitation_alerts)
+                discord_message = format_precipitation_alert_message(
+                    precipitation_alerts
+                )
                 message_hash = compute_message_hash(discord_message)
                 now_utc = datetime.now(timezone.utc)
                 alert_date = now_utc.date()
@@ -169,8 +170,14 @@ def rj_iplanrio__alertario_previsao_24h(
                             f"Limite diário de {max_daily_alerts} alertas atingido. Mensagem será descartada.",
                             level="warning",
                         )
-                    elif last_sent_at and (now_utc - last_sent_at).total_seconds() < min_alert_interval_hours * 3600:
-                        hours_since_last = (now_utc - last_sent_at).total_seconds() / 3600
+                    elif (
+                        last_sent_at
+                        and (now_utc - last_sent_at).total_seconds()
+                        < min_alert_interval_hours * 3600
+                    ):
+                        hours_since_last = (
+                            now_utc - last_sent_at
+                        ).total_seconds() / 3600
                         log(
                             f"Último alerta enviado há {hours_since_last:.2f}h. Aguardando {min_alert_interval_hours}h entre alertas.",
                             level="warning",
@@ -199,7 +206,9 @@ def rj_iplanrio__alertario_previsao_24h(
                             table_id=alert_log_table_id,
                             rows=log_rows,
                         )
-                        log("Alerta de precipitação enviado ao Discord e registrado no BigQuery.")
+                        log(
+                            "Alerta de precipitação enviado ao Discord e registrado no BigQuery."
+                        )
             except Exception as error:  # pylint: disable=broad-except
                 log(f"Erro ao processar alerta do Discord: {error}", level="error")
     elif send_discord_alerts:
