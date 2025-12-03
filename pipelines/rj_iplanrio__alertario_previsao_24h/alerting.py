@@ -101,7 +101,6 @@ def format_precipitation_alert_message(
             lines.append(f"• {alert.periodo or '-'}: {alert.precipitacao}")
         lines.append("")
 
-    lines.append("Fonte: pipeline rj_iplanrio__alertario_previsao_24h.")
     return "\n".join(lines).strip()
 
 
