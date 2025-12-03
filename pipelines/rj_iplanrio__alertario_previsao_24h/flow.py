@@ -97,6 +97,7 @@ def rj_iplanrio__alertario_previsao_24h(
         if min_alert_interval_hours is not None
         else AlertaRioConstants.MIN_ALERT_INTERVAL_HOURS.value
     )
+    alert_log_dataset_id = dataset_id
 
     # Renomear flow run para melhor identificação
     rename_current_flow_run_task(new_name=f"alertario_previsao_24h_{dataset_id}")
@@ -171,12 +172,12 @@ def rj_iplanrio__alertario_previsao_24h(
                 else:
                     ensure_alert_log_table(
                         client=bq_client,
-                        dataset_id=dataset_id,
+                        dataset_id=alert_log_dataset_id,
                         table_id=alert_log_table_id,
                     )
                     sent_count, sent_hashes, last_sent_at = fetch_daily_alert_status(
                         client=bq_client,
-                        dataset_id=dataset_id,
+                        dataset_id=alert_log_dataset_id,
                         table_id=alert_log_table_id,
                         alert_date=alert_date,
                     )
@@ -237,7 +238,7 @@ def rj_iplanrio__alertario_previsao_24h(
                         )
                         insert_alert_log_rows(
                             client=bq_client,
-                            dataset_id=dataset_id,
+                            dataset_id=alert_log_dataset_id,
                             table_id=alert_log_table_id,
                             rows=log_rows,
                         )
