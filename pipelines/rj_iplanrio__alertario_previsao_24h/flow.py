@@ -97,7 +97,10 @@ def rj_iplanrio__alertario_previsao_24h(
         if min_alert_interval_hours is not None
         else AlertaRioConstants.MIN_ALERT_INTERVAL_HOURS.value
     )
-    alert_log_dataset_id = dataset_id
+    # Sempre usar dataset_staging para consistência com dim_* tables
+    # que são criadas pela BD+ em modo staging
+    alert_log_dataset_id = f"{dataset_id}_staging"
+    log(f"[Alert] Using dataset_id for alerts: {alert_log_dataset_id} (base: {dataset_id})")
 
     # Renomear flow run para melhor identificação
     rename_current_flow_run_task(new_name=f"alertario_previsao_24h_{dataset_id}")

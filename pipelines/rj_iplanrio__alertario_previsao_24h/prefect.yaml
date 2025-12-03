@@ -27,6 +27,8 @@ deployments:
   - name: rj-iplanrio--alertario-previsao-24h--staging
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
+    parameters:
+      send_discord_alerts: false  # Desativa envio de alertas ao Discord para teste
     work_pool:
       name: k3s-pool
       work_queue_name: default
