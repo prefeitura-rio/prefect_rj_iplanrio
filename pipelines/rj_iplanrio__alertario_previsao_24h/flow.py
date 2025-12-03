@@ -44,7 +44,7 @@ def rj_iplanrio__alertario_previsao_24h(
     dataset_id: str | None = None,
     dump_mode: str | None = None,
     materialize_after_dump: bool | None = None,
-    send_discord_alerts: bool = True,
+    send_discord_alerts: bool = False,
     discord_webhook_env_var: str | None = None,
     max_daily_alerts: int | None = None,
     min_alert_interval_hours: int | None = None,
@@ -117,8 +117,36 @@ def rj_iplanrio__alertario_previsao_24h(
     df_dim_mares = create_dim_mares_df(parsed_data)
 
     precipitation_alerts = extract_precipitation_alerts(df_dim_periodo)
+    discord_message: str | None = None
+    message_hash: str | None = None
 
-    if send_discord_alerts and precipitation_alerts:
+    if precipitation_alerts:
+        try:
+            discord_message = format_precipitation_alert_message(
+                precipitation_alerts,
+                synoptic_summary=parsed_data.get("quadro_sinotico"),
+                synoptic_reference_date=parsed_data.get("create_date"),
+            )
+            message_hash = compute_message_hash(discord_message)
+            log(
+                (
+                    f"[Alert Debug] {len(precipitation_alerts)} combos relevantes. "
+                    f"hash={message_hash} tamanho={len(discord_message)} caracteres."
+                ),
+                level="info",
+            )
+        except Exception as error:  # pylint: disable=broad-except
+            log(f"Erro ao montar mensagem de alerta: {error}", level="error")
+            discord_message = None
+            message_hash = None
+
+    if not send_discord_alerts:
+        log(
+            "Envio automático de alertas no Discord está desativado para depuração.",
+            level="warning",
+        )
+
+    if send_discord_alerts and precipitation_alerts and discord_message:
         webhook_url = os.getenv(discord_webhook_env_var or "")
         if not webhook_url:
             log(
@@ -132,12 +160,6 @@ def rj_iplanrio__alertario_previsao_24h(
             )
         else:
             try:
-                discord_message = format_precipitation_alert_message(
-                    precipitation_alerts,
-                    synoptic_summary=parsed_data.get("quadro_sinotico"),
-                    synoptic_reference_date=parsed_data.get("create_date"),
-                )
-                message_hash = compute_message_hash(discord_message)
                 now_utc = datetime.now(timezone.utc)
                 alert_date = now_utc.date()
                 bq_client = get_bigquery_client(project_id=billing_project_id)
@@ -157,6 +179,17 @@ def rj_iplanrio__alertario_previsao_24h(
                         dataset_id=dataset_id,
                         table_id=alert_log_table_id,
                         alert_date=alert_date,
+                    )
+                    debug_last_sent = (
+                        last_sent_at.isoformat() if last_sent_at else "nunca"
+                    )
+                    log(
+                        (
+                            "[Alert Debug] status diário: enviados="
+                            f"{sent_count}, último={debug_last_sent}, hashes={sorted(sent_hashes)}, "
+                            f"intervalo_mínimo={min_alert_interval_hours}h"
+                        ),
+                        level="info",
                     )
 
                     if last_sent_at and last_sent_at.tzinfo is None:
@@ -215,6 +248,15 @@ def rj_iplanrio__alertario_previsao_24h(
                 log(f"Erro ao processar alerta do Discord: {error}", level="error")
     elif send_discord_alerts:
         log("Sem alertas de precipitação para enviar ao Discord.")
+    elif precipitation_alerts and discord_message and message_hash:
+        preview = discord_message.splitlines()[0:5]
+        log(
+            (
+                "Envio de alerta desativado. Mensagem não enviada "
+                f"(hash={message_hash}). Prévia:\n" + "\n".join(preview)
+            ),
+            level="info",
+        )
 
     # Upload tabela 1: dim_quadro_sinotico
     root_folder_1 = AlertaRioConstants.ROOT_FOLDER.value + "dim_quadro_sinotico/"
