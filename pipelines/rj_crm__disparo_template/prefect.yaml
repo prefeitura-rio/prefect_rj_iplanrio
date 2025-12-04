@@ -22,14 +22,14 @@ pull:
 deployments:
 - name: rj-crm--disparo-template--staging
   version: '{{ build-image.tag }}'
-  entrypoint: 
+  entrypoint:
     pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
   work_pool:
     name: default-pool
     work_queue_name: default
     job_variables:
       image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-      command: uv run --package rj_crm__disparo_template -- prefect flow-run 
+      command: uv run --package rj_crm__disparo_template -- prefect flow-run
         execute
       secretName: prefect-jobs-crm-registry-secrets-staging
       image_pull_policy: Always
@@ -439,14 +439,14 @@ deployments:
             where rn=1
 - name: rj-crm--disparo-template--prod
   version: '{{ get-commit-hash.stdout }}'
-  entrypoint: 
+  entrypoint:
     pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
   work_pool:
     name: default-pool
     work_queue_name: default
     job_variables:
       image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-      command: uv run --package rj_crm__disparo_template -- prefect flow-run 
+      command: uv run --package rj_crm__disparo_template -- prefect flow-run
         execute
       secretName: prefect-jobs-crm-registry-secrets
       image_pull_policy: Always
