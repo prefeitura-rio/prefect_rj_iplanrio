@@ -36,8 +36,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smas__disparo_pic -- prefect flow-run 
-          execute
+        command: "uv run --package rj_smas__disparo_pic -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
@@ -61,8 +60,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smas__disparo_pic -- prefect flow-run 
-          execute
+        command: "uv run --package rj_smas__disparo_pic -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
