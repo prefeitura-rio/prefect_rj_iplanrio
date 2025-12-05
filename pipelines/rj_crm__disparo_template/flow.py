@@ -2,9 +2,6 @@
 # flake8: noqa:E501
 # pylint: disable='line-too-long'
 
-# TODO: rodar teste no prefect no cadunico, pic e template
-# adicionar whitelist aqui, no cadunico e no pic
-
 """
 Flow to dispatch templated messages via Wetalkie API
 """
@@ -33,6 +30,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     dispatch,
     format_query,
     get_destinations,
+    remove_duplicate_cpfs,
     remove_duplicate_phones,
 )
 # pylint: disable=E0611, E0401
@@ -58,11 +56,13 @@ def rj_crm__disparo_template(
     query: str | None = None,
     query_processor_name: str | None = None,
     query_replacements: dict | None = None,
-    filter_dispatched_phones: bool = True,
+    filter_dispatched_phones_or_cpfs: str | None = "cpf",
+    filter_duplicated_phones: bool = True,
+    filter_duplicated_cpfs: bool = True,
     sleep_minutes: int | None = 5,
     infisical_secret_path: str = "/wetalkie",
-    whitelist_percentage: int = 30,
-    whitelist_environment: str = "staging",
+    whitelist_percentage: int = 100,
+    whitelist_environment: str = "production",
 ):
     """
     Orchestrates the dispatch of templated messages via Wetalkie API.
@@ -82,7 +82,9 @@ def rj_crm__disparo_template(
         query (str, optional): The SQL query used to retrieve the list of destinations for dispatch.
         query_processor_name (str, optional): The name of the processor to format the query.
         query_replacements (dict, optional): A dictionary of key-value pairs to replace placeholders in the `query`. Defaults to None.
-        filter_dispatched_phones (bool, optional): If True, filters out phone numbers that have already been dispatched today. Defaults to True.
+        filter_dispatched_phones_or_cpfs (str, optional): If True, filters out phone numbers that have already been dispatched today. This parameter must be None, "cpf" or "phone_number". Defaults to "cpf".
+        filter_duplicated_phones (bool, optional): If True, removes duplicate phone numbers from the destination list. Defaults to True.
+        filter_duplicated_cpfs (bool, optional): If True, removes duplicate CPFs from the destination list. Defaults to True.
         sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
         whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
@@ -133,7 +135,7 @@ def rj_crm__disparo_template(
         destinations=destinations,
         query=query_complete,
         billing_project_id=billing_project_id,
-        filter_dispatched_phones=filter_dispatched_phones,
+        filter_dispatched_phones_or_cpfs=filter_dispatched_phones_or_cpfs,
     )
 
     validated_destinations = skip_flow_if_empty(
@@ -141,7 +143,9 @@ def rj_crm__disparo_template(
         message="No destinations found from query. Skipping flow execution.",
     )
 
-    unique_destinations = remove_duplicate_phones(validated_destinations)
+    # Remove duplicate phone numbers and CPFs if flags are set
+    unique_phone_destinations = remove_duplicate_phones(validated_destinations) if filter_duplicated_phones else validated_destinations
+    unique_destinations = remove_duplicate_cpfs(unique_phone_destinations) if filter_duplicated_cpfs else unique_phone_destinations
 
     # Log destination counts for tracking
     print(f"Total unique destinations to dispatch: {len(unique_destinations)}")

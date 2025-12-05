@@ -280,7 +280,7 @@ def check_api_status(api: object) -> bool:
         return False
 
 
-def filter_already_dispatched_phones(
+def filter_already_dispatched_phones_or_cpfs(
     destinations: List[Dict], billing_project_id: str, bucket_name: str, field: str = "cpf"
 ) -> List[Dict]:
     """
@@ -343,10 +343,12 @@ def get_destinations(
     destinations: Union[None, List[Dict], str],
     query: str,
     billing_project_id: str = "rj-crm-registry",
-    filter_dispatched_phones: bool = True,
+    filter_dispatched_phones_or_cpfs: Union[None, str] = "cpf",
 ) -> List[Dict]:
     """
     Get destinations from the query or from the parameter with validation.
+    If filter_dispatched_phones_or_cpfs is provided, filters out already dispatched phones or CPFs.
+    This parameter must be None, "cpf" or "phone_number".
 
     Returns validated destinations with mandatory externalId field.
     """
@@ -366,11 +368,12 @@ def get_destinations(
             destinations = json.loads(destinations)
         else: return []
 
-    if filter_dispatched_phones:
-        destinations = filter_already_dispatched_phones(
+    if filter_dispatched_phones_or_cpfs:
+        destinations = filter_already_dispatched_phones_or_cpfs(
             destinations=destinations,
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
+            field=filter_dispatched_phones_or_cpfs
         )
 
     # Validate destinations using centralized validation
@@ -415,6 +418,42 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
             log(f"Duplicate phone removed: {phone[:8]}**** (externalId: {external_id})")
 
     log(f"Removed {duplicates_count} duplicate phone numbers")
+    log(f"Total unique destinations: {len(unique_destinations)}")
+
+    return unique_destinations
+
+
+@task
+def remove_duplicate_cpfs(destinations: List[Dict]) -> List[Dict]:
+    """
+    Remove duplicate CPFs (externalId) from destinations list with validation.
+    Keeps only the first occurrence of each CPF.
+    Validates each destination before processing.
+    """
+    if not destinations:
+        log("No destinations to process")
+        return destinations
+
+    # Re-validate destinations to ensure data integrity
+    validated_destinations, validation_stats = validate_destinations(destinations)
+    log_validation_summary(validation_stats, "remove_duplicate_cpfs")
+
+    # Process only validated destinations
+    seen_cpfs = set()
+    unique_destinations = []
+    duplicates_count = 0
+
+    for destination in validated_destinations:
+        cpf = destination.externalId  # Pydantic model attribute
+
+        if cpf not in seen_cpfs:
+            seen_cpfs.add(cpf)
+            unique_destinations.append(destination.dict())  # Convert back to dict
+        else:
+            duplicates_count += 1
+            log(f"Duplicate CPF removed: {cpf[:4]}**** (phone: {destination.to})")
+
+    log(f"Removed {duplicates_count} duplicate CPFs")
     log(f"Total unique destinations: {len(unique_destinations)}")
 
     return unique_destinations
