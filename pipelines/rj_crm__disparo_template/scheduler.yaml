@@ -343,7 +343,7 @@ schedules:
                 from divida_ativa
                 where cotas.cota_paga = false
                 and cotas.data_vencimento = date_add(current_date("America/Sao_Paulo"), interval 1 day) -- TODO: MUDAR
-                and cotas.observacoes != "Encaminhada para Protesto"  -- TODO: nesse caso temos mais de uma cota vencendo no mesmo dia pra mesma pessoa, ignoramos essas pessoas, disparamos mais de uma HSM ou mudamos a HSM? para visualizar usar where rn1>1 na próxima query. CPFs nesse estado "28252683053", "18590020134", "10273416758", "94269637749", "97110833704" com vencimento para o fim de dez
+                and cotas.observacoes != "Encaminhada para Protesto"  -- TODO: nesse caso temos mais de uma cota vencendo no mesmo dia pra mesma pessoa, ignoramos essas pessoas, disparamos mais de uma HSM ou mudamos a HSM? para visualizar usar where rn1>1 na próxima query.
             ),
             remove_optout as (
                 select remove_duplicados.*,
