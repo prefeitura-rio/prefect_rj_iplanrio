@@ -237,7 +237,8 @@ def insert_alert_log_rows(
         return
 
     table_ref = f"{client.project}.{dataset_id}.{table_id}"
-    errors = client.insert_rows_json(table_ref, rows)
+    serialized_rows = [_serialize_row_for_json(row) for row in rows]
+    errors = client.insert_rows_json(table_ref, serialized_rows)
     if errors:
         raise RuntimeError(f"Falha ao inserir registros de alerta: {errors}")
 
@@ -263,3 +264,16 @@ def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 
         return response.json()
     except ValueError:
         return {}
+
+
+def _serialize_row_for_json(row: dict) -> dict:
+    """Converte valores não serializáveis (date/datetime) em strings ISO."""
+    serialized: dict = {}
+    for key, value in row.items():
+        if isinstance(value, datetime):
+            serialized[key] = value.isoformat()
+        elif isinstance(value, date):
+            serialized[key] = value.isoformat()
+        else:
+            serialized[key] = value
+    return serialized
