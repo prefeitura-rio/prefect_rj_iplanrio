@@ -48,7 +48,7 @@ with sched_path.open() as f:
 # Aplica scheduler aos deployments com base no argumento --env
 for dep in base.get("deployments", []):
     dep_name = dep.get("name", "")
-    
+
     # Lógica para staging
     if "staging" in dep_name:
         if args.env in ["staging", "both"]:

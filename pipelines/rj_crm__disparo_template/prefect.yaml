@@ -22,7 +22,7 @@ pull:
 deployments:
   - name: rj-crm--disparo-template--staging
     version: '{{ build-image.tag }}'
-    entrypoint: 
+    entrypoint:
       pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
     work_pool:
       name: default-pool
@@ -46,7 +46,7 @@ deployments:
       infisical_secret_path: /wetalkie
   - name: rj-crm--disparo-template--prod
     version: '{{ get-commit-hash.stdout }}'
-    entrypoint: 
+    entrypoint:
       pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
     work_pool:
       name: default-pool
@@ -270,7 +270,7 @@ deployments:
         flow_run_name: pgm-divida-ativa
         parameters:
           id_hsm: 196
-          query_replacements: {"id_hsm_placeholder": 196, "limit_placeholder": 
+          query_replacements: {"id_hsm_placeholder": 196, "limit_placeholder":
               1000}
           campaign_name: pgm-divida-ativa-prod-v1
           cost_center_id: 71
