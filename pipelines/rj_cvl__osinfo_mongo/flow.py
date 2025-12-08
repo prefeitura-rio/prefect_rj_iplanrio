@@ -17,7 +17,7 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_iplanrio__osinfo_mongo(
+def rj_cvl__osinfo_mongo(
     db_database: str = "OSINFO_FILES",
     db_host: str = "187.111.98.189",
     db_port: str = "27017",
@@ -76,7 +76,8 @@ def rj_iplanrio__osinfo_mongo(
         database_type=db_type,
         hostname=db_host,
         port=db_port,
-        user=secrets["MONGO_DB_USERNAME"],
+        user=secrets["MONGO_" \
+        "DB_USERNAME"],
         password=secrets["MONGO_DB_PASSWORD"],
         database=db_database,
         auth_source=db_auth_source,

@@ -1,4 +1,4 @@
 [project]
-name = "rj_iplanrio__osinfo_mongo"
+name = "rj_cvl__osinfo_mongo"
 version = "0.1.0"
 description = "Pipeline para ingestão de dados de PDF do OSINFO (MongoDB)"
