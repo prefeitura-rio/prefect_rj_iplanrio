@@ -9,13 +9,15 @@ import hashlib
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime
+from time import sleep
 from typing import Optional, Sequence
 
 import pandas as pd
 import requests
+from basedosdados import Base
+from google.cloud import bigquery
 
 from iplanrio.pipelines_utils.logging import log
-from pipelines.rj_crm__disparo_template.utils.tasks import task_download_data_from_bigquery
 
 SAFE_PRECIPITATION_VALUES = {"Sem chuva", "Chuva fraca isolada"}
 
@@ -145,6 +147,38 @@ def build_alert_log_rows(
 
 
 
+def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
+    """
+    Execute a BigQuery SQL query and return results as a pandas DataFrame.
+
+    Args:
+        query (str): SQL query to execute in BigQuery
+        billing_project_id (str): GCP project ID for billing purposes
+        bucket_name (str): GCS bucket name for credential loading
+
+    Returns:
+        pd.DataFrame: Query results as a pandas DataFrame
+
+    Raises:
+        Exception: If BigQuery job fails or credentials cannot be loaded
+    """
+    log("Querying data from BigQuery")
+    query = str(query)
+    bq_client = bigquery.Client(
+        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
+        project=billing_project_id,
+    )
+    job = bq_client.query(query)
+    while not job.done():
+        sleep(1)
+    log("Getting result from query")
+    results = job.result()
+    log("Converting result to pandas dataframe")
+    dfr = results.to_dataframe()
+    log("End download data from bigquery")
+    return dfr
+
+
 def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 15) -> dict:
     """
     Envia mensagem para o webhook retornando o payload da resposta (quando disponível).
@@ -222,8 +256,8 @@ def check_alert_deduplication(
         FROM alert_stats
         """
 
-        # Usar função pronta do projeto
-        df = task_download_data_from_bigquery(
+        # Usar função local
+        df = download_data_from_bigquery(
             query=query,
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
