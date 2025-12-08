@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
     parameters:
-      send_discord_alerts: false  # Desativa envio de alertas ao Discord para teste
+      send_discord_alerts: true  # Desativa envio de alertas ao Discord para teste
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -51,5 +51,5 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-      - cron: "0 * * * *"  # Executa de hora em hora
+      - cron: "0 9 * * *"  # Executa diariamente às 9h
         timezone: America/Sao_Paulo
