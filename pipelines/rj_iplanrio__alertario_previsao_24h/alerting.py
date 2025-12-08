@@ -238,12 +238,17 @@ def check_alert_deduplication(
         ),
         alert_stats AS (
           SELECT
-            COUNTIF(alert_hash = '{alert_hash}') as hash_count_today,
-            COUNT(*) as total_alerts_today,
-            MAX(sent_at) as last_alert_sent_at
+            -- Conta quantos ALERTAS ÚNICOS têm este hash (usando discord_message_id)
+            COUNT(DISTINCT CASE
+              WHEN alert_hash = '{alert_hash}' THEN discord_message_id
+              END) as hash_count_today,
+            -- Conta quantos ALERTAS ÚNICOS foram enviados (mensagens Discord únicas)
+            COUNT(DISTINCT discord_message_id) as total_alerts_today,
+            -- Timestamp do último alerta (sent_at é STRING, precisa CAST)
+            MAX(CAST(sent_at AS TIMESTAMP)) as last_alert_sent_at
           FROM `rj-iplanrio.brutos_alertario_staging.alertario_precipitacao_alerts_log` al
           CROSS JOIN brazil_today bt
-          WHERE al.alert_date = bt.local_date
+          WHERE CAST(al.data_particao AS DATE) = bt.local_date
         )
         SELECT
           hash_count_today,
