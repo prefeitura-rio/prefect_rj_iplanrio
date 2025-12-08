@@ -11,19 +11,17 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+import pandas as pd
 
 from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
     AlertaRioConstants,
 )
 from pipelines.rj_iplanrio__alertario_previsao_24h.alerting import (
     build_alert_log_rows,
+    check_alert_deduplication,
     compute_message_hash,
-    ensure_alert_log_table,
     extract_precipitation_alerts,
-    fetch_daily_alert_status,
     format_precipitation_alert_message,
-    get_bigquery_client,
-    insert_alert_log_rows,
     send_discord_webhook_message,
 )
 from pipelines.rj_iplanrio__alertario_previsao_24h.tasks import (
@@ -44,7 +42,7 @@ def rj_iplanrio__alertario_previsao_24h(
     dataset_id: str | None = None,
     dump_mode: str | None = None,
     materialize_after_dump: bool | None = None,
-    send_discord_alerts: bool = True,
+    send_discord_alerts: bool = False,
     discord_webhook_env_var: str | None = None,
     max_daily_alerts: int | None = None,
     min_alert_interval_hours: int | None = None,
@@ -98,6 +96,9 @@ def rj_iplanrio__alertario_previsao_24h(
         else AlertaRioConstants.MIN_ALERT_INTERVAL_HOURS.value
     )
 
+    # Inicializar lista para acumular alertas (será processada no final com as dim_* tables)
+    alert_log_rows_to_save = []
+
     # Renomear flow run para melhor identificação
     rename_current_flow_run_task(new_name=f"alertario_previsao_24h_{dataset_id}")
 
@@ -117,74 +118,67 @@ def rj_iplanrio__alertario_previsao_24h(
     df_dim_mares = create_dim_mares_df(parsed_data)
 
     precipitation_alerts = extract_precipitation_alerts(df_dim_periodo)
+    discord_message: str | None = None
+    message_hash: str | None = None
 
-    if send_discord_alerts and precipitation_alerts:
+    if precipitation_alerts:
+        try:
+            discord_message = format_precipitation_alert_message(
+                precipitation_alerts,
+                synoptic_summary=parsed_data.get("quadro_sinotico"),
+                synoptic_reference_date=parsed_data.get("create_date"),
+            )
+            message_hash = compute_message_hash(discord_message)
+            log(
+                (
+                    f"[Alert Debug] {len(precipitation_alerts)} combos relevantes. "
+                    f"hash={message_hash} tamanho={len(discord_message)} caracteres."
+                ),
+                level="info",
+            )
+        except Exception as error:  # pylint: disable=broad-except
+            log(f"Erro ao montar mensagem de alerta: {error}", level="error")
+            discord_message = None
+            message_hash = None
+
+    if not send_discord_alerts:
+        log(
+            "Envio automático de alertas no Discord está desativado para depuração.",
+            level="warning",
+        )
+
+    if send_discord_alerts and precipitation_alerts and discord_message:
         webhook_url = os.getenv(discord_webhook_env_var or "")
         if not webhook_url:
             log(
                 f"Variável {discord_webhook_env_var} não configurada. Alerta não será enviado.",
                 level="warning",
             )
-        elif max_daily_alerts <= 0:
-            log(
-                f"max_daily_alerts={max_daily_alerts} inválido. Ignorando envio de alerta.",
-                level="warning",
-            )
         else:
             try:
-                discord_message = format_precipitation_alert_message(
-                    precipitation_alerts,
-                    synoptic_summary=parsed_data.get("quadro_sinotico"),
-                    synoptic_reference_date=parsed_data.get("create_date"),
-                )
-                message_hash = compute_message_hash(discord_message)
                 now_utc = datetime.now(timezone.utc)
                 alert_date = now_utc.date()
-                bq_client = get_bigquery_client(project_id=billing_project_id)
-                if bq_client is None:
-                    log(
-                        "Credenciais do BigQuery indisponíveis. Pulando envio de alerta.",
-                        level="warning",
+
+                # Verificar regras de deduplicação antes de enviar
+                try:
+                    should_send, reason = check_alert_deduplication(
+                        alert_hash=message_hash,
+                        billing_project_id=billing_project_id,
+                        max_daily_alerts=max_daily_alerts,
+                        min_alert_interval_hours=min_alert_interval_hours,
                     )
+                    log(f"[Deduplication] {reason}", level="info")
+
+                    if not should_send:
+                        log("Alerta pulado devido a regras de deduplicação.", level="warning")
+                        # Não envia, não salva log (pula para próxima seção)
+                except Exception as dedup_error:
+                    log(f"Erro ao verificar deduplicação: {dedup_error}", level="error")
+                    log("Pulando envio de alerta por segurança (query falhou).", level="error")
+                    # Não envia se query falhar (comportamento conservador)
                 else:
-                    ensure_alert_log_table(
-                        client=bq_client,
-                        dataset_id=dataset_id,
-                        table_id=alert_log_table_id,
-                    )
-                    sent_count, sent_hashes, last_sent_at = fetch_daily_alert_status(
-                        client=bq_client,
-                        dataset_id=dataset_id,
-                        table_id=alert_log_table_id,
-                        alert_date=alert_date,
-                    )
-
-                    if last_sent_at and last_sent_at.tzinfo is None:
-                        last_sent_at = last_sent_at.replace(tzinfo=timezone.utc)
-
-                    if message_hash in sent_hashes:
-                        log(
-                            "Alerta de precipitação já enviado com o mesmo conteúdo hoje. Ignorando duplicado.",
-                            level="warning",
-                        )
-                    elif sent_count >= max_daily_alerts:
-                        log(
-                            f"Limite diário de {max_daily_alerts} alertas atingido. Mensagem será descartada.",
-                            level="warning",
-                        )
-                    elif (
-                        last_sent_at
-                        and (now_utc - last_sent_at).total_seconds()
-                        < min_alert_interval_hours * 3600
-                    ):
-                        hours_since_last = (
-                            now_utc - last_sent_at
-                        ).total_seconds() / 3600
-                        log(
-                            f"Último alerta enviado há {hours_since_last:.2f}h. Aguardando {min_alert_interval_hours}h entre alertas.",
-                            level="warning",
-                        )
-                    else:
+                    # Só envia se should_send == True
+                    if should_send:
                         discord_response = send_discord_webhook_message(
                             webhook_url=webhook_url,
                             message=discord_message,
@@ -202,19 +196,23 @@ def rj_iplanrio__alertario_previsao_24h(
                             message_excerpt=discord_message,
                             severity_level="info",
                         )
-                        insert_alert_log_rows(
-                            client=bq_client,
-                            dataset_id=dataset_id,
-                            table_id=alert_log_table_id,
-                            rows=log_rows,
-                        )
+                        alert_log_rows_to_save.extend(log_rows)
                         log(
-                            "Alerta de precipitação enviado ao Discord e registrado no BigQuery."
+                            "Alerta de precipitação enviado ao Discord. Log será salvo junto com as outras tabelas."
                         )
             except Exception as error:  # pylint: disable=broad-except
                 log(f"Erro ao processar alerta do Discord: {error}", level="error")
     elif send_discord_alerts:
         log("Sem alertas de precipitação para enviar ao Discord.")
+    elif precipitation_alerts and discord_message and message_hash:
+        preview = discord_message.splitlines()[0:5]
+        log(
+            (
+                "Envio de alerta desativado. Mensagem não enviada "
+                f"(hash={message_hash}). Prévia:\n" + "\n".join(preview)
+            ),
+            level="info",
+        )
 
     # Upload tabela 1: dim_quadro_sinotico
     root_folder_1 = AlertaRioConstants.ROOT_FOLDER.value + "dim_quadro_sinotico/"
@@ -278,3 +276,27 @@ def rj_iplanrio__alertario_previsao_24h(
         dump_mode=dump_mode,
         biglake_table=biglake_table,
     )
+
+    # Upload tabela 5: alertario_precipitacao_alerts_log (se houver alertas enviados)
+    if alert_log_rows_to_save:
+        df_alerts = pd.DataFrame(alert_log_rows_to_save)
+        root_folder_5 = (
+            AlertaRioConstants.ROOT_FOLDER.value + "alertario_precipitacao_alerts_log/"
+        )
+        partitions_path_5 = create_date_partitions(
+            dataframe=df_alerts,
+            partition_column="alert_date",  # Diferente das dim_* que usam data_particao
+            file_format=file_format,
+            root_folder=root_folder_5,
+        )
+        create_table_and_upload_to_gcs_task(
+            data_path=partitions_path_5,
+            dataset_id=dataset_id,
+            table_id=alert_log_table_id,
+            dump_mode=dump_mode,
+            biglake_table=biglake_table,
+        )
+    else:
+        log(
+            "Nenhum alerta foi enviado nesta execução. Tabela de alerts não será atualizada."
+        )
