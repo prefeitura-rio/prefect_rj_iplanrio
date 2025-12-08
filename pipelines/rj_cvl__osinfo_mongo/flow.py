@@ -49,7 +49,7 @@ def rj_cvl__osinfo_mongo(
     secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
     partition_columns_list = parse_comma_separated_string_to_list_task(text=partition_columns)
 
-    formated_query = format_partitioned_query_task(
+    formatted_query = format_partitioned_query_task(
         query=execute_query,
         dataset_id=dataset_id,
         table_id=table_id,
@@ -63,7 +63,7 @@ def rj_cvl__osinfo_mongo(
     )
 
     dump_upload_batch_task(
-        queries=formated_query,
+        queries=formatted_query,
         batch_size=batch_size,
         dataset_id=dataset_id,
         table_id=table_id,
