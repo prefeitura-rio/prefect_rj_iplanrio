@@ -23,10 +23,11 @@ def rj_iplanrio__osinfo_mongo(
     db_port: str = "27017",
     db_type: str = "mongodb",
     db_charset: Optional[str] = None,
+    db_auth_source: Optional[str] = "OSINFO_FILES",
     execute_query: str = "FILES.files",
     dataset_id: str = "osinfo_mongo",
     table_id: str = "files",
-    infisical_secret_path: str = "/db-osinfo-mongo", # TODO: CONFIGURAR
+    infisical_secret_path: str = "/db-osinfo",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
@@ -75,9 +76,10 @@ def rj_iplanrio__osinfo_mongo(
         database_type=db_type,
         hostname=db_host,
         port=db_port,
-        user=secrets["DB_USERNAME"],  # TODO: CONFIGURAR
-        password=secrets["DB_PASSWORD"],  # TODO: CONFIGURAR
+        user=secrets["MONGO_DB_USERNAME"],
+        password=secrets["MONGO_DB_PASSWORD"],
         database=db_database,
+        auth_source=db_auth_source,
         charset=db_charset,
         max_concurrency=max_concurrency,
         only_staging_dataset=only_staging_dataset,
