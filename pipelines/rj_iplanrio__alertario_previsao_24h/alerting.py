@@ -15,6 +15,7 @@ import pandas as pd
 import requests
 
 from iplanrio.pipelines_utils.logging import log
+from pipelines.rj_crm__disparo_template.utils.tasks import task_download_data_from_bigquery
 
 SAFE_PRECIPITATION_VALUES = {"Sem chuva", "Chuva fraca isolada"}
 
@@ -165,5 +166,100 @@ def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 
         return response.json()
     except ValueError:
         return {}
+
+
+def check_alert_deduplication(
+    alert_hash: str,
+    billing_project_id: str,
+    max_daily_alerts: int,
+    min_alert_interval_hours: int,
+) -> tuple[bool, str]:
+    """
+    Verifica se alerta deve ser enviado com base em regras de deduplicação.
+
+    Consulta tabela alerts_log no BigQuery (hardcoded) e verifica:
+    1. Este hash já foi enviado hoje? (duplicata exata)
+    2. Já enviamos max_daily_alerts hoje? (limite diário)
+    3. Último alerta foi há menos de min_alert_interval_hours? (intervalo)
+
+    Args:
+        alert_hash: SHA-256 hash da mensagem de alerta
+        billing_project_id: ID do projeto GCP para billing
+        max_daily_alerts: Número máximo de alertas por dia
+        min_alert_interval_hours: Intervalo mínimo em horas entre alertas
+
+    Returns:
+        (should_send, reason) onde:
+        - should_send: True se todas as verificações passarem
+        - reason: Explicação para logging (por que envia ou pula)
+
+    Raises:
+        Exception: Se query do BigQuery falhar (caller deve pegar e não enviar)
+    """
+    try:
+        # Query com tabela hardcoded (padrão do projeto)
+        query = f"""
+        WITH brazil_today AS (
+          SELECT DATE(CURRENT_TIMESTAMP(), 'America/Sao_Paulo') as local_date
+        ),
+        alert_stats AS (
+          SELECT
+            COUNTIF(alert_hash = '{alert_hash}') as hash_count_today,
+            COUNT(*) as total_alerts_today,
+            MAX(sent_at) as last_alert_sent_at
+          FROM `rj-iplanrio.brutos_alertario_staging.alertario_precipitacao_alerts_log` al
+          CROSS JOIN brazil_today bt
+          WHERE al.alert_date = bt.local_date
+        )
+        SELECT
+          hash_count_today,
+          total_alerts_today,
+          last_alert_sent_at,
+          CASE
+            WHEN last_alert_sent_at IS NULL THEN NULL
+            ELSE TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), last_alert_sent_at, HOUR)
+          END as hours_since_last_alert
+        FROM alert_stats
+        """
+
+        # Usar função pronta do projeto
+        df = task_download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id,
+        )
+
+        # Tabela vazia ou primeira execução
+        if df.empty or df["total_alerts_today"].iloc[0] == 0:
+            return (True, "No alerts sent today. Proceeding with send.")
+
+        row = df.iloc[0]
+        hash_count = row["hash_count_today"]
+        total_today = row["total_alerts_today"]
+        hours_since = row["hours_since_last_alert"]
+
+        # Check 1: Duplicate hash
+        if hash_count > 0:
+            return (False, f"Duplicate alert. Hash {alert_hash[:8]}... already sent today.")
+
+        # Check 2: Daily limit
+        if total_today >= max_daily_alerts:
+            return (False, f"Daily limit reached. {total_today}/{max_daily_alerts} alerts sent today.")
+
+        # Check 3: Time interval
+        if hours_since is not None and hours_since < min_alert_interval_hours:
+            return (False, f"Too soon. {hours_since}h elapsed (minimum {min_alert_interval_hours}h).")
+
+        # All checks passed
+        return (True, f"All checks passed. Sending alert ({total_today + 1}/{max_daily_alerts} today).")
+
+    except Exception as e:
+        # Tabela não existe (primeira execução)
+        error_msg = str(e).lower()
+        if "not found" in error_msg:
+            log(f"Alert log table not found (first run): {e}", level="warning")
+            return (True, "First run, proceeding with send.")
+        # Qualquer outro erro → não envia
+        raise
 
 

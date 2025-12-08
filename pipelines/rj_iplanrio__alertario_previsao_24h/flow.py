@@ -18,6 +18,7 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
 )
 from pipelines.rj_iplanrio__alertario_previsao_24h.alerting import (
     build_alert_log_rows,
+    check_alert_deduplication,
     compute_message_hash,
     extract_precipitation_alerts,
     format_precipitation_alert_message,
@@ -158,30 +159,47 @@ def rj_iplanrio__alertario_previsao_24h(
                 now_utc = datetime.now(timezone.utc)
                 alert_date = now_utc.date()
 
-                # TODO: Reimplementar deduplicação em futuro PR via query BD+
-                # Por enquanto, confiamos no parâmetro send_discord_alerts para controlar envio
+                # Verificar regras de deduplicação antes de enviar
+                try:
+                    should_send, reason = check_alert_deduplication(
+                        alert_hash=message_hash,
+                        billing_project_id=billing_project_id,
+                        max_daily_alerts=max_daily_alerts,
+                        min_alert_interval_hours=min_alert_interval_hours,
+                    )
+                    log(f"[Deduplication] {reason}", level="info")
 
-                discord_response = send_discord_webhook_message(
-                    webhook_url=webhook_url,
-                    message=discord_message,
-                )
-                discord_message_id = discord_response.get("id")
-                sent_at = now_utc
-                log_rows = build_alert_log_rows(
-                    alert_date=alert_date,
-                    id_execucao=parsed_data["id_execucao"],
-                    alert_hash=message_hash,
-                    alerts=precipitation_alerts,
-                    sent_at=sent_at,
-                    discord_message_id=discord_message_id,
-                    webhook_channel=discord_channel_label,
-                    message_excerpt=discord_message,
-                    severity_level="info",
-                )
-                alert_log_rows_to_save.extend(log_rows)
-                log(
-                    "Alerta de precipitação enviado ao Discord. Log será salvo junto com as outras tabelas."
-                )
+                    if not should_send:
+                        log("Alerta pulado devido a regras de deduplicação.", level="warning")
+                        # Não envia, não salva log (pula para próxima seção)
+                except Exception as dedup_error:
+                    log(f"Erro ao verificar deduplicação: {dedup_error}", level="error")
+                    log("Pulando envio de alerta por segurança (query falhou).", level="error")
+                    # Não envia se query falhar (comportamento conservador)
+                else:
+                    # Só envia se should_send == True
+                    if should_send:
+                        discord_response = send_discord_webhook_message(
+                            webhook_url=webhook_url,
+                            message=discord_message,
+                        )
+                        discord_message_id = discord_response.get("id")
+                        sent_at = now_utc
+                        log_rows = build_alert_log_rows(
+                            alert_date=alert_date,
+                            id_execucao=parsed_data["id_execucao"],
+                            alert_hash=message_hash,
+                            alerts=precipitation_alerts,
+                            sent_at=sent_at,
+                            discord_message_id=discord_message_id,
+                            webhook_channel=discord_channel_label,
+                            message_excerpt=discord_message,
+                            severity_level="info",
+                        )
+                        alert_log_rows_to_save.extend(log_rows)
+                        log(
+                            "Alerta de precipitação enviado ao Discord. Log será salvo junto com as outras tabelas."
+                        )
             except Exception as error:  # pylint: disable=broad-except
                 log(f"Erro ao processar alerta do Discord: {error}", level="error")
     elif send_discord_alerts:
