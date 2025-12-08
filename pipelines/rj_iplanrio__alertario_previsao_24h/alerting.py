@@ -13,9 +13,6 @@ from typing import Optional, Sequence
 
 import pandas as pd
 import requests
-from basedosdados import Base
-from google.api_core.exceptions import NotFound
-from google.cloud import bigquery
 
 from iplanrio.pipelines_utils.logging import log
 
@@ -109,87 +106,6 @@ def compute_message_hash(message: str) -> str:
     return hashlib.sha256(message.encode("utf-8")).hexdigest()
 
 
-def get_bigquery_client(project_id: str, bucket_name: str | None = None) -> bigquery.Client | None:
-    """
-    Inicializa um cliente do BigQuery usando as credenciais carregadas via Base dos Dados.
-    """
-    try:
-        credentials = Base(bucket_name=bucket_name or project_id)._load_credentials(mode="prod")
-        return bigquery.Client(credentials=credentials, project=project_id)
-    except Exception as error:  # pylint: disable=broad-except
-        log(
-            f"Não foi possível obter credenciais do BigQuery para o projeto {project_id}: {error}",
-            level="warning",
-        )
-        return None
-
-
-def ensure_alert_log_table(
-    client: bigquery.Client,
-    dataset_id: str,
-    table_id: str,
-) -> None:
-    """
-    Garante que a tabela de log existe com o schema esperado.
-    """
-    table_ref = f"{client.project}.{dataset_id}.{table_id}"
-    try:
-        client.get_table(table_ref)
-        return
-    except NotFound:
-        schema = [
-            bigquery.SchemaField("alert_date", "DATE", mode="REQUIRED"),
-            bigquery.SchemaField("id_execucao", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("forecast_date", "DATE", mode="REQUIRED"),
-            bigquery.SchemaField("periodo", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("precipitacao", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("alert_hash", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("severity_level", "STRING", mode="NULLABLE"),
-            bigquery.SchemaField("sent_at", "TIMESTAMP", mode="REQUIRED"),
-            bigquery.SchemaField("discord_message_id", "STRING", mode="NULLABLE"),
-            bigquery.SchemaField("webhook_channel", "STRING", mode="NULLABLE"),
-            bigquery.SchemaField("message_excerpt", "STRING", mode="NULLABLE"),
-        ]
-        table = bigquery.Table(table_ref, schema=schema)
-        table.time_partitioning = bigquery.TimePartitioning(field="alert_date")
-        client.create_table(table)
-        log(f"Tabela {table_ref} criada para log de alertas.")
-
-
-def fetch_daily_alert_status(
-    client: bigquery.Client,
-    dataset_id: str,
-    table_id: str,
-    alert_date: date,
-) -> tuple[int, set[str], datetime | None]:
-    """
-    Retorna quantidade distinta de mensagens enviadas no dia e o conjunto de hashes registrados.
-    """
-    table_ref = f"{client.project}.{dataset_id}.{table_id}"
-    query = f"""
-        SELECT alert_hash, sent_at
-        FROM `{table_ref}`
-        WHERE alert_date = @alert_date
-    """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("alert_date", "DATE", alert_date),
-        ]
-    )
-    results = client.query(query, job_config=job_config).result()
-    hashes: set[str] = set()
-    last_sent_at: datetime | None = None
-    for row in results:
-        hash_value = row["alert_hash"]
-        if hash_value:
-            hashes.add(hash_value)
-        row_sent_at = row.get("sent_at")
-        if row_sent_at:
-            if isinstance(row_sent_at, str):
-                row_sent_at = datetime.fromisoformat(row_sent_at)
-            if last_sent_at is None or row_sent_at > last_sent_at:
-                last_sent_at = row_sent_at
-    return len(hashes), hashes, last_sent_at
 
 
 def build_alert_log_rows(
@@ -226,21 +142,6 @@ def build_alert_log_rows(
     return rows
 
 
-def insert_alert_log_rows(
-    client: bigquery.Client,
-    dataset_id: str,
-    table_id: str,
-    rows: Sequence[dict],
-) -> None:
-    """Insere registros no log de alertas."""
-    if not rows:
-        return
-
-    table_ref = f"{client.project}.{dataset_id}.{table_id}"
-    serialized_rows = [_serialize_row_for_json(row) for row in rows]
-    errors = client.insert_rows_json(table_ref, serialized_rows)
-    if errors:
-        raise RuntimeError(f"Falha ao inserir registros de alerta: {errors}")
 
 
 def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 15) -> dict:
@@ -266,14 +167,3 @@ def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 
         return {}
 
 
-def _serialize_row_for_json(row: dict) -> dict:
-    """Converte valores não serializáveis (date/datetime) em strings ISO."""
-    serialized: dict = {}
-    for key, value in row.items():
-        if isinstance(value, datetime):
-            serialized[key] = value.isoformat()
-        elif isinstance(value, date):
-            serialized[key] = value.isoformat()
-        else:
-            serialized[key] = value
-    return serialized
