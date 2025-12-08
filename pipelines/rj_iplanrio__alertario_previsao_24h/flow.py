@@ -11,6 +11,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+import pandas as pd
 
 from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
     AlertaRioConstants,
@@ -261,7 +262,9 @@ def rj_iplanrio__alertario_previsao_24h(
     # Upload tabela 5: alertario_precipitacao_alerts_log (se houver alertas enviados)
     if alert_log_rows_to_save:
         df_alerts = pd.DataFrame(alert_log_rows_to_save)
-        root_folder_5 = AlertaRioConstants.ROOT_FOLDER.value + "alertario_precipitacao_alerts_log/"
+        root_folder_5 = (
+            AlertaRioConstants.ROOT_FOLDER.value + "alertario_precipitacao_alerts_log/"
+        )
         partitions_path_5 = create_date_partitions(
             dataframe=df_alerts,
             partition_column="alert_date",  # Diferente das dim_* que usam data_particao
@@ -276,4 +279,6 @@ def rj_iplanrio__alertario_previsao_24h(
             biglake_table=biglake_table,
         )
     else:
-        log("Nenhum alerta foi enviado nesta execução. Tabela de alerts não será atualizada.")
+        log(
+            "Nenhum alerta foi enviado nesta execução. Tabela de alerts não será atualizada."
+        )
