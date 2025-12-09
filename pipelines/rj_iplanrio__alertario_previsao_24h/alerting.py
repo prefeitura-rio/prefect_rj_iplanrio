@@ -109,8 +109,6 @@ def compute_message_hash(message: str) -> str:
     return hashlib.sha256(message.encode("utf-8")).hexdigest()
 
 
-
-
 def build_alert_log_rows(
     *,
     alert_date: date,
@@ -145,9 +143,9 @@ def build_alert_log_rows(
     return rows
 
 
-
-
-def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
+def download_data_from_bigquery(
+    query: str, billing_project_id: str, bucket_name: str
+) -> pd.DataFrame:
     """
     Execute a BigQuery SQL query and return results as a pandas DataFrame.
 
@@ -174,12 +172,14 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
     log("Getting result from query")
     results = job.result()
     log("Converting result to pandas dataframe")
-    dfr = results.to_dataframe()
+    dfr = results.to_dataframe(create_bqstorage_client=False)
     log("End download data from bigquery")
     return dfr
 
 
-def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 15) -> dict:
+def send_discord_webhook_message(
+    webhook_url: str, message: str, timeout: int = 15
+) -> dict:
     """
     Envia mensagem para o webhook retornando o payload da resposta (quando disponível).
     """
@@ -194,7 +194,9 @@ def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 
         timeout=timeout,
     )
     if response.status_code not in (200, 204):
-        raise ValueError(f"Falha ao enviar alerta ao Discord: {response.status_code} - {response.text}")
+        raise ValueError(
+            f"Falha ao enviar alerta ao Discord: {response.status_code} - {response.text}"
+        )
 
     try:
         return response.json()
@@ -279,18 +281,30 @@ def check_alert_deduplication(
 
         # Check 1: Duplicate hash
         if hash_count > 0:
-            return (False, f"Duplicate alert. Hash {alert_hash[:8]}... already sent today.")
+            return (
+                False,
+                f"Duplicate alert. Hash {alert_hash[:8]}... already sent today.",
+            )
 
         # Check 2: Daily limit
         if total_today >= max_daily_alerts:
-            return (False, f"Daily limit reached. {total_today}/{max_daily_alerts} alerts sent today.")
+            return (
+                False,
+                f"Daily limit reached. {total_today}/{max_daily_alerts} alerts sent today.",
+            )
 
         # Check 3: Time interval
         if hours_since is not None and hours_since < min_alert_interval_hours:
-            return (False, f"Too soon. {hours_since}h elapsed (minimum {min_alert_interval_hours}h).")
+            return (
+                False,
+                f"Too soon. {hours_since}h elapsed (minimum {min_alert_interval_hours}h).",
+            )
 
         # All checks passed
-        return (True, f"All checks passed. Sending alert ({total_today + 1}/{max_daily_alerts} today).")
+        return (
+            True,
+            f"All checks passed. Sending alert ({total_today + 1}/{max_daily_alerts} today).",
+        )
 
     except Exception as e:
         # Tabela não existe (primeira execução)
@@ -300,5 +314,3 @@ def check_alert_deduplication(
             return (True, "First run, proceeding with send.")
         # Qualquer outro erro → não envia
         raise
-
-
