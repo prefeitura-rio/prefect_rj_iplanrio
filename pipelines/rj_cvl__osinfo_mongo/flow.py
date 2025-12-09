@@ -9,7 +9,7 @@ MongoDB Filter Examples:
 - Filter by field: execute_query = "FILES.chunks|{\"n\": 0}"
 - From BigQuery: bq_files_ids_query = "SELECT _id FROM dataset.table"
 
-Note: String values in *_id fields are automatically converted to ObjectId
+Note: String values in *_id fields are automatically converted to ObjectId.
 """
 
 from typing import Optional
@@ -24,7 +24,12 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from .tasks import build_batch_query, chunk_list, get_batch_dump_mode, get_files_ids_from_bigquery
+from .tasks import (
+    build_batch_query,
+    chunk_list,
+    get_batch_dump_mode,
+    get_files_ids_from_bigquery,
+)
 
 
 @flow(log_prints=True)
@@ -59,8 +64,12 @@ def rj_cvl__osinfo_mongo(
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
-    secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
-    partition_columns_list = parse_comma_separated_string_to_list_task(text=partition_columns)
+    secrets = get_database_username_and_password_from_secret_task(
+        infisical_secret_path=infisical_secret_path
+    )
+    partition_columns_list = parse_comma_separated_string_to_list_task(
+        text=partition_columns
+    )
 
     # If BigQuery query is provided, process files_id in batches
     if bq_files_ids_query:
