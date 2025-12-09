@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump MongoDB collections from OSINFO to BigQuery.
+This flow is used to dump MongoDB collections from OSINFO to BigQuery
 """
 
 from typing import Optional
