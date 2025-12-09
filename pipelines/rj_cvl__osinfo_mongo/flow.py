@@ -4,7 +4,7 @@ This flow is used to dump MongoDB collections from OSINFO to BigQuery.
 
 MongoDB Filter Examples:
 - Without filter: execute_query = "FILES.files"
-- With filter: execute_query = "FILES.chunks|{\"files_id\": \"example\"}"
+- With filter: execute_query = "FILES.chunks|{\"files_id\": \"xxx\"}"
 - Filter by field: execute_query = "FILES.chunks|{\"n\": 0}"
 """
 

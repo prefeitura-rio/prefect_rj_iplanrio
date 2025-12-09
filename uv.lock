@@ -1682,7 +1682,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git?rev=33af7d9720cc2e4869e5a4b4cfa3e1acd588f5a2#33af7d9720cc2e4869e5a4b4cfa3e1acd588f5a2" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git?rev=16120db5dde01578709d8a73c4330406d0fea983#16120db5dde01578709d8a73c4330406d0fea983" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -2748,7 +2748,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "idna", specifier = ">=3.10" },
-    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git?rev=33af7d9720cc2e4869e5a4b4cfa3e1acd588f5a2" },
+    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git?rev=16120db5dde01578709d8a73c4330406d0fea983" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "prefect", specifier = "==3.4.9" },
     { name = "unidecode", specifier = ">=1.3.8" },
