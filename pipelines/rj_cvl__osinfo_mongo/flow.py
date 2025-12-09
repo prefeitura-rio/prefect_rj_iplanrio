@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 This flow is used to dump MongoDB collections from OSINFO to BigQuery.
+
+MongoDB Filter Examples:
+- Without filter: execute_query = "FILES.files"
+- With filter: execute_query = "FILES.chunks|{\"files_id\": \"example\"}"
+- Filter by field: execute_query = "FILES.chunks|{\"n\": 0}"
 """
 
 from typing import Optional
