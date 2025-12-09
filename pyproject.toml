@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "a2df7d5d2c25be7eff396cba6fa99d96ce79b3dc" }
+iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "86e0767c3f6774d2e73d3bf89a64d939a0b7e8f0" }
 
 [tool.uv.workspace]
 members = ["pipelines/*"]
