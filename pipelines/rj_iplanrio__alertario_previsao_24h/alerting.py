@@ -174,7 +174,7 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
     log("Getting result from query")
     results = job.result()
     log("Converting result to pandas dataframe")
-    dfr = results.to_dataframe()
+    dfr = results.to_dataframe(create_bqstorage_client=False)
     log("End download data from bigquery")
     return dfr
 
