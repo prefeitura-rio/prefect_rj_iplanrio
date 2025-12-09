@@ -38,7 +38,7 @@ def rj_cvl__osinfo_mongo(
     execute_query: str = "FILES.files",
     bq_files_ids_query: Optional[str] = None,
     files_id_batch_size: int = 10000,
-    dataset_id: str = "osinfo_mongo",
+    dataset_id: str = "brutos_osinfo_mongo",
     table_id: str = "files",
     infisical_secret_path: str = "/db-osinfo-mongo",
     dump_mode: str = "overwrite",
