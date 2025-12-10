@@ -42,7 +42,7 @@ deployments:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       infisical_secret_path: /wetalkie
       whitelist_percentage: 100
@@ -65,7 +65,7 @@ deployments:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       infisical_secret_path: /wetalkie
       whitelist_percentage: 100
