@@ -66,3 +66,28 @@ deployments:
           table_id: files_chunks
           execute_query: FILES.chunks
           dump_mode: overwrite
+
+  # PDF Reconstruction flows
+  - name: rj-cvl--osinfo-pdf-reconstruct--staging
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_cvl__osinfo_mongo/flow.py:rj_cvl__osinfo_pdf_reconstruct
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cvl__osinfo_mongo -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  - name: rj-cvl--osinfo-pdf-reconstruct-batch--staging
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_cvl__osinfo_mongo/flow.py:rj_cvl__osinfo_pdf_reconstruct_batch
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cvl__osinfo_mongo -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
