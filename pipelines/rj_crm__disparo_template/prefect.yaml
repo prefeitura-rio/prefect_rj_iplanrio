@@ -38,7 +38,7 @@ deployments:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
       filter_duplicated_phones: false
@@ -62,7 +62,7 @@ deployments:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       filter_dispatched_phones_or_cpfs: cpf
       filter_duplicated_phones: false
@@ -83,7 +83,7 @@ deployments:
           cost_center_id: 71
           chunk_size: 1000
           dataset_id: brutos_wetalkie
-          table_id: disparos
+          table_id: disparos_efetuados
           dump_mode: append
           test_mode: false
           sleep_minutes: 5
@@ -276,7 +276,7 @@ deployments:
           cost_center_id: 71
           chunk_size: 1000
           dataset_id: brutos_wetalkie
-          table_id: disparos
+          table_id: disparos_efetuados
           dump_mode: append
           test_mode: false
           sleep_minutes: 5
@@ -345,7 +345,7 @@ deployments:
           cost_center_id: 71
           chunk_size: 1000
           dataset_id: brutos_wetalkie
-          table_id: disparos
+          table_id: disparos_efetuados
           dump_mode: append
           test_mode: false
           sleep_minutes: 5

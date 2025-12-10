@@ -13,7 +13,7 @@ schedules:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
@@ -205,7 +205,7 @@ schedules:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
@@ -274,7 +274,7 @@ schedules:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
@@ -320,8 +320,6 @@ schedules:
                 ON contribuinte.cpf_cnpj = disparos.cpf
                 -- criacao da guia de pagamento após o disparo
                 where data_disparo_cobranca <= guia_pagamento.data_criacao_guia or guia_pagamento.data_criacao_guia is null
-                -- filtra se a pessoa já recebeu o lembrete há pouco tempo já que ela pode ter uma cota por mês e devemos lembrá-la de pagar
-                and (data_disparo_lembrete is null or data_disparo_lembrete <= date_sub(current_date(), INTERVAL 15 day))
             ),
             remove_duplicados as (
                 select distinct
