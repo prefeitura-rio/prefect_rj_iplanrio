@@ -49,7 +49,7 @@ deployments:
         image_pull_policy: Always
     schedules:
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:00:00"
       timezone: America/Sao_Paulo
       slug: CDA
       parameters:
@@ -123,7 +123,7 @@ deployments:
             idEntidadeCredora
           FROM DAM_PRD.dbo.CDA
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:02:00"
       timezone: America/Sao_Paulo
       slug: CotaPagamento
       parameters:
@@ -162,7 +162,7 @@ deployments:
             codigoQrEMVPix
           FROM DAM_PRD.dbo.CotaPagamento
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:04:00"
       timezone: America/Sao_Paulo
       slug: Cotas_Associadas
       parameters:
@@ -176,7 +176,7 @@ deployments:
             valEntradaTransp
           FROM DAM_PRD.dbo.Cotas_Associadas
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:06:00"
       timezone: America/Sao_Paulo
       slug: DevedorCDA
       parameters:
@@ -190,7 +190,7 @@ deployments:
             TipVinculo
           FROM DAM_PRD.dbo.DevedorCDA
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:08:00"
       timezone: America/Sao_Paulo
       slug: NotaDebito
       parameters:
@@ -240,7 +240,7 @@ deployments:
             valMoraOrigemSMF
           FROM DAM_PRD.dbo.NotaDebito
     - interval: 86400
-      anchor_date: "2022-01-01T02:36:00"
+      anchor_date: "2022-01-01T00:10:00"
       timezone: America/Sao_Paulo
       slug: GuiaPagamento
       parameters:
@@ -299,7 +299,7 @@ deployments:
             codFaseCobranca
           FROM DAM_PRD.dbo.GuiaPagamento
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:12:00"
       timezone: America/Sao_Paulo
       slug: GuiaPagamento_CDA
       parameters:
@@ -318,7 +318,7 @@ deployments:
             valDescontoSobrePrincipal
           FROM DAM_PRD.dbo.GuiaPagamento_CDA
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:14:00"
       timezone: America/Sao_Paulo
       slug: GuiaPagamento_Honorarios
       parameters:
@@ -338,7 +338,7 @@ deployments:
             idProtesto
           FROM DAM_PRD.dbo.GuiaPagamento_Honorarios
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:16:00"
       timezone: America/Sao_Paulo
       slug: Honorarios
       parameters:
@@ -360,7 +360,7 @@ deployments:
             datPercentualHonorarios
           FROM DAM_PRD.dbo.Honorarios
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:18:00"
       timezone: America/Sao_Paulo
       slug: VWPESSOA
       parameters:
@@ -383,7 +383,7 @@ deployments:
             admPublicaIndireta
           FROM DAM_PRD.dbo.VWPESSOA
     - interval: 86400
-      anchor_date: "2022-01-01T01:00:00"
+      anchor_date: "2022-01-01T00:20:00"
       timezone: America/Sao_Paulo
       slug: PagamentosCDA
       parameters:
