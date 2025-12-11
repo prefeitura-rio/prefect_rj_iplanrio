@@ -22,4 +22,6 @@ LOCATION_PROD = getenv_or_action("EAI__LOCATION_PROD", action="ignore")
 INSTANCE_PROD = getenv_or_action("EAI__INSTANCE_PROD", action="ignore")
 DATABASE_PROD = getenv_or_action("EAI__DATABASE_PROD", action="ignore")
 DATABASE_USER_PROD = getenv_or_action("EAI__DATABASE_USER_PROD", action="ignore")
-DATABASE_PASSWORD_PROD = getenv_or_action("EAI__DATABASE_PASSWORD_PROD", action="ignore")
+DATABASE_PASSWORD_PROD = getenv_or_action(
+    "EAI__DATABASE_PASSWORD_PROD", action="ignore"
+)

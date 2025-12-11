@@ -1,42 +1,61 @@
 # -*- coding: utf-8 -*-
-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
+"""
+Dispatch Flow for agendamento cadunico
+"""
+from math import ceil
 import os
+import time
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect import flow
+import pendulum
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
+from prefect import flow  # pylint: disable=E0611, E0401
 
-from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants
-from pipelines.rj_smas__disparo_cadunico.tasks import (
+from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
+# pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.dispatch import (
     check_api_status,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
+    format_query,
     get_destinations,
-    printar,
     remove_duplicate_phones,
+    add_contacts_to_whitelist,
 )
-from pipelines.rj_smas__disparo_cadunico.utils.tasks import (
+# pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     skip_flow_if_empty,
 )
-
+# pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.discord import (
+    send_dispatch_result_notification,
+    send_dispatch_success_notification,
+)
 
 @flow(log_prints=True)
 def rj_smas__disparo_cadunico(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
     campaign_name: str | None = None,
-    cost_center_id: int | None = None,
+    cost_center_id: int | None = 71,
     chunk_size: int | None = None,
     dataset_id: str | None = None,
     table_id: str | None = None,
     dump_mode: str | None = None,
+    test_mode: bool | None = True,
     query: str | None = None,
-    query_processor_name: str | None = "cadunico",
+    query_processor_name: str | None = "skip_weekends",
+    sleep_minutes: int | None = 5,
+    days_ahead: str | None = 2,
     infisical_secret_path: str = "/wetalkie",
+    whitelist_percentage: int = 30,
+    whitelist_environment: str = "staging",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
     table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
@@ -45,15 +64,22 @@ def rj_smas__disparo_cadunico(
     campaign_name = campaign_name or CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
     cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
     chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
+    days_ahead = days_ahead or CadunicoConstants.DAYS_AHEAD.value
     query = query or CadunicoConstants.CADUNICO_QUERY.value
-    query_processor_name = query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
-
+    query_processor_name = (
+        query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
+    )
     billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
 
     destinations = getenv_or_action("CADUNICO__DESTINATIONS", action="ignore")
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
+
+    if test_mode:
+        campaign_name = "teste-" + campaign_name
+        query = CadunicoConstants.QUERY_MOCK.value
+        print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
 
     api = access_api(
         infisical_secret_path,
@@ -65,11 +91,21 @@ def rj_smas__disparo_cadunico(
 
     api_status = check_api_status(api)
 
+    query_replacements = {
+        "id_hsm_placeholder": id_hsm,
+        "days_ahead_placeholder": days_ahead,
+    }
+    query_complete = format_query(
+        raw_query=query,
+        replacements=query_replacements,
+        query_processor_name=query_processor_name,
+    )
+    print(f"\n⚠️  Query dispatch:\n{query_complete}")
+
     destinations_result = get_destinations(
         destinations=destinations,
-        query=query,
+        query=query_complete,
         billing_project_id=billing_project_id,
-        query_processor_name=query_processor_name,
     )
 
     validated_destinations = skip_flow_if_empty(
@@ -78,6 +114,19 @@ def rj_smas__disparo_cadunico(
     )
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
+
+    # Add contacts to whitelist if percentage is set
+    if whitelist_percentage > 0:
+        whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
+        add_contacts_to_whitelist(
+            destinations=unique_destinations,
+            percentage_to_insert=whitelist_percentage,
+            group_name=whitelist_group_name,
+            environment=whitelist_environment,
+        )
+        print(f"{whitelist_percentage}% ({int(len(unique_destinations)*whitelist_percentage/100)}) \
+             of numbers were added to whitelist on group {whitelist_group_name} inside \
+             environment {whitelist_environment}.")
 
     # Log destination counts for tracking
     print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
@@ -89,7 +138,14 @@ def rj_smas__disparo_cadunico(
             destinations=unique_destinations,
         )
 
-        printar(id_hsm)
+        print(
+            f"\n⚠️  Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}\n"
+        )
+        # TODO: adicionar print da hsm
+        print(
+            f"\n⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!"
+        )
+        time.sleep(sleep_minutes * 60)
 
         dispatch_date = dispatch(
             api=api,
@@ -98,7 +154,26 @@ def rj_smas__disparo_cadunico(
             chunk=chunk_size,
         )
 
-        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+        print(
+            f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations"
+        )
+
+        total_batches = ceil(len(unique_destinations) / chunk_size)
+
+        # Send Discord notification
+        send_dispatch_success_notification(
+            total_dispatches=len(unique_destinations),
+            dispatch_date=dispatch_date,
+            id_hsm=id_hsm,
+            campaign_name=campaign_name,
+            cost_center_id=cost_center_id,
+            total_batches=total_batches,
+            sample_destination=(
+                unique_destinations[0] if unique_destinations else None
+            ),
+            test_mode=test_mode,
+            whitelist_percentage=whitelist_percentage,
+        )
 
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
@@ -110,30 +185,48 @@ def rj_smas__disparo_cadunico(
 
         print(f"DataFrame created with {len(dfr)} records for BigQuery upload")
 
-        partitions_path = create_date_partitions(
-            dataframe=dfr,
-            partition_column="dispatch_date",
-            file_format="csv",
-            root_folder="./data_dispatch/",
+        if not test_mode:
+            partitions_path = create_date_partitions(
+                dataframe=dfr,
+                partition_column="dispatch_date",
+                file_format="csv",
+                root_folder="./data_dispatch/",
+            )
+
+            if not partitions_path:
+                raise ValueError("partitions_path is None - partition creation failed")
+
+            if not os.path.exists(partitions_path):
+                raise ValueError(f"partitions_path does not exist: {partitions_path}")
+
+            print(f"Generated partitions_path: {partitions_path}")
+            if os.path.exists(partitions_path):
+                files_in_path = []
+                for root, dirs, files in os.walk(partitions_path):
+                    files_in_path.extend([os.path.join(root, f) for f in files])
+                print(f"Files in partitions path: {files_in_path}")
+
+            create_table = create_table_and_upload_to_gcs_task(
+                data_path=partitions_path,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                dump_mode=dump_mode,
+                biglake_table=False,
+            )
+
+        # Wait 15 minutes before querying results
+        print("⚠️  Waiting 15 minutes before checking dispatch results...")
+        time.sleep(15 * 60)
+
+        # Send results notification with BigQuery data
+        send_dispatch_result_notification(
+            total_dispatches=len(unique_destinations),
+            dispatch_date=dispatch_date,
+            id_hsm=id_hsm,
+            campaign_name=campaign_name,
+            cost_center_id=cost_center_id,
+            total_batches=total_batches,
+            test_mode=test_mode,
         )
-
-        if not partitions_path:
-            raise ValueError("partitions_path is None - partition creation failed")
-
-        if not os.path.exists(partitions_path):
-            raise ValueError(f"partitions_path does not exist: {partitions_path}")
-
-        print(f"Generated partitions_path: {partitions_path}")
-        if os.path.exists(partitions_path):
-            files_in_path = []
-            for root, dirs, files in os.walk(partitions_path):
-                files_in_path.extend([os.path.join(root, f) for f in files])
-            print(f"Files in partitions path: {files_in_path}")
-
-        create_table = create_table_and_upload_to_gcs_task(
-            data_path=partitions_path,
-            dataset_id=dataset_id,
-            table_id=table_id,
-            dump_mode=dump_mode,
-            biglake_table=False,
-        )
+# force deploy####
+#forçando deploy
