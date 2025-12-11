@@ -43,7 +43,12 @@ def chunk_list(items: list, chunk_size: int) -> list[list]:
 
     Returns:
         List of chunked lists
+
+    Raises:
+        ValueError: If chunk_size is less than or equal to 0
     """
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be greater than 0, got {chunk_size}")
     return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 

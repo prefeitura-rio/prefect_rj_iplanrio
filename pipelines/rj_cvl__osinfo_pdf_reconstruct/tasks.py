@@ -65,7 +65,12 @@ def chunk_list(items: list, chunk_size: int) -> list[list]:
 
     Returns:
         List of chunked lists
+
+    Raises:
+        ValueError: If chunk_size is less than or equal to 0
     """
+    if chunk_size <= 0:
+        raise ValueError(f"chunk_size must be greater than 0, got {chunk_size}")
     chunks = [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
     print(f"Split {len(items)} items into {len(chunks)} chunks of size {chunk_size}")
     return chunks
@@ -91,16 +96,21 @@ def get_chunks_from_bigquery(
     """
     client = bigquery.Client()
 
-    files_ids_str = ", ".join([f"'{fid}'" for fid in files_ids])
     query = f"""
         SELECT files_id, n, data
         FROM `{client.project}.{dataset_id}.{table_id}`
-        WHERE files_id IN ({files_ids_str})
+        WHERE files_id IN UNNEST(@files_ids)
         ORDER BY files_id, n
     """
 
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ArrayQueryParameter("files_ids", "STRING", files_ids)
+        ]
+    )
+
     print(f"Fetching chunks for {len(files_ids)} files from BigQuery...")
-    query_job = client.query(query)
+    query_job = client.query(query, job_config=job_config)
     results = query_job.result()
 
     chunks_by_file = {}
@@ -131,14 +141,17 @@ def reconstruct_pdf(file_id: str, chunks: list[dict]) -> bytes:
 
     Args:
         file_id: File identifier (for logging)
-        chunks: List of chunks sorted by n, each with 'data' field
+        chunks: List of chunks sorted by n, each with 'data' field (base64 strings from BigQuery)
 
     Returns:
         Complete PDF as bytes
     """
+    import base64
+
     print(f"Reconstructing PDF for {file_id} from {len(chunks)} chunks...")
 
-    pdf_data = b''.join(chunk['data'] for chunk in chunks)
+    # Decode base64 strings from BigQuery to bytes
+    pdf_data = b''.join(base64.b64decode(chunk['data']) for chunk in chunks)
 
     print(f"  - Total size: {len(pdf_data):,} bytes")
 
