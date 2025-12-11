@@ -189,7 +189,7 @@ def get_chunks_from_bigquery(
             chunks_by_file[file_id] = []
 
         chunks_by_file[file_id].append({
-            'n': row.n,
+            'n': int(row.n),  # Ensure n is integer
             'data': row.data
         })
 
