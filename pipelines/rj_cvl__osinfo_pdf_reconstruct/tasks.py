@@ -26,32 +26,87 @@ def validate_inputs(files_ids: list[str] = None, bq_files_ids_query: str = None)
 
 
 @task
-def get_files_ids_from_bigquery(query: str, max_files: int = None) -> list[str]:
+def get_files_ids_from_bigquery(query: str, max_files: int = None) -> list[dict]:
     """
-    Fetch files_id list from BigQuery
+    Fetch files information from BigQuery
 
     Args:
-        query: SQL query to fetch files_id
+        query: SQL query to fetch files info (must return _id and filename columns)
         max_files: Maximum number of files to return
 
     Returns:
-        List of files_id strings
+        List of dicts with 'file_id' and 'filename' keys
     """
     client = bigquery.Client()
-    print(f"Fetching files_id from BigQuery: {query}")
+    print(f"Fetching files from BigQuery: {query}")
 
     query_job = client.query(query)
     results = query_job.result()
 
-    files_ids = [row[0] for row in results]
+    files_info = []
+    for row in results:
+        # Support both formats: (file_id, filename) or just (file_id,)
+        if len(row) >= 2:
+            files_info.append({
+                'file_id': row[0],
+                'filename': row[1]
+            })
+        else:
+            # Fallback: use file_id as filename if only one column
+            files_info.append({
+                'file_id': row[0],
+                'filename': row[0]
+            })
 
     if max_files:
         print(f"Limiting to first {max_files} files")
-        files_ids = files_ids[:max_files]
+        files_info = files_info[:max_files]
 
-    print(f"Retrieved {len(files_ids):,} files_id from BigQuery")
+    print(f"Retrieved {len(files_info):,} files from BigQuery")
 
-    return files_ids
+    return files_info
+
+
+@task
+def convert_ids_to_info(files_ids: list[str]) -> list[dict]:
+    """
+    Convert simple file_ids list to files_info format
+
+    Args:
+        files_ids: List of file IDs
+
+    Returns:
+        List of dicts with 'file_id' and 'filename' keys
+    """
+    return [{'file_id': fid, 'filename': fid} for fid in files_ids]
+
+
+@task
+def extract_file_ids(files_info: list[dict]) -> list[str]:
+    """
+    Extract file_ids from files_info list
+
+    Args:
+        files_info: List of dicts with 'file_id' key
+
+    Returns:
+        List of file_id strings
+    """
+    return [f['file_id'] for f in files_info]
+
+
+@task
+def create_filename_mapping(files_info: list[dict]) -> dict[str, str]:
+    """
+    Create mapping of file_id to filename
+
+    Args:
+        files_info: List of dicts with 'file_id' and 'filename' keys
+
+    Returns:
+        Dict mapping file_id to filename
+    """
+    return {f['file_id']: f['filename'] for f in files_info}
 
 
 @task
@@ -204,16 +259,18 @@ def save_pdf_to_gcs(
     file_id: str,
     pdf_data: bytes,
     bucket_name: str = "rj-iplanrio",
-    prefix: str = "staging/brutos_osinfo_mongo/files_pdfs"
+    prefix: str = "staging/brutos_osinfo_mongo/files_pdfs",
+    filename: str = None
 ) -> str:
     """
     Save reconstructed PDF to Google Cloud Storage
 
     Args:
-        file_id: File identifier (used as filename)
+        file_id: File identifier (for logging)
         pdf_data: PDF binary data
         bucket_name: GCS bucket name (default: rj-iplanrio)
         prefix: Folder prefix in bucket (default: staging/brutos_osinfo_mongo/files_pdfs)
+        filename: Custom filename (without .pdf extension). If None, uses file_id
 
     Returns:
         GCS URI of saved file
@@ -221,7 +278,9 @@ def save_pdf_to_gcs(
     client = storage.Client()
     bucket = client.bucket(bucket_name)
 
-    blob_path = f"{prefix}/{file_id}.pdf"
+    # Use filename if provided, otherwise use file_id
+    pdf_filename = filename if filename else file_id
+    blob_path = f"{prefix}/{pdf_filename}.pdf"
     blob = bucket.blob(blob_path)
 
     blob.upload_from_string(pdf_data, content_type='application/pdf')

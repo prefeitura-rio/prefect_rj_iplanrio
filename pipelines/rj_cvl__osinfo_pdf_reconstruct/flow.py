@@ -12,7 +12,7 @@ Examples:
     rj_cvl__osinfo_pdf_reconstruct(files_ids=files_ids, validate_only=True)
 
     # Batch mode
-    bq_query = "SELECT DISTINCT files_id FROM `rj-cvl.brutos_osinfo_mongo.chunks` LIMIT 100"
+    bq_query = "SELECT DISTINCT _id, filename FROM `rj-cvl.brutos_osinfo_mongo.chunks` LIMIT 100"
     rj_cvl__osinfo_pdf_reconstruct(
         bq_files_ids_query=bq_query,
         gcs_bucket="rj-cvl-osinfo",
@@ -28,6 +28,9 @@ from prefect import flow
 
 from .tasks import (
     chunk_list,
+    convert_ids_to_info,
+    create_filename_mapping,
+    extract_file_ids,
     get_chunks_from_bigquery,
     get_files_ids_from_bigquery,
     reconstruct_pdf,
@@ -41,7 +44,7 @@ from .tasks import (
 def rj_cvl__osinfo_pdf_reconstruct(
     files_ids: Optional[list[str]] = None,
     bq_files_ids_query: Optional[str] = None,
-    dataset_id: str = "brutos_osinfo_mongo",
+    dataset_id: str = "brutos_osinfo_mongo_staging",
     table_id: str = "chunks",
     gcs_bucket: str = "rj-iplanrio",
     gcs_prefix: str = "staging/brutos_osinfo_mongo/files_pdfs",
@@ -72,15 +75,20 @@ def rj_cvl__osinfo_pdf_reconstruct(
     validate_inputs(files_ids=files_ids, bq_files_ids_query=bq_files_ids_query)
 
     if bq_files_ids_query:
-        files_ids = get_files_ids_from_bigquery(
+        files_info = get_files_ids_from_bigquery(
             query=bq_files_ids_query, max_files=max_files
         )
+    else:
+        files_info = convert_ids_to_info(files_ids=files_ids)
 
-    batches = chunk_list(items=files_ids, chunk_size=batch_size)
+    batches = chunk_list(items=files_info, chunk_size=batch_size)
 
     for batch in batches:
+        batch_file_ids = extract_file_ids(files_info=batch)
+        filename_map = create_filename_mapping(files_info=batch)
+
         chunks_by_file = get_chunks_from_bigquery(
-            files_ids=batch, dataset_id=dataset_id, table_id=table_id
+            files_ids=batch_file_ids, dataset_id=dataset_id, table_id=table_id
         )
 
         for file_id, chunks in chunks_by_file.items():
@@ -93,4 +101,5 @@ def rj_cvl__osinfo_pdf_reconstruct(
                     pdf_data=pdf_data,
                     bucket_name=gcs_bucket,
                     prefix=gcs_prefix,
+                    filename=filename_map.get(file_id)
                 )
