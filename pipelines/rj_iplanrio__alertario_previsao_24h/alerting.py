@@ -9,12 +9,12 @@ import hashlib
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import date, datetime
+from time import sleep
 from typing import Optional, Sequence
 
 import pandas as pd
 import requests
 from basedosdados import Base
-from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 from iplanrio.pipelines_utils.logging import log
@@ -109,89 +109,6 @@ def compute_message_hash(message: str) -> str:
     return hashlib.sha256(message.encode("utf-8")).hexdigest()
 
 
-def get_bigquery_client(project_id: str, bucket_name: str | None = None) -> bigquery.Client | None:
-    """
-    Inicializa um cliente do BigQuery usando as credenciais carregadas via Base dos Dados.
-    """
-    try:
-        credentials = Base(bucket_name=bucket_name or project_id)._load_credentials(mode="prod")
-        return bigquery.Client(credentials=credentials, project=project_id)
-    except Exception as error:  # pylint: disable=broad-except
-        log(
-            f"Não foi possível obter credenciais do BigQuery para o projeto {project_id}: {error}",
-            level="warning",
-        )
-        return None
-
-
-def ensure_alert_log_table(
-    client: bigquery.Client,
-    dataset_id: str,
-    table_id: str,
-) -> None:
-    """
-    Garante que a tabela de log existe com o schema esperado.
-    """
-    table_ref = f"{client.project}.{dataset_id}.{table_id}"
-    try:
-        client.get_table(table_ref)
-        return
-    except NotFound:
-        schema = [
-            bigquery.SchemaField("alert_date", "DATE", mode="REQUIRED"),
-            bigquery.SchemaField("id_execucao", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("forecast_date", "DATE", mode="REQUIRED"),
-            bigquery.SchemaField("periodo", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("precipitacao", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("alert_hash", "STRING", mode="REQUIRED"),
-            bigquery.SchemaField("severity_level", "STRING", mode="NULLABLE"),
-            bigquery.SchemaField("sent_at", "TIMESTAMP", mode="REQUIRED"),
-            bigquery.SchemaField("discord_message_id", "STRING", mode="NULLABLE"),
-            bigquery.SchemaField("webhook_channel", "STRING", mode="NULLABLE"),
-            bigquery.SchemaField("message_excerpt", "STRING", mode="NULLABLE"),
-        ]
-        table = bigquery.Table(table_ref, schema=schema)
-        table.time_partitioning = bigquery.TimePartitioning(field="alert_date")
-        client.create_table(table)
-        log(f"Tabela {table_ref} criada para log de alertas.")
-
-
-def fetch_daily_alert_status(
-    client: bigquery.Client,
-    dataset_id: str,
-    table_id: str,
-    alert_date: date,
-) -> tuple[int, set[str], datetime | None]:
-    """
-    Retorna quantidade distinta de mensagens enviadas no dia e o conjunto de hashes registrados.
-    """
-    table_ref = f"{client.project}.{dataset_id}.{table_id}"
-    query = f"""
-        SELECT alert_hash, sent_at
-        FROM `{table_ref}`
-        WHERE alert_date = @alert_date
-    """
-    job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("alert_date", "DATE", alert_date),
-        ]
-    )
-    results = client.query(query, job_config=job_config).result()
-    hashes: set[str] = set()
-    last_sent_at: datetime | None = None
-    for row in results:
-        hash_value = row["alert_hash"]
-        if hash_value:
-            hashes.add(hash_value)
-        row_sent_at = row.get("sent_at")
-        if row_sent_at:
-            if isinstance(row_sent_at, str):
-                row_sent_at = datetime.fromisoformat(row_sent_at)
-            if last_sent_at is None or row_sent_at > last_sent_at:
-                last_sent_at = row_sent_at
-    return len(hashes), hashes, last_sent_at
-
-
 def build_alert_log_rows(
     *,
     alert_date: date,
@@ -226,23 +143,43 @@ def build_alert_log_rows(
     return rows
 
 
-def insert_alert_log_rows(
-    client: bigquery.Client,
-    dataset_id: str,
-    table_id: str,
-    rows: Sequence[dict],
-) -> None:
-    """Insere registros no log de alertas."""
-    if not rows:
-        return
+def download_data_from_bigquery(
+    query: str, billing_project_id: str, bucket_name: str
+) -> pd.DataFrame:
+    """
+    Execute a BigQuery SQL query and return results as a pandas DataFrame.
 
-    table_ref = f"{client.project}.{dataset_id}.{table_id}"
-    errors = client.insert_rows_json(table_ref, rows)
-    if errors:
-        raise RuntimeError(f"Falha ao inserir registros de alerta: {errors}")
+    Args:
+        query (str): SQL query to execute in BigQuery
+        billing_project_id (str): GCP project ID for billing purposes
+        bucket_name (str): GCS bucket name for credential loading
+
+    Returns:
+        pd.DataFrame: Query results as a pandas DataFrame
+
+    Raises:
+        Exception: If BigQuery job fails or credentials cannot be loaded
+    """
+    log("Querying data from BigQuery")
+    query = str(query)
+    bq_client = bigquery.Client(
+        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
+        project=billing_project_id,
+    )
+    job = bq_client.query(query)
+    while not job.done():
+        sleep(1)
+    log("Getting result from query")
+    results = job.result()
+    log("Converting result to pandas dataframe")
+    dfr = results.to_dataframe(create_bqstorage_client=False)
+    log("End download data from bigquery")
+    return dfr
 
 
-def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 15) -> dict:
+def send_discord_webhook_message(
+    webhook_url: str, message: str, timeout: int = 15
+) -> dict:
     """
     Envia mensagem para o webhook retornando o payload da resposta (quando disponível).
     """
@@ -257,9 +194,123 @@ def send_discord_webhook_message(webhook_url: str, message: str, timeout: int = 
         timeout=timeout,
     )
     if response.status_code not in (200, 204):
-        raise ValueError(f"Falha ao enviar alerta ao Discord: {response.status_code} - {response.text}")
+        raise ValueError(
+            f"Falha ao enviar alerta ao Discord: {response.status_code} - {response.text}"
+        )
 
     try:
         return response.json()
     except ValueError:
         return {}
+
+
+def check_alert_deduplication(
+    alert_hash: str,
+    billing_project_id: str,
+    max_daily_alerts: int,
+    min_alert_interval_hours: int,
+) -> tuple[bool, str]:
+    """
+    Verifica se alerta deve ser enviado com base em regras de deduplicação.
+
+    Consulta tabela alerts_log no BigQuery (hardcoded) e verifica:
+    1. Este hash já foi enviado hoje? (duplicata exata)
+    2. Já enviamos max_daily_alerts hoje? (limite diário)
+    3. Último alerta foi há menos de min_alert_interval_hours? (intervalo)
+
+    Args:
+        alert_hash: SHA-256 hash da mensagem de alerta
+        billing_project_id: ID do projeto GCP para billing
+        max_daily_alerts: Número máximo de alertas por dia
+        min_alert_interval_hours: Intervalo mínimo em horas entre alertas
+
+    Returns:
+        (should_send, reason) onde:
+        - should_send: True se todas as verificações passarem
+        - reason: Explicação para logging (por que envia ou pula)
+
+    Raises:
+        Exception: Se query do BigQuery falhar (caller deve pegar e não enviar)
+    """
+    try:
+        # Query com tabela hardcoded (padrão do projeto)
+        query = f"""
+        WITH brazil_today AS (
+          SELECT DATE(CURRENT_TIMESTAMP(), 'America/Sao_Paulo') as local_date
+        ),
+        alert_stats AS (
+          SELECT
+            -- Conta quantos ALERTAS ÚNICOS têm este hash (usando discord_message_id)
+            COUNT(DISTINCT CASE
+              WHEN alert_hash = '{alert_hash}' THEN discord_message_id
+              END) as hash_count_today,
+            -- Conta quantos ALERTAS ÚNICOS foram enviados (mensagens Discord únicas)
+            COUNT(DISTINCT discord_message_id) as total_alerts_today,
+            -- Timestamp do último alerta (sent_at é STRING, precisa CAST)
+            MAX(CAST(sent_at AS TIMESTAMP)) as last_alert_sent_at
+          FROM `rj-iplanrio.brutos_alertario_staging.alertario_precipitacao_alerts_log` al
+          CROSS JOIN brazil_today bt
+          WHERE CAST(al.data_particao AS DATE) = bt.local_date
+        )
+        SELECT
+          hash_count_today,
+          total_alerts_today,
+          last_alert_sent_at,
+          CASE
+            WHEN last_alert_sent_at IS NULL THEN NULL
+            ELSE TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), last_alert_sent_at, HOUR)
+          END as hours_since_last_alert
+        FROM alert_stats
+        """
+
+        # Usar função local
+        df = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id,
+        )
+
+        # Tabela vazia ou primeira execução
+        if df.empty or df["total_alerts_today"].iloc[0] == 0:
+            return (True, "No alerts sent today. Proceeding with send.")
+
+        row = df.iloc[0]
+        hash_count = row["hash_count_today"]
+        total_today = row["total_alerts_today"]
+        hours_since = row["hours_since_last_alert"]
+
+        # Check 1: Duplicate hash
+        if hash_count > 0:
+            return (
+                False,
+                f"Duplicate alert. Hash {alert_hash[:8]}... already sent today.",
+            )
+
+        # Check 2: Daily limit
+        if total_today >= max_daily_alerts:
+            return (
+                False,
+                f"Daily limit reached. {total_today}/{max_daily_alerts} alerts sent today.",
+            )
+
+        # Check 3: Time interval
+        if hours_since is not None and hours_since < min_alert_interval_hours:
+            return (
+                False,
+                f"Too soon. {hours_since}h elapsed (minimum {min_alert_interval_hours}h).",
+            )
+
+        # All checks passed
+        return (
+            True,
+            f"All checks passed. Sending alert ({total_today + 1}/{max_daily_alerts} today).",
+        )
+
+    except Exception as e:
+        # Tabela não existe (primeira execução)
+        error_msg = str(e).lower()
+        if "not found" in error_msg:
+            log(f"Alert log table not found (first run): {e}", level="warning")
+            return (True, "First run, proceeding with send.")
+        # Qualquer outro erro → não envia
+        raise
