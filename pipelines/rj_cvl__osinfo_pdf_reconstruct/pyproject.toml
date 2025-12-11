@@ -1,0 +1,4 @@
+[project]
+name = "rj_cvl__osinfo_pdf_reconstruct"
+version = "0.1.0"
+description = "Pipeline osinfo_pdf_reconstruct da secretaria cvl"

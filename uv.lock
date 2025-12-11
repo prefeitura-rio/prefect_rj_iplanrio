@@ -22,6 +22,7 @@ members = [
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
     "rj-cvl-osinfo-mongo",
+    "rj-cvl-osinfo-pdf-reconstruct",
     "rj-iplanrio-alertario-previsao-24h",
     "rj-iplanrio-dados-mestres",
     "rj-iplanrio-data-catalog",
@@ -3801,6 +3802,11 @@ source = { virtual = "pipelines/rj_cvl__osinfo" }
 name = "rj-cvl-osinfo-mongo"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cvl__osinfo_mongo" }
+
+[[package]]
+name = "rj-cvl-osinfo-pdf-reconstruct"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_cvl__osinfo_pdf_reconstruct" }
 
 [[package]]
 name = "rj-iplanrio-alertario-previsao-24h"
