@@ -169,8 +169,22 @@ def get_chunks_from_bigquery(
     results = query_job.result()
 
     chunks_by_file = {}
+    corrupted_files = set()
+
     for row in results:
         file_id = row.files_id
+
+        # Mark file as corrupted if any chunk has null/empty data
+        if row.data is None or row.data == '':
+            if file_id not in corrupted_files:
+                print(f"⚠️ Skipping file {file_id} - chunk {row.n} has null/empty data")
+                corrupted_files.add(file_id)
+            continue
+
+        # Skip if file already marked as corrupted
+        if file_id in corrupted_files:
+            continue
+
         if file_id not in chunks_by_file:
             chunks_by_file[file_id] = []
 
@@ -179,12 +193,21 @@ def get_chunks_from_bigquery(
             'data': row.data
         })
 
+    # Sort chunks by n for each file
     for file_id in chunks_by_file:
         chunks_by_file[file_id].sort(key=lambda x: x['n'])
 
-    print(f"Retrieved chunks for {len(chunks_by_file)} files")
+    print(f"Retrieved chunks for {len(chunks_by_file)} files ({len(corrupted_files)} files skipped due to null data)")
     for file_id, chunks in chunks_by_file.items():
-        print(f"  - {file_id}: {len(chunks)} chunks")
+        chunk_numbers = [c['n'] for c in chunks]
+        min_n, max_n = min(chunk_numbers), max(chunk_numbers)
+
+        # Check for gaps in chunk sequence
+        expected_chunks = max_n - min_n + 1
+        actual_chunks = len(chunks)
+        status = "✓" if expected_chunks == actual_chunks else f"⚠️ gaps: expected {expected_chunks}, got {actual_chunks}"
+
+        print(f"  - {file_id}: {len(chunks)} chunks (n: {min_n} to {max_n}) {status}")
 
     return chunks_by_file
 
