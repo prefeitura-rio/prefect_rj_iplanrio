@@ -166,24 +166,24 @@
             <h1>Programa Pequenos Cariocas</h1>
             <div class="subtitle">Rede de Proteção Multidisciplinar</div>
         </div>
-        
+
         <div class="content">
             <div class="greeting">
                 Olá, {% if recipiente_nome %}{{ recipiente_nome }}{% else %}Profissional{% endif %}!
             </div>
-            
+
             <div class="alert-box">
                 <h3>⚠️ Alertas de Proteção</h3>
                 <p class="info-text">
-                    Identificamos crianças e adolescentes que podem ter sofrido algum tipo de violência 
-                    ou que tiveram protocolos de proteção feridos nas últimas 24 horas. 
+                    Identificamos crianças e adolescentes que podem ter sofrido algum tipo de violência
+                    ou que tiveram protocolos de proteção feridos nas últimas 24 horas.
                     Sua atenção e ação imediata são fundamentais para garantir a segurança desses menores.
                 </p>
             </div>
 
             {% if alunos and alunos|length > 0 %}
             <div class="summary">
-                <strong>📊 Resumo:</strong> Foram identificados <strong>{{ total_alunos }}</strong> caso(s) 
+                <strong>📊 Resumo:</strong> Foram identificados <strong>{{ total_alunos }}</strong> caso(s)
                 que requerem sua atenção imediata.
             </div>
 
@@ -253,7 +253,7 @@
                 <p><strong>Última atualização:</strong> {{ data_atualizacao }}</p>
             </div>
             {% endif %}
-            
+
             <div class="signature">
                 <p>
                     Atenciosamente,<br>
@@ -262,7 +262,7 @@
                 </p>
             </div>
         </div>
-        
+
         <div class="footer">
             <p><strong>Prefeitura do Rio de Janeiro</strong></p>
             <p>Programa Pequenos Cariocas - Rede de Proteção Multidisciplinar</p>

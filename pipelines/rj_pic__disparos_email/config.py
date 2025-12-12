@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Configurações do sistema de envio de e-mails."""
 import os
 from dotenv import load_dotenv

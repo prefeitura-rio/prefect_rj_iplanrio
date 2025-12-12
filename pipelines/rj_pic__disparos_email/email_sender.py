@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Módulo de envio de e-mails via SMTP."""
 import smtplib
 import time
@@ -34,12 +35,12 @@ success_logger.propagate = False
 
 class EmailSender:
     """Classe para envio de e-mails com retry e throttling."""
-    
+
     def __init__(self):
         """Inicializa o sender de e-mails."""
         self.last_send_time = 0
         self._validate_credentials()
-    
+
     def _validate_credentials(self):
         """Valida se as credenciais estão configuradas."""
         if not SMTP_USERNAME or not SMTP_PASSWORD:
@@ -47,18 +48,18 @@ class EmailSender:
                 "Credenciais SMTP não configuradas. "
                 "Configure SMTP_USERNAME e SMTP_PASSWORD no arquivo .env"
             )
-    
+
     def _throttle(self):
         """Aplica throttling entre envios."""
         current_time = time.time()
         time_since_last_send = current_time - self.last_send_time
-        
+
         if time_since_last_send < THROTTLE_DELAY:
             sleep_time = THROTTLE_DELAY - time_since_last_send
             time.sleep(sleep_time)
-        
+
         self.last_send_time = time.time()
-    
+
     def _create_message(
         self,
         to_email: str,
@@ -68,13 +69,13 @@ class EmailSender:
     ) -> MIMEMultipart:
         """
         Cria a mensagem de e-mail.
-        
+
         Args:
             to_email: E-mail do destinatário
             subject: Assunto do e-mail
             html_body: Corpo HTML do e-mail
             from_email: E-mail do remetente (opcional)
-        
+
         Returns:
             Mensagem MIME pronta para envio
         """
@@ -82,13 +83,13 @@ class EmailSender:
         msg['Subject'] = subject
         msg['From'] = from_email or EMAIL_FROM
         msg['To'] = to_email
-        
+
         # Adiciona corpo HTML
         html_part = MIMEText(html_body, 'html', 'utf-8')
         msg.attach(html_part)
-        
+
         return msg
-    
+
     def _send_email_internal(
         self,
         to_email: str,
@@ -98,31 +99,31 @@ class EmailSender:
     ) -> bool:
         """
         Envia um e-mail (sem retry).
-        
+
         Args:
             to_email: E-mail do destinatário
             subject: Assunto do e-mail
             html_body: Corpo HTML do e-mail
             from_email: E-mail do remetente (opcional)
-        
+
         Returns:
             True se enviado com sucesso, False caso contrário
         """
         try:
             # Aplica throttling
             self._throttle()
-            
+
             # Cria mensagem
             msg = self._create_message(to_email, subject, html_body, from_email)
-            
+
             # Conecta e envia
             with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
                 server.starttls()
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
                 server.send_message(msg)
-            
+
             return True
-            
+
         except smtplib.SMTPAuthenticationError as e:
             logging.error(f"Erro de autenticação para {to_email}: {e}")
             raise
@@ -138,7 +139,7 @@ class EmailSender:
         except Exception as e:
             logging.error(f"Erro inesperado ao enviar para {to_email}: {e}")
             raise
-    
+
     def send_email(
         self,
         to_email: str,
@@ -149,35 +150,35 @@ class EmailSender:
     ) -> bool:
         """
         Envia um e-mail com retry automático.
-        
+
         Args:
             to_email: E-mail do destinatário
             subject: Assunto do e-mail
             html_body: Corpo HTML do e-mail
             from_email: E-mail do remetente (opcional)
             recipient_name: Nome do destinatário (para logs)
-        
+
         Returns:
             True se enviado com sucesso, False caso contrário
         """
         display_name = recipient_name or to_email
-        
+
         for attempt in range(1, MAX_RETRIES + 1):
             try:
                 self._send_email_internal(to_email, subject, html_body, from_email)
-                
+
                 # Sucesso
                 success_msg = f"E-mail enviado com sucesso para {display_name} ({to_email})"
                 logging.info(success_msg)
                 success_logger.info(f"{to_email} | {display_name}")
                 return True
-                
+
             except (smtplib.SMTPAuthenticationError, smtplib.SMTPRecipientsRefused) as e:
                 # Erros que não devem ser retentados
                 error_msg = f"Falha permanente ao enviar para {display_name} ({to_email}): {e}"
                 logging.error(error_msg)
                 return False
-                
+
             except Exception as e:
                 # Erros temporários - tenta novamente
                 if attempt < MAX_RETRIES:
@@ -194,6 +195,6 @@ class EmailSender:
                     )
                     logging.error(error_msg)
                     return False
-        
+
         return False
 
