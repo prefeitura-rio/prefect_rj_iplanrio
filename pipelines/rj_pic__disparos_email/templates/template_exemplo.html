@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Programa Pequenos Cariocas - Alertas</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: #ffffff;
+            margin: 20px auto;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
+            color: white;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        .header .subtitle {
+            margin-top: 10px;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px 20px;
+            background-color: #ffffff;
+        }
+        .greeting {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #0066cc;
+            font-weight: 600;
+        }
+        .alert-box {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .alert-box h3 {
+            margin-top: 0;
+            color: #856404;
+            font-size: 18px;
+        }
+        .info-text {
+            margin: 15px 0;
+            text-align: justify;
+        }
+        .table-container {
+            margin: 25px 0;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        thead {
+            background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
+            color: white;
+        }
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 13px;
+        }
+        tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-irregular {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .status-atencao {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .status-regular {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .protocol-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            background-color: #e9ecef;
+            color: #495057;
+            margin: 2px;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            font-style: italic;
+        }
+        .footer {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            font-size: 12px;
+        }
+        .footer p {
+            margin: 5px 0;
+        }
+        .signature {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e0e0e0;
+        }
+        .signature strong {
+            color: #0066cc;
+        }
+        .summary {
+            background-color: #e8f4f8;
+            border-left: 4px solid #0066cc;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .summary strong {
+            color: #0066cc;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Programa Pequenos Cariocas</h1>
+            <div class="subtitle">Rede de Proteção Multidisciplinar</div>
+        </div>
+        
+        <div class="content">
+            <div class="greeting">
+                Olá, {% if recipiente_nome %}{{ recipiente_nome }}{% else %}Profissional{% endif %}!
+            </div>
+            
+            <div class="alert-box">
+                <h3>⚠️ Alertas de Proteção</h3>
+                <p class="info-text">
+                    Identificamos crianças e adolescentes que podem ter sofrido algum tipo de violência 
+                    ou que tiveram protocolos de proteção feridos nas últimas 24 horas. 
+                    Sua atenção e ação imediata são fundamentais para garantir a segurança desses menores.
+                </p>
+            </div>
+
+            {% if alunos and alunos|length > 0 %}
+            <div class="summary">
+                <strong>📊 Resumo:</strong> Foram identificados <strong>{{ total_alunos }}</strong> caso(s) 
+                que requerem sua atenção imediata.
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>CPF</th>
+                            <th>Nome</th>
+                            <th>Escola</th>
+                            <th>Clínica da Família</th>
+                            <th>CRAS</th>
+                            <th>Secretaria</th>
+                            <th>Protocolo</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for aluno in alunos %}
+                        <tr>
+                            <td>{{ aluno.cpf }}</td>
+                            <td><strong>{{ aluno.nome }}</strong></td>
+                            <td>{{ aluno.escola }}</td>
+                            <td>{{ aluno.clinica_familia }}</td>
+                            <td>{{ aluno.cras }}</td>
+                            <td>{{ aluno.secretaria_responsavel }}</td>
+                            <td>
+                                <span class="protocol-badge">{{ aluno.protocolo }}</span>
+                            </td>
+                            <td>
+                                {% if aluno.status == 'irregular' %}
+                                    <span class="status-badge status-irregular">Irregular</span>
+                                {% elif aluno.status == 'atencao' %}
+                                    <span class="status-badge status-atencao">Atenção</span>
+                                {% elif aluno.status == 'regular' %}
+                                    <span class="status-badge status-regular">Regular</span>
+                                {% else %}
+                                    <span class="status-badge">{{ aluno.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="info-text">
+                <p>
+                    <strong>🔍 Próximos Passos:</strong>
+                </p>
+                <ul>
+                    <li>Revise cada caso listado na tabela acima</li>
+                    <li>Entre em contato com as instituições responsáveis (Escola, Clínica da Família, CRAS)</li>
+                    <li>Verifique a situação atual de cada criança/adolescente</li>
+                    <li>Documente as ações tomadas no sistema</li>
+                    <li>Em caso de violência confirmada, acione os órgãos competentes imediatamente</li>
+                </ul>
+            </div>
+            {% else %}
+            <div class="no-data">
+                <p>Nenhum caso identificado no momento.</p>
+            </div>
+            {% endif %}
+
+            {% if data_atualizacao %}
+            <div class="info-text" style="font-size: 12px; color: #6c757d; margin-top: 20px;">
+                <p><strong>Última atualização:</strong> {{ data_atualizacao }}</p>
+            </div>
+            {% endif %}
+            
+            <div class="signature">
+                <p>
+                    Atenciosamente,<br>
+                    <strong>Prefeitura do Rio de Janeiro</strong><br>
+                    <strong>Programa Pequenos Cariocas</strong>
+                </p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Prefeitura do Rio de Janeiro</strong></p>
+            <p>Programa Pequenos Cariocas - Rede de Proteção Multidisciplinar</p>
+            <p style="margin-top: 10px; opacity: 0.8;">
+                E-mail enviado em {{ data }} às {{ hora }}
+            </p>
+        </div>
+    </div>
+</body>
+</html>
