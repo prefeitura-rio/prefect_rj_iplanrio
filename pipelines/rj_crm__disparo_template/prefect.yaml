@@ -22,7 +22,7 @@ pull:
 deployments:
   - name: rj-crm--disparo-template--staging
     version: '{{ build-image.tag }}'
-    entrypoint: 
+    entrypoint:
       pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
     work_pool:
       name: default-pool
@@ -96,7 +96,7 @@ deployments:
                     ultima_data_falha is null
                   -- filtra se a pessoa já recebeu o agradecimento há pouco tempo já que ela pode ter mais de uma cota por mês
                    and  (data_disparo_agradecimento is null or data_disparo_agradecimento <= date_sub(current_date(), INTERVAL 15 day))
-                    
+
                 ),
                 contribuinte as (
                     select
@@ -111,7 +111,7 @@ deployments:
                     left JOIN UNNEST(guias_pagamento) AS guia_pagamento
                     left JOIN UNNEST(cotas) AS cotas
                     left join unnest(cdas_associadas) as cdas_associadas
-                    where 
+                    where
                     guia_pagamento.data_criacao_guia >= "2025-11-14"
                     and cotas.cota_paga = True
                     and cotas.data_pagamento >= date_sub(current_date("America/Sao_Paulo"), interval 30 day)
@@ -125,7 +125,7 @@ deployments:
                     from disparos_filtro
                     inner join contribuinte ON contribuinte.cpf_cnpj = disparos_filtro.cpf
                     order by cpf, data_criacao_guia desc, data_pagamento desc
-                   
+
                 ),
                 remove_duplicados as (
                     select distinct
@@ -178,7 +178,7 @@ deployments:
                 where rn=1
   - name: rj-crm--disparo-template--prod
     version: '{{ get-commit-hash.stdout }}'
-    entrypoint: 
+    entrypoint:
       pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
     work_pool:
       name: default-pool
@@ -402,7 +402,7 @@ deployments:
         flow_run_name: pgm-divida-ativa
         parameters:
           id_hsm: 196
-          query_replacements: {"id_hsm_placeholder": 196, "limit_placeholder": 
+          query_replacements: {"id_hsm_placeholder": 196, "limit_placeholder":
               1000}
           campaign_name: pgm-divida-ativa-prod-v1
           cost_center_id: 71
@@ -645,7 +645,7 @@ deployments:
                     ultima_data_falha is null
                   -- filtra se a pessoa já recebeu o agradecimento há pouco tempo já que ela pode ter mais de uma cota por mês
                    and  (data_disparo_agradecimento is null or data_disparo_agradecimento <= date_sub(current_date(), INTERVAL 15 day))
-                    
+
                 ),
                 contribuinte as (
                     select
@@ -660,7 +660,7 @@ deployments:
                     left JOIN UNNEST(guias_pagamento) AS guia_pagamento
                     left JOIN UNNEST(cotas) AS cotas
                     left join unnest(cdas_associadas) as cdas_associadas
-                    where 
+                    where
                     guia_pagamento.data_criacao_guia >= "2025-11-14"
                     and cotas.cota_paga = True
                     and cotas.data_pagamento >= date_sub(current_date("America/Sao_Paulo"), interval 30 day)
@@ -674,7 +674,7 @@ deployments:
                     from disparos_filtro
                     inner join contribuinte ON contribuinte.cpf_cnpj = disparos_filtro.cpf
                     order by cpf, data_criacao_guia desc, data_pagamento desc
-                   
+
                 ),
                 remove_duplicados as (
                     select distinct

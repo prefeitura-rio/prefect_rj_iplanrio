@@ -461,7 +461,7 @@ schedules:
                 ultima_data_falha is null
               -- filtra se a pessoa já recebeu o agradecimento há pouco tempo já que ela pode ter mais de uma cota por mês
                and  (data_disparo_agradecimento is null or data_disparo_agradecimento <= date_sub(current_date(), INTERVAL 15 day))
-                
+
             ),
             contribuinte as (
                 select
@@ -476,7 +476,7 @@ schedules:
                 left JOIN UNNEST(guias_pagamento) AS guia_pagamento
                 left JOIN UNNEST(cotas) AS cotas
                 left join unnest(cdas_associadas) as cdas_associadas
-                where 
+                where
                 guia_pagamento.data_criacao_guia >= "2025-11-14"
                 and cotas.cota_paga = True
                 and cotas.data_pagamento >= date_sub(current_date("America/Sao_Paulo"), interval 30 day)
@@ -490,7 +490,7 @@ schedules:
                 from disparos_filtro
                 inner join contribuinte ON contribuinte.cpf_cnpj = disparos_filtro.cpf
                 order by cpf, data_criacao_guia desc, data_pagamento desc
-               
+
             ),
             remove_duplicados as (
                 select distinct
