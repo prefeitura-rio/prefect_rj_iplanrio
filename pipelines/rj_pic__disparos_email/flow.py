@@ -10,6 +10,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 import logging
 import json
 import ast
+import os
 
 from pipelines.rj_pic__disparos_email.template_engine import TemplateEngine
 from pipelines.rj_pic__disparos_email.email_sender import EmailSender
@@ -143,6 +144,15 @@ def process_email_task(
         }
 
         # Cria instância do TemplateEngine e renderiza template
+
+        template_path = os.path.join(os.getcwd(), "email_templates.html")
+
+        # print files fro this folder
+        for file in os.listdir(os.getcwd()):
+            print(file)
+        if not os.path.exists(template_path):
+            raise FileNotFoundError(f"Template não encontrado: {template_path}")
+
         template_engine = TemplateEngine(template_path)
         html_body = template_engine.render(**template_vars)
 
