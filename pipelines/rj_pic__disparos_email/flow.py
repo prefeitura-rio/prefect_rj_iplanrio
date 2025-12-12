@@ -224,9 +224,6 @@ def rj_pic__disparos_email(
         print(f"  ✅ Sucessos: {success_count}")
         print(f"  ❌ Falhas: {error_count}")
         print(f"  📝 Total: {len(rows)}")
-        print(f"\n📋 Logs salvos em:")
-        print(f"  - erros.log (falhas)")
-        print(f"  - sucesso.log (sucessos)")
 
     except FileNotFoundError as e:
         logging.error(f"Arquivo não encontrado: {e}")
