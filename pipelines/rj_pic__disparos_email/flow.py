@@ -170,8 +170,7 @@ def process_email_task(
 
 @flow(log_prints=True)
 def rj_pic__disparos_email(
-    template_path: str = "templates/template_exemplo.html",
-    email_subject: Optional[str] = None,
+    email_subject: Optional[str] = "E-mail enviado automaticamente",
 ):
     """
     Flow para envio de e-mails em massa com templates HTML.
@@ -180,8 +179,7 @@ def rj_pic__disparos_email(
     personalizados para cada destinatário.
 
     Args:
-        template_path: Caminho para o arquivo de template HTML
-        email_subject: Assunto do e-mail (usa EMAIL_SUBJECT do config se não fornecido)
+        email_subject: Assunto do e-mail
     """
     # Injetar credenciais do BD
     inject_bd_credentials_task(environment="prod")
@@ -206,7 +204,7 @@ def rj_pic__disparos_email(
         for idx, row in enumerate(rows, 1):
             success = process_email_task(
                 row=row,
-                template_path=template_path,
+                template_path="email_templates.html",
                 email_subject=email_subject,
                 idx=idx,
                 total=len(rows)
