@@ -37,7 +37,7 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 86400  # Executa a cada 24h
-        anchor_date: "2025-01-01T08:00:00"  # Data de início do schedule em UTC
+        anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
         timezone: America/Sao_Paulo
         slug: staging-daily
         active: false  # Desabilitado por padrão para staging
@@ -57,7 +57,7 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 86400  # Executa a cada 24h
-        anchor_date: "2025-01-01T08:00:00"  # Data de início do schedule em UTC
+        anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
         timezone: America/Sao_Paulo
         slug: prod-daily
         parameters:
