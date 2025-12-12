@@ -145,7 +145,7 @@ def process_email_task(
 
         # Cria instância do TemplateEngine e renderiza template
 
-        template_path = os.path.join(os.getcwd(), "email_templates.html")
+        template_path = os.path.join(os.getcwd(), "email_template.html")
 
         # print files fro this folder
         for file in os.listdir(os.getcwd()):
