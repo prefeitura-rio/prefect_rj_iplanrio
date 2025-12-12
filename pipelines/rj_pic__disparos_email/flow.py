@@ -29,9 +29,8 @@ logging.basicConfig(
 def read_bigquery_task(
     project_id: Optional[str] = None,
     dataset_id: Optional[str] = None,
-    table_id: Optional[str] = None,
-    query: Optional[str] = None
-) -> List[Dict[str, str]]:
+    table_id: Optional[str] = None
+    ) -> List[Dict[str, str]]:
     """
     Lê uma tabela do BigQuery e retorna uma lista de dicionários.
 
@@ -44,20 +43,15 @@ def read_bigquery_task(
     Returns:
         Lista de dicionários, onde cada dicionário representa uma linha da tabela
     """
-    # Usa valores do config se não fornecidos
-    project_id = project_id or BIGQUERY_PROJECT_ID
-    dataset_id = dataset_id or BIGQUERY_DATASET_ID
-    table_id = table_id or BIGQUERY_TABLE_ID
 
-    if not query:
-        if not project_id or not dataset_id or not table_id:
-            raise ValueError(
-                "É necessário fornecer project_id, dataset_id e table_id, "
-                "ou definir BIGQUERY_PROJECT_ID, BIGQUERY_DATASET_ID e BIGQUERY_TABLE_ID no .env, "
-                "ou fornecer uma query SQL customizada."
-            )
-        # Constrói query padrão para ler toda a tabela
-        query = f"SELECT * FROM `{project_id}.{dataset_id}.{table_id}`"
+    if not project_id or not dataset_id or not table_id:
+        raise ValueError(
+            "É necessário fornecer project_id, dataset_id e table_id, "
+            "ou definir BIGQUERY_PROJECT_ID, BIGQUERY_DATASET_ID e BIGQUERY_TABLE_ID no .env, "
+            "ou fornecer uma query SQL customizada."
+        )
+    # Constrói query padrão para ler toda a tabela
+    query = f"SELECT * FROM `{project_id}.{dataset_id}.{table_id}`"
 
     try:
         # Inicializa cliente do BigQuery
@@ -178,10 +172,6 @@ def process_email_task(
 def rj_pic__disparos_email(
     template_path: str = "templates/template_exemplo.html",
     email_subject: Optional[str] = None,
-    project_id: Optional[str] = None,
-    dataset_id: Optional[str] = None,
-    table_id: Optional[str] = None,
-    query: Optional[str] = None,
 ):
     """
     Flow para envio de e-mails em massa com templates HTML.
@@ -192,10 +182,6 @@ def rj_pic__disparos_email(
     Args:
         template_path: Caminho para o arquivo de template HTML
         email_subject: Assunto do e-mail (usa EMAIL_SUBJECT do config se não fornecido)
-        project_id: ID do projeto do BigQuery (opcional)
-        dataset_id: ID do dataset do BigQuery (opcional)
-        table_id: ID da tabela do BigQuery (opcional)
-        query: Query SQL customizada (opcional, se fornecida, ignora project_id/dataset_id/table_id)
     """
     # Injetar credenciais do BD
     inject_bd_credentials_task(environment="prod")
@@ -204,10 +190,9 @@ def rj_pic__disparos_email(
         # Lê dados do BigQuery
         print(f"📖 Lendo dados do BigQuery: {BIGQUERY_PROJECT_ID}.{BIGQUERY_DATASET_ID}.{BIGQUERY_TABLE_ID}")
         rows = read_bigquery_task(
-            project_id=project_id,
-            dataset_id=dataset_id,
-            table_id=table_id,
-            query=query
+            project_id=BIGQUERY_PROJECT_ID,
+            dataset_id=BIGQUERY_DATASET_ID,
+            table_id=BIGQUERY_TABLE_ID
         )
         print(f"✅ {len(rows)} registros encontrados no BigQuery")
 

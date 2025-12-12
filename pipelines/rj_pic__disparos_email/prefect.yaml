@@ -33,8 +33,17 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_pic__disparos_email -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
+    schedules:
+      - interval: 86400  # Executa a cada 24h
+        anchor_date: "2025-01-01T08:00:00"  # Data de início do schedule em UTC
+        timezone: America/Sao_Paulo
+        slug: staging-daily
+        active: false  # Desabilitado por padrão para staging
+        parameters:
+          template_path: "templates/template_exemplo.html"
+          email_subject: "E-mail enviado automaticamente"
   - name: rj-pic--disparos_email--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_pic__disparos_email/flow.py:rj_pic__disparos_email
@@ -46,37 +55,11 @@ deployments:
         command: uv run --package rj_pic__disparos_email -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-
     schedules:
-    # Exemplo de schedule overwrite
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: slug # slug do schedule
-      parameters:
-        table_id: table_id # Nome da tabela no BigQuery
-        execute_query: |
-          SELECT
-            column1,
-            column2,
-            column3
-          FROM database.table_name
-    # Exemplo de schedule incremental
-    - interval: 86400
-      anchor_date: "2022-01-01T02:32:00"
-      timezone: America/Sao_Paulo
-      slug: slug
-      parameters:
-        table_id: table_id
-        dump_mode: append
-        partition_columns: partition_column # Coluna de particionamento
-        partition_date_format: "%Y-%m-%d" # Formato da data de particionamento
-        break_query_frequency: day # Frequencia de particionamento
-        break_query_start: current_day # Data de inicio do particionamento
-        break_query_end: current_day # Data de fim do particionamento
-        execute_query: |
-          SELECT
-            column1,
-            column2,
-            column3
-          FROM database.table_name
+      - interval: 86400  # Executa a cada 24h
+        anchor_date: "2025-01-01T08:00:00"  # Data de início do schedule em UTC
+        timezone: America/Sao_Paulo
+        slug: prod-daily
+        parameters:
+          template_path: "templates/template_exemplo.html"
+          email_subject: "E-mail enviado automaticamente"
