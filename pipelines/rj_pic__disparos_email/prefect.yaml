@@ -42,7 +42,6 @@ deployments:
         slug: staging-daily
         active: false  # Desabilitado por padrão para staging
         parameters:
-          template_path: "templates/template_exemplo.html"
           email_subject: "E-mail enviado automaticamente"
   - name: rj-pic--disparos_email--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -61,5 +60,4 @@ deployments:
         timezone: America/Sao_Paulo
         slug: prod-daily
         parameters:
-          template_path: "templates/template_exemplo.html"
           email_subject: "E-mail enviado automaticamente"
