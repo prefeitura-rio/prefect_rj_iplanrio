@@ -77,24 +77,18 @@ def extract_serpro_data(
     """
     print(f"Iniciando extração de dados do SERPRO para {timestamp.date()}")
 
-    conn = _get_serpro_connection()
-    cursor = conn.cursor()
+    query = SERPRO_CAPTURE_PARAMS["query"].format(data=timestamp.strftime("%Y-%m-%d"))
+    print(f"Executando query:\n{query}")
 
-    try:
-        query = SERPRO_CAPTURE_PARAMS["query"].format(data=timestamp.strftime("%Y-%m-%d"))
-        print(f"Executando query:\n{query}")
+    with _get_serpro_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query)
 
-        cursor.execute(query)
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
 
-        columns = [desc[0] for desc in cursor.description]
-        rows = cursor.fetchall()
-
-        data = [dict(zip(columns, row)) for row in rows]
-        print(f"Extraídos {len(data)} registros")
-
-    finally:
-        cursor.close()
-        conn.close()
+            data = [dict(zip(columns, row)) for row in rows]
+            print(f"Extraídos {len(data)} registros")
 
     filepath = raw_filepath.format(page=0)
     save_local_file(filepath=filepath, filetype="json", data=data)
