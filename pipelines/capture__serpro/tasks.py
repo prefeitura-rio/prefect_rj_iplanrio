@@ -8,6 +8,7 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 
+import pandas as pd
 import requests
 from impala.dbapi import connect
 from prefect import task
@@ -91,7 +92,8 @@ def extract_serpro_data(
             print(f"Extraídos {len(data)} registros")
 
     filepath = raw_filepath.format(page=0)
-    save_local_file(filepath=filepath, filetype="csv", data=data)
+    df = pd.DataFrame(rows, columns=columns, **SERPRO_CAPTURE_PARAMS["pre_treatment_reader_args"])
+    save_local_file(filepath=filepath, filetype="csv", data=df)
 
     return [filepath]
 
