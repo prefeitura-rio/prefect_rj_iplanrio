@@ -88,7 +88,7 @@ def rj_crm__wetalkie_atualiza_contato(
 
     # Buscar dados dos contatos na API Wetalkie
     updated_contacts = get_contacts(api, validated_contacts)
-
+    print("\n\nForce deploy\n\n")
     # Verificar se algum contato foi atualizado
     final_contacts = skip_flow_if_empty(
         data=updated_contacts,
