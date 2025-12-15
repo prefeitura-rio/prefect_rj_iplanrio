@@ -218,7 +218,7 @@ def create_metadata_table(
 
 
 @task
-async def process_files_batch_async(
+def process_files_batch_async(
     client: MongoClient,
     database: str,
     collection: str,
@@ -243,27 +243,32 @@ async def process_files_batch_async(
         List of metadata records
     """
     logger = get_run_logger()
-    semaphore = asyncio.Semaphore(max_concurrency)
 
-    async def process_with_semaphore(file_id: str) -> dict:
-        async with semaphore:
-            try:
-                return await dump_chunks_to_gcs_async(
-                    client=client,
-                    database=database,
-                    collection=collection,
-                    file_id=file_id,
-                    gcs_bucket=gcs_bucket,
-                    gcs_prefix=gcs_prefix,
-                    logger=logger,
-                )
-            except Exception as e:
-                logger.error(f"Error processing file_id {file_id}: {e}")
-                return None
+    async def _process_async():
+        semaphore = asyncio.Semaphore(max_concurrency)
 
-    # Process all files concurrently
-    tasks = [process_with_semaphore(file_id) for file_id in files_ids]
-    results = await asyncio.gather(*tasks)
+        async def process_with_semaphore(file_id: str) -> dict:
+            async with semaphore:
+                try:
+                    return await dump_chunks_to_gcs_async(
+                        client=client,
+                        database=database,
+                        collection=collection,
+                        file_id=file_id,
+                        gcs_bucket=gcs_bucket,
+                        gcs_prefix=gcs_prefix,
+                        logger=logger,
+                    )
+                except Exception as e:
+                    logger.error(f"Error processing file_id {file_id}: {e}")
+                    return None
 
-    # Filter out None results
-    return [r for r in results if r is not None]
+        # Process all files concurrently
+        tasks = [process_with_semaphore(file_id) for file_id in files_ids]
+        results = await asyncio.gather(*tasks)
+
+        # Filter out None results
+        return [r for r in results if r is not None]
+
+    # Run the async function
+    return asyncio.run(_process_async())
