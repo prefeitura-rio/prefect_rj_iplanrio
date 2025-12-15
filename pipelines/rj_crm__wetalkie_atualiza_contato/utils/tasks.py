@@ -13,7 +13,7 @@ from google.cloud import bigquery
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
-from prefect.exceptions import PrefectException
+from prefect.states import Completed
 
 from pipelines.rj_crm__wetalkie_atualiza_contato.utils.api_handler import ApiHandler
 
@@ -45,7 +45,7 @@ def skip_flow_if_empty(
     """Skip the flow if input data is empty."""
     if len(data) == 0:
         log(message)
-        raise PrefectException(message)
+        return Completed(message)
     return data
 
 
