@@ -59,27 +59,6 @@ def chunk_list(items: list, chunk_size: int) -> list[list]:
     return [items[i : i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 
-@task
-def get_mongodb_client(host: str, port: str, username: str, password: str, auth_source: str) -> MongoClient:
-    """
-    Create MongoDB client connection
-
-    Args:
-        host: MongoDB host
-        port: MongoDB port
-        username: MongoDB username
-        password: MongoDB password
-        auth_source: MongoDB auth source database
-
-    Returns:
-        MongoClient instance
-    """
-    logger = get_run_logger()
-    logger.info(f"Connecting to MongoDB at {host}:{port}")
-    connection_string = f"mongodb://{username}:{password}@{host}:{port}/{auth_source}"
-    return MongoClient(connection_string)
-
-
 async def dump_chunks_to_gcs_async(
     client: MongoClient,
     database: str,
@@ -219,7 +198,11 @@ def create_metadata_table(
 
 @task
 def process_files_batch_async(
-    client: MongoClient,
+    host: str,
+    port: str,
+    username: str,
+    password: str,
+    auth_source: str,
     database: str,
     collection: str,
     files_ids: list[str],
@@ -231,7 +214,11 @@ def process_files_batch_async(
     Process multiple files concurrently using asyncio with semaphore
 
     Args:
-        client: MongoDB client instance
+        host: MongoDB host
+        port: MongoDB port
+        username: MongoDB username
+        password: MongoDB password
+        auth_source: MongoDB auth source
         database: MongoDB database name
         collection: MongoDB collection name
         files_ids: List of file IDs to process
@@ -243,6 +230,11 @@ def process_files_batch_async(
         List of metadata records
     """
     logger = get_run_logger()
+
+    # Create MongoDB client inside the task
+    logger.info(f"Connecting to MongoDB at {host}:{port}")
+    connection_string = f"mongodb://{username}:***@{host}:{port}/{auth_source}"
+    client = MongoClient(connection_string)
 
     async def _process_async():
         semaphore = asyncio.Semaphore(max_concurrency)

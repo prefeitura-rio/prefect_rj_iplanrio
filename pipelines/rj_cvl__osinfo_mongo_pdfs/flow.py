@@ -26,7 +26,6 @@ from .tasks import (
     chunk_list,
     create_metadata_table,
     get_files_ids_from_bigquery,
-    get_mongodb_client,
     process_files_batch_async,
 )
 
@@ -75,15 +74,6 @@ def rj_cvl__osinfo_mongo_pdfs(
         infisical_secret_path=infisical_secret_path
     )
 
-    # Connect to MongoDB
-    mongo_client = get_mongodb_client(
-        host=db_host,
-        port=db_port,
-        username=secrets["DB_USERNAME"],
-        password=secrets["DB_PASSWORD"],
-        auth_source=db_auth_source,
-    )
-
     # Fetch files_id list from BigQuery
     files_ids = get_files_ids_from_bigquery(bq_files_ids_query)
     batches = chunk_list(files_ids, files_id_batch_size)
@@ -93,7 +83,11 @@ def rj_cvl__osinfo_mongo_pdfs(
     for _batch_idx, batch_ids in enumerate(batches):
         # Process all files in batch concurrently with asyncio
         batch_metadata = process_files_batch_async(
-            client=mongo_client,
+            host=db_host,
+            port=db_port,
+            username=secrets["DB_USERNAME"],
+            password=secrets["DB_PASSWORD"],
+            auth_source=db_auth_source,
             database=db_database,
             collection=db_collection,
             files_ids=batch_ids,
