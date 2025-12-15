@@ -110,3 +110,4 @@ def rj_crm__wetalkie_atualiza_contato(
     # Materializar com DBT se necessário
     if materialize_after_dump:
         execute_dbt_task(dataset_id=dataset_id, table_id=table_id, target="prod")
+# force deploy
