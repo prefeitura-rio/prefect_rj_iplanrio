@@ -51,7 +51,6 @@ deployments:
             AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 99999 MINUTE)
             order by datarelay_timestamp desc
       test_mode: true
-      infisical_secret_path: /wetalkie
       
 
   - name: rj_crm__webhook_wetalkie--prod
@@ -81,7 +80,6 @@ deployments:
             AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 99999 MINUTE)
             order by datarelay_timestamp desc
       test_mode: false
-      infisical_secret_path: /wetalkie
     #schedules:
     #  - interval: 21600  # 6 horas (6 * 60 * 60 segundos)
     #    anchor_date: "2021-01-01T00:15:00"
