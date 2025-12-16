@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Valores constantes para pipeline capture__serpro
+Valores constantes para pipeline capture__serpro_autuacao
 """
 from datetime import datetime
 from zoneinfo import ZoneInfo

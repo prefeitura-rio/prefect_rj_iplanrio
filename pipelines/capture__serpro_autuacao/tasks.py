@@ -13,7 +13,7 @@ import requests
 from impala.dbapi import connect
 from prefect import task
 
-from pipelines.capture__serpro.constants import SERPRO_CAPTURE_PARAMS
+from pipelines.capture__serpro_autuacao.constants import SERPRO_CAPTURE_PARAMS
 from pipelines.common.capture.default_capture.utils import SourceCaptureContext
 from pipelines.common.utils.fs import save_local_file
 

@@ -6,7 +6,7 @@ WORKDIR /opt/prefect/pipelines_v3
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/pipelines_v3/
 
-COPY ./pipelines/capture__serpro ./pipelines/capture__serpro/
+COPY ./pipelines/capture__serpro_autuacao ./pipelines/capture__serpro_autuacao/
 
 COPY ./pipelines/common/ ./pipelines/common/
 

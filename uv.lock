@@ -272,7 +272,7 @@ wheels = [
 [[package]]
 name = "capture-serpro"
 version = "0.1.0"
-source = { virtual = "pipelines/capture__serpro" }
+source = { virtual = "pipelines/capture__serpro_autuacao" }
 dependencies = [
     { name = "impyla" },
     { name = "jaydebeapi" },
