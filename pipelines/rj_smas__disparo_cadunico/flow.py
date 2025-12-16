@@ -112,6 +112,8 @@ def rj_smas__disparo_cadunico(
         data=destinations_result,
         message="No destinations found from query. Skipping flow execution.",
     )
+    if validated_destinations is None:
+        return  # flow termina aqui, nada downstream é agendado
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
 

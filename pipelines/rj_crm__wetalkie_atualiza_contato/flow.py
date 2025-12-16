@@ -76,6 +76,8 @@ def rj_crm__wetalkie_atualiza_contato(
         data=df_contacts,
         message="No contacts found with missing phone data. Skipping flow execution.",
     )
+    if validated_contacts is None:
+        return  # flow termina aqui, nada downstream é agendado
 
     # Acessar API Wetalkie
     api = access_api(
@@ -88,12 +90,11 @@ def rj_crm__wetalkie_atualiza_contato(
 
     # Buscar dados dos contatos na API Wetalkie
     updated_contacts = get_contacts(api, validated_contacts)
-    print("\n\nForce deploy\n\n")
     # Verificar se algum contato foi atualizado
     final_contacts = skip_flow_if_empty(
-    data=updated_contacts,
-    message="No contacts were successfully updated from API. Skipping upload.",
-)
+        data=updated_contacts,
+        message="No contacts were successfully updated from API. Skipping upload.",
+    )
 
     if final_contacts is None:
         return  # flow termina aqui, nada downstream é agendado
@@ -116,4 +117,3 @@ def rj_crm__wetalkie_atualiza_contato(
     # Materializar com DBT se necessário
     if materialize_after_dump:
         execute_dbt_task(dataset_id=dataset_id, table_id=table_id, target="prod")
-# force deploy
