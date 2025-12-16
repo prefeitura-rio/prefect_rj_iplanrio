@@ -37,14 +37,14 @@ deployments:
         image_pull_policy: Always
     parameters:
       query: |
-          SELECT 
+          SELECT
             datarelay_timestamp,
             phone_number,
             content_new_category,
             content_previous_category,
             content_message_template_name
-          FROM 
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12` 
+          FROM
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
@@ -52,7 +52,7 @@ deployments:
             order by datarelay_timestamp desc
       test_mode: true
       infisical_secret_path: /wetalkie
-      
+
 
   - name: rj_crm__webhook_wetalkie--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -67,14 +67,14 @@ deployments:
         image_pull_policy: Always
     parameters:
       query: |
-          SELECT 
+          SELECT
             datarelay_timestamp,
             phone_number,
             content_new_category,
             content_previous_category,
             content_message_template_name
-          FROM 
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12` 
+          FROM
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'

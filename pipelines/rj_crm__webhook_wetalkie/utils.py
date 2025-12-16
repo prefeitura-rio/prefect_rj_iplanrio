@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from google.cloud import bigquery
 from basedosdados import Base
 from time import sleep
