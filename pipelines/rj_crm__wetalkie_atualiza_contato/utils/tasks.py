@@ -13,7 +13,6 @@ from google.cloud import bigquery
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
-from prefect.exceptions import PrefectException
 
 from pipelines.rj_crm__wetalkie_atualiza_contato.utils.api_handler import ApiHandler
 
@@ -41,11 +40,15 @@ def access_api(
 def skip_flow_if_empty(
     data: Union[pd.DataFrame, List, str, Dict],
     message: str = "Data is empty. Skipping flow.",
-) -> Union[pd.DataFrame, List, str, Dict]:
-    """Skip the flow if input data is empty."""
+) -> Union[pd.DataFrame, List, str, Dict, None]:
+    """Skip the flow if input data is empty.
+    To skip is necessary to add the following check in the flow:
+    'if validated_destinations is None:
+        return  # flow termina aqui, nada downstream é agendado'
+    """
     if len(data) == 0:
         log(message)
-        raise PrefectException(message)
+        return None
     return data
 
 

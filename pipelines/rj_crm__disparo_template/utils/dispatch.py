@@ -15,6 +15,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
+from prefect.exceptions import PrefectException
 from pytz import timezone
 
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
@@ -99,8 +100,9 @@ def add_contacts_to_whitelist(
     )
 
     if not manager.authenticate():
-        print("\n⚠️  Authentication failed. Cannot add contacts to whitelist.")
-        return
+        message = "\n⚠️  Authentication failed. Cannot add contacts to whitelist."
+        print(message)
+        raise PrefectException(message)
 
     # Find or create the group
     group = manager.find_group_by_name(group_name)
@@ -108,8 +110,9 @@ def add_contacts_to_whitelist(
         group = manager.create_group(group_name)
 
     if not group:
-        print(f"\n⚠️  Could not find or create group '{group_name}'. Aborting.")
-        return
+        message = f"\n⚠️  Could not find or create group '{group_name}'. Aborting."
+        print(message)
+        raise PrefectException(message)
 
     group_id = group["id"]
 
@@ -126,7 +129,9 @@ def add_contacts_to_whitelist(
     if manager.add_numbers_to_group(group_id, new_numbers_to_add):
         print("\n✅  Successfully added contacts to the whitelist.")
     else:
-        print("\n⚠️  Failed to add contacts to the whitelist.")
+        message = "\n⚠️  Failed to add contacts to the whitelist."
+        print(message)
+        raise PrefectException(message)
 
 
 @task

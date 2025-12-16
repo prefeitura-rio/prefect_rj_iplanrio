@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task

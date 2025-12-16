@@ -37,22 +37,20 @@ deployments:
         image_pull_policy: Always
     parameters:
       query: |
-          SELECT 
+          SELECT
             datarelay_timestamp,
             phone_number,
             content_new_category,
             content_previous_category,
             content_message_template_name
-          FROM 
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12` 
+          FROM
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
             AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 99999 MINUTE)
             order by datarelay_timestamp desc
       test_mode: true
-      
-
   - name: rj_crm__webhook_wetalkie--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__webhook_wetalkie/flow.py:rj_crm__webhook_wetalkie
@@ -66,14 +64,14 @@ deployments:
         image_pull_policy: Always
     parameters:
       query: |
-          SELECT 
+          SELECT
             datarelay_timestamp,
             phone_number,
             content_new_category,
             content_previous_category,
             content_message_template_name
-          FROM 
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12` 
+          FROM
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
