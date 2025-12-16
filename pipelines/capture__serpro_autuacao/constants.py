@@ -30,7 +30,7 @@ SERPRO_CAPTURE_PARAMS = {
 SERPRO_AUTUACAO_SOURCE = SourceTable(
     source_name=SERPRO_SOURCE_NAME,
     table_id=AUTUACAO_TABLE_ID,
-    first_timestamp=datetime(2025, 12, 15, 0, 0, 0, tzinfo=ZoneInfo(smtr_constants.TIMEZONE)),
+    first_timestamp=datetime(2025, 12, 11, 0, 0, 0, tzinfo=ZoneInfo(smtr_constants.TIMEZONE)),
     primary_keys=SERPRO_CAPTURE_PARAMS["primary_key"],
     pretreatment_reader_args=SERPRO_CAPTURE_PARAMS["pre_treatment_reader_args"],
     bucket_names=SERPRO_CAPTURE_PARAMS["save_bucket_names"],
