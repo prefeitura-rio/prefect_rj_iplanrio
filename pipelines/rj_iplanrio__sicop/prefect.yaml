@@ -158,3 +158,57 @@ deployments:
           dump_mode: overwrite
           execute_query: |
             SELECT NUM_PROCESSO, LOCALIZA_PROCESSO FROM SICOP.VW_LOCALIZA_PROCESSO_DLK
+
+
+      - interval: 86400
+        anchor_date: '2025-07-20T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: orgao
+        parameters:
+          table_id: orgao
+          dump_mode: overwrite
+          execute_query: |
+            SELECT ORG_SICOP, SIGLA_ORGAO, DESC_ORGAO, END_ORGAO,TEL_ORGAO  FROM SICOP.VW_ORGAO_DLK
+
+      - interval: 86400
+        anchor_date: '2025-07-20T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: assunto
+        parameters:
+          table_id: assunto
+          dump_mode: overwrite
+          execute_query: |
+            SELECT IDENT, COD, SEQ, CHAVE_IDENT_COD_SEQ, DESC_ASSUNTO FROM SICOP.VW_ASSUNTO_DLK
+
+      - interval: 86400
+        anchor_date: '2025-07-20T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: documento
+        parameters:
+          table_id: documento
+          dump_mode: overwrite
+          execute_query: |
+            SELECT TIPO_DOC,NUM_DOCUMENTO,ORG_RESP,DATA_DOCUMENTO,PRAZO_DOC,PROC_JUD_DOC,NUMERO_EXTERNO,
+            NUM_PROCESSO,REQUERENTE,COD_ASSUN,ASSUN_COMP,TP_DOC_INF,NUM_DOCUMENTO_INF,ORG_RESP_INF FROM SICOP.VW_DOCUMENTO_DLK
+
+      - interval: 86400
+        anchor_date: '2025-07-20T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: ultima_tram_processo
+        parameters:
+          table_id: ultima_tram_processo
+          dump_mode: overwrite
+          execute_query: |
+            SELECT I22004_COD_NPROC2,I22004_RA_NPROC2,I22004_SEQ_NPROC2,I22004_SEC_NPROC2,I22004_ANO_NPROC2,MAX_SEQ,I22004_ORG_ORIGEM,I22004_ORG_DEST,I22004_COD_DESP,
+              I22004_MAT_TRANSC,I22004_NUM_GUIA  FROM SICOP.VW_ULTIMA_TRAM_PROCESSO_DLK
+
+
+      - interval: 86400
+        anchor_date: '2025-07-20T05:01:00'
+        timezone: America/Sao_Paulo
+        slug: despacho
+        parameters:
+          table_id: despacho
+          dump_mode: overwrite
+          execute_query: |
+            SELECT IDENT,SEQ_REM,SEQ,DESCRICAO FROM SICOP.VW_DESPACHO_DLK

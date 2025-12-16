@@ -112,6 +112,8 @@ def rj_smas__disparo_cadunico(
         data=destinations_result,
         message="No destinations found from query. Skipping flow execution.",
     )
+    if validated_destinations is None:
+        return  # flow termina aqui, nada downstream é agendado
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
 
@@ -217,7 +219,7 @@ def rj_smas__disparo_cadunico(
         # Wait 15 minutes before querying results
         print("⚠️  Waiting 15 minutes before checking dispatch results...")
         time.sleep(15 * 60)
-
+        print("force deploy")
         # Send results notification with BigQuery data
         send_dispatch_result_notification(
             total_dispatches=len(unique_destinations),
@@ -228,5 +230,5 @@ def rj_smas__disparo_cadunico(
             total_batches=total_batches,
             test_mode=test_mode,
         )
-# force deploy####
-#forçando deploy
+
+        print("force deploy")

@@ -55,7 +55,7 @@ runs:
   using: composite
   steps:
     - name: Tailscale
-      uses: tailscale/github-action@v3
+      uses: tailscale/github-action@v4
       with:
         oauth-client-id: ${{ inputs.ts_oauth_client_id }}
         oauth-secret: ${{ inputs.ts_oauth_secret }}
