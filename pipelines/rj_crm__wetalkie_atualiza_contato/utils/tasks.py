@@ -41,11 +41,12 @@ def access_api(
 def skip_flow_if_empty(
     data: Union[pd.DataFrame, List, str, Dict],
     message: str = "Data is empty. Skipping flow.",
-) -> Union[pd.DataFrame, List, str, Dict]:
+) -> Union[pd.DataFrame, List, str, Dict, None]:
     """Skip the flow if input data is empty."""
     if len(data) == 0:
         log(message)
-        return Completed(message)
+        # return Completed(message)
+        return None
     return data
 
 
