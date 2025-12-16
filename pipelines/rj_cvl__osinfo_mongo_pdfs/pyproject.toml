@@ -1,7 +1,0 @@
-[project]
-name = "rj_cvl__osinfo_mongo_pdfs"
-version = "0.1.0"
-description = "Pipeline para dump de chunks do OSINFO MongoDB para GCS + tabela metadata"
-dependencies = [
-    "pymongo>=3.12,<4.0",
-]
