@@ -20,8 +20,6 @@ from google.cloud import bigquery  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
-from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
-
 from pipelines.rj_crm__disparo_template.utils.api_handler import ApiHandler  # pylint: disable=E0611, E0401
 
 
@@ -162,18 +160,15 @@ def task_download_data_from_bigquery(
 def skip_flow_if_empty(
     data: Union[pd.DataFrame, List, str, Dict],
     message: str = "Data is empty. Skipping flow.",
-    wait=None,  # pylint: disable=unused-argument
-) -> Union[pd.DataFrame, List, str, Dict]:
+) -> Union[pd.DataFrame, List, str, Dict, None]:
     """Skip the flow if input data is empty.
-
-    Args:
-        data: The data structure to check (DataFrame, list, string, or dict)
-        message: Optional message to log when skipping
+    To skip is necessary to add the following check in the flow:
+    'if validated_destinations is None:
+        return  # flow termina aqui, nada downstream é agendado'
     """
     if len(data) == 0:
         log(message)
-        # In Prefect 3, we raise an exception instead of ENDRUN
-        raise PrefectException(message)
+        return None
     return data
 
 
