@@ -1,0 +1,51 @@
+select
+      count(*) as failures,
+      count(*) != 0 as should_warn,
+      count(*) != 0 as should_error
+    from (
+      
+
+
+
+
+
+with validation_errors as (
+
+    select
+        data, servico
+    from 
+    
+        
+        
+
+        
+
+        
+            
+            
+            
+            
+        
+            
+            
+            
+            
+        
+            
+            
+            
+            
+        
+        (select * from `rj-smtr`.`dashboard_subsidio_sppo_v2`.`sumario_servico_dia_pagamento` where data between date('2022-01-01T00:00:00') and date('2022-01-01T01:00:00') and data < date('2025-01-05'))
+    group by data, servico
+    having count(*) > 1
+
+)
+
+select *
+from validation_errors
+
+
+
+      
+    ) dbt_internal_test

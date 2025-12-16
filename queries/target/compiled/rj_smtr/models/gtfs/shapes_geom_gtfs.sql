@@ -1,0 +1,130 @@
+-- depends_on: `rj-smtr`.`gtfs`.`feed_info`
+
+
+
+    
+
+
+
+
+
+
+
+with
+    contents as (
+        select
+            shape_id,
+            st_geogpoint(shape_pt_lon, shape_pt_lat) as ponto_shape,
+            shape_pt_sequence,
+            feed_start_date,
+        from `rj-smtr`.`gtfs`.`shapes` s
+        where
+                feed_start_date
+                in ('2024-12-23', '2024-12-31')
+    ),
+    pts as (
+        select
+            *,
+            max(shape_pt_sequence) over (
+                partition by feed_start_date, shape_id
+            ) final_pt_sequence
+        from contents c
+        order by feed_start_date, shape_id, shape_pt_sequence
+    ),
+    shapes as (
+        -- BUILD LINESTRINGS OVER SHAPE POINTS
+        select
+            shape_id,
+            feed_start_date,
+            st_makeline(array_agg(ponto_shape)) as shape,
+            array_agg(ponto_shape)[ordinal(1)] as start_pt,
+            array_agg(ponto_shape)[
+                ordinal(array_length(array_agg(ponto_shape)))
+            ] as end_pt,
+        from pts
+        group by 1, 2
+    ),
+    shapes_half as (
+        -- BUILD HALF LINESTRINGS OVER SHAPE POINTS
+        (
+            select
+                shape_id,
+                feed_start_date,
+                shape_id || "_0" as new_shape_id,
+                st_makeline(array_agg(ponto_shape)) as shape,
+                array_agg(ponto_shape)[ordinal(1)] as start_pt,
+                array_agg(ponto_shape)[
+                    ordinal(array_length(array_agg(ponto_shape)))
+                ] as end_pt,
+            from pts
+            where shape_pt_sequence <= round(final_pt_sequence / 2)
+            group by 1, 2
+        )
+        union all
+        (
+            select
+                shape_id,
+                feed_start_date,
+                shape_id || "_1" as new_shape_id,
+                st_makeline(array_agg(ponto_shape)) as shape,
+                array_agg(ponto_shape)[ordinal(1)] as start_pt,
+                array_agg(ponto_shape)[
+                    ordinal(array_length(array_agg(ponto_shape)))
+                ] as end_pt,
+            from pts
+            where shape_pt_sequence > round(final_pt_sequence / 2)
+            group by 1, 2
+        )
+    ),
+    ids as (
+        select * except (rn)
+        from
+            (
+                select
+                    feed_start_date,
+                    shape_id,
+                    shape,
+                    start_pt,
+                    end_pt,
+                    row_number() over (partition by feed_start_date, shape_id) rn
+                from shapes
+            )
+        where rn = 1
+    ),
+    union_shapes as (
+        (select feed_start_date, shape_id, shape, start_pt, end_pt, from ids)
+        union all
+        (
+            select
+                feed_start_date,
+                new_shape_id as shape_id,
+                s.shape,
+                s.start_pt,
+                s.end_pt,
+            from ids as i
+            left join shapes_half as s using (feed_start_date, shape_id)
+            where
+                (
+                    round(st_y(i.start_pt), 4) = round(st_y(i.end_pt), 4)
+                    and round(st_x(i.start_pt), 4) = round(st_x(i.end_pt), 4)
+                )
+                or (
+                    feed_start_date = "2025-05-01" and shape_id in ("iz18", "ycug")  -- Operação Especial "Todo Mundo no Rio" - Lady Gaga
+                )
+        )
+    )
+select
+    feed_version,
+    feed_start_date,
+    feed_end_date,
+    shape_id,
+    shape,
+    round(st_length(shape), 1) shape_distance,
+    start_pt,
+    end_pt,
+    '' as versao_modelo
+from union_shapes as m
+left join `rj-smtr`.`gtfs`.`feed_info` as fi using (feed_start_date)
+where
+        fi.feed_start_date
+        in ('2024-12-23', '2024-12-31')
