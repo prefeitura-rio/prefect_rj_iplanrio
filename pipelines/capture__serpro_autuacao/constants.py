@@ -9,11 +9,11 @@ from pipelines.common import constants as smtr_constants
 from pipelines.common.utils.gcp.bigquery import SourceTable
 
 SERPRO_SOURCE_NAME = "serpro"
-AUTUACAO_TABLE_ID = "autuacao_v2"
+AUTUACAO_TABLE_ID = "autuacao"
 
 SERPRO_PRIVATE_BUCKET_NAMES = {
-    "prod": "rj-smtr-infracao-private",
-    "dev": "rj-smtr-dev-infracao-private",
+    "prod": "rj-smtr-serpro-private",
+    "dev": "rj-smtr-dev-serpro-private",
 }
 
 SERPRO_CAPTURE_PARAMS = {
