@@ -219,7 +219,7 @@ def rj_smas__disparo_cadunico(
         # Wait 15 minutes before querying results
         print("⚠️  Waiting 15 minutes before checking dispatch results...")
         time.sleep(15 * 60)
-
+        print("force deploy")
         # Send results notification with BigQuery data
         send_dispatch_result_notification(
             total_dispatches=len(unique_destinations),
