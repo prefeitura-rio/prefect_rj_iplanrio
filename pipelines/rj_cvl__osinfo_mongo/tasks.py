@@ -351,12 +351,12 @@ def dump_files_by_id_to_gcs(
                         uploaded_count += 1
 
                         # Get metadata from futures
-                        file_id_key, temp_file_path, gcs_path = futures[future]
+                        file_id_key, temp_file_path, gcs_full_path_result = futures[future]
 
                         # Store processing results
                         processing_results[file_id] = {
                             "chunks_captured_at": capture_time,
-                            "chunks_gcs_path": gcs_path,
+                            "chunks_gcs_path": gcs_full_path_result,
                             "chunks_not_found": False,
                         }
 
