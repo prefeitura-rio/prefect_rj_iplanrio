@@ -17,6 +17,13 @@ Individual Files Mode:
 - Saves to GCS path: gs://bucket/staging/dataset/table/files_id=<id>/data.parquet
 - Does NOT create BigLake table (only saves files to GCS)
 - More efficient for large numbers of files (processes in batches)
+
+PDF Reconstruction Mode:
+- Set reconstruct_pdfs_from_chunks=True to reconstruct PDFs from chunks
+- Requires save_individual_files_by_id=True
+- Uses temp files from dump process (no GCS download needed)
+- Saves to: gs://bucket/staging/dataset/files_pdfs/[original_filename].pdf
+- Much faster than downloading from GCS (6-12x speedup)
 """
 
 from typing import Optional
@@ -37,6 +44,7 @@ from .tasks import (
     dump_files_by_id_to_gcs,
     get_batch_dump_mode,
     get_files_ids_from_bigquery,
+    reconstruct_pdfs_from_temp_files,
 )
 
 
@@ -70,6 +78,7 @@ def rj_cvl__osinfo_mongo(
     only_staging_dataset: bool = True,
     add_timestamp_column: bool = True,
     save_individual_files_by_id: bool = False,
+    reconstruct_pdfs_from_chunks: bool = False,
     gcs_bucket_name: str = "rj-nf-agent",
 ):
     rename_current_flow_run_task(new_name=table_id)
@@ -92,7 +101,7 @@ def rj_cvl__osinfo_mongo(
         files_ids = get_files_ids_from_bigquery(bq_files_ids_query)
 
         # Dump each file_id to individual parquet in GCS
-        dump_files_by_id_to_gcs(
+        temp_files_map = dump_files_by_id_to_gcs(
             database_type=db_type,
             hostname=db_host,
             port=int(db_port),
@@ -107,7 +116,16 @@ def rj_cvl__osinfo_mongo(
             auth_source=db_auth_source,
             batch_size=files_id_batch_size,
             mongo_batch_size=batch_size,
+            reconstruct_pdfs_from_chunks=reconstruct_pdfs_from_chunks,
         )
+
+        # Reconstruct PDFs if requested
+        if reconstruct_pdfs_from_chunks and temp_files_map:
+            reconstruct_pdfs_from_temp_files(
+                temp_files_map=temp_files_map,
+                dest_gcs_path=f"staging/{dataset_id}/files_pdfs",
+                bucket_name=gcs_bucket_name,
+            )
 
         return
 
