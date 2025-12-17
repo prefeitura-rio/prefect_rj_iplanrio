@@ -3,6 +3,7 @@
 Tasks for rj_cvl__osinfo_mongo pipeline
 """
 
+import base64
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -137,6 +138,25 @@ def _reconstruct_pdf_from_chunks(
     temp_file_path.unlink()  # Remove parquet temp file
 
     return filename
+
+
+def _decode_base64_data(x):
+    """
+    Decode base64 string to bytes (iplanrio database_sql.py encodes bytes as base64)
+
+    Args:
+        x: Value from MongoDB chunk data column
+
+    Returns:
+        Bytes object
+    """
+    if isinstance(x, bytes):
+        return x
+    elif isinstance(x, str):
+        # iplanrio converts bytes to base64 strings
+        return base64.b64decode(x)
+    else:
+        return x
 
 
 def _upload_file_to_gcs(
@@ -319,12 +339,9 @@ def dump_files_by_id_to_gcs(
                 temp_file = temp_dir / f"{file_id}.parquet"
 
                 # Ensure 'data' column is bytes type for binary data
+                # Note: iplanrio database_sql.py converts bytes to base64 strings, so we need to decode
                 if 'data' in file_chunks_df.columns:
-                    # Convert to bytes if needed (MongoDB returns bytes but pandas may convert to object)
-                    if file_chunks_df['data'].dtype == 'object':
-                        file_chunks_df['data'] = file_chunks_df['data'].apply(
-                            lambda x: x if isinstance(x, bytes) else bytes(x)
-                        )
+                    file_chunks_df['data'] = file_chunks_df['data'].apply(_decode_base64_data)
 
                 file_chunks_df.to_parquet(temp_file, engine='pyarrow', index=False)
 
@@ -610,7 +627,7 @@ def update_processing_metadata(
 
     # Write to BigQuery
     client = bigquery.Client()
-    table_ref = f"{dataset_id}.{metadata_table_id}"
+    table_ref = f"{dataset_id}_staging.{metadata_table_id}"
 
     schema = [
         bigquery.SchemaField("file_id", "STRING", mode="REQUIRED"),
