@@ -25,6 +25,7 @@ SERPRO_CAPTURE_PARAMS = {
     "primary_key": ["auinf_num_auto"],
     "save_bucket_names": SERPRO_PRIVATE_BUCKET_NAMES,
     "pre_treatment_reader_args": {"dtype": "object"},
+    "page_size": 50000,
 }
 
 SERPRO_AUTUACAO_SOURCE = SourceTable(
