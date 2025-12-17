@@ -317,6 +317,15 @@ def dump_files_by_id_to_gcs(
 
             for file_id, file_chunks_df in grouped:
                 temp_file = temp_dir / f"{file_id}.parquet"
+
+                # Ensure 'data' column is bytes type for binary data
+                if 'data' in file_chunks_df.columns:
+                    # Convert to bytes if needed (MongoDB returns bytes but pandas may convert to object)
+                    if file_chunks_df['data'].dtype == 'object':
+                        file_chunks_df['data'] = file_chunks_df['data'].apply(
+                            lambda x: x if isinstance(x, bytes) else bytes(x)
+                        )
+
                 file_chunks_df.to_parquet(temp_file, engine='pyarrow', index=False)
 
                 partition_path = f"{gcs_path}/files_id={file_id}"
