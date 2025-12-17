@@ -10,6 +10,13 @@ MongoDB Filter Examples:
 - From BigQuery: bq_files_ids_query = "SELECT _id FROM dataset.table"
 
 Note: String values in *_id fields are automatically converted to ObjectId.
+
+Individual Files Mode:
+- Set save_individual_files_by_id=True to save one parquet file per file_id
+- Requires bq_files_ids_query to be set
+- Saves to GCS path: gs://bucket/staging/dataset/table/files_id=<id>/data.parquet
+- Does NOT create BigLake table (only saves files to GCS)
+- More efficient for large numbers of files (processes in batches)
 """
 
 from typing import Optional
@@ -27,6 +34,7 @@ from prefect import flow
 from .tasks import (
     build_batch_query,
     chunk_list,
+    dump_files_by_id_to_gcs,
     get_batch_dump_mode,
     get_files_ids_from_bigquery,
 )
@@ -42,7 +50,7 @@ def rj_cvl__osinfo_mongo(
     db_auth_source: Optional[str] = "OSINFO_FILES",
     execute_query: str = "FILES.files",
     bq_files_ids_query: Optional[str] = None,
-    files_id_batch_size: int = 10000,
+    files_id_batch_size: int = 1000,
     dataset_id: str = "brutos_osinfo_mongo",
     table_id: str = "files",
     infisical_secret_path: str = "/db-osinfo-mongo",
@@ -61,6 +69,8 @@ def rj_cvl__osinfo_mongo(
     max_concurrency: int = 1,
     only_staging_dataset: bool = True,
     add_timestamp_column: bool = True,
+    save_individual_files_by_id: bool = False,
+    gcs_bucket_name: str = "rj-nf-agent",
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
@@ -71,7 +81,37 @@ def rj_cvl__osinfo_mongo(
         text=partition_columns
     )
 
-    # If BigQuery query is provided, process files_id in batches
+    # NEW MODE: Save individual parquet files per file_id to GCS
+    if save_individual_files_by_id:
+        if not bq_files_ids_query:
+            raise ValueError(
+                "save_individual_files_by_id=True requires bq_files_ids_query to be set"
+            )
+
+        # Get file_ids from BigQuery
+        files_ids = get_files_ids_from_bigquery(bq_files_ids_query)
+
+        # Dump each file_id to individual parquet in GCS
+        dump_files_by_id_to_gcs(
+            database_type=db_type,
+            hostname=db_host,
+            port=int(db_port),
+            user=secrets["DB_USERNAME"],
+            password=secrets["DB_PASSWORD"],
+            database=db_database,
+            collection_query=execute_query,
+            file_ids=files_ids,
+            bucket_name=gcs_bucket_name,
+            gcs_path=f"staging/{dataset_id}/{table_id}",
+            charset=db_charset,
+            auth_source=db_auth_source,
+            batch_size=files_id_batch_size,
+            mongo_batch_size=batch_size,
+        )
+
+        return
+
+    # ORIGINAL MODE: If BigQuery query is provided, process files_id in batches
     if bq_files_ids_query:
         files_ids = get_files_ids_from_bigquery(bq_files_ids_query)
         batches = chunk_list(files_ids, files_id_batch_size)
