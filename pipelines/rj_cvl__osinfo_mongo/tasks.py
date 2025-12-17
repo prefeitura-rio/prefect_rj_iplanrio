@@ -586,7 +586,16 @@ def update_processing_metadata(
     # Prepare rows from processing_results
     rows = []
     for file_id, result in processing_results.items():
-        rows.append({"file_id": file_id, **result})
+        # Ensure all schema fields are present (set None for missing PDF fields)
+        row = {
+            "file_id": file_id,
+            "chunks_captured_at": result.get("chunks_captured_at"),
+            "chunks_gcs_path": result.get("chunks_gcs_path"),
+            "chunks_not_found": result.get("chunks_not_found", False),
+            "pdf_reconstructed_at": result.get("pdf_reconstructed_at"),
+            "pdf_reconstruction_failed": result.get("pdf_reconstruction_failed"),
+        }
+        rows.append(row)
 
     df = pd.DataFrame(rows)
 
