@@ -4,6 +4,7 @@ Tasks for rj_cvl__osinfo_mongo pipeline
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -92,6 +93,25 @@ def get_batch_dump_mode(batch_idx: int, dump_mode: str) -> str:
     return dump_mode if batch_idx == 0 else "append"
 
 
+def _upload_file_to_gcs(bucket, temp_file: Path, blob_path: str, file_id: str) -> str:
+    """
+    Upload a single file to GCS and clean up local file
+
+    Args:
+        bucket: GCS bucket object
+        temp_file: Local temporary file path
+        blob_path: Destination path in GCS
+        file_id: File ID for logging
+
+    Returns:
+        file_id on success
+    """
+    blob = bucket.blob(blob_path)
+    blob.upload_from_filename(str(temp_file))
+    temp_file.unlink()  # Clean up immediately after upload
+    return file_id
+
+
 @task
 def dump_files_by_id_to_gcs(
     # Database connection parameters
@@ -110,14 +130,16 @@ def dump_files_by_id_to_gcs(
     # Processing parameters
     charset: str = NOT_SET,
     auth_source: str = NOT_SET,
-    batch_size: int = 10000,
+    batch_size: int = 500,  # Changed from 10000 to 500 for better memory management
     mongo_batch_size: int = 50000,
+    upload_max_workers: int = 10,  # Number of parallel upload threads
 ):
     """
     Dump MongoDB chunks to individual parquet files per file_id in GCS
 
     This task processes file_ids in batches to minimize MongoDB queries while
-    creating individual parquet files for each file_id in GCS.
+    creating individual parquet files for each file_id in GCS. Uses parallel
+    uploads for better performance.
 
     Args:
         database_type: Database type (should be "mongodb")
@@ -132,16 +154,18 @@ def dump_files_by_id_to_gcs(
         file_ids: List of file_ids to process
         bucket_name: GCS bucket name
         gcs_path: Base path in GCS (e.g., "staging/dataset/table")
-        batch_size: Number of file_ids to process per MongoDB query
+        batch_size: Number of file_ids to process per MongoDB query (default: 500)
         mongo_batch_size: Number of documents to fetch per MongoDB batch
+        upload_max_workers: Number of parallel upload threads (default: 10)
 
     Example:
         For file_ids ['id1', 'id2', 'id3'] with batch_size=2:
         - Batch 1: Query MongoDB for 'id1' and 'id2'
         - Batch 2: Query MongoDB for 'id3'
-        - Save: gs://bucket/path/files_id=id1/data.parquet
-                gs://bucket/path/files_id=id2/data.parquet
-                gs://bucket/path/files_id=id3/data.parquet
+        - Save locally, then upload in parallel (10 threads)
+        - Result: gs://bucket/path/files_id=id1/20251217_143025.parquet
+                  gs://bucket/path/files_id=id2/20251217_143025.parquet
+                  gs://bucket/path/files_id=id3/20251217_143025.parquet
     """
     print(f"Starting dump of {len(file_ids):,} file_ids to GCS")
     print(f"GCS destination: gs://{bucket_name}/{gcs_path}")
@@ -210,34 +234,48 @@ def dump_files_by_id_to_gcs(
             files_in_batch = grouped.ngroups
             print(f"  Grouped into {files_in_batch:,} unique file_ids")
 
-            # Save each file_id as individual parquet
-            for file_idx, (file_id, file_chunks_df) in enumerate(grouped, 1):
-                # Create GCS path following Hive partitioning
-                partition_path = f"{gcs_path}/files_id={file_id}"
-                # Use timestamp for filename to track when data was captured
-                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                blob_path = f"{partition_path}/{timestamp}.parquet"
+            # Prepare temp directory
+            temp_dir = Path(f"/tmp/osinfo_dump_{batch_idx}")
+            temp_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-                # Save to temporary local file first
-                temp_dir = Path(f"/tmp/osinfo_dump_{batch_idx}")
-                temp_dir.mkdir(parents=True, exist_ok=True)
+            # Step 1: Save all files locally first (fast)
+            print(f"  Saving {files_in_batch} files locally...")
+            local_files = []
+            for file_id, file_chunks_df in grouped:
                 temp_file = temp_dir / f"{file_id}.parquet"
-
-                # Write parquet locally
                 file_chunks_df.to_parquet(temp_file, engine='pyarrow', index=False)
 
-                # Upload to GCS
-                blob = bucket.blob(blob_path)
-                blob.upload_from_filename(str(temp_file))
+                partition_path = f"{gcs_path}/files_id={file_id}"
+                blob_path = f"{partition_path}/{timestamp}.parquet"
+                local_files.append((temp_file, blob_path, file_id))
 
-                # Clean up temp file
-                temp_file.unlink()
+            print(f"  Local save complete. Starting parallel upload with {upload_max_workers} workers...")
 
-                total_files_saved += 1
+            # Step 2: Upload to GCS in parallel (much faster)
+            uploaded_count = 0
 
-                # Log progress every 100 files
-                if file_idx % 100 == 0:
-                    print(f"    Saved {file_idx}/{files_in_batch} files from batch...")
+            with ThreadPoolExecutor(max_workers=upload_max_workers) as executor:
+                # Submit all upload tasks
+                futures = {
+                    executor.submit(_upload_file_to_gcs, bucket, temp_file, blob_path, file_id): file_id
+                    for temp_file, blob_path, file_id in local_files
+                }
+
+                # Process completed uploads
+                for future in as_completed(futures):
+                    try:
+                        file_id = future.result()
+                        uploaded_count += 1
+                        total_files_saved += 1
+
+                        # Log progress every 50 files
+                        if uploaded_count % 50 == 0:
+                            print(f"    Uploaded {uploaded_count}/{files_in_batch} files...")
+                    except Exception as e:
+                        file_id = futures[future]
+                        print(f"    Error uploading {file_id}: {e}")
+                        raise
 
             print(f"  Batch {batch_idx} complete: saved {files_in_batch} files")
 
