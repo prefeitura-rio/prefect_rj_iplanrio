@@ -45,6 +45,7 @@ from .tasks import (
     get_batch_dump_mode,
     get_files_ids_from_bigquery,
     reconstruct_pdfs_from_temp_files,
+    update_processing_metadata,
 )
 
 
@@ -79,6 +80,7 @@ def rj_cvl__osinfo_mongo(
     add_timestamp_column: bool = True,
     save_individual_files_by_id: bool = False,
     reconstruct_pdfs_from_chunks: bool = False,
+    metadata_table_id: Optional[str] = None,
     gcs_bucket_name: str = "rj-nf-agent",
 ):
     rename_current_flow_run_task(new_name=table_id)
@@ -101,7 +103,7 @@ def rj_cvl__osinfo_mongo(
         files_ids = get_files_ids_from_bigquery(bq_files_ids_query)
 
         # Dump each file_id to individual parquet in GCS
-        temp_files_map = dump_files_by_id_to_gcs(
+        processing_results = dump_files_by_id_to_gcs(
             database_type=db_type,
             hostname=db_host,
             port=int(db_port),
@@ -120,11 +122,19 @@ def rj_cvl__osinfo_mongo(
         )
 
         # Reconstruct PDFs if requested
-        if reconstruct_pdfs_from_chunks and temp_files_map:
-            reconstruct_pdfs_from_temp_files(
-                temp_files_map=temp_files_map,
+        if reconstruct_pdfs_from_chunks:
+            processing_results = reconstruct_pdfs_from_temp_files(
+                processing_results=processing_results,
                 dest_gcs_path=f"staging/{dataset_id}/files_pdfs",
                 bucket_name=gcs_bucket_name,
+            )
+
+        # Update metadata table if requested
+        if metadata_table_id:
+            update_processing_metadata(
+                dataset_id=dataset_id,
+                metadata_table_id=metadata_table_id,
+                processing_results=processing_results,
             )
 
         return

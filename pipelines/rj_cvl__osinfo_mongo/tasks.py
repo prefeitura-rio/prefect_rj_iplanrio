@@ -186,7 +186,7 @@ def dump_files_by_id_to_gcs(
     mongo_batch_size: int = 50000,
     upload_max_workers: int = 10,  # Number of parallel upload threads
     reconstruct_pdfs_from_chunks: bool = False,  # Keep temp files for PDF reconstruction
-) -> dict[str, Path]:
+) -> dict[str, dict]:
     """
     Dump MongoDB chunks to individual parquet files per file_id in GCS
 
@@ -213,8 +213,16 @@ def dump_files_by_id_to_gcs(
         reconstruct_pdfs_from_chunks: Keep temp files for PDF reconstruction (default: False)
 
     Returns:
-        Dict mapping file_id to temp file path (if reconstruct_pdfs_from_chunks=True)
-        Empty dict otherwise
+        Dict mapping file_id to processing info:
+        {
+            "file_id": {
+                "chunks_captured_at": datetime,
+                "chunks_gcs_path": "gs://...",
+                "chunks_not_found": False,
+                "temp_file_path": Path(...),  # Only if reconstruct_pdfs_from_chunks=True
+            },
+            ...
+        }
 
     Example:
         For file_ids ['id1', 'id2', 'id3'] with batch_size=2:
@@ -231,10 +239,8 @@ def dump_files_by_id_to_gcs(
     if reconstruct_pdfs_from_chunks:
         print("Keeping temp files for PDF reconstruction")
 
-    # Track temp files for PDF reconstruction
-    temp_files_map = {}
-    # Track which file_ids were successfully saved
-    saved_file_ids = set()
+    # Track processing results for all file_ids
+    processing_results = {}
 
     # Create MongoDB connection
     db = database_get_db(
@@ -307,13 +313,17 @@ def dump_files_by_id_to_gcs(
             # Step 1: Save all files locally first (fast)
             print(f"  Saving {files_in_batch} files locally...")
             local_files = []
+            capture_time = datetime.now()
+
             for file_id, file_chunks_df in grouped:
                 temp_file = temp_dir / f"{file_id}.parquet"
                 file_chunks_df.to_parquet(temp_file, engine='pyarrow', index=False)
 
                 partition_path = f"{gcs_path}/files_id={file_id}"
                 blob_path = f"{partition_path}/{timestamp}.parquet"
-                local_files.append((temp_file, blob_path, file_id))
+                gcs_full_path = f"gs://{bucket_name}/{blob_path}"
+
+                local_files.append((temp_file, blob_path, file_id, gcs_full_path))
 
             print(f"  Local save complete. Starting parallel upload with {upload_max_workers} workers...")
 
@@ -330,8 +340,8 @@ def dump_files_by_id_to_gcs(
                         blob_path,
                         file_id,
                         reconstruct_pdfs_from_chunks,  # Pass keep_temp parameter
-                    ): (file_id, temp_file)
-                    for temp_file, blob_path, file_id in local_files
+                    ): (file_id, temp_file, gcs_full_path)
+                    for temp_file, blob_path, file_id, gcs_full_path in local_files
                 }
 
                 # Process completed uploads
@@ -339,18 +349,26 @@ def dump_files_by_id_to_gcs(
                     try:
                         file_id = future.result()
                         uploaded_count += 1
-                        saved_file_ids.add(file_id)  # Track successfully saved file_ids
 
-                        # Store temp file path if keeping for PDF reconstruction
+                        # Get metadata from futures
+                        file_id_key, temp_file_path, gcs_path = futures[future]
+
+                        # Store processing results
+                        processing_results[file_id] = {
+                            "chunks_captured_at": capture_time,
+                            "chunks_gcs_path": gcs_path,
+                            "chunks_not_found": False,
+                        }
+
+                        # Add temp file path if keeping for PDF reconstruction
                         if reconstruct_pdfs_from_chunks:
-                            file_id_key, temp_file_path = futures[future]
-                            temp_files_map[file_id] = temp_file_path
+                            processing_results[file_id]["temp_file_path"] = temp_file_path
 
                         # Log progress every 50 files
                         if uploaded_count % 50 == 0:
                             print(f"    Uploaded {uploaded_count}/{files_in_batch} files...")
                     except Exception as e:
-                        file_id_key, _ = futures[future]
+                        file_id_key, _, _ = futures[future]
                         print(f"    Error uploading {file_id_key}: {e}")
                         raise
 
@@ -373,7 +391,17 @@ def dump_files_by_id_to_gcs(
 
     # Check for missing file_ids
     input_file_ids_set = set(file_ids)
+    saved_file_ids = set(processing_results.keys())
     missing_file_ids = input_file_ids_set - saved_file_ids
+
+    # Mark missing file_ids in processing_results
+    for missing_id in missing_file_ids:
+        processing_results[missing_id] = {
+            "chunks_captured_at": None,
+            "chunks_gcs_path": None,
+            "chunks_not_found": True,
+        }
+
     if missing_file_ids:
         print(f"\n⚠️  WARNING: {len(missing_file_ids)} file_ids were NOT saved:")
         for fid in list(missing_file_ids)[:10]:  # Show first 10
@@ -384,53 +412,60 @@ def dump_files_by_id_to_gcs(
         print(f"✅ All {len(file_ids):,} file_ids were successfully saved!")
 
     if reconstruct_pdfs_from_chunks:
-        print(f"\nKept {len(temp_files_map):,} temp files for PDF reconstruction")
-        return temp_files_map
-    else:
-        return {}
+        temp_files_count = sum(1 for r in processing_results.values() if "temp_file_path" in r)
+        print(f"\nKept {temp_files_count:,} temp files for PDF reconstruction")
+
+    return processing_results
 
 
 @task
 def reconstruct_pdfs_from_temp_files(
-    temp_files_map: dict[str, Path],
+    processing_results: dict[str, dict],
     dest_gcs_path: str,
     bucket_name: str,
     max_workers: int = 10,
-) -> int:
+) -> dict[str, dict]:
     """
     Reconstruct PDFs from temporary parquet files and upload to GCS
 
     Args:
-        temp_files_map: Dict mapping file_id to temp parquet file path
-        dataset_id: BigQuery dataset with files table (e.g., "brutos_osinfo_mongo")
-        table_id: Table name with file metadata (e.g., "files")
+        processing_results: Dict mapping file_id to processing info (must include temp_file_path)
         dest_gcs_path: Destination path in GCS for PDFs (e.g., "staging/dataset/files_pdfs")
         bucket_name: GCS bucket name
         max_workers: Number of parallel processing threads (default: 10)
 
     Returns:
-        Number of PDFs successfully reconstructed
+        Updated processing_results dict with pdf_reconstructed_at and pdf_reconstruction_failed fields
 
     Example:
-        temp_files = {
-            "abc123": Path("/tmp/osinfo_dump_1/abc123.parquet"),
-            "def456": Path("/tmp/osinfo_dump_1/def456.parquet"),
+        processing_results = {
+            "abc123": {
+                "chunks_captured_at": datetime.now(),
+                "chunks_gcs_path": "gs://...",
+                "chunks_not_found": False,
+                "temp_file_path": Path("/tmp/osinfo_dump_1/abc123.parquet"),
+            }
         }
         reconstruct_pdfs_from_temp_files(
-            temp_files_map=temp_files,
-            dataset_id="brutos_osinfo_mongo",
-            table_id="files",
+            processing_results=processing_results,
             dest_gcs_path="staging/brutos_osinfo_mongo/files_pdfs",
             bucket_name="datario-public",
         )
         # Result: gs://datario-public/staging/.../files_pdfs/document1.pdf
         #         gs://datario-public/staging/.../files_pdfs/document2.pdf
     """
+    # Filter only entries with temp_file_path
+    temp_files_map = {
+        file_id: result["temp_file_path"]
+        for file_id, result in processing_results.items()
+        if "temp_file_path" in result
+    }
+
     print(f"Reconstructing {len(temp_files_map):,} PDFs from temp files...")
 
     if not temp_files_map:
         print("No temp files to process")
-        return 0
+        return processing_results
 
     # Step 1: Fetch metadata from BigQuery (1 query for all file_ids)
     file_ids = list(temp_files_map.keys())
@@ -461,6 +496,7 @@ def reconstruct_pdfs_from_temp_files(
     bucket = gcs_client.bucket(bucket_name)
 
     pdfs_created = 0
+    failed_pdfs = []
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {}
@@ -468,6 +504,9 @@ def reconstruct_pdfs_from_temp_files(
         for file_id, temp_file_path in temp_files_map.items():
             if file_id not in metadata_dict:
                 print(f"  Warning: No metadata found for {file_id}, skipping...")
+                # Mark as failed in processing_results
+                processing_results[file_id]["pdf_reconstructed_at"] = None
+                processing_results[file_id]["pdf_reconstruction_failed"] = True
                 continue
 
             meta = metadata_dict[file_id]
@@ -485,18 +524,101 @@ def reconstruct_pdfs_from_temp_files(
 
         # Process completed reconstructions
         for future in as_completed(futures):
+            file_id = futures[future]
             try:
                 filename = future.result()
                 pdfs_created += 1
 
+                # Update processing_results with success
+                processing_results[file_id]["pdf_reconstructed_at"] = datetime.now()
+                processing_results[file_id]["pdf_reconstruction_failed"] = False
+
                 if pdfs_created % 50 == 0:
                     print(f"  Reconstructed {pdfs_created}/{len(temp_files_map)} PDFs...")
             except Exception as e:
-                file_id = futures[future]
                 print(f"  Error reconstructing {file_id}: {e}")
-                raise
+                # Update processing_results with failure
+                processing_results[file_id]["pdf_reconstructed_at"] = None
+                processing_results[file_id]["pdf_reconstruction_failed"] = True
+                failed_pdfs.append((file_id, str(e)))
 
     print(f"Successfully reconstructed {pdfs_created:,} PDFs")
+    if failed_pdfs:
+        print(f"⚠️  Failed to reconstruct {len(failed_pdfs)} PDFs:")
+        for file_id, error in failed_pdfs[:5]:  # Show first 5
+            print(f"  - {file_id}: {error}")
+        if len(failed_pdfs) > 5:
+            print(f"  ... and {len(failed_pdfs) - 5} more")
     print(f"Location: gs://{bucket_name}/{dest_gcs_path}/*.pdf")
 
-    return pdfs_created
+    return processing_results
+
+
+@task
+def update_processing_metadata(
+    dataset_id: str,
+    metadata_table_id: str,
+    processing_results: dict[str, dict],
+) -> int:
+    """
+    Update BigQuery metadata table with processing status
+
+    Args:
+        dataset_id: BigQuery dataset
+        metadata_table_id: Metadata table name
+        processing_results: Dict mapping file_id to processing info:
+            {
+                "file_id_1": {
+                    "chunks_captured_at": datetime or None,
+                    "chunks_gcs_path": "gs://..." or None,
+                    "chunks_not_found": bool,
+                    "pdf_reconstructed_at": datetime or None,
+                    "pdf_reconstruction_failed": bool or None,
+                },
+                ...
+            }
+
+    Returns:
+        Number of rows written to BigQuery
+    """
+    print(f"Updating metadata for {len(processing_results):,} file_ids...")
+
+    # Prepare rows from processing_results
+    rows = []
+    for file_id, result in processing_results.items():
+        rows.append({"file_id": file_id, **result})
+
+    df = pd.DataFrame(rows)
+
+    # Write to BigQuery
+    client = bigquery.Client()
+    table_ref = f"{dataset_id}.{metadata_table_id}"
+
+    schema = [
+        bigquery.SchemaField("file_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("chunks_captured_at", "TIMESTAMP", mode="NULLABLE"),
+        bigquery.SchemaField("chunks_gcs_path", "STRING", mode="NULLABLE"),
+        bigquery.SchemaField("chunks_not_found", "BOOLEAN", mode="NULLABLE"),
+        bigquery.SchemaField("pdf_reconstructed_at", "TIMESTAMP", mode="NULLABLE"),
+        bigquery.SchemaField("pdf_reconstruction_failed", "BOOLEAN", mode="NULLABLE"),
+    ]
+
+    job_config = bigquery.LoadJobConfig(
+        schema=schema,
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+    )
+
+    job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
+    job.result()
+
+    # Summary stats
+    chunks_found = sum(1 for r in rows if not r["chunks_not_found"])
+    pdfs_ok = sum(1 for r in rows if r["pdf_reconstructed_at"] is not None)
+
+    print(f"✅ Written {len(rows):,} rows to {table_ref}")
+    print(f"  - Chunks found: {chunks_found:,}")
+    print(f"  - Chunks not found: {len(rows) - chunks_found:,}")
+    if pdfs_ok > 0:
+        print(f"  - PDFs reconstructed: {pdfs_ok:,}")
+
+    return len(rows)
