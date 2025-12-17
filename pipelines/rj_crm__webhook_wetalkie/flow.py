@@ -25,8 +25,7 @@ def rj_crm__webhook_wetalkie(
     if len(data) > 0:
         for i in range(0, len(data_json)):
             fmt_msg = """⚠️ Atenção:
-O template {content_message_template_name} teve a sua categoria atualizada de {content_previous_category} para
-{content_new_category}""".format(
+                         O template **`{content_message_template_name}`** teve a sua categoria atualizada de **`{content_previous_category}`** para **`{content_new_category}`**""".format(
                 content_message_template_name=data_json[i][
                     "content_message_template_name"
                 ],

@@ -44,11 +44,11 @@ deployments:
             content_previous_category,
             content_message_template_name
           FROM
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12`
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_*`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
-            AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 99999 MINUTE)
+            AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
             order by datarelay_timestamp desc
       test_mode: true
   - name: rj_crm__webhook_wetalkie--prod
@@ -71,15 +71,15 @@ deployments:
             content_previous_category,
             content_message_template_name
           FROM
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_12`
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_*`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
-            AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 99999 MINUTE)
+            AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
             order by datarelay_timestamp desc
       test_mode: false
-    #schedules:
-    #  - interval: 21600  # 6 horas (6 * 60 * 60 segundos)
-    #    anchor_date: "2021-01-01T00:15:00"
-    #    timezone: America/Sao_Paulo
-    #    slug: webhook_wetalkie_10min
+    schedules:
+      - interval: 300  # 5 minutes
+        anchor_date: "2021-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: webhook_wetalkie_5min
