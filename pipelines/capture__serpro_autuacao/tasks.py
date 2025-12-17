@@ -78,24 +78,40 @@ def extract_serpro_data(
     """
     print(f"Iniciando extração de dados do SERPRO para {timestamp.date()}")
 
+    page_size = SERPRO_CAPTURE_PARAMS["page_size"]
     query = SERPRO_CAPTURE_PARAMS["query"].format(data=timestamp.strftime("%Y-%m-%d"))
     print(f"Executando query:\n{query}")
+
+    filepaths = []
 
     with _get_serpro_connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(query)
-
             columns = [desc[0] for desc in cursor.description]
-            rows = cursor.fetchall()
 
-            data = [dict(zip(columns, row)) for row in rows]
-            print(f"Extraídos {len(data)} registros")
+            page = 0
+            while True:
+                rows = cursor.fetchmany(page_size)
+                if not rows:
+                    break
 
-    filepath = raw_filepath.format(page=0)
-    df = pd.DataFrame(rows, columns=columns, **SERPRO_CAPTURE_PARAMS["pre_treatment_reader_args"])
-    save_local_file(filepath=filepath, filetype="csv", data=df)
+                filepath = raw_filepath.format(page=page)
+                df = pd.DataFrame(
+                    rows, columns=columns, **SERPRO_CAPTURE_PARAMS["pre_treatment_reader_args"]
+                )
+                save_local_file(filepath=filepath, filetype="csv", data=df)
+                filepaths.append(filepath)
 
-    return [filepath]
+                print(
+                    f"""
+                    Page size: {page_size}
+                    Current page: {page}
+                    Current page returned {len(rows)} rows"""
+                )
+                page += 1
+
+    print(f"Extração concluída. Total de arquivos: {len(filepaths)}")
+    return filepaths
 
 
 @task
