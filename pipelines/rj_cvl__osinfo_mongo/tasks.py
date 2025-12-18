@@ -216,7 +216,8 @@ def _upload_file_to_gcs(
     return file_id
 
 
-def _process_batch_threaded(
+@task
+def process_batch_task(
     batch_idx: int,
     batch_file_ids: list[str],
     # MongoDB connection parameters (each thread creates its own connection)
@@ -237,12 +238,13 @@ def _process_batch_threaded(
     reconstruct_pdfs_from_chunks: bool,
 ) -> dict[str, dict]:
     """
-    Process a single batch in a thread (stateless, thread-safe function)
+    Process a single batch as a Prefect task (runs concurrently with other batches)
 
-    This function is designed to run in parallel threads safely:
-    - Each thread creates its own MongoDB connection
+    This task is designed to run in parallel with other batch tasks:
+    - Each task creates its own MongoDB connection
     - Processes batch independently with no shared state
     - Closes connection when done
+    - Prefect manages concurrent execution via ConcurrentTaskRunner
 
     Args:
         batch_idx: Batch index for logging
@@ -439,14 +441,14 @@ def dump_files_by_id_to_gcs_parallel(
     batch_workers: int = 5,
 ) -> dict[str, dict]:
     """
-    Dump MongoDB chunks using thread pool for parallel batch processing
+    Dump MongoDB chunks using Prefect task runner for parallel batch processing
 
-    This task uses thread-local connections for efficient parallel processing:
-    - Single Prefect flow/task (one process)
-    - Thread pool (batch_workers threads processing batches in parallel)
-    - Each thread creates its own MongoDB connection (thread-local)
-    - Each thread closes connection when done
-    - PyMongo handles internal connection pooling
+    This task uses Prefect's ConcurrentTaskRunner for efficient parallel processing:
+    - Single Prefect flow (one process)
+    - Prefect manages concurrent task execution (batch_workers concurrent tasks)
+    - Each task creates its own MongoDB connection (thread-safe)
+    - Each task closes connection when done
+    - Proper Prefect context propagation to all concurrent tasks
 
     Args:
         database_type: Database type (should be "mongodb")
@@ -467,20 +469,20 @@ def dump_files_by_id_to_gcs_parallel(
         upload_retry_attempts: Retry attempts for GCS uploads (default: 3)
         reconstruct_pdfs_from_chunks: Reconstruct PDFs from chunks after upload (default: False)
         mongo_pool_size: Not used (kept for backward compatibility)
-        batch_workers: Number of parallel batch processing threads (default: 5)
+        batch_workers: Number of concurrent batch processing tasks (default: 5)
 
     Returns:
         Dict mapping file_id to processing info (includes pdf_reconstructed_at and pdf_reconstruction_failed if reconstruct_pdfs_from_chunks=True)
     """
     print(f"\n{'='*60}")
-    print(f"PARALLEL PROCESSING MODE (Thread-Local Connections)")
+    print(f"PARALLEL PROCESSING MODE (Prefect ConcurrentTaskRunner)")
     print(f"{'='*60}")
     print(f"Total files to process: {len(file_ids):,}")
     print(f"Batch size: {batch_size:,} files per batch")
-    print(f"Batch worker threads: {batch_workers} parallel workers")
+    print(f"Concurrent batch tasks: {batch_workers} parallel workers")
     print(f"Upload workers per batch: {upload_max_workers}")
     print(f"Reconstruct PDFs: {reconstruct_pdfs_from_chunks}")
-    print(f"Note: Each thread creates its own MongoDB connection")
+    print(f"Note: Each task creates its own MongoDB connection")
     print(f"{'='*60}\n")
 
     # Split file_ids into batches
@@ -488,56 +490,53 @@ def dump_files_by_id_to_gcs_parallel(
     total_batches = len(batches)
     print(f"\n📦 Split {len(file_ids):,} files into {total_batches} batches\n")
 
-    # Process batches in parallel using thread pool
+    # Process batches in parallel using Prefect task.submit()
     all_processing_results = {}
     completed_batches = 0
 
-    print(f"🚀 Starting parallel processing with {batch_workers} workers...\n")
+    print(f"🚀 Starting parallel processing with {batch_workers} concurrent tasks...\n")
 
-    with ThreadPoolExecutor(max_workers=batch_workers, thread_name_prefix="BatchWorker") as executor:
-        # Submit all batches to thread pool
-        print(f"📤 Submitting {total_batches} batches to thread pool...")
-        futures = {}
-        for batch_idx, batch_file_ids in enumerate(batches, 1):
-            print(f"  Submitting batch {batch_idx}/{total_batches} ({len(batch_file_ids)} files)...")
-            future = executor.submit(
-                _process_batch_threaded,
-                batch_idx,
-                batch_file_ids,
-                # Pass connection parameters (each thread creates its own connection)
-                hostname,
-                port,
-                user,
-                password,
-                database,
-                charset,
-                auth_source,
-                # Processing parameters
-                collection_query,
-                bucket_name,
-                gcs_path,
-                mongo_batch_size,
-                upload_max_workers,
-                upload_retry_attempts,
-                reconstruct_pdfs_from_chunks,
-            )
-            futures[future] = batch_idx
-        print(f"✅ All {total_batches} batches submitted!\n")
+    # Submit all batches as Prefect tasks
+    print(f"📤 Submitting {total_batches} batches as Prefect tasks...")
+    futures = []
+    for batch_idx, batch_file_ids in enumerate(batches, 1):
+        print(f"  Submitting batch {batch_idx}/{total_batches} ({len(batch_file_ids)} files)...")
+        future = process_batch_task.submit(
+            batch_idx,
+            batch_file_ids,
+            # Pass connection parameters (each task creates its own connection)
+            hostname,
+            port,
+            user,
+            password,
+            database,
+            charset,
+            auth_source,
+            # Processing parameters
+            collection_query,
+            bucket_name,
+            gcs_path,
+            mongo_batch_size,
+            upload_max_workers,
+            upload_retry_attempts,
+            reconstruct_pdfs_from_chunks,
+        )
+        futures.append((future, batch_idx))
+    print(f"✅ All {total_batches} batches submitted!\n")
 
-        # Collect results as they complete
-        for future in as_completed(futures):
-            batch_idx = futures[future]
-            try:
-                batch_results = future.result()
-                all_processing_results.update(batch_results)
-                completed_batches += 1
+    # Collect results from all tasks
+    for future, batch_idx in futures:
+        try:
+            batch_results = future.result()
+            all_processing_results.update(batch_results)
+            completed_batches += 1
 
-                progress_pct = (completed_batches / total_batches) * 100
-                print(f"\n📊 Progress: {completed_batches}/{total_batches} batches ({progress_pct:.1f}%) - Total files: {len(all_processing_results):,}\n")
+            progress_pct = (completed_batches / total_batches) * 100
+            print(f"\n📊 Progress: {completed_batches}/{total_batches} batches ({progress_pct:.1f}%) - Total files: {len(all_processing_results):,}\n")
 
-            except Exception as e:
-                print(f"\n❌ Batch {batch_idx} FAILED: {e}\n")
-                raise
+        except Exception as e:
+            print(f"\n❌ Batch {batch_idx} FAILED: {e}\n")
+            raise
 
     # Summary
     print(f"\n{'='*60}")

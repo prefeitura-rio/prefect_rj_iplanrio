@@ -37,6 +37,7 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from prefect.task_runners import ConcurrentTaskRunner
 
 from .tasks import (
     build_batch_query,
@@ -49,7 +50,7 @@ from .tasks import (
 )
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, task_runner=ConcurrentTaskRunner())
 def rj_cvl__osinfo_mongo(
     db_database: str = "OSINFO_FILES",
     db_host: str = "187.111.98.189",
