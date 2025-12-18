@@ -66,6 +66,7 @@ def rj_iplanrio__betterstack_api(
             table_id=BetterStackConstants.TABLE_ID_RESPONSE_TIMES.value,
             dump_mode=BetterStackConstants.DUMP_MODE.value,
             biglake_table=BetterStackConstants.BIGLAKE_TABLE.value,
+            source_format=BetterStackConstants.FILE_FORMAT.value,
         )
 
     # --- TABLE 2: Incidents ---
@@ -87,6 +88,7 @@ def rj_iplanrio__betterstack_api(
             table_id=BetterStackConstants.TABLE_ID_INCIDENTS.value,
             dump_mode=BetterStackConstants.DUMP_MODE.value,
             biglake_table=BetterStackConstants.BIGLAKE_TABLE.value,
+            source_format=BetterStackConstants.FILE_FORMAT.value,
         )
 
     # Optional: DBT Trigger
