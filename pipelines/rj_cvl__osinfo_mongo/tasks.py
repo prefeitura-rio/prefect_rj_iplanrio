@@ -302,9 +302,13 @@ def _process_batch_threaded(
     thread_id = threading.current_thread().ident
 
     # Get connection from pool (blocks until one is available)
-    print(f"[{thread_name}] Batch {batch_idx}: Waiting for MongoDB connection...")
-    db = connection_pool.get()
-    print(f"[{thread_name}] Batch {batch_idx}: Got connection, processing {len(batch_file_ids):,} files")
+    print(f"[{thread_name}] Batch {batch_idx}: ⏳ Waiting for MongoDB connection...")
+    try:
+        db = connection_pool.get(timeout=30)  # Add 30s timeout
+        print(f"[{thread_name}] Batch {batch_idx}: ✅ Got connection, processing {len(batch_file_ids):,} files")
+    except Exception as e:
+        print(f"[{thread_name}] Batch {batch_idx}: ❌ Failed to get connection: {e}")
+        raise
 
     try:
         # Build MongoDB query
@@ -530,8 +534,11 @@ def dump_files_by_id_to_gcs_parallel(
 
     with ThreadPoolExecutor(max_workers=batch_workers, thread_name_prefix="BatchWorker") as executor:
         # Submit all batches to thread pool
-        futures = {
-            executor.submit(
+        print(f"📤 Submitting {total_batches} batches to thread pool...")
+        futures = {}
+        for batch_idx, batch_file_ids in enumerate(batches, 1):
+            print(f"  Submitting batch {batch_idx}/{total_batches} ({len(batch_file_ids)} files)...")
+            future = executor.submit(
                 _process_batch_threaded,
                 batch_idx,
                 batch_file_ids,
@@ -543,9 +550,9 @@ def dump_files_by_id_to_gcs_parallel(
                 upload_max_workers,
                 upload_retry_attempts,
                 reconstruct_pdfs_from_chunks,
-            ): batch_idx
-            for batch_idx, batch_file_ids in enumerate(batches, 1)
-        }
+            )
+            futures[future] = batch_idx
+        print(f"✅ All {total_batches} batches submitted!\n")
 
         # Collect results as they complete
         for future in as_completed(futures):
