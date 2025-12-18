@@ -63,10 +63,11 @@ def chunk_list(items: list, chunk_size: int) -> list[list]:
     return [items[i:i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 
-@task
 def build_batch_query(execute_query: str, batch_ids: list[str]) -> str:
     """
     Build MongoDB query with $in filter for batch processing
+
+    Helper function (not a task) used internally by process_batch_task
 
     Args:
         execute_query: Base collection query (e.g., "FILES.chunks")
