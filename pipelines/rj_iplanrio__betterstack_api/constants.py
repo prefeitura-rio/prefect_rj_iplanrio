@@ -9,7 +9,7 @@ class BetterStackConstants(Enum):
 
     BASE_URL_V2 = "https://uptime.betterstack.com/api/v2"
     BASE_URL_V3 = "https://uptime.betterstack.com/api/v3"
-    
+
     MONITOR_ID = "3839268"
 
     # Dataset e Tabelas
@@ -20,7 +20,7 @@ class BetterStackConstants(Enum):
     # Configurações de execução
     DUMP_MODE = "append"
     MATERIALIZE_AFTER_DUMP = True
-    
+
     # Partitioning
     PARTITION_COLUMN = "data_particao"
     FILE_FORMAT = "parquet"
