@@ -20,7 +20,7 @@ class BetterStackConstants(Enum):
     # Configurações de execução
     DUMP_MODE = "append"
     MATERIALIZE_AFTER_DUMP = True
-    
+
     # Partitioning
     PARTITION_COLUMN = "data_particao"
     FILE_FORMAT = "parquet"

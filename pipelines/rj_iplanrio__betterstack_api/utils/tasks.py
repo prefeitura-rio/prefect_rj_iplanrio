@@ -42,11 +42,11 @@ def create_date_partitions(
             df = df.dropna(subset=["data_particao"])
 
     dates = df["data_particao"].unique()
-    
+
     # Save partitions
     for date in dates:
         partition_df = df[df["data_particao"] == date].drop(columns=["data_particao"])
-        
+
         partition_folder = os.path.join(
             root_folder,
             f"ano_particao={date[:4]}/mes_particao={date[5:7]}/data_particao={date}",
