@@ -11131,3 +11131,695 @@ Update your versions in packages.yml, then run dbt deps
 [0m11:01:30.378068 [debug] [MainThread]: Command `cli deps` succeeded at 11:01:30.377866 after 2.73 seconds
 [0m11:01:30.378629 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f0c9deda0e0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f0c9b488550>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f0c9b583880>]}
 [0m11:01:30.379223 [debug] [MainThread]: Flushing usage events
+[0m10:42:45.137069 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd69a05be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd6ae1c190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd6b121810>]}
+
+
+============================== 10:42:45.140532 | 2b9dcf7b-c47f-48e3-9450-b7a89f368238 ==============================
+[0m10:42:45.140532 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:42:45.141071 [debug] [MainThread]: running dbt with arguments {'log_cache_events': 'False', 'log_format': 'default', 'use_colors': 'True', 'profiles_dir': './queries', 'static_parser': 'True', 'empty': 'False', 'printer_width': '80', 'partial_parse': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'warn_error': 'None', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries', 'cache_selected_only': 'False', 'no_print': 'None', 'fail_fast': 'False', 'indirect_selection': 'eager', 'write_json': 'True', 'introspect': 'True', 'version_check': 'True', 'debug': 'False', 'use_experimental_parser': 'False', 'log_path': 'queries/logs', 'send_anonymous_usage_stats': 'True', 'quiet': 'False'}
+[0m10:42:54.840110 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:42:54.840657 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': '2b9dcf7b-c47f-48e3-9450-b7a89f368238', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd3302f100>]}
+[0m10:42:55.130195 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': '2b9dcf7b-c47f-48e3-9450-b7a89f368238', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd69b93350>]}
+[0m10:42:55.212437 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': '2b9dcf7b-c47f-48e3-9450-b7a89f368238', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd68de3550>]}
+[0m10:42:55.213031 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:42:55.430609 [debug] [MainThread]: checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9, vars: {}, profile: , target: , version: 1.10.11
+[0m10:42:55.779947 [info ] [MainThread]: Unable to do partial parsing because of a version mismatch
+[0m10:42:55.780366 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': '2b9dcf7b-c47f-48e3-9450-b7a89f368238', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd31f1f4d0>]}
+[0m10:42:57.848755 [error] [MainThread]: Encountered an error:
+Compilation Error
+  Snapshot 'snapshot.rj_smtr.snapshot_tuneis_logradouro' (snapshots/dados_mestres/snapshot_tuneis_logradouro.sql) depends on a source named 'dados_mestres.logradouro' which was not found
+[0m10:42:57.849587 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:42:57.850529 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": false, "command_wall_clock_time": 12.789958, "process_in_blocks": "411240", "process_kernel_time": 0.787499, "process_mem_max_rss": "429276", "process_out_blocks": "172144", "process_user_time": 13.801125}
+[0m10:42:57.851117 [debug] [MainThread]: Command `dbt compile` failed at 10:42:57.850963 after 12.79 seconds
+[0m10:42:57.851544 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd68b5bd90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd3173a5f0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcd31496d00>]}
+[0m10:42:57.851982 [debug] [MainThread]: Flushing usage events
+[0m10:42:58.598767 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:43:48.433164 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec77185be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec78584190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec7888d810>]}
+
+
+============================== 10:43:48.436203 | 1cac9830-74d5-4ae3-bec9-9a786eaf3991 ==============================
+[0m10:43:48.436203 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:43:48.436676 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'quiet': 'False', 'empty': 'False', 'cache_selected_only': 'False', 'introspect': 'True', 'send_anonymous_usage_stats': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'indirect_selection': 'eager', 'printer_width': '80', 'debug': 'False', 'log_path': 'queries/logs', 'warn_error': 'None', 'fail_fast': 'False', 'partial_parse': 'True', 'use_experimental_parser': 'False', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries', 'no_print': 'None', 'use_colors': 'True', 'log_cache_events': 'False', 'target_path': 'None', 'static_parser': 'True', 'profiles_dir': './queries', 'write_json': 'True', 'log_format': 'default'}
+[0m10:43:50.333470 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:43:50.333966 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': '1cac9830-74d5-4ae3-bec9-9a786eaf3991', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec41030d60>]}
+[0m10:43:50.602210 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': '1cac9830-74d5-4ae3-bec9-9a786eaf3991', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec7730f350>]}
+[0m10:43:50.681408 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': '1cac9830-74d5-4ae3-bec9-9a786eaf3991', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec7639ba50>]}
+[0m10:43:50.681961 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:43:50.887979 [debug] [MainThread]: checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9, vars: {}, profile: , target: , version: 1.10.11
+[0m10:43:51.211991 [info ] [MainThread]: Unable to do partial parsing because of a version mismatch
+[0m10:43:51.212412 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': '1cac9830-74d5-4ae3-bec9-9a786eaf3991', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec3fe26990>]}
+[0m10:43:52.886865 [error] [MainThread]: Encountered an error:
+Compilation Error
+  Model 'model.rj_smtr.brt_aux_registros_flag_trajeto_correto' (models/br_rj_riodejaneiro_brt_gps/brt_aux_registros_flag_trajeto_correto.sql) depends on a node named 'shapes_geom' which was not found
+[0m10:43:52.887461 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:43:52.888128 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": false, "command_wall_clock_time": 4.52585, "process_in_blocks": "63424", "process_kernel_time": 0.443115, "process_mem_max_rss": "405692", "process_out_blocks": "16", "process_user_time": 6.55492}
+[0m10:43:52.888522 [debug] [MainThread]: Command `dbt compile` failed at 10:43:52.888438 after 4.53 seconds
+[0m10:43:52.888872 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec76317d90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec3f1d8910>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fec3f864c80>]}
+[0m10:43:52.889287 [debug] [MainThread]: Flushing usage events
+[0m10:43:53.615840 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:44:44.422479 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79f6819be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79f7c28190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79f7f35810>]}
+
+
+============================== 10:44:44.425175 | eb040d69-3adb-40db-93e4-6ecbd42d234e ==============================
+[0m10:44:44.425175 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:44:44.425652 [debug] [MainThread]: running dbt with arguments {'log_cache_events': 'False', 'static_parser': 'True', 'fail_fast': 'False', 'indirect_selection': 'eager', 'use_colors': 'True', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries', 'write_json': 'True', 'version_check': 'True', 'quiet': 'False', 'introspect': 'True', 'target_path': 'None', 'partial_parse': 'True', 'debug': 'False', 'profiles_dir': './queries', 'log_path': 'queries/logs', 'warn_error': 'None', 'printer_width': '80', 'use_experimental_parser': 'False', 'log_format': 'default', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'no_print': 'None', 'cache_selected_only': 'False', 'send_anonymous_usage_stats': 'True', 'empty': 'False'}
+[0m10:44:46.192449 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:44:46.192990 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': 'eb040d69-3adb-40db-93e4-6ecbd42d234e', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79c06ccd60>]}
+[0m10:44:46.478077 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': 'eb040d69-3adb-40db-93e4-6ecbd42d234e', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79f69a3350>]}
+[0m10:44:46.555755 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': 'eb040d69-3adb-40db-93e4-6ecbd42d234e', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79f5a2fa50>]}
+[0m10:44:46.556319 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:44:46.763306 [debug] [MainThread]: checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9, vars: {}, profile: , target: , version: 1.10.11
+[0m10:44:47.100021 [info ] [MainThread]: Unable to do partial parsing because of a version mismatch
+[0m10:44:47.100559 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': 'eb040d69-3adb-40db-93e4-6ecbd42d234e', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79bf4c2990>]}
+[0m10:44:48.737351 [error] [MainThread]: Encountered an error:
+Compilation Error
+  Documentation for 'model.rj_smtr.brt_registros_desaninhada' depends on doc 'data_captura'  which was not found
+[0m10:44:48.737974 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:44:48.738699 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": false, "command_wall_clock_time": 4.3893347, "process_in_blocks": "16", "process_kernel_time": 0.39872, "process_mem_max_rss": "405600", "process_out_blocks": "32", "process_user_time": 6.475219}
+[0m10:44:48.739138 [debug] [MainThread]: Command `dbt compile` failed at 10:44:48.739047 after 4.39 seconds
+[0m10:44:48.739562 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79f59abd90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79bea090f0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f79beef6000>]}
+[0m10:44:48.739964 [debug] [MainThread]: Flushing usage events
+[0m10:44:49.598274 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:46:07.895862 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbfe1fdbe0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbff614190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbff919810>]}
+
+
+============================== 10:46:07.898585 | be445b8a-953c-4615-9925-f5ece6008efb ==============================
+[0m10:46:07.898585 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:46:07.899135 [debug] [MainThread]: running dbt with arguments {'warn_error': 'None', 'printer_width': '80', 'log_path': 'queries/logs', 'use_colors': 'True', 'quiet': 'False', 'use_experimental_parser': 'False', 'fail_fast': 'False', 'no_print': 'None', 'introspect': 'True', 'profiles_dir': './queries', 'debug': 'False', 'log_cache_events': 'False', 'target_path': 'None', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries', 'partial_parse': 'True', 'version_check': 'True', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'write_json': 'True', 'static_parser': 'True', 'cache_selected_only': 'False', 'send_anonymous_usage_stats': 'True', 'empty': 'False', 'indirect_selection': 'eager', 'log_format': 'default'}
+[0m10:46:09.747957 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:46:09.748443 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': 'be445b8a-953c-4615-9925-f5ece6008efb', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbc8128d60>]}
+[0m10:46:10.015145 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': 'be445b8a-953c-4615-9925-f5ece6008efb', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbfe38b350>]}
+[0m10:46:10.094569 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': 'be445b8a-953c-4615-9925-f5ece6008efb', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbfd5dba50>]}
+[0m10:46:10.095157 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:46:10.312739 [debug] [MainThread]: checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9, vars: {}, profile: , target: , version: 1.10.11
+[0m10:46:10.655935 [info ] [MainThread]: Unable to do partial parsing because of a version mismatch
+[0m10:46:10.656380 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': 'be445b8a-953c-4615-9925-f5ece6008efb', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbc6eea990>]}
+[0m10:46:12.321187 [warn ] [MainThread]: [[33mWARNING[0m]: Configuration paths exist in your dbt_project.yml file which do not apply to any resources.
+There are 67 unused configuration paths:
+- models.rj_smtr.veiculo
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1
+- models.rj_smtr.monitoramento_interno
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps
+- models.rj_smtr.dashboard_bilhetagem_jae
+- models.rj_smtr.dashboard_subsidio_sppo_v2
+- models.rj_smtr.projeto_subsidio_sppo.deprecated
+- models.rj_smtr.bilhetagem
+- models.rj_smtr.br_rj_riodejaneiro_recursos_staging
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix
+- models.rj_smtr.br_rj_riodejaneiro_rdo
+- models.rj_smtr.gtfs
+- models.rj_smtr.bilhetagem_interno
+- models.rj_smtr.financeiro_interno
+- models.rj_smtr.projeto_subsidio_sppo
+- models.rj_smtr.infraestrutura.staging
+- models.rj_smtr.cadastro.staging
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix.staging
+- models.rj_smtr.catalogo
+- models.rj_smtr.dashboard_controle_vinculo_jae_riocard
+- models.rj_smtr.datario
+- models.rj_smtr.financeiro_interno.staging
+- models.rj_smtr.infraestrutura
+- models.rj_smtr.controle_financeiro.staging
+- models.rj_smtr.transito.staging
+- models.rj_smtr.dashboard_operacao_onibus.staging
+- models.rj_smtr.cadastro
+- models.rj_smtr.validacao_dados_jae.staging
+- models.rj_smtr.indicadores_continuados_egp.staging
+- models.rj_smtr.monitoramento
+- models.rj_smtr.br_rj_riodejaneiro_rdo_staging
+- models.rj_smtr.financeiro.staging
+- models.rj_smtr.monitoramento.staging
+- models.rj_smtr.dashboard_subsidio_sppo_staging
+- models.rj_smtr.dashboard_bilhetagem_implantacao_jae
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2.staging
+- models.rj_smtr.dashboard_subsidio_sppo
+- models.rj_smtr.dashboard_operacao_onibus
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2
+- models.rj_smtr.br_rj_riodejaneiro_stu
+- models.rj_smtr.br_rj_riodejaneiro_recursos
+- models.rj_smtr.planejamento
+- models.rj_smtr.br_rj_riodejaneiro_sigmob
+- models.rj_smtr.veiculo.staging
+- models.rj_smtr.bilhetagem.staging
+- models.rj_smtr.monitoramento_interno.staging
+- models.rj_smtr.financeiro
+- models.rj_smtr.indicadores_continuados_egp
+- models.rj_smtr.subsidio
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1.staging
+- models.rj_smtr.cadastro_interno.staging
+- models.rj_smtr.br_rj_riodejaneiro_veiculos
+- models.rj_smtr.bilhetagem_interno.staging
+- models.rj_smtr.subsidio.staging
+- models.rj_smtr.cadastro_interno
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps_zirix
+- models.rj_smtr.validacao_dados_jae
+- models.rj_smtr.planejamento.staging
+- models.rj_smtr.projeto_app_cct
+- models.rj_smtr.controle_financeiro
+- models.rj_smtr.br_rj_riodejaneiro_bilhetagem
+- models.rj_smtr.transito
+- snapshots
+- data_tests.rj_smtr.dashboard_subsidio_sppo
+- data_tests.rj_smtr
+- data_tests.rj_smtr.bilhetagem
+- data_tests.rj_smtr.dashboard_subsidio_sppo_v2
+[0m10:46:12.326774 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'load_project', 'label': 'be445b8a-953c-4615-9925-f5ece6008efb', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbc67284b0>]}
+[0m10:46:12.389974 [debug] [MainThread]: Wrote artifact WritableManifest to queries/target/manifest.json
+[0m10:46:12.391563 [debug] [MainThread]: Wrote artifact SemanticManifest to queries/target/semantic_manifest.json
+[0m10:46:12.440907 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'resource_counts', 'label': 'be445b8a-953c-4615-9925-f5ece6008efb', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbc6b0c6d0>]}
+[0m10:46:12.441366 [info ] [MainThread]: Found 3 models, 1026 macros
+[0m10:46:12.441722 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'runnable_timing', 'label': 'be445b8a-953c-4615-9925-f5ece6008efb', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbc6540d10>]}
+[0m10:46:12.443780 [info ] [MainThread]: 
+[0m10:46:12.444186 [info ] [MainThread]: Concurrency: 1 threads (target='prod')
+[0m10:46:12.444549 [info ] [MainThread]: 
+[0m10:46:12.445119 [debug] [MainThread]: Acquiring new bigquery connection 'master'
+[0m10:46:12.448767 [debug] [ThreadPool]: Acquiring new bigquery connection 'list_rj-smtr_br_rj_riodejaneiro_brt_gps'
+[0m10:46:12.449199 [debug] [ThreadPool]: Opening a new connection, currently in state init
+[0m10:46:12.449579 [debug] [ThreadPool]: BigQuery adapter: Got an error when attempting to create a bigquery " "client: '[Errno 2] No such file or directory: '/tmp/credentials.json''
+[0m10:46:12.450153 [debug] [MainThread]: Opening a new connection, currently in state init
+[0m10:46:12.450514 [debug] [MainThread]: BigQuery adapter: Got an error when attempting to create a bigquery " "client: '[Errno 2] No such file or directory: '/tmp/credentials.json''
+[0m10:46:12.451001 [error] [MainThread]: Encountered an error:
+Database Error
+  [Errno 2] No such file or directory: '/tmp/credentials.json'
+[0m10:46:12.451614 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:46:12.452440 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": false, "command_wall_clock_time": 4.632166, "process_in_blocks": "5760", "process_kernel_time": 0.468325, "process_mem_max_rss": "405468", "process_out_blocks": "5472", "process_user_time": 6.576576}
+[0m10:46:12.452841 [debug] [MainThread]: Command `dbt compile` failed at 10:46:12.452755 after 4.63 seconds
+[0m10:46:12.453201 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbc6711910>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbffa16a30>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fcbc6470b90>]}
+[0m10:46:12.453571 [debug] [MainThread]: Flushing usage events
+[0m10:46:13.197766 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:47:46.971238 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6d32421be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6d33830190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6d33b3d810>]}
+
+
+============================== 10:47:46.974358 | 6aa45693-8b7e-4fe7-a1b0-843a17a871e2 ==============================
+[0m10:47:46.974358 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:47:46.975202 [debug] [MainThread]: running dbt with arguments {'cache_selected_only': 'False', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'log_path': 'queries/logs', 'send_anonymous_usage_stats': 'True', 'log_format': 'default', 'profiles_dir': './queries', 'quiet': 'False', 'version_check': 'True', 'debug': 'False', 'no_print': 'None', 'use_experimental_parser': 'False', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries', 'fail_fast': 'False', 'partial_parse': 'True', 'static_parser': 'True', 'printer_width': '80', 'empty': 'False', 'use_colors': 'True', 'indirect_selection': 'eager', 'target_path': 'None', 'write_json': 'True', 'introspect': 'True', 'log_cache_events': 'False', 'warn_error': 'None'}
+[0m10:47:48.762510 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:47:48.762968 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': '6aa45693-8b7e-4fe7-a1b0-843a17a871e2', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfc2d8d60>]}
+[0m10:47:49.032863 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': '6aa45693-8b7e-4fe7-a1b0-843a17a871e2', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6d325ab350>]}
+[0m10:47:49.110398 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': '6aa45693-8b7e-4fe7-a1b0-843a17a871e2', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6d31637a50>]}
+[0m10:47:49.110970 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:47:49.317516 [debug] [MainThread]: checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9, vars: {}, profile: , target: , version: 1.10.11
+[0m10:47:49.418388 [debug] [MainThread]: Partial parsing enabled: 0 files deleted, 0 files added, 0 files changed.
+[0m10:47:49.418782 [debug] [MainThread]: Partial parsing enabled, no changes found, skipping parsing
+[0m10:47:49.423691 [warn ] [MainThread]: [[33mWARNING[0m]: Configuration paths exist in your dbt_project.yml file which do not apply to any resources.
+There are 67 unused configuration paths:
+- models.rj_smtr.monitoramento_interno
+- models.rj_smtr.subsidio.staging
+- models.rj_smtr.cadastro.staging
+- models.rj_smtr.planejamento
+- models.rj_smtr.projeto_app_cct
+- models.rj_smtr.indicadores_continuados_egp
+- models.rj_smtr.dashboard_operacao_onibus.staging
+- models.rj_smtr.br_rj_riodejaneiro_sigmob
+- models.rj_smtr.br_rj_riodejaneiro_bilhetagem
+- models.rj_smtr.dashboard_subsidio_sppo_staging
+- models.rj_smtr.br_rj_riodejaneiro_stu
+- models.rj_smtr.monitoramento_interno.staging
+- models.rj_smtr.dashboard_bilhetagem_implantacao_jae
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps
+- models.rj_smtr.infraestrutura
+- models.rj_smtr.dashboard_controle_vinculo_jae_riocard
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix.staging
+- models.rj_smtr.monitoramento.staging
+- models.rj_smtr.financeiro_interno
+- models.rj_smtr.validacao_dados_jae
+- models.rj_smtr.financeiro_interno.staging
+- models.rj_smtr.cadastro_interno
+- models.rj_smtr.controle_financeiro.staging
+- models.rj_smtr.catalogo
+- models.rj_smtr.br_rj_riodejaneiro_recursos
+- models.rj_smtr.cadastro
+- models.rj_smtr.dashboard_subsidio_sppo
+- models.rj_smtr.bilhetagem.staging
+- models.rj_smtr.financeiro
+- models.rj_smtr.validacao_dados_jae.staging
+- models.rj_smtr.subsidio
+- models.rj_smtr.planejamento.staging
+- models.rj_smtr.transito
+- models.rj_smtr.veiculo
+- models.rj_smtr.infraestrutura.staging
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2.staging
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix
+- models.rj_smtr.br_rj_riodejaneiro_veiculos
+- models.rj_smtr.cadastro_interno.staging
+- models.rj_smtr.gtfs
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1
+- models.rj_smtr.financeiro.staging
+- models.rj_smtr.controle_financeiro
+- models.rj_smtr.projeto_subsidio_sppo.deprecated
+- models.rj_smtr.indicadores_continuados_egp.staging
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1.staging
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps_zirix
+- models.rj_smtr.bilhetagem_interno
+- models.rj_smtr.dashboard_bilhetagem_jae
+- models.rj_smtr.br_rj_riodejaneiro_rdo_staging
+- models.rj_smtr.transito.staging
+- models.rj_smtr.datario
+- models.rj_smtr.br_rj_riodejaneiro_rdo
+- models.rj_smtr.monitoramento
+- models.rj_smtr.bilhetagem
+- models.rj_smtr.projeto_subsidio_sppo
+- models.rj_smtr.bilhetagem_interno.staging
+- models.rj_smtr.dashboard_subsidio_sppo_v2
+- models.rj_smtr.br_rj_riodejaneiro_recursos_staging
+- models.rj_smtr.dashboard_operacao_onibus
+- models.rj_smtr.veiculo.staging
+- snapshots
+- data_tests.rj_smtr.dashboard_subsidio_sppo_v2
+- data_tests.rj_smtr.dashboard_subsidio_sppo
+- data_tests.rj_smtr.bilhetagem
+- data_tests.rj_smtr
+[0m10:47:49.443051 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'load_project', 'label': '6aa45693-8b7e-4fe7-a1b0-843a17a871e2', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfbc98aa0>]}
+[0m10:47:49.508594 [debug] [MainThread]: Wrote artifact WritableManifest to queries/target/manifest.json
+[0m10:47:49.510151 [debug] [MainThread]: Wrote artifact SemanticManifest to queries/target/semantic_manifest.json
+[0m10:47:49.519190 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'resource_counts', 'label': '6aa45693-8b7e-4fe7-a1b0-843a17a871e2', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfbe13850>]}
+[0m10:47:49.519613 [info ] [MainThread]: Found 3 models, 1026 macros
+[0m10:47:49.519958 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'runnable_timing', 'label': '6aa45693-8b7e-4fe7-a1b0-843a17a871e2', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfbac0600>]}
+[0m10:47:49.521319 [info ] [MainThread]: 
+[0m10:47:49.521676 [info ] [MainThread]: Concurrency: 1 threads (target='prod')
+[0m10:47:49.521996 [info ] [MainThread]: 
+[0m10:47:49.522490 [debug] [MainThread]: Acquiring new bigquery connection 'master'
+[0m10:47:49.526432 [debug] [ThreadPool]: Acquiring new bigquery connection 'list_rj-smtr_br_rj_riodejaneiro_brt_gps'
+[0m10:47:49.526819 [debug] [ThreadPool]: Opening a new connection, currently in state init
+[0m10:47:50.503824 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'runnable_timing', 'label': '6aa45693-8b7e-4fe7-a1b0-843a17a871e2', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfba82d50>]}
+[0m10:47:50.505697 [debug] [MainThread]: Opening a new connection, currently in state init
+[0m10:47:50.575459 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_registros
+[0m10:47:50.575974 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly list_rj-smtr_br_rj_riodejaneiro_brt_gps, now model.rj_smtr.brt_registros)
+[0m10:47:50.576330 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_registros
+[0m10:47:50.584047 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_registros"
+[0m10:47:50.585063 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_registros
+[0m10:47:50.585486 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:47:50.619319 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_registros
+[0m10:47:50.620330 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_registros_desaninhada
+[0m10:47:50.620764 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly model.rj_smtr.brt_registros, now model.rj_smtr.brt_registros_desaninhada)
+[0m10:47:50.621126 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_registros_desaninhada
+[0m10:47:50.623486 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_registros_desaninhada"
+[0m10:47:50.624059 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_registros_desaninhada
+[0m10:47:50.624478 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:47:50.658640 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_registros_desaninhada
+[0m10:47:50.659451 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:47:50.659913 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly model.rj_smtr.brt_registros_desaninhada, now model.rj_smtr.brt_aux_registros_filtrada)
+[0m10:47:50.660295 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:47:50.668662 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_aux_registros_filtrada"
+[0m10:47:50.669228 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:47:50.669607 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:47:50.703086 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:47:50.703964 [debug] [MainThread]: Connection 'master' was properly closed.
+[0m10:47:50.704290 [debug] [MainThread]: Connection 'model.rj_smtr.brt_aux_registros_filtrada' was properly closed.
+[0m10:47:50.705072 [debug] [MainThread]: Command end result
+[0m10:47:50.735742 [debug] [MainThread]: Wrote artifact WritableManifest to queries/target/manifest.json
+[0m10:47:50.737235 [debug] [MainThread]: Wrote artifact SemanticManifest to queries/target/semantic_manifest.json
+[0m10:47:50.742548 [debug] [MainThread]: Wrote artifact RunExecutionResult to queries/target/run_results.json
+[0m10:47:50.743075 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:47:50.743702 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": true, "command_wall_clock_time": 3.8462343, "process_in_blocks": "3824", "process_kernel_time": 0.483633, "process_mem_max_rss": "389216", "process_out_blocks": "4720", "process_user_time": 5.121756}
+[0m10:47:50.744095 [debug] [MainThread]: Command `dbt compile` succeeded at 10:47:50.744011 after 3.85 seconds
+[0m10:47:50.744433 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfbf73960>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfbb39090>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f6cfbb38b90>]}
+[0m10:47:50.744783 [debug] [MainThread]: Flushing usage events
+[0m10:47:51.512220 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:49:02.259085 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdffb745be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdffcb40190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdffce45810>]}
+
+
+============================== 10:49:02.261824 | b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b ==============================
+[0m10:49:02.261824 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:49:02.262589 [debug] [MainThread]: running dbt with arguments {'log_path': 'queries/logs', 'static_parser': 'True', 'write_json': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'send_anonymous_usage_stats': 'True', 'cache_selected_only': 'False', 'no_print': 'None', 'warn_error': 'None', 'indirect_selection': 'eager', 'quiet': 'False', 'log_cache_events': 'False', 'profiles_dir': './queries', 'use_colors': 'True', 'log_format': 'default', 'version_check': 'True', 'use_experimental_parser': 'False', 'partial_parse': 'True', 'empty': 'False', 'fail_fast': 'False', 'introspect': 'True', 'printer_width': '80', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries --select models/br_rj_riodejaneiro_brt_gps', 'debug': 'False'}
+[0m10:49:04.043072 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:49:04.043555 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': 'b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc55e8d60>]}
+[0m10:49:04.313246 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': 'b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdffb8cf350>]}
+[0m10:49:04.390963 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': 'b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdffa95ba50>]}
+[0m10:49:04.391654 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:49:04.620757 [debug] [MainThread]: checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9, vars: {}, profile: , target: , version: 1.10.11
+[0m10:49:04.726565 [debug] [MainThread]: Partial parsing enabled: 0 files deleted, 0 files added, 0 files changed.
+[0m10:49:04.726951 [debug] [MainThread]: Partial parsing enabled, no changes found, skipping parsing
+[0m10:49:04.732021 [warn ] [MainThread]: [[33mWARNING[0m]: Configuration paths exist in your dbt_project.yml file which do not apply to any resources.
+There are 67 unused configuration paths:
+- models.rj_smtr.cadastro_interno
+- models.rj_smtr.cadastro.staging
+- models.rj_smtr.gtfs
+- models.rj_smtr.financeiro.staging
+- models.rj_smtr.br_rj_riodejaneiro_bilhetagem
+- models.rj_smtr.infraestrutura
+- models.rj_smtr.br_rj_riodejaneiro_rdo_staging
+- models.rj_smtr.monitoramento_interno
+- models.rj_smtr.dashboard_subsidio_sppo
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1.staging
+- models.rj_smtr.dashboard_subsidio_sppo_v2
+- models.rj_smtr.datario
+- models.rj_smtr.monitoramento
+- models.rj_smtr.dashboard_operacao_onibus.staging
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1
+- models.rj_smtr.infraestrutura.staging
+- models.rj_smtr.projeto_subsidio_sppo
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps_zirix
+- models.rj_smtr.br_rj_riodejaneiro_rdo
+- models.rj_smtr.veiculo
+- models.rj_smtr.br_rj_riodejaneiro_recursos_staging
+- models.rj_smtr.cadastro
+- models.rj_smtr.dashboard_controle_vinculo_jae_riocard
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2
+- models.rj_smtr.catalogo
+- models.rj_smtr.indicadores_continuados_egp.staging
+- models.rj_smtr.veiculo.staging
+- models.rj_smtr.validacao_dados_jae
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2.staging
+- models.rj_smtr.bilhetagem_interno
+- models.rj_smtr.bilhetagem.staging
+- models.rj_smtr.cadastro_interno.staging
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix
+- models.rj_smtr.br_rj_riodejaneiro_stu
+- models.rj_smtr.br_rj_riodejaneiro_veiculos
+- models.rj_smtr.subsidio.staging
+- models.rj_smtr.financeiro_interno.staging
+- models.rj_smtr.monitoramento_interno.staging
+- models.rj_smtr.controle_financeiro
+- models.rj_smtr.financeiro_interno
+- models.rj_smtr.controle_financeiro.staging
+- models.rj_smtr.planejamento
+- models.rj_smtr.transito
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix.staging
+- models.rj_smtr.projeto_app_cct
+- models.rj_smtr.transito.staging
+- models.rj_smtr.br_rj_riodejaneiro_recursos
+- models.rj_smtr.financeiro
+- models.rj_smtr.monitoramento.staging
+- models.rj_smtr.dashboard_bilhetagem_implantacao_jae
+- models.rj_smtr.dashboard_operacao_onibus
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps
+- models.rj_smtr.bilhetagem_interno.staging
+- models.rj_smtr.projeto_subsidio_sppo.deprecated
+- models.rj_smtr.br_rj_riodejaneiro_sigmob
+- models.rj_smtr.indicadores_continuados_egp
+- models.rj_smtr.planejamento.staging
+- models.rj_smtr.bilhetagem
+- models.rj_smtr.dashboard_bilhetagem_jae
+- models.rj_smtr.dashboard_subsidio_sppo_staging
+- models.rj_smtr.subsidio
+- models.rj_smtr.validacao_dados_jae.staging
+- snapshots
+- data_tests.rj_smtr.bilhetagem
+- data_tests.rj_smtr.dashboard_subsidio_sppo
+- data_tests.rj_smtr.dashboard_subsidio_sppo_v2
+- data_tests.rj_smtr
+[0m10:49:04.751559 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'load_project', 'label': 'b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc4fb0aa0>]}
+[0m10:49:04.821999 [debug] [MainThread]: Wrote artifact WritableManifest to queries/target/manifest.json
+[0m10:49:04.823520 [debug] [MainThread]: Wrote artifact SemanticManifest to queries/target/semantic_manifest.json
+[0m10:49:04.832651 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'resource_counts', 'label': 'b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc5127850>]}
+[0m10:49:04.833087 [info ] [MainThread]: Found 3 models, 1026 macros
+[0m10:49:04.833437 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'runnable_timing', 'label': 'b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc4dd0600>]}
+[0m10:49:04.834779 [info ] [MainThread]: 
+[0m10:49:04.835124 [info ] [MainThread]: Concurrency: 1 threads (target='prod')
+[0m10:49:04.835430 [info ] [MainThread]: 
+[0m10:49:04.835905 [debug] [MainThread]: Acquiring new bigquery connection 'master'
+[0m10:49:04.839682 [debug] [ThreadPool]: Acquiring new bigquery connection 'list_rj-smtr_br_rj_riodejaneiro_brt_gps'
+[0m10:49:04.840051 [debug] [ThreadPool]: Opening a new connection, currently in state init
+[0m10:49:05.614603 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'runnable_timing', 'label': 'b36b1e99-96bc-4792-bbe3-fb4d9f3cd64b', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc4d96d50>]}
+[0m10:49:05.616339 [debug] [MainThread]: Opening a new connection, currently in state init
+[0m10:49:05.682859 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_registros
+[0m10:49:05.683381 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly list_rj-smtr_br_rj_riodejaneiro_brt_gps, now model.rj_smtr.brt_registros)
+[0m10:49:05.683744 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_registros
+[0m10:49:05.690896 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_registros"
+[0m10:49:05.691464 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_registros
+[0m10:49:05.691844 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:49:05.725341 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_registros
+[0m10:49:05.726144 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_registros_desaninhada
+[0m10:49:05.726584 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly model.rj_smtr.brt_registros, now model.rj_smtr.brt_registros_desaninhada)
+[0m10:49:05.726943 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_registros_desaninhada
+[0m10:49:05.729346 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_registros_desaninhada"
+[0m10:49:05.729862 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_registros_desaninhada
+[0m10:49:05.730232 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:49:05.763774 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_registros_desaninhada
+[0m10:49:05.764670 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:49:05.765100 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly model.rj_smtr.brt_registros_desaninhada, now model.rj_smtr.brt_aux_registros_filtrada)
+[0m10:49:05.765472 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:49:05.773553 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_aux_registros_filtrada"
+[0m10:49:05.774059 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:49:05.774426 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:49:05.809283 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:49:05.810172 [debug] [MainThread]: Connection 'master' was properly closed.
+[0m10:49:05.810510 [debug] [MainThread]: Connection 'model.rj_smtr.brt_aux_registros_filtrada' was properly closed.
+[0m10:49:05.811402 [debug] [MainThread]: Command end result
+[0m10:49:05.841129 [debug] [MainThread]: Wrote artifact WritableManifest to queries/target/manifest.json
+[0m10:49:05.842761 [debug] [MainThread]: Wrote artifact SemanticManifest to queries/target/semantic_manifest.json
+[0m10:49:05.848660 [debug] [MainThread]: Wrote artifact RunExecutionResult to queries/target/run_results.json
+[0m10:49:05.849004 [debug] [MainThread]: Excluded node 'brt_registros' from results
+[0m10:49:05.849335 [debug] [MainThread]: Excluded node 'brt_registros_desaninhada' from results
+[0m10:49:05.849600 [debug] [MainThread]: Excluded node 'brt_aux_registros_filtrada' from results
+[0m10:49:05.850039 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:49:05.850641 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": true, "command_wall_clock_time": 3.6617289, "process_in_blocks": "32", "process_kernel_time": 0.523806, "process_mem_max_rss": "389224", "process_out_blocks": "4696", "process_user_time": 5.075369}
+[0m10:49:05.851019 [debug] [MainThread]: Command `dbt compile` succeeded at 10:49:05.850938 after 3.66 seconds
+[0m10:49:05.851346 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc528f8b0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc4e31130>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7fdfc4e30c30>]}
+[0m10:49:05.851685 [debug] [MainThread]: Flushing usage events
+[0m10:49:06.557596 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:49:20.819818 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffbc5d41be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffbc7158190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffbc745d810>]}
+
+
+============================== 10:49:20.822595 | c0c664b9-ab62-42d3-8bc4-37d095930bd4 ==============================
+[0m10:49:20.822595 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:49:20.823072 [debug] [MainThread]: running dbt with arguments {'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'static_parser': 'True', 'cache_selected_only': 'False', 'log_format': 'default', 'log_cache_events': 'False', 'indirect_selection': 'eager', 'log_path': 'queries/logs', 'use_experimental_parser': 'False', 'debug': 'False', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries --select models/br_rj_riodejaneiro_brt_gps --target dev', 'version_check': 'True', 'profiles_dir': './queries', 'write_json': 'True', 'quiet': 'False', 'use_colors': 'True', 'no_print': 'None', 'send_anonymous_usage_stats': 'True', 'printer_width': '80', 'target_path': 'None', 'introspect': 'True', 'partial_parse': 'True', 'fail_fast': 'False', 'warn_error': 'None', 'empty': 'False'}
+[0m10:49:22.647380 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:49:22.647840 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': 'c0c664b9-ab62-42d3-8bc4-37d095930bd4', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffb8fbb8d60>]}
+[0m10:49:22.923808 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': 'c0c664b9-ab62-42d3-8bc4-37d095930bd4', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffbc5ecf350>]}
+[0m10:49:23.002993 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': 'c0c664b9-ab62-42d3-8bc4-37d095930bd4', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffbc511fa50>]}
+[0m10:49:23.003587 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:49:23.219205 [debug] [MainThread]: checksum: f3a15f20cd0e17be8ec6b80249cbdcbd069c0abe6ee56424d4c8bc1a8c4095f7, vars: {}, profile: , target: dev, version: 1.10.11
+[0m10:49:23.280728 [info ] [MainThread]: Unable to do partial parsing because config vars, config profile, or config target have changed
+[0m10:49:23.281126 [debug] [MainThread]: previous checksum: f3a15f20cd0e17be8ec6b80249cbdcbd069c0abe6ee56424d4c8bc1a8c4095f7, current checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9
+[0m10:49:23.281469 [info ] [MainThread]: Unable to do partial parsing because profile has changed
+[0m10:49:23.281799 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': 'c0c664b9-ab62-42d3-8bc4-37d095930bd4', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffb8fae3a70>]}
+[0m10:49:24.924705 [error] [MainThread]: Encountered an error:
+Parsing Error
+  Env var required but not provided: 'DBT_USER'
+[0m10:49:24.925357 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:49:24.926036 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": false, "command_wall_clock_time": 4.1765366, "process_in_blocks": "1848", "process_kernel_time": 0.429446, "process_mem_max_rss": "380892", "process_out_blocks": "16", "process_user_time": 6.230955}
+[0m10:49:24.926433 [debug] [MainThread]: Command `dbt compile` failed at 10:49:24.926349 after 4.18 seconds
+[0m10:49:24.926784 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffbc4e97d90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffb8f708c90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7ffb8f47b930>]}
+[0m10:49:24.927143 [debug] [MainThread]: Flushing usage events
+[0m10:49:25.664423 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:51:11.279532 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f254b8b5be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f254ccb0190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f254cfb5810>]}
+
+
+============================== 10:51:11.282228 | 20c9ddff-46dd-4856-bc12-32f6b7361e1a ==============================
+[0m10:51:11.282228 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:51:11.282712 [debug] [MainThread]: running dbt with arguments {'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries --select models/br_rj_riodejaneiro_brt_gps --target dev', 'no_print': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'empty': 'False', 'fail_fast': 'False', 'log_format': 'default', 'version_check': 'True', 'partial_parse': 'True', 'write_json': 'True', 'use_colors': 'True', 'introspect': 'True', 'profiles_dir': './queries', 'log_cache_events': 'False', 'cache_selected_only': 'False', 'target_path': 'None', 'printer_width': '80', 'static_parser': 'True', 'indirect_selection': 'eager', 'use_experimental_parser': 'False', 'log_path': 'queries/logs', 'warn_error': 'None', 'debug': 'False', 'quiet': 'False', 'send_anonymous_usage_stats': 'True'}
+[0m10:51:13.122158 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:51:13.122641 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': '20c9ddff-46dd-4856-bc12-32f6b7361e1a', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f2515764d60>]}
+[0m10:51:13.396052 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': '20c9ddff-46dd-4856-bc12-32f6b7361e1a', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f254ba3f350>]}
+[0m10:51:13.474675 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': '20c9ddff-46dd-4856-bc12-32f6b7361e1a', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f254aacfa50>]}
+[0m10:51:13.475277 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:51:13.688003 [debug] [MainThread]: checksum: f3a15f20cd0e17be8ec6b80249cbdcbd069c0abe6ee56424d4c8bc1a8c4095f7, vars: {}, profile: , target: dev, version: 1.10.11
+[0m10:51:13.689826 [info ] [MainThread]: Unable to do partial parsing because saved manifest not found. Starting full parse.
+[0m10:51:13.690236 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': '20c9ddff-46dd-4856-bc12-32f6b7361e1a', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f2515685220>]}
+[0m10:51:15.361422 [error] [MainThread]: Encountered an error:
+Parsing Error
+  Env var required but not provided: 'DBT_USER'
+[0m10:51:15.362324 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:51:15.363411 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": false, "command_wall_clock_time": 4.15427, "process_in_blocks": "1608", "process_kernel_time": 0.460513, "process_mem_max_rss": "382492", "process_out_blocks": "16", "process_user_time": 6.210928}
+[0m10:51:15.364159 [debug] [MainThread]: Command `dbt compile` failed at 10:51:15.364039 after 4.16 seconds
+[0m10:51:15.364898 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f254aa47d90>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f2515026270>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f25150fda50>]}
+[0m10:51:15.365833 [debug] [MainThread]: Flushing usage events
+[0m10:51:16.110792 [debug] [MainThread]: An error was encountered while trying to flush usage events
+[0m10:51:24.429777 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'start', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f84a5c99be0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f84a70b0190>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f84a73b5810>]}
+
+
+============================== 10:51:24.432574 | 65f2d886-30c2-44ab-aad9-3a8773251b42 ==============================
+[0m10:51:24.432574 [info ] [MainThread]: Running with dbt=1.10.11
+[0m10:51:24.433206 [debug] [MainThread]: running dbt with arguments {'empty': 'False', 'quiet': 'False', 'send_anonymous_usage_stats': 'True', 'fail_fast': 'False', 'static_parser': 'True', 'version_check': 'True', 'write_json': 'True', 'profiles_dir': './queries', 'partial_parse': 'True', 'log_path': 'queries/logs', 'use_experimental_parser': 'False', 'indirect_selection': 'eager', 'printer_width': '80', 'introspect': 'True', 'debug': 'False', 'log_cache_events': 'False', 'log_format': 'default', 'warn_error': 'None', 'cache_selected_only': 'False', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'target_path': 'None', 'use_colors': 'True', 'invocation_command': 'dbt compile --profiles-dir ./queries --project-dir ./queries --select models/br_rj_riodejaneiro_brt_gps', 'no_print': 'None'}
+[0m10:51:26.274683 [warn ] [MainThread]: [[33mWARNING[0m][DuplicateYAMLKeysDeprecation]: Deprecated functionality
+Duplicate key 'id_ordem_rateio' in "<unicode string>", line 217, column 5 in
+file `queries/dbt_project.yml`
+[0m10:51:26.275213 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'deprecation', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'property_': 'warn', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846fb00d60>]}
+[0m10:51:26.541919 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'project_id', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f84a5e27350>]}
+[0m10:51:26.620465 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'adapter_info', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f84a5077a50>]}
+[0m10:51:26.621146 [info ] [MainThread]: Registered adapter: bigquery=1.10.1
+[0m10:51:26.844799 [debug] [MainThread]: checksum: 5335e1629744fab92fa7809c625edbb36f0d7063a879d6215c971798f27e66f9, vars: {}, profile: , target: , version: 1.10.11
+[0m10:51:26.846585 [info ] [MainThread]: Unable to do partial parsing because saved manifest not found. Starting full parse.
+[0m10:51:26.846968 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'partial_parser', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846fa29220>]}
+[0m10:51:28.631541 [warn ] [MainThread]: [[33mWARNING[0m]: Configuration paths exist in your dbt_project.yml file which do not apply to any resources.
+There are 67 unused configuration paths:
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1
+- models.rj_smtr.financeiro_interno
+- models.rj_smtr.transito
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix
+- models.rj_smtr.dashboard_subsidio_sppo_staging
+- models.rj_smtr.indicadores_continuados_egp.staging
+- models.rj_smtr.bilhetagem_interno.staging
+- models.rj_smtr.transito.staging
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v1.staging
+- models.rj_smtr.br_rj_riodejaneiro_rdo
+- models.rj_smtr.bilhetagem_interno
+- models.rj_smtr.dashboard_subsidio_sppo_v2
+- models.rj_smtr.subsidio
+- models.rj_smtr.br_rj_riodejaneiro_recursos_staging
+- models.rj_smtr.br_rj_riodejaneiro_sigmob
+- models.rj_smtr.bilhetagem
+- models.rj_smtr.cadastro_interno.staging
+- models.rj_smtr.cadastro
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2
+- models.rj_smtr.planejamento
+- models.rj_smtr.br_rj_riodejaneiro_bilhetagem
+- models.rj_smtr.datario
+- models.rj_smtr.br_rj_riodejaneiro_rdo_staging
+- models.rj_smtr.br_rj_riodejaneiro_recursos
+- models.rj_smtr.monitoramento_interno
+- models.rj_smtr.financeiro.staging
+- models.rj_smtr.planejamento.staging
+- models.rj_smtr.bilhetagem.staging
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps_zirix
+- models.rj_smtr.validacao_dados_jae.staging
+- models.rj_smtr.financeiro
+- models.rj_smtr.gtfs
+- models.rj_smtr.veiculo.staging
+- models.rj_smtr.cadastro.staging
+- models.rj_smtr.projeto_subsidio_sppo.deprecated
+- models.rj_smtr.veiculo
+- models.rj_smtr.dashboard_operacao_onibus
+- models.rj_smtr.br_rj_riodejaneiro_onibus_gps
+- models.rj_smtr.dashboard_subsidio_sppo
+- models.rj_smtr.indicadores_continuados_egp
+- models.rj_smtr.controle_financeiro.staging
+- models.rj_smtr.dashboard_controle_vinculo_jae_riocard
+- models.rj_smtr.projeto_subsidio_sppo
+- models.rj_smtr.controle_financeiro
+- models.rj_smtr.projeto_app_cct
+- models.rj_smtr.monitoramento.staging
+- models.rj_smtr.cadastro_interno
+- models.rj_smtr.dashboard_bilhetagem_jae
+- models.rj_smtr.br_rj_riodejaneiro_veiculos
+- models.rj_smtr.monitoramento
+- models.rj_smtr.dashboard_bilhetagem_implantacao_jae
+- models.rj_smtr.financeiro_interno.staging
+- models.rj_smtr.infraestrutura.staging
+- models.rj_smtr.projeto_subsidio_sppo_encontro_contas.v2.staging
+- models.rj_smtr.dashboard_operacao_onibus.staging
+- models.rj_smtr.monitoramento_interno.staging
+- models.rj_smtr.br_rj_riodejaneiro_viagem_zirix.staging
+- models.rj_smtr.catalogo
+- models.rj_smtr.subsidio.staging
+- models.rj_smtr.infraestrutura
+- models.rj_smtr.validacao_dados_jae
+- models.rj_smtr.br_rj_riodejaneiro_stu
+- snapshots
+- data_tests.rj_smtr.dashboard_subsidio_sppo_v2
+- data_tests.rj_smtr
+- data_tests.rj_smtr.dashboard_subsidio_sppo
+- data_tests.rj_smtr.bilhetagem
+[0m10:51:28.637211 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'load_project', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846f3cf310>]}
+[0m10:51:28.715524 [debug] [MainThread]: Wrote artifact WritableManifest to queries/target/manifest.json
+[0m10:51:28.717559 [debug] [MainThread]: Wrote artifact SemanticManifest to queries/target/semantic_manifest.json
+[0m10:51:28.728061 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'resource_counts', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846f7a9640>]}
+[0m10:51:28.728523 [info ] [MainThread]: Found 3 models, 1026 macros
+[0m10:51:28.728900 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'runnable_timing', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846f4a0350>]}
+[0m10:51:28.730344 [info ] [MainThread]: 
+[0m10:51:28.730708 [info ] [MainThread]: Concurrency: 1 threads (target='prod')
+[0m10:51:28.731032 [info ] [MainThread]: 
+[0m10:51:28.731539 [debug] [MainThread]: Acquiring new bigquery connection 'master'
+[0m10:51:28.734854 [debug] [ThreadPool]: Acquiring new bigquery connection 'list_rj-smtr_br_rj_riodejaneiro_brt_gps'
+[0m10:51:28.735327 [debug] [ThreadPool]: Opening a new connection, currently in state init
+[0m10:51:29.533040 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'runnable_timing', 'label': '65f2d886-30c2-44ab-aad9-3a8773251b42', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846db022b0>]}
+[0m10:51:29.534810 [debug] [MainThread]: Opening a new connection, currently in state init
+[0m10:51:29.603464 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_registros
+[0m10:51:29.603981 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly list_rj-smtr_br_rj_riodejaneiro_brt_gps, now model.rj_smtr.brt_registros)
+[0m10:51:29.604331 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_registros
+[0m10:51:29.610366 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_registros"
+[0m10:51:29.611021 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_registros
+[0m10:51:29.611435 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:51:29.645440 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_registros
+[0m10:51:29.646263 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_registros_desaninhada
+[0m10:51:29.646707 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly model.rj_smtr.brt_registros, now model.rj_smtr.brt_registros_desaninhada)
+[0m10:51:29.647076 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_registros_desaninhada
+[0m10:51:29.649629 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_registros_desaninhada"
+[0m10:51:29.650094 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_registros_desaninhada
+[0m10:51:29.650468 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:51:29.684086 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_registros_desaninhada
+[0m10:51:29.684800 [debug] [Thread-1 (]: Began running node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:51:29.685231 [debug] [Thread-1 (]: Re-using an available connection from the pool (formerly model.rj_smtr.brt_registros_desaninhada, now model.rj_smtr.brt_aux_registros_filtrada)
+[0m10:51:29.685613 [debug] [Thread-1 (]: Began compiling node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:51:29.691614 [debug] [Thread-1 (]: Writing injected SQL for node "model.rj_smtr.brt_aux_registros_filtrada"
+[0m10:51:29.692167 [debug] [Thread-1 (]: Began executing node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:51:29.692548 [debug] [Thread-1 (]: Opening a new connection, currently in state closed
+[0m10:51:29.726033 [debug] [Thread-1 (]: Finished running node model.rj_smtr.brt_aux_registros_filtrada
+[0m10:51:29.727027 [debug] [MainThread]: Connection 'master' was properly closed.
+[0m10:51:29.727366 [debug] [MainThread]: Connection 'model.rj_smtr.brt_aux_registros_filtrada' was properly closed.
+[0m10:51:29.728169 [debug] [MainThread]: Command end result
+[0m10:51:29.769290 [debug] [MainThread]: Wrote artifact WritableManifest to queries/target/manifest.json
+[0m10:51:29.771022 [debug] [MainThread]: Wrote artifact SemanticManifest to queries/target/semantic_manifest.json
+[0m10:51:29.776562 [debug] [MainThread]: Wrote artifact RunExecutionResult to queries/target/run_results.json
+[0m10:51:29.776942 [debug] [MainThread]: Excluded node 'brt_registros' from results
+[0m10:51:29.777337 [debug] [MainThread]: Excluded node 'brt_registros_desaninhada' from results
+[0m10:51:29.777639 [debug] [MainThread]: Excluded node 'brt_aux_registros_filtrada' from results
+[0m10:51:29.778220 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- DuplicateYAMLKeysDeprecation: 2 occurrences
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m10:51:29.779067 [debug] [MainThread]: Resource report: {"command_name": "compile", "command_success": true, "command_wall_clock_time": 5.4199414, "process_in_blocks": "672", "process_kernel_time": 0.441872, "process_mem_max_rss": "391348", "process_out_blocks": "7096", "process_user_time": 6.878883}
+[0m10:51:29.779499 [debug] [MainThread]: Command `dbt compile` succeeded at 10:51:29.779397 after 5.42 seconds
+[0m10:51:29.779960 [debug] [MainThread]: Sending event: {'category': 'dbt', 'action': 'invocation', 'label': 'end', 'context': [<snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846f428c30>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846f42e3c0>, <snowplow_tracker.self_describing_json.SelfDescribingJson object at 0x7f846f8e40d0>]}
+[0m10:51:29.780342 [debug] [MainThread]: Flushing usage events
+[0m10:51:30.515694 [debug] [MainThread]: An error was encountered while trying to flush usage events

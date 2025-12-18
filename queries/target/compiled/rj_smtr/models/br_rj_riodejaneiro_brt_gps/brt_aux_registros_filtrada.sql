@@ -19,10 +19,10 @@ with
         from `rj-smtr`.`br_rj_riodejaneiro_brt_gps`.`brt_registros_desaninhada`
         where
                 data between date("2022-01-01T00:00:00") and date(
-                    "2022-01-01T01:00:00"
+                    "2022-01-02T01:00:00"
                 )
                 and timestamp_gps > "2022-01-01T00:00:00"
-                and timestamp_gps <= "2022-01-01T01:00:00"
+                and timestamp_gps <= "2022-01-02T01:00:00"
                 and datetime_diff(timestamp_captura, timestamp_gps, minute)
                 between 0 and 1
     ),
@@ -53,4 +53,7 @@ with
     )
 select * except (rn), '' as versao
 from filtrada
-where rn = 1
+where
+    rn = 1
+
+    -- trigger sqlfmt again
