@@ -42,7 +42,7 @@ deployments:
             content_message_template_name,
             content_previous_quality_score,
             content_new_quality_score
-            FROM 
+            FROM
             `rj-crm-registry.brutos_wetalkie_staging.message_template_quality_update_2025_*`
             WHERE 1=1
             AND phone_number = '5521991952121'
@@ -68,7 +68,7 @@ deployments:
             content_message_template_name,
             content_previous_quality_score,
             content_new_quality_score
-            FROM 
+            FROM
             `rj-crm-registry.brutos_wetalkie_staging.message_template_quality_update_2025_*`
             WHERE 1=1
             AND phone_number = '5521991952121'

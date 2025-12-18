@@ -42,7 +42,7 @@ deployments:
           content_display_phone_number,
           content_event,
           content_current_limit
-          FROM 
+          FROM
           `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_2025_*`
           WHERE 1=1
           AND account = '1'
@@ -67,7 +67,7 @@ deployments:
           content_display_phone_number,
           content_event,
           content_current_limit
-          FROM 
+          FROM
           `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_2025_*`
           WHERE 1=1
           AND account = '1'

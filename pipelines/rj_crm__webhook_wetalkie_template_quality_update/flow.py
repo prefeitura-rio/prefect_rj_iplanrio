@@ -32,7 +32,7 @@ def rj_crm__webhook_wetalkie_template_quality_update(
 
         for row in data_json:
             content_message_template_name = row["content_message_template_name"]
-            
+
             raw_prev_score = row.get("content_previous_quality_score", "UNKNOWN")
             raw_new_score = row.get("content_new_quality_score", "UNKNOWN")
 
