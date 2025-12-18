@@ -5,11 +5,13 @@ Tasks for rj_cvl__osinfo_mongo pipeline
 
 import base64
 import json
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from google.api_core import retry as api_retry
 from google.cloud import bigquery, storage
 from iplanrio.pipelines_templates.dump_db.utils import database_get_db
 from iplanrio.pipelines_utils.constants import NOT_SET
@@ -160,10 +162,10 @@ def _decode_base64_data(x):
 
 
 def _upload_file_to_gcs(
-    bucket, temp_file: Path, blob_path: str, file_id: str, keep_temp: bool = False
+    bucket, temp_file: Path, blob_path: str, file_id: str, keep_temp: bool = False, max_retries: int = 3
 ) -> str:
     """
-    Upload a single file to GCS and optionally clean up local file
+    Upload a single file to GCS with retry logic and optionally clean up local file
 
     Args:
         bucket: GCS bucket object
@@ -171,12 +173,40 @@ def _upload_file_to_gcs(
         blob_path: Destination path in GCS
         file_id: File ID for logging
         keep_temp: If True, keep temp file after upload (default: False)
+        max_retries: Maximum number of retry attempts (default: 3)
 
     Returns:
         file_id on success
     """
     blob = bucket.blob(blob_path)
-    blob.upload_from_filename(str(temp_file))
+
+    # Configure retry policy for transient errors
+    retry_policy = api_retry.Retry(
+        initial=1.0,  # Initial delay 1 second
+        maximum=60.0,  # Max delay 60 seconds
+        multiplier=2.0,  # Exponential backoff
+        deadline=300.0,  # Total deadline 5 minutes
+    )
+
+    # Attempt upload with retries
+    for attempt in range(max_retries):
+        try:
+            blob.upload_from_filename(
+                str(temp_file),
+                timeout=180,  # 3 minutes timeout per upload attempt
+                retry=retry_policy,
+            )
+            break  # Success, exit retry loop
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt  # Exponential backoff: 1s, 2s, 4s
+                print(f"    Upload failed for {file_id} (attempt {attempt + 1}/{max_retries}): {e}")
+                print(f"    Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                # Final attempt failed, re-raise exception
+                print(f"    Upload failed for {file_id} after {max_retries} attempts")
+                raise
 
     if not keep_temp:
         temp_file.unlink()  # Clean up only if not keeping
@@ -205,6 +235,7 @@ def dump_files_by_id_to_gcs(
     batch_size: int = 500,  # Changed from 10000 to 500 for better memory management
     mongo_batch_size: int = 50000,
     upload_max_workers: int = 10,  # Number of parallel upload threads
+    upload_retry_attempts: int = 3,  # Number of retry attempts for GCS uploads
     reconstruct_pdfs_from_chunks: bool = False,  # Keep temp files for PDF reconstruction
 ) -> dict[str, dict]:
     """
@@ -212,7 +243,7 @@ def dump_files_by_id_to_gcs(
 
     This task processes file_ids in batches to minimize MongoDB queries while
     creating individual parquet files for each file_id in GCS. Uses parallel
-    uploads for better performance.
+    uploads for better performance with automatic retry on failures.
 
     Args:
         database_type: Database type (should be "mongodb")
@@ -230,6 +261,7 @@ def dump_files_by_id_to_gcs(
         batch_size: Number of file_ids to process per MongoDB query (default: 500)
         mongo_batch_size: Number of documents to fetch per MongoDB batch
         upload_max_workers: Number of parallel upload threads (default: 10)
+        upload_retry_attempts: Number of retry attempts for GCS uploads (default: 3)
         reconstruct_pdfs_from_chunks: Keep temp files for PDF reconstruction (default: False)
 
     Returns:
@@ -313,7 +345,7 @@ def dump_files_by_id_to_gcs(
             print(f"  Total chunks fetched: {len(all_chunks):,}")
 
             if not all_chunks:
-                print(f"  No data found for this batch, skipping...")
+                print("  No data found for this batch, skipping...")
                 continue
 
             # Convert to DataFrame
@@ -366,6 +398,7 @@ def dump_files_by_id_to_gcs(
                         blob_path,
                         file_id,
                         reconstruct_pdfs_from_chunks,  # Pass keep_temp parameter
+                        upload_retry_attempts,  # Pass retry attempts parameter
                     ): (file_id, temp_file, gcs_full_path)
                     for temp_file, blob_path, file_id, gcs_full_path in local_files
                 }
@@ -495,7 +528,7 @@ def reconstruct_pdfs_from_temp_files(
 
     # Step 1: Fetch metadata from BigQuery (1 query for all file_ids)
     file_ids = list(temp_files_map.keys())
-    metadata_query = f"""
+    metadata_query = """
       SELECT
         files_id as file_id,
         filename,
