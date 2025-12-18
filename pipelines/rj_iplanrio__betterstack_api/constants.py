@@ -13,7 +13,7 @@ class BetterStackConstants(Enum):
 
 
     # Dataset e Tabelas
-    DATASET_ID = "brutos_betterstack_staging"
+    DATASET_ID = "brutos_betterstack"
     TABLE_ID_RESPONSE_TIMES = "response_times"
     TABLE_ID_INCIDENTS = "incidents"
 
