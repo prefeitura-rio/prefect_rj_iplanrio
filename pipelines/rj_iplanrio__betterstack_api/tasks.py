@@ -3,6 +3,7 @@
 Tasks for rj_iplanrio__betterstack_api pipeline
 """
 
+import json
 import pandas as pd
 import requests
 from datetime import datetime, timedelta
@@ -16,15 +17,32 @@ from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstant
 
 
 @task
-def get_betterstack_credentials(infisical_secret_path: str = "/api-betterstack") -> str:
+def get_betterstack_credentials() -> str:
     """
     Recupera as credenciais da API BetterStack do Infisical.
     """
     log("Recuperando credenciais do BetterStack")
-    token = getenv_or_action("betterstack_token")
+    
+    # Try with BETTERSTACK_TOKEN first, then legacy betterstack_token
+    token = getenv_or_action("BETTERSTACK_TOKEN", action="ignore")
     if not token:
-        raise ValueError("BetterStack token not found in Infisical")
+        token = getenv_or_action("betterstack_token", action="ignore")
+        
+    if not token:
+        raise ValueError("BetterStack token not found in environment")
+    
     return token
+
+
+@task
+def get_betterstack_monitor_id() -> str:
+    """
+    Recupera o ID do monitor da BetterStack do Infisical.
+    """
+    log("Recuperando MONITOR_ID do BetterStack")
+    monitor_id = getenv_or_action("MONITOR_ID")
+    return monitor_id
+
 
 
 @task
@@ -49,11 +67,12 @@ def calculate_date_range(from_date: str = None, to_date: str = None) -> Dict[str
 
 
 @task(retries=3, retry_delay_seconds=60)
-def fetch_response_times(token: str, date_range: Dict[str, str]) -> List[Dict[str, Any]]:
+def fetch_response_times(token: str, monitor_id: str, date_range: Dict[str, str]) -> List[Dict[str, Any]]:
     """
     Busca dados de response-times da API v2.
     """
-    url = f"{BetterStackConstants.BASE_URL_V2.value}/monitors/{BetterStackConstants.MONITOR_ID.value}/response-times"
+    url = f"{BetterStackConstants.BASE_URL_V2.value}/monitors/{monitor_id}/response-times"
+
     
     headers = {"Authorization": f"Bearer {token}"}
     params = {
@@ -64,32 +83,36 @@ def fetch_response_times(token: str, date_range: Dict[str, str]) -> List[Dict[st
     log(f"Fetching response times from {url} with params {params}")
     
     try:
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(
+            url, headers=headers, params=params, timeout=BetterStackConstants.TIMEOUT.value
+        )
         response.raise_for_status()
+    except requests.exceptions.Timeout as e:
+        log(f"Timeout ao buscar response-times: {e}")
+        raise
     except requests.exceptions.RequestException as e:
-        log(f"Erro ao buscar response-times: {e}")
+        log(f"Erro de requisição ao buscar response-times: {e}")
         if hasattr(e, "response") and e.response is not None:
             log(f"Response status: {e.response.status_code}")
             log(f"Response text: {e.response.text[:500]}")
         raise
     
-    data = response.json()
-    
-    # Structure: data -> attributes -> regions (list)
     try:
+        data = response.json()
         if "data" in data and "attributes" in data["data"]:
             regions = data["data"]["attributes"].get("regions", [])
             return regions
         else:
-            log("Unexpected JSON structure for response times")
+            log(f"Unexpected JSON structure for response times: {data}")
             return []
-    except Exception as e:
+    except (json.JSONDecodeError, KeyError) as e:
         log(f"Error parsing response times: {e}")
         return []
 
 
 @task(retries=3, retry_delay_seconds=60)
-def fetch_incidents(token: str, date_range: Dict[str, str]) -> List[Dict[str, Any]]:
+def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> List[Dict[str, Any]]:
+
     """
     Busca dados de incidents da API v3.
     """
@@ -99,9 +122,10 @@ def fetch_incidents(token: str, date_range: Dict[str, str]) -> List[Dict[str, An
     params = {
         "from": date_range["from"],
         "to": date_range["to"],
-        "monitor_id": BetterStackConstants.MONITOR_ID.value,
+        "monitor_id": monitor_id,
         "per_page": 50 # Maximize page size just in case
     }
+
     
     log(f"Fetching incidents from {url} with params {params}")
     
@@ -109,30 +133,44 @@ def fetch_incidents(token: str, date_range: Dict[str, str]) -> List[Dict[str, An
     
     while url:
         try:
-            response = requests.get(url, headers=headers, params=params)
+            response = requests.get(
+                url,
+                headers=headers,
+                params=params,
+                timeout=BetterStackConstants.TIMEOUT.value,
+            )
             response.raise_for_status()
+            data = response.json()
+        except requests.exceptions.Timeout as e:
+            log(f"Timeout ao buscar incidents: {e}")
+            raise
         except requests.exceptions.RequestException as e:
-            log(f"Erro ao buscar incidents: {e}")
+            log(f"Erro de requisição ao buscar incidents: {e}")
             if hasattr(e, "response") and e.response is not None:
                 log(f"Response status: {e.response.status_code}")
                 log(f"Response text: {e.response.text[:500]}")
             raise
-        
-        data = response.json()
+        except json.JSONDecodeError as e:
+            log(f"Error decoding incidents JSON: {e}")
+            raise
         
         # Structure: data (list), pagination (dict)
-        incidents = data.get("data", [])
-        all_incidents.extend(incidents)
-        
-        # Pagination handling
-        pagination = data.get("pagination", {})
-        next_url = pagination.get("next")
-        
-        if next_url:
-            url = next_url
-            params = {} # params are usually encoded in the next_url
-        else:
-            url = None
+        try:
+            incidents = data.get("data", [])
+            all_incidents.extend(incidents)
+            
+            # Pagination handling
+            pagination = data.get("pagination", {})
+            next_url = pagination.get("next")
+            
+            if next_url:
+                url = next_url
+                params = {} # params are usually encoded in the next_url
+            else:
+                url = None
+        except KeyError as e:
+            log(f"Error parsing incidents structure: {e}")
+            url = None # Stop loop if structure is broken
             
     return all_incidents
 

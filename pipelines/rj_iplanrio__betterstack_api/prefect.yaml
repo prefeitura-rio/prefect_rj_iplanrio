@@ -38,7 +38,6 @@ deployments:
     parameters:
       dataset_id: brutos_betterstack_staging
       billing_project_id: rj-iplanrio-dev
-      infisical_secret_path: /api-betterstack
       
   - name: rj-iplanrio--betterstack-api--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -54,7 +53,6 @@ deployments:
     parameters:
       dataset_id: brutos_betterstack_staging
       billing_project_id: rj-iplanrio
-      infisical_secret_path: /api-betterstack
     schedules:
       - cron: "0 6 * * *"
         timezone: America/Sao_Paulo

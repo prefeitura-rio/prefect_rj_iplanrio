@@ -8,12 +8,14 @@ from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstants
 from pipelines.rj_iplanrio__betterstack_api.tasks import (
     get_betterstack_credentials,
+    get_betterstack_monitor_id,
     calculate_date_range,
     fetch_response_times,
     fetch_incidents,
     transform_response_times,
     transform_incidents,
 )
+
 from pipelines.rj_iplanrio__betterstack_api.utils.tasks import create_date_partitions
 
 
@@ -22,7 +24,6 @@ def rj_iplanrio__betterstack_api(
     date: str | None = None,
     dataset_id: str | None = None,
     billing_project_id: str | None = None,
-    infisical_secret_path: str = "/api-betterstack",
 ):
     """
     Flow para extrair dados da BetterStack API (Response Times e Incidents)
@@ -37,7 +38,9 @@ def rj_iplanrio__betterstack_api(
     inject_bd_credentials_task(environment="prod")
     
     # 1. Credentials
-    token = get_betterstack_credentials(infisical_secret_path=infisical_secret_path)
+    token = get_betterstack_credentials()
+    monitor_id = get_betterstack_monitor_id()
+
     
     # 2. Date Logic
     # Se date for passado (YYYY-MM-DD), usamos ele como from e to.
@@ -45,7 +48,8 @@ def rj_iplanrio__betterstack_api(
     extraction_date = date_range["from"] # Usado para partição
     
     # --- TABLE 1: Response Times ---
-    raw_response_times = fetch_response_times(token=token, date_range=date_range)
+    raw_response_times = fetch_response_times(token=token, monitor_id=monitor_id, date_range=date_range)
+
     df_response = transform_response_times(raw_response_times, extraction_date=extraction_date)
     
     if not df_response.empty:
@@ -66,7 +70,8 @@ def rj_iplanrio__betterstack_api(
         )
     
     # --- TABLE 2: Incidents ---
-    raw_incidents = fetch_incidents(token=token, date_range=date_range)
+    raw_incidents = fetch_incidents(token=token, monitor_id=monitor_id, date_range=date_range)
+
     df_incidents = transform_incidents(raw_incidents, extraction_date=extraction_date)
     
     if not df_incidents.empty:

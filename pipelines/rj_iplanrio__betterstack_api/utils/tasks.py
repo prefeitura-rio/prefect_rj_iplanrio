@@ -16,7 +16,7 @@ from prefect import task
 @task
 def create_date_partitions(
     dataframe,
-    partition_column: str = None,
+    partition_column: str | None = None,
     file_format: Literal["csv", "parquet"] = "csv",
     root_folder="./data/",
 ):
@@ -25,7 +25,7 @@ def create_date_partitions(
     """
 
     if dataframe.empty:
-        log("DataFrame vazio, sem criando partições.")
+        log("DataFrame vazio, nenhuma partição será criada.")
         return root_folder
 
     df = dataframe.copy()

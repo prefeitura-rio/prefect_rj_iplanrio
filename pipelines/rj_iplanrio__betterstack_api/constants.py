@@ -10,7 +10,7 @@ class BetterStackConstants(Enum):
     BASE_URL_V2 = "https://uptime.betterstack.com/api/v2"
     BASE_URL_V3 = "https://uptime.betterstack.com/api/v3"
     
-    MONITOR_ID = "3839268"
+
 
     # Dataset e Tabelas
     DATASET_ID = "brutos_betterstack_staging"
@@ -26,3 +26,7 @@ class BetterStackConstants(Enum):
     FILE_FORMAT = "parquet"
     ROOT_FOLDER = "/tmp/betterstack"
     BIGLAKE_TABLE = True
+    
+    # Timeout
+    TIMEOUT = (5, 30)
+
