@@ -5,6 +5,7 @@ Tasks for rj_cvl__osinfo_mongo pipeline
 
 import base64
 import json
+import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -435,9 +436,39 @@ def dump_files_by_id_to_gcs(
             total_files_saved += uploaded_count
             print(f"  Batch {batch_idx} complete: saved {uploaded_count} files (total: {total_files_saved})")
 
-            # Clean up temp directory only if not keeping files
-            if not reconstruct_pdfs_from_chunks and temp_dir.exists():
-                temp_dir.rmdir()
+            # Reconstruct PDFs for this batch if requested
+            if reconstruct_pdfs_from_chunks:
+                # Extract PDFs destination path from gcs_path
+                # gcs_path = "staging/dataset/chunks" -> "staging/dataset/files_pdfs"
+                base_path = "/".join(gcs_path.split("/")[:-1])
+                dest_gcs_path = f"{base_path}/files_pdfs"
+
+                # Filter only current batch results (files in temp_dir)
+                batch_processing_results = {
+                    fid: result
+                    for fid, result in processing_results.items()
+                    if "temp_file_path" in result and result["temp_file_path"].parent == temp_dir
+                }
+
+                print(f"  Reconstructing {len(batch_processing_results)} PDFs from batch {batch_idx}...")
+                _reconstruct_pdfs_from_temp_files(
+                    processing_results=batch_processing_results,
+                    dest_gcs_path=dest_gcs_path,
+                    bucket_name=bucket_name,
+                )
+
+                # Update main processing_results with PDF reconstruction status
+                for fid, result in batch_processing_results.items():
+                    processing_results[fid].update(result)
+
+                # Clean up temp directory after PDF reconstruction
+                if temp_dir.exists():
+                    shutil.rmtree(temp_dir)
+                    print(f"  Cleaned up temp directory: {temp_dir.name}")
+            else:
+                # Clean up temp directory if not keeping files
+                if temp_dir.exists():
+                    temp_dir.rmdir()
 
     finally:
         # Ensure connection is closed
@@ -471,14 +502,13 @@ def dump_files_by_id_to_gcs(
         print(f"✅ All {len(file_ids):,} file_ids were successfully saved!")
 
     if reconstruct_pdfs_from_chunks:
-        temp_files_count = sum(1 for r in processing_results.values() if "temp_file_path" in r)
-        print(f"\nKept {temp_files_count:,} temp files for PDF reconstruction")
+        pdfs_ok = sum(1 for r in processing_results.values() if r.get("pdf_reconstructed_at") is not None)
+        print(f"✅ Reconstructed {pdfs_ok:,} PDFs during batch processing")
 
     return processing_results
 
 
-@task
-def reconstruct_pdfs_from_temp_files(
+def _reconstruct_pdfs_from_temp_files(
     processing_results: dict[str, dict],
     dest_gcs_path: str,
     bucket_name: str,

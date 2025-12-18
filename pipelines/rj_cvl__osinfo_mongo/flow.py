@@ -44,7 +44,6 @@ from .tasks import (
     dump_files_by_id_to_gcs,
     get_batch_dump_mode,
     get_files_ids_from_bigquery,
-    reconstruct_pdfs_from_temp_files,
     update_processing_metadata,
 )
 
@@ -103,6 +102,7 @@ def rj_cvl__osinfo_mongo(
         files_ids = get_files_ids_from_bigquery(bq_files_ids_query)
 
         # Dump each file_id to individual parquet in GCS
+        # If reconstruct_pdfs_from_chunks=True, PDFs are reconstructed during batch processing
         processing_results = dump_files_by_id_to_gcs(
             database_type=db_type,
             hostname=db_host,
@@ -120,14 +120,6 @@ def rj_cvl__osinfo_mongo(
             mongo_batch_size=batch_size,
             reconstruct_pdfs_from_chunks=reconstruct_pdfs_from_chunks,
         )
-
-        # Reconstruct PDFs if requested
-        if reconstruct_pdfs_from_chunks:
-            processing_results = reconstruct_pdfs_from_temp_files(
-                processing_results=processing_results,
-                dest_gcs_path=f"staging/{dataset_id}/files_pdfs",
-                bucket_name=gcs_bucket_name,
-            )
 
         # Update metadata table if requested
         if metadata_table_id:
