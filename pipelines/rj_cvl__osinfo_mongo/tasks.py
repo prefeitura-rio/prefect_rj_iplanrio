@@ -11,7 +11,6 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-from queue import Queue
 
 import pandas as pd
 from google.api_core import retry as api_retry
@@ -217,7 +216,10 @@ def _upload_file_to_gcs(
     return file_id
 
 
-def _create_mongo_connection_pool(
+def _process_batch_threaded(
+    batch_idx: int,
+    batch_file_ids: list[str],
+    # MongoDB connection parameters (each thread creates its own connection)
     hostname: str,
     port: int,
     user: str,
@@ -225,49 +227,7 @@ def _create_mongo_connection_pool(
     database: str,
     charset: str,
     auth_source: str,
-    pool_size: int = 5,
-) -> Queue:
-    """
-    Create a pool of MongoDB connections for thread-safe reuse
-
-    Args:
-        hostname: MongoDB hostname
-        port: MongoDB port
-        user: MongoDB username
-        password: MongoDB password
-        database: MongoDB database name
-        charset: Database charset
-        auth_source: MongoDB authentication database
-        pool_size: Number of connections in pool (default: 5)
-
-    Returns:
-        Queue with MongoDB connection objects (thread-safe)
-    """
-    connection_pool = Queue(maxsize=pool_size)
-
-    print(f"Creating MongoDB connection pool with {pool_size} connections...")
-    for i in range(pool_size):
-        db = database_get_db(
-            database_type="mongodb",
-            hostname=hostname,
-            port=port,
-            user=user,
-            password=password,
-            database=database,
-            charset=charset,
-            auth_source=auth_source,
-        )
-        connection_pool.put(db)
-        print(f"  Connection {i+1}/{pool_size} created")
-
-    print(f"✅ Connection pool ready with {pool_size} connections")
-    return connection_pool
-
-
-def _process_batch_threaded(
-    batch_idx: int,
-    batch_file_ids: list[str],
-    connection_pool: Queue,
+    # Processing parameters
     collection_query: str,
     bucket_name: str,
     gcs_path: str,
@@ -280,20 +240,27 @@ def _process_batch_threaded(
     Process a single batch in a thread (stateless, thread-safe function)
 
     This function is designed to run in parallel threads safely:
-    - Gets connection from pool (blocks until available)
+    - Each thread creates its own MongoDB connection
     - Processes batch independently with no shared state
-    - Returns connection to pool when done
+    - Closes connection when done
 
     Args:
         batch_idx: Batch index for logging
         batch_file_ids: List of file_ids to process in this batch
-        connection_pool: Thread-safe queue with MongoDB connections
+        hostname: MongoDB hostname
+        port: MongoDB port
+        user: MongoDB username
+        password: MongoDB password
+        database: MongoDB database name
+        charset: Database charset
+        auth_source: MongoDB authentication database
         collection_query: MongoDB collection query
         bucket_name: GCS bucket name
         gcs_path: Base path in GCS
         mongo_batch_size: Number of documents to fetch per MongoDB batch
         upload_max_workers: Number of parallel upload threads
         upload_retry_attempts: Number of retry attempts for GCS uploads
+        reconstruct_pdfs_from_chunks: Reconstruct PDFs from chunks after upload
 
     Returns:
         Dict mapping file_id to processing results for this batch
@@ -301,14 +268,19 @@ def _process_batch_threaded(
     thread_name = threading.current_thread().name
     thread_id = threading.current_thread().ident
 
-    # Get connection from pool (blocks until one is available)
-    print(f"[{thread_name}] Batch {batch_idx}: ⏳ Waiting for MongoDB connection...")
-    try:
-        db = connection_pool.get(timeout=30)  # Add 30s timeout
-        print(f"[{thread_name}] Batch {batch_idx}: ✅ Got connection, processing {len(batch_file_ids):,} files")
-    except Exception as e:
-        print(f"[{thread_name}] Batch {batch_idx}: ❌ Failed to get connection: {e}")
-        raise
+    # Create MongoDB connection for this thread
+    print(f"[{thread_name}] Batch {batch_idx}: Creating MongoDB connection...")
+    db = database_get_db(
+        database_type="mongodb",
+        hostname=hostname,
+        port=port,
+        user=user,
+        password=password,
+        database=database,
+        charset=charset,
+        auth_source=auth_source,
+    )
+    print(f"[{thread_name}] Batch {batch_idx}: ✅ Connected, processing {len(batch_file_ids):,} files")
 
     try:
         # Build MongoDB query
@@ -433,9 +405,10 @@ def _process_batch_threaded(
         return processing_results
 
     finally:
-        # CRITICAL: Always return connection to pool
-        connection_pool.put(db)
-        print(f"[{thread_name}] Batch {batch_idx}: Returned connection to pool")
+        # CRITICAL: Always close connection
+        if hasattr(db, 'close'):
+            db.close()
+        print(f"[{thread_name}] Batch {batch_idx}: Closed MongoDB connection")
 
 
 @task
@@ -462,17 +435,18 @@ def dump_files_by_id_to_gcs_parallel(
     upload_retry_attempts: int = 3,
     reconstruct_pdfs_from_chunks: bool = False,
     # Parallelism parameters
-    mongo_pool_size: int = 5,
+    mongo_pool_size: int = 5,  # Kept for backward compatibility, but not used
     batch_workers: int = 5,
 ) -> dict[str, dict]:
     """
     Dump MongoDB chunks using thread pool for parallel batch processing
 
-    This task uses a connection pool and thread pool for efficient parallel processing:
+    This task uses thread-local connections for efficient parallel processing:
     - Single Prefect flow/task (one process)
-    - Connection pool (mongo_pool_size connections, shared via queue)
     - Thread pool (batch_workers threads processing batches in parallel)
-    - Each thread gets connection from pool, processes batch, returns connection
+    - Each thread creates its own MongoDB connection (thread-local)
+    - Each thread closes connection when done
+    - PyMongo handles internal connection pooling
 
     Args:
         database_type: Database type (should be "mongodb")
@@ -492,41 +466,29 @@ def dump_files_by_id_to_gcs_parallel(
         upload_max_workers: Parallel upload threads per batch (default: 50)
         upload_retry_attempts: Retry attempts for GCS uploads (default: 3)
         reconstruct_pdfs_from_chunks: Reconstruct PDFs from chunks after upload (default: False)
-        mongo_pool_size: MongoDB connection pool size (default: 5)
+        mongo_pool_size: Not used (kept for backward compatibility)
         batch_workers: Number of parallel batch processing threads (default: 5)
 
     Returns:
         Dict mapping file_id to processing info (includes pdf_reconstructed_at and pdf_reconstruction_failed if reconstruct_pdfs_from_chunks=True)
     """
     print(f"\n{'='*60}")
-    print(f"PARALLEL PROCESSING MODE")
+    print(f"PARALLEL PROCESSING MODE (Thread-Local Connections)")
     print(f"{'='*60}")
     print(f"Total files to process: {len(file_ids):,}")
     print(f"Batch size: {batch_size:,} files per batch")
-    print(f"MongoDB connection pool: {mongo_pool_size} connections")
     print(f"Batch worker threads: {batch_workers} parallel workers")
     print(f"Upload workers per batch: {upload_max_workers}")
     print(f"Reconstruct PDFs: {reconstruct_pdfs_from_chunks}")
+    print(f"Note: Each thread creates its own MongoDB connection")
     print(f"{'='*60}\n")
 
-    # Step 1: Create MongoDB connection pool
-    connection_pool = _create_mongo_connection_pool(
-        hostname=hostname,
-        port=port,
-        user=user,
-        password=password,
-        database=database,
-        charset=charset,
-        auth_source=auth_source,
-        pool_size=mongo_pool_size,
-    )
-
-    # Step 2: Split file_ids into batches
+    # Split file_ids into batches
     batches = [file_ids[i:i + batch_size] for i in range(0, len(file_ids), batch_size)]
     total_batches = len(batches)
     print(f"\n📦 Split {len(file_ids):,} files into {total_batches} batches\n")
 
-    # Step 3: Process batches in parallel using thread pool
+    # Process batches in parallel using thread pool
     all_processing_results = {}
     completed_batches = 0
 
@@ -542,7 +504,15 @@ def dump_files_by_id_to_gcs_parallel(
                 _process_batch_threaded,
                 batch_idx,
                 batch_file_ids,
-                connection_pool,
+                # Pass connection parameters (each thread creates its own connection)
+                hostname,
+                port,
+                user,
+                password,
+                database,
+                charset,
+                auth_source,
+                # Processing parameters
                 collection_query,
                 bucket_name,
                 gcs_path,
@@ -569,15 +539,7 @@ def dump_files_by_id_to_gcs_parallel(
                 print(f"\n❌ Batch {batch_idx} FAILED: {e}\n")
                 raise
 
-    # Step 4: Clean up connection pool
-    print(f"\n🧹 Cleaning up connection pool...")
-    while not connection_pool.empty():
-        db = connection_pool.get()
-        if hasattr(db, 'close'):
-            db.close()
-    print(f"✅ Connection pool cleaned up")
-
-    # Step 5: Summary
+    # Summary
     print(f"\n{'='*60}")
     print(f"SUMMARY")
     print(f"{'='*60}")
