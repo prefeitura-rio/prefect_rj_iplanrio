@@ -13,7 +13,7 @@ def materialization__test_dbt():
     inject_bd_credentials_task()
 
     runner = PrefectDbtRunner()
-    runner.profiles_dir = 'opt/prefect/pipelines_v3/queries'
-    runner.project_dir = 'opt/prefect/pipelines_v3/queries'
-    run_result = runner.invoke(['compile', '--select', 'models/br_rj_riodejaneiro_brt_gps', ])
+    profiles_dir = 'opt/prefect/pipelines_v3/queries'
+    project_dir = 'opt/prefect/pipelines_v3/queries'
+    run_result = runner.invoke(['compile', '--select', 'models/br_rj_riodejaneiro_brt_gps','--project-dir', project_dir, '--profiles-dir', profiles_dir])
     print(run_result)  # You can log or process the result as needed
