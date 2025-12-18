@@ -1,0 +1,14 @@
+[project]
+name = "rj_iplanrio__betterstack_api"
+version = "0.1.0"
+description = "Pipeline para extração de dados da BetterStack API"
+dependencies = [
+    "prefect==3.4.9",
+    "pandas>=1.5.0",
+    "requests>=2.28.0",
+    "prefeitura-rio[actions] @ git+https://github.com/prefeitura-rio/prefeitura-rio@54593ddff444158b0ecbab5514c5cde4d44012c0",
+]
+
+[tool.uv]
+managed = true
+package = true
