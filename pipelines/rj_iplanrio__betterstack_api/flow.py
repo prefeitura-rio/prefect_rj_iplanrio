@@ -41,7 +41,7 @@ def rj_iplanrio__betterstack_api(
     token = get_betterstack_credentials()
     monitor_id = get_betterstack_monitor_id()
 
-    
+
     # 2. Date Logic
     # Se date for passado (YYYY-MM-DD), usamos ele como from e to.
     date_range = calculate_date_range(from_date=date, to_date=date)

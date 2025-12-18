@@ -22,15 +22,15 @@ def get_betterstack_credentials() -> str:
     Recupera as credenciais da API BetterStack do Infisical.
     """
     log("Recuperando credenciais do BetterStack")
-    
+
     # Try with BETTERSTACK_TOKEN first, then legacy betterstack_token
     token = getenv_or_action("BETTERSTACK_TOKEN", action="ignore")
     if not token:
         token = getenv_or_action("betterstack_token", action="ignore")
-        
+
     if not token:
         raise ValueError("BetterStack token not found in environment")
-    
+
     return token
 
 
@@ -73,7 +73,7 @@ def fetch_response_times(token: str, monitor_id: str, date_range: Dict[str, str]
     """
     url = f"{BetterStackConstants.BASE_URL_V2.value}/monitors/{monitor_id}/response-times"
 
-    
+
     headers = {"Authorization": f"Bearer {token}"}
     params = {
         "from": date_range["from"],
@@ -96,7 +96,7 @@ def fetch_response_times(token: str, monitor_id: str, date_range: Dict[str, str]
             log(f"Response status: {e.response.status_code}")
             log(f"Response text: {e.response.text[:500]}")
         raise
-    
+
     try:
         data = response.json()
         if "data" in data and "attributes" in data["data"]:
@@ -126,7 +126,7 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
         "per_page": 50 # Maximize page size just in case
     }
 
-    
+
     log(f"Fetching incidents from {url} with params {params}")
 
     all_incidents = []
@@ -153,16 +153,16 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
         except json.JSONDecodeError as e:
             log(f"Error decoding incidents JSON: {e}")
             raise
-        
+
         # Structure: data (list), pagination (dict)
         try:
             incidents = data.get("data", [])
             all_incidents.extend(incidents)
-            
+
             # Pagination handling
             pagination = data.get("pagination", {})
             next_url = pagination.get("next")
-            
+
             if next_url:
                 url = next_url
                 params = {} # params are usually encoded in the next_url
@@ -171,7 +171,7 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
         except KeyError as e:
             log(f"Error parsing incidents structure: {e}")
             url = None # Stop loop if structure is broken
-            
+
     return all_incidents
 
 
