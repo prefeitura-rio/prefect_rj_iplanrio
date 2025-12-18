@@ -1,0 +1,83 @@
+name: rj_crm__webhook_wetalkie_template_status_update
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_crm__webhook_wetalkie_template_status_update-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_crm__webhook_wetalkie_template_status_update/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj_crm__webhook_wetalkie_template_status_update--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__webhook_wetalkie_template_status_update/flow.py:rj_crm__webhook_wetalkie_template_status_update
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__webhook_wetalkie_template_status_update -- prefect flow-run execute
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      query: |
+              SELECT
+              content_event,
+              content_reason,
+              content_message_template_name,
+              content_other_info_description
+              FROM           
+              `rj-crm-registry.brutos_wetalkie_staging.message_template_status_update_2025_*`
+              WHERE 1=1
+              AND phone_number = '5521991952121'
+              AND account = '1'
+              AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
+              order by datarelay_timestamp desc
+      test_mode: true
+  - name: rj_crm__webhook_wetalkie_template_status_update--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__webhook_wetalkie_template_status_update/flow.py:rj_crm__webhook_wetalkie_template_status_update
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__webhook_wetalkie_template_status_update -- prefect flow-run execute
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    parameters:
+      query: |
+          SELECT
+              content_event,
+              content_reason,
+              content_message_template_name,
+              content_other_info_description
+              FROM           
+              `rj-crm-registry.brutos_wetalkie_staging.message_template_status_update_2025_*`
+              WHERE 1=1
+              AND phone_number = '5521991952121'
+              AND account = '1'
+              AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
+              order by datarelay_timestamp desc
+      test_mode: false
+    schedules:
+      - interval: 300  # 5 minutes
+        anchor_date: "2021-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: webhook_wetalkie_template_status_update_5min

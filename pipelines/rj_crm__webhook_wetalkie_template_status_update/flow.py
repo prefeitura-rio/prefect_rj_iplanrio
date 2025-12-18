@@ -8,12 +8,12 @@ import os
 
 
 @flow(log_prints=True)
-def rj_crm__webhook_wetalkie(
+def rj_crm__webhook_wetalkie_template_status_update(
     query: str,
     test_mode: bool = False,
 ):
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"rj_crm__webhook_wetalkie")
+    rename_flow_run = rename_current_flow_run_task(new_name=f"rj_crm__webhook_wetalkie_template_status_update")
     crd = inject_bd_credentials_task(environment="prod")
     disc_webhook_url = os.getenv("discord_wetalkie_notifications_hook")
 
@@ -23,15 +23,22 @@ def rj_crm__webhook_wetalkie(
     data_json = data.to_dict("records")
 
     if len(data) > 0:
-        for i in range(0, len(data_json)):
-            fmt_msg = """⚠️ Atenção:
-                         O template **`{content_message_template_name}`** teve a sua categoria atualizada de **`{content_previous_category}`** para **`{content_new_category}`**""".format(
-                content_message_template_name=data_json[i][
-                    "content_message_template_name"
-                ],
-                content_previous_category=data_json[i]["content_previous_category"],
-                content_new_category=data_json[i]["content_new_category"],
-            )
+        for row in data_json:
+            content_message_template_name = row.get("content_message_template_name")
+            content_event = row.get("content_event")
+            content_reason = row.get("content_reason")
+            content_other_info_description = row.get("content_other_info_description")
+
+            fmt_msg = f"⚠️ Atenção:\n- O template **`{content_message_template_name}`** teve seu status alterado para **`{content_event}`**"
+
+            other_info_lines = []
+            if content_reason:
+                other_info_lines.append(f"  - Reason: **`{content_reason}`**")
+            if content_other_info_description:
+                other_info_lines.append(f"  - **`{content_other_info_description}`**")
+
+            if other_info_lines:
+                fmt_msg += "\n- Outras informações:\n" + "\n".join(other_info_lines)
 
             if not test_mode:
                 send_discord_webhook_message(

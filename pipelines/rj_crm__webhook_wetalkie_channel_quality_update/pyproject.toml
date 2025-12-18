@@ -1,5 +1,5 @@
 [project]
-name = "rj_crm__webhook_wetalkie"
+name = "rj_crm__webhook_wetalkie_channel_quality_update"
 version = "0.1.0"
 description = "..."
 dependencies = [

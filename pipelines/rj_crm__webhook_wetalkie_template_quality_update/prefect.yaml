@@ -1,4 +1,4 @@
-name: rj_crm__webhook_wetalkie
+name: rj_crm__webhook_wetalkie_template_quality_update_template_category_changes
 prefect-version: 3.4.3
 
 build:
@@ -10,8 +10,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_crm__webhook_wetalkie-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_crm__webhook_wetalkie/Dockerfile
+      tag: "rj_crm__webhook_wetalkie_template_quality_update-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_crm__webhook_wetalkie_template_quality_update/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -24,54 +24,52 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj_crm__webhook_wetalkie--staging
+  - name: rj_crm__webhook_wetalkie_template_quality_update--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_crm__webhook_wetalkie/flow.py:rj_crm__webhook_wetalkie
+    entrypoint: pipelines/rj_crm__webhook_wetalkie_template_quality_update/flow.py:rj_crm__webhook_wetalkie_template_quality_update
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__webhook_wetalkie -- prefect flow-run execute
+        command: uv run --package rj_crm__webhook_wetalkie_template_quality_update -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
       query: |
-          SELECT
+       SELECT
             datarelay_timestamp,
-            phone_number,
-            content_new_category,
-            content_previous_category,
-            content_message_template_name
-          FROM
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_*`
+            content_message_template_name,
+            content_previous_quality_score,
+            content_new_quality_score
+            FROM 
+            `rj-crm-registry.brutos_wetalkie_staging.message_template_quality_update_2025_*`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
             AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
             order by datarelay_timestamp desc
       test_mode: true
-  - name: rj_crm__webhook_wetalkie--prod
+  - name: rj_crm__webhook_wetalkie_template_quality_update--prod
     version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_crm__webhook_wetalkie/flow.py:rj_crm__webhook_wetalkie
+    entrypoint: pipelines/rj_crm__webhook_wetalkie_template_quality_update/flow.py:rj_crm__webhook_wetalkie_template_quality_update
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_crm__webhook_wetalkie -- prefect flow-run execute
+        command: uv run --package rj_crm__webhook_wetalkie_template_quality_update -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
       query: |
-          SELECT
+       SELECT
             datarelay_timestamp,
-            phone_number,
-            content_new_category,
-            content_previous_category,
-            content_message_template_name
-          FROM
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_*`
+            content_message_template_name,
+            content_previous_quality_score,
+            content_new_quality_score
+            FROM 
+            `rj-crm-registry.brutos_wetalkie_staging.message_template_quality_update_2025_*`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
@@ -82,4 +80,4 @@ deployments:
       - interval: 300  # 5 minutes
         anchor_date: "2021-01-01T00:00:00"
         timezone: America/Sao_Paulo
-        slug: webhook_wetalkie_5min
+        slug: webhook_wetalkie_template_quality_update_5min
