@@ -42,6 +42,7 @@ from .tasks import (
     build_batch_query,
     chunk_list,
     dump_files_by_id_to_gcs,
+    dump_files_by_id_to_gcs_parallel,
     get_batch_dump_mode,
     get_files_ids_from_bigquery,
     update_processing_metadata,
@@ -81,6 +82,10 @@ def rj_cvl__osinfo_mongo(
     reconstruct_pdfs_from_chunks: bool = False,
     metadata_table_id: Optional[str] = None,
     gcs_bucket_name: str = "rj-nf-agent",
+    use_parallel_processing: bool = False,
+    mongo_pool_size: int = 5,
+    batch_workers: int = 5,
+    upload_max_workers: int = 50,
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
@@ -101,25 +106,48 @@ def rj_cvl__osinfo_mongo(
         # Get file_ids from BigQuery
         files_ids = get_files_ids_from_bigquery(bq_files_ids_query)
 
-        # Dump each file_id to individual parquet in GCS
-        # If reconstruct_pdfs_from_chunks=True, PDFs are reconstructed during batch processing
-        processing_results = dump_files_by_id_to_gcs(
-            database_type=db_type,
-            hostname=db_host,
-            port=int(db_port),
-            user=secrets["DB_USERNAME"],
-            password=secrets["DB_PASSWORD"],
-            database=db_database,
-            collection_query=execute_query,
-            file_ids=files_ids,
-            bucket_name=gcs_bucket_name,
-            gcs_path=f"staging/{dataset_id}/{table_id}",
-            charset=db_charset,
-            auth_source=db_auth_source,
-            batch_size=files_id_batch_size,
-            mongo_batch_size=batch_size,
-            reconstruct_pdfs_from_chunks=reconstruct_pdfs_from_chunks,
-        )
+        # Choose parallel or sequential processing
+        if use_parallel_processing:
+            processing_results = dump_files_by_id_to_gcs_parallel(
+                database_type=db_type,
+                hostname=db_host,
+                port=int(db_port),
+                user=secrets["DB_USERNAME"],
+                password=secrets["DB_PASSWORD"],
+                database=db_database,
+                collection_query=execute_query,
+                file_ids=files_ids,
+                bucket_name=gcs_bucket_name,
+                gcs_path=f"staging/{dataset_id}/{table_id}",
+                charset=db_charset,
+                auth_source=db_auth_source,
+                batch_size=files_id_batch_size,
+                mongo_batch_size=batch_size,
+                upload_max_workers=upload_max_workers,
+                upload_retry_attempts=retry_dump_upload_attempts,
+                reconstruct_pdfs_from_chunks=reconstruct_pdfs_from_chunks,
+                mongo_pool_size=mongo_pool_size,
+                batch_workers=batch_workers,
+            )
+        else:
+            # If reconstruct_pdfs_from_chunks=True, PDFs are reconstructed during batch processing
+            processing_results = dump_files_by_id_to_gcs(
+                database_type=db_type,
+                hostname=db_host,
+                port=int(db_port),
+                user=secrets["DB_USERNAME"],
+                password=secrets["DB_PASSWORD"],
+                database=db_database,
+                collection_query=execute_query,
+                file_ids=files_ids,
+                bucket_name=gcs_bucket_name,
+                gcs_path=f"staging/{dataset_id}/{table_id}",
+                charset=db_charset,
+                auth_source=db_auth_source,
+                batch_size=files_id_batch_size,
+                mongo_batch_size=batch_size,
+                reconstruct_pdfs_from_chunks=reconstruct_pdfs_from_chunks,
+            )
 
         # Update metadata table if requested
         if metadata_table_id:
