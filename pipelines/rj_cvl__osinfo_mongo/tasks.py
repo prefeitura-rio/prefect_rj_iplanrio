@@ -18,6 +18,7 @@ from google.cloud import bigquery, storage
 from iplanrio.pipelines_templates.dump_db.utils import database_get_db
 from iplanrio.pipelines_utils.constants import NOT_SET
 from prefect import task
+from prefect.futures import wait
 
 
 @task
@@ -531,13 +532,21 @@ def dump_files_by_id_to_gcs_parallel(
     print(f"✅ Initial wave submitted ({len(active_futures)} tasks active)\n")
 
     # Process results and submit new batches as slots open up
-    while active_futures:
-        # Check for completed tasks
-        for i, (future, batch_idx) in enumerate(active_futures):
-            try:
-                # Non-blocking check if task is done
-                if future.get_state().is_completed():
-                    # Get result
+    while active_futures or pending_batches:
+        # Wait for at least one future to complete (with timeout to avoid blocking forever)
+        if active_futures:
+            # Extract just the futures for wait()
+            futures_only = [future for future, _ in active_futures]
+            done_futures, remaining_futures = wait(futures_only, timeout=0.5)
+
+            # Rebuild active_futures with remaining futures
+            remaining_map = {future: batch_idx for future, batch_idx in active_futures}
+            active_futures = [(future, remaining_map[future]) for future in remaining_futures]
+
+            # Process all completed tasks
+            for future in done_futures:
+                batch_idx = remaining_map[future]
+                try:
                     batch_results = future.result()
                     all_processing_results.update(batch_results)
                     completed_batches += 1
@@ -545,41 +554,36 @@ def dump_files_by_id_to_gcs_parallel(
                     progress_pct = (completed_batches / total_batches) * 100
                     print(f"\n📊 Progress: {completed_batches}/{total_batches} batches ({progress_pct:.1f}%) - Total files: {len(all_processing_results):,}")
 
-                    # Remove from active list
-                    active_futures.pop(i)
+                except Exception as e:
+                    print(f"\n❌ Batch {batch_idx} FAILED: {e}\n")
+                    raise
 
-                    # Submit next batch if any pending
-                    if pending_batches:
-                        next_batch_idx, next_batch_file_ids = pending_batches.pop(0)
-                        print(f"  📤 Submitting batch {next_batch_idx}/{total_batches} ({len(next_batch_file_ids)} files) - Active: {len(active_futures) + 1}/{batch_workers}\n")
-                        next_future = process_batch_task.submit(
-                            next_batch_idx,
-                            next_batch_file_ids,
-                            hostname,
-                            port,
-                            user,
-                            password,
-                            database,
-                            charset,
-                            auth_source,
-                            collection_query,
-                            bucket_name,
-                            gcs_path,
-                            mongo_batch_size,
-                            upload_max_workers,
-                            upload_retry_attempts,
-                            reconstruct_pdfs_from_chunks,
-                        )
-                        active_futures.append((next_future, next_batch_idx))
+        # Submit new batches to fill up to batch_workers limit
+        slots_available = batch_workers - len(active_futures)
+        batches_to_submit = min(slots_available, len(pending_batches))
 
-                    break  # Restart loop to check for more completed tasks
-
-            except Exception as e:
-                print(f"\n❌ Batch {batch_idx} FAILED: {e}\n")
-                raise
-
-        # Small sleep to avoid busy-waiting
-        time.sleep(0.5)
+        for _ in range(batches_to_submit):
+            next_batch_idx, next_batch_file_ids = pending_batches.pop(0)
+            print(f"  📤 Submitting batch {next_batch_idx}/{total_batches} ({len(next_batch_file_ids)} files) - Active: {len(active_futures) + 1}/{batch_workers}\n")
+            next_future = process_batch_task.submit(
+                next_batch_idx,
+                next_batch_file_ids,
+                hostname,
+                port,
+                user,
+                password,
+                database,
+                charset,
+                auth_source,
+                collection_query,
+                bucket_name,
+                gcs_path,
+                mongo_batch_size,
+                upload_max_workers,
+                upload_retry_attempts,
+                reconstruct_pdfs_from_chunks,
+            )
+            active_futures.append((next_future, next_batch_idx))
 
     # Summary
     print(f"\n{'='*60}")
