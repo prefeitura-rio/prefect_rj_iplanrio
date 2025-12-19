@@ -202,7 +202,7 @@ def transform_response_times(data: List[Dict[str, Any]], extraction_date: str) -
         # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
         for col in df.columns:
             df[col] = df[col].astype(str)
-            
+
         df["data_particao"] = extraction_date
 
     return df
