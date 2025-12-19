@@ -491,16 +491,21 @@ def dump_files_by_id_to_gcs_parallel(
     total_batches = len(batches)
     print(f"\n📦 Split {len(file_ids):,} files into {total_batches} batches\n")
 
-    # Process batches in parallel using Prefect task.submit()
+    # Process batches in waves to limit concurrent MongoDB connections
     all_processing_results = {}
     completed_batches = 0
 
-    print(f"🚀 Starting parallel processing with {batch_workers} concurrent tasks...\n")
+    print(f"🚀 Starting wave-based processing (max {batch_workers} concurrent MongoDB connections)...\n")
 
-    # Submit all batches as Prefect tasks
-    print(f"📤 Submitting {total_batches} batches as Prefect tasks...")
-    futures = []
-    for batch_idx, batch_file_ids in enumerate(batches, 1):
+    # Prepare batch queue
+    active_futures = []  # Currently running tasks
+    pending_batches = list(enumerate(batches, 1))  # Batches waiting to process
+
+    # Submit initial wave (up to batch_workers tasks)
+    initial_wave_size = min(batch_workers, len(pending_batches))
+    print(f"📤 Submitting initial wave of {initial_wave_size} batches...")
+    for _ in range(initial_wave_size):
+        batch_idx, batch_file_ids = pending_batches.pop(0)
         print(f"  Submitting batch {batch_idx}/{total_batches} ({len(batch_file_ids)} files)...")
         future = process_batch_task.submit(
             batch_idx,
@@ -522,22 +527,59 @@ def dump_files_by_id_to_gcs_parallel(
             upload_retry_attempts,
             reconstruct_pdfs_from_chunks,
         )
-        futures.append((future, batch_idx))
-    print(f"✅ All {total_batches} batches submitted!\n")
+        active_futures.append((future, batch_idx))
+    print(f"✅ Initial wave submitted ({len(active_futures)} tasks active)\n")
 
-    # Collect results from all tasks
-    for future, batch_idx in futures:
-        try:
-            batch_results = future.result()
-            all_processing_results.update(batch_results)
-            completed_batches += 1
+    # Process results and submit new batches as slots open up
+    while active_futures:
+        # Check for completed tasks
+        for i, (future, batch_idx) in enumerate(active_futures):
+            try:
+                # Non-blocking check if task is done
+                if future.get_state().is_completed():
+                    # Get result
+                    batch_results = future.result()
+                    all_processing_results.update(batch_results)
+                    completed_batches += 1
 
-            progress_pct = (completed_batches / total_batches) * 100
-            print(f"\n📊 Progress: {completed_batches}/{total_batches} batches ({progress_pct:.1f}%) - Total files: {len(all_processing_results):,}\n")
+                    progress_pct = (completed_batches / total_batches) * 100
+                    print(f"\n📊 Progress: {completed_batches}/{total_batches} batches ({progress_pct:.1f}%) - Total files: {len(all_processing_results):,}")
 
-        except Exception as e:
-            print(f"\n❌ Batch {batch_idx} FAILED: {e}\n")
-            raise
+                    # Remove from active list
+                    active_futures.pop(i)
+
+                    # Submit next batch if any pending
+                    if pending_batches:
+                        next_batch_idx, next_batch_file_ids = pending_batches.pop(0)
+                        print(f"  📤 Submitting batch {next_batch_idx}/{total_batches} ({len(next_batch_file_ids)} files) - Active: {len(active_futures) + 1}/{batch_workers}\n")
+                        next_future = process_batch_task.submit(
+                            next_batch_idx,
+                            next_batch_file_ids,
+                            hostname,
+                            port,
+                            user,
+                            password,
+                            database,
+                            charset,
+                            auth_source,
+                            collection_query,
+                            bucket_name,
+                            gcs_path,
+                            mongo_batch_size,
+                            upload_max_workers,
+                            upload_retry_attempts,
+                            reconstruct_pdfs_from_chunks,
+                        )
+                        active_futures.append((next_future, next_batch_idx))
+
+                    break  # Restart loop to check for more completed tasks
+
+            except Exception as e:
+                print(f"\n❌ Batch {batch_idx} FAILED: {e}\n")
+                raise
+
+        # Small sleep to avoid busy-waiting
+        time.sleep(0.5)
 
     # Summary
     print(f"\n{'='*60}")
