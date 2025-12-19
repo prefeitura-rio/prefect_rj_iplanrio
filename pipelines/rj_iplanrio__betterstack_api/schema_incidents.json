@@ -1,0 +1,27 @@
+[
+    {
+        "name": "id",
+        "type": "STRING",
+        "mode": "NULLABLE"
+    },
+    {
+        "name": "type",
+        "type": "STRING",
+        "mode": "NULLABLE"
+    },
+    {
+        "name": "attributes",
+        "type": "STRING",
+        "mode": "NULLABLE"
+    },
+    {
+        "name": "relationships",
+        "type": "STRING",
+        "mode": "NULLABLE"
+    },
+    {
+        "name": "data_particao",
+        "type": "DATE",
+        "mode": "REQUIRED"
+    }
+]

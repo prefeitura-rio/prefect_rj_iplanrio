@@ -1,0 +1,13 @@
+{
+  "data": {
+    "id": "3839268",
+    "type": "monitor_sla",
+    "attributes": {
+      "availability": 100.0,
+      "total_downtime": 0,
+      "number_of_incidents": 0,
+      "longest_incident": 0,
+      "average_incident": 0
+    }
+  }
+}
