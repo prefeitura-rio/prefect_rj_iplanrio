@@ -199,6 +199,10 @@ def transform_response_times(data: List[Dict[str, Any]], extraction_date: str) -
     df = pd.DataFrame(flattened_data)
 
     if not df.empty:
+        # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
+        for col in df.columns:
+            df[col] = df[col].astype(str)
+            
         df["data_particao"] = extraction_date
 
     return df
@@ -214,15 +218,11 @@ def transform_incidents(data: List[Dict[str, Any]], extraction_date: str) -> pd.
 
     df = pd.DataFrame(data)
 
-    # Process complex columns (attributes, relationships) if necessary
-    # For now, keep as is, but BigQuery might require stringifying dicts if schema is auto-detected as string
-    # or specific structs. Let's convert dicts/lists to strings to be safe for a "brutos" layer.
-
-    for col in df.columns:
-        if df[col].apply(lambda x: isinstance(x, (dict, list))).any():
+    if not df.empty:
+        # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
+        for col in df.columns:
             df[col] = df[col].astype(str)
 
-    if not df.empty:
         df["data_particao"] = extraction_date
 
     return df

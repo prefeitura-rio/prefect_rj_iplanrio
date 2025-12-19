@@ -16,23 +16,27 @@ Monitorar o tempo de resposta (uptime) e registrar incidentes de interrupção d
 
 | Tabela | Origem (API) | Descrição |
 | :--- | :--- | :--- |
-| `response_times` | `/v2/monitors/{id}/response-times` | Latência por região geográfica. |
-| `incidents` | `/v3/incidents` | Registro de incidentes ocorridos no período. |
+| `eai_gateway_response_times` | `/v2/monitors/{id}/response-times` | Latência por região geográfica. |
+| `eai_gateway_incidents` | `/v3/incidents` | Registro de incidentes ocorridos no período. |
 
 ## Configurações e Deploy
 
-A pipeline está configurada no `prefect.yaml` com dois deployments:
+A pipeline está configurada no `prefect.yaml` com dois deployments, ambos apontando para o projeto principal:
 
-1.  **Staging**: Destino projeto `rj-iplanrio-dev`.
+1.  **Staging**: Destino projeto `rj-iplanrio`.
 2.  **Production**: Destino projeto `rj-iplanrio`. Agendamento diário (`cron: "0 6 * * *"`).
 
+> [!NOTE]
+> Seguindo o padrão de simplificação, ambos os ambientes utilizam o projeto `rj-iplanrio` para faturamento e armazenamento, garantindo a existência do bucket de staging.
+
 ### Requisitos
-- **Token de API**: Deve estar configurado no Infisical no caminho `/api-betterstack` com a chave `betterstack_token`.
+- **Token de API**: Deve estar configurado no Infisical (injetado via variáveis de ambiente) com a chave `BETTERSTACK_TOKEN`.
+- **Monitor ID**: Deve estar configurado no Infisical com a chave `MONITOR_ID`.
 
 ## Resiliência e Monitoramento
 - **Retries**: As tarefas de busca de dados na API possuem 3 tentativas automáticas com 60s de intervalo.
 - **Fail-Fast**: A pipeline quebra totalmente caso qualquer uma das tabelas falhe na ingestão, garantindo visibilidade total sobre falhas de dados.
-- **Particionamento**: Utiliza o modelo BigLake particionado por `data_particao` (YYYY-MM-DD).
+- **Particionamento**: Utiliza o modelo BigLake particionado por `data_particao` (YYYY-MM-DD) em formato Parquet.
 
 ---
-*Documentação gerada automaticamente para o repositório rj-iplanrio.*
+*Documentação atualizada em Dezembro/2025.*
