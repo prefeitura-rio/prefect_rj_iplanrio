@@ -144,7 +144,9 @@ def rj_crm__disparo_template(
     )
     if validated_destinations is None:
         return  # flow termina aqui, nada downstream é agendado
-
+    print("force deploy")
+    print("force deploy")
+    print("force deploy")
     # Remove duplicate phone numbers and CPFs if flags are set
     unique_phone_destinations = remove_duplicate_phones(validated_destinations) if filter_duplicated_phones else validated_destinations
     unique_destinations = remove_duplicate_cpfs(unique_phone_destinations) if filter_duplicated_cpfs else unique_phone_destinations
