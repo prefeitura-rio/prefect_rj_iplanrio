@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import os
 from prefect import flow
 from iplanrio.pipelines_utils.bd import (
