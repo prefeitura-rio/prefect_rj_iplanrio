@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 from prefect import flow
 from iplanrio.pipelines_utils.bd import (
@@ -36,7 +37,7 @@ def rj_iplanrio__betterstack_api(
     # 0. Setup
     billing_project_id = billing_project_id or BetterStackConstants.BILLING_PROJECT_ID.value
     os.environ["BASEDOSDADOS_CONFIG"] = get_base64_bd_config(billing_project_id)
-    
+
     dataset_id = dataset_id or BetterStackConstants.DATASET_ID.value
     rename_current_flow_run_task(new_name=f"BetterStack_{date or 'D-1'}")
 
