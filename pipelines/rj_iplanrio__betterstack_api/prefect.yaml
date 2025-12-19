@@ -37,7 +37,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       dataset_id: brutos_betterstack
-      billing_project_id: rj-iplanrio-dev
+      billing_project_id: rj-iplanrio
 
   - name: rj-iplanrio--betterstack-api--prod
     version: "{{ get-commit-hash.stdout }}"
