@@ -434,10 +434,11 @@ deployments:
                 ),
                 remove_optout as (
                     select remove_duplicados.*,
-                    coalesce(da.nome, pf.nome) as nome,
+                    coalesce(da3.nome, da.nome, pf.nome) as nome,
                     from remove_duplicados
                     left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
                     left join `rj-crm-registry-dev.staging__ab_test.divida_ativa` da on remove_duplicados.cpf = lpad(cast(da.cpf as string) , 11, '0')
+                    left join `rj-crm-registry-dev.staging__ab_test.divida_ativa_grupo_3` da3 on remove_duplicados.cpf = lpad(cast(da3.cpf as string) , 11, '0')
                     where pf.telefone.principal.indicador_optout = false
                     and pf.telefone.principal.indicador_quarentena = false
                 )
@@ -611,7 +612,7 @@ deployments:
                                 ) AS destination_data
                 from remove_optout
                 where rn=1
-    # Daily schedule para flow smf-iptu-2025-em-atraso-prod-v1
+  # Daily schedule para flow smf-iptu-2025-em-atraso-prod-v1
       - interval: 86400
         anchor_date: "2021-01-01T16:00:00"
         timezone: America/Sao_Paulo
@@ -684,9 +685,9 @@ deployments:
                     where pf.telefone.principal.indicador_optout = false
                     and pf.telefone.principal.indicador_quarentena = false
                 ),
-            dia_semana_tb as ( select
+                dia_semana_tb as ( select
                     EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) as dia_semana
-            )
+                )
 
                 select
                     TO_JSON_STRING(
