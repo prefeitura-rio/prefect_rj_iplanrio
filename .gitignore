@@ -4,10 +4,10 @@ prefect_rj_iplanrio.egg-info/
 .cursor/
 
 #dbt
-queries/logs/
-queries/target/
-queries/target-base/
-queries/profiles/
+queries/logs/*
+queries/target/*
+queries/target-base/*
+queries/profiles/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
