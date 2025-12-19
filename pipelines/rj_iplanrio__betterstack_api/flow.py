@@ -17,6 +17,8 @@ from pipelines.rj_iplanrio__betterstack_api.tasks import (
     fetch_incidents,
     transform_response_times,
     transform_incidents,
+    fetch_sla,
+    transform_sla,
 )
 
 from pipelines.rj_iplanrio__betterstack_api.utils.tasks import create_date_partitions
@@ -47,14 +49,14 @@ def rj_iplanrio__betterstack_api(
 
 
     # 2. Date Logic
-    # Se date for passado (YYYY-MM-DD), usamos ele como from e to.
+    # For high-availability, we always fetch the last 24h.
+    # The 'date' parameter remains for manual backfills if needed.
     date_range = calculate_date_range(from_date=date, to_date=date)
-    extraction_date = date_range["from"] # Usado para partição
-
+    
     # --- TABLE 1: Response Times ---
     raw_response_times = fetch_response_times(token=token, monitor_id=monitor_id, date_range=date_range)
 
-    df_response = transform_response_times(raw_response_times, extraction_date=extraction_date)
+    df_response = transform_response_times(raw_response_times)
 
     if not df_response.empty:
         path_response = create_date_partitions(
@@ -76,7 +78,7 @@ def rj_iplanrio__betterstack_api(
     # --- TABLE 2: Incidents ---
     raw_incidents = fetch_incidents(token=token, monitor_id=monitor_id, date_range=date_range)
 
-    df_incidents = transform_incidents(raw_incidents, extraction_date=extraction_date)
+    df_incidents = transform_incidents(raw_incidents)
 
     if not df_incidents.empty:
         path_incidents = create_date_partitions(
@@ -90,6 +92,28 @@ def rj_iplanrio__betterstack_api(
             data_path=path_incidents,
             dataset_id=dataset_id,
             table_id=BetterStackConstants.TABLE_ID_INCIDENTS.value,
+            dump_mode=BetterStackConstants.DUMP_MODE.value,
+            biglake_table=BetterStackConstants.BIGLAKE_TABLE.value,
+            source_format=BetterStackConstants.FILE_FORMAT.value,
+        )
+
+    # --- TABLE 3: SLA (Daily Summary) ---
+    raw_sla = fetch_sla(token=token, monitor_id=monitor_id, date_range=date_range)
+
+    df_sla = transform_sla(raw_sla, extraction_date=date_range["from"])
+
+    if not df_sla.empty:
+        path_sla = create_date_partitions(
+            dataframe=df_sla,
+            partition_column=BetterStackConstants.PARTITION_COLUMN.value,
+            file_format=BetterStackConstants.FILE_FORMAT.value,
+            root_folder=f"{BetterStackConstants.ROOT_FOLDER.value}/{BetterStackConstants.TABLE_ID_SLA.value}"
+        )
+
+        create_table_and_upload_to_gcs_task(
+            data_path=path_sla,
+            dataset_id=dataset_id,
+            table_id=BetterStackConstants.TABLE_ID_SLA.value,
             dump_mode=BetterStackConstants.DUMP_MODE.value,
             biglake_table=BetterStackConstants.BIGLAKE_TABLE.value,
             source_format=BetterStackConstants.FILE_FORMAT.value,

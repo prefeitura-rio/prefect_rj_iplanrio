@@ -17,6 +17,7 @@ class BetterStackConstants(Enum):
     BILLING_PROJECT_ID = "rj-iplanrio"
     TABLE_ID_RESPONSE_TIMES = "eai_gateway_response_times"
     TABLE_ID_INCIDENTS = "eai_gateway_incidents"
+    TABLE_ID_SLA = "eai_gateway_daily_sla"
 
     # Configurações de execução
     DUMP_MODE = "append"

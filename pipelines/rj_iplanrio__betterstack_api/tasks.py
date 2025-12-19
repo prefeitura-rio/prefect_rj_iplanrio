@@ -176,7 +176,7 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
 
 
 @task
-def transform_response_times(data: List[Dict[str, Any]], extraction_date: str) -> pd.DataFrame:
+def transform_response_times(data: List[Dict[str, Any]]) -> pd.DataFrame:
     """
     Transforma dados de response-times.
     Flatten da estrutura: Regions -> Response Times
@@ -199,17 +199,21 @@ def transform_response_times(data: List[Dict[str, Any]], extraction_date: str) -
     df = pd.DataFrame(flattened_data)
 
     if not df.empty:
-        # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
+        # Dynamic partitioning based on the 'at' timestamp
+        # Format: 2025-12-18T04:03:10.000Z -> 2025-12-18
+        df["data_particao"] = pd.to_datetime(df["at"]).dt.strftime("%Y-%m-%d")
+
+        # Cast all columns to string (except partition which is used by utility)
+        # to avoid schema mismatches in BigQuery brutos layer
         for col in df.columns:
-            df[col] = df[col].astype(str)
-            
-        df["data_particao"] = extraction_date
+            if col != "data_particao":
+                df[col] = df[col].astype(str)
 
     return df
 
 
 @task
-def transform_incidents(data: List[Dict[str, Any]], extraction_date: str) -> pd.DataFrame:
+def transform_incidents(data: List[Dict[str, Any]]) -> pd.DataFrame:
     """
     Transforma dados de incidents.
     """
@@ -219,10 +223,84 @@ def transform_incidents(data: List[Dict[str, Any]], extraction_date: str) -> pd.
     df = pd.DataFrame(data)
 
     if not df.empty:
+        # Dynamic partitioning based on started_at in attributes
+        # First, ensure we can access attributes easily if it's a dict
+        def extract_date(row):
+            try:
+                attrs = row.get("attributes", {})
+                ts = attrs.get("started_at") or attrs.get("created_at")
+                if ts:
+                    return ts[:10] # YYYY-MM-DD
+            except Exception:
+                pass
+            return datetime.now().strftime("%Y-%m-%d")
+
+        df["data_particao"] = df.apply(extract_date, axis=1)
+
         # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
         for col in df.columns:
-            df[col] = df[col].astype(str)
+            if col != "data_particao":
+                df[col] = df[col].astype(str)
 
-        df["data_particao"] = extraction_date
+    return df
+
+@task(
+    retries=3,
+    retry_delay_seconds=60,
+)
+def fetch_sla(
+    token: str,
+    monitor_id: str,
+    date_range: Dict[str, str],
+) -> Dict[str, Any]:
+    """
+    Obtém os dados de SLA (resumo diário) da BetterStack API v2.
+    """
+    url = f"{BetterStackConstants.BASE_URL_V2.value}/monitors/{monitor_id}/sla"
+    headers = {"Authorization": f"Bearer {token}"}
+    params = {
+        "from": date_range["from"],
+        "to": date_range["to"],
+    }
+
+    log(f"Fetching SLA data from {date_range['from']} to {date_range['to']}...")
+    try:
+        response = requests.get(
+            url, headers=headers, params=params, timeout=BetterStackConstants.TIMEOUT.value
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        log(f"Erro ao buscar SLA: {e}")
+        raise
+
+
+@task
+def transform_sla(data: Dict[str, Any], extraction_date: str) -> pd.DataFrame:
+    """
+    Transforma dados de SLA em DataFrame.
+    """
+    if not data or "data" not in data:
+        return pd.DataFrame()
+
+    sla_data = data["data"]
+    attributes = sla_data.get("attributes", {})
+
+    record = {
+        "id": sla_data.get("id"),
+        "availability": attributes.get("availability"),
+        "total_downtime": attributes.get("total_downtime"),
+        "number_of_incidents": attributes.get("number_of_incidents"),
+        "longest_incident": attributes.get("longest_incident"),
+        "average_incident": attributes.get("average_incident"),
+        "data_particao": extraction_date
+    }
+
+    df = pd.DataFrame([record])
+
+    # Cast numeric to string for consistency in brutos layer
+    for col in df.columns:
+        if col != "data_particao":
+            df[col] = df[col].astype(str)
 
     return df
