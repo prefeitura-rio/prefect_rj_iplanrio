@@ -30,4 +30,4 @@ def materialization__test_dbt():
     runner = PrefectDbtRunner(settings=settings)
     
     run_result = runner.invoke(['compile', '--select', 'models/br_rj_riodejaneiro_brt_gps'])
-    print(run_result)  # You can log or process the result as needed
+    print(run_result)  # trigger cd
