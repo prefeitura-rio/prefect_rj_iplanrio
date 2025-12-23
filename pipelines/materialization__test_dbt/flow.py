@@ -17,8 +17,8 @@ def materialization__test_dbt():
     project_dir = '/opt/prefect/pipelines_v3/queries'
 
     #set envs
-    environ['DBT_PROFILES_DIR'] = profiles_dir
-    environ['DBT_PROJECT_DIR'] = project_dir
+    # environ['DBT_PROFILES_DIR'] = profiles_dir
+    # environ['DBT_PROJECT_DIR'] = project_dir
 
     files = [f for f in Path(profiles_dir).glob('**/*.yml')]
     print(f"Files in profiles_dir ({profiles_dir}): {[str(f) for f in files]}")
