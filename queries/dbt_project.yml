@@ -432,10 +432,6 @@ models:
     catalogo:
       +materialized: view
       +schema: catalogo
-    planejamento:
-      +materialized: incremental
-      +incremental_strategy: insert_overwrite
-      +schema: planejamento
     transito:
       +materialized: incremental
       +schema: transito

@@ -8,6 +8,7 @@ queries/logs/*
 queries/target/*
 queries/target-base/*
 queries/profiles/*
+queries/dev/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
