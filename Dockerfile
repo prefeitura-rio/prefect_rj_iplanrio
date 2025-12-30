@@ -26,3 +26,13 @@ RUN apt-get update \
     && ldconfig \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
+
+WORKDIR /opt/prefect/pipelines_v3
+
+COPY ./pyproject.toml ./uv.lock /opt/prefect/pipelines_v3/
+
+RUN uv sync --all-packages
+
+WORKDIR /opt/prefect/pipelines_v3/queries
+
+RUN uv run dbt deps
