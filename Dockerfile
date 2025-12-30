@@ -29,6 +29,8 @@ RUN apt-get update \
 
 WORKDIR /opt/prefect/pipelines_v3
 
+COPY ./pyproject.toml ./uv.lock /opt/prefect/pipelines_v3/
+
 RUN uv sync --all-packages
 
 WORKDIR /opt/prefect/pipelines_v3/queries
