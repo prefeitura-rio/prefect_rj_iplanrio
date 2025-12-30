@@ -35,4 +35,4 @@ RUN uv sync --all-packages
 
 WORKDIR /opt/prefect/pipelines_v3/queries
 
-RUN uv dbt deps
+RUN uv run dbt deps
