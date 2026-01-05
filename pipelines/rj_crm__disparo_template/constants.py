@@ -28,7 +28,7 @@ class TemplateConstants(Enum):
 
     # Configurações de dataset
     DATASET_ID = "brutos_wetalkie"
-    TABLE_ID = "disparos"
+    TABLE_ID = "disparos_efetuados"
     DUMP_MODE = "append"
     CHUNK_SIZE = 1000
 
