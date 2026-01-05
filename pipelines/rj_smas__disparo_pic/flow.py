@@ -17,7 +17,7 @@ from prefect import flow
 # pylint: disable=E0611, E0401
 from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
     check_if_dispatch_approved,
@@ -26,15 +26,16 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     dispatch,
     format_query,
     get_destinations,
+    remove_duplicate_cpfs,
     remove_duplicate_phones,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.discord import (
+from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     printar,
@@ -57,6 +58,9 @@ def rj_smas__disparo_pic(
     query: str | None = None,
     query_dispatch_approved: str | None = None,
     query_processor_name: str | None = None,
+    filter_dispatched_phones_or_cpfs: str | None = "cpf",
+    filter_duplicated_phones: bool = True,
+    filter_duplicated_cpfs: bool = True,
     test_mode: bool | None = True,
     sleep_minutes: int | None = 5,
     dispatch_approved_col: str | None = "APROVACAO_DISPARO_AVISO",
@@ -136,14 +140,19 @@ def rj_smas__disparo_pic(
             destinations=destinations,
             query=query_complete,
             billing_project_id=billing_project_id,
+            filter_dispatched_phones_or_cpfs=filter_dispatched_phones_or_cpfs,
         )
 
         validated_destinations = skip_flow_if_empty(
             data=destinations_result,
             message="No destinations found from query. Skipping flow execution.",
         )
+        if validated_destinations is None:
+            return  # flow termina aqui, nada downstream é agendado
 
-        unique_destinations = remove_duplicate_phones(validated_destinations)
+        # Remove duplicate phone numbers and CPFs if flags are set
+        unique_phone_destinations = remove_duplicate_phones(validated_destinations) if filter_duplicated_phones else validated_destinations
+        unique_destinations = remove_duplicate_cpfs(unique_phone_destinations) if filter_duplicated_cpfs else unique_phone_destinations
 
         # Log destination counts for tracking!!
         print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
@@ -197,6 +206,7 @@ def rj_smas__disparo_pic(
                 total_batches=total_batches,
                 sample_destination=(unique_destinations[0] if unique_destinations else None),
                 test_mode=test_mode,
+                whitelist_percentage=whitelist_percentage,
             )
 
             dfr = create_dispatch_dfr(

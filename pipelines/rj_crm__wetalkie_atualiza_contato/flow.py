@@ -76,6 +76,8 @@ def rj_crm__wetalkie_atualiza_contato(
         data=df_contacts,
         message="No contacts found with missing phone data. Skipping flow execution.",
     )
+    if validated_contacts is None:
+        return  # flow termina aqui, nada downstream é agendado
 
     # Acessar API Wetalkie
     api = access_api(
@@ -88,15 +90,20 @@ def rj_crm__wetalkie_atualiza_contato(
 
     # Buscar dados dos contatos na API Wetalkie
     updated_contacts = get_contacts(api, validated_contacts)
-
     # Verificar se algum contato foi atualizado
     final_contacts = skip_flow_if_empty(
         data=updated_contacts,
         message="No contacts were successfully updated from API. Skipping upload.",
     )
 
+    if final_contacts is None:
+        return  # flow termina aqui, nada downstream é agendado
+
     # Exportar dados para arquivo
-    exported_path = safe_export_df_to_parquet(dfr=final_contacts, output_path=root_folder)
+    exported_path = safe_export_df_to_parquet(
+        dfr=final_contacts,
+        output_path=root_folder,
+    )
 
     # Upload para GCS e BigQuery
     create_table_and_upload_to_gcs_task(

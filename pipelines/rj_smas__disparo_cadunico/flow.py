@@ -16,7 +16,7 @@ from prefect import flow  # pylint: disable=E0611, E0401
 
 from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.utils.dispatch import (
     check_api_status,
     create_dispatch_dfr,
     create_dispatch_payload,
@@ -27,13 +27,13 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     skip_flow_if_empty,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.discord import (
+from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
@@ -112,6 +112,8 @@ def rj_smas__disparo_cadunico(
         data=destinations_result,
         message="No destinations found from query. Skipping flow execution.",
     )
+    if validated_destinations is None:
+        return  # flow termina aqui, nada downstream é agendado
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
 
@@ -172,6 +174,7 @@ def rj_smas__disparo_cadunico(
                 unique_destinations[0] if unique_destinations else None
             ),
             test_mode=test_mode,
+            whitelist_percentage=whitelist_percentage,
         )
 
         dfr = create_dispatch_dfr(
@@ -216,7 +219,7 @@ def rj_smas__disparo_cadunico(
         # Wait 15 minutes before querying results
         print("⚠️  Waiting 15 minutes before checking dispatch results...")
         time.sleep(15 * 60)
-
+        print("force deploy")
         # Send results notification with BigQuery data
         send_dispatch_result_notification(
             total_dispatches=len(unique_destinations),
@@ -227,5 +230,5 @@ def rj_smas__disparo_cadunico(
             total_batches=total_batches,
             test_mode=test_mode,
         )
-# force deploy####
-#forçando deploy
+
+        print("force deploy")

@@ -1,0 +1,726 @@
+name: rj_crm__disparo_template
+prefect-version: 3.4.3
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__disparo_template-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__disparo_template/Dockerfile
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: '{{ build-image.image_name }}'
+      tag: '{{ build-image.tag }}'
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+deployments:
+  - name: rj-crm--disparo-template--staging
+    version: '{{ build-image.tag }}'
+    entrypoint:
+      pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__disparo_template -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      id_hsm: 101
+      campaign_name: disparo-template-prod
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      filter_dispatched_phones_or_cpfs: cpf
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
+      infisical_secret_path: /wetalkie
+  - name: rj-crm--disparo-template--prod
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint:
+      pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__disparo_template -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    parameters:
+      id_hsm: 101
+      campaign_name: disparo-template-prod
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      filter_dispatched_phones_or_cpfs: cpf
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
+      infisical_secret_path: /wetalkie
+    schedules:
+  # Daily schedule para flow cvl-pesquisa1746-prod
+      - interval: 86400
+        anchor_date: "2021-01-01T19:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-cvl-pesquisa1746-prod
+        flow_run_name: cvl-pesquisa1746
+        parameters:
+          id_hsm: 192
+          query_replacements: {"id_hsm_placeholder": 192}
+          campaign_name: cvl-pesquisa1746-prod
+          cost_center_id: 71
+          chunk_size: 1000
+          dataset_id: brutos_wetalkie
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          whitelist_percentage: 100
+          infisical_secret_path: "/wetalkie"
+          whitelist_environment: "production"
+          query: |
+            WITH tabela_global AS (
+                SELECT
+                    DISTINCT
+                    -- Identificação do chamado e protocolo
+                    t1.id_chamado,
+                    t3.id_protocolo,
+                    t3.id_protocolo_chamado,
+                    t3.ic_motivo,
+
+                    -- Descrição e canal de origem
+                    t1.descricao AS descricao_chamado,
+                    t5.no_origem_ocorrencia AS canal_atendimento,
+                    CASE
+                    WHEN t1.id_origem_ocorrencia = '1' THEN 'Central 1746'
+                    WHEN t1.id_origem_ocorrencia = '11' THEN 'Aplicativo 1746'
+                    WHEN t1.id_origem_ocorrencia = '12' THEN 'Agência 1746'
+                    WHEN t1.id_origem_ocorrencia = '13' THEN 'Site 1746'
+                    WHEN t1.id_origem_ocorrencia = '16' THEN 'Carioca Digital'
+                    WHEN t1.id_origem_ocorrencia = '17' THEN 'WhatsApp 1746'
+                    WHEN t1.id_origem_ocorrencia = '18' THEN 'Van 1746'
+                    WHEN t1.id_origem_ocorrencia = '26' THEN 'Agência 1746'
+                    WHEN t1.id_origem_ocorrencia = '28' THEN 'WhatsApp 1746'
+                    ELSE t1.id_origem_ocorrencia
+                    END AS canal_tratado,
+
+                    -- Dados do cidadão
+                    t3.cpf,
+                    t4.id_pessoa,
+                    t4.nome,
+                    CONCAT(
+                    INITCAP(SPLIT(t4.nome, ' ')[OFFSET(0)]),
+                    ' ',
+                    INITCAP(SPLIT(t4.nome, ' ')[OFFSET(ARRAY_LENGTH(SPLIT(t4.nome, ' ')) - 1)])
+                    ) AS nome_tratado,
+                    t4.email,
+
+                    -- Telefones limpos e formatados
+                    COALESCE(
+                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(t4.telefone_1, r'[^\d]', '')),
+                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(t4.telefone_2, r'[^\d]', '')),
+                    `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(t4.telefone_3, r'[^\d]', ''))
+                    ) AS telefone,
+
+                    -- Datas e informações operacionais
+                    t1.data_inicio,
+                    t1.data_fim,
+                    t1.data_alvo_finalizacao,
+                    t1.categoria,
+                    t1.id_tipo,
+                    t1.tipo,
+                    t1.id_subtipo,
+
+                    -- Subtipo tratado (descrição legível)
+                    CASE
+                    WHEN t1.id_subtipo = '1274' THEN 'Verificação de frequência irregular da coleta domiciliar'
+                    WHEN t1.id_subtipo = '1242' THEN 'Verificação de ar condicionado inoperante no ônibus'
+                    WHEN t1.id_subtipo = '1287' THEN 'Varrição de logradouro'
+                    WHEN t1.id_subtipo = '2178' THEN 'Reposição de tampão ou grelha'
+                    WHEN t1.id_subtipo = '3139' THEN 'Reparo de sinal de trânsito apagado'
+                    WHEN t1.id_subtipo = '5799' THEN 'Reparo de Luminária'
+                    WHEN t1.id_subtipo = '78' THEN 'Reparo de buraco na pista'
+                    WHEN t1.id_subtipo = '1298' THEN 'Remoção de resíduos no logradouro'
+                    WHEN t1.id_subtipo = '1325' THEN 'Remoção de entulho e bens inservíveis'
+                    WHEN t1.id_subtipo = '1319' THEN 'Poda de árvore em logradouro'
+                    WHEN t1.id_subtipo = '5071' THEN 'Fiscalização de perturbação do sossego'
+                    WHEN t1.id_subtipo = '114' THEN 'Fiscalização de obstáculo fixo na calçada'
+                    WHEN t1.id_subtipo = '2966' THEN 'Fiscalização de estacionamento irregular de veículo'
+                    WHEN t1.id_subtipo = '1101' THEN 'Fiscalização de comércio ambulante'
+                    WHEN t1.id_subtipo = '5841' THEN 'Fiscalização da ocupação de área pública'
+                    WHEN t1.id_subtipo = '100' THEN 'Desobstrução de ramais e ralos'
+                    WHEN t1.id_subtipo = '1316' THEN 'Controle de roedores e caramujos africanos'
+                    WHEN t1.id_subtipo = '1279' THEN 'Capina em logradouro'
+                    ELSE t1.subtipo
+                    END AS subtipo_tratado,
+
+                    -- Localização e unidade responsável
+                    t1.subtipo,
+                    t1.id_territorialidade,
+                    t1.id_unidade_organizacional,
+                    t1.nome_unidade_organizacional,
+                    t1.id_bairro,
+                    t2.bairro,
+                    t2.no_subprefeitura AS subprefeitura,
+                    t1.id_logradouro,
+                    t1.numero_logradouro,
+
+                    -- Status e tempo de atendimento
+                    t1.status,
+                    t1.situacao,
+                    t1.tipo_situacao,
+                    t1.tempo_prazo
+
+                FROM rj-segovi.adm_central_atendimento_1746.chamado t1
+                LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura t2
+                    ON t1.id_bairro = t2.id_bairro
+                LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf t3
+                    ON t1.id_chamado = t3.id_chamado
+                LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa t4
+                    ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)
+                LEFT JOIN rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5
+                    ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)
+                WHERE 1=1
+                    AND t1.data_inicio >= '2025-01-01 00:00:00.000' -- Considera somente chamados a partir de Jan/25
+                    AND t1.id_subtipo IN (
+                    '2966','1325','5799','78','100','1298','1319','1316','1274','1242',
+                    '1287','5071','1279','2178','3139','114','5841','1101'
+                    ) -- 18 serviços selecionados pela SUBTD
+                    AND t1.data_fim IS NOT NULL -- Somente chamados fechados
+                    AND t1.id_bairro IS NOT NULL -- Somente chamados com bairro classificado
+                    AND t1.categoria IN ('Serviço') -- Desconsidera ouvidoria
+                    AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
+                    AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
+                    AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
+                    AND t1.status IN ('Fechado com providências', 'Fechado com solução') --desconsidera chamados onde a equipe de campo não conseguiu atender
+                ),
+
+                dados_finais AS (
+                SELECT
+                    id_chamado,
+                    canal_tratado,
+                    cpf,
+                    nome_tratado AS nome,
+                    telefone,
+                    data_inicio,
+                    data_fim,
+                    subtipo_tratado,
+                    id_subtipo
+                FROM tabela_global ta
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.flattarget = ta.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and date(fl.createDate) = CURRENT_DATE("America/Sao_Paulo") and fl.status="PROCESSING"
+                WHERE fl.flattarget is null
+                    AND (
+                    CASE
+                        -- Se for sábado ou domingo, joga para uma data no futuro (retorna vazio)
+                        WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7, 1)
+                        THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL 1 YEAR)
+                        -- Se for segunda-feira, pega chamados fechados na sexta, sábado e domingo
+                        WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) = 2
+                        THEN DATE(data_fim) IN (
+                            DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY),
+                            DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY),
+                            DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+                        )
+                        -- Nos demais dias, pega chamados fechados no dia anterior
+                        ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+                    END
+                    )
+                    AND telefone IS NOT NULL
+                )
+
+                SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                    telefone AS celular_disparo,
+                    STRUCT(
+                        nome AS NOME_SOBRENOME,
+                        nome AS CC_WT_NOME_SOBRENOME,
+                        subtipo_tratado AS SOLICITACAO,
+                        subtipo_tratado AS CC_WT_SOLICITACAO,
+                        canal_tratado AS CANAL,
+                        canal_tratado AS CC_WT_CANAL,
+                        cpf AS CC_WT_CPF_CIDADAO,
+                        CAST(id_chamado AS STRING) AS CC_WT_ID_CHAMADO,
+                        CAST(id_subtipo AS STRING) AS CC_WT_ID_SUBTIPO
+                    ) AS vars,
+                    CAST(cpf AS STRING) AS externalId
+                    )
+                ) AS destination_data
+                FROM dados_finais;
+  # Daily schedule para flow pgm-divida-ativa-prod
+      - interval: 86400
+        anchor_date: "2021-01-01T19:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-pgm-divida-ativa-prod
+        flow_run_name: pgm-divida-ativa
+        parameters:
+          id_hsm: 196
+          query_replacements: {"id_hsm_placeholder": 196, "limit_placeholder": 2000}
+          campaign_name: pgm-divida-ativa-prod-v1
+          cost_center_id: 71
+          chunk_size: 1000
+          dataset_id: brutos_wetalkie
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          whitelist_percentage: 100
+          infisical_secret_path: "/wetalkie"
+          whitelist_environment: "production"
+          query: |
+            with
+            divida_ativa as (
+                select * except(cpf, telefone),
+                cast(telefone as string) as telefone,
+                lpad(cast(cpf as string) , 11, '0') as cpf
+                from `rj-crm-registry-dev.staging__ab_test.divida_ativa_grupo_3`
+                where grupo like "%tratamento%3%"
+            ),
+            filtra_disparados as (
+                select da.*
+                FROM divida_ativa da
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.flattarget = da.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)  -- and fl.status="PROCESSING"
+                    where fl.flattarget is null
+            ),
+            dados_rmi as (
+              SELECT
+                cpf,
+                -- Telefones limpos e formatados
+                CONCAT(ifnull(telefone.principal.ddi, "55"), telefone.principal.ddd, telefone.principal.valor) AS telefone_principal,
+              FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+              WHERE menor_idade is False
+              and obito.indicador is False
+              and telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+            ),
+            final as (
+              select
+              filtra_disparados.nome,
+              dados_rmi.*
+              from filtra_disparados
+              inner join dados_rmi using(cpf)
+            )
+
+            SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                        telefone_principal AS celular_disparo,
+                        STRUCT(
+                            INITCAP(
+                            IF(
+                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                CONCAT(
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                ),
+                                nome
+                            )
+                            )  AS NOME_SOBRENOME,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                    ),
+                                    nome
+                                )
+                            ) AS CC_WT_NOME_SOBRENOME,
+                            cpf AS CC_WT_CPF_CIDADAO
+                        ) AS vars,
+                        CAST(cpf AS STRING) AS externalId
+                        )
+                    ) AS destination_data
+            from final
+            limit cast({limit_placeholder} as int64)
+
+  # Daily schedule para flow pgm-divida-ativa-lembrete-prod-v1
+      - interval: 86400
+        anchor_date: "2021-01-01T19:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-pgm-divida-ativa-lembrete-prod-v1
+        flow_run_name: pgm-divida-ativa-lembrete
+        parameters:
+          id_hsm: 227
+          campaign_name: pgm-divida-ativa-lembrete-prod-v1
+          cost_center_id: 71
+          chunk_size: 1000
+          dataset_id: brutos_wetalkie
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          whitelist_percentage: 100
+          infisical_secret_path: "/wetalkie"
+          whitelist_environment: "production"
+          query: |
+            with
+                disparos_divida_ativa as (
+                    -- quem recebeu os disparos de whatsapp sem erros
+                    select distinct targetexternalid as cpf,
+                    flattarget as celular_disparo,
+                    (DATE(createdate)) as data_disparo,
+                    templateId as id_hsm
+                    from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+                    where templateid in (196, 227)
+                    and faileddate is null
+                ),
+                disparos as (
+                    -- traz último disparo de cobrança e lembrete
+                    select cpf, celular_disparo,
+                    max(case when id_hsm = 196 then data_disparo else null end) as data_disparo_cobranca,
+                    max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
+                    from disparos_divida_ativa
+                    group by 1, 2
+                ),
+                divida_ativa as (
+                    -- seleciona dados da tabela de dÃvida ativa do lake
+                    SELECT
+                    contribuinte.*,
+                    disparos.*,
+                    guia_pagamento.tipo_pagamento.nome_tipo_pagamento,
+                    cotas AS cotas,
+                    cdas_associadas.situacao_cda.descricao_situacao_cda as descricao_situacao_cda,
+                    guia_pagamento.id_guia_pagamento,
+                    guia_pagamento.numero_processo_associado,
+                    guia_pagamento.data_criacao_guia
+                    FROM `rj-iplanrio.divida_ativa.contribuinte` AS contribuinte
+                    CROSS JOIN UNNEST(guias_pagamento) AS guia_pagamento
+                    CROSS JOIN UNNEST(cotas) AS cotas
+                    cross join unnest(cdas_associadas) as cdas_associadas
+                    RIGHT JOIN disparos
+                    ON contribuinte.cpf_cnpj = disparos.cpf
+                    -- criacao da guia de pagamento após o disparo
+                    where data_disparo_cobranca <= guia_pagamento.data_criacao_guia or guia_pagamento.data_criacao_guia is null
+                ),
+                remove_duplicados as (
+                    select distinct
+                    cpf,
+                    celular_disparo,
+                    cotas.codigo_barras,
+                    cotas.codigo_qr_pix,
+                    id_guia_pagamento as guia,
+                    numero_processo_associado,
+                    cotas.cota_paga as cota_paga,
+                    cotas.data_vencimento as data_vencimento,
+                    cotas.valor_cota_guia_pagamento as valor_cota,
+                    data_criacao_guia,
+                    -- seleciono a última guia gerada por pessoa
+                    row_number() over (partition by cpf_cnpj order by cotas.data_vencimento, data_criacao_guia desc) as rn,
+                    -- rn1 > 1 significa que a pessoa tem mais de uma cota vencendo no mesmo dia com valores distintos,
+                    -- aparentemente acontece quando cotas.observacoes != "Encaminhada para Protesto"
+                    rank() over (partition by cpf_cnpj, cotas.data_vencimento order by cotas.valor_cota_guia_pagamento desc) as rn1
+                    from divida_ativa
+                    where cotas.cota_paga = false
+                    and cotas.data_vencimento = date_add(current_date("America/Sao_Paulo"), interval 1 day) -- TODO: MUDAR
+                    and cotas.observacoes != "Encaminhada para Protesto"  -- TODO: nesse caso temos mais de uma cota vencendo no mesmo dia pra mesma pessoa, ignoramos essas pessoas, disparamos mais de uma HSM ou mudamos a HSM? para visualizar usar where rn1>1 na próxima query.
+                ),
+                remove_optout as (
+                    select remove_duplicados.*,
+                    coalesce(da3.nome, da.nome, pf.nome) as nome,
+                    from remove_duplicados
+                    left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
+                    left join `rj-crm-registry-dev.staging__ab_test.divida_ativa` da on remove_duplicados.cpf = lpad(cast(da.cpf as string) , 11, '0')
+                    left join `rj-crm-registry-dev.staging__ab_test.divida_ativa_grupo_3` da3 on remove_duplicados.cpf = lpad(cast(da3.cpf as string) , 11, '0')
+                    where pf.telefone.principal.indicador_optout = false
+                    and pf.telefone.principal.indicador_quarentena = false
+                )
+
+                select
+                    TO_JSON_STRING(
+                                STRUCT(
+                                    celular_disparo,
+                                    STRUCT(
+                                        INITCAP(
+                                        IF(
+                                            ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                            CONCAT(
+                                                SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                                SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                            ),
+                                            nome
+                                        )
+                                        )  AS NOME_SOBRENOME,
+                                        INITCAP(
+                                            IF(
+                                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                                CONCAT(
+                                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                                    SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                                ),
+                                                nome
+                                            )
+                                        ) AS CC_WT_NOME_SOBRENOME,
+                                        cpf AS CC_WT_CPF_CIDADAO,
+                                        data_vencimento as DATA_VENCIMENTO,
+                                        data_vencimento as CC_WT_DATA_VENCIMENTO,
+                                        codigo_barras as CC_WT_COD_BOLETO,
+                                        codigo_qr_pix as CC_WT_COD_PIX,
+                                        guia as CC_WT_NUMERO_GUIA,
+                                        CONCAT('R$ ', REPLACE(cast(valor_cota as string), '.', ',')) as CC_WT_VALOR_GUIA
+                                    ) AS vars,
+                                    CAST(cpf AS STRING) AS externalId
+                                    )
+                                ) AS destination_data
+                from remove_optout
+                where rn=1
+  # Daily schedule para flow pgm-divida-ativa-confirma-pgto-prod-v1
+      - interval: 86400
+        anchor_date: "2021-01-01T19:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
+        flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
+        parameters:
+          id_hsm: 231
+          campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
+          cost_center_id: 71
+          chunk_size: 1000
+          dataset_id: brutos_wetalkie
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          whitelist_percentage: 0
+          infisical_secret_path: "/wetalkie"
+          whitelist_environment: "production"
+          query: |
+            with
+                disparos_divida_ativa as (
+                    -- quem recebeu os disparos de whatsapp sem erros
+                    select distinct targetexternalid as cpf,
+                    flattarget as celular_disparo,
+                    DATE(createdate) as data_disparo,
+                    templateId as id_hsm,
+                    failedDate
+                    from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+                    where templateid in (196, 227, 231)
+                ),
+                disparos as (
+                    -- traz último disparo de cobrança e lembrete
+                    select cpf, celular_disparo,
+                    max(failedDate) as ultima_data_falha,
+                    max(case when id_hsm = 196 then data_disparo else null end) as data_disparo_cobranca,
+                    max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
+                    max(case when id_hsm = 231 then data_disparo else null end) as data_disparo_agradecimento,
+                    from disparos_divida_ativa
+                    group by 1, 2
+                ),
+                disparos_filtro as (
+                  select
+                  *
+                  from disparos
+                  where
+                    -- filtro falhas aqui pq se falhou na segunda/última hsm ele vai continuar enviando o agradecimento e pagando para falhar
+                    ultima_data_falha is null
+                  -- filtra se a pessoa já recebeu o agradecimento há pouco tempo já que ela pode ter mais de uma cota por mês
+                   and  (data_disparo_agradecimento is null or data_disparo_agradecimento <= date_sub(current_date(), INTERVAL 15 day))
+
+                ),
+                contribuinte as (
+                    select
+                      lpad(cpf_cnpj, 11, "0") as cpf_cnpj,
+                      nome,
+                      guia_pagamento.data_criacao_guia,
+                      guia_pagamento.id_guia_pagamento,
+                      cotas.id_cota_guia_pagamento,
+                      cotas.data_pagamento,
+                      cotas.cota_paga
+                    FROM `rj-iplanrio.divida_ativa.contribuinte` AS contribuinte
+                    left JOIN UNNEST(guias_pagamento) AS guia_pagamento
+                    left JOIN UNNEST(cotas) AS cotas
+                    left join unnest(cdas_associadas) as cdas_associadas
+                    where
+                    guia_pagamento.data_criacao_guia >= "2025-11-14"
+                    and cotas.cota_paga = True
+                    and cotas.data_pagamento >= date_sub(current_date("America/Sao_Paulo"), interval 30 day)
+                )
+                ,
+                divida_ativa as (
+                    -- seleciona dados da tabela de dívida ativa do lake
+                    SELECT
+                    contribuinte.*,
+                    disparos_filtro.*,
+                    from disparos_filtro
+                    inner join contribuinte ON contribuinte.cpf_cnpj = disparos_filtro.cpf
+                    order by cpf, data_criacao_guia desc, data_pagamento desc
+
+                ),
+                remove_duplicados as (
+                    select distinct
+                    cpf,
+                    nome,
+                    celular_disparo,
+                    row_number() over (partition by cpf_cnpj order by data_pagamento desc) as rn,
+                    from divida_ativa
+                ),
+                remove_optout as (
+                    select remove_duplicados.* except(nome),
+                    coalesce(remove_duplicados.nome, pf.nome) as nome,
+                    from remove_duplicados
+                    left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
+                    where pf.telefone.principal.indicador_optout = false
+                    and pf.telefone.principal.indicador_quarentena = false
+                )
+
+                select
+                    TO_JSON_STRING(
+                                STRUCT(
+                                    celular_disparo,
+                                    STRUCT(
+                                        INITCAP(
+                                        IF(
+                                            ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                            CONCAT(
+                                                SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                                SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                            ),
+                                            nome
+                                        )
+                                        )  AS NOME_SOBRENOME,
+                                        INITCAP(
+                                            IF(
+                                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                                CONCAT(
+                                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                                    SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                                ),
+                                                nome
+                                            )
+                                        ) AS CC_WT_NOME_SOBRENOME,
+                                        cpf AS CC_WT_CPF_CIDADAO
+                                    ) AS vars,
+                                    CAST(cpf AS STRING) AS externalId
+                                    )
+                                ) AS destination_data
+                from remove_optout
+                where rn=1
+  # Daily schedule para flow smf-iptu-2025-em-atraso-prod-v1
+      - interval: 86400
+        anchor_date: "2021-01-01T16:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-smf-iptu-2025-em-atraso-prod-v1
+        flow_run_name: smf-iptu-2025-em-atraso-prod-v1
+        parameters:
+          id_hsm: 234
+          campaign_name: smf-iptu-2025-em-atraso-prod-v1
+          cost_center_id: 71
+          chunk_size: 1000
+          dataset_id: brutos_wetalkie
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          whitelist_percentage: 100
+          infisical_secret_path: "/wetalkie"
+          whitelist_environment: "production"
+          query: |-
+            with
+                disparos_realizados as (
+                    -- quem recebeu os disparos de whatsapp sem erros
+                    select distinct targetexternalid as cpf,
+                    flattarget as celular_disparo,
+                    DATE(createdate) as data_disparo,
+                    templateId as id_hsm,
+                    failedDate
+                    from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+                    where templateid in (196, 234)
+                ),
+                disparos as (
+                    -- traz último disparo de cobrança e lembrete
+                    select cpf, celular_disparo,
+                    max(failedDate) as ultima_data_falha,
+                    max(case when id_hsm in (196, 234) then data_disparo else null end) as data_disparo_cobranca,
+                    -- max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
+                    -- max(case when id_hsm = 231 then data_disparo else null end) as data_disparo_agradecimento,
+                    from disparos_realizados
+                    group by 1, 2
+                ),
+                disparos_filtro as (
+                  -- seleciona para remover quem teve falhas ou recebeu uma mensagem de cobrança recentemente
+                  select
+                    *
+                  from disparos
+                  where
+                    ultima_data_falha is not null
+                   or data_disparo_cobranca >= date_sub(current_date(), INTERVAL 30 day)
+                ),
+                contribuinte as (
+                    select
+                      *
+                    FROM rj-crm-registry.ab_test.iptu_2025
+                    where arm = "tratamento"
+                ),
+                contribuintes_sem_disparo as (
+                    -- remove quem teve disparo de cobrança recentemente
+                    SELECT
+                    contribuinte.*,
+                    from contribuinte
+                    left join disparos_filtro using(cpf)
+                    where disparos_filtro.cpf is null
+                ),
+                remove_optout as (
+                    select c.* except(nome),
+                    coalesce(c.nome, pf.nome) as nome,
+                    from contribuintes_sem_disparo as c
+                    inner join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
+                    where pf.telefone.principal.indicador_optout = false
+                    and pf.telefone.principal.indicador_quarentena = false
+                ),
+                dia_semana_tb as ( select
+                    EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) as dia_semana
+                )
+
+                select
+                    TO_JSON_STRING(
+                                STRUCT(
+                                    celular_disparo,
+                                    STRUCT(
+                                        INITCAP(
+                                        IF(
+                                            ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                            CONCAT(
+                                                SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                                SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                            ),
+                                            nome
+                                        )
+                                        )  AS NOME_SOBRENOME,
+                                        INITCAP(
+                                            IF(
+                                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                                CONCAT(
+                                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+                                                    SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+                                                ),
+                                                nome
+                                            )
+                                        ) AS CC_WT_NOME_SOBRENOME,
+                                        cpf AS CC_WT_CPF_CIDADAO
+                                    ) AS vars,
+                                    CAST(cpf AS STRING) AS externalId
+                                    )
+                                ) AS destination_data
+                from remove_optout
+                cross join dia_semana_tb
+                where dia_semana not in (1, 7)
+                order by trat_subgrupo
+                limit 200
