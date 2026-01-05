@@ -25,22 +25,16 @@ from pipelines.common.utils.utils import convert_timezone, is_running_locally
 
 class DBTTest:
     """
-    Classe para configurar testes agendados do DBT
+    Representa a configuração de um teste do DBT a ser executado em uma materialização.
 
     Args:
-        test_name (str, optional): O nome do teste a ser executado
-        dataset_id (str, optional): ID do conjunto de dados do modelo dbt
-        table_id (str, optional): ID da tabela do modelo dbt
-        model (str, optional): Modelo específico a ser testado
-        exclude (str, optional): Recurso dbt para ser excluído do teste
-        test_descriptions (dict, optional): Dicionário com nome e as descrições dos testes
-        delay_days_start (int): Quantidade de dias que serão subtraídos do horário inicial
-            da materialização
-        delay_days_end (int): Quantidade de dias que serão subtraídos do horário final
-            da materialização
-        truncate_date (bool): Se True, trunca as horas para testar o dia completo
-                             (00:00:00 a 23:59:59)
-        additional_vars (dict, optional): Variáveis adicionais para passar ao DBT
+        test_select (str): Select do dbt que define quais testes serão executados.
+        exclude (Optional[str]): Parâmetro exclude do dbt.
+        test_descriptions (Optional[dict]): Descrições dos testes para uso em notificações.
+        delay_days_start (int): Dias subtraídos do datetime inicial da materialização.
+        delay_days_end (int): Dias subtraídos do datetime final da materialização.
+        truncate_date (bool): Se True, ajusta o intervalo para o dia inteiro.
+        additional_vars (Optional[dict]): Variáveis adicionais para o dbt.
     """
 
     def __init__(  # noqa: PLR0913
@@ -66,14 +60,14 @@ class DBTTest:
 
     def get_test_vars(self, datetime_start: datetime, datetime_end: datetime) -> dict:
         """
-        Retorna dict para teste
+        Gera as variáveis para execução do teste do dbt.
 
         Args:
-            datetime_start (datetime): Datetime inicial
-            datetime_end (datetime): Datetime final
+            datetime_start (datetime): Datetime inicial da materialização.
+            datetime_end (datetime): Datetime final da materialização.
 
         Returns:
-            dict: dicionário com parâmetros para o teste do dbt
+            dict: Variáveis formatadas para execução do teste do dbt.
         """
 
         pattern = constants.MATERIALIZATION_LAST_RUN_PATTERN
@@ -123,17 +117,19 @@ class DBTTest:
 
 class DBTSelector:
     """
-    Classe que representa um selector do DBT
+    Representa um selector do DBT com controle de agendamento e estado de materialização.
 
     Args:
-        name (str): nome do seletor no DBT
-        schedule_cron (str, optional): expressão cron que representa a frequência com que o seletor
-            é executado
-        initial_datetime (datetime): primeiro datetime que o selector deve ser executado
-            (é usado na criação da primeira variável date_range_start)
-        incremental_delay_hours (int): quantidade de horas que serão subtraídas do horário atual
-            ao criar a variável date_range_end
-        redis_key_suffix (str, optional): sufixo para diferenciar redis_keys de selectores
+        name (str): Nome do selector no DBT.
+        initial_datetime (datetime): Datetime inicial permitido para materialização.
+        final_datetime (Optional[datetime]): Datetime final permitido para materialização.
+        flow_folder_name (Optional[str]): Nome da pasta do flow no Prefect.
+        incremental_delay_hours (int): Horas subtraídas do datetime final.
+        redis_key_suffix (Optional[str]): Sufixo para a chave do Redis.
+        pre_test (Optional[DBTTest]): Teste executado antes da materialização.
+        post_test (Optional[DBTTest]): Teste executado após a materialização.
+        data_sources (Optional[list[Union["DBTSelector", SourceTable, dict]]]): Fontes de dados
+            associadas ao selector.
     """
 
     def __init__(  # noqa: PLR0913
@@ -181,6 +177,9 @@ class DBTSelector:
         return redis_key
 
     def _get_schedule_cron(self) -> str:
+        """
+        Retorna o cron do schedule do deployment do flow associado ao Selector
+        """
         if self.flow_folder_name is None:
             flow_folder_path = Path(inspect.stack()[2].filename).parent
 
@@ -213,7 +212,7 @@ class DBTSelector:
             datetime: a data vinda do Redis
         """
         redis_key = self._get_redis_key(env)
-        redis_client = get_redis_client(host="localhost")
+        redis_client = get_redis_client()
         content = redis_client.get(redis_key)
         if content is None:
             last_datetime = self.initial_datetime
@@ -282,7 +281,7 @@ class DBTSelector:
         value = timestamp.strftime(constants.MATERIALIZATION_LAST_RUN_PATTERN)
         redis_key = self._get_redis_key(env)
         print(f"Salvando timestamp {value} na key: {redis_key}")
-        redis_client = get_redis_client(host="localhost")
+        redis_client = get_redis_client()
         content = redis_client.get(redis_key)
         if not content:
             content = {constants.REDIS_LAST_MATERIALIZATION_TS_KEY: value}
@@ -313,11 +312,17 @@ class DBTSelectorMaterializationContext:
         force_test_run: bool,
     ):
         """
-        Objeto contendo as informações básicas para captura de dados.
+        Armazena o contexto completo necessário para materializar um selector do DBT.
 
         Args:
-            source (SourceTable): SourceTable da captura.
-            timestamp (datetime): Timestamp da captura.
+            env (str): prod ou dev
+            selector (DBTSelector): Selector associado à materialização.
+            timestamp (datetime): Timestamp de execução do fluxo.
+            datetime_start (Optional[str]): Datetime inicial forçado.
+            datetime_end (Optional[str]): Datetime final forçado.
+            additional_vars (Optional[dict]): Variáveis adicionais do dbt.
+            test_scheduled_time (time): Horário agendado para execução dos testes.
+            force_test_run (bool): Força a execução dos testes.
         """
         self.env = env
         self.selector = selector
@@ -480,6 +485,18 @@ def run_dbt(
     flags: Optional[list[str]] = None,
     raise_on_failure=True,
 ):
+    """
+    Executa comandos do DBT e retorna os logs gerados.
+
+    Args:
+        dbt_obj (Optional[Union[DBTSelector, DBTTest]]): Objeto DBT a ser executado.
+        dbt_vars (Optional[dict]): Variáveis para execução do DBT.
+        flags (Optional[list[str]]): Flags adicionais do DBT.
+        raise_on_failure (bool): Indica se deve lançar erro em falha.
+
+    Returns:
+        str: Conteúdo do arquivo de log do DBT.
+    """
     root_path = get_project_root_path()
     project_dir = root_path / "queries"
     flags = flags or []
@@ -517,17 +534,14 @@ def run_dbt(
 
 
 def parse_dbt_test_output(dbt_logs: str) -> dict:
-    """Parses DBT test output and returns a list of test results.
+    """
+    Processa os logs do DBT e extrai os resultados dos testes executados.
 
     Args:
-        dbt_logs: The DBT test output as a string.
+        dbt_logs (str): Logs do DBT em formato texto JSON.
 
     Returns:
-        A list of dictionaries, each representing a test result with the following keys:
-        - name: The test name.
-        - result: "PASS", "FAIL" or "ERROR".
-        - query: Query to see test failures.
-        - error: Message error.
+        dict: Resultados dos testes com status e queries associadas.
     """
 
     log_lines = re.split(r"(?m)(?=^)", dbt_logs)

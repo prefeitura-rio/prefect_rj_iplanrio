@@ -40,10 +40,19 @@ def create_materialization_flows_default_tasks(  # noqa: PLR0913
 
     Args:
         env (Optional[str]): prod ou dev.
+        selectors (list[SourceTable]): Lista de selectors a serem materializadas.
+        datetime_start (Optional[str]): Data/hora inicial para recorte dos dados.
+        datetime_end (Optional[str]): Data/hora final para recorte dos dados.
+        skip_source_check (bool): Indica se a checagem das fontes de dados deve ser ignorada.
+        flags (Optional[list[str]]): Flags adicionais para execução do dbt.
+        additional_vars (Optional[dict[str, str]]): Variáveis DBT adicionais.
+        test_scheduled_time (Optional[time]): Horário agendado para execução dos testes.
+        force_test_run (bool): Força a execução dos testes.
+        test_webhook_key (str): Chave do webhook para notificações dos testes no Discord.
+        test_additional_mentions (Optional[list[str]]): Menções adicionais a serem incluídas
+            nas notificações dos testes no Discord.
         tasks_wait_for (Optional[dict[str, list[Task]]]): Mapeamento para adicionar tasks no
             argumento wait_for das tasks retornadas por esta função.
-        extra_parameters (Optional[dict[str, dict]]): Parametros extras mapeados no padrão
-            {"table_id": {"key": "value", ...}, ...}.
 
     Returns:
         dict: Dicionário com o retorno das tasks.

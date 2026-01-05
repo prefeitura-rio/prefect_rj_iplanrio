@@ -34,6 +34,22 @@ def create_materialization_contexts(  # noqa: PLR0913
     test_scheduled_time: time,
     force_test_run: bool,
 ) -> list[DBTSelectorMaterializationContext]:
+    """
+    Cria os contextos de materialização a partir dos selectors informados.
+
+    Args:
+        env (str): prod ou dev.
+        selectors (list[DBTSelector]): Lista de selectors do dbt.
+        timestamp (datetime): Timestamp de execução do flow.
+        datetime_start (Optional[str]): Parâmetro de data e hora de inicio manual da materialização.
+        datetime_end (Optional[str]): Parâmetro de data e hora de final manual da materialização.
+        additional_vars (Optional[dict]): Variáveis adicionais para o dbt.
+        test_scheduled_time (time): Horário agendado para execução dos testes.
+        force_test_run (bool): Força a execução dos testes.
+
+    Returns:
+        list[DBTSelectorMaterializationContext]: Lista de contextos de materialização.
+    """
     contexts = []
     for s in selectors:
         ctx = DBTSelectorMaterializationContext(
@@ -58,7 +74,11 @@ def wait_data_sources(
     skip: bool,
 ):
     """
-    Espera os dados fonte estarem completos
+    Aguarda a completude das fontes de dados associadas ao selector.
+
+    Args:
+        context (DBTSelectorMaterializationContext): Contexto de materialização.
+        skip (bool): Indica se a verificação de completude deve ser ignorada.
     """
     if skip:
         print("Pulando verificação de completude dos dados")
@@ -121,6 +141,13 @@ def wait_data_sources(
 def run_dbt_selectors(
     contexts: list[DBTSelectorMaterializationContext], flags: Optional[list[str]]
 ):
+    """
+    Executa os selectors do dbt para cada contexto de materialização.
+
+    Args:
+        contexts (list[DBTSelectorMaterializationContext]): Lista de contextos de materialização.
+        flags (Optional[list[str]]): Flags adicionais para execução do dbt.
+    """
     for context in contexts:
         run_dbt(dbt_obj=context.selector, dbt_vars=context.dbt_vars, flags=flags)
 
@@ -130,6 +157,13 @@ def run_dbt_tests(
     contexts: list[DBTSelectorMaterializationContext],
     mode: str,
 ):
+    """
+    Executa os testes do dbt para cada contexto de materialização.
+
+    Args:
+        contexts (list[DBTSelectorMaterializationContext]): Lista de contextos de materialização.
+        mode (str): Modo de execução do teste (pre ou post).
+    """
     for context in contexts:
         if not context[f"should_run_{mode}_test"]:
             continue
@@ -156,7 +190,14 @@ def dbt_test_notify_discord(  # noqa: PLR0912, PLR0915
     additional_mentions: Optional[list] = None,
 ):
     """
-    Extrai os resultados dos testes do DBT e envia uma mensagem com as informações para o Discord.
+    Processa os resultados dos testes do dbt e envia notificações para o Discord.
+
+    Args:
+        context (DBTSelectorMaterializationContext): Contexto de materialização.
+        mode (str): Modo do teste (pre ou post).
+        webhook_key (str): Chave do webhook do Discord.
+        raise_check_error (bool): Indica se deve lançar erro em caso de falha nos testes.
+        additional_mentions (Optional[list]): Menções adicionais na mensagem.
     """
     test: DBTTest = context.selector[f"{mode}_test"]
     dbt_vars: dict = context[f"{mode}_test_dbt_vars"]
@@ -281,7 +322,10 @@ def dbt_test_notify_discord(  # noqa: PLR0912, PLR0915
 @task
 def save_materialization_datetime_redis(context: DBTSelectorMaterializationContext):
     """
-    Salva o datetime de materialização do Redis
+    Salva no Redis o datetime da última materialização do selector.
+
+    Args:
+        context (DBTSelectorMaterializationContext): Contexto de materialização.
     """
     context.selector.set_redis_materialized_datetime(
         env=context.env, timestamp=context.datetime_end
