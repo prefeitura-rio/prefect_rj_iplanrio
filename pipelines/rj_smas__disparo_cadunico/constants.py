@@ -30,7 +30,7 @@ class CadunicoConstants(Enum):
 
     # Configurações de dataset
     CADUNICO_DATASET_ID = "brutos_wetalkie"
-    CADUNICO_TABLE_ID = "disparos"
+    CADUNICO_TABLE_ID = "disparos_efetuados"
     CADUNICO_DUMP_MODE = "append"
     CADUNICO_CHUNK_SIZE = 1000
 
