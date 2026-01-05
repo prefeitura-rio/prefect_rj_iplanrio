@@ -1,4 +1,4 @@
-# Changelog - default_treatment
+# Changelog - default_capture
 
 ## [1.0.0] - 2025-11-24
 
