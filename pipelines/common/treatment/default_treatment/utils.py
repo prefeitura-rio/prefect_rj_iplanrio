@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import inspect
+import json
+import os
 import re
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -158,7 +160,7 @@ class DBTSelector:
         self.pre_test = pre_test
         self.post_test = post_test
 
-        self.data_sources = [] or data_sources
+        self.data_sources = data_sources or []
 
     def __getitem__(self, key):
         return self.__dict__[key]
@@ -322,8 +324,7 @@ class DBTSelectorMaterializationContext:
         self.timestamp = timestamp.astimezone(tz=pytz.timezone(smtr_constants.TIMEZONE))
         self.datetime_start = self.get_datetime_start(datetime_start=datetime_start)
         self.datetime_end = self.get_datetime_end(datetime_end=datetime_end)
-        print(f"datetime_start = {self.datetime_start}")
-        print(f"datetime_end = {self.datetime_end}")
+
         self.dbt_vars = self.get_dbt_vars(
             datetime_start=self.datetime_start,
             datetime_end=self.datetime_end,
@@ -338,21 +339,14 @@ class DBTSelectorMaterializationContext:
             )
             else True
         )
-        print(f"should_run = {self.should_run}")
 
         is_test_scheduled_time = (
             force_test_run or test_scheduled_time is None or timestamp.time() == test_scheduled_time
         ) and self.should_run
 
-        print(f"is_test_scheduled_time = {is_test_scheduled_time}")
-
         self.should_run_pre_test = selector.pre_test is not None and is_test_scheduled_time
 
-        print(f"should_run_pre_test = {self.should_run_pre_test}")
-
         self.should_run_post_test = selector.post_test is not None and is_test_scheduled_time
-
-        print(f"should_run_post_test = {self.should_run_post_test}")
 
         self.pre_test_dbt_vars = (
             selector.pre_test.get_test_vars(
@@ -489,15 +483,9 @@ def run_dbt(
     root_path = get_project_root_path()
     project_dir = root_path / "queries"
     flags = flags or []
-    log_dir = f'"{project_dir}/logs/{runtime.task_run.id}"'
+    log_dir = f"{project_dir}/logs/{runtime.task_run.id}"
 
-    flags = [
-        *flags,
-        "--log-path",
-        log_dir,
-        "--log-level-file",
-        "info",
-    ]
+    flags = [*flags, "--log-path", log_dir, "--log-level-file", "info", "--log-format", "json"]
     if is_running_locally():
         profiles_dir = project_dir / "dev"
     else:
@@ -508,22 +496,20 @@ def run_dbt(
         if isinstance(dbt_obj, DBTSelector):
             invoke = ["run", "--selector", dbt_obj.name]
         elif isinstance(dbt_obj, DBTTest):
-            invoke = ["run", "--select", dbt_obj.test_select]
+            invoke = ["test", "--select", dbt_obj.test_select]
 
     if dbt_vars is not None:
-        invoke = [*invoke, "--vars", f'"{dbt_vars}"']
+        vars_yaml = yaml.safe_dump(dbt_vars, default_flow_style=True)
+        invoke = [*invoke, "--vars", vars_yaml]
 
     invoke = invoke + flags
-    print(" ".join(["dbt", *invoke]))
-    return ""
-
     PrefectDbtRunner(
         settings=PrefectDbtSettings(
             project_dir=project_dir,
             profiles_dir=profiles_dir,
-            target_path=root_path / "target",
-            raise_on_failure=raise_on_failure,
-        )
+            target_path=project_dir / "target",
+        ),
+        raise_on_failure=raise_on_failure,
     ).invoke(invoke)
 
     with (Path(log_dir) / "dbt.log").open("r") as logs:
@@ -544,39 +530,38 @@ def parse_dbt_test_output(dbt_logs: str) -> dict:
         - error: Message error.
     """
 
-    # Remover sequências ANSI
-    dbt_logs = re.sub(r"\x1B[@-_][0-?]*[ -/]*[@-~]", "", dbt_logs)
+    log_lines = re.split(r"(?m)(?=^)", dbt_logs)
 
     results = {}
-    result_pattern = r"\d+ of \d+ (PASS|FAIL|ERROR) (\d+ )?([\w._]+) .* \[(PASS|FAIL|ERROR) .*\]"
-    fail_pattern = r"Failure in test ([\w._]+) .*\n.*\n.*\n.* compiled Code at (.*)\n"
-    error_pattern = r"Error in test ([\w._]+) \(.*schema.yml\)\n  (.*)\n"
+    root_path = get_project_root_path()
+    queries_path = filepath = root_path / "queries"
 
-    # root_path = get_project_root_path()
+    for line in log_lines:
+        if line.strip() == "":
+            continue
+        log_line_json = json.loads(line)
+        data = log_line_json["data"]
 
-    for match in re.finditer(result_pattern, dbt_logs):
-        groups = match.groups()
-        test_name = groups[2]
-        results[test_name] = {"result": groups[3]}
+        node_info = data.get("node_info", {})
+        if node_info.get("materialized", "") == "test":
+            test_name = node_info["node_name"]
+            status = data.get("status")
+            if status is not None:
+                results[test_name] = {"result": status.upper()}
 
-    for match in re.finditer(fail_pattern, dbt_logs):
-        groups = match.groups()
-        test_name = groups[0]
-        filepath = Path(groups[1])
+            path = data.get("path")
 
-        # filepath = root_path / "queries" / Path(os.path.relpath(file, filepath))
+            if (
+                path is not None
+                and "compiled code at" in log_line_json.get("info", {}).get("msg", "").lower()
+            ):
+                filepath = queries_path / Path(os.path.relpath(path, queries_path))
+                filepath = filepath.resolve()
+                with filepath.open("r") as f:
+                    query = f.read()
 
-        with filepath.open("r") as f:
-            query = f.read()
-
-        query = re.sub(r"\n+", "\n", query)
-        results[test_name]["query"] = query
-
-    for match in re.finditer(error_pattern, dbt_logs):
-        groups = match.groups()
-        test_name = groups[0]
-        error = groups[1]
-        results[test_name]["error"] = error
+                query = re.sub(r"\n+", "\n", query)
+                results[test_name]["query"] = query
 
     log_message = ""
     for test, info in results.items():

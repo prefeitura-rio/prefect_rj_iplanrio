@@ -13,7 +13,7 @@ from pipelines.common.tasks import (
 from pipelines.common.treatment.default_treatment.tasks import (
     create_materialization_contexts,
     dbt_test_notify_discord,
-    run_dbt_contexts,
+    run_dbt_selectors,
     run_dbt_tests,
     save_materialization_datetime_redis,
     wait_data_sources,
@@ -112,11 +112,11 @@ def create_materialization_flows_default_tasks(  # noqa: PLR0913
         ),
     )
 
-    tasks["run_dbt"] = run_dbt_contexts(
+    tasks["run_dbt"] = run_dbt_selectors(
         contexts=tasks["contexts"],
         flags=flags,
         wait_for=[
-            tasks["pre_tests"],
+            tasks["pre_tests_notify_discord"],
             *tasks_wait_for.get("run_dbt", []),
         ],
     )
@@ -145,7 +145,7 @@ def create_materialization_flows_default_tasks(  # noqa: PLR0913
 
     tasks["save_redis"] = save_materialization_datetime_redis.map(
         context=tasks["contexts"],
-        wait_for=tasks_wait_for.get("save_redis"),
+        wait_for=[tasks["run_dbt"], *tasks_wait_for.get("save_redis", [])],
     )
 
     return tasks

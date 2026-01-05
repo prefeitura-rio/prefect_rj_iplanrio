@@ -118,7 +118,9 @@ def wait_data_sources(
 
 
 @task
-def run_dbt_contexts(contexts: list[DBTSelectorMaterializationContext], flags: Optional[list[str]]):
+def run_dbt_selectors(
+    contexts: list[DBTSelectorMaterializationContext], flags: Optional[list[str]]
+):
     for context in contexts:
         run_dbt(dbt_obj=context.selector, dbt_vars=context.dbt_vars, flags=flags)
 
@@ -157,12 +159,13 @@ def dbt_test_notify_discord(  # noqa: PLR0912, PLR0915
     Extrai os resultados dos testes do DBT e envia uma mensagem com as informações para o Discord.
     """
     test: DBTTest = context.selector[f"{mode}_test"]
-    test_descriptions = test.test_descriptions
     dbt_vars: dict = context[f"{mode}_test_dbt_vars"]
     dbt_logs: str = context[f"{mode}_test_log"]
-
     if dbt_logs is None:
         return
+
+    test_descriptions = test.test_descriptions
+
     checks_results = parse_dbt_test_output(dbt_logs)
 
     webhook_url = get_secret(secret_path=smtr_constants.WEBHOOKS_SECRET_PATH)[webhook_key]
