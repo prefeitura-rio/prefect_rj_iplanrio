@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import uuid4
 import traceback
 
+from datetime import datetime
 import pandas as pd
 
 from iplanrio.pipelines_utils.logging import log
@@ -113,10 +114,13 @@ class GoogleAgentEngineHistory:
         ]
 
         dataframe = pd.DataFrame(data=bq_payload)
+
+        now = datetime.now().strftime("%Y%m%d_%H%M%S")
         to_partitions(
             data=dataframe,
             partition_columns=["environment", "user_id"],
             savepath=str(save_path),
+            suffix=now,
         )
 
     async def get_history_bulk_from_last_checkpoint_id(
