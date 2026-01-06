@@ -73,7 +73,7 @@ deployments:
       - interval: 86400
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-cvl-pesquisa1746-prod
         flow_run_name: cvl-pesquisa1746
         parameters:
@@ -269,9 +269,9 @@ deployments:
         slug: daily-pgm-divida-ativa-prod
         flow_run_name: pgm-divida-ativa
         parameters:
-          id_hsm: 196
-          query_replacements: {"id_hsm_placeholder": 196, "limit_placeholder": 2000}
-          campaign_name: pgm-divida-ativa-prod-v1
+          id_hsm: 239
+          query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 2000}
+          campaign_name: pgm-divida-ativa-prod-v2
           cost_center_id: 71
           chunk_size: 1000
           dataset_id: brutos_wetalkie
@@ -354,7 +354,7 @@ deployments:
       - interval: 86400
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-pgm-divida-ativa-lembrete-prod-v1
         flow_run_name: pgm-divida-ativa-lembrete
         parameters:
@@ -379,13 +379,13 @@ deployments:
                     (DATE(createdate)) as data_disparo,
                     templateId as id_hsm
                     from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-                    where templateid in (196, 227)
+                    where templateid in (196, 227, 239)
                     and faileddate is null
                 ),
                 disparos as (
                     -- traz último disparo de cobrança e lembrete
                     select cpf, celular_disparo,
-                    max(case when id_hsm = 196 then data_disparo else null end) as data_disparo_cobranca,
+                    max(case when id_hsm in (196, 239) then data_disparo else null end) as data_disparo_cobranca,
                     max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
                     from disparos_divida_ativa
                     group by 1, 2
@@ -485,7 +485,7 @@ deployments:
       - interval: 86400
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
         flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
         parameters:
@@ -511,13 +511,13 @@ deployments:
                     templateId as id_hsm,
                     failedDate
                     from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-                    where templateid in (196, 227, 231)
+                    where templateid in (196, 227, 231, 239)
                 ),
                 disparos as (
                     -- traz último disparo de cobrança e lembrete
                     select cpf, celular_disparo,
                     max(failedDate) as ultima_data_falha,
-                    max(case when id_hsm = 196 then data_disparo else null end) as data_disparo_cobranca,
+                    max(case when id_hsm in (196, 239) then data_disparo else null end) as data_disparo_cobranca,
                     max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
                     max(case when id_hsm = 231 then data_disparo else null end) as data_disparo_agradecimento,
                     from disparos_divida_ativa
@@ -612,115 +612,115 @@ deployments:
                                 ) AS destination_data
                 from remove_optout
                 where rn=1
-  # Daily schedule para flow smf-iptu-2025-em-atraso-prod-v1
-      - interval: 86400
-        anchor_date: "2021-01-01T16:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: daily-smf-iptu-2025-em-atraso-prod-v1
-        flow_run_name: smf-iptu-2025-em-atraso-prod-v1
-        parameters:
-          id_hsm: 234
-          campaign_name: smf-iptu-2025-em-atraso-prod-v1
-          cost_center_id: 71
-          chunk_size: 1000
-          dataset_id: brutos_wetalkie
-          table_id: disparos_efetuados
-          dump_mode: append
-          test_mode: false
-          sleep_minutes: 5
-          whitelist_percentage: 100
-          infisical_secret_path: "/wetalkie"
-          whitelist_environment: "production"
-          query: |-
-            with
-                disparos_realizados as (
-                    -- quem recebeu os disparos de whatsapp sem erros
-                    select distinct targetexternalid as cpf,
-                    flattarget as celular_disparo,
-                    DATE(createdate) as data_disparo,
-                    templateId as id_hsm,
-                    failedDate
-                    from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-                    where templateid in (196, 234)
-                ),
-                disparos as (
-                    -- traz último disparo de cobrança e lembrete
-                    select cpf, celular_disparo,
-                    max(failedDate) as ultima_data_falha,
-                    max(case when id_hsm in (196, 234) then data_disparo else null end) as data_disparo_cobranca,
-                    -- max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
-                    -- max(case when id_hsm = 231 then data_disparo else null end) as data_disparo_agradecimento,
-                    from disparos_realizados
-                    group by 1, 2
-                ),
-                disparos_filtro as (
-                  -- seleciona para remover quem teve falhas ou recebeu uma mensagem de cobrança recentemente
-                  select
-                    *
-                  from disparos
-                  where
-                    ultima_data_falha is not null
-                   or data_disparo_cobranca >= date_sub(current_date(), INTERVAL 30 day)
-                ),
-                contribuinte as (
-                    select
-                      *
-                    FROM rj-crm-registry.ab_test.iptu_2025
-                    where arm = "tratamento"
-                ),
-                contribuintes_sem_disparo as (
-                    -- remove quem teve disparo de cobrança recentemente
-                    SELECT
-                    contribuinte.*,
-                    from contribuinte
-                    left join disparos_filtro using(cpf)
-                    where disparos_filtro.cpf is null
-                ),
-                remove_optout as (
-                    select c.* except(nome),
-                    coalesce(c.nome, pf.nome) as nome,
-                    from contribuintes_sem_disparo as c
-                    inner join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
-                    where pf.telefone.principal.indicador_optout = false
-                    and pf.telefone.principal.indicador_quarentena = false
-                ),
-                dia_semana_tb as ( select
-                    EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) as dia_semana
-                )
+#   # Daily schedule para flow smf-iptu-2025-em-atraso-prod-v1
+#   - interval: 86400
+#     anchor_date: "2021-01-01T16:00:00"
+#     timezone: America/Sao_Paulo
+#     active: false
+#     slug: daily-smf-iptu-2025-em-atraso-prod-v1
+#     flow_run_name: smf-iptu-2025-em-atraso-prod-v1
+#     parameters:
+#       id_hsm: 234
+#       campaign_name: smf-iptu-2025-em-atraso-prod-v1
+#       cost_center_id: 71
+#       chunk_size: 1000
+#       dataset_id: brutos_wetalkie
+#       table_id: disparos_efetuados
+#       dump_mode: append
+#       test_mode: false
+#       sleep_minutes: 5
+#       whitelist_percentage: 100
+#       infisical_secret_path: "/wetalkie"
+#       whitelist_environment: "production"
+#       query: |
+#         with
+#             disparos_realizados as (
+#                 -- quem recebeu os disparos de whatsapp sem erros
+#                 select distinct targetexternalid as cpf,
+#                 flattarget as celular_disparo,
+#                 DATE(createdate) as data_disparo,
+#                 templateId as id_hsm,
+#                 failedDate
+#                 from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+#                 where templateid in (196, 234, 239)
+#             ),
+#             disparos as (
+#                 -- traz último disparo de cobrança e lembrete
+#                 select cpf, celular_disparo,
+#                 max(failedDate) as ultima_data_falha,
+#                 max(case when id_hsm in (196, 234, 239) then data_disparo else null end) as data_disparo_cobranca,
+#                 -- max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
+#                 -- max(case when id_hsm = 231 then data_disparo else null end) as data_disparo_agradecimento,
+#                 from disparos_realizados
+#                 group by 1, 2
+#             ),
+#             disparos_filtro as (
+#               -- seleciona para remover quem teve falhas ou recebeu uma mensagem de cobrança recentemente
+#               select
+#                 *
+#               from disparos
+#               where
+#                 ultima_data_falha is not null
+#                or data_disparo_cobranca >= date_sub(current_date(), INTERVAL 30 day)
+#             ),
+#             contribuinte as (
+#                 select
+#                   *
+#                 FROM rj-crm-registry.ab_test.iptu_2025
+#                 where arm = "tratamento"
+#             ),
+#             contribuintes_sem_disparo as (
+#                 -- remove quem teve disparo de cobrança recentemente
+#                 SELECT
+#                 contribuinte.*,
+#                 from contribuinte
+#                 left join disparos_filtro using(cpf)
+#                 where disparos_filtro.cpf is null
+#             ),
+#             remove_optout as (
+#                 select c.* except(nome),
+#                 coalesce(c.nome, pf.nome) as nome,
+#                 from contribuintes_sem_disparo as c
+#                 inner join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
+#                 where pf.telefone.principal.indicador_optout = false
+#                 and pf.telefone.principal.indicador_quarentena = false
+#             ),
+#             dia_semana_tb as ( select
+#                 EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) as dia_semana
+#             )
 
-                select
-                    TO_JSON_STRING(
-                                STRUCT(
-                                    celular_disparo,
-                                    STRUCT(
-                                        INITCAP(
-                                        IF(
-                                            ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
-                                            CONCAT(
-                                                SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
-                                                SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
-                                            ),
-                                            nome
-                                        )
-                                        )  AS NOME_SOBRENOME,
-                                        INITCAP(
-                                            IF(
-                                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
-                                                CONCAT(
-                                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
-                                                    SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
-                                                ),
-                                                nome
-                                            )
-                                        ) AS CC_WT_NOME_SOBRENOME,
-                                        cpf AS CC_WT_CPF_CIDADAO
-                                    ) AS vars,
-                                    CAST(cpf AS STRING) AS externalId
-                                    )
-                                ) AS destination_data
-                from remove_optout
-                cross join dia_semana_tb
-                where dia_semana not in (1, 7)
-                order by trat_subgrupo
-                limit 200
+#             select
+#                 TO_JSON_STRING(
+#                             STRUCT(
+#                                 celular_disparo,
+#                                 STRUCT(
+#                                     INITCAP(
+#                                     IF(
+#                                         ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+#                                         CONCAT(
+#                                             SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+#                                             SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+#                                         ),
+#                                         nome
+#                                     )
+#                                     )  AS NOME_SOBRENOME,
+#                                     INITCAP(
+#                                         IF(
+#                                             ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+#                                             CONCAT(
+#                                                 SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
+#                                                 SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
+#                                             ),
+#                                             nome
+#                                         )
+#                                     ) AS CC_WT_NOME_SOBRENOME,
+#                                     cpf AS CC_WT_CPF_CIDADAO
+#                                 ) AS vars,
+#                                 CAST(cpf AS STRING) AS externalId
+#                                 )
+#                             ) AS destination_data
+#             from remove_optout
+#             cross join dia_semana_tb
+#             where dia_semana not in (1, 7)
+#             order by trat_subgrupo
+#             limit 200
