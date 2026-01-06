@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# python3 -m build_prefect_yaml --env prod
+# python3 -m rj_crm__disparo_template/build_prefect_yaml --env prod
 import warnings
 from pathlib import Path
 from ruamel.yaml import YAML
