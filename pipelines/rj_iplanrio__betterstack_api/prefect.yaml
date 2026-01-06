@@ -36,6 +36,8 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
+      from_date: null
+      to_date: null
       dataset_id: brutos_betterstack
       billing_project_id: rj-iplanrio
 
@@ -51,8 +53,10 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
+      from_date: null
+      to_date: null
       dataset_id: brutos_betterstack
       billing_project_id: rj-iplanrio
     schedules:
-      - cron: "0 6 * * *"
+      - cron: "0 3 * * *"
         timezone: America/Sao_Paulo
