@@ -23,6 +23,7 @@ def rj_crm__whitelist_whatsapp(
     billing_project_id: str | None = None,
     table_id: str | None = None,
     backfill: bool = False,
+    environment: str = "prod",
 ):
     """
     Flow to extract the WhatsApp Whitelist and load it into BigQuery.
@@ -39,7 +40,7 @@ def rj_crm__whitelist_whatsapp(
     rename_current_flow_run_task(new_name=flow_name)
 
     # 0.1 Inject BD Credentials
-    inject_bd_credentials_task(environment="prod")
+    inject_bd_credentials_task(environment=environment)
 
     # 1. Credentials
     creds = get_whitelist_credentials()
