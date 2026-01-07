@@ -48,7 +48,7 @@ def rj_iplanrio__betterstack_api(
     # For high-availability, we always fetch the last 24h.
     # The 'date' parameters remain for manual backfills if needed.
     date_range = calculate_date_range(from_date=from_date, to_date=to_date)
-    
+
     # --- TABLE: Incidents ---
     raw_incidents = fetch_incidents(token=token, monitor_id=monitor_id, date_range=date_range)
 
