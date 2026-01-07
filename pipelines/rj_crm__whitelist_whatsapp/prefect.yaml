@@ -1,0 +1,59 @@
+name: rj_crm__whitelist_whatsapp
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_crm__whitelist_whatsapp-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_crm__whitelist_whatsapp/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-crm--whitelist_whatsapp--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__whitelist_whatsapp/flow.py:rj_crm__whitelist_whatsapp
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__whitelist_whatsapp -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+        environment: "prod"
+        backfill: false
+  - name: rj-crm--whitelist-whatsapp--prod
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__whitelist_whatsapp/flow.py:rj_crm__whitelist_whatsapp
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_crm__whitelist_whatsapp -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+        environment: "prod"
+        backfill: false
+    schedules:
+      - interval: 86400 # 24h
+        anchor_date: "2026-01-01T06:00:00" # 03:00 AM BRT
+        timezone: America/Sao_Paulo
+        active: true
