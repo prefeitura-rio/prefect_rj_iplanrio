@@ -4,7 +4,6 @@ from prefect import flow
 from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
-from iplanrio.pipelines_utils.dbt import execute_dbt_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 
@@ -71,8 +70,3 @@ def rj_iplanrio__betterstack_api(
             biglake_table=BetterStackConstants.BIGLAKE_TABLE.value,
             source_format=BetterStackConstants.FILE_FORMAT.value,
         )
-
-    # Optional: DBT Trigger
-    if BetterStackConstants.MATERIALIZE_AFTER_DUMP.value:
-        # Assuming model names match table names or use a consistent tagging
-        execute_dbt_task(select="staging.betterstack", target="prod") # Adjust select as needed
