@@ -32,11 +32,11 @@ def rj_crm__whitelist_whatsapp(
     billing_project_id = billing_project_id or WhitelistConstants.BILLING_PROJECT_ID.value
     dataset_id = dataset_id or WhitelistConstants.DATASET_ID.value
     table_id = table_id or WhitelistConstants.TABLE_ID.value
-    
+
     flow_name = f"Whitelist_WhatsApp_{dataset_id}"
     if backfill:
         flow_name += "_BACKFILL"
-    
+
     rename_current_flow_run_task(new_name=flow_name)
 
     # 0.1 Inject BD Credentials
