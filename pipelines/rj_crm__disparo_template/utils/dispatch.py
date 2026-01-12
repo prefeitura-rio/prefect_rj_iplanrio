@@ -552,3 +552,40 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
         replacements = json.loads(replacements["value"])
         print(f"replacements modificado: {replacements}")
     return raw_query.format_map(replacements)
+
+
+@task
+def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: str, bucket_name: str) -> Optional[bool]:
+    query = f"""
+        SELECT ativo, data_limite_disparo
+        FROM `rj-crm-registry.brutos_wetalkie_staging.disparos_ativos`
+        WHERE id_hsm = '{id_hsm}' AND ambiente = '{flow_environment}'
+        LIMIT 1
+    """
+    dfr = download_data_from_bigquery(
+        query=query,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+    )
+
+    if dfr.empty:
+        log(f"\n⚠️  No configuration found for id_hsm={id_hsm} in environment={flow_environment}.")
+        return None
+
+    row = dfr.iloc[0]
+
+    if not row.get("ativo") or row.get("ativo") != 1:
+        log(f"\n⚠️  Flow is not active for id_hsm={id_hsm} in environment={flow_environment}.")
+        return None
+
+    current_date = datetime.now(timezone("America/Sao_Paulo")).date()
+    print(f'>>>>> DEBUG row.get("data_limite_disparo"): {row.get("data_limite_disparo")}')
+
+    expiration_date = row.get("data_limite_disparo") if not pd.isnull(row.get("data_limite_disparo")) else current_date
+
+    if expiration_date < current_date:
+        log(f"\n⚠️  Flow for id_hsm={id_hsm} in environment={flow_environment} has expired on {expiration_date}.")
+        return None
+
+    log(f"\n✅  Active flow found for id_hsm={id_hsm} in environment={flow_environment}.")
+    return True

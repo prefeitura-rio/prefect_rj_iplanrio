@@ -25,6 +25,7 @@ from pipelines.rj_crm__disparo_template.utils.discord import (
 from pipelines.rj_crm__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
+    check_flow_status,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
@@ -63,6 +64,7 @@ def rj_crm__disparo_template(
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 100,
     whitelist_environment: str = "production",
+    flow_environment: str = "production",
 ):
     """
     Orchestrates the dispatch of templated messages via Wetalkie API.
@@ -89,6 +91,7 @@ def rj_crm__disparo_template(
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
         whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
         whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
+        flow_environment (str, optional): The environment where the flow is running (e.g., "staging", "production"). Defaults to "staging".
     """
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
@@ -121,6 +124,16 @@ def rj_crm__disparo_template(
 
     api_status = check_api_status(api)
 
+    flow_status = check_flow_status(
+        flow_environment=flow_environment,
+        id_hsm=id_hsm,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+    )
+    if flow_status is None:
+        print("Ending flow due to inactive status.")
+        return  # flow termina aqui, nada downstream é agendado
+
     if query_replacements:
         query_complete = format_query(
             raw_query=query,
@@ -144,9 +157,7 @@ def rj_crm__disparo_template(
     )
     if validated_destinations is None:
         return  # flow termina aqui, nada downstream é agendado
-    print("force deploy")
-    print("force deploy")
-    print("force deploy")
+
     # Remove duplicate phone numbers and CPFs if flags are set
     unique_phone_destinations = remove_duplicate_phones(validated_destinations) if filter_duplicated_phones else validated_destinations
     unique_destinations = remove_duplicate_cpfs(unique_phone_destinations) if filter_duplicated_cpfs else unique_phone_destinations
