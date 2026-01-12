@@ -66,48 +66,7 @@ def calculate_date_range(from_date: str = None, to_date: str = None) -> Dict[str
     return {"from": yesterday_str, "to": yesterday_str}
 
 
-@task(retries=3, retry_delay_seconds=60)
-def fetch_response_times(token: str, monitor_id: str, date_range: Dict[str, str]) -> List[Dict[str, Any]]:
-    """
-    Busca dados de response-times da API v2.
-    """
-    url = f"{BetterStackConstants.BASE_URL_V2.value}/monitors/{monitor_id}/response-times"
 
-
-    headers = {"Authorization": f"Bearer {token}"}
-    params = {
-        "from": date_range["from"],
-        "to": date_range["to"]
-    }
-
-    log(f"Fetching response times from {url} with params {params}")
-
-    try:
-        response = requests.get(
-            url, headers=headers, params=params, timeout=BetterStackConstants.TIMEOUT.value
-        )
-        response.raise_for_status()
-    except requests.exceptions.Timeout as e:
-        log(f"Timeout ao buscar response-times: {e}")
-        raise
-    except requests.exceptions.RequestException as e:
-        log(f"Erro de requisição ao buscar response-times: {e}")
-        if hasattr(e, "response") and e.response is not None:
-            log(f"Response status: {e.response.status_code}")
-            log(f"Response text: {e.response.text[:500]}")
-        raise
-
-    try:
-        data = response.json()
-        if "data" in data and "attributes" in data["data"]:
-            regions = data["data"]["attributes"].get("regions", [])
-            return regions
-        else:
-            log(f"Unexpected JSON structure for response times: {data}")
-            return []
-    except (json.JSONDecodeError, KeyError) as e:
-        log(f"Error parsing response times: {e}")
-        return []
 
 
 @task(retries=3, retry_delay_seconds=60)
@@ -175,41 +134,11 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
     return all_incidents
 
 
-@task
-def transform_response_times(data: List[Dict[str, Any]], extraction_date: str) -> pd.DataFrame:
-    """
-    Transforma dados de response-times.
-    Flatten da estrutura: Regions -> Response Times
-    """
-    if not data:
-        return pd.DataFrame()
 
-    flattened_data = []
-
-    for region_data in data:
-        region_name = region_data.get("region")
-        response_times_list = region_data.get("response_times", [])
-
-        for measurement in response_times_list:
-            # Create a flat record combining region info and measurement info
-            record = measurement.copy()
-            record["region"] = region_name
-            flattened_data.append(record)
-
-    df = pd.DataFrame(flattened_data)
-
-    if not df.empty:
-        # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
-        for col in df.columns:
-            df[col] = df[col].astype(str)
-
-        df["data_particao"] = extraction_date
-
-    return df
 
 
 @task
-def transform_incidents(data: List[Dict[str, Any]], extraction_date: str) -> pd.DataFrame:
+def transform_incidents(data: List[Dict[str, Any]]) -> pd.DataFrame:
     """
     Transforma dados de incidents.
     """
@@ -219,10 +148,25 @@ def transform_incidents(data: List[Dict[str, Any]], extraction_date: str) -> pd.
     df = pd.DataFrame(data)
 
     if not df.empty:
+        # Dynamic partitioning based on started_at in attributes
+        # First, ensure we can access attributes easily if it's a dict
+        def extract_date(row):
+            try:
+                attrs = row.get("attributes", {})
+                ts = attrs.get("started_at") or attrs.get("created_at")
+                if ts:
+                    return ts[:10] # YYYY-MM-DD
+            except Exception:
+                pass
+            return datetime.now().strftime("%Y-%m-%d")
+
+        df["data_particao"] = df.apply(extract_date, axis=1)
+
         # Cast all columns to string to avoid schema mismatches in BigQuery brutos layer
         for col in df.columns:
-            df[col] = df[col].astype(str)
-
-        df["data_particao"] = extraction_date
+            if col != "data_particao":
+                df[col] = df[col].astype(str)
 
     return df
+
+
