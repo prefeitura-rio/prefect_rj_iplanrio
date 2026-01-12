@@ -22,7 +22,7 @@ pull:
 deployments:
   - name: rj-crm--disparo-template--staging
     version: '{{ build-image.tag }}'
-    entrypoint: 
+    entrypoint:
       pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
     work_pool:
       name: default-pool
@@ -555,7 +555,7 @@ deployments:
 #             limit 200
   - name: rj-crm--disparo-template--prod
     version: '{{ get-commit-hash.stdout }}'
-    entrypoint: 
+    entrypoint:
       pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
     work_pool:
       name: default-pool
