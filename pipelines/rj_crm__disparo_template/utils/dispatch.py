@@ -566,6 +566,8 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
     Returns:
         True se o fluxo estiver ativo e válido, None caso contrário."""
 
+    log(f"\nStarting flow status check for id_hsm={id_hsm} in environment={flow_environment}.")
+
     if flow_environment not in ["staging", "production"]:
         log(f"\n⚠️  Invalid flow_environment: {flow_environment}. Must be 'staging' or 'production'.")
         return None
@@ -581,7 +583,7 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
         billing_project_id=billing_project_id,
         bucket_name=bucket_name,
     )
-
+    log(f"DEBUG: Flow status query result:\n{dfr} \nwith query {query}")
     if dfr.empty:
         log(f"\n⚠️  No configuration found for id_hsm={id_hsm} in environment={flow_environment}.")
         return None

@@ -65,7 +65,7 @@ def rj_crm__disparo_template(
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 100,
     whitelist_environment: str = "production",
-    flow_environment: str = "production",
+    flow_environment: str = "staging",
 ):
     """
     Orchestrates the dispatch of templated messages via Wetalkie API.
