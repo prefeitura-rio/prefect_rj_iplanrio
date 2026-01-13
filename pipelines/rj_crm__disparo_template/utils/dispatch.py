@@ -590,7 +590,8 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
 
     row = dfr.iloc[0]
 
-    if not row.get("ativo") or row.get("ativo") != 1:
+    if not row.get("ativo") or row.get("ativo") not in (1, "1"):
+        log(f'DEBUG row.get("ativo") {row.get("ativo")}')
         log(f"\n⚠️  Flow is not active for id_hsm={id_hsm} in environment={flow_environment}.")
         return None
 
