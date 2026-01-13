@@ -9,9 +9,11 @@ Módulo de notificações Discord para pipeline de disparo PIC lembrete.
 import asyncio
 import json
 import os
+from datetime import datetime
 
 import aiohttp  # pylint: disable=E0611, E0401
 from discord import Webhook  # pylint: disable=E0611, E0401
+from pytz import timezone
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 # pylint: disable=E0611, E0401
@@ -39,6 +41,60 @@ async def _send_discord_webhook(webhook_url: str, message: str):
             raise ValueError(f"Error sending message to Discord webhook: {error}")
 
 
+def send_discord_notification(webhook_url: str = None, message: str = 'No message provided'):
+    """
+    Envia uma notificação genérica para um webhook do Discord.
+
+    Args:
+        webhook_url: URL do webhook do Discord
+        message: Mensagem de texto a ser enviada
+    """
+    if not webhook_url:
+        log(
+            "Discord webhook URL not provided. Using default.",
+            level="warning",
+        )
+
+    try:
+        asyncio.run(_send_discord_webhook(webhook_url, message))
+        log("Discord notification sent successfully")
+    except Exception as error:
+        log(f"Failed to send Discord notification: {error}", level="error")
+
+
+def send_dispatch_no_destinations_found(
+    id_hsm: int,
+    campaign_name: str,
+    cost_center_id: int,
+    test_mode: bool = False,
+):
+    """
+    Envia notificação para Discord quando nenhum destinatário é encontrado na query.
+
+    Args:
+        id_hsm: ID do template HSM utilizado
+        campaign_name: Nome da campanha
+        cost_center_id: ID do centro de custo
+        test_mode: Indica se é um disparo de teste (opcional)
+    """
+
+     # Adicionar indicador [TESTE] no título se test_mode=True
+    title = "⚠️ **[TESTE] Disparo não realizado pois nenhum destinatário foi encontrado.**" if test_mode else "⚠️ **Disparo não realizado pois nenhum destinatário foi encontrado.**"
+
+    # Formatar mensagem com contexto e resultados
+    message = f"""{title}
+
+📋 **Campanha:** {campaign_name}
+🆔 **Template ID:** {id_hsm}
+💰 **Centro de Custo:** {cost_center_id}
+🕐 **Disparo realizado em:** {datetime.now(timezone("America/Sao_Paulo")).date()}
+
+"""
+
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+    send_discord_notification(webhook_url, message)
+
+
 def send_dispatch_success_notification(
     total_dispatches: int,
     dispatch_date: str,
@@ -63,14 +119,6 @@ def send_dispatch_success_notification(
         sample_destination: Exemplo de destinatário (opcional)
         test_mode: Indica se é um disparo de teste (opcional)
     """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
-
-    if not webhook_url:
-        log(
-            "Discord webhook URL not configured. Skipping notification.",
-            level="warning",
-        )
-        return
 
     # Adicionar indicador [TESTE] no título se test_mode=True
     title = "✅ **[TESTE] Disparo Realizado com Sucesso**" if test_mode else "✅ **Disparo Realizado com Sucesso**"
@@ -95,12 +143,8 @@ def send_dispatch_success_notification(
 {_format_sample_destination(sample_destination)}
 ```
 """
-
-    try:
-        asyncio.run(_send_discord_webhook(webhook_url, message))
-        log("Discord notification sent successfully")
-    except Exception as error:
-        log(f"Failed to send Discord notification: {error}", level="error")
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+    send_discord_notification(webhook_url, message)
 
 
 def send_dispatch_result_notification(
@@ -110,7 +154,6 @@ def send_dispatch_result_notification(
     campaign_name: str,
     cost_center_id: int,
     total_batches: int,
-    sample_destination: dict = None,
     test_mode: bool = False,
 ):
     """
@@ -131,13 +174,6 @@ def send_dispatch_result_notification(
     """
 
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
-
-    if not webhook_url:
-        log(
-            "Discord webhook URL not configured. Skipping results notification.",
-            level="warning",
-        )
-        return
 
     # Query para obter resultados do disparo
     results_query = f"""
@@ -185,48 +221,42 @@ def send_dispatch_result_notification(
             ORDER BY status_ranking;
     """
 
-    try:
-        log("Querying BigQuery for dispatch results...")
+    log("Querying BigQuery for dispatch results...")
 
-        # Executar query no BigQuery
-        results_df = download_data_from_bigquery(
-            query=results_query, billing_project_id="rj-crm-registry", bucket_name="rj-crm-registry"
-        )
+    # Executar query no BigQuery
+    results_df = download_data_from_bigquery(
+        query=results_query, billing_project_id="rj-crm-registry", bucket_name="rj-crm-registry"
+    )
 
-        # Adicionar indicador [TESTE] no título se test_mode=True
-        title = "📊 **[TESTE] Resultados do Disparo**" if test_mode else "📊 **Resultados do Disparo**"
+    # Adicionar indicador [TESTE] no título se test_mode=True
+    title = "📊 **[TESTE] Resultados do Disparo**" if test_mode else "📊 **Resultados do Disparo**"
 
-        # Formatar mensagem com contexto e resultados
-        message = f"""{title}
+    # Formatar mensagem com contexto e resultados
+    message = f"""{title}
 
 📋 **Campanha:** {campaign_name}
 🆔 **Template ID:** {id_hsm}
+💰 **Centro de Custo:** {cost_center_id}
 🕐 **Disparo realizado em:** {dispatch_date}
 📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
 **Status dos Disparos:**
 """
 
-        # Adicionar resultados da query formatados
-        if len(results_df) > 0:
-            for _, row in results_df.iterrows():
-                status = str(row["status"])
-                cpfs = int(row["quantidade_cpfs"])
-                disparos = int(row["quantidade_disparos"])
-                percent = float(row["percentual"])
+    # Adicionar resultados da query formatados
+    if len(results_df) > 0:
+        for _, row in results_df.iterrows():
+            status = str(row["status"])
+            cpfs = int(row["quantidade_cpfs"])
+            disparos = int(row["quantidade_disparos"])
+            percent = float(row["percentual"])
 
-                message += f"• **{status}**: {cpfs} CPFs ({disparos} disparos) - {percent:.1f}%\n"
-        else:
-            message += "⚠️ Nenhum resultado encontrado ainda.\n"
-            message += "Os dados podem ainda não ter sido processados pelo webhook."
+            message += f"• **{status}**: {cpfs} CPFs ({disparos} disparos) - {percent:.1f}%\n"
+    else:
+        message += "⚠️ Nenhum resultado encontrado ainda.\n"
+        message += "Os dados podem ainda não ter sido processados pelo webhook."
 
-        # Enviar notificação
-        asyncio.run(_send_discord_webhook(webhook_url, message))
-        log("Discord results notification sent successfully")
-
-    except Exception as error:
-        log(f"Failed to send Discord results notification: {error}", level="error")
-
+    send_discord_notification(webhook_url, message)
 
 def _format_sample_destination(destination: dict) -> str:
     """
