@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
-from prefect.exceptions import PrefectException
+from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 from pytz import timezone
 
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
@@ -314,7 +314,7 @@ def filter_already_dispatched_phones_or_cpfs(
     if not phone_numbers:
         return destinations
 
-    query = f"""
+    query = """
         SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo
         FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
         WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo") AND status = "PROCESSING"
@@ -556,6 +556,20 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
 
 @task
 def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: str, bucket_name: str) -> Optional[bool]:
+    """
+    Verifica se o fluxo está ativo e dentro do prazo de validade consultando o BigQuery.
+    Args:
+        flow_environment: Ambiente do fluxo ('staging' ou 'production')
+        id_hsm: ID do template HSM
+        billing_project_id: ID do projeto GCP para billing
+        bucket_name: Nome do bucket GCS para carregamento de credenciais
+    Returns:
+        True se o fluxo estiver ativo e válido, None caso contrário."""
+
+    if flow_environment not in ["staging", "production"]:
+        log(f"\n⚠️  Invalid flow_environment: {flow_environment}. Must be 'staging' or 'production'.")
+        return None
+
     query = f"""
         SELECT ativo, data_limite_disparo
         FROM `rj-crm-registry.brutos_wetalkie_staging.disparos_ativos`
@@ -565,7 +579,7 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
     dfr = download_data_from_bigquery(
         query=query,
         billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
+        bucket_name=bucket_name,
     )
 
     if dfr.empty:

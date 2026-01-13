@@ -18,6 +18,7 @@ from prefect import flow  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.discord import (
+    send_dispatch_no_destinations_found,
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
@@ -156,6 +157,12 @@ def rj_crm__disparo_template(
         message="No destinations found from query. Skipping flow execution.",
     )
     if validated_destinations is None:
+        send_dispatch_no_destinations_found(
+            id_hsm,
+            campaign_name,
+            cost_center_id,
+            test_mode
+        )
         return  # flow termina aqui, nada downstream é agendado
 
     # Remove duplicate phone numbers and CPFs if flags are set
