@@ -22,6 +22,7 @@ from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_no_destinations_found,
     send_dispatch_result_notification,
     send_dispatch_success_notification,
+    send_discord_notification_on_failure,
     send_discord_notification,
 )
 # pylint: disable=E0611, E0401
@@ -46,27 +47,27 @@ from pipelines.rj_crm__disparo_template.utils.tasks import (
 )
 
 
-def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
-    """
-    Sends a Discord notification when a flow run fails.
-    """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
-    if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
-        return
+# def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
+#     """
+#     Sends a Discord notification when a flow run fails.
+#     """
+#     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+#     if not webhook_url:
+#         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
+#         return
 
-    campaign_name = flow_run.parameters.get("campaign_name", "N/A")
-    id_hsm = flow_run.parameters.get("id_hsm", "N/A")
-    cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
+#     campaign_name = flow_run.parameters.get("campaign_name", "N/A")
+#     id_hsm = flow_run.parameters.get("id_hsm", "N/A")
+#     cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
 
-    message = f"""
-    Prefect flow run failed!
-    📋 **Campanha:** {campaign_name}
-    🆔 **Template ID:** {id_hsm}
-    💰 **Centro de Custo:** {cost_center_id}
-    ⚠️ **Mensagem:** {state.message}
-    """
-    send_discord_notification(webhook_url, message)
+#     message = f"""
+#     Prefect flow run failed!
+#     📋 **Campanha:** {campaign_name}
+#     🆔 **Template ID:** {id_hsm}
+#     💰 **Centro de Custo:** {cost_center_id}
+#     ⚠️ **Mensagem:** {state.message}
+#     """
+#     send_discord_notification(webhook_url, message)
 
 
 @flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
