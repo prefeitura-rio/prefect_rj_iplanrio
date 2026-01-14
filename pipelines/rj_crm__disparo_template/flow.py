@@ -21,6 +21,7 @@ from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_no_destinations_found,
     send_dispatch_result_notification,
     send_dispatch_success_notification,
+    send_discord_notification_on_failure,
 )
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.dispatch import (
@@ -44,7 +45,7 @@ from pipelines.rj_crm__disparo_template.utils.tasks import (
 )
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
 def rj_crm__disparo_template(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,

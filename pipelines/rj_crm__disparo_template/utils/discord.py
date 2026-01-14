@@ -14,6 +14,7 @@ from datetime import datetime
 import aiohttp  # pylint: disable=E0611, E0401
 from discord import Webhook  # pylint: disable=E0611, E0401
 from pytz import timezone
+from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 # pylint: disable=E0611, E0401
@@ -277,3 +278,22 @@ def _format_sample_destination(destination: dict) -> str:
     }
 
     return json.dumps(sample, indent=2, ensure_ascii=False)
+
+
+def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
+    """
+    Sends a Discord notification when a flow run fails.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS") # Recommended to use a specific webhook for errors
+    if not webhook_url:
+        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        return
+
+    message = f"""
+    Prefect flow run failed!
+    Flow: {flow.name}
+    Flow Run: {flow_run.name}
+    State: {state.name}
+    Message: {state.message}
+    """
+    send_discord_notification(webhook_url, message)
