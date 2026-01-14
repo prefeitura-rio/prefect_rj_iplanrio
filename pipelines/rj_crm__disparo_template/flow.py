@@ -9,6 +9,7 @@ import os
 import time
 from math import ceil
 import pendulum
+from typing import TYPE_CHECKING
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
@@ -43,15 +44,17 @@ from pipelines.rj_crm__disparo_template.utils.tasks import (
     printar,
     skip_flow_if_empty,
 )
+if TYPE_CHECKING:
+    from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
 
 
-def send_discord_notification_on_failure(flow, flow_run, state):
+def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
     """
     Sends a Discord notification when a flow run fails.
     """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")  # Recommended to use a specific webhook for errors
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
     if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
         return
 
     campaign_name = flow_run.parameters.get("campaign_name", "N/A")
