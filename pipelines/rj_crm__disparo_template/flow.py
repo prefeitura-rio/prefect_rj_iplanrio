@@ -21,7 +21,7 @@ from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_no_destinations_found,
     send_dispatch_result_notification,
     send_dispatch_success_notification,
-    send_discord_notification_on_failure,
+    send_discord_notification,
 )
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.dispatch import (
@@ -43,6 +43,25 @@ from pipelines.rj_crm__disparo_template.utils.tasks import (
     printar,
     skip_flow_if_empty,
 )
+
+
+def send_discord_notification_on_failure(flow, flow_run, state):
+    """
+    Sends a Discord notification when a flow run fails.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS") # Recommended to use a specific webhook for errors
+    if not webhook_url:
+        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        return
+
+    message = f"""
+    Prefect flow run failed!
+    Flow: {flow.name}
+    Flow Run: {flow_run.name}
+    State: {state.name}
+    Message: {state.message}
+    """
+    send_discord_notification(webhook_url, message)
 
 
 @flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
