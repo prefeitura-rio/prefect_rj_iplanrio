@@ -66,7 +66,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     📋 **Campanha:** {campaign_name}
     🆔 **Template ID:** {id_hsm}
     💰 **Centro de Custo:** {cost_center_id}
-    ⚠️ **Mensagem:** {state.message}    
+    ⚠️ **Mensagem:** {state.message}
     """
     send_discord_notification(webhook_url, message)
 
