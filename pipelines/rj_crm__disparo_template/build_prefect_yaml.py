@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# python3 -m rj_crm__disparo_template/build_prefect_yaml --env prod
+# python3 -m build_prefect_yaml --env prod
 import warnings
 from pathlib import Path
 from ruamel.yaml import YAML
@@ -21,7 +21,7 @@ print("Current Working Directory:", os.getcwd())
 parser = argparse.ArgumentParser(description="Build prefect.yaml with specific schedules.")
 parser.add_argument(
     "--env",
-    choices=["staging", "prod", "both"],
+    choices=["staging", "prod", "both", "none"],
     default="both",
     help="Specify the environment to add schedules to: 'staging', 'prod', or 'both'. Defaults to 'both'.",
 )
