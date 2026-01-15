@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# python3 -m rj_crm__disparo_template/build_prefect_yaml --env prod
+# python3 -m build_prefect_yaml --env prod
 import warnings
 from pathlib import Path
 from ruamel.yaml import YAML
@@ -21,7 +21,7 @@ print("Current Working Directory:", os.getcwd())
 parser = argparse.ArgumentParser(description="Build prefect.yaml with specific schedules.")
 parser.add_argument(
     "--env",
-    choices=["staging", "prod", "both"],
+    choices=["staging", "prod", "both", "none"],
     default="both",
     help="Specify the environment to add schedules to: 'staging', 'prod', or 'both'. Defaults to 'both'.",
 )
@@ -45,19 +45,23 @@ with base_path.open() as f:
 with sched_path.open() as f:
     sched = yaml.load(f)
 
-# Aplica scheduler aos deployments com base no argumento --env
+# Aplica scheduler e parâmetros aos deployments com base no argumento --env
 for dep in base.get("deployments", []):
     dep_name = dep.get("name", "")
 
     # Lógica para staging
     if "staging" in dep_name:
         if args.env in ["staging", "both"]:
-            # Adiciona 'active: false' para staging
+            # Copia schedules e adiciona parâmetros a cada um
             staging_schedules = deepcopy(sched.get("schedules", []))
             for schedule in staging_schedules:
                 schedule["active"] = False
+                if "parameters" not in schedule:
+                    schedule["parameters"] = {}  # ruamel.yaml will convert this to CommentedMap
+                schedule["parameters"].insert(0, "flow_environment", "staging")
             dep["schedules"] = staging_schedules
-            print(f"Schedules with 'active: false' applied to '{dep_name}'.")
+            print(f"Schedules with 'flow_environment: staging' applied to '{dep_name}'.")
+
         elif "schedules" in dep:
             # Remove schedules se não for o ambiente alvo
             del dep["schedules"]
@@ -66,13 +70,23 @@ for dep in base.get("deployments", []):
     # Lógica para prod
     elif "prod" in dep_name:
         if args.env in ["prod", "both"]:
-            # Adiciona ou substitui schedules
-            dep["schedules"] = deepcopy(sched.get("schedules", []))
-            print(f"Schedules applied to '{dep_name}'.")
+            # Copia schedules e adiciona parâmetros a cada um
+            prod_schedules = deepcopy(sched.get("schedules", []))
+            for schedule in prod_schedules:
+                if "parameters" not in schedule:
+                    schedule["parameters"] = {}
+                schedule["parameters"].insert(0, "flow_environment", "production")
+            dep["schedules"] = prod_schedules
+            print(f"Schedules with 'flow_environment: production' applied to '{dep_name}'.")
+
         elif "schedules" in dep:
             # Remove schedules se não for o ambiente alvo
             del dep["schedules"]
             print(f"Schedules removed from '{dep_name}'.")
+
+    # Remove o 'parameters' de nível superior se estiver vazio, para limpeza
+    if "parameters" in dep and not dep["parameters"]:
+        del dep["parameters"]
 
 
 # Escreve o YAML final limpo

@@ -15,7 +15,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
-from prefect.exceptions import PrefectException
+from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 from pytz import timezone
 
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
@@ -314,7 +314,7 @@ def filter_already_dispatched_phones_or_cpfs(
     if not phone_numbers:
         return destinations
 
-    query = f"""
+    query = """
         SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo
         FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
         WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo") AND status = "PROCESSING"
@@ -552,3 +552,57 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
         replacements = json.loads(replacements["value"])
         print(f"replacements modificado: {replacements}")
     return raw_query.format_map(replacements)
+
+
+@task
+def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: str, bucket_name: str) -> Optional[bool]:
+    """
+    Verifica se o fluxo está ativo e dentro do prazo de validade consultando o BigQuery.
+    Args:
+        flow_environment: Ambiente do fluxo ('staging' ou 'production')
+        id_hsm: ID do template HSM
+        billing_project_id: ID do projeto GCP para billing
+        bucket_name: Nome do bucket GCS para carregamento de credenciais
+    Returns:
+        True se o fluxo estiver ativo e válido, None caso contrário."""
+
+    log(f"\nStarting flow status check for id_hsm={id_hsm} in environment={flow_environment}.")
+
+    if flow_environment not in ["staging", "production"]:
+        log(f"\n⚠️  Invalid flow_environment: {flow_environment}. Must be 'staging' or 'production'.")
+        return None
+
+    query = f"""
+        SELECT ativo, data_limite_disparo
+        FROM `rj-crm-registry.brutos_wetalkie_staging.disparos_ativos`
+        WHERE id_hsm = '{id_hsm}' AND ambiente = '{flow_environment}'
+        LIMIT 1
+    """
+    dfr = download_data_from_bigquery(
+        query=query,
+        billing_project_id=billing_project_id,
+        bucket_name=bucket_name,
+    )
+    log(f"DEBUG: Flow status query result:\n{dfr} \nwith query {query}")
+    if dfr.empty:
+        log(f"\n⚠️  No configuration found for id_hsm={id_hsm} in environment={flow_environment}.")
+        return None
+
+    row = dfr.iloc[0]
+
+    if not row.get("ativo") or row.get("ativo") not in (1, "1"):
+        log(f'DEBUG row.get("ativo") {row.get("ativo")}')
+        log(f"\n⚠️  Flow is not active for id_hsm={id_hsm} in environment={flow_environment}.")
+        return None
+
+    current_date = datetime.now(timezone("America/Sao_Paulo")).date()
+    print(f'>>>>> DEBUG row.get("data_limite_disparo"): {row.get("data_limite_disparo")}')
+
+    expiration_date = row.get("data_limite_disparo") if not pd.isnull(row.get("data_limite_disparo")) else current_date
+
+    if expiration_date < current_date:
+        log(f"\n⚠️  Flow for id_hsm={id_hsm} in environment={flow_environment} has expired on {expiration_date}.")
+        return None
+
+    log(f"\n✅  Active flow found for id_hsm={id_hsm} in environment={flow_environment}.")
+    return True
