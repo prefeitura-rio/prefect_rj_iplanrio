@@ -284,7 +284,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     """
     Sends a Discord notification when a flow run fails.
     """
-    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS") # Recommended to use a specific webhook for errors
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
     if not webhook_url:
         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
         return
