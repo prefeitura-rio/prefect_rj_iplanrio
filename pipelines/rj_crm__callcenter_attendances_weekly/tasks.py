@@ -489,7 +489,7 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         # =========================================
 
         page_attendances = []
-        has_next_page = True
+        has_next_page = False  # Default seguro: parar se resposta malformada
 
         if "data" in response_data and "item" in response_data["data"]:
             item_data = response_data["data"]["item"]
