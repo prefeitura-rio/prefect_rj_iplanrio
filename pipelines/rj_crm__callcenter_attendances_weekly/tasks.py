@@ -432,7 +432,6 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     all_attendances = []
     page_number = 1
     page_size = 100
-    max_pages = 10  # TODO: Remove this limit after testing
 
     while True:
         log(f"🔍 Buscando página {page_number} (acumulados: {len(all_attendances)} atendimentos)", level="debug")
@@ -520,10 +519,6 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         if not has_next_page:
             log(f"✓ Paginação finalizada: hasNextPage=False", level="info")
-            break
-
-        if page_number >= max_pages:
-            log(f"⚠️ Limite de {max_pages} páginas atingido (teste)", level="warning")
             break
 
         log(f"➡️ Continuando para página {page_number + 1}", level="debug")
