@@ -202,12 +202,20 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
         elif audio_format == "wav":
             audio = WAVE(audio_path)
             duration = audio.info.length
-        elif audio_format in ["ogg", "oga"]:
-            audio = OggVorbis(audio_path)
-            duration = audio.info.length
-        elif audio_format == "opus":
-            audio = OggOpus(audio_path)
-            duration = audio.info.length
+        elif audio_format in ["ogg", "oga", "opus"]:
+            # Try Opus first (common for WhatsApp voice messages), then Vorbis
+            try:
+                audio = OggOpus(audio_path)
+                duration = audio.info.length
+                log(f"Detected Opus codec for {audio_path}", level="debug")
+            except Exception:
+                try:
+                    audio = OggVorbis(audio_path)
+                    duration = audio.info.length
+                    log(f"Detected Vorbis codec for {audio_path}", level="debug")
+                except Exception as e:
+                    log(f"Could not detect OGG codec: {e}", level="warning")
+                    duration = None
         else:
             log(f"Formato de áudio não reconhecido: {audio_format}", level="warning")
             duration = None
@@ -257,9 +265,28 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
             content = audio_file.read()
 
         audio = speech.RecognitionAudio(content=content)
+
+        # Detect encoding based on file format
+        audio_format = audio_path.lower().split(".")[-1]
+
+        # Default config
+        encoding = speech.RecognitionConfig.AudioEncoding.ENCODING_UNSPECIFIED
+        sample_rate = 16000
+
+        # Check if file is Opus (common in WhatsApp voice messages)
+        if audio_format in ["ogg", "oga", "opus"]:
+            try:
+                OggOpus(audio_path)
+                encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
+                sample_rate = 48000  # Opus standard sample rate
+                log(f"Using OGG_OPUS encoding for {audio_path}", level="debug")
+            except Exception:
+                # Not Opus, let Google auto-detect
+                log(f"Not Opus, using ENCODING_UNSPECIFIED for {audio_path}", level="debug")
+
         config = speech.RecognitionConfig(
-            encoding=speech.RecognitionConfig.AudioEncoding.ENCODING_UNSPECIFIED,
-            sample_rate_hertz=16000,
+            encoding=encoding,
+            sample_rate_hertz=sample_rate,
             language_code=language_code,
             enable_automatic_punctuation=True,
         )
