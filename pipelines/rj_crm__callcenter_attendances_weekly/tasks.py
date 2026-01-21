@@ -525,15 +525,6 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         page_number += 1
 
-        # Safety check: evitar loop infinito extremo
-        if page_number > 1000:
-            log(
-                f"⚠️ ALERTA: Atingido limite de segurança de 1000 páginas. "
-                f"Interrompendo paginação. Total de atendimentos: {len(all_attendances)}",
-                level="error"
-            )
-            break
-
     if not all_attendances:
         log("No attendances found")
         return pd.DataFrame()
