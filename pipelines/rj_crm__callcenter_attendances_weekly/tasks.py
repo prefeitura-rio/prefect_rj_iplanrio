@@ -184,11 +184,18 @@ def check_audio_file(audio_path: str) -> bool:
 
 
 def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
-    """Check if audio duration is within specified limit."""
+    """
+    Check if audio duration is within specified limit.
+    If duration cannot be determined, logs warning and continues (Google API will validate).
+    """
     audio_format = audio_path.lower().split(".")[-1]
-    duration = 0
+    duration = None
+
+    log(f"Iniciando verificação de duração: {audio_path} (formato: {audio_format})", level="debug")
 
     try:
+        log(f"Tentando verificar duração com mutagen para formato {audio_format}", level="debug")
+
         if audio_format == "mp3":
             audio = MP3(audio_path)
             duration = audio.info.length
@@ -202,16 +209,43 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
             audio = OggOpus(audio_path)
             duration = audio.info.length
         else:
-            raise AudioProcessingError(f"Formato de áudio não suportado: {audio_format}")
+            log(f"Formato de áudio não reconhecido: {audio_format}", level="warning")
+            duration = None
 
+        if duration is not None:
+            log(
+                f"✓ Duração verificada com mutagen: {duration:.2f}s para {audio_path}",
+                level="info"
+            )
+    except Exception as mutagen_error:
+        log(
+            f"⚠ Não foi possível verificar duração com mutagen para {audio_path} "
+            f"({audio_format}): {mutagen_error}. "
+            f"Continuando sem validação de duração - Google API validará.",
+            level="warning"
+        )
+        duration = None
+
+    # Se conseguiu determinar duração, valida o limite
+    if duration is not None:
         if duration > max_duration_seconds:
-            raise AudioProcessingError(f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s")
+            log(
+                f"✗ Áudio {audio_path} excede limite de duração: {duration:.2f}s > {max_duration_seconds}s",
+                level="error"
+            )
+            raise AudioProcessingError(
+                f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s"
+            )
 
-        log(f"Duração do áudio verificada: {duration:.2f}s", level="debug")
-
-    except Exception as e:
-        log(f"Erro ao verificar duração do áudio {audio_path}: {e}", level="error")
-        raise AudioProcessingError(f"Erro ao verificar duração do áudio: {e}") from e
+        log(
+            f"✓ Verificação de duração completa: {audio_path} ({duration:.2f}s <= {max_duration_seconds}s)",
+            level="debug"
+        )
+    else:
+        log(
+            f"⚠ Pulando validação de duração para {audio_path} - será validado pela Google API",
+            level="info"
+        )
 
 
 def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
