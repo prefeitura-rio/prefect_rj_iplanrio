@@ -692,7 +692,15 @@ def criar_dataframe_de_lista(dados_processados: list) -> pd.DataFrame:
     Returns:
         A pandas DataFrame created from the input list
     """
-    return pd.DataFrame(dados_processados)
+    import json
+
+    df = pd.DataFrame(dados_processados)
+
+    # Convert json_data dict to JSON string for proper storage
+    if 'json_data' in df.columns:
+        df['json_data'] = df['json_data'].apply(lambda x: json.dumps(x) if isinstance(x, dict) else x)
+
+    return df
 
 
 def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
