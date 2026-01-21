@@ -276,10 +276,10 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
         # Check if file is Opus (common in WhatsApp voice messages)
         if audio_format in ["ogg", "oga", "opus"]:
             try:
-                OggOpus(audio_path)
+                opus_info = OggOpus(audio_path)
                 encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
-                sample_rate = 48000  # Opus standard sample rate
-                log(f"Using OGG_OPUS encoding for {audio_path}", level="debug")
+                sample_rate = opus_info.info.sample_rate  # Read from file metadata
+                log(f"Using OGG_OPUS encoding with {sample_rate}Hz for {audio_path}", level="info")
             except Exception:
                 # Not Opus, let Google auto-detect
                 log(f"Not Opus, using ENCODING_UNSPECIFIED for {audio_path}", level="debug")
@@ -432,6 +432,7 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     all_attendances = []
     page_number = 1
     page_size = 100
+    max_pages = 10  # TODO: Remove this limit after testing
 
     while True:
         log(f"🔍 Buscando página {page_number} (acumulados: {len(all_attendances)} atendimentos)", level="debug")
@@ -520,9 +521,12 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         if not has_next_page:
             log(f"✓ Paginação finalizada: hasNextPage=False", level="info")
             break
-        else:
-            log(f"➡️ Continuando para página {page_number + 1}", level="debug")
 
+        if page_number >= max_pages:
+            log(f"⚠️ Limite de {max_pages} páginas atingido (teste)", level="warning")
+            break
+
+        log(f"➡️ Continuando para página {page_number + 1}", level="debug")
         page_number += 1
 
     if not all_attendances:
