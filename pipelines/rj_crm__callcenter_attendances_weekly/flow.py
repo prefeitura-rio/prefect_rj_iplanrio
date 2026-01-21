@@ -137,7 +137,3 @@ def rj_crm__callcenter_attendances_weekly(
     print(
         f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
     )
-
-    # if materialize_after_dump:
-    #    dbt_select = CallCenterAttendancesConstants.DBT_SELECT.value
-    #    execute_dbt_task(select=dbt_select, target="prod")
