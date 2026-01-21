@@ -45,7 +45,9 @@ def rj_crm__api_wetalkie(
     table_id = table_id or WetalkieConstants.TABLE_ID.value
     dump_mode = dump_mode or WetalkieConstants.DUMP_MODE.value
     materialize_after_dump = (
-        materialize_after_dump if materialize_after_dump is not None else WetalkieConstants.MATERIALIZE_AFTER_DUMP.value
+        materialize_after_dump
+        if materialize_after_dump is not None
+        else WetalkieConstants.MATERIALIZE_AFTER_DUMP.value
     )
 
     partition_column = WetalkieConstants.PARTITION_COLUMN.value
@@ -71,7 +73,9 @@ def rj_crm__api_wetalkie(
 
     # Check if there's data to process - return early if empty
     if raw_attendances.empty:
-        log("No attendances found from API. Flow completed successfully with no data to process.")
+        log(
+            "No attendances found from API. Flow completed successfully with no data to process."
+        )
         return
 
     # Processar JSON e transcrever áudios
@@ -95,7 +99,3 @@ def rj_crm__api_wetalkie(
         dump_mode=dump_mode,
         biglake_table=biglake_table,
     )
-
-    # if materialize_after_dump:
-    #    dbt_select = WetalkieConstants.DBT_SELECT.value
-    #    execute_dbt_task(select=dbt_select, target="prod")
