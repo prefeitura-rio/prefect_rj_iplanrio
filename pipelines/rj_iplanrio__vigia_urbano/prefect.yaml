@@ -59,31 +59,5 @@ deployments:
       parameters:
         table_id: vw_RespostaOcorrencia_Detalhada # Nome da tabela no BigQuery
         execute_query: |
-          SELECT
-              Id,
-              cpfUsuario,
-              nomeUsuario,
-              dataHoraRegistro,
-              logradouro,
-              numeroPorta,
-              bairroID,
-              BairroNome,
-              praca,
-              referencia,
-              coordenadaX,
-              coordenadaY,
-              observacao,
-              TPTFOCUP,
-              ocorrenciaID,
-              OcorrenciaDescricao,
-              NumeroOcorrencia,
-              temPessoa,
-              temDrogas,
-              ehParque,
-              orgaoID,
-              OrgaoNome,
-              chamadoJson,
-              TPTFOCUP_Descricao,
-              TipoPessoa_Frequencia_ID,
-              Ocupacao_ItensPraca_ID
+          SELECT *
           FROM vigiaurbano.vw_RespostaOcorrencia_Detalhada
