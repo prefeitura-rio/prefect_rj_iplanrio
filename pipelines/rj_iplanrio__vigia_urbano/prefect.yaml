@@ -36,6 +36,21 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
+
+
+
+  - name: rj-iplanrio--vigia_urbano--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__vigia_urbano -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
     schedules:
     - interval: 3600 # executa a cada 1 hora
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
@@ -72,17 +87,3 @@ deployments:
               TipoPessoa_Frequencia_ID,
               Ocupacao_ItensPraca_ID
           FROM vigiaurbano.vw_RespostaOcorrencia_Detalhada
-
-
-  - name: rj-iplanrio--vigia_urbano--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
-    work_pool:
-      name: k3s-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_iplanrio__vigia_urbano -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
-        image_pull_policy: Always
-
