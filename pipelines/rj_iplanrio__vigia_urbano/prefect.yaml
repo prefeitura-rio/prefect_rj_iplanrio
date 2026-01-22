@@ -1,0 +1,88 @@
+name: rj_iplanrio__vigia_urbano
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__vigia_urbano-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__vigia_urbano/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--vigia_urbano--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__vigia_urbano -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: vigia_urbano_overwrite # slug do schedule
+      parameters:
+        table_id: vw_RespostaOcorrencia_Detalhada # Nome da tabela no BigQuery
+        execute_query: |
+          SELECT
+              Id,
+              cpfUsuario,
+              nomeUsuario,
+              dataHoraRegistro,
+              logradouro,
+              numeroPorta,
+              bairroID,
+              BairroNome,
+              praca,
+              referencia,
+              coordenadaX,
+              coordenadaY,
+              observacao,
+              TPTFOCUP,
+              ocorrenciaID,
+              OcorrenciaDescricao,
+              NumeroOcorrencia,
+              temPessoa,
+              temDrogas,
+              ehParque,
+              orgaoID,
+              OrgaoNome,
+              chamadoJson,
+              TPTFOCUP_Descricao,
+              TipoPessoa_Frequencia_ID,
+              Ocupacao_ItensPraca_ID
+          FROM vigiaurbano.vw_RespostaOcorrencia_Detalhada
+
+
+  - name: rj-iplanrio--vigia_urbano--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__vigia_urbano -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
