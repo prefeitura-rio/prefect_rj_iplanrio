@@ -161,11 +161,7 @@ deployments:
             `RHCO_NR_MES_VIGENCIA_FIM`,
             `RHCO_NR_ANO_VIGENCIA_INICIO`,
             `RHCO_NR_ANO_VIGENCIA_FIM`,
-<<<<<<< HEAD
             `RHCO_NR_ORDEM`, 
-=======
-            `RHCO_NR_ORDEN`,
->>>>>>> 245f43b58bed294c3c95d5e55e366f68491de1c8
             `RHCO_I18N_LABEL`,
             `RHCO_CAMPO_OBRIGATORIO`
           FROM `rh`.`tb_colunas_valores`;
@@ -202,7 +198,6 @@ deployments:
         table_id: tb_funcionario # Nome da tabela no BigQuery
         dump_mode: overwrite
         execute_query: |
-<<<<<<< HEAD
           SELECT  
             FUNC_CD_CPF,
             FUNC_DS_NOME,
@@ -221,26 +216,6 @@ deployments:
             FUNC_DT_EMISSAO,
             COD_OS
           FROM tb_funcionario;
-=======
-          SELECT
-            `FUNC_CD_CPF`,
-            `FUNC_DS_NOME`,
-            `FUNC_DS_NOME_SOCIAL`,
-            `FUNC_DT_NASCIMENTO`,
-            `FUNC_DS_NOME_MAE`,
-            `FUNC_DS_NOME_PAI`,
-            `FUNC_CD_NACIONALIDADE`,
-            `FUNC_DS_NACIONALIDADE`,
-            `FUNC_SEXO`,
-            `FUNC_GRAU_INSTRUCAO`,
-            `FUNC_MUNI_CD_IBGE_NASCIMENTO`,
-            `FUNC_RACO_CD_RACA_COR`,
-            `FUNC_NR_RG`,
-            `FUNC_DS_ORGAO_EXPEDIDOR_RG`,
-            `FUNC_DT_EMISSAO`,
-            `FUNC_COD_OS`
-          FROM `rh`.`tb_funcionario`;
->>>>>>> 245f43b58bed294c3c95d5e55e366f68491de1c8
 
 
     - interval: 86400 # executa a cada 24h
@@ -330,11 +305,7 @@ deployments:
             `VINC_VL_CARGA_HORARIA`,
             `VINC_DT_INICIO`,
             `VINC_DT_ENCERRAMENTO`,
-<<<<<<< HEAD
             `ENDE_CD_ENDERECO`,
-=======
-            `ENDERECO_CD_ENDERECO`,
->>>>>>> 245f43b58bed294c3c95d5e55e366f68491de1c8
             `VINC_DS_EMAIL`,
             `VINC_CD_CNES`,
             `VINC_DS_CARGO`,
