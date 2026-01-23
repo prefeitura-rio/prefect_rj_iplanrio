@@ -1,0 +1,316 @@
+name: rj_cvl__osinfo_rh
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_cvl__osinfo_rh-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_cvl__osinfo_rh/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-cvl--osinfo_rh--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_cvl__osinfo_rh/flow.py:rj_cvl__osinfo_rh
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cvl__osinfo_rh -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+  - name: rj-cvl--osinfo_rh--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_cvl__osinfo_rh/flow.py:rj_cvl__osinfo_rh
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cvl__osinfo_rh -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # Exemplo de schedule overwrite
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dc_conselho # slug do schedule
+      parameters:
+        table_id: dc_conselho # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `CONS_SG_CONSELHO`,
+            `CONS_DS_CONSELHO`
+          FROM `rh`.`dc_conselho`;
+    # Exemplo de schedule incremental
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dc_grau_instrucao # slug do schedule
+      parameters:
+        table_id: dc_grau_instrucao # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `GINS_CD_GRAU_INSTRUCAO`,
+            `GINS_DS_GRAU_INSTRUCAO`,
+            `GINS_ORDEM`
+          FROM `rh`.`dc_grau_instrucao`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dc_raca_cor # slug do schedule
+      parameters:
+        table_id: dc_raca_cor # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `RACO_CD_RACA_COR`,
+            `RACO_DS_DESCRICAO`
+          FROM `rh`.`dc_raca_cor`;
+
+        - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dc_sexo # slug do schedule
+      parameters:
+        table_id: dc_sexo # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `SEX_CD_SEXO`,
+            `SEX_DS_DESCRICAO`
+          FROM `rh`.`dc_sexo`;
+    # Exemplo de schedule incremental
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dc_tipo_vinculacao # slug do schedule
+      parameters:
+        table_id: dc_tipo_vinculacao # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `TPVC_CD_TIPO_VINCULACAO`,
+            `TPVC_DS_DESCRICAO`
+          FROM `rh`.`dc_tipo_vinculacao`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_cbo # slug do schedule
+      parameters:
+        table_id: tb_cbo # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `CBO_CD_CBO`,
+            `CBO_DS_CBO`,
+            `CBO_IN_ATIVIDADE_FIM`
+          FROM `rh`.`tb_cbo`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_cbo_bkp # slug do schedule
+      parameters:
+        table_id: tb_cbo_bkp # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `CBO_CD_CBO`,
+            `CBO_DS_CBO`,
+            `CBO_IN_ATIVIDADE_FIM`
+          FROM `rh`.`tb_cbo_bkp`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_colunas_valores # slug do schedule
+      parameters:
+        table_id: tb_colunas_valores # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `RHCO_COD_COLUNA`,
+            `RHCO_NM_COLUNA`,
+            `RHGR_CD_CODIGO`,
+            `RHGR_TP_TIPO`,
+            `RHCO_PERC_PERCENTUAL`,
+            `RHCO_NR_MES_VIGENCIA_INICIO`,
+            `RHCO_NR_MES_VIGENCIA_FIM`,
+            `RHCO_NR_ANO_VIGENCIA_INICIO`,
+            `RHCO_NR_ANO_VIGENCIA_FIM`,
+            `RHCO_NR_ORDEM`, 
+            `RHCO_I18N_LABEL`,
+            `RHCO_CAMPO_OBRIGATORIO`
+          FROM `rh`.`tb_colunas_valores`;
+    # Exemplo de schedule incremental
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_folha_pagamento # slug do schedule
+      parameters:
+        table_id: tb_folha_pagamento # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+         SELECT
+          `FPTO_CD_FOLHA`,
+          `VINC_CD_VINCULO`,
+          `FPTO_NR_MES_REFERENCIA`,
+          `FPTO_NR_ANO_REFERENCIA`,
+          `FPTO_NR_MES_COMPETENCIA`,
+          `FPTO_NR_ANO_COMPETENCIA`,
+          `ID_CONTRATO`,
+          `COD_UNIDADE`,
+          `FPTO_VL_CARGA_HORARIA_EFETIVA`,
+          `FPTO_PERC_RATEIO`,
+          `FPTO_DT_LICENCA_INICIO`,
+          `FPTO_DT_LICENCA_FIM`,
+          `FPTO_OBSERVACAO`
+          FROM `rh`.`tb_folha_pagamento`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_funcionario # slug do schedule
+      parameters:
+        table_id: tb_funcionario # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT  
+            FUNC_CD_CPF,
+            FUNC_DS_NOME,
+            FUNC_DS_NOME_SOCIAL,
+            FUNC_DT_NASCIMENTO,
+            FUNC_DS_NOME_MAE,
+            FUNC_DS_NOME_PAI,
+            FUNC_CD_NACIONALIDADE,
+            FUNC_DS_NACIONALIDADE,
+            SEX_CD_SEXO,
+            GINS_CD_GRAU_INSTRUCAO,
+            MUNI_CD_IBGE_NASCIMENTO,
+            RACO_CD_RACA_COR,
+            FUNC_NR_RG,
+            FUNC_DS_ORGAO_EXPEDIDOR_RG,
+            FUNC_DT_EMISSAO,
+            COD_OS
+          FROM tb_funcionario;
+
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_grupo # slug do schedule
+      parameters:
+        table_id: tb_grupo # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `RHGR_TP_TIPO`,
+            `RHGR_CD_CODIGO`,
+            `RHGR_NM_NOME`,
+            `RHGR_IN_TOTALIZAR`
+          FROM `rh`.`tb_grupo`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_provisionamento # slug do schedule
+      parameters:
+        table_id: tb_provisionamento # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `PROV_CD_PROVISIONAMENTO`,
+            `VINC_CD_VINCULO`,
+            `PROV_NR_MES_REFERENCIA`,
+            `PROV_NR_ANO_REFERENCIA`,
+            `PROV_NR_MES_COMPETENCIA`,
+            `PROV_NR_ANO_COMPETENCIA`,
+            `ID_CONTRATO`,
+            `COD_UNIDADE`,
+            `PROV_OBSERVACAO`
+          FROM `rh`.`tb_provisionamento`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_valores_folha_pagamento # slug do schedule
+      parameters:
+        table_id: tb_valores_folha_pagamento # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `FPTO_CD_FOLHA`,
+            `RHCO_COD_COLUNA`,
+            `VLFP_VL_VALOR`
+          FROM `rh`.`tb_valores_folha_pagamento`;
+    # Exemplo de schedule incremental
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_valores_provisionamento # slug do schedule
+      parameters:
+        table_id: tb_valores_provisionamento # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+         SELECT
+            `PROV_CD_PROVISIONAMENTO`,
+            `RHCO_COD_COLUNA`,
+            `VLPR_VL_VALOR`
+          FROM `rh`.`tb_valores_provisionamento`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: tb_vinculo_trabalho # slug do schedule
+      parameters:
+        table_id: tb_vinculo_trabalho # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `VINC_CD_VINCULO`,
+            `FUNC_CD_CPF`,
+            `VINC_IN_ATIVO`,
+            `COD_OS`,
+            `VINC_NR_CNPJ_OS`,
+            `CBO_CD_CBO`,
+            `VINC_NR_REGISTRO_PROFISSIONAL`,
+            `CONS_SG_CONSELHO`,
+            `UF_CD_IBGE_CONSELHO`,
+            `IDCATEGORIA`,
+            `VINC_SETOR`,
+            `CD_TIPO_VINCULACAO`,
+            `VINC_VL_CARGA_HORARIA`,
+            `VINC_DT_INICIO`,
+            `VINC_DT_ENCERRAMENTO`,
+            `ENDE_CD_ENDERECO`,
+            `VINC_DS_EMAIL`,
+            `VINC_CD_CNES`,
+            `VINC_DS_CARGO`,
+            `VINC_NR_TELEFONE`
+          FROM `rh`.`tb_vinculo_trabalho`;
+
+    
+ 
