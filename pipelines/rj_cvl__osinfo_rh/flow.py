@@ -84,4 +84,4 @@ def rj_cvl__osinfo_rh(
         add_timestamp_column=add_timestamp_column,
     )
 
-   
+

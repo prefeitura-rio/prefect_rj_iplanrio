@@ -161,7 +161,7 @@ deployments:
             `RHCO_NR_MES_VIGENCIA_FIM`,
             `RHCO_NR_ANO_VIGENCIA_INICIO`,
             `RHCO_NR_ANO_VIGENCIA_FIM`,
-            `RHCO_NR_ORDEM`, 
+            `RHCO_NR_ORDEM`,
             `RHCO_I18N_LABEL`,
             `RHCO_CAMPO_OBRIGATORIO`
           FROM `rh`.`tb_colunas_valores`;
@@ -198,7 +198,7 @@ deployments:
         table_id: tb_funcionario # Nome da tabela no BigQuery
         dump_mode: overwrite
         execute_query: |
-          SELECT  
+          SELECT
             FUNC_CD_CPF,
             FUNC_DS_NOME,
             FUNC_DS_NOME_SOCIAL,
@@ -310,7 +310,6 @@ deployments:
             `VINC_CD_CNES`,
             `VINC_DS_CARGO`,
             `VINC_NR_TELEFONE`
-          FROM `rh`.`tb_vinculo_trabalho`; 
+          FROM `rh`.`tb_vinculo_trabalho`;
 
-    
- 
+
