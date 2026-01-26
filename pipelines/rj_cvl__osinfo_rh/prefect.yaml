@@ -313,3 +313,30 @@ deployments:
           FROM `rh`.`tb_vinculo_trabalho`;
 
 
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dc_unidade_federacao # slug do schedule
+      parameters:
+        table_id: dc_unidade_federacao # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `UF_CD_IBGE`,
+            `UF_SG_SIGLA`,
+            `UF_DS_DESCRICAO`
+          FROM `common`.`dc_unidade_federacao`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dc_municipio # slug do schedule
+      parameters:
+        table_id: dc_municipio # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+          SELECT
+            `MUNI_CD_IBGE`,
+            `UF_CD_IBGE`,
+            `MUNI_DS_NOME`
+          FROM `common`.`dc_municipio`;
