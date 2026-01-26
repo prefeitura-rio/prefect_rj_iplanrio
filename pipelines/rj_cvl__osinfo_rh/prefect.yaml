@@ -89,7 +89,7 @@ deployments:
             `RACO_DS_DESCRICAO`
           FROM `rh`.`dc_raca_cor`;
 
-        - interval: 86400 # executa a cada 24h
+    - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
       slug: dc_sexo # slug do schedule
