@@ -310,7 +310,7 @@ deployments:
             `VINC_CD_CNES`,
             `VINC_DS_CARGO`,
             `VINC_NR_TELEFONE`
-          FROM `rh`.`tb_vinculo_trabalho`;
+          FROM `rh`.`tb_vinculo_trabalho`; 
 
     
  
