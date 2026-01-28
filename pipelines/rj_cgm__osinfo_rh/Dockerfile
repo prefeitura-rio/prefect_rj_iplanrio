@@ -6,6 +6,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
-COPY ./pipelines/rj_cvl__osinfo_rh ./pipelines/rj_cvl__osinfo_rh/
+COPY ./pipelines/rj_cgm__osinfo_rh ./pipelines/rj_cgm__osinfo_rh/
 
 RUN uv sync --all-packages

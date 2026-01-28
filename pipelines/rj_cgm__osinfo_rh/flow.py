@@ -17,7 +17,7 @@ from prefect import flow
 
 
 @flow(log_prints=True)
-def rj_cvl__osinfo_rh(
+def rj_cgm__osinfo_rh(
     db_database: str = "rh",
     db_host: str = "10.70.4.188",
     db_port: str = "3306",

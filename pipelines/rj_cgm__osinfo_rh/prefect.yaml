@@ -1,4 +1,4 @@
-name: rj_cvl__osinfo_rh
+name: rj_cgm__osinfo_rh
 prefect-version: 3.4.3
 
 build:
@@ -10,8 +10,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_cvl__osinfo_rh-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj_cvl__osinfo_rh/Dockerfile
+      tag: "rj_cgm__osinfo_rh-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_cgm__osinfo_rh/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -24,26 +24,26 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-cvl--osinfo_rh--staging
+  - name: rj-cgm--osinfo_rh--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_cvl__osinfo_rh/flow.py:rj_cvl__osinfo_rh
+    entrypoint: pipelines/rj_cgm__osinfo_rh/flow.py:rj_cgm__osinfo_rh
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cvl__osinfo_rh -- prefect flow-run execute
+        command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-  - name: rj-cvl--osinfo_rh--prod
+  - name: rj-cgm--osinfo_rh--prod
     version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_cvl__osinfo_rh/flow.py:rj_cvl__osinfo_rh
+    entrypoint: pipelines/rj_cgm__osinfo_rh/flow.py:rj_cgm__osinfo_rh
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cvl__osinfo_rh -- prefect flow-run execute
+        command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
@@ -340,3 +340,22 @@ deployments:
             `UF_CD_IBGE`,
             `MUNI_DS_NOME`
           FROM `common`.`dc_municipio`;
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: categoria # slug do schedule
+      parameters:
+        table_id: categoria # Nome da tabela no BigQuery
+        dump_mode: overwrite
+        execute_query: |
+            SELECT
+              `IDCATEGORIA`,
+              `COD_CATEGORIA`,
+              `DS_CATEGORIA`,
+              `DT_CADASTRO`,
+              `DT_ULTIMA_ATUALIZ`,
+              `FLG_ATIVO`,
+              `CNES_OBRIGATORIO`
+            FROM `osinfo`.`categoria`;
+  
