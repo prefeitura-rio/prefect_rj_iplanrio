@@ -29,7 +29,7 @@ deployments:
     entrypoint: pipelines/rj_iplanrio__cor_alerts_aggregator/flow.py:rj_iplanrio__cor_alerts_aggregator
     parameters:
       environment: staging
-      dry_run: false
+      send_to_cor: false
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -47,7 +47,7 @@ deployments:
     entrypoint: pipelines/rj_iplanrio__cor_alerts_aggregator/flow.py:rj_iplanrio__cor_alerts_aggregator
     parameters:
       environment: prod
-      dry_run: false
+      send_to_cor: false
     work_pool:
       name: k3s-pool
       work_queue_name: default
