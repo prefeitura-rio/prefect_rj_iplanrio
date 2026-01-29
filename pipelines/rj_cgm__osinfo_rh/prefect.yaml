@@ -35,17 +35,7 @@ deployments:
         command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-  - name: rj-cgm--osinfo_rh--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_cgm__osinfo_rh/flow.py:rj_cgm__osinfo_rh
-    work_pool:
-      name: k3s-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
-        image_pull_policy: Always
+
 
     schedules:
     # Exemplo de schedule overwrite
@@ -358,6 +348,18 @@ deployments:
               `FLG_ATIVO`,
               `CNES_OBRIGATORIO`
             FROM `osinfo`.`categoria`;
+  
+  - name: rj-cgm--osinfo_rh--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_cgm__osinfo_rh/flow.py:rj_cgm__osinfo_rh
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
 
     schedules:
     # Exemplo de schedule overwrite
