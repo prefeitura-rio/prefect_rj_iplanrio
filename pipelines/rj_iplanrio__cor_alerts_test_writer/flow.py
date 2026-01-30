@@ -65,13 +65,14 @@ def rj_iplanrio__cor_alerts_test_writer(
         removed = cleanup_test_alerts(environment=environment)
         log(f"Cleanup inicial: {removed} alertas de teste removidos")
 
-    # 2. Gerar alertas mockados baseado no cenario
-    alerts = generate_mock_alerts(scenario=scenario, environment=environment)
-    log(f"Gerados {len(alerts)} alertas mockados para cenario '{scenario}'")
+    # 2. Gerar configuracoes de alertas baseado no cenario
+    alert_configs = generate_mock_alerts(scenario=scenario, environment=environment)
+    log(f"Preparados {len(alert_configs)} alertas para cenario '{scenario}'")
 
     # 3. Inserir no BigQuery (tabela cor_alerts_queue) com delay entre alertas
     inserted = insert_alerts_to_bigquery(
-        alerts=alerts,
+        alert_configs=alert_configs,
+        scenario=scenario,
         environment=environment,
         delay_seconds=delay_between_alerts,
     )
@@ -95,6 +96,6 @@ def rj_iplanrio__cor_alerts_test_writer(
     return {
         "scenario": scenario,
         "environment": environment,
-        "alerts_generated": len(alerts),
+        "alerts_generated": len(alert_configs),
         "alerts_inserted": inserted,
     }

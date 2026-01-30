@@ -23,6 +23,9 @@ class CORTestWriterConstants(Enum):
     # Ambientes validos
     VALID_ENVIRONMENTS = ["staging", "prod"]
 
+    # Diretorio temporario para arquivos CSV
+    ROOT_FOLDER = "./data_cor_alerts_test/"
+
 
 # Definicao de cenarios de teste
 TEST_SCENARIOS = {

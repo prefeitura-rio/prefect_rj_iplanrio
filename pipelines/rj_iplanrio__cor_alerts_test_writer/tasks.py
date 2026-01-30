@@ -3,16 +3,19 @@
 Tasks para pipeline de geracao de dados de teste COR
 """
 
+import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from time import sleep
 from typing import Any, Dict, List
 
+import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery
-from prefect import task
-
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.logging import log
+from prefect import task
 
 from pipelines.rj_iplanrio__cor_alerts_test_writer.constants import (
     CORTestWriterConstants,
@@ -23,15 +26,6 @@ from pipelines.rj_iplanrio__cor_alerts_test_writer.constants import (
 def validate_environment(environment: str) -> str:
     """
     Valida environment contra whitelist para prevenir SQL injection.
-
-    Args:
-        environment: Ambiente a validar
-
-    Returns:
-        Environment validado (lowercase)
-
-    Raises:
-        ValueError: Se environment nao estiver na whitelist
     """
     valid_environments = CORTestWriterConstants.VALID_ENVIRONMENTS.value
     env_lower = environment.strip().lower()
@@ -52,7 +46,7 @@ def get_bigquery_client(billing_project_id: str) -> bigquery.Client:
 
 
 def execute_bigquery_dml(query: str, billing_project_id: str) -> int:
-    """Executa DML (INSERT/UPDATE/DELETE) no BigQuery e retorna linhas afetadas"""
+    """Executa DML (DELETE) no BigQuery e retorna linhas afetadas"""
     log(f"Executando DML: {query[:200]}...")
     client = get_bigquery_client(billing_project_id)
     job = client.query(query)
@@ -61,6 +55,58 @@ def execute_bigquery_dml(query: str, billing_project_id: str) -> int:
     rows_affected = job.num_dml_affected_rows or 0
     log(f"DML afetou {rows_affected} linhas")
     return rows_affected
+
+
+def generate_single_alert(
+    alert_config: Dict[str, Any],
+    scenario: str,
+    environment: str,
+    index: int,
+) -> Dict[str, Any]:
+    """
+    Gera um unico alerta mockado.
+    """
+    prefix = CORTestWriterConstants.TEST_ALERT_PREFIX.value
+    user_id = CORTestWriterConstants.TEST_USER_ID.value
+    now = datetime.now()
+
+    alert_id = f"{prefix}{scenario}_{uuid.uuid4().hex[:8]}"
+
+    return {
+        "alert_id": alert_id,
+        "user_id": user_id,
+        "alert_type": alert_config["alert_type"],
+        "severity": alert_config.get("severity", "alta"),
+        "description": alert_config.get("description", f"Alerta de teste {index+1}"),
+        "address": alert_config.get("address", "Endereco de teste"),
+        "latitude": alert_config["lat"],
+        "longitude": alert_config["lng"],
+        "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "environment": environment,
+        "status": "pending",
+        "aggregation_group_id": None,
+        "sent_at": None,
+    }
+
+
+def save_alert_to_csv(alert: Dict[str, Any], data_path: str) -> str:
+    """
+    Salva um alerta em arquivo CSV no diretorio especificado.
+
+    Returns:
+        Caminho do arquivo CSV criado
+    """
+    df = pd.DataFrame([alert])
+
+    # Criar diretorio se nao existir
+    Path(data_path).mkdir(parents=True, exist_ok=True)
+
+    # Nome do arquivo com timestamp unico
+    filename = f"alert_{alert['alert_id']}.csv"
+    filepath = os.path.join(data_path, filename)
+
+    df.to_csv(filepath, index=False)
+    return filepath
 
 
 @task
@@ -76,7 +122,7 @@ def generate_mock_alerts(
         environment: Ambiente alvo (staging ou prod)
 
     Returns:
-        Lista de dicionarios com dados de alertas
+        Lista de configuracoes de alertas (ainda nao gerados)
     """
     env_validated = validate_environment(environment)
 
@@ -90,103 +136,64 @@ def generate_mock_alerts(
     log(f"Gerando alertas para cenario: {scenario_config['name']}")
     log(f"Descricao: {scenario_config['description']}")
 
-    alerts = []
-    prefix = CORTestWriterConstants.TEST_ALERT_PREFIX.value
-    user_id = CORTestWriterConstants.TEST_USER_ID.value
-    now = datetime.now()
-
-    for i, alert_config in enumerate(scenario_config["alerts"]):
-        alert_id = f"{prefix}{scenario}_{uuid.uuid4().hex[:8]}"
-
-        alert = {
-            "alert_id": alert_id,
-            "user_id": user_id,
-            "alert_type": alert_config["alert_type"],
-            "severity": alert_config.get("severity", "alta"),
-            "description": alert_config.get("description", f"Alerta de teste {i+1}"),
-            "address": alert_config.get("address", "Endereco de teste"),
-            "latitude": alert_config["lat"],
-            "longitude": alert_config["lng"],
-            "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "environment": env_validated,
-            "status": "pending",
-        }
-        alerts.append(alert)
-
-    log(f"Gerados {len(alerts)} alertas mockados")
-    return alerts
-
-
-def insert_single_alert_to_bigquery(
-    alert: Dict[str, Any],
-    environment: str,
-) -> bool:
-    """
-    Insere um unico alerta no BigQuery.
-
-    Args:
-        alert: Alerta a inserir
-        environment: Ambiente (staging ou prod)
-
-    Returns:
-        True se inserido com sucesso
-    """
-    env_validated = validate_environment(environment)
-    billing_project = CORTestWriterConstants.BILLING_PROJECT_ID.value
-    dataset = CORTestWriterConstants.DATASET_ID.value
-    table = CORTestWriterConstants.QUEUE_TABLE_ID.value
-
-    # Escape single quotes
-    alert_id = alert["alert_id"].replace("'", "''")
-    user_id = alert["user_id"].replace("'", "''")
-    alert_type = alert["alert_type"].replace("'", "''")
-    severity = alert["severity"].replace("'", "''")
-    description = alert["description"][:500].replace("'", "''")
-    address = alert["address"].replace("'", "''")
-
-    query = f"""
-    INSERT INTO `{billing_project}.{dataset}.{table}`
-    (alert_id, user_id, alert_type, severity, description, address,
-     latitude, longitude, created_at, environment, status,
-     aggregation_group_id, sent_at)
-    VALUES
-    ('{alert_id}', '{user_id}', '{alert_type}', '{severity}',
-     '{description}', '{address}', {alert['latitude']}, {alert['longitude']},
-     CURRENT_DATETIME('America/Sao_Paulo'), '{env_validated}', 'pending',
-     NULL, NULL)
-    """
-
-    execute_bigquery_dml(query, billing_project)
-    return True
+    # Retorna as configuracoes de alerta do cenario
+    return scenario_config["alerts"]
 
 
 @task
 def insert_alerts_to_bigquery(
-    alerts: List[Dict[str, Any]],
+    alert_configs: List[Dict[str, Any]],
+    scenario: str,
     environment: str,
     delay_seconds: int = 10,
 ) -> int:
     """
-    Insere alertas mockados no BigQuery, um a um com delay entre eles.
+    Insere alertas mockados no BigQuery um a um, usando create_table_and_upload_to_gcs_task.
 
     Args:
-        alerts: Lista de alertas a inserir
+        alert_configs: Lista de configuracoes de alertas
+        scenario: Nome do cenario
         environment: Ambiente (staging ou prod)
         delay_seconds: Delay em segundos entre cada alerta (default: 10s)
 
     Returns:
         Numero de alertas inseridos
     """
-    if not alerts:
+    if not alert_configs:
         log("Nenhum alerta para inserir")
         return 0
 
-    inserted_count = 0
-    total = len(alerts)
+    env_validated = validate_environment(environment)
+    dataset_id = CORTestWriterConstants.DATASET_ID.value
+    table_id = CORTestWriterConstants.QUEUE_TABLE_ID.value
+    root_folder = CORTestWriterConstants.ROOT_FOLDER.value
 
-    for i, alert in enumerate(alerts):
+    inserted_count = 0
+    total = len(alert_configs)
+
+    for i, alert_config in enumerate(alert_configs):
         try:
-            insert_single_alert_to_bigquery(alert, environment)
+            # Gerar alerta com timestamp atual
+            alert = generate_single_alert(
+                alert_config=alert_config,
+                scenario=scenario,
+                environment=env_validated,
+                index=i,
+            )
+
+            # Salvar em CSV
+            data_path = os.path.join(root_folder, f"test_alert_{i}")
+            save_alert_to_csv(alert, data_path)
+
+            # Upload para BigQuery
+            create_table_and_upload_to_gcs_task(
+                data_path=data_path,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                biglake_table=False,
+                dump_mode="append",
+            )
+
             inserted_count += 1
             log(
                 f"[{i+1}/{total}] Inserido alerta: {alert['alert_type']} - "
@@ -199,7 +206,7 @@ def insert_alerts_to_bigquery(
                 sleep(delay_seconds)
 
         except Exception as e:
-            log(f"Erro ao inserir alerta {alert['alert_id']}: {e}", level="error")
+            log(f"Erro ao inserir alerta {i+1}: {e}", level="error")
 
     log(f"Total inseridos: {inserted_count}/{total} alertas")
     return inserted_count
