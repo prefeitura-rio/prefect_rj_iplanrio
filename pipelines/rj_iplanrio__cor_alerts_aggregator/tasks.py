@@ -173,39 +173,26 @@ def cluster_alerts_by_location(
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
 
     # Build the STRUCT array for the query
+    # Só incluir campos necessários para clustering (alert_type, lat/lng, alert_id)
     struct_parts = []
     for _, row in alerts_df.iterrows():
-        # Escape single quotes and remove problematic characters
-        def clean_string(s):
-            """Remove quebras de linha e caracteres especiais, escape aspas"""
-            return str(s).replace("'", "''").replace("\n", " ").replace("\r", " ").replace('"', '')
+        alert_id = str(row.alert_id).replace("'", "''")
+        alert_type = str(row.alert_type).replace("'", "''")
 
-        alert_id = clean_string(row.alert_id)
-        alert_type = clean_string(row.alert_type)
-        severity = clean_string(row.severity)
-        address = clean_string(row.address)[:200]
-        description = clean_string(row.description)[:200]
-
-        # Formatar created_at como string para SQL
+        # Formatar created_at
         if isinstance(row.created_at, str):
             created_at_str = row.created_at
         else:
             created_at_str = row.created_at.strftime('%Y-%m-%d %H:%M:%S')
 
-        # Garantir lat/lng como float
         lat = float(row.latitude)
         lng = float(row.longitude)
 
-        # Construir STRUCT em uma única string para evitar problemas
-        struct = f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, '{severity}' AS severity, {lat} AS latitude, {lng} AS longitude, '{address}' AS address, '{description}' AS description, DATETIME('{created_at_str}') AS created_at)"
+        # STRUCT simplificado - só o necessário para clustering
+        struct = f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, {lat} AS latitude, {lng} AS longitude, DATETIME('{created_at_str}') AS created_at)"
         struct_parts.append(struct)
 
     structs_str = ", ".join(struct_parts)
-
-    # Log primeiro STRUCT para debug
-    if struct_parts:
-        log(f"Exemplo de STRUCT gerado: {struct_parts[0][:300]}")
-        log(f"Total de structs: {len(struct_parts)}, tamanho total: {len(structs_str)} chars")
 
     query = f"""
     WITH alerts AS (
@@ -230,9 +217,6 @@ def cluster_alerts_by_location(
         alert_type,
         cluster_id,
         ARRAY_AGG(alert_id) as alert_ids,
-        ARRAY_AGG(address) as addresses,
-        ARRAY_AGG(description) as descriptions,
-        ARRAY_AGG(severity) as severities,
         COUNT(*) as alert_count,
         MIN(created_at) as oldest_alert,
         AVG(latitude) as centroid_lat,
@@ -243,28 +227,33 @@ def cluster_alerts_by_location(
     ORDER BY alert_type, oldest_alert
     """
 
-    # Log da query completa para debug
-    log(f"Query completa (primeiros 2000 chars):\n{query[:2000]}")
-
     result_df = query_bigquery(query, billing_project, billing_project)
 
     clusters = []
     for _, row in result_df.iterrows():
+        alert_ids = row["alert_ids"]
+
+        # Buscar metadados do DataFrame original usando alert_ids
+        cluster_alerts = alerts_df[alerts_df["alert_id"].isin(alert_ids)]
+
+        addresses = cluster_alerts["address"].tolist()
+        descriptions = cluster_alerts["description"].tolist()
+        severities = cluster_alerts["severity"].tolist()
+
         # Determina severidade maxima do cluster
-        severities = row["severities"]
         max_severity = "critica" if "critica" in severities else "alta"
 
         clusters.append(
             AlertCluster(
                 cluster_id=row["cluster_id"],
                 alert_type=row["alert_type"],
-                alert_ids=row["alert_ids"],
+                alert_ids=alert_ids,
                 alert_count=row["alert_count"],
                 oldest_alert=row["oldest_alert"],
                 centroid_lat=row["centroid_lat"],
                 centroid_lng=row["centroid_lng"],
-                addresses=row["addresses"],
-                descriptions=row["descriptions"],
+                addresses=addresses,
+                descriptions=descriptions,
                 severity=max_severity,
             )
         )
