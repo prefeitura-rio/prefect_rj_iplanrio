@@ -134,14 +134,14 @@ def fetch_pending_alerts(
         address,
         latitude,
         longitude,
-        created_at,
+        PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) as created_at,
         environment
     FROM `{billing_project}.{dataset}.{table}`
     WHERE status = 'pending'
         AND environment = '{env_validated}'
         AND latitude IS NOT NULL
         AND longitude IS NOT NULL
-        AND created_at >= DATETIME_SUB(
+        AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) >= DATETIME_SUB(
             CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {time_window_minutes + 3} MINUTE
         )
