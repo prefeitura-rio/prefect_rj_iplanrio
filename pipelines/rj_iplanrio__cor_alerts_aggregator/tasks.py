@@ -175,12 +175,16 @@ def cluster_alerts_by_location(
     # Build the STRUCT array for the query
     struct_parts = []
     for _, row in alerts_df.iterrows():
-        # Escape single quotes in strings
-        alert_id = str(row.alert_id).replace("'", "''")
-        alert_type = str(row.alert_type).replace("'", "''")
-        severity = str(row.severity).replace("'", "''")
-        address = str(row.address).replace("'", "''")
-        description = str(row.description)[:200].replace("'", "''")
+        # Escape single quotes and remove problematic characters
+        def clean_string(s):
+            """Remove quebras de linha e caracteres especiais, escape aspas"""
+            return str(s).replace("'", "''").replace("\n", " ").replace("\r", " ").replace('"', '')
+
+        alert_id = clean_string(row.alert_id)
+        alert_type = clean_string(row.alert_type)
+        severity = clean_string(row.severity)
+        address = clean_string(row.address)[:200]
+        description = clean_string(row.description)[:200]
 
         # Formatar created_at como string para SQL
         if isinstance(row.created_at, str):
@@ -188,15 +192,24 @@ def cluster_alerts_by_location(
         else:
             created_at_str = row.created_at.strftime('%Y-%m-%d %H:%M:%S')
 
+        # Garantir lat/lng como float
+        lat = float(row.latitude)
+        lng = float(row.longitude)
+
         struct_parts.append(
             f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, "
-            f"'{severity}' AS severity, {row.latitude} AS latitude, "
-            f"{row.longitude} AS longitude, '{address}' AS address, "
+            f"'{severity}' AS severity, {lat} AS latitude, "
+            f"{lng} AS longitude, '{address}' AS address, "
             f"'{description}' AS description, "
             f"DATETIME('{created_at_str}') AS created_at)"
         )
 
     structs_str = ", ".join(struct_parts)
+
+    # Log primeiro STRUCT para debug
+    if struct_parts:
+        log(f"Exemplo de STRUCT gerado: {struct_parts[0][:300]}")
+        log(f"Total de structs: {len(struct_parts)}, tamanho total: {len(structs_str)} chars")
 
     query = f"""
     WITH alerts AS (
