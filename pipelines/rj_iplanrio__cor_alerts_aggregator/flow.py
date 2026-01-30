@@ -120,15 +120,16 @@ def rj_iplanrio__cor_alerts_aggregator(
 
             if send_decision:
                 if dry_run:
-                    # Construir AgencyEventTypeCode com relatos
+                    # Construir AgencyEventTypeCode com relatos + enderecos (igual cor_api.py)
                     type_code = ALERT_TYPE_MAPPING.get(
                         cluster.alert_type, cluster.alert_type.upper()
                     )
                     if len(cluster.descriptions) == 1:
-                        agency_event_type = f"{type_code}: {cluster.descriptions[0][:200]}"
+                        addr = cluster.addresses[0][:80] if cluster.addresses else ""
+                        agency_event_type = f"{type_code}: {cluster.descriptions[0][:150]} [{addr}]"
                     else:
                         relatos = " | ".join(
-                            f"({i+1}) {d[:100]}"
+                            f"({i+1}) {d[:60]} [{cluster.addresses[i][:40] if i < len(cluster.addresses) else ''}]"
                             for i, d in enumerate(cluster.descriptions[:5])
                         )
                         if len(cluster.descriptions) > 5:
