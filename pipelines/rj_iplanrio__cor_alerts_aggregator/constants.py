@@ -23,6 +23,9 @@ class CORAlertAggregatorConstants(Enum):
     # Tipos de alerta validos
     VALID_ALERT_TYPES = ["enchente", "alagamento", "bolsao"]
 
+    # Ambientes validos (whitelist para prevenir SQL injection)
+    VALID_ENVIRONMENTS = ["staging", "prod"]
+
     # Arquivos temporarios
     ROOT_FOLDER = "./data_cor_alerts/"
     FILE_FORMAT = "csv"

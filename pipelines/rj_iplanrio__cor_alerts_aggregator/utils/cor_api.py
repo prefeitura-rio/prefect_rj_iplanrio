@@ -128,27 +128,28 @@ class COROnCallClient:
 
         events_url = f"{self.base_url}/hxgnEvents/api/Events/OpenedEvents"
 
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(
-                events_url,
-                json=payload,
-                params={"Token": self._access_token},
-            )
-
-            if response.status_code == 401:
-                # Token expirado, tenta renovar
-                self._access_token = self._authenticate()
-                response = client.post(
+        def _send_request(token: str) -> httpx.Response:
+            """Envia requisicao com o token fornecido."""
+            with httpx.Client(timeout=30.0) as client:
+                return client.post(
                     events_url,
                     json=payload,
-                    params={"Token": self._access_token},
+                    params={"Token": token},
                 )
 
-            if response.status_code != 200:
-                raise Exception(f"Erro ao enviar alerta: {response.status_code} - {response.text}")
+        response = _send_request(self._access_token)
 
-            return {
-                "success": True,
-                "status_code": response.status_code,
-                "response": response.json() if response.text else None,
-            }
+        if response.status_code == 401:
+            # Token expirado, renova e tenta novamente com novo cliente
+            log("Token expirado, renovando...")
+            self._access_token = self._authenticate()
+            response = _send_request(self._access_token)
+
+        if response.status_code != 200:
+            raise Exception(f"Erro ao enviar alerta: {response.status_code} - {response.text}")
+
+        return {
+            "success": True,
+            "status_code": response.status_code,
+            "response": response.json() if response.text else None,
+        }

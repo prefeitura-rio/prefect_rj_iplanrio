@@ -6,6 +6,7 @@ Tasks para pipeline de agregacao de alertas COR
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from time import sleep
 from typing import Any, Dict, List, Tuple
 
@@ -19,6 +20,31 @@ from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
     CORAlertAggregatorConstants,
 )
+
+
+def validate_environment(environment: str) -> str:
+    """
+    Valida environment contra whitelist para prevenir SQL injection.
+
+    Args:
+        environment: Ambiente a validar
+
+    Returns:
+        Environment validado (lowercase)
+
+    Raises:
+        ValueError: Se environment nao estiver na whitelist
+    """
+    valid_environments = CORAlertAggregatorConstants.VALID_ENVIRONMENTS.value
+    env_lower = environment.strip().lower()
+
+    if env_lower not in valid_environments:
+        raise ValueError(
+            f"Environment '{environment}' invalido. "
+            f"Valores permitidos: {valid_environments}"
+        )
+
+    return env_lower
 
 
 @dataclass
@@ -87,6 +113,9 @@ def fetch_pending_alerts(
     Returns:
         DataFrame com alertas pendentes
     """
+    # Valida environment contra whitelist (previne SQL injection)
+    env_validated = validate_environment(environment)
+
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
     dataset = CORAlertAggregatorConstants.DATASET_ID.value
     table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
@@ -107,7 +136,7 @@ def fetch_pending_alerts(
         environment
     FROM `{billing_project}.{dataset}.{table}`
     WHERE status = 'pending'
-        AND environment = '{environment}'
+        AND environment = '{env_validated}'
         AND latitude IS NOT NULL
         AND longitude IS NOT NULL
         AND created_at >= DATETIME_SUB(
@@ -247,13 +276,16 @@ def should_send_cluster(
     Returns:
         (should_send, reason)
     """
-    now = datetime.now(timezone.utc)
+    # Usa timezone de Sao Paulo para consistencia com BigQuery
+    # (CURRENT_DATETIME('America/Sao_Paulo'))
+    tz_saopaulo = ZoneInfo("America/Sao_Paulo")
+    now = datetime.now(tz_saopaulo)
 
     # Handle timezone-aware comparison
     oldest_alert = cluster.oldest_alert
     if oldest_alert.tzinfo is None:
-        # Assume it's in UTC if no timezone
-        oldest_alert = oldest_alert.replace(tzinfo=timezone.utc)
+        # BigQuery retorna em America/Sao_Paulo quando nao especificado
+        oldest_alert = oldest_alert.replace(tzinfo=tz_saopaulo)
 
     oldest_age_minutes = (now - oldest_alert).total_seconds() / 60
 
@@ -353,6 +385,9 @@ def mark_alerts_as_sent(
     Returns:
         Numero de alertas atualizados
     """
+    # Valida environment contra whitelist (previne SQL injection)
+    env_validated = validate_environment(environment)
+
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
     dataset = CORAlertAggregatorConstants.DATASET_ID.value
     table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
@@ -367,7 +402,7 @@ def mark_alerts_as_sent(
         aggregation_group_id = '{aggregation_group_id}',
         sent_at = DATETIME('{now}')
     WHERE alert_id IN ('{alert_ids_str}')
-        AND environment = '{environment}'
+        AND environment = '{env_validated}'
         AND status = 'pending'
     """
 

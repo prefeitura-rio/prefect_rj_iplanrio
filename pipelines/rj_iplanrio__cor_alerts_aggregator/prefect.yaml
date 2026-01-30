@@ -38,9 +38,6 @@ deployments:
         command: uv run --package rj_iplanrio__cor_alerts_aggregator -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-    schedules:
-      - cron: "*/2 * * * *"
-        timezone: America/Sao_Paulo
 
   - name: rj-iplanrio--cor-alerts-aggregator--prod
     version: "{{ get-commit-hash.stdout }}"
