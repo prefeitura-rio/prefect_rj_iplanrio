@@ -5,14 +5,14 @@ Tasks para pipeline de agregacao de alertas COR
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import List, Dict, Any, Tuple
+from datetime import datetime, timedelta, timezone
+from time import sleep
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
-from google.cloud import bigquery
 from basedosdados import Base
+from google.cloud import bigquery
 from prefect import task
-from time import sleep
 
 from iplanrio.pipelines_utils.logging import log
 
@@ -141,25 +141,32 @@ def cluster_alerts_by_location(
 
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
 
-    # Monta dados para query de clusterizacao
+    # Build the STRUCT array for the query
     struct_parts = []
     for _, row in alerts_df.iterrows():
-        # Escape single quotes in description and address
-        desc = str(row.description)[:200].replace("'", "\\'")
-        addr = str(row.address).replace("'", "\\'")
+        # Escape single quotes in strings
+        alert_id = str(row.alert_id).replace("'", "''")
+        alert_type = str(row.alert_type).replace("'", "''")
+        severity = str(row.severity).replace("'", "''")
+        address = str(row.address).replace("'", "''")
+        description = str(row.description)[:200].replace("'", "''")
+        created_at = row.created_at
+
         struct_parts.append(
-            f"STRUCT('{row.alert_id}' AS alert_id, '{row.alert_type}' AS alert_type, "
-            f"'{row.severity}' AS severity, {row.latitude} AS latitude, "
-            f"{row.longitude} AS longitude, '{addr}' AS address, "
-            f"'{desc}' AS description, "
-            f"DATETIME('{row.created_at}') AS created_at)"
+            f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, "
+            f"'{severity}' AS severity, {row.latitude} AS latitude, "
+            f"{row.longitude} AS longitude, '{address}' AS address, "
+            f"'{description}' AS description, "
+            f"DATETIME('{created_at}') AS created_at)"
         )
+
+    structs_str = ", ".join(struct_parts)
 
     query = f"""
     WITH alerts AS (
         SELECT *
         FROM UNNEST([
-            {', '.join(struct_parts)}
+            {structs_str}
         ])
     ),
 
@@ -245,6 +252,7 @@ def should_send_cluster(
     # Handle timezone-aware comparison
     oldest_alert = cluster.oldest_alert
     if oldest_alert.tzinfo is None:
+        # Assume it's in UTC if no timezone
         oldest_alert = oldest_alert.replace(tzinfo=timezone.utc)
 
     oldest_age_minutes = (now - oldest_alert).total_seconds() / 60
@@ -293,19 +301,7 @@ def submit_cluster_to_cor_api(
     # Gera ID do grupo de agregacao
     aggregation_group_id = str(uuid.uuid4())
 
-    # Monta descricao agregada
-    if cluster.alert_count == 1:
-        description = cluster.descriptions[0]
-    else:
-        unique_addresses = list(set(cluster.addresses[:5]))
-        description = (
-            f"ALERTA AGREGADO: {cluster.alert_count} relatos de {cluster.alert_type} "
-            f"em raio de 500m. Enderecos: {'; '.join(unique_addresses)}"
-        )
-        if len(cluster.addresses) > 5:
-            description += f" e mais {len(cluster.addresses) - 5} locais."
-
-    # Monta endereco representativo (primeiro)
+    # Monta endereco representativo (primeiro ou mais frequente)
     representative_address = cluster.addresses[0]
 
     try:
@@ -314,7 +310,7 @@ def submit_cluster_to_cor_api(
             aggregation_group_id=aggregation_group_id,
             alert_type=cluster.alert_type,
             severity=cluster.severity,
-            description=description,
+            descriptions=cluster.descriptions,
             address=representative_address,
             latitude=cluster.centroid_lat,
             longitude=cluster.centroid_lng,

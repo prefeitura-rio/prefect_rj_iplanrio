@@ -1,7 +1,11 @@
-FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio/base:latest
+FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
 
-COPY pipelines/rj_iplanrio__cor_alerts_aggregator /opt/prefect/prefect_rj_iplanrio/pipelines/rj_iplanrio__cor_alerts_aggregator
+LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_rj_iplanrio
 
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
-RUN uv sync --package rj_iplanrio__cor_alerts_aggregator
+COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+
+COPY ./pipelines/rj_iplanrio__cor_alerts_aggregator ./pipelines/rj_iplanrio__cor_alerts_aggregator/
+
+RUN uv sync --all-packages

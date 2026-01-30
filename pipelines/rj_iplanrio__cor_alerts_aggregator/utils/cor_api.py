@@ -12,14 +12,13 @@ import httpx
 from iplanrio.pipelines_utils.logging import log
 
 
-# Mapeamento de tipos de alerta para codigo COR
+# Mapeamento de tipos de alerta
 ALERT_TYPE_MAPPING = {
     "alagamento": "ALAGAMENTO",
     "enchente": "ENCHENTE",
     "bolsao": "BOLSAO_DAGUA",
 }
 
-# Mapeamento de severidade para prioridade COR
 SEVERITY_PRIORITY_MAPPING = {
     "alta": "02",
     "critica": "01",
@@ -44,9 +43,6 @@ class COROnCallClient:
         if not self.base_url:
             raise ValueError("CHATBOT_COR_EVENTS_API_BASE_URL nao configurado")
 
-        if not self.username or not self.password:
-            raise ValueError("Credenciais COR API nao configuradas")
-
         login_url = f"{self.base_url}/hxgnEvents/api/Events/Login"
 
         with httpx.Client(timeout=30.0) as client:
@@ -62,9 +58,6 @@ class COROnCallClient:
             if data.get("Error"):
                 raise Exception(f"Erro de autenticacao: {data['Error']}")
 
-            if not data.get("access_token"):
-                raise Exception("Token de acesso nao retornado")
-
             return data["access_token"]
 
     def submit_aggregated_alert(
@@ -72,7 +65,7 @@ class COROnCallClient:
         aggregation_group_id: str,
         alert_type: str,
         severity: str,
-        description: str,
+        descriptions: List[str],
         address: str,
         latitude: float,
         longitude: float,
@@ -84,14 +77,14 @@ class COROnCallClient:
 
         Args:
             aggregation_group_id: ID unico do grupo de agregacao
-            alert_type: Tipo do alerta (alagamento, enchente, bolsao)
+            alert_type: Tipo do alerta
             severity: Severidade (alta, critica)
-            description: Descricao agregada
+            descriptions: Lista de descricoes/relatos dos usuarios
             address: Endereco representativo
             latitude: Latitude do centroide
             longitude: Longitude do centroide
-            alert_count: Numero de alertas no grupo
-            alert_ids: Lista de IDs originais
+            alert_count: Numero de alertas no grupo (usado internamente)
+            alert_ids: Lista de IDs originais (usado internamente)
 
         Returns:
             Resultado da API
@@ -100,25 +93,37 @@ class COROnCallClient:
             log("COR API nao configurada - simulando envio")
             return {"success": True, "simulated": True}
 
-        # Obtem token se necessario
+        # Obtem token
         if not self._access_token:
             self._access_token = self._authenticate()
 
-        # Monta payload
+        # Construir AgencyEventTypeCode com tipo + relatos
+        type_code = ALERT_TYPE_MAPPING.get(alert_type, alert_type.upper())
+
+        if len(descriptions) == 1:
+            # Alerta unico: "ALAGAMENTO: <relato>"
+            agency_event_type = f"{type_code}: {descriptions[0][:200]}"
+        else:
+            # Alerta agregado: "ALAGAMENTO: (1) <relato1> | (2) <relato2> | ..."
+            relatos_formatados = " | ".join(
+                f"({i+1}) {desc[:100]}" for i, desc in enumerate(descriptions[:5])
+            )
+            if len(descriptions) > 5:
+                relatos_formatados += f" | (+{len(descriptions) - 5} relatos)"
+            agency_event_type = f"{type_code}: {relatos_formatados}"
+
+        # Limitar tamanho total (API pode ter limite)
+        agency_event_type = agency_event_type[:500]
+
+        # Monta payload (apenas campos aceitos pela API COR)
         payload = {
             "EventId": aggregation_group_id,
             "Location": address,
             "Priority": SEVERITY_PRIORITY_MAPPING.get(severity, "02"),
-            "AgencyEventTypeCode": ALERT_TYPE_MAPPING.get(
-                alert_type, alert_type.upper()
-            ),
+            "AgencyEventTypeCode": agency_event_type,
             "CreatedDate": datetime.now().strftime("%Y-%m-%d %H:%M:%Sh"),
             "Latitude": latitude,
             "Longitude": longitude,
-            # Campos customizados para agregacao
-            "AlertCount": alert_count,
-            "OriginalAlertIds": ",".join(alert_ids[:10]),  # Limita a 10 IDs
-            "Description": description[:500],  # Limita descricao
         }
 
         events_url = f"{self.base_url}/hxgnEvents/api/Events/OpenedEvents"
@@ -132,7 +137,6 @@ class COROnCallClient:
 
             if response.status_code == 401:
                 # Token expirado, tenta renovar
-                log("Token expirado, renovando...")
                 self._access_token = self._authenticate()
                 response = client.post(
                     events_url,
@@ -141,11 +145,7 @@ class COROnCallClient:
                 )
 
             if response.status_code != 200:
-                raise Exception(
-                    f"Erro ao enviar alerta: {response.status_code} - {response.text}"
-                )
-
-            log(f"Alerta {aggregation_group_id} enviado com sucesso para COR API")
+                raise Exception(f"Erro ao enviar alerta: {response.status_code} - {response.text}")
 
             return {
                 "success": True,
