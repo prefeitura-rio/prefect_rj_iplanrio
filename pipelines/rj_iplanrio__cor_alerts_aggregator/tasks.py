@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 Tasks para pipeline de agregacao de alertas COR
+
+Inclui: fetch, clustering espacial, decisao de envio, submissao API
 """
 
 import uuid

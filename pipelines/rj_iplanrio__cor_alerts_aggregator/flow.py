@@ -3,6 +3,8 @@
 Flow para agregacao e envio de alertas COR.
 Executa a cada 2 minutos, busca alertas pendentes, agrupa por localizacao
 e envia para COR OnCall API conforme regras de agregacao.
+
+Regras: clustering 500m, janela 7min, threshold 5 alertas
 """
 
 import json
