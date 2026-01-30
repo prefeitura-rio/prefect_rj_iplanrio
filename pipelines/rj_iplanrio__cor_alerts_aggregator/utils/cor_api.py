@@ -58,7 +58,7 @@ class COROnCallClient:
             if data.get("Error"):
                 raise Exception(f"Erro de autenticacao: {data['Error']}")
 
-            return data["access_token"]
+            return data["AccessToken"]
 
     def submit_aggregated_alert(
         self,
