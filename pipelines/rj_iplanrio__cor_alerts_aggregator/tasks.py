@@ -196,13 +196,9 @@ def cluster_alerts_by_location(
         lat = float(row.latitude)
         lng = float(row.longitude)
 
-        struct_parts.append(
-            f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, "
-            f"'{severity}' AS severity, {lat} AS latitude, "
-            f"{lng} AS longitude, '{address}' AS address, "
-            f"'{description}' AS description, "
-            f"DATETIME('{created_at_str}') AS created_at)"
-        )
+        # Construir STRUCT em uma única string para evitar problemas
+        struct = f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, '{severity}' AS severity, {lat} AS latitude, {lng} AS longitude, '{address}' AS address, '{description}' AS description, DATETIME('{created_at_str}') AS created_at)"
+        struct_parts.append(struct)
 
     structs_str = ", ".join(struct_parts)
 
@@ -246,6 +242,9 @@ def cluster_alerts_by_location(
     GROUP BY alert_type, cluster_id
     ORDER BY alert_type, oldest_alert
     """
+
+    # Log da query completa para debug
+    log(f"Query completa (primeiros 2000 chars):\n{query[:2000]}")
 
     result_df = query_bigquery(query, billing_project, billing_project)
 
