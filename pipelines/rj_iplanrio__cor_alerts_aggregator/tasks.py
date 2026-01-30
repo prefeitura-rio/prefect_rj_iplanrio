@@ -343,6 +343,7 @@ def submit_cluster_to_cor_api(
             alert_type=cluster.alert_type,
             severity=cluster.severity,
             descriptions=cluster.descriptions,
+            addresses=cluster.addresses,
             address=representative_address,
             latitude=cluster.centroid_lat,
             longitude=cluster.centroid_lng,

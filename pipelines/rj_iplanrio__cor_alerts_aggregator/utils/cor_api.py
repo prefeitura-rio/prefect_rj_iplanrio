@@ -66,6 +66,7 @@ class COROnCallClient:
         alert_type: str,
         severity: str,
         descriptions: List[str],
+        addresses: List[str],
         address: str,
         latitude: float,
         longitude: float,
@@ -80,7 +81,8 @@ class COROnCallClient:
             alert_type: Tipo do alerta
             severity: Severidade (alta, critica)
             descriptions: Lista de descricoes/relatos dos usuarios
-            address: Endereco representativo
+            addresses: Lista de enderecos individuais de cada relato
+            address: Endereco representativo (usado no campo Location)
             latitude: Latitude do centroide
             longitude: Longitude do centroide
             alert_count: Numero de alertas no grupo (usado internamente)
@@ -97,16 +99,18 @@ class COROnCallClient:
         if not self._access_token:
             self._access_token = self._authenticate()
 
-        # Construir AgencyEventTypeCode com tipo + relatos
+        # Construir AgencyEventTypeCode com tipo + relatos + enderecos
         type_code = ALERT_TYPE_MAPPING.get(alert_type, alert_type.upper())
 
         if len(descriptions) == 1:
-            # Alerta unico: "ALAGAMENTO: <relato>"
-            agency_event_type = f"{type_code}: {descriptions[0][:200]}"
+            # Alerta unico: "ALAGAMENTO: <relato> [<endereco>]"
+            addr = addresses[0][:80] if addresses else ""
+            agency_event_type = f"{type_code}: {descriptions[0][:150]} [{addr}]"
         else:
-            # Alerta agregado: "ALAGAMENTO: (1) <relato1> | (2) <relato2> | ..."
+            # Alerta agregado: "ALAGAMENTO: (1) <relato> [<endereco>] | (2) ..."
             relatos_formatados = " | ".join(
-                f"({i+1}) {desc[:100]}" for i, desc in enumerate(descriptions[:5])
+                f"({i+1}) {desc[:60]} [{addresses[i][:40] if i < len(addresses) else ''}]"
+                for i, desc in enumerate(descriptions[:5])
             )
             if len(descriptions) > 5:
                 relatos_formatados += f" | (+{len(descriptions) - 5} relatos)"
