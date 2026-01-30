@@ -117,8 +117,10 @@ def fetch_pending_alerts(
     env_validated = validate_environment(environment)
 
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-    dataset = CORAlertAggregatorConstants.DATASET_ID.value
+    dataset = "brutos_eai_logs_staging"  # Hardcoded por enquanto
     table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
+
+    log(f"Buscando alertas em {billing_project}.{dataset}.{table}")
 
     # Busca alertas pendentes com coordenadas validas
     # Expande janela um pouco para incluir alertas no limite
@@ -390,8 +392,10 @@ def mark_alerts_as_sent(
     env_validated = validate_environment(environment)
 
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-    dataset = CORAlertAggregatorConstants.DATASET_ID.value
+    dataset = "brutos_eai_logs_staging"  # Hardcoded por enquanto
     table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
+
+    log(f"Atualizando alertas em {billing_project}.{dataset}.{table}")
 
     alert_ids_str = "', '".join(alert_ids)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
