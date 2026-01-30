@@ -406,3 +406,17 @@ deployments:
               `MES`,
               `VALOR`
             FROM `osinfo`.`termo_aditivo_mes`;
+
+      - interval: 86400
+        anchor_date: '2025-07-15T05:10:00'
+        timezone: America/Sao_Paulo
+        slug: tb_tipo_entrega
+        parameters:
+          table_id: tb_tipo_entrega
+          dump_mode: overwrite
+          execute_query: |
+            SELECT
+              `TIET_CD_TIPO_ENTREGA`,
+              `TIET_DS_TIPO_ENTREGA`,
+              `TIET_TABELA_TIPO_ENTREGA`
+            FROM `osinfo_V2`.`tb_tipo_entrega`;
