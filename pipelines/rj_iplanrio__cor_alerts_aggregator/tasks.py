@@ -181,14 +181,19 @@ def cluster_alerts_by_location(
         severity = str(row.severity).replace("'", "''")
         address = str(row.address).replace("'", "''")
         description = str(row.description)[:200].replace("'", "''")
-        created_at = row.created_at
+
+        # Formatar created_at como string para SQL
+        if isinstance(row.created_at, str):
+            created_at_str = row.created_at
+        else:
+            created_at_str = row.created_at.strftime('%Y-%m-%d %H:%M:%S')
 
         struct_parts.append(
             f"STRUCT('{alert_id}' AS alert_id, '{alert_type}' AS alert_type, "
             f"'{severity}' AS severity, {row.latitude} AS latitude, "
             f"{row.longitude} AS longitude, '{address}' AS address, "
             f"'{description}' AS description, "
-            f"DATETIME('{created_at}') AS created_at)"
+            f"DATETIME('{created_at_str}') AS created_at)"
         )
 
     structs_str = ", ".join(struct_parts)
