@@ -100,7 +100,8 @@ class COROnCallClient:
             self._access_token = self._authenticate()
 
         # Construir AgencyEventTypeCode com tipo + relatos + enderecos
-        type_code = ALERT_TYPE_MAPPING.get(alert_type, alert_type.upper())
+        # TODO: Remover [TESTE] apos validacao em producao
+        type_code = "[TESTE] " + ALERT_TYPE_MAPPING.get(alert_type, alert_type.upper())
 
         if len(descriptions) == 1:
             # Alerta unico: "ALAGAMENTO: <relato> [<endereco>]"
