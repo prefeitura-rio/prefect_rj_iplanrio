@@ -375,6 +375,9 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     while True:
         # Build path with matrix variables and query parameters
         path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date}"
+        print(f"DEBUG: path = {path}")
+        # filtra pela data do fim de atendimento
+        # period=(finalization , opening)
         params = {"pageSize": page_size, "pageNumber": page_number}
 
         response = api.get(path=path, params=params)
