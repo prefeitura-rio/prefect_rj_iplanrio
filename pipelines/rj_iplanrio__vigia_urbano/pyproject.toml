@@ -1,0 +1,4 @@
+[project]
+name = "rj_iplanrio__vigia_urbano"
+version = "0.1.0"
+description = "Pipeline vigia_urbano da secretaria iplanrio"
