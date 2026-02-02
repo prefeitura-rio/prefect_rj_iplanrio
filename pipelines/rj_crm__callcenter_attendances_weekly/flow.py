@@ -134,7 +134,6 @@ def rj_crm__callcenter_attendances_weekly(
         biglake_table=biglake_table,
     )
     print("Force deploy")
-    print("Force deploy again")
     print(
         f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
     )

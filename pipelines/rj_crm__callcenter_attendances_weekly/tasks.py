@@ -430,7 +430,7 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     log(f"Getting attendances from {start_date} to {end_date}")
     log("New")
     all_attendances = []
-    page_number = 1
+    page_number = 0
     page_size = 100
 
     while True:
