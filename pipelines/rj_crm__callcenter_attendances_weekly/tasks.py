@@ -429,7 +429,6 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         DataFrame with attendances data
     """
     log(f"Getting attendances from {start_date} to {end_date}")
-    log("New")
     all_attendances = []
     page_number = 0
     page_size = 100
@@ -439,7 +438,6 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
         # Build path with matrix variables and query parameters
         path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date}"
-        print(f"DEBUG: path = {path}")
         # filtra pela data do fim de atendimento
         # period=(finalization , opening)
         params = {"pageSize": page_size, "pageNumber": page_number}
@@ -640,6 +638,7 @@ def processar_json_e_transcrever_audios(
                             check_audio_duration(audio_path_temp, max_duration_seconds)
                             transcricao = transcribe_audio(audio_path_temp)
                             msg_copy["text"] = transcricao
+                            msg_copy["transcription_failed"] = 0
                             log(
                                 f"Transcrição concluída para sessão {id_reply}, msg {msg_copy.get('id')}: Status {'sucesso' if transcricao != 'Áudio sem conteúdo reconhecível' else 'sem_conteudo'}"
                             )
@@ -654,14 +653,16 @@ def processar_json_e_transcrever_audios(
                                 f"Erro ao transcrever áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}. Audio url: {url_audio}",
                                 level="error",
                             )
-                            msg_copy["text"] = None
+                            msg_copy["text"] = erro_msg
+                            msg_copy["transcription_failed"] = 1
                         except Exception as e:
                             erro_msg = f"ERRO_INESPERADO_TRANSCRICAO: {type(e).__name__}: {e!s}"
                             log(
                                 f"Erro inesperado ao processar áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}",
                                 level="error",
                             )
-                            msg_copy["text"] = None
+                            msg_copy["text"] = erro_msg
+                            msg_copy["transcription_failed"] = 1
                         finally:
                             if audio_path_temp and os.path.exists(audio_path_temp):
                                 try:
