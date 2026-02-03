@@ -29,6 +29,7 @@ def rj_crm__callcenter_attendances_weekly(
     materialize_after_dump: bool | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    transcribe_audio: bool = True,
     infisical_secret_path: str = "/wetalkie",
     date_interval: int = 7,
 ):
@@ -110,10 +111,13 @@ def rj_crm__callcenter_attendances_weekly(
         )
         return
 
-    processed_data = processar_json_e_transcrever_audios(
-        dados_entrada=filtered_attendances
-    )
-    df = criar_dataframe_de_lista(processed_data)
+    if transcribe_audio:
+        processed_data = processar_json_e_transcrever_audios(
+            dados_entrada=filtered_attendances
+        )
+        df = criar_dataframe_de_lista(processed_data)
+    else:
+        df = filtered_attendances
 
     print(
         f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}"

@@ -431,7 +431,7 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     log(f"Getting attendances from {start_date} to {end_date}")
     all_attendances = []
     page_number = 0
-    page_size = 100
+    page_size = 1000
 
     while True:
         log(f"🔍 Buscando página {page_number} (acumulados: {len(all_attendances)} atendimentos)", level="debug")
@@ -472,7 +472,7 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
 
                 # Log específico de hasNextPage
                 has_next = item_data.get("hasNextPage", "KEY_NOT_FOUND")
-                log(f"  - hasNextPage: {has_next} (tipo: {type(has_next).__name__})", level="info")
+                # log(f"  - hasNextPage: {has_next} (tipo: {type(has_next).__name__})", level="info")
 
                 # Log de elements
                 if "elements" in item_data:
