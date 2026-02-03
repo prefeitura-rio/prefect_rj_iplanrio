@@ -129,7 +129,7 @@ def rj_crm__callcenter_attendances_weekly(
         file_format=file_format,
         root_folder=root_folder,
     )
-
+    print("Force deploy")
     create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
