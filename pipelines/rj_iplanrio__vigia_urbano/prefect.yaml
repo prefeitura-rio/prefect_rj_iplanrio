@@ -68,6 +68,6 @@ deployments:
       slug: vw_Auditoria_overwrite # slug do schedule
       parameters:
         table_id: vw_Auditoria # Nome da tabela no BigQuery
-        execute_query: |
+        execute_query: | 
           SELECT *
           FROM vigiaurbano.vw_Auditoria          
