@@ -135,11 +135,13 @@ class COROnCallClient:
 
         def _send_request(token: str) -> httpx.Response:
             """Envia requisicao com o token fornecido."""
+            # Adicionar token no body do payload
+            payload_with_token = {**payload, "Token": token}
+
             with httpx.Client(timeout=30.0) as client:
                 return client.post(
                     events_url,
-                    json=payload,
-                    params={"Token": token},
+                    json=payload_with_token,
                 )
 
         response = _send_request(self._access_token)
