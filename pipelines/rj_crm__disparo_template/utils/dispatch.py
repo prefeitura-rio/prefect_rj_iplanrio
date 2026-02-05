@@ -7,6 +7,7 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 """
 
 import json
+import os
 import random
 from datetime import datetime
 from math import ceil
@@ -15,9 +16,10 @@ from typing import Dict, List, Optional, Tuple, Union
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
-from prefect.exceptions import PrefectException
+from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 from pytz import timezone
 
+from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
@@ -314,7 +316,7 @@ def filter_already_dispatched_phones_or_cpfs(
     if not phone_numbers:
         return destinations
 
-    query = f"""
+    query = """
         SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo
         FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
         WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo") AND status = "PROCESSING"
@@ -552,3 +554,78 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
         replacements = json.loads(replacements["value"])
         print(f"replacements modificado: {replacements}")
     return raw_query.format_map(replacements)
+
+
+@task
+def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: str, bucket_name: str) -> Optional[bool]:
+    """
+    Verifica se o fluxo está ativo e dentro do prazo de validade consultando o BigQuery.
+    Args:
+        flow_environment: Ambiente do fluxo ('staging' ou 'production')
+        id_hsm: ID do template HSM
+        billing_project_id: ID do projeto GCP para billing
+        bucket_name: Nome do bucket GCS para carregamento de credenciais
+    Returns:
+        True se o fluxo estiver ativo e válido, None caso contrário."""
+
+    log(f"\nStarting flow status check for id_hsm={id_hsm} in environment={flow_environment}.")
+
+    if flow_environment not in ["staging", "production"]:
+        log(f"\n⚠️  Invalid flow_environment: {flow_environment}. Must be 'staging' or 'production'.")
+        return None
+
+    query = f"""
+        SELECT ativo, data_limite_disparo, nome_campanha
+        FROM `rj-crm-registry.brutos_wetalkie_staging.disparos_ativos`
+        WHERE id_hsm = '{id_hsm}' AND ambiente = '{flow_environment}'
+        LIMIT 1
+    """
+    dfr = download_data_from_bigquery(
+        query=query,
+        billing_project_id=billing_project_id,
+        bucket_name=bucket_name,
+    )
+    log(f"DEBUG: Flow status query result:\n{dfr} \nwith query {query}")
+    if dfr.empty:
+        log(f"\n⚠️  No configuration found for id_hsm={id_hsm} in environment={flow_environment}.")
+        return None
+
+    row = dfr.iloc[0]
+
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    if not webhook_url:
+        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+
+    if not row.get("ativo") or row.get("ativo") not in (1, "1"):
+        log(f"\n⚠️  Flow is not active for id_hsm={id_hsm} in environment={flow_environment}.")
+        message = f"""
+    Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
+    📋 **Campanha:** {row.get("nome_campanha")}
+    🆔 **Template ID:** {id_hsm}
+    💻 **Ambiente:** {flow_environment}
+
+    Desligue o scheduler no prefect ou mude o status para ativo para reativar o fluxo.
+    """
+        send_discord_notification(webhook_url, message)
+        return None
+
+    current_date = datetime.now(timezone("America/Sao_Paulo")).date()
+
+    expiration_date = row.get("data_limite_disparo") if not pd.isnull(row.get("data_limite_disparo")) else current_date
+
+    if expiration_date < current_date:
+        log(f"\n⚠️  Flow for id_hsm={id_hsm} in environment={flow_environment} has expired on {expiration_date}.")
+        message = f"""
+    Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
+    📋 **Campanha:** {row.get("nome_campanha")}
+    🆔 **Template ID:** {id_hsm}
+    💻 **Ambiente:** {flow_environment}
+    📆 **Data limite do disparo:** {expiration_date}
+
+    Desligue o scheduler no prefect ou altere a data limite.
+    """
+        send_discord_notification(webhook_url, message)
+        return None
+
+    log(f"\n✅  Active flow found for id_hsm={id_hsm} in environment={flow_environment}.")
+    return True

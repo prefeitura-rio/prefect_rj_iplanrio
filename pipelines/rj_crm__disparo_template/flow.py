@@ -14,17 +14,21 @@ from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # p
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
+from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.discord import (
+    send_dispatch_no_destinations_found,
     send_dispatch_result_notification,
     send_dispatch_success_notification,
+    send_discord_notification,
 )
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
+    check_flow_status,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
@@ -42,7 +46,30 @@ from pipelines.rj_crm__disparo_template.utils.tasks import (
 )
 
 
-@flow(log_prints=True)
+def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
+    """
+    Sends a Discord notification when a flow run fails.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    if not webhook_url:
+        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
+        return
+
+    campaign_name = flow_run.parameters.get("campaign_name", "N/A")
+    id_hsm = flow_run.parameters.get("id_hsm", "N/A")
+    cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
+
+    message = f"""
+    Prefect flow run failed!
+    📋 **Campanha:** {campaign_name}
+    🆔 **Template ID:** {id_hsm}
+    💰 **Centro de Custo:** {cost_center_id}
+    ⚠️ **Mensagem:** {state.message}
+    """
+    send_discord_notification(webhook_url, message)
+
+
+@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
 def rj_crm__disparo_template(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
@@ -63,6 +90,7 @@ def rj_crm__disparo_template(
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 100,
     whitelist_environment: str = "production",
+    flow_environment: str = "staging",
 ):
     """
     Orchestrates the dispatch of templated messages via Wetalkie API.
@@ -89,6 +117,7 @@ def rj_crm__disparo_template(
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
         whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
         whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
+        flow_environment (str, optional): The environment where the flow is running (e.g., "staging", "production"). Defaults to "staging".
     """
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
@@ -121,6 +150,16 @@ def rj_crm__disparo_template(
 
     api_status = check_api_status(api)
 
+    flow_status = check_flow_status(
+        flow_environment=flow_environment,
+        id_hsm=id_hsm,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+    )
+    if flow_status is None:
+        print("Ending flow due to inactive status.")
+        return  # flow termina aqui, nada downstream é agendado
+
     if query_replacements:
         query_complete = format_query(
             raw_query=query,
@@ -143,10 +182,14 @@ def rj_crm__disparo_template(
         message="No destinations found from query. Skipping flow execution.",
     )
     if validated_destinations is None:
+        send_dispatch_no_destinations_found(
+            id_hsm,
+            campaign_name,
+            cost_center_id,
+            test_mode
+        )
         return  # flow termina aqui, nada downstream é agendado
-    print("force deploy")
-    print("force deploy")
-    print("force deploy")
+
     # Remove duplicate phone numbers and CPFs if flags are set
     unique_phone_destinations = remove_duplicate_phones(validated_destinations) if filter_duplicated_phones else validated_destinations
     unique_destinations = remove_duplicate_cpfs(unique_phone_destinations) if filter_duplicated_cpfs else unique_phone_destinations
@@ -256,4 +299,3 @@ def rj_crm__disparo_template(
             total_batches=total_batches,
             test_mode=test_mode,
         )
-#force deploy
