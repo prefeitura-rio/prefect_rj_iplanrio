@@ -43,7 +43,7 @@ deployments:
           content_event,
           content_current_limit
           FROM
-          `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_2025_*`
+          `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_*`
           WHERE 1=1
           AND account = '1'
           AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
@@ -68,7 +68,7 @@ deployments:
           content_event,
           content_current_limit
           FROM
-          `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_2025_*`
+          `rj-crm-registry.brutos_wetalkie_staging.phone_number_quality_update_*`
           WHERE 1=1
           AND account = '1'
           AND datarelay_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 5 MINUTE)
