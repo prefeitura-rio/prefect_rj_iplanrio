@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_crm__callcenter_attendances_weekly ./pipelines/rj_crm__callcenter_attendances_weekly/
 
-RUN uv sync --package prefect_rj_iplanrio --package rj_crm__callcenter_attendances_weekly
+RUN uv sync --package rj_crm__callcenter_attendances_weekly

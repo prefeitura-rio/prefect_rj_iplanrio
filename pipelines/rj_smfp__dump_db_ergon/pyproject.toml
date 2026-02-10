@@ -2,3 +2,9 @@
 name = "rj_smfp__dump_db_ergon"
 version = "0.1.0"
 description = "Pipeline dump_db_ergon da secretaria smfp"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

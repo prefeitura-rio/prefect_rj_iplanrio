@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_smas__cadunico ./pipelines/rj_smas__cadunico/
 
-RUN uv sync --package prefect_rj_iplanrio --package rj_smas__cadunico
+RUN uv sync --package rj_smas__cadunico

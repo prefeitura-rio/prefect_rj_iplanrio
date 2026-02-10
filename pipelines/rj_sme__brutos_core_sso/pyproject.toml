@@ -2,3 +2,9 @@
 name = "rj_sme__brutos_core_sso"
 version = "0.1.0"
 description = "Pipeline brutos_core_sso da secretaria sme"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
