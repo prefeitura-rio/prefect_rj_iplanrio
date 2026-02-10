@@ -1,0 +1,63 @@
+name: rj_pic__disparos_email
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_pic__disparos_email-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_pic__disparos_email/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-pic--disparos_email--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_pic__disparos_email/flow.py:rj_pic__disparos_email
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_pic__disparos_email -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+    schedules:
+      - interval: 86400  # Executa a cada 24h
+        anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
+        timezone: America/Sao_Paulo
+        slug: staging-daily
+        active: false  # Desabilitado por padrão para staging
+        parameters:
+          email_subject: "E-mail enviado automaticamente"
+  - name: rj-pic--disparos_email--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_pic__disparos_email/flow.py:rj_pic__disparos_email
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_pic__disparos_email -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    schedules:
+      - interval: 86400  # Executa a cada 24h
+        anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
+        timezone: America/Sao_Paulo
+        slug: prod-daily
+        parameters:
+          email_subject: "E-mail enviado automaticamente"
