@@ -8,4 +8,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_smfp__dump_db_ergon ./pipelines/rj_smfp__dump_db_ergon/
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_smfp__dump_db_ergon

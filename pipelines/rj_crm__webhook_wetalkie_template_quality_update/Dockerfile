@@ -13,4 +13,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_crm__webhook_wetalkie_template_quality_update ./pipelines/rj_crm__webhook_wetalkie_template_quality_update/
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_crm__webhook_wetalkie_template_quality_update

@@ -19,5 +19,5 @@ COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
 
 RUN pip install pyyaml
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_smas__disparo_pic
 # RUN uv run pipelines/rj_smas__disparo_pic/build_prefect_yaml.py --env both

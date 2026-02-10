@@ -8,4 +8,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_crm__whitelist_whatsapp ./pipelines/rj_crm__whitelist_whatsapp/
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_crm__whitelist_whatsapp
