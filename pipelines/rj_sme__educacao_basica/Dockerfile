@@ -8,4 +8,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_sme__educacao_basica ./pipelines/rj_sme__educacao_basica/
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_sme__educacao_basica
