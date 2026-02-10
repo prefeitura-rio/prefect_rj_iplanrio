@@ -8,4 +8,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_iplanrio__alertario_previsao_24h ./pipelines/rj_iplanrio__alertario_previsao_24h/
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_iplanrio__alertario_previsao_24h
