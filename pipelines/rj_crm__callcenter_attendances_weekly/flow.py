@@ -117,7 +117,7 @@ def rj_crm__callcenter_attendances_weekly(
         )
     else:
         # processed_data = filtered_attendances.to_dict("records")
-        processed_data = df.copy()
+        processed_data = filtered_attendances.copy()
 
     df = criar_dataframe_de_lista(filtered_attendances)
 
