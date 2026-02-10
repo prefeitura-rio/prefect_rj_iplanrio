@@ -13,4 +13,4 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_crm__wetalkie_atualiza_contato ./pipelines/rj_crm__wetalkie_atualiza_contato/
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_crm__wetalkie_atualiza_contato

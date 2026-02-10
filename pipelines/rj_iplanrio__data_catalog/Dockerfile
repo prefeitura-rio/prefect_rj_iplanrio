@@ -10,4 +10,4 @@ COPY ./pipelines/rj_iplanrio__data_catalog ./pipelines/rj_iplanrio__data_catalog
 
 RUN apt update && apt install jq -y
 
-RUN uv sync --all-packages
+RUN uv sync --package prefect_rj_iplanrio --package rj_iplanrio__data_catalog
