@@ -25,12 +25,6 @@ iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
 [tool.uv.workspace]
 members = ["pipelines/*"]
 
-[tool.uv]
-override-dependencies = [
-  "cx-oracle ; python_version < '3.13'",
-  "oracledb>=2.0.0 ; python_version >= '3.13'",
-]
-
 [dependency-groups]
 dev = ["prefect-docker>=0.6.5"]
 
