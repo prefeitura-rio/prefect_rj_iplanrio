@@ -3,6 +3,7 @@ name = "rj_smas__api_datametrica_agendamentos"
 version = "0.1.0"
 description = "Pipeline API Datametrica agendamentos da secretaria smas"
 dependencies = [
+    "prefect_rj_iplanrio",
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",
     "prefect==3.4.9",
@@ -25,3 +26,5 @@ dependencies = [
     "requests>=2.28.0",
     "urllib3>=1.26.0",
 ]
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

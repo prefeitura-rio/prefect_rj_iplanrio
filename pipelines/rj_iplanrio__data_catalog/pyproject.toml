@@ -3,7 +3,10 @@ name = "rj_iplanrio__data_catalog"
 version = "0.1.0"
 description = "Pipeline data_catalog da secretaria iplanrio"
 dependencies = [
+    "prefect_rj_iplanrio",
     "google-cloud-bigquery>=3.29.0",
     "google-cloud-storage>=2.10.0",
     "polars>=1.35.2",
 ]
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
