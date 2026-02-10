@@ -59,12 +59,20 @@ def get_attendances(api: object) -> pd.DataFrame:
         return pd.DataFrame()  # Return empty DataFrame instead of raising ENDRUN
 
     for item in all_attendances:
+        if item.get("ura"):
+            ura_name = item.get("ura", {}).get("name")
+            id_ura = item.get("ura", {}).get("id")
+        elif item.get("flow"):
+            ura_name = item.get("flow", {}).get("name")
+            id_ura = item.get("flow", {}).get("id")
+        else:
+            ura_name, id_ura = None, None
         data.append(
             {
                 "end_date": item["endDate"],
                 "begin_date": item["beginDate"],
-                "ura_name": item["ura"]["name"],
-                "id_ura": item["ura"]["id"],
+                "ura_name": ura_name,
+                "id_ura": id_ura,
                 "channel": item["channel"].lower(),
                 "id_reply": item["serial"],
                 "protocol": item["protocol"],
