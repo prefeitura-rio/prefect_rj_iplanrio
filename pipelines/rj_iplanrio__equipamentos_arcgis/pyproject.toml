@@ -3,5 +3,8 @@ name = "rj_iplanrio__equipamentos_arcgis"
 version = "0.1.0"
 description = "Pipeline equipamentos_arcgis da secretaria iplanrio"
 dependencies = [
+    "prefect_rj_iplanrio",
     "geopandas>=1.1.1",
 ]
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

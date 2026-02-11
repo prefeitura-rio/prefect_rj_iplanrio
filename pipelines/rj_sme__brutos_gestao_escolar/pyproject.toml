@@ -2,3 +2,9 @@
 name = "rj_sme__brutos_gestao_escolar"
 version = "0.1.0"
 description = "Pipeline brutos_gestao_escolar da secretaria sme"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

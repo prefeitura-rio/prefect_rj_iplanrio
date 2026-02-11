@@ -117,9 +117,11 @@ def rj_crm__callcenter_attendances_weekly(
         processed_data = processar_json_e_transcrever_audios(
             dados_entrada=filtered_attendances
         )
-        df = criar_dataframe_de_lista(processed_data)
     else:
-        df = filtered_attendances
+        # processed_data = filtered_attendances.to_dict("records")
+        processed_data = filtered_attendances.copy()
+
+    df = criar_dataframe_de_lista(filtered_attendances)
 
     print(
         f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}"
@@ -131,7 +133,7 @@ def rj_crm__callcenter_attendances_weekly(
         file_format=file_format,
         root_folder=root_folder,
     )
-
+    print("Force deploy")
     create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
