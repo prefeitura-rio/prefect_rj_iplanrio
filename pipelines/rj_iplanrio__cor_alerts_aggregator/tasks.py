@@ -72,6 +72,16 @@ def get_bigquery_client(billing_project_id: str, bucket_name: str) -> bigquery.C
     return bigquery.Client(credentials=credentials, project=billing_project_id)
 
 
+def _table_exists(table_ref: str, billing_project_id: str) -> bool:
+    """Verifica se uma tabela existe no BigQuery"""
+    client = get_bigquery_client(billing_project_id, billing_project_id)
+    try:
+        client.get_table(table_ref)
+        return True
+    except Exception:
+        return False
+
+
 def query_bigquery(
     query: str, billing_project_id: str, bucket_name: str
 ) -> pd.DataFrame:
@@ -113,35 +123,64 @@ def fetch_pending_alerts(
 
     log(f"Buscando alertas em {billing_project}.{dataset}.{queue_table}")
 
+    # Verifica se tabela de controle (cor_alerts_sent) existe
+    sent_table_ref = f"{billing_project}.{dataset}.{sent_table}"
+    sent_table_exists = _table_exists(sent_table_ref, billing_project)
+
     # Busca alertas pendentes com coordenadas validas
-    # Filtra alertas ja enviados via tabela de controle (cor_alerts_sent)
+    # Filtra alertas ja enviados via tabela de controle (se existir)
     # Expande janela um pouco para incluir alertas no limite
-    query = f"""
-    SELECT
-        q.alert_id,
-        q.user_id,
-        q.alert_type,
-        q.severity,
-        q.description,
-        q.address,
-        q.latitude,
-        q.longitude,
-        PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) as created_at,
-        q.environment
-    FROM `{billing_project}.{dataset}.{queue_table}` q
-    LEFT JOIN `{billing_project}.{dataset}.{sent_table}` s
-        ON q.alert_id = s.alert_id
-        AND s.environment = '{env_validated}'
-    WHERE s.alert_id IS NULL
-        AND q.environment = '{env_validated}'
-        AND q.latitude IS NOT NULL
-        AND q.longitude IS NOT NULL
-        AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) >= DATETIME_SUB(
-            CURRENT_DATETIME('America/Sao_Paulo'),
-            INTERVAL {time_window_minutes + 3} MINUTE
-        )
-    ORDER BY created_at ASC
-    """
+    if sent_table_exists:
+        query = f"""
+        SELECT
+            q.alert_id,
+            q.user_id,
+            q.alert_type,
+            q.severity,
+            q.description,
+            q.address,
+            q.latitude,
+            q.longitude,
+            PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) as created_at,
+            q.environment
+        FROM `{billing_project}.{dataset}.{queue_table}` q
+        LEFT JOIN `{sent_table_ref}` s
+            ON q.alert_id = s.alert_id
+            AND s.environment = '{env_validated}'
+        WHERE s.alert_id IS NULL
+            AND q.environment = '{env_validated}'
+            AND q.latitude IS NOT NULL
+            AND q.longitude IS NOT NULL
+            AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) >= DATETIME_SUB(
+                CURRENT_DATETIME('America/Sao_Paulo'),
+                INTERVAL {time_window_minutes + 3} MINUTE
+            )
+        ORDER BY created_at ASC
+        """
+    else:
+        log(f"Tabela {sent_table_ref} nao existe ainda - buscando todos os alertas pendentes")
+        query = f"""
+        SELECT
+            alert_id,
+            user_id,
+            alert_type,
+            severity,
+            description,
+            address,
+            latitude,
+            longitude,
+            PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) as created_at,
+            environment
+        FROM `{billing_project}.{dataset}.{queue_table}`
+        WHERE environment = '{env_validated}'
+            AND latitude IS NOT NULL
+            AND longitude IS NOT NULL
+            AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) >= DATETIME_SUB(
+                CURRENT_DATETIME('America/Sao_Paulo'),
+                INTERVAL {time_window_minutes + 3} MINUTE
+            )
+        ORDER BY created_at ASC
+        """
 
     return query_bigquery(query, billing_project, billing_project)
 
