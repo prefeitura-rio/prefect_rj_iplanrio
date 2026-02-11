@@ -3,6 +3,10 @@ name = "rj_smas__cadunico"
 version = "0.1.0"
 description = "Pipeline cadunico da secretaria smas"
 dependencies = [
+    "prefect_rj_iplanrio",
     "openpyxl>=3.1.5",
     "xlrd>=2.0.2",
 ]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

@@ -5,11 +5,18 @@ description = "Prefect pipelines for the Rio de Janeiro City Hall."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "idna>=3.10",
-    "iplanrio",
-    "pandas>=2.2.3",
-    "prefect==3.4.9",
-    "unidecode>=1.3.8",
+  "idna>=3.10",
+  "iplanrio",
+  "pandas>=2.2.3",
+  "prefect==3.4.9",
+  "unidecode>=1.3.8",
+]
+
+[tool.uv]
+link-mode = "copy"
+override-dependencies = [
+  "cx-oracle ; python_version < '3.13'",
+  "oracledb>=2.0.0 ; python_version >= '3.13'",
 ]
 
 [tool.uv.sources]

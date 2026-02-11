@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_smfp__dump_db_ergon ./pipelines/rj_smfp__dump_db_ergon/
 
-RUN uv sync --all-packages
+RUN uv sync --package rj_smfp__dump_db_ergon
