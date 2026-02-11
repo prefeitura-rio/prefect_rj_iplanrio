@@ -1,0 +1,11 @@
+schedules:
+  - interval: "P1M" # Every 1 month
+    anchor_date: "2024-01-01T09:00:00" # Anchor to January 1st, 9 AM
+    timezone: America/Sao_Paulo
+    active: true
+    slug: monthly-rj-crm-relatorio-cvl-prod
+    flow_run_name: rj_crm__relatorio_cvl_monthly_run
+    deployment_name: rj-crm--relatorio-cvl--prod
+    parameters:
+      # No specific parameters needed for the scheduler, as the flow handles defaults
+      # You can override start_date and end_date here if needed
