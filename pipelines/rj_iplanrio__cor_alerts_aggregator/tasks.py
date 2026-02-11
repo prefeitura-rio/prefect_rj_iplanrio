@@ -107,7 +107,7 @@ def fetch_pending_alerts(
     env_validated = validate_environment(environment)
 
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-    dataset = CORAlertAggregatorConstants.DATASET_ID.value
+    dataset = "brutos_eai_logs_staging"  # Reads precisam do sufixo _staging explicito
     queue_table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
     sent_table = CORAlertAggregatorConstants.SENT_TABLE_ID.value
 
