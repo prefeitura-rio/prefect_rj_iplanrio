@@ -5,12 +5,13 @@ Tasks para pipeline de agregacao de alertas COR
 Inclui: fetch, clustering espacial, decisao de envio, submissao API
 """
 
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Literal, Tuple
 from zoneinfo import ZoneInfo
 from time import sleep
-from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 from basedosdados import Base
@@ -119,31 +120,36 @@ def fetch_pending_alerts(
     env_validated = validate_environment(environment)
 
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-    dataset = "brutos_eai_logs_staging"  # Hardcoded por enquanto
-    table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
+    dataset = CORAlertAggregatorConstants.DATASET_ID.value
+    queue_table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
+    sent_table = CORAlertAggregatorConstants.SENT_TABLE_ID.value
 
-    log(f"Buscando alertas em {billing_project}.{dataset}.{table}")
+    log(f"Buscando alertas em {billing_project}.{dataset}.{queue_table}")
 
     # Busca alertas pendentes com coordenadas validas
+    # Filtra alertas ja enviados via tabela de controle (cor_alerts_sent)
     # Expande janela um pouco para incluir alertas no limite
     query = f"""
     SELECT
-        alert_id,
-        user_id,
-        alert_type,
-        severity,
-        description,
-        address,
-        latitude,
-        longitude,
-        PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) as created_at,
-        environment
-    FROM `{billing_project}.{dataset}.{table}`
-    WHERE status = 'pending'
-        AND environment = '{env_validated}'
-        AND latitude IS NOT NULL
-        AND longitude IS NOT NULL
-        AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) >= DATETIME_SUB(
+        q.alert_id,
+        q.user_id,
+        q.alert_type,
+        q.severity,
+        q.description,
+        q.address,
+        q.latitude,
+        q.longitude,
+        PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) as created_at,
+        q.environment
+    FROM `{billing_project}.{dataset}.{queue_table}` q
+    LEFT JOIN `{billing_project}.{dataset}.{sent_table}` s
+        ON q.alert_id = s.alert_id
+        AND s.environment = '{env_validated}'
+    WHERE s.alert_id IS NULL
+        AND q.environment = '{env_validated}'
+        AND q.latitude IS NOT NULL
+        AND q.longitude IS NOT NULL
+        AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) >= DATETIME_SUB(
             CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {time_window_minutes + 3} MINUTE
         )
@@ -380,13 +386,146 @@ def submit_cluster_to_cor_api(
 
 
 @task
+def build_cluster_dataframe(
+    cluster: AlertCluster,
+    environment: str,
+) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """
+    Constroi DataFrame com dados do cluster para upload ao BigQuery.
+
+    Args:
+        cluster: Cluster de alertas a enviar
+        environment: staging ou prod
+
+    Returns:
+        Tupla (DataFrame com linha do cluster, metadata com aggregation_group_id e alert_ids)
+    """
+    env_validated = validate_environment(environment)
+
+    aggregation_group_id = str(uuid.uuid4())
+
+    alert_type_mapping = CORAlertAggregatorConstants.ALERT_TYPE_MAPPING.value
+    severity_priority_mapping = CORAlertAggregatorConstants.SEVERITY_PRIORITY_MAPPING.value
+
+    type_code = alert_type_mapping.get(cluster.alert_type, cluster.alert_type.upper())
+    priority = severity_priority_mapping.get(cluster.severity, "02")
+
+    representative_address = cluster.addresses[0] if cluster.addresses else ""
+
+    # Construir AgencyEventTypeCode com relatos + enderecos
+    if len(cluster.descriptions) == 1:
+        addr = cluster.addresses[0][:80] if cluster.addresses else ""
+        agency_event_type = f"{type_code}: {cluster.descriptions[0][:150]} [{addr}]"
+    else:
+        relatos = " | ".join(
+            f"({i+1}) {d[:60]} [{cluster.addresses[i][:40] if i < len(cluster.addresses) else ''}]"
+            for i, d in enumerate(cluster.descriptions[:5])
+        )
+        if len(cluster.descriptions) > 5:
+            relatos += f" | (+{len(cluster.descriptions) - 5} relatos)"
+        agency_event_type = f"{type_code}: {relatos}"
+
+    now_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
+
+    row = {
+        "aggregation_group_id": aggregation_group_id,
+        "event_id": str(uuid.uuid4()),
+        "location": representative_address,
+        "priority": priority,
+        "agency_event_type_code": agency_event_type[:500],
+        "created_date": now_sp.strftime("%Y-%m-%d %H:%M:%S"),
+        "latitude": cluster.centroid_lat,
+        "longitude": cluster.centroid_lng,
+        "alert_ids": ",".join(cluster.alert_ids),
+        "alert_count": cluster.alert_count,
+        "alert_type": cluster.alert_type,
+        "severity": cluster.severity,
+        "environment": env_validated,
+        "data_particao": now_sp.strftime("%Y-%m-%d"),
+    }
+
+    df = pd.DataFrame([row])
+
+    metadata = {
+        "aggregation_group_id": aggregation_group_id,
+        "alert_ids": cluster.alert_ids,
+    }
+
+    log(
+        f"Cluster {cluster.cluster_id} preparado para BigQuery: "
+        f"{cluster.alert_count} alertas, aggregation_group_id={aggregation_group_id}"
+    )
+
+    return df, metadata
+
+
+@task
+def create_date_partitions(
+    dataframe: pd.DataFrame,
+    partition_column: str = "data_particao",
+    file_format: Literal["csv", "parquet"] = "csv",
+    root_folder: str = "./data/",
+) -> str:
+    """
+    Cria particoes por data e salva em disco.
+
+    Args:
+        dataframe: DataFrame com dados a particionar
+        partition_column: Coluna de particao
+        file_format: Formato do arquivo (csv ou parquet)
+        root_folder: Diretorio raiz para salvar
+
+    Returns:
+        Caminho do diretorio raiz
+    """
+    if dataframe.empty:
+        log("DataFrame vazio, nenhuma particao sera criada.")
+        return root_folder
+
+    df = dataframe.copy()
+
+    if partition_column not in df.columns:
+        df["data_particao"] = datetime.now(ZoneInfo("America/Sao_Paulo")).strftime(
+            "%Y-%m-%d"
+        )
+    else:
+        df["data_particao"] = pd.to_datetime(
+            df[partition_column], errors="coerce"
+        ).dt.strftime("%Y-%m-%d")
+        df = df.dropna(subset=["data_particao"])
+
+    for date in df["data_particao"].unique():
+        partition_df = df[df["data_particao"] == date].drop(columns=["data_particao"])
+
+        partition_folder = os.path.join(
+            root_folder,
+            f"ano_particao={date[:4]}/mes_particao={date[5:7]}/data_particao={date}",
+        )
+        os.makedirs(partition_folder, exist_ok=True)
+
+        file_path = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
+
+        if file_format == "csv":
+            partition_df.to_csv(file_path, index=False)
+        elif file_format == "parquet":
+            partition_df.to_parquet(file_path, index=False)
+
+    log(f"Arquivos salvos em {root_folder}")
+    return root_folder
+
+
+@task
 def mark_alerts_as_sent(
     alert_ids: List[str],
     aggregation_group_id: str,
     environment: str,
 ) -> int:
     """
-    Marca alertas como enviados no BigQuery.
+    Registra alertas como enviados na tabela de controle (cor_alerts_sent).
+
+    Grava os alert_ids na tabela de controle via GCS upload.
+    A tabela cor_alerts_queue (externa/GCS) nao suporta DML UPDATE,
+    entao o controle de "ja enviado" e feito por tabela separada.
 
     Args:
         alert_ids: Lista de IDs de alertas
@@ -394,29 +533,62 @@ def mark_alerts_as_sent(
         environment: staging ou prod
 
     Returns:
-        Numero de alertas atualizados
+        Numero de alertas registrados
     """
-    # Valida environment contra whitelist (previne SQL injection)
+    from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+
     env_validated = validate_environment(environment)
 
-    billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-    dataset = "brutos_eai_logs_staging"  # Hardcoded por enquanto
-    table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
+    now_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    sent_at = now_sp.strftime("%Y-%m-%d %H:%M:%S")
 
-    log(f"Atualizando alertas em {billing_project}.{dataset}.{table}")
+    rows = [
+        {
+            "alert_id": alert_id,
+            "aggregation_group_id": aggregation_group_id,
+            "sent_at": sent_at,
+            "environment": env_validated,
+            "data_particao": now_sp.strftime("%Y-%m-%d"),
+        }
+        for alert_id in alert_ids
+    ]
 
-    alert_ids_str = "', '".join(alert_ids)
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    df = pd.DataFrame(rows)
 
-    query = f"""
-    UPDATE `{billing_project}.{dataset}.{table}`
-    SET
-        status = 'sent',
-        aggregation_group_id = '{aggregation_group_id}',
-        sent_at = DATETIME('{now}')
-    WHERE alert_id IN ('{alert_ids_str}')
-        AND environment = '{env_validated}'
-        AND status = 'pending'
-    """
+    dataset_id = CORAlertAggregatorConstants.DATASET_ID.value
+    table_id = CORAlertAggregatorConstants.SENT_TABLE_ID.value
+    root_folder = f"{CORAlertAggregatorConstants.ROOT_FOLDER.value}{table_id}"
 
-    return execute_bigquery_dml(query, billing_project, billing_project)
+    # Salvar particoes em disco
+    partition_column = CORAlertAggregatorConstants.PARTITION_COLUMN.value
+    file_format = CORAlertAggregatorConstants.FILE_FORMAT.value
+
+    df_copy = df.copy()
+    date_str = now_sp.strftime("%Y-%m-%d")
+    partition_folder = os.path.join(
+        root_folder,
+        f"ano_particao={date_str[:4]}/mes_particao={date_str[5:7]}/data_particao={date_str}",
+    )
+    os.makedirs(partition_folder, exist_ok=True)
+
+    file_path = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
+    df_copy.drop(columns=[partition_column], errors="ignore").to_csv(
+        file_path, index=False
+    )
+
+    # Upload para BigQuery
+    create_table_and_upload_to_gcs(
+        data_path=root_folder,
+        dataset_id=dataset_id,
+        table_id=table_id,
+        dump_mode=CORAlertAggregatorConstants.DUMP_MODE.value,
+        biglake_table=CORAlertAggregatorConstants.BIGLAKE_TABLE.value,
+        source_format=file_format,
+    )
+
+    log(
+        f"{len(alert_ids)} alertas registrados como enviados em {dataset_id}.{table_id} "
+        f"(aggregation_group_id={aggregation_group_id})"
+    )
+
+    return len(alert_ids)

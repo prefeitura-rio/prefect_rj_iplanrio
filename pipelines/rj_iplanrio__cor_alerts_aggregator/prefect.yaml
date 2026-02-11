@@ -30,6 +30,7 @@ deployments:
     parameters:
       environment: staging
       dry_run: true
+      destination: google_sheets
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -45,6 +46,7 @@ deployments:
     parameters:
       environment: prod
       dry_run: false
+      destination: google_sheets
     work_pool:
       name: k3s-pool
       work_queue_name: default

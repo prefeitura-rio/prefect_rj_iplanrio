@@ -26,6 +26,26 @@ class CORAlertAggregatorConstants(Enum):
     # Ambientes validos (whitelist para prevenir SQL injection)
     VALID_ENVIRONMENTS = ["staging", "prod"]
 
+    # Tabela de alertas agregados (Connected Sheets)
+    AGGREGATED_TABLE_ID = "cor_alerts_aggregated"
+
+    # Tabela de controle de alertas ja enviados
+    SENT_TABLE_ID = "cor_alerts_sent"
+
+    # Destinos validos para envio de alertas
+    VALID_DESTINATIONS = ["cor_api", "google_sheets"]
+
+    # Mapeamentos de tipo de alerta e severidade para payload
+    ALERT_TYPE_MAPPING = {
+        "alagamento": "ALAGAMENTO",
+        "enchente": "ENCHENTE",
+        "bolsao": "BOLSAO_DAGUA",
+    }
+    SEVERITY_PRIORITY_MAPPING = {
+        "alta": "02",
+        "critica": "01",
+    }
+
     # Arquivos temporarios
     ROOT_FOLDER = "./data_cor_alerts/"
     FILE_FORMAT = "csv"
