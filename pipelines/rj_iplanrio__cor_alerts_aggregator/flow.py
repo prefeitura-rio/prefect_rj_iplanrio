@@ -149,10 +149,10 @@ def rj_iplanrio__cor_alerts_aggregator(
                     # Construir payload para log
                     dry_run_payload = {
                         "EventId": str(uuid.uuid4()),
-                        "Location": cluster.addresses[0],
+                        "Location": cluster.addresses[0] if cluster.addresses else "",
                         "Priority": SEVERITY_PRIORITY_MAPPING.get(cluster.severity, "02"),
                         "AgencyEventTypeCode": agency_event_type[:500],
-                        "CreatedDate": datetime.now().strftime("%Y-%m-%d %H:%M:%Sh"),
+                        "CreatedDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "Latitude": cluster.centroid_lat,
                         "Longitude": cluster.centroid_lng,
                     }

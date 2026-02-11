@@ -11,18 +11,12 @@ import httpx
 
 from iplanrio.pipelines_utils.logging import log
 
+from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
+    CORAlertAggregatorConstants,
+)
 
-# Mapeamento de tipos de alerta
-ALERT_TYPE_MAPPING = {
-    "alagamento": "ALAGAMENTO",
-    "enchente": "ENCHENTE",
-    "bolsao": "BOLSAO_DAGUA",
-}
-
-SEVERITY_PRIORITY_MAPPING = {
-    "alta": "02",
-    "critica": "01",
-}
+ALERT_TYPE_MAPPING = CORAlertAggregatorConstants.ALERT_TYPE_MAPPING.value
+SEVERITY_PRIORITY_MAPPING = CORAlertAggregatorConstants.SEVERITY_PRIORITY_MAPPING.value
 
 
 class COROnCallClient:
@@ -126,7 +120,7 @@ class COROnCallClient:
             "Location": address,
             "Priority": SEVERITY_PRIORITY_MAPPING.get(severity, "02"),
             "AgencyEventTypeCode": agency_event_type,
-            "CreatedDate": datetime.now().strftime("%Y-%m-%d %H:%M:%Sh"),
+            "CreatedDate": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "Latitude": latitude,
             "Longitude": longitude,
         }

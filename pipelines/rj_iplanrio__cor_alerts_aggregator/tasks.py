@@ -87,19 +87,6 @@ def query_bigquery(
     return df
 
 
-def execute_bigquery_dml(
-    query: str, billing_project_id: str, bucket_name: str
-) -> int:
-    """Executa DML (UPDATE/DELETE) no BigQuery e retorna linhas afetadas"""
-    log(f"Executando DML: {query[:100]}...")
-    client = get_bigquery_client(billing_project_id, bucket_name)
-    job = client.query(query)
-    while not job.done():
-        sleep(1)
-    rows_affected = job.num_dml_affected_rows or 0
-    log(f"DML afetou {rows_affected} linhas")
-    return rows_affected
-
 
 @task
 def fetch_pending_alerts(
@@ -350,7 +337,7 @@ def submit_cluster_to_cor_api(
     aggregation_group_id = str(uuid.uuid4())
 
     # Monta endereco representativo (primeiro ou mais frequente)
-    representative_address = cluster.addresses[0]
+    representative_address = cluster.addresses[0] if cluster.addresses else ""
 
     try:
         client = COROnCallClient(environment=environment)

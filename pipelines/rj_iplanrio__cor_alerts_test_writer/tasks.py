@@ -233,9 +233,19 @@ def cleanup_test_alerts(
     table = CORTestWriterConstants.QUEUE_TABLE_ID.value
     prefix = CORTestWriterConstants.TEST_ALERT_PREFIX.value
 
-    # Construir condicao de tempo se especificado
+    # Validar e sanitizar older_than_hours
     time_condition = ""
     if older_than_hours is not None:
+        try:
+            older_than_hours = int(older_than_hours)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"older_than_hours deve ser um inteiro, recebeu: {older_than_hours!r}"
+            )
+        if older_than_hours < 1 or older_than_hours > 8760:
+            raise ValueError(
+                f"older_than_hours deve estar entre 1 e 8760, recebeu: {older_than_hours}"
+            )
         time_condition = f"""
         AND created_at < DATETIME_SUB(
             CURRENT_DATETIME('America/Sao_Paulo'),
