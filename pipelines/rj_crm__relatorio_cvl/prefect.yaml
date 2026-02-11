@@ -28,7 +28,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "prefect flow-run execute -name rj_crm__relatorio_cvl"
+        command: "uv run --package rj_crm__relatorio_cvl -- prefect flow-run execute"        
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
@@ -44,7 +44,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "prefect flow-run execute -name rj_crm__relatorio_cvl"
+        command: "uv run --package rj_crm__relatorio_cvl -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
