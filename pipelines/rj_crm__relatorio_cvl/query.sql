@@ -17,7 +17,7 @@ distinct
      ORDER BY msg.data
    ) AS rn,
    protocolo,
- FROM `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_conversas.base_receptivo_teste`,
+ FROM `rj-crm-registry.intermediario_rmi_conversas.base_receptivo`,
  UNNEST(mensagens) as msg
  WHERE msg.data IS NOT NULL
    and DATE(msg.data) BETWEEN 
