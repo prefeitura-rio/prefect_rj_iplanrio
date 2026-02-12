@@ -15,6 +15,7 @@ members = [
     "rj-crm-webhook-wetalkie-template-category-update",
     "rj-crm-webhook-wetalkie-template-quality-update",
     "rj-crm-webhook-wetalkie-template-status-update",
+    "rj-crm-wetalkie-api-hsm-info",
     "rj-crm-wetalkie-atualiza-contato",
     "rj-crm-whitelist-whatsapp",
     "rj-cvl-arquivo-virtual",
@@ -3460,6 +3461,17 @@ requires-dist = [
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "requests", specifier = ">=2.32.4" },
 ]
+
+[[package]]
+name = "rj-crm-wetalkie-api-hsm-info"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_crm__wetalkie_api_hsm_info" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-wetalkie-atualiza-contato"
