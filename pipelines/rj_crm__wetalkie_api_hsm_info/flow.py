@@ -3,6 +3,7 @@
 Flow for rj_crm__wetalkie_api_hsm_info pipeline
 """
 
+import os
 from typing import Optional
 
 from prefect import flow
@@ -41,6 +42,9 @@ def rj_crm__wetalkie_api_hsm_info(
 
     # 1. Inject BD Credentials
     inject_bd_credentials_task(environment="prod")
+    
+    # FORCE PROJECT ID (Override environment to ensure correct billing/destination)
+    os.environ["GOOGLE_CLOUD_PROJECT"] = Constants.BILLING_PROJECT_ID.value
 
     # 2. Extract
     log("Starting extraction...")
@@ -77,7 +81,6 @@ def rj_crm__wetalkie_api_hsm_info(
         dump_mode=dump_mode,
         biglake_table=Constants.BIGLAKE_TABLE.value,
         source_format=Constants.FILE_FORMAT.value,
-        billing_project_id=Constants.BILLING_PROJECT_ID.value,
     )
     
     log("Flow finished successfully.")
