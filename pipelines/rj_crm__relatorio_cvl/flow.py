@@ -86,5 +86,5 @@ def rj_crm__relatorio_cvl(
             dump_mode=dump_mode,
             # source_format=file_format,
     )
-    print("force deploy")
+    # print("force deploy")
     print("Flow completed successfully!")
