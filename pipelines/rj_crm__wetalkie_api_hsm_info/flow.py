@@ -77,6 +77,7 @@ def rj_crm__wetalkie_api_hsm_info(
         dump_mode=dump_mode,
         biglake_table=Constants.BIGLAKE_TABLE.value,
         source_format=Constants.FILE_FORMAT.value,
+        billing_project_id=Constants.BILLING_PROJECT_ID.value,
     )
     
     log("Flow finished successfully.")
