@@ -1,0 +1,10 @@
+[project]
+name = "rj_crm__wetalkie_api_hsm_info"
+version = "0.1.0"
+description = "Pipeline wetalkie_api_hsm_info da secretaria crm"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
