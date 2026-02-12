@@ -101,6 +101,7 @@ def create_date_partitions(
     partition_column: str = None,
     file_format: Literal["csv", "parquet"] = "csv",
     root_folder="./data/",
+    filename=None,
     wait=None,  # pylint: disable=unused-argument
 ):
     """
@@ -132,7 +133,10 @@ def create_date_partitions(
         )
         os.makedirs(partition_folder, exist_ok=True)
 
-        file_folder = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
+        if filename:
+            file_folder = os.path.join(partition_folder, f"{filename}.{file_format}")
+        else:
+            file_folder = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
 
         if file_format == "csv":
             _dataframe.to_csv(file_folder, index=False)
