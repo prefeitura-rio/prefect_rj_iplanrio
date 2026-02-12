@@ -20,7 +20,8 @@ def identificar_sessoes_cliente(group):
                 ultimo_inicio_sessao = row['inicio_datetime']
             else:
                 nova_sessao.append(False)
-        nova_sessao[0] = True
+        if nova_sessao:
+            nova_sessao[0] = True
         return pd.Series(nova_sessao, index=group.index)
 
 
@@ -123,7 +124,7 @@ def calculate_24h_sessions(df: pd.DataFrame, report_month: str) -> tuple[pd.Data
     df = df.sort_values(by=['contato_telefone', 'inicio_datetime'])
 
     df['nova_sessao'] = df.groupby('contato_telefone', group_keys=False).apply(identificar_sessoes_cliente)
-    df['id_sessao_24h'] = df['contato_telefone'] + '_' + df.groupby('contato_telefone')['nova_sessao'].cumsum().astype(str)
+    df['id_sessao_24h'] = df['contato_telefone'] + '_' + df.groupby('contato_telefone')['nova_sessao'].astype(int).cumsum().astype(str)
 
     # Extrair o mês e ano do início da interação
     df['mes_ano'] = df['inicio_datetime'].dt.to_period('M')
