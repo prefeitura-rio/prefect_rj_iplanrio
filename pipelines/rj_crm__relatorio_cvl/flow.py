@@ -16,7 +16,7 @@ from pipelines.rj_crm__relatorio_cvl.tasks import calculate_24h_sessions, get_fi
 from pipelines.rj_crm__disparo_template.utils.tasks import create_date_partitions, task_download_data_from_bigquery
 
 @flow(log_prints=True, name="rj_crm__relatorio_cvl")
-def rj_crm__relatorio_cvl_flow(
+def rj_crm__relatorio_cvl(
     # Parâmetros opcionais para override manual na UI.
     dataset_id: str | None = None,
     table_id: str | None = None,
@@ -35,7 +35,7 @@ def rj_crm__relatorio_cvl_flow(
     crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
 
     # Default date parameters
-    if start_date is None:
+    if start_date is None or end_date is None:
         start_date, end_date = get_first_and_last_day_of_previous_month()
     
     report_month = start_date[:7] 
@@ -63,9 +63,9 @@ def rj_crm__relatorio_cvl_flow(
     
     create_table_and_upload_to_gcs_task(
             data_path=data_path,
-            dataset_id=PipelineConstants.DATASET_ID.value,
-            table_id=PipelineConstants.TABLE_ID.value,
-            dump_mode=PipelineConstants.DUMP_MODE.value,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            dump_mode=dump_mode,
         )
     # print("force deploy")
     print("Flow completed successfully!")
