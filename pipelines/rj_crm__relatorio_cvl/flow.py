@@ -70,14 +70,18 @@ def rj_crm__relatorio_cvl(
 
     df_estatistica_mes, df_sessions = calculate_24h_sessions(df_raw, report_month)
 
-    data_path = create_date_partitions(df_sessions, partition_column="inicio_datetime", file_format="parquet")
+    data_path = create_date_partitions(
+        df_sessions,
+        partition_column="inicio_datetime",
+        file_format="parquet",
+        filename=f"Sessoes_receptivo_{start_date}_to_{end_date}",
+    )
     
     create_table_and_upload_to_gcs_task(
             data_path=data_path,
             dataset_id=dataset_id,
             table_id=table_id,
             dump_mode=dump_mode,
-            filename=f"Sessoes_receptivo_{start_date}_to_{end_date}",
         )
     # print("force deploy")
     print("Flow completed successfully!")
