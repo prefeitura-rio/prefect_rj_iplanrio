@@ -3,6 +3,8 @@
 Flow for rj_crm__wetalkie_api_hsm_info pipeline
 """
 
+from typing import Optional
+
 from prefect import flow
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
@@ -20,10 +22,10 @@ from pipelines.rj_crm__wetalkie_api_hsm_info.utils.tasks import create_date_part
 
 @flow(log_prints=True)
 def rj_crm__wetalkie_api_hsm_info(
-    dataset_id: str = None,
-    table_id: str = None,
-    dump_mode: str = None,
-    overwrite_flow_run_name: str = None,
+    dataset_id: Optional[str] = None,
+    table_id: Optional[str] = None,
+    dump_mode: Optional[str] = None,
+    overwrite_flow_run_name: Optional[str] = None,
 ):
     """
     Flow to collect HSM templates from WeTalkie API and load into BigQuery.
