@@ -96,15 +96,17 @@ def estatisticas_mensais_sessoes(df: pd.DataFrame) -> pd.DataFrame:
 
 
 @task
-def calculate_24h_sessions(df: pd.DataFrame, report_month: str) -> pd.DataFrame:
+def calculate_24h_sessions(df: pd.DataFrame, report_month: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Calcula uma nova coluna para as sessões em um intervalo de 24h partir de um DataFrame de interações.
+    Calcula sessões de 24h e estatísticas mensais/semanais a partir de um DataFrame de interações.
 
     Args:
         df (pd.DataFrame): DataFrame com os dados de interações.
+        report_month (str): Mês de referência para o relatório (YYYY-MM).
 
     Returns:
-        pd.DataFrame: DataFrame com as os ids das sessões de 24h.
+        tuple[pd.DataFrame, pd.DataFrame]: DataFrames com estatísticas mensais e tabela
+        original com id_sessap_24h e se aquela mensagem corresponde a uma nova sessão (coluna "nova_sessao").
     """
     # Converter colunas de data e hora para datetime
     df['inicio_datetime'] = pd.to_datetime(df['mensagem_datahora'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')
@@ -129,19 +131,23 @@ def calculate_24h_sessions(df: pd.DataFrame, report_month: str) -> pd.DataFrame:
     print(f"Dataframe after calculating 24h sessions: {df.head()}")
     print(f"Dataframe after calculating 24h sessions: {df.iloc[0]}")
 
-    df = df[df['mes_ano'] == report_month]
+    df_filtered = df[df['mes_ano'] == report_month]
 
-    print(f"Dataframe after filtering for report month: {df.head()}")
-    print(f"Dataframe after filtering for report month: {df.iloc[0]}")
+    print(f"Dataframe after filtering for report month: {df_filtered.head()}")
+    print(f"Dataframe after filtering for report month: {df_filtered.iloc[0]}")
 
-    # Calcular as estatísticas por mês
-    estatisticas_mensais = estatisticas_mensais_sessoes(df)
-    # estatisticas_semanais = estatisticas_semanais_sessoes(df)
+    # Calcular as estatísticas mensais e semanais
+    estatisticas_mensais = estatisticas_mensais_sessoes(df_filtered)
+    # estatisticas_semanais = estatisticas_semanais_sessoes(df_filtered)
     
-    return estatisticas_mensais, df
+    return estatisticas_mensais, df_filtered
 
 
+@task
 def get_first_and_last_day_of_previous_month() -> tuple[str, str]:
+    """
+    Retorna o primeiro e o último dia do mês anterior como objetos date.
+    """
     today = pendulum.now("America/Sao_Paulo").date()
 
     first_day_of_current_month = today.replace(day=1)

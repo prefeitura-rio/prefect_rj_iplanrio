@@ -67,5 +67,5 @@ def rj_crm__relatorio_cvl_flow(
             table_id=PipelineConstants.TABLE_ID.value,
             dump_mode=PipelineConstants.DUMP_MODE.value,
         )
-    print("force deploy")
+    # print("force deploy")
     print("Flow completed successfully!")
