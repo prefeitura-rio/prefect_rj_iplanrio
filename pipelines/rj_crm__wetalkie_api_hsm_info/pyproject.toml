@@ -4,6 +4,9 @@ version = "0.1.0"
 description = "Pipeline wetalkie_api_hsm_info da secretaria crm"
 dependencies = [
     "prefect_rj_iplanrio",
+    "prefect-docker>=0.6.5",
+    "pandas>=2.0.0",
+    "requests>=2.0.0",
 ]
 
 [tool.uv.sources]
