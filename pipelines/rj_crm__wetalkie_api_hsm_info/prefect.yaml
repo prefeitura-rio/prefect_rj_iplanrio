@@ -53,6 +53,6 @@ deployments:
       timezone: America/Sao_Paulo
       active: true
       parameters:
-        dataset_id: "rj-crm-registry"
+        dataset_id: "brutos_wetalkie"
         table_id: "hsm_templates_info"
         dump_mode: "overwrite"

@@ -12,7 +12,7 @@ class Constants(Enum):
     """
 
     # Dataset and table BigQuery
-    DATASET_ID = "rj-crm-registry"
+    DATASET_ID = "brutos_wetalkie"
     TABLE_ID = "hsm_templates_info"
     DUMP_MODE = "overwrite"
 
@@ -23,7 +23,7 @@ class Constants(Enum):
 
     # BigQuery configuration
     BIGLAKE_TABLE = True
-    BILLING_PROJECT_ID = "rj-iplanrio"
+    BILLING_PROJECT_ID = "rj-crm-registry"
 
     # Wetalkie API Configuration
     INFISICAL_SECRET_PATH = "/wetalkie" # reusing from rj_crm__api_wetalkie
