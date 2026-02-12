@@ -5,10 +5,7 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
-COPY ./src ./src/
 
-COPY ./pipelines/rj_iplanrio__data_catalog ./pipelines/rj_iplanrio__data_catalog/
+COPY ./pipelines/rj_iplanrio__cor_alerts_test_writer ./pipelines/rj_iplanrio__cor_alerts_test_writer/
 
-RUN apt update && apt install jq -y
-
-RUN uv sync --package rj_iplanrio__data_catalog
+RUN uv sync --all-packages
