@@ -124,7 +124,8 @@ def calculate_24h_sessions(df: pd.DataFrame, report_month: str) -> tuple[pd.Data
     df = df.sort_values(by=['contato_telefone', 'inicio_datetime'])
 
     df['nova_sessao'] = df.groupby('contato_telefone', group_keys=False).apply(identificar_sessoes_cliente)
-    df['id_sessao_24h'] = df['contato_telefone'] + '_' + df.groupby('contato_telefone')['nova_sessao'].astype(int).cumsum().astype(str)
+    print(f"dtypes: {df.dtypes}")
+    df['id_sessao_24h'] = df['contato_telefone'] + '_' + df.groupby('contato_telefone')['nova_sessao'].cumsum().astype(str)
 
     # Extrair o mês e ano do início da interação
     df['mes_ano'] = df['inicio_datetime'].dt.to_period('M')
