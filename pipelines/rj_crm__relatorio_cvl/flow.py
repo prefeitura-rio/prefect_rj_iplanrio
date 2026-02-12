@@ -76,6 +76,7 @@ def rj_crm__relatorio_cvl(
         file_format="parquet",
         filename=f"Sessoes_receptivo_{start_date}_to_{end_date}",
     )
+    print(f"data_path {data_path}")
     
     create_table_and_upload_to_gcs_task(
             data_path=data_path,
@@ -83,5 +84,5 @@ def rj_crm__relatorio_cvl(
             table_id=table_id,
             dump_mode=dump_mode,
         )
-    # print("force deploy")
+    print("force deploy")
     print("Flow completed successfully!")

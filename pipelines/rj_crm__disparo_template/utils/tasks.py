@@ -118,6 +118,7 @@ def create_date_partitions(
             raise ValueError("Some dates in the partition column could not be parsed.")
 
     dates = dataframe["data_particao"].unique()
+    print(f"DEBUG dates {dates}")
     dataframes = [
         (
             date,
@@ -143,7 +144,7 @@ def create_date_partitions(
         elif file_format == "parquet":
             safe_export_df_to_parquet(dfr=_dataframe, output_path=file_folder)
 
-    log(f"Files saved on {root_folder}")
+    log(f"Files saved on root_folder{root_folder} as {file_folder}")
     return root_folder
 
 
