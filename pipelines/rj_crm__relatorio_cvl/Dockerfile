@@ -9,4 +9,6 @@ COPY ./src ./src/
 
 COPY ./pipelines/rj_crm__relatorio_cvl ./pipelines/rj_crm__relatorio_cvl/
 
+COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
+
 RUN uv sync --package rj_crm__relatorio_cvl
