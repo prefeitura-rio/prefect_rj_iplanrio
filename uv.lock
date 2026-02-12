@@ -1529,7 +1529,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#f1a95577f336263ca6ce564eb8d00d8adeb07b0d" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git#0c730118a8084907be7ba62206ca8dc360b107c4" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -1538,6 +1538,7 @@ dependencies = [
     { name = "gitpython" },
     { name = "google-api-python-client" },
     { name = "gspread" },
+    { name = "oracledb" },
     { name = "pandas" },
     { name = "prefect" },
     { name = "prefect-dbt" },
@@ -2139,6 +2140,23 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/97/b9/3161be15bb8e3ad01be8be5a968a9237c3027c5be504362ff800fca3e442/opentelemetry_api-1.39.1.tar.gz", hash = "sha256:fbde8c80e1b937a2c61f20347e91c0c18a1940cecf012d62e65a7caf08967c9c", size = 65767, upload-time = "2025-12-11T13:32:39.182Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cf/df/d3f1ddf4bb4cb50ed9b1139cc7b1c54c34a1e7ce8fd1b9a37c0d1551a6bd/opentelemetry_api-1.39.1-py3-none-any.whl", hash = "sha256:2edd8463432a7f8443edce90972169b195e7d6a05500cd29e6d13898187c9950", size = 66356, upload-time = "2025-12-11T13:32:17.304Z" },
+]
+
+[[package]]
+name = "oracledb"
+version = "3.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f7/02/70a872d1a4a739b4f7371ab8d3d5ed8c6e57e142e2503531aafcb220893c/oracledb-3.4.2.tar.gz", hash = "sha256:46e0f2278ff1fe83fbc33a3b93c72d429323ec7eed47bc9484e217776cd437e5", size = 855467, upload-time = "2026-01-28T17:25:39.91Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/22/68/f7126f5d911c295b57720c6b1a0609a5a2667b4546946433552a4de46333/oracledb-3.4.2-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:643c25d301a289a371e37fcedb59e5fa5e54fb321708e5c12821c4b55bdd8a4d", size = 4205176, upload-time = "2026-01-28T17:26:12.463Z" },
+    { url = "https://files.pythonhosted.org/packages/5d/93/2fced60f92dc82e66980a8a3ba5c1ea48110bf1dd81d030edb69d88f992e/oracledb-3.4.2-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:55397e7eb43bb7017c03a981c736c25724182f5210951181dfe3fab0e5d457fb", size = 2231298, upload-time = "2026-01-28T17:26:14.497Z" },
+    { url = "https://files.pythonhosted.org/packages/75/a7/4dd286f3a6348d786fef9e6ab2e6c9b74ca9195d9a756f2a67e45743cdf0/oracledb-3.4.2-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b26a10f9c790bd141ffc8af68520803ed4a44a9258bf7d1eea9bfdd36bd6df7f", size = 2439430, upload-time = "2026-01-28T17:26:16.044Z" },
+    { url = "https://files.pythonhosted.org/packages/19/28/94bc753e5e969c60ee5d9c914e2b4ef79999eaca8e91bcab2fbf0586b80b/oracledb-3.4.2-cp313-cp313-win32.whl", hash = "sha256:b974caec2c330c22bbe765705a5ac7d98ec3022811dec2042d561a3c65cb991b", size = 1458209, upload-time = "2026-01-28T17:26:17.652Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/2b/593a9b2d4c12c9de3289e67d84fe023336d99f36ba51442a5a0f5ce6acf7/oracledb-3.4.2-cp313-cp313-win_amd64.whl", hash = "sha256:3df8eee1410d25360599968b1625b000f10c5ae0e47274031a7842a9dc418890", size = 1793558, upload-time = "2026-01-28T17:26:19.914Z" },
 ]
 
 [[package]]
@@ -3379,6 +3397,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "google-cloud-bigquery" },
     { name = "pandas" },
+    { name = "prefect-docker" },
     { name = "prefect-rj-iplanrio" },
     { name = "requests" },
 ]
@@ -3389,6 +3408,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "google-cloud-bigquery", specifier = ">=3.25.0" },
     { name = "pandas", specifier = ">=2.3.1" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "requests", specifier = ">=2.32.4" },
 ]
@@ -3402,6 +3422,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "google-cloud-bigquery" },
     { name = "pandas" },
+    { name = "prefect-docker" },
     { name = "prefect-rj-iplanrio" },
     { name = "requests" },
 ]
@@ -3412,6 +3433,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "google-cloud-bigquery", specifier = ">=3.25.0" },
     { name = "pandas", specifier = ">=2.3.1" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "requests", specifier = ">=2.32.4" },
 ]
@@ -3425,6 +3447,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "google-cloud-bigquery" },
     { name = "pandas" },
+    { name = "prefect-docker" },
     { name = "prefect-rj-iplanrio" },
     { name = "requests" },
 ]
@@ -3435,6 +3458,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "google-cloud-bigquery", specifier = ">=3.25.0" },
     { name = "pandas", specifier = ">=2.3.1" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "requests", specifier = ">=2.32.4" },
 ]
@@ -3448,6 +3472,7 @@ dependencies = [
     { name = "defusedxml" },
     { name = "google-cloud-bigquery" },
     { name = "pandas" },
+    { name = "prefect-docker" },
     { name = "prefect-rj-iplanrio" },
     { name = "requests" },
 ]
@@ -3458,6 +3483,7 @@ requires-dist = [
     { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "google-cloud-bigquery", specifier = ">=3.25.0" },
     { name = "pandas", specifier = ">=2.3.1" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "requests", specifier = ">=2.32.4" },
 ]
@@ -3467,11 +3493,19 @@ name = "rj-crm-wetalkie-api-hsm-info"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__wetalkie_api_hsm_info" }
 dependencies = [
+    { name = "pandas" },
+    { name = "prefect-docker" },
     { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+requires-dist = [
+    { name = "pandas", specifier = ">=2.0.0" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests", specifier = ">=2.0.0" },
+]
 
 [[package]]
 name = "rj-crm-wetalkie-atualiza-contato"
