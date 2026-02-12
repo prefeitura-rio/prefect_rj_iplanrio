@@ -24,4 +24,4 @@ distinct
     DATE_SUB(DATE('{START_DATE_PLACEHOLDER}'), INTERVAL 10 DAY) AND DATE_ADD(DATE('{END_DATE_PLACEHOLDER}'), INTERVAL 10 DAY)
     and data_particao >= DATE_SUB(DATE('{START_DATE_PLACEHOLDER}'), interval 10 day)
     and data_particao <= DATE_ADD(DATE('{END_DATE_PLACEHOLDER}'), interval 10 day)
-    and msg.fonte = "CUSTOMER"
+    and msg.fonte = 'CUSTOMER'

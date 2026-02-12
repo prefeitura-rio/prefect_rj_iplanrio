@@ -68,12 +68,14 @@ def rj_crm__relatorio_cvl(
         print("No data returned from BigQuery query. Skipping further processing.")
         return
 
-    df_estatistica_mes, df_sessions = calculate_24h_sessions(df_raw, report_month)
+    df_estatistica_mes_, df_sessions = calculate_24h_sessions(df_raw, report_month)
+
+    file_format="csv"
 
     data_path = create_date_partitions(
         df_sessions,
         partition_column="inicio_datetime",
-        file_format="parquet",
+        file_format=file_format,
         filename=f"Sessoes_receptivo_{start_date}_to_{end_date}",
     )
     
@@ -82,7 +84,7 @@ def rj_crm__relatorio_cvl(
             dataset_id=dataset_id,
             table_id=table_id,
             dump_mode=dump_mode,
-            source_format="parquet"
-        )
+            # source_format=file_format,
+    )
     print("force deploy")
     print("Flow completed successfully!")

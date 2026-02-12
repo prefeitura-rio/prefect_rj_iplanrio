@@ -19,7 +19,5 @@ class PipelineConstants(Enum):
     TABLE_ID = "receptivo_sessoes_24h"
     DUMP_MODE = "append"
     
-    # Query Project ID
-    QUERY_PROJECT_ID = "rj-crm-registry-dev"
-    QUERY_DATASET_ID = "dev__dev_fantasma__intermediario_rmi_conversas"
-    QUERY_TABLE_ID = "base_receptivo_teste"
+    # Query 
+    QUERY_TABLE = "rj-crm-registry.intermediario_rmi_conversas.base_receptivo"

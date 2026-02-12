@@ -32,7 +32,7 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
 
-  - name: rj-crm--relatorio-cvl--prod
+  - name: rj_crm__relatorio_cvl--prod
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__relatorio_cvl/flow.py:rj_crm__relatorio_cvl
     work_pool:
