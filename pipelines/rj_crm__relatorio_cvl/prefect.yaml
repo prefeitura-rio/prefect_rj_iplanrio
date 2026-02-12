@@ -28,7 +28,7 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: uv run --package rj_crm__relatorio_cvl -- prefect flow-run execute        
+        command: uv run --package rj_crm__relatorio_cvl -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
@@ -51,3 +51,16 @@ deployments:
       dataset_id: brutos_wetalkie
       table_id: receptivo_sessoes_24h
       dump_mode: append
+    schedules:
+      - interval: "0 9 1 * *" # Every 1 month
+        anchor_date: "2024-01-01T09:00:00" # Anchor to January 1st, 9 AM
+        timezone: America/Sao_Paulo
+        active: true
+        slug: monthly-relatorio-cvl-prod
+        flow_run_name: rj_crm__relatorio_cvl_monthly_run
+        deployment_name: rj-crm--relatorio-cvl--prod
+        parameters:
+          flow_environment: production
+          dataset_id: brutos_wetalkie
+          table_id: receptivo_sessoes_24h
+          dump_mode: append

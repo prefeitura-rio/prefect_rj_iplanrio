@@ -24,7 +24,7 @@ def rj_cvl__osinfo(  # noqa
     db_type: str = "mysql",
     db_charset: Optional[str] = "utf8",
     execute_query: str = "execute_query",
-    dataset_id: str = "adm_contrato_gestao",
+    dataset_id: str = "brutos_osinfo",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-osinfo",
     dump_mode: str = "overwrite",

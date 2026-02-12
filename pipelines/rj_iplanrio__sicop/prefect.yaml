@@ -68,7 +68,6 @@ deployments:
               REQUERENTE AS REQUERENTE,
               AUTO_INFRACAO AS AUTO_INFRACAO,
               CODIGO_LOGRADOURO AS LOGRADOURO,
-              ENDERECO AS ENDERECO,
               NUMERO_PORTA_REQUERENTE AS NUMERO_PORTA,
               COMPLEMENTO_REQUERENTE AS COMPLEMENTO,
               CEP AS CEP,
@@ -213,4 +212,3 @@ deployments:
           dump_mode: overwrite
           execute_query: |
             SELECT IDENT,SEQ_REM,SEQ,DESCRICAO FROM SICOP.VW_DESPACHO_DLK
-
