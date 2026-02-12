@@ -118,7 +118,6 @@ def create_date_partitions(
             raise ValueError("Some dates in the partition column could not be parsed.")
 
     dates = dataframe["data_particao"].unique()
-    print(f"DEBUG dates {dates}")
     dataframes = [
         (
             date,
