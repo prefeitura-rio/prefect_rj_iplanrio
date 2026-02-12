@@ -79,5 +79,5 @@ def rj_crm__relatorio_cvl(
             dump_mode=dump_mode,
             filename=f"Sessoes_receptivo_{start_date}_to_{end_date}",
         )
-    print("force deploy")
+    # print("force deploy")
     print("Flow completed successfully!")
