@@ -52,7 +52,7 @@ deployments:
       table_id: receptivo_sessoes_24h
       dump_mode: append
     schedules:
-      - interval: "0 9 1 * *" # Every 1 month
+      - cron: "0 9 1 * *" # Every 1 month
         anchor_date: "2024-01-01T09:00:00" # Anchor to January 1st, 9 AM
         timezone: America/Sao_Paulo
         active: true
