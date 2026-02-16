@@ -121,7 +121,7 @@ def rj_crm__callcenter_attendances_weekly(
         # processed_data = filtered_attendances.to_dict("records")
         processed_data = filtered_attendances.copy()
 
-    df = criar_dataframe_de_lista(filtered_attendances)
+    df = criar_dataframe_de_lista(processed_data)
 
     print(
         f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}"

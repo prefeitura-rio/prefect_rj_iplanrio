@@ -1,0 +1,12 @@
+schedules:
+  - interval: "0 9 1 * *" # Every 1 month
+    anchor_date: "2024-01-01T09:00:00" # Anchor to January 1st, 9 AM
+    timezone: America/Sao_Paulo
+    active: true
+    slug: monthly-relatorio-cvl-prod
+    flow_run_name: rj_crm__relatorio_cvl_monthly_run
+    deployment_name: rj-crm--relatorio-cvl--prod
+    parameters:
+      dataset_id: brutos_wetalkie
+      table_id: receptivo_sessoes_24h
+      dump_mode: append
