@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect import flow
+from prefect import flow, task
 
 from pipelines.rj_crm__callcenter_attendances_weekly.constants import (
     CallCenterAttendancesConstants,
@@ -142,3 +144,54 @@ def rj_crm__callcenter_attendances_weekly(
     print(
         f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
     )
+
+
+@task
+def get_monthly_date_range(run_date: datetime):
+    """
+    Calculates the start and end dates for a given month.
+    """
+    start_date = run_date.replace(day=1)
+    end_date = start_date + relativedelta(months=1) - relativedelta(days=1)
+    return start_date.strftime("%Y-%m-%d"), end_date.strftime("%Y-%m-%d")
+
+
+@flow(log_prints=True)
+def rj_crm__callcenter_attendances_monthly_loader(
+    dataset_id: str | None = None,
+    table_id: str | None = None,
+    dump_mode: str | None = None,
+    materialize_after_dump: bool | None = None,
+    start_date: str = "2025-01-01",
+    end_date: str | None = None,
+    transcribe_audio: bool = True,
+    infisical_secret_path: str = "/wetalkie",
+):
+    """
+    Flow to load call center attendances month by month from a specific start date until a specific end date.
+    """
+    if end_date is None:
+        current_date = datetime.now()
+    else:
+        current_date = datetime.strptime(end_date, "%Y-%m-%d")
+
+    current_start_date = datetime.strptime(start_date, "%Y-%m-%d")
+
+    while current_start_date <= current_date:
+        month_start, month_end = get_monthly_date_range(current_start_date)
+        
+        rj_crm__callcenter_attendances_weekly.with_options(
+            name=f"load_callcenter_attendances_monthly-{month_start}-{month_end}"
+        )(
+            start_date=month_start,
+            end_date=month_end,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            dump_mode=dump_mode,
+            materialize_after_dump=materialize_after_dump,
+            infisical_secret_path=infisical_secret_path,
+            transcribe_audio=transcribe_audio, 
+        )
+        
+        current_start_date += relativedelta(months=1)
+
