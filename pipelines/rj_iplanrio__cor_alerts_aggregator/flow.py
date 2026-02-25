@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Flow para agregacao e envio de alertas COR.
+Flow para agregacao e envio de alertas COR. v2.
 Executa a cada 2 minutos, busca alertas pendentes, agrupa por localizacao
 e envia para COR OnCall API conforme regras de agregacao.
 
