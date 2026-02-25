@@ -2,7 +2,6 @@
 """
 Flow para envio de e-mails em massa com templates HTML..
 """
-
 from prefect import flow
 from iplanrio.pipelines_utils.env import (
     inject_bd_credentials_task,
