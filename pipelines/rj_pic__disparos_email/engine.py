@@ -129,12 +129,13 @@ class EmailSender:
                 json=payload,
                 timeout=30,
             )
-
             # Verifica se foi bem sucedido
             response.raise_for_status()
-
-            return True
-
+            if response.json().get("success") == True:
+                return True
+            else:
+                logging.error(f"Falha ao enviar para {to_email}: {response.text}")
+                raise
         except requests.exceptions.HTTPError as e:
             if e.response.status_code in [400, 401, 403]:
                 # Erros de autenticação ou validação - não devem ser retentados
@@ -190,7 +191,7 @@ class EmailSender:
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                self._send_email_internal(
+                response = self._send_email_internal(
                     to_email=to_email,
                     subject=subject,
                     html_body=html_body,
@@ -206,14 +207,12 @@ class EmailSender:
                 )
                 logging.info(success_msg)
                 success_logger.info(f"{to_email} | {display_name}")
-                return True
+                return response
 
             except requests.exceptions.HTTPError as e:
                 if e.response and e.response.status_code in [400, 401, 403]:
                     # Erros que não devem ser retentados
-                    error_msg = (
-                        f"Falha permanente ao enviar para {display_name} ({to_email}): {e}"
-                    )
+                    error_msg = f"Falha permanente ao enviar para {display_name} ({to_email}): {e}"
                     logging.error(error_msg)
                     return False
                 # Outros erros HTTP podem ser retentados

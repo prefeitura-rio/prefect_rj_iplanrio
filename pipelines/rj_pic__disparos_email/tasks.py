@@ -6,21 +6,16 @@ Task para envio de e-mails em massa com templates HTML.
 from typing import Dict, List, Optional
 from google.cloud import bigquery
 from prefect import task
-import logging
 import json
 import ast
 import os
 
 from pipelines.rj_pic__disparos_email.engine import TemplateEngine
 from pipelines.rj_pic__disparos_email.engine import EmailSender
+from pipelines.rj_pic__disparos_email.env import FILTER_EMAILS
 
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-
-@task  # Decorador comentado temporariamente
+@task(log_prints=True)
 def read_bigquery_task(
     project_id: Optional[str] = None,
     dataset_id: Optional[str] = None,
@@ -50,15 +45,23 @@ def read_bigquery_task(
         SELECT
             *
         FROM `{project_id}.{dataset_id}.{table_id}`
-        -- WHERE recipiente_email = 'd116626@gmail.com'
     """
+
+    if "@" in FILTER_EMAILS:
+        lista_emails = [f"'{email.strip()}'" for email in FILTER_EMAILS.split(",")]
+        separador = ",\n             "
+        filters = separador.join(lista_emails)
+        query += f"""    WHERE recipiente_email IN (
+             {filters}
+         )
+        """
 
     try:
         # Inicializa cliente do BigQuery
         client = bigquery.Client(project=project_id)
 
         # Executa query
-        logging.info(f"Executando query no BigQuery: {query[:100]}...")
+        print(f"Executando query no BigQuery:\n{query}")
         query_job = client.query(query)
         results = query_job.result()
 
@@ -72,15 +75,15 @@ def read_bigquery_task(
                 row_dict[key] = str(value) if value is not None else ""
             rows.append(row_dict)
 
-        logging.info(f"✅ {len(rows)} registros encontrados no BigQuery")
+        print(f"✅ {len(rows)} registros encontrados no BigQuery")
         return rows
 
     except Exception as e:
-        logging.error(f"Erro ao ler dados do BigQuery: {e}")
+        print(f"Erro ao ler dados do BigQuery: {e}")
         raise
 
 
-@task  # Decorador comentado temporariamente
+@task(log_prints=True)
 def process_email_task(
     row: Dict[str, str], template_path: str, email_subject: str, idx: int, total: int
 ) -> bool:
@@ -103,7 +106,7 @@ def process_email_task(
     )
 
     if not email:
-        logging.warning(f"Linha {idx}: E-mail vazio, pulando...")
+        print(f"Linha {idx}: E-mail vazio, pulando...")
         return False
 
     print(f"\n[{idx}/{total}] Processando: {nome} ({email})")
@@ -122,15 +125,13 @@ def process_email_task(
                     # Se falhar, tenta como representação Python (aspas simples)
                     alunos = ast.literal_eval(dados_str)
                 except (ValueError, SyntaxError) as e:
-                    logging.warning(f"Erro ao parsear dados na linha {idx}: {e}")
-                    logging.warning(f"Conteúdo: {dados_str[:200]}...")
+                    print(f"Erro ao parsear dados na linha {idx}: {e}")
+                    print(f"Conteúdo: {dados_str[:200]}...")
                     alunos = []
 
         # Garante que alunos é uma lista
         if not isinstance(alunos, list):
-            logging.warning(
-                f"Dados parseados não são uma lista na linha {idx}, convertendo..."
-            )
+            print(f"Dados parseados não são uma lista na linha {idx}, convertendo...")
             alunos = [alunos] if alunos else []
 
         # Prepara variáveis para o template
@@ -158,7 +159,6 @@ def process_email_task(
             html_body=html_body,
             recipient_name=nome,
         )
-
         if success:
             print(f"  ✅ Enviado com sucesso")
             return True
@@ -167,6 +167,6 @@ def process_email_task(
             return False
 
     except Exception as e:
-        logging.error(f"Erro ao processar linha {idx} ({email}): {e}")
+        print(f"Erro ao processar linha {idx} ({email}): {e}")
         print(f"  ❌ Erro: {e}")
         return False
