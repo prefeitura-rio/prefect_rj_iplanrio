@@ -20,7 +20,7 @@ logging.basicConfig(
 )
 
 
-# @task  # Decorador comentado temporariamente
+@task  # Decorador comentado temporariamente
 def read_bigquery_task(
     project_id: Optional[str] = None,
     dataset_id: Optional[str] = None,
@@ -47,8 +47,8 @@ def read_bigquery_task(
         )
     # Constrói query padrão para ler toda a tabela
     query = f"""
-        SELECT 
-            * 
+        SELECT
+            *
         FROM `{project_id}.{dataset_id}.{table_id}`
         -- WHERE recipiente_email = 'd116626@gmail.com'
     """
@@ -80,7 +80,7 @@ def read_bigquery_task(
         raise
 
 
-# @task  # Decorador comentado temporariamente
+@task  # Decorador comentado temporariamente
 def process_email_task(
     row: Dict[str, str], template_path: str, email_subject: str, idx: int, total: int
 ) -> bool:

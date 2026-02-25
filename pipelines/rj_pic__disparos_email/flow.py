@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 
 
-# @flow(log_prints=True)  # Decorador comentado temporariamente
+@flow(log_prints=True)  # Decorador comentado temporariamente
 def rj_pic__disparos_email(
     email_subject: str = "E-mail enviado automaticamente",
 ):
