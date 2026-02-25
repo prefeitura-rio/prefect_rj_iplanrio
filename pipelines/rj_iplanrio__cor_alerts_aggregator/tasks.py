@@ -575,7 +575,6 @@ def write_clusters_to_google_sheets(
     ]
 
     creds, _ = google.auth.default(scopes=SCOPES)
-    log(f"SA em uso: {creds.service_account_email}")
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(spreadsheet_id).worksheet(sheet_tab)
 
