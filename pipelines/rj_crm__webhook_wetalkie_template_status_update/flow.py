@@ -33,7 +33,8 @@ def rj_crm__webhook_wetalkie_template_status_update(
 
             other_info_lines = []
             if content_reason:
-                other_info_lines.append(f"  - Reason: **`{content_reason}`**")
+                if not (content_event == "APPROVED" and content_reason == "NONE"):
+                    other_info_lines.append(f"  - Reason: **`{content_reason}`**")
             if content_other_info_description:
                 other_info_lines.append(f"  - **`{content_other_info_description}`**")
 

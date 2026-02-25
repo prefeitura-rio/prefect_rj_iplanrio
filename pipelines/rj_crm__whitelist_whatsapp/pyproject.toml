@@ -2,3 +2,9 @@
 name = "rj_crm__whitelist_whatsapp"
 version = "0.1.0"
 description = "Pipeline whitelist_whatsapp da secretaria crm"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

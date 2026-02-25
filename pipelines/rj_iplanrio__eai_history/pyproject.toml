@@ -3,8 +3,12 @@ name = "rj_iplanrio__eai_history"
 version = "0.1.0"
 description = "Pipeline eai_history da secretaria iplanrio"
 dependencies = [
+    "prefect_rj_iplanrio",
     "langchain>=0.3.27",
     "langchain-google-cloud-sql-pg>=0.14.1",
     "langgraph>=1.0.1",
 ]
 
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

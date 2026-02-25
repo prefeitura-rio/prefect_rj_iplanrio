@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} ./pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/
 
-RUN uv sync --package prefect_rj_iplanrio --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
+RUN uv sync --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}

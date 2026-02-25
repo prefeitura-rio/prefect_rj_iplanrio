@@ -3,6 +3,7 @@ name = "rj_sms__sisreg_disparo_lembretes"
 version = "0.1.0"
 description = "Pipeline SMS SISREG para disparo de lembretes de agendamentos"
 dependencies = [
+    "prefect_rj_iplanrio",
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",
     "google-cloud-bigquery",
@@ -19,3 +20,5 @@ dependencies = [
     "requests>=2.25.0",
     "pytz>=2021.1",
 ]
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

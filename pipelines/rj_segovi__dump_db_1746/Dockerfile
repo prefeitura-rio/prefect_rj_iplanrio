@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_segovi__dump_db_1746 ./pipelines/rj_segovi__dump_db_1746/
 
-RUN uv sync --package prefect_rj_iplanrio --package rj_segovi__dump_db_1746
+RUN uv sync --package rj_segovi__dump_db_1746

@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_smi__siscob ./pipelines/rj_smi__siscob/
 
-RUN uv sync --package prefect_rj_iplanrio --package rj_smi__siscob
+RUN uv sync --package rj_smi__siscob

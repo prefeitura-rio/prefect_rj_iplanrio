@@ -2,3 +2,9 @@
 name = "rj_iplanrio__dados_mestres"
 version = "0.1.0"
 description = "Pipeline dados_mestres da secretaria iplanrio"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

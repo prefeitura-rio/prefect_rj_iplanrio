@@ -3,6 +3,7 @@ name = "rj_crm__geolocalizacao_residencia"
 version = "0.1.0"
 description = "Pipeline CRM para geolocalização de endereços residenciais com múltiplas estratégias"
 dependencies = [
+    "prefect_rj_iplanrio",
     # Core Prefect
     "prefect==3.4.9",
     "prefect-docker>=0.6.5",
@@ -44,3 +45,5 @@ dev = [
     "flake8>=6.0.0",
     "isort>=5.12.0",
 ]
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

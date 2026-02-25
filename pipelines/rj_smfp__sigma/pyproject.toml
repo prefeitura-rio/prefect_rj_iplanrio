@@ -2,3 +2,9 @@
 name = "rj_smfp__sigma"
 version = "0.1.0"
 description = "Pipeline sigma da secretaria smfp"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

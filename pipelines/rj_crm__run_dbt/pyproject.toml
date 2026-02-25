@@ -3,6 +3,7 @@ name = "rj_crm__run_dbt"
 version = "0.1.0"
 description = "Pipeline run_dbt do crm"
 dependencies = [
+    "prefect_rj_iplanrio",
     "pip>=25.1.1",
     "gitpython>=3.1.44",
     "prefect-dbt>=0.7.5",
@@ -10,3 +11,6 @@ dependencies = [
     "discord-py>=2.5.2",
     "dbt-bigquery>=1.10.1",
 ]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
