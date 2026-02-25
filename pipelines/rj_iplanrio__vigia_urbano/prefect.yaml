@@ -55,7 +55,7 @@ deployments:
     - interval: 3600 # executa a cada 1 hora
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: vigia_urbano_overwrite # slug do schedule
+      slug: vw_RespostaOcorrencia # slug do schedule
       parameters:
         table_id: vw_RespostaOcorrencia # Nome da tabela no BigQuery
         execute_query: |
@@ -65,9 +65,49 @@ deployments:
     - interval: 3600 # executa a cada 1 hora
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: vw_Auditoria_overwrite # slug do schedule
+      slug: vw_Auditoria # slug do schedule
       parameters:
         table_id: vw_Auditoria # Nome da tabela no BigQuery
-        execute_query: | 
+        execute_query: |
           SELECT *
-          FROM vigiaurbano.vw_Auditoria          
+          FROM vigiaurbano.vw_Auditoria
+
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: perfilUsuario # slug do schedule
+      parameters:
+        table_id: perfilUsuario # Nome da tabela no BigQuery
+        execute_query: |
+          SELECT *
+          FROM vigiaurbano.perfilUsuario
+
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: Usuario # slug do schedule
+      parameters:
+        table_id: Usuario # Nome da tabela no BigQuery
+        execute_query: |
+          SELECT *
+          FROM vigiaurbano.Usuario
+
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: OrgaoUsuario # slug do schedule
+      parameters:
+        table_id: OrgaoUsuario # Nome da tabela no BigQuery
+        execute_query: |
+          SELECT *
+          FROM vigiaurbano.OrgaoUsuario
+
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: Orgao # slug do schedule
+      parameters:
+        table_id: Orgao # Nome da tabela no BigQuery
+        execute_query: |
+          SELECT *
+          FROM vigiaurbano.Orgao
