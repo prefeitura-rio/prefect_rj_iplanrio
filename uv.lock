@@ -2529,6 +2529,7 @@ dependencies = [
     { name = "pandas" },
     { name = "pre-commit" },
     { name = "prefect" },
+    { name = "prefect-docker" },
     { name = "unidecode" },
 ]
 
@@ -2544,6 +2545,7 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.7.1" },
     { name = "unidecode", specifier = ">=1.3.8" },
 ]
 
