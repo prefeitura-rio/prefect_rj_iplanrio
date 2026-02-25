@@ -541,6 +541,115 @@ def create_date_partitions(
 
 
 @task
+def write_clusters_to_google_sheets(
+    dataframe: pd.DataFrame,
+    spreadsheet_id: str,
+    sheet_tab: str = CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
+) -> int:
+    """
+    Escreve clusters no Google Sheet via API, com upsert por aggregation_group_id.
+
+    - Se aggregation_group_id ja existe no Sheet: atualiza a linha
+    - Se nao existe: appenda nova linha
+
+    Reutiliza credenciais SA ja injetadas no ambiente (inject_bd_credentials_task).
+    A SA precisa ter permissao de Editor no Sheet.
+
+    Returns:
+        Numero de linhas escritas (inseridas + atualizadas)
+    """
+    import gspread
+    import google.auth
+
+    if dataframe.empty:
+        log("DataFrame vazio, nada a escrever no Sheet.")
+        return 0
+
+    if not spreadsheet_id:
+        log("spreadsheet_id nao fornecido, pulando escrita no Sheet.", level="warning")
+        return 0
+
+    SCOPES = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive.readonly",
+    ]
+
+    creds, _ = google.auth.default(scopes=SCOPES)
+    log(f"SA em uso: {creds.service_account_email}")
+    gc = gspread.authorize(creds)
+    worksheet = gc.open_by_key(spreadsheet_id).worksheet(sheet_tab)
+
+    COLUMNS = [
+        "aggregation_group_id", "event_id", "location", "priority",
+        "agency_event_type_code", "created_date", "latitude", "longitude",
+        "alert_ids", "alert_count", "alert_type", "severity", "environment",
+    ]
+
+    existing_values = worksheet.get_all_values()
+
+    if not existing_values:
+        worksheet.append_row(COLUMNS)
+        rows_to_append = [
+            [str(row.get(col, "")) for col in COLUMNS]
+            for _, row in dataframe.iterrows()
+        ]
+        worksheet.append_rows(rows_to_append, value_input_option="RAW")
+        log(f"Sheet vazio: escrito header + {len(rows_to_append)} linhas")
+        return len(rows_to_append)
+
+    header = existing_values[0]
+    try:
+        id_col_idx = header.index("aggregation_group_id")
+    except ValueError:
+        worksheet.clear()
+        worksheet.append_row(COLUMNS)
+        rows_to_append = [
+            [str(row.get(col, "")) for col in COLUMNS]
+            for _, row in dataframe.iterrows()
+        ]
+        worksheet.append_rows(rows_to_append, value_input_option="RAW")
+        log(f"Header incompativel, Sheet recriado: {len(rows_to_append)} linhas")
+        return len(rows_to_append)
+
+    # Mapa: aggregation_group_id -> indice de linha no Sheet (1-based, skip header)
+    existing_map = {
+        existing_values[i][id_col_idx]: i + 1
+        for i in range(1, len(existing_values))
+        if len(existing_values[i]) > id_col_idx
+    }
+
+    updates = []
+    appends = []
+
+    for _, row in dataframe.iterrows():
+        row_values = [str(row.get(col, "")) for col in COLUMNS]
+        agg_id = str(row.get("aggregation_group_id", ""))
+
+        if agg_id in existing_map:
+            sheet_row_num = existing_map[agg_id] + 1  # +1 porque header e linha 1
+            cell_range = f"A{sheet_row_num}"
+            updates.append({
+                "range": cell_range,
+                "values": [row_values],
+            })
+        else:
+            appends.append(row_values)
+
+    written = 0
+    if updates:
+        worksheet.batch_update(updates, value_input_option="RAW")
+        written += len(updates)
+        log(f"Atualizadas {len(updates)} linhas existentes no Sheet")
+
+    if appends:
+        worksheet.append_rows(appends, value_input_option="RAW")
+        written += len(appends)
+        log(f"Inseridas {len(appends)} novas linhas no Sheet")
+
+    return written
+
+
+@task
 def mark_alerts_as_sent(
     alert_ids: List[str],
     aggregation_group_id: str,

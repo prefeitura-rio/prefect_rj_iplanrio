@@ -34,6 +34,7 @@ from pipelines.rj_iplanrio__cor_alerts_aggregator.tasks import (
     mark_alerts_as_sent,
     should_send_cluster,
     submit_cluster_to_cor_api,
+    write_clusters_to_google_sheets,
 )
 
 
@@ -45,6 +46,7 @@ def rj_iplanrio__cor_alerts_aggregator(
     immediate_threshold: int = CORAlertAggregatorConstants.IMMEDIATE_THRESHOLD.value,
     dry_run: bool = False,
     destination: str = "google_sheets",
+    spreadsheet_id: str = "",
 ):
     """
     Agrega alertas COR pendentes e envia para API do COR ou BigQuery.
@@ -62,6 +64,7 @@ def rj_iplanrio__cor_alerts_aggregator(
         immediate_threshold: Limite para disparo imediato (default: 5)
         dry_run: Se True, nao envia para destino (apenas simula)
         destination: Destino dos alertas ("cor_api" ou "google_sheets")
+        spreadsheet_id: ID do Google Sheet para escrita direta via API (destination=google_sheets)
     """
     valid_destinations = CORAlertAggregatorConstants.VALID_DESTINATIONS.value
     if destination not in valid_destinations:
@@ -212,6 +215,14 @@ def rj_iplanrio__cor_alerts_aggregator(
                 biglake_table=CORAlertAggregatorConstants.BIGLAKE_TABLE.value,
                 source_format=CORAlertAggregatorConstants.FILE_FORMAT.value,
             )
+
+            # Escrever no Google Sheets via API (upsert por aggregation_group_id)
+            written = write_clusters_to_google_sheets(
+                dataframe=combined_df,
+                spreadsheet_id=spreadsheet_id,
+                sheet_tab=CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
+            )
+            log(f"Sheets: {written} linhas escritas/atualizadas")
 
             # Marcar alertas como enviados apos upload bem-sucedido
             for metadata in bq_metadata_list:

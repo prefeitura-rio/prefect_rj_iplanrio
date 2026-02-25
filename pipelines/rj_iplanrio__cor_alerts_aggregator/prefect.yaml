@@ -31,6 +31,7 @@ deployments:
       environment: staging
       dry_run: true
       destination: google_sheets
+      spreadsheet_id: "1ewoRPUvPRdmdy-jrwPGLIVyd0DAQuiNsKxXDR3CwC-Q"
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -47,6 +48,7 @@ deployments:
       environment: prod
       dry_run: false
       destination: google_sheets
+      spreadsheet_id: "1ewoRPUvPRdmdy-jrwPGLIVyd0DAQuiNsKxXDR3CwC-Q"
     work_pool:
       name: k3s-pool
       work_queue_name: default

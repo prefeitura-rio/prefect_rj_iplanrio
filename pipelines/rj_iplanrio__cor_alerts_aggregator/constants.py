@@ -46,6 +46,9 @@ class CORAlertAggregatorConstants(Enum):
         "critica": "01",
     }
 
+    # Google Sheets (escrita direta via API)
+    SHEETS_TAB_NAME = "alertas_agregados"
+
     # Arquivos temporarios
     ROOT_FOLDER = "./data_cor_alerts/"
     FILE_FORMAT = "csv"
