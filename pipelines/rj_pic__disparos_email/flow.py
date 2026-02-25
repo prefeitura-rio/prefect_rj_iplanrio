@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Flow para envio de e-mails em massa com templates HTML.
+Flow para envio de e-mails em massa com templates HTML..
 """
 
 from prefect import flow
