@@ -6,7 +6,6 @@ Flow para envio de e-mails em massa com templates HTML..
 from prefect import flow
 from iplanrio.pipelines_utils.env import (
     inject_bd_credentials_task,
-    inject_bd_credentials,
 )
 import logging
 
@@ -39,8 +38,7 @@ def rj_pic__disparos_email(
         email_subject: Assunto do e-mail
     """
     # Injetar credenciais do BD
-    # inject_bd_credentials_task(environment="prod")
-    inject_bd_credentials(environment="prod")
+    inject_bd_credentials_task(environment="prod")
 
     try:
         # Lê dados do BigQuery
