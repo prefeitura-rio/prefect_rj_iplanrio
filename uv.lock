@@ -30,6 +30,7 @@ members = [
     "rj-iplanrio-sisbicho-images",
     "rj-iplanrio-vigia-urbano",
     "rj-pgm-divida-ativa",
+    "rj-pic-disparos-email",
     "rj-segovi-dump-db-1746",
     "rj-smas-api-datametrica-agendamentos",
     "rj-smas-cadunico",
@@ -3669,6 +3670,23 @@ source = { virtual = "pipelines/rj_iplanrio__vigia_urbano" }
 name = "rj-pgm-divida-ativa"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_pgm__divida_ativa" }
+
+[[package]]
+name = "rj-pic-disparos-email"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_pic__disparos_email" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "jinja2" },
+    { name = "python-dotenv" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.25.0" },
+    { name = "jinja2", specifier = ">=3.1.2" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
+]
 
 [[package]]
 name = "rj-segovi-dump-db-1746"
