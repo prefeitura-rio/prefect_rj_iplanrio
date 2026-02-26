@@ -28,6 +28,7 @@ schedules:
                 t1.id_chamado,
                 t3.id_protocolo,
                 t3.id_protocolo_chamado,
+                t3.numero_protocolo,
                 t3.ic_motivo,
 
                 -- Descrição e canal de origem
@@ -140,7 +141,7 @@ schedules:
 
             dados_finais AS (
             SELECT
-                id_chamado,
+                numero_protocolo,
                 canal_tratado,
                 cpf,
                 nome_tratado AS nome,
@@ -186,7 +187,7 @@ schedules:
                     canal_tratado AS CANAL,
                     canal_tratado AS CC_WT_CANAL,
                     cpf AS CC_WT_CPF_CIDADAO,
-                    CAST(id_chamado AS STRING) AS CC_WT_ID_CHAMADO,
+                    CAST(numero_protocolo AS STRING) AS CC_WT_ID_CHAMADO,
                     CAST(id_subtipo AS STRING) AS CC_WT_ID_SUBTIPO,
                     status AS CC_WT_STATUS_CHAMADO
                 ) AS vars,
@@ -224,6 +225,7 @@ schedules:
                 t1.id_chamado,
                 t3.id_protocolo,
                 t3.id_protocolo_chamado,
+                t3.numero_protocolo,
                 t3.ic_motivo,
 
                 -- Descrição e canal de origem
@@ -335,7 +337,7 @@ schedules:
 
             dados_finais AS (
             SELECT
-                id_chamado,
+                numero_protocolo,
                 canal_tratado,
                 cpf,
                 nome_tratado AS nome,
@@ -381,7 +383,7 @@ schedules:
                     canal_tratado AS CANAL,
                     canal_tratado AS CC_WT_CANAL,
                     cpf AS CC_WT_CPF_CIDADAO,
-                    CAST(id_chamado AS STRING) AS CC_WT_ID_CHAMADO,
+                    CAST(numero_protocolo AS STRING) AS CC_WT_ID_CHAMADO,
                     CAST(id_subtipo AS STRING) AS CC_WT_ID_SUBTIPO,
                     status AS CC_WT_STATUS_CHAMADO
                 ) AS vars,
