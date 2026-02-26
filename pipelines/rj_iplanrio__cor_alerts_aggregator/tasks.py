@@ -547,10 +547,13 @@ def write_clusters_to_google_sheets(
     sheet_tab: str = CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
 ) -> int:
     """
-    Escreve clusters no Google Sheet via API, com upsert por aggregation_group_id.
+    Escreve clusters no Google Sheet via API, com upsert por id_grupo.
 
-    - Se aggregation_group_id ja existe no Sheet: atualiza a linha
+    - Se id_grupo ja existe no Sheet: atualiza a linha
     - Se nao existe: appenda nova linha
+
+    As colunas são escritas em português e apenas as colunas relevantes são
+    incluídas (remove colunas técnicas: priority, alert_count, severity, environment).
 
     Reutiliza credenciais SA ja injetadas no ambiente (inject_bd_credentials_task).
     A SA precisa ter permissao de Editor no Sheet.
@@ -578,10 +581,32 @@ def write_clusters_to_google_sheets(
     gc = gspread.authorize(creds)
     worksheet = gc.open_by_key(spreadsheet_id).worksheet(sheet_tab)
 
+    # Mapeamento: nome no DataFrame -> nome no Sheet (português)
+    # Remove colunas técnicas: priority, alert_count, severity, environment
+    COLUMN_MAPPING = {
+        "created_date": "data_criacao",
+        "alert_type": "tipo_alerta",
+        "location": "localizacao",
+        "agency_event_type_code": "descricao_evento",
+        "latitude": "latitude",
+        "longitude": "longitude",
+        "aggregation_group_id": "id_grupo",
+        "event_id": "id_evento",
+        "alert_ids": "ids_alertas",
+    }
+
+    # Colunas a incluir no Google Sheets (em português)
+    # Ordem: data/tipo/local primeiro, depois coordenadas e IDs
     COLUMNS = [
-        "aggregation_group_id", "event_id", "location", "priority",
-        "agency_event_type_code", "created_date", "latitude", "longitude",
-        "alert_ids", "alert_count", "alert_type", "severity", "environment",
+        "data_criacao",
+        "tipo_alerta",
+        "localizacao",
+        "descricao_evento",
+        "latitude",
+        "longitude",
+        "id_grupo",
+        "id_evento",
+        "ids_alertas",
     ]
 
     existing_values = worksheet.get_all_values()
@@ -589,7 +614,7 @@ def write_clusters_to_google_sheets(
     if not existing_values:
         worksheet.append_row(COLUMNS)
         rows_to_append = [
-            [str(row.get(col, "")) for col in COLUMNS]
+            [str(row.get(col_en, "")) for col_en in COLUMN_MAPPING.keys()]
             for _, row in dataframe.iterrows()
         ]
         worksheet.append_rows(rows_to_append, value_input_option="RAW")
@@ -598,12 +623,12 @@ def write_clusters_to_google_sheets(
 
     header = existing_values[0]
     try:
-        id_col_idx = header.index("aggregation_group_id")
+        id_col_idx = header.index("id_grupo")
     except ValueError:
         worksheet.clear()
         worksheet.append_row(COLUMNS)
         rows_to_append = [
-            [str(row.get(col, "")) for col in COLUMNS]
+            [str(row.get(col_en, "")) for col_en in COLUMN_MAPPING.keys()]
             for _, row in dataframe.iterrows()
         ]
         worksheet.append_rows(rows_to_append, value_input_option="RAW")
@@ -621,7 +646,7 @@ def write_clusters_to_google_sheets(
     appends = []
 
     for _, row in dataframe.iterrows():
-        row_values = [str(row.get(col, "")) for col in COLUMNS]
+        row_values = [str(row.get(col_en, "")) for col_en in COLUMN_MAPPING.keys()]
         agg_id = str(row.get("aggregation_group_id", ""))
 
         if agg_id in existing_map:
