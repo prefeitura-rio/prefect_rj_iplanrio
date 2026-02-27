@@ -16,10 +16,7 @@ dependencies = [
 
 [tool.uv]
 link-mode = "copy"
-override-dependencies = [
-  "cx-oracle ; python_version < '3.13'",
-  "oracledb>=2.0.0 ; python_version >= '3.13'",
-]
+override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0"]
 
 [tool.uv.sources]
 iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
