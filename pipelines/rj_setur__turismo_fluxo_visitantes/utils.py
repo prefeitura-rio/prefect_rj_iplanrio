@@ -1,7 +1,6 @@
 import re
 
-import pandas as pd
-from janitor import clean_names
+from unidecode import unidecode
 
 
 def extract_year_from_filename(filename: str) -> str:
@@ -29,15 +28,11 @@ def get_base_table_name(worksheet_title: str, suffix: str | None) -> str:
 
 
 def normalize_to_bigquery_table_name(name: str) -> str:
-    """Normalize name to valid BigQuery table name using pyjanitor."""
-    df = pd.DataFrame({name: []})
-    df = clean_names(df)
-    normalized_name = str(df.columns[0])
-
-    if normalized_name and not normalized_name[0].isalpha() and normalized_name[0] != "_":
-        normalized_name = f"table_{normalized_name}"
-
-    return normalized_name
+    """Normalize name to valid BigQuery table name."""
+    normalized_name = unidecode(name.lower())
+    normalized_name = re.sub(r"[^a-z0-9_]", "_", normalized_name)
+    normalized_name = re.sub(r"_+", "_", normalized_name)
+    return normalized_name.strip("_")
 
 
 def get_worksheet_ranges_config() -> dict[str, list[tuple[str, str | None]]]:
