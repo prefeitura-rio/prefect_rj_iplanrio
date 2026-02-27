@@ -7,6 +7,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
 
-COPY ./pipelines/rj_smtur__geodata ./pipelines/rj_smtur__geodata/
+COPY ./pipelines/rj_setur__turismo_fluxo_visitantes ./pipelines/rj_setur__turismo_fluxo_visitantes/
 
-RUN uv sync --package rj_smtur__geodata
+RUN uv sync --package rj_setur__turismo_fluxo_visitantes
