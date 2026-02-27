@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from typing import TypedDict
 
 import gspread
@@ -13,7 +11,6 @@ from iplanrio.pipelines_utils.env import (
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow, task
-from prefect.task_runners import ThreadPoolTaskRunner
 
 from .utils import (
     build_drive_query,
@@ -127,7 +124,7 @@ def extract_range_to_bigquery(job: ExtractionJob) -> None:
     log(f"  ✓ Completed {job['dataset_id']}.{table_id_with_year}")
 
 
-@flow(log_prints=True, task_runner=ThreadPoolTaskRunner(max_workers=6))
+@flow(log_prints=True)
 def rj_setur__turismo_fluxo_visitantes(
     folder_id: str = "1d_SxiMsXQd2JH1Ttik3OQDRJy7wLtX6S",
     dataset_id: str = "brutos_turismo_fluxo_visitante",
@@ -163,24 +160,26 @@ def rj_setur__turismo_fluxo_visitantes(
             ranges_config = worksheet_ranges_config[worksheet_title]
 
             for cell_range, table_suffix in ranges_config:
-                extraction_jobs.append(
-                    {
-                        "spreadsheet_url": spreadsheet_url,
-                        "spreadsheet_name": spreadsheet_name,
-                        "spreadsheet_year": spreadsheet_year,
-                        "worksheet_index": worksheet_index,
-                        "worksheet_title": worksheet_title,
-                        "cell_range": cell_range,
-                        "table_suffix": table_suffix,
-                        "dataset_id": dataset_id,
-                        "dump_mode": dump_mode,
-                        "biglake_table": False,
-                    }
-                )
+                job: ExtractionJob = {
+                    "spreadsheet_url": spreadsheet_url,
+                    "spreadsheet_name": spreadsheet_name,
+                    "spreadsheet_year": spreadsheet_year,
+                    "worksheet_index": worksheet_index,
+                    "worksheet_title": worksheet_title,
+                    "cell_range": cell_range,
+                    "table_suffix": table_suffix,
+                    "dataset_id": dataset_id,
+                    "dump_mode": dump_mode,
+                    "biglake_table": False,
+                }
+                table_name = f"{worksheet_title}{'_' + table_suffix if table_suffix else ''}_{spreadsheet_year}"
+                log(f"  Queued: {table_name} from {cell_range}")
+                extraction_jobs.append(job)
 
     log(f"\nPrepared {len(extraction_jobs)} extraction tasks")
-    log("Starting concurrent extraction...\n")
+    log("Starting sequential extraction...\n")
 
-    extract_range_to_bigquery.map(extraction_jobs)
+    for job in extraction_jobs:
+        extract_range_to_bigquery(job)
 
-    log("\n✓ All extractions completed successfully")
+    log(f"\n✓ All {len(extraction_jobs)} extractions completed successfully")
