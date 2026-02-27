@@ -1,0 +1,223 @@
+name: rj_sma__contracheques
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_sma__contracheques-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_sma__contracheques/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-sma--contracheques--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_sma__contracheques/flow.py:rj_sma__contracheques
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sma__contracheques -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # Exemplo de schedule overwrite
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: folhas_emp # slug do schedule
+      parameters:
+        table_id: folhas_emp # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMERO, MES_ANO, TIPO_FOLHA, EMP_CODIGO, DATA_CONSOL from FOLHAS_EMP
+    # Exemplo de schedule incremental
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: fichas_vinculos # slug do schedule
+      parameters:
+        table_id: fichas_vinculos # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMFUNC, NUMVINC, MES_ANO_FOLHA, NUM_FOLHA, EMP_CODIGO, FICHA, NUMPENS from FICHAS_VINCULOS
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: fichas_rubricas # slug do schedule
+      parameters:
+        table_id: fichas_rubricas # Nome da tabela no BigQuery
+        execute_query: |
+          select RUBRICA, FICHA, LINHA, VALOR, DESC_VANT, COMPLEMENTO, MES_ANO_DIREITO, INFO from FICHAS_RUBRICAS
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: fitabanco # slug do schedule
+      parameters:
+        table_id: fitabanco # Nome da tabela no BigQuery
+        execute_query: |
+          select FICHA, NUMDEPEN, BANCO, AGENCIA, CONTA, SETOR, MES_ANO, CARGO, REFERENCIA, CPF from FITABANCO
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: vinculos # slug do schedule
+      parameters:
+        table_id: vinculos # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMERO, NUMFUNC, EMP_CODIGO, MATRIC, DTEXERC, DTAPOSENT, REGIMEJUR, DTVAC from VINCULOS
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: funcionarios # slug do schedule
+      parameters:
+        table_id: funcionarios # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMERO, NOME, CPF from funcionarios
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: hsetor # slug do schedule
+      parameters:
+        table_id: hsetor # Nome da tabela no BigQuery
+        execute_query: |
+          select SETOR, EMP_CODIGO, DATAINI, DATAFIM, FLEX_CAMPO_01, FLEX_CAMPO_05 from hsetor
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: pensionistas # slug do schedule
+      parameters:
+        table_id: pensionistas # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMERO, NUMFUNC, NUMVINC, EMP_CODIGO from PENSIONISTAS
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: rubricas # slug do schedule
+      parameters:
+        table_id: rubricas # Nome da tabela no BigQuery
+        execute_query: |
+          select RUBRICA, TIPORUBR, NOME_ABREV, NOME from rubricas
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dependencias # slug do schedule
+      parameters:
+        table_id: dependencias # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMFUNC, TIPODEPEN, DTINI, DTFIM from dependencias
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: historico_dependentes # slug do schedule
+      parameters:
+        table_id: historico_dependentes # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMFUNC, INVALIDO, DTINI, DTFIM from hist_depen
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: cargos # slug do schedule
+      parameters:
+        table_id: cargos # Nome da tabela no BigQuery
+        execute_query: |
+          select  CARGO, NOME from cargos_
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: provimentos_ev # slug do schedule
+      parameters:
+        table_id: provimentos_ev # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMFUNC, NUMVINC, DTINI, DTFIM, CARGO, SETOR, JORNADA from provimentos_ev
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: iplanrio_mensagem_setor_cargo # slug do schedule
+      parameters:
+        table_id: iplanrio_mensagem_setor_cargo # Nome da tabela no BigQuery
+        execute_query: |
+          select MES_ANO_FOLHA, NUM_FOLHA, CARGO, SETOR, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_setcarg
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: iplanrio_mensagem_prefixo # slug do schedule
+      parameters:
+        table_id: iplanrio_mensagem_prefixo # Nome da tabela no BigQuery
+        execute_query: |
+          select PREFIXO, NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_prefixo
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: iplanrio_registro_prefixo # slug do schedule
+      parameters:
+        table_id: iplanrio_registro_prefixo # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMFUNC, NUMVINC, MESANO, PREFIXO from IPL_PREFIXOS
+
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: iplanrio_mensagem_externo # slug do schedule
+      parameters:
+        table_id: iplanrio_mensagem_externo # Nome da tabela no BigQuery
+        execute_query: |
+          select NUM_FOLHA, MES_ANO_FOLHA, LINHA1, LINHA2, LINHA3, LINHA4, LINHA5 from ipl_msg_ext
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: dependentes # slug do schedule
+      parameters:
+        table_id: dependentes # Nome da tabela no BigQuery
+        execute_query: |
+          select NUMERO, NUMFUNC, CPF, NOME from dependentes
+
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: fatores_rubricas # slug do schedule
+      parameters:
+        table_id: fatores_rubricas # Nome da tabela no BigQuery
+        execute_query: |
+          select FATOR, RUBRICA from FATORES_RUBRICA
+
+  - name: rj-sma--contracheques--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_sma__contracheques/flow.py:rj_sma__contracheques
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_sma__contracheques -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
