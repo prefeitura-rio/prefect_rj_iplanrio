@@ -75,12 +75,12 @@ deployments:
     - interval: 3600 # executa a cada 1 hora
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
       timezone: America/Sao_Paulo
-      slug: perfilUsuario # slug do schedule
+      slug: PerfiilUsuario # slug do schedule
       parameters:
-        table_id: perfilUsuario # Nome da tabela no BigQuery
+        table_id: PerfiilUsuario # Nome da tabela no BigQuery
         execute_query: |
           SELECT *
-          FROM vigiaurbano.perfilUsuario
+          FROM vigiaurbano.PerfiilUsuario
 
     - interval: 3600 # executa a cada 1 hora
       anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
