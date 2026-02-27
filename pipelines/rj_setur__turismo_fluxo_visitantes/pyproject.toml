@@ -1,0 +1,10 @@
+[project]
+name = "rj_setur__turismo_fluxo_visitantes"
+version = "0.1.0"
+description = "Pipeline turismo fluxo visitantes da secretaria setur"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
