@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Pipeline turismo fluxo visitantes da secretaria setur"
 dependencies = [
     "prefect_rj_iplanrio",
-    "pyjanitor==0.32.20",
 ]
 
 [tool.uv.sources]
