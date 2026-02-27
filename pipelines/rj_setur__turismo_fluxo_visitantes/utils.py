@@ -48,7 +48,7 @@ def get_worksheet_ranges_config() -> dict[str, list[tuple[str, str | None]]]:
         "Ranking nacional por estado": [
             ("A3:O30", None),
         ],
-        "Municipio": [
+        "Município": [
             ("A3:D16", None),
         ],
     }
