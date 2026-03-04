@@ -3755,6 +3755,8 @@ dependencies = [
     { name = "gspread" },
     { name = "httpx" },
     { name = "pandas" },
+    { name = "prefect" },
+    { name = "prefect-docker" },
 ]
 
 [package.metadata]
@@ -3764,6 +3766,8 @@ requires-dist = [
     { name = "gspread", specifier = ">=6.0.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "pandas", specifier = ">=2.0.0" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
 ]
 
 [[package]]
@@ -3775,6 +3779,8 @@ dependencies = [
     { name = "google-cloud-bigquery" },
     { name = "httpx" },
     { name = "pandas" },
+    { name = "prefect" },
+    { name = "prefect-docker" },
 ]
 
 [package.metadata]
@@ -3783,6 +3789,8 @@ requires-dist = [
     { name = "google-cloud-bigquery", specifier = ">=3.25.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "pandas", specifier = ">=2.0.0" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
 ]
 
 [[package]]
