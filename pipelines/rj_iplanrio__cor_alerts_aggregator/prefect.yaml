@@ -57,6 +57,6 @@ deployments:
         command: uv run --package rj_iplanrio__cor_alerts_aggregator -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-    schedules:
+    schedule:
       - cron: "*/2 * * * *"
         timezone: America/Sao_Paulo
