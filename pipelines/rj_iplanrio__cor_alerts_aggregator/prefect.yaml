@@ -33,7 +33,7 @@ deployments:
       destination: google_sheets
       spreadsheet_id: "1ewoRPUvPRdmdy-jrwPGLIVyd0DAQuiNsKxXDR3CwC-Q"
     work_pool:
-      name: k3s-pool
+      name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
