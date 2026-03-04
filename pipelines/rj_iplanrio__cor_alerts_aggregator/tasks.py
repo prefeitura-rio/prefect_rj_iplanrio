@@ -117,8 +117,8 @@ def fetch_pending_alerts(
     env_validated = validate_environment(environment)
 
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
-    dataset = "brutos_eai_logs_staging"  # Reads precisam do sufixo _staging explicito
-    queue_table = CORAlertAggregatorConstants.QUEUE_TABLE_ID.value
+    dataset = CORAlertAggregatorConstants.DATASET_ID.value
+    queue_table = CORAlertAggregatorConstants.HISTORY_TABLE_ID.value
     sent_table = CORAlertAggregatorConstants.SENT_TABLE_ID.value
 
     log(f"Buscando alertas em {billing_project}.{dataset}.{queue_table}")
@@ -141,7 +141,7 @@ def fetch_pending_alerts(
             q.address,
             q.latitude,
             q.longitude,
-            PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) as created_at,
+            CAST(q.created_at AS DATETIME) as created_at,
             q.environment
         FROM `{billing_project}.{dataset}.{queue_table}` q
         LEFT JOIN `{sent_table_ref}` s
@@ -151,7 +151,7 @@ def fetch_pending_alerts(
             AND q.environment = '{env_validated}'
             AND q.latitude IS NOT NULL
             AND q.longitude IS NOT NULL
-            AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', q.created_at) >= DATETIME_SUB(
+            AND CAST(q.created_at AS DATETIME) >= DATETIME_SUB(
                 CURRENT_DATETIME('America/Sao_Paulo'),
                 INTERVAL {time_window_minutes + 3} MINUTE
             )
@@ -169,13 +169,13 @@ def fetch_pending_alerts(
             address,
             latitude,
             longitude,
-            PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) as created_at,
+            CAST(created_at AS DATETIME) as created_at,
             environment
         FROM `{billing_project}.{dataset}.{queue_table}`
         WHERE environment = '{env_validated}'
             AND latitude IS NOT NULL
             AND longitude IS NOT NULL
-            AND PARSE_DATETIME('%Y-%m-%d %H:%M:%S', created_at) >= DATETIME_SUB(
+            AND CAST(created_at AS DATETIME) >= DATETIME_SUB(
                 CURRENT_DATETIME('America/Sao_Paulo'),
                 INTERVAL {time_window_minutes + 3} MINUTE
             )
@@ -459,7 +459,7 @@ def build_cluster_dataframe(
         "location": representative_address,
         "priority": priority,
         "agency_event_type_code": agency_event_type[:500],
-        "created_date": now_sp.strftime("%Y-%m-%d %H:%M:%S"),
+        "created_date": now_sp.strftime("%d/%m/%Y %H:%M:%S"),
         "latitude": cluster.centroid_lat,
         "longitude": cluster.centroid_lng,
         "alert_ids": ",".join(cluster.alert_ids),
