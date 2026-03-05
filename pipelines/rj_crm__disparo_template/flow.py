@@ -135,7 +135,7 @@ def rj_crm__disparo_template(
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
     crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
-
+    # force deploy
     add_contacts_to_whitelist(
             destinations=[{"to": "5521999999881"}],
             percentage_to_insert=100,
