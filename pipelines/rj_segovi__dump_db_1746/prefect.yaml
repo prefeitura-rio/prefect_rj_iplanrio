@@ -48,6 +48,17 @@ deployments:
   #     - interval: 86400
   #       anchor_date: '2025-07-15T00:10:00'
   #       timezone: America/Sao_Paulo
+  #       slug: tb_chamado_atributo_smtr
+  #       parameters:
+  #         table_id: tb_chamado_atributo_smtr
+  #         dataset_id: brutos_1746
+  #         dump_mode: overwrite
+  #         execute_query: select ds_valor, fl_ativo, id_atributo_fk, id_chamado_atributo, id_chamado_fk, id_unidade_organizacional_fk from tb_chamado_atributo where id_atributo_fk = 812
+
+  #   schedules:
+  #     - interval: 86400
+  #       anchor_date: '2025-07-15T00:10:00'
+  #       timezone: America/Sao_Paulo
   #       slug: chamado_cpf
   #       parameters:
   #         table_id: chamado_cpf
