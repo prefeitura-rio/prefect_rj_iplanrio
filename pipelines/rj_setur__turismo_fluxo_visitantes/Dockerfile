@@ -7,8 +7,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
 
-COPY ./pipelines/rj_iplanrio__data_catalog ./pipelines/rj_iplanrio__data_catalog/
+COPY ./pipelines/rj_setur__turismo_fluxo_visitantes ./pipelines/rj_setur__turismo_fluxo_visitantes/
 
-RUN apt update && apt install jq -y
-
-RUN uv sync --package rj_iplanrio__data_catalog
+RUN uv sync --package rj_setur__turismo_fluxo_visitantes
