@@ -659,7 +659,7 @@ schedules:
                 -- filtro falhas aqui pq se falhou na segunda/última hsm ele vai continuar enviando o agradecimento e pagando para falhar
                 ultima_data_falha is null
               -- filtra se a pessoa já recebeu o agradecimento há pouco tempo já que ela pode ter mais de uma cota por mês
-               and  (data_disparo_agradecimento is null or data_disparo_agradecimento <= date_sub(current_date(), INTERVAL 15 day))
+               and  (data_disparo_agradecimento is null or data_disparo_agradecimento <= date_sub(current_date(), INTERVAL 180 day))
 
             ),
             contribuinte as (
