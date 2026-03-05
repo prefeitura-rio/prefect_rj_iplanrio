@@ -93,7 +93,6 @@ def rj_iplanrio__cor_alerts_aggregator(
 
         # 1. Buscar alertas pendentes
         pending_alerts = fetch_pending_alerts(
-            environment=environment,
             time_window_minutes=time_window_minutes,
         )
 
