@@ -664,19 +664,22 @@ def get_retry_destinations(
       ]
     }
     """
-    # Consulta robusta: pega apenas quem o STATUS ATUAL (mais recente) é FAILED
+
+    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagenm.
     query = f"""
         WITH ranked_messages AS (
             SELECT
                 targetExternalId,
                 max(
-                CASE
-                WHEN status = "PROCESSING" THEN 1
-                WHEN status = "SENT" THEN 2
-                WHEN status = "DELIVERED" THEN 3
-                WHEN status = "READ" THEN 4
-                WHEN status = "FAILED" THEN 5
-            END) AS id_status_disparo
+                    CASE
+                    WHEN status = "PROCESSING" THEN 1
+                    WHEN status = "FAILED" THEN 2
+                    WHEN status = "SENT" THEN 3
+                    WHEN status = "DELIVERED" THEN 4
+                    WHEN status = "READ" THEN 5
+                    END
+                ) AS id_status_disparo,
+                row_number() over (partition by targetExternalId order by createDate desc) as rn
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             WHERE templateId = {id_hsm}
                 AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
@@ -684,7 +687,8 @@ def get_retry_destinations(
         )
         SELECT DISTINCT targetExternalId
         FROM ranked_messages
-        WHERE id_status_disparo = 5
+        WHERE id_status_disparo = 2 AND rn = 1
+        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
     """
     try:
         failed_df = download_data_from_bigquery(
