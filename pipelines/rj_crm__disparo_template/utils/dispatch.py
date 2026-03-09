@@ -157,7 +157,6 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
         destinations = destinations.to_dict("records")
     
     print(f"Destination example {destinations[0]} before removing key others")
-    destinations = [item.pop("others", None) for item in destinations if "others" in item]  # Remove 'others' field if exists
 
     # Create a copy of destinations without the 'others' key for the payload
     # This ensures we don't mutate the original data needed for retries
@@ -651,6 +650,19 @@ def get_retry_destinations(
 ) -> List[Dict]:
     """
     Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
+
+    Exemplo de como deve estar o schema da query:
+    {
+       "celular_disparo": "5521999999999",
+       "externalId": "12345678901",
+       "vars": {
+         "nome_usuario": "João Silva"
+       },
+       "others": [
+         "5521888888888",
+         "5521777777777"
+      ]
+    }
     """
     # Consulta robusta: pega apenas quem o STATUS ATUAL (mais recente) é FAILED
     query = f"""
