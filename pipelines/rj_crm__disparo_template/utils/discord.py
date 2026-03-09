@@ -105,7 +105,7 @@ def send_dispatch_success_notification(
     total_batches: int,
     sample_destination: dict = None,
     test_mode: bool = False,
-    whitelist_percentage: int = 0,
+    # whitelist_percentage: int = 0,
     attempt_number: int = 1,
     max_dispatch_retries: int = 3,
 ):
@@ -136,10 +136,10 @@ def send_dispatch_success_notification(
 🆔 **ID HSM:** {id_hsm}
 📋 **Campanha:** {campaign_name}
 💰 **Centro de Custo:** {cost_center_id}
-**️⃣ **Tentativa:** {attempt_number} de {max_dispatch_retries}
-📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
-📖 **Quantidade de pessoas na Whitelist:** {int(whitelist_percentage*total_dispatches/100)}
+*️⃣ **Tentativa:** {attempt_number} de {max_dispatch_retries}
 """
+# 📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
+# 📖 **Quantidade de pessoas na Whitelist:** {int(whitelist_percentage*total_dispatches/100)}
 
     # Add sample destination if provided
     if sample_destination:

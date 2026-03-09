@@ -90,7 +90,7 @@ def rj_crm__disparo_template(
     sleep_minutes: int | None = 5,
     max_dispatch_retries: int = 1,
     infisical_secret_path: str = "/wetalkie",
-    whitelist_percentage: int = 100,
+    whitelist_percentage: int = 0,
     whitelist_environment: str = "production",
     flow_environment: str = "staging",
 ):
@@ -270,7 +270,7 @@ def rj_crm__disparo_template(
             total_batches=total_batches,
             sample_destination=(final_destinations[0] if final_destinations else None),
             test_mode=test_mode,
-            whitelist_percentage=whitelist_percentage,
+            # whitelist_percentage=whitelist_percentage,
             attempt_number=i,
             max_dispatch_retries=max_dispatch_retries,  
         )

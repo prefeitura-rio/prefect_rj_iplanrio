@@ -17,7 +17,7 @@ schedules:
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 100
+      whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
       query: |
@@ -214,7 +214,7 @@ schedules:
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 100
+      whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
       query: |
@@ -409,7 +409,7 @@ schedules:
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 100
+      whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
       query: |
@@ -759,7 +759,7 @@ schedules:
 #       dump_mode: append
 #       test_mode: false
 #       sleep_minutes: 5
-#       whitelist_percentage: 100
+#       whitelist_percentage: 0
 #       infisical_secret_path: "/wetalkie"
 #       whitelist_environment: "production"
 #       query: |
