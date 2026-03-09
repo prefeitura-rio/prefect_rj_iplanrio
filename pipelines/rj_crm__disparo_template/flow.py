@@ -20,7 +20,7 @@ from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # py
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_no_destinations_found,
-    send_dispatch_result_notification,
+    # send_retry_dispatch_result_notification,
     send_dispatch_success_notification,
     send_discord_notification,
 )
@@ -34,6 +34,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     dispatch,
     format_query,
     get_destinations,
+    get_retry_destinations,
     remove_duplicate_cpfs,
     remove_duplicate_phones,
 )
@@ -87,6 +88,7 @@ def rj_crm__disparo_template(
     filter_duplicated_phones: bool = True,
     filter_duplicated_cpfs: bool = True,
     sleep_minutes: int | None = 5,
+    max_dispatch_retries: int = 1,
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 100,
     whitelist_environment: str = "production",
@@ -114,6 +116,7 @@ def rj_crm__disparo_template(
         filter_duplicated_phones (bool, optional): If True, removes duplicate phone numbers from the destination list. Defaults to True.
         filter_duplicated_cpfs (bool, optional): If True, removes duplicate CPFs from the destination list. Defaults to True.
         sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
+        max_dispatch_retries (int): Maximum number of retry attempts using alternative phone numbers. Defaults to 1.
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
         whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
         whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
@@ -135,19 +138,7 @@ def rj_crm__disparo_template(
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
     crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
-    # force deploy
-    add_contacts_to_whitelist(
-            destinations=[{"to": "5521999999881"}],
-            percentage_to_insert=100,
-            group_name="prefeitura_interno",
-            environment="production",
-    )
-    add_contacts_to_whitelist(
-            destinations=[{"to": "5521999999881"}],
-            percentage_to_insert=100,
-            group_name="prefeitura_interno",
-            environment="staging",
-    )
+
     if test_mode:
         campaign_name = "teste-"+campaign_name
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
@@ -202,35 +193,59 @@ def rj_crm__disparo_template(
         )
         return  # flow termina aqui, nada downstream é agendado
 
-    # Remove duplicate phone numbers and CPFs if flags are set
-    unique_phone_destinations = remove_duplicate_phones(validated_destinations) if filter_duplicated_phones else validated_destinations
-    unique_destinations = remove_duplicate_cpfs(unique_phone_destinations) if filter_duplicated_cpfs else unique_phone_destinations
+    # Remove duplicate CPFs if flag is set
+    base_destinations = remove_duplicate_cpfs(validated_destinations) if filter_duplicated_cpfs else validated_destinations
 
-    # Log destination counts for tracking
-    print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
+    print(f"Total unique destinations to dispatch: {len(base_destinations)}")
 
     # Add contacts to whitelist if percentage is set
     if whitelist_percentage > 0:
         whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
         add_contacts_to_whitelist(
-            destinations=unique_destinations,
+            destinations=base_destinations,
             percentage_to_insert=whitelist_percentage,
             group_name=whitelist_group_name,
             environment=whitelist_environment,
         )
 
-    if api_status:
+    if not api_status:
+        print("API is not accessible. Ending flow execution.")
+        return
+    
+    # Destinos que serão processados na iteração atual do loop
+    current_attempt_destinations = base_destinations
+
+    # RETRY LOOP
+    for i in range(1, max_dispatch_retries + 1):
+        
+        if i > 1:
+            print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
+            retry_destinations = get_retry_destinations(
+                id_hsm=id_hsm,
+                original_destinations=base_destinations,
+                billing_project_id=billing_project_id,
+                attempt_number=i
+            )
+
+            if not retry_destinations:
+                print(f"✅ No remaining failures found for retry attempt {i}. Ending retry loop.")
+                break
+
+            print(f"🚀 Found {len(retry_destinations)} destinations to retry for attempt {i}.")
+            current_attempt_destinations = retry_destinations
+
+        # Filter duplicates (important as 'others' might have repetitions)
+        final_destinations = remove_duplicate_phones(current_attempt_destinations) if filter_duplicated_phones else current_attempt_destinations
+        
         dispatch_payload = create_dispatch_payload(
-            campaign_name=campaign_name,
+            campaign_name=campaign_name if i == 1 else f"{campaign_name}-retry-{i}",
             cost_center_id=cost_center_id,
-            destinations=unique_destinations,
+            destinations=final_destinations,
         )
 
-        printar(id_hsm)
         print(
-            f"\nStarting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}\n"
+            f"\nStarting dispatch for id_hsm={id_hsm}, retry={i}, campaign_name={campaign_name}, example data {final_destinations[:5]}\n"
         )
-        # TODO: adicionar print da hsm
         print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
         time.sleep(sleep_minutes * 60)
 
@@ -241,26 +256,28 @@ def rj_crm__disparo_template(
             chunk=chunk_size,
         )
 
-        print(f"Dispatch completed successfully for {len(unique_destinations)} destinations")
+        print(f"Dispatch completed successfully for {len(final_destinations)} destinations on attempt {i}.")
 
-        total_batches = ceil(len(unique_destinations) / chunk_size)
+        total_batches = ceil(len(final_destinations) / chunk_size)
 
-        # Send Discord notification
+        # Send Discord notification for attempt
         send_dispatch_success_notification(
-            total_dispatches=len(unique_destinations),
+            total_dispatches=len(final_destinations),
             dispatch_date=dispatch_date,
             id_hsm=id_hsm,
             campaign_name=campaign_name,
             cost_center_id=cost_center_id,
             total_batches=total_batches,
-            sample_destination=(unique_destinations[0] if unique_destinations else None),
+            sample_destination=(final_destinations[0] if final_destinations else None),
             test_mode=test_mode,
             whitelist_percentage=whitelist_percentage,
+            attempt_number=i,
+            max_dispatch_retries=max_dispatch_retries,  
         )
 
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
-            original_destinations=unique_destinations,
+            original_destinations=final_destinations,
             campaign_name=campaign_name,
             cost_center_id=cost_center_id,
             dispatch_date=dispatch_date,
@@ -296,18 +313,3 @@ def rj_crm__disparo_template(
                 dump_mode=dump_mode,
                 biglake_table=False,
             )
-
-        # Wait 15 minutes before querying results
-        print("⚠️  Waiting 15 minutes before checking dispatch results...")
-        time.sleep(15 * 60)
-
-        # Send results notification with BigQuery data
-        send_dispatch_result_notification(
-            total_dispatches=len(unique_destinations),
-            dispatch_date=dispatch_date,
-            id_hsm=id_hsm,
-            campaign_name=campaign_name,
-            cost_center_id=cost_center_id,
-            total_batches=total_batches,
-            test_mode=test_mode,
-        )

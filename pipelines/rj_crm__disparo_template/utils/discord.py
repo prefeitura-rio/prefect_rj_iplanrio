@@ -106,6 +106,8 @@ def send_dispatch_success_notification(
     sample_destination: dict = None,
     test_mode: bool = False,
     whitelist_percentage: int = 0,
+    attempt_number: int = 1,
+    max_dispatch_retries: int = 3,
 ):
     """
     Envia notificação de sucesso de disparo para Discord.
@@ -119,6 +121,8 @@ def send_dispatch_success_notification(
         total_batches: Número total de lotes enviados
         sample_destination: Exemplo de destinatário (opcional)
         test_mode: Indica se é um disparo de teste (opcional)
+        attempt_number: Número da tentativa de repescagem
+        max_dispatch_retries: Número máximo de tentativas de repescagem
     """
 
     # Adicionar indicador [TESTE] no título se test_mode=True
@@ -132,6 +136,7 @@ def send_dispatch_success_notification(
 🆔 **ID HSM:** {id_hsm}
 📋 **Campanha:** {campaign_name}
 💰 **Centro de Custo:** {cost_center_id}
+**️⃣ **Tentativa:** {attempt_number} de {max_dispatch_retries}
 📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
 📖 **Quantidade de pessoas na Whitelist:** {int(whitelist_percentage*total_dispatches/100)}
 """
@@ -258,6 +263,87 @@ def send_dispatch_result_notification(
         message += "Os dados podem ainda não ter sido processados pelo webhook."
 
     send_discord_notification(webhook_url, message)
+
+
+def send_retry_dispatch_result_notification(
+    total_dispatches: int,
+    dispatch_date: str,
+    id_hsm: int,
+    campaign_name: str,
+    cost_center_id: int,
+    total_batches: int,
+    test_mode: bool = False,
+):
+    """
+    Envia notificação com resultados finais considerando retentativas.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+
+    # Query que agrupa por CPF e pega o status mais recente
+    results_query = f"""
+        WITH ranked_messages AS (
+            SELECT
+                targetExternalId,
+                status,
+                ROW_NUMBER() OVER(PARTITION BY targetExternalId ORDER BY datarelay_timestamp DESC) as rn
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE templateId = {id_hsm}
+                AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+        ),
+        latest_status AS (
+            SELECT status, targetExternalId FROM ranked_messages WHERE rn = 1
+        ),
+        total AS (
+            SELECT COUNT(DISTINCT targetExternalId) as total_cpfs FROM latest_status
+        ),
+        aggregated AS (
+            SELECT
+                status,
+                CASE
+                    WHEN status = "PROCESSING" THEN 1
+                    WHEN status = "SENT" THEN 2
+                    WHEN status = "DELIVERED" THEN 3
+                    WHEN status = "READ" THEN 4
+                    WHEN status = "FAILED" THEN 5
+                    ELSE 6
+                END AS status_ranking,
+                COUNT(*) as quantidade_cpfs
+            FROM latest_status
+            GROUP BY status, status_ranking
+        )
+        SELECT
+            status,
+            quantidade_cpfs,
+            ROUND(quantidade_cpfs * 100.0 / total_cpfs, 1) as percentual
+        FROM aggregated
+        CROSS JOIN total
+        ORDER BY status_ranking
+    """
+
+    log("Querying BigQuery for final retry results...")
+    results_df = download_data_from_bigquery(
+        query=results_query, billing_project_id="rj-crm-registry", bucket_name="rj-crm-registry"
+    )
+
+    title = "🔄 **[TESTE] Resultados Finais (Pós-Retentativa)**" if test_mode else "🔄 **Resultados Finais (Pós-Retentativa)**"
+
+    message = f"""{title}
+
+📋 **Campanha:** {campaign_name}
+🆔 **Template ID:** {id_hsm}
+🕐 **Início do Disparo:** {dispatch_date}
+📦 **Total de CPFs alvo:** {total_dispatches}
+
+**Status Final por CPF:**
+"""
+    if len(results_df) > 0:
+        for _, row in results_df.iterrows():
+            message += f"• **{row['status']}**: {int(row['quantidade_cpfs'])} CPFs ({row['percentual']}%)\n"
+    else:
+        message += "⚠️ Nenhum resultado processado até o momento."
+
+    send_discord_notification(webhook_url, message)
+
 
 def _format_sample_destination(destination: dict) -> str:
     """

@@ -155,9 +155,20 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
     # Convert DataFrame to list if needed
     if isinstance(destinations, pd.DataFrame):
         destinations = destinations.to_dict("records")
+    
+    print(f"Destination example {destinations[0]} before removing key others")
+    destinations = [item.pop("others", None) for item in destinations if "others" in item]  # Remove 'others' field if exists
+
+    # Create a copy of destinations without the 'others' key for the payload
+    # This ensures we don't mutate the original data needed for retries
+    payload_destinations = []
+    for dest in destinations:
+        new_dest = dest.copy()
+        new_dest.pop("others", None)
+        payload_destinations.append(new_dest)
 
     # Validate destinations first
-    validated_destinations, validation_stats = validate_destinations(destinations)
+    validated_destinations, validation_stats = validate_destinations(payload_destinations)
     log_validation_summary(validation_stats, "create_dispatch_payload")
 
     # Validate complete payload
@@ -629,3 +640,64 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
 
     log(f"\n✅  Active flow found for id_hsm={id_hsm} in environment={flow_environment}.")
     return True
+
+
+@task
+def get_retry_destinations(
+    id_hsm: int,
+    original_destinations: List[Dict],
+    billing_project_id: str,
+    attempt_number: int  # 2 para primeira retentativa, 3 para segunda...
+) -> List[Dict]:
+    """
+    Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
+    """
+    # Consulta robusta: pega apenas quem o STATUS ATUAL (mais recente) é FAILED
+    query = f"""
+        WITH ranked_messages AS (
+            SELECT
+                targetExternalId,
+                max(
+                CASE
+                WHEN status = "PROCESSING" THEN 1
+                WHEN status = "SENT" THEN 2
+                WHEN status = "DELIVERED" THEN 3
+                WHEN status = "READ" THEN 4
+                WHEN status = "FAILED" THEN 5
+            END) AS id_status_disparo
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE templateId = {id_hsm}
+                AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+                group by 1
+        )
+        SELECT DISTINCT targetExternalId
+        FROM ranked_messages
+        WHERE id_status_disparo = 5
+    """
+    try:
+        failed_df = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id
+        )
+        failed_ids = set(failed_df['targetExternalId'].tolist())
+    except Exception as e:
+        log(f"Erro ao buscar falhas para atentativa: {e}")
+        return []
+
+    if not failed_ids:
+        log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
+        return []
+
+    retry_destinations = []
+    for dest in original_destinations:
+        others = dest.get('others', [])
+        # Se falhou e existe um telefone para esta tentativa (índice i-1)
+        # Ao entrar aqui attempt_number começa em 2, então para acessar o primeiro número da lista 'others' usamos attempt_number - 2
+        if dest.get('externalId') in failed_ids and len(others) >= (attempt_number - 1):
+            new_dest = dest.copy()
+            new_dest['to'] = others[attempt_number - 2]  # Pega o próximo telefone
+            retry_destinations.append(new_dest)
+
+    log(f"Preparados {len(retry_destinations)} destinos para a tentativa {attempt_number}.")
+    return retry_destinations
