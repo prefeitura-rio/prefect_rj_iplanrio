@@ -6,6 +6,7 @@ dependencies = [
     "prefect_rj_iplanrio",
     "openpyxl>=3.1.5",
     "xlrd>=2.0.2",
+    "setuptools>=82.0.1",
 ]
 
 [tool.uv.sources]
