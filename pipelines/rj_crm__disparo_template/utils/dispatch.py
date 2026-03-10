@@ -709,7 +709,7 @@ def get_retry_destinations(
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
-        print(f"DEBUG: Primeiros IDs com falha detectados para retentativa: {failed_df.head()}... (total {failed_df.shape[0]})")
+        print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
@@ -735,5 +735,5 @@ def get_retry_destinations(
             print(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
 
-    log(f"Preparados {len(retry_destinations)} destinos para a tentativa {attempt_number}.")
+    log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
     return retry_destinations
