@@ -587,8 +587,19 @@ def create_cadunico_dbt_consolidated_models(
 
     # Apply conversion with context information
     def convert_with_context(row):
-        context = f"column={row.get('column', 'unknown')}, reg={row.get('reg', 'unknown')}, version={row.get('version', 'unknown')}"
-        return convert_string_to_json(row["dicionario_atributos"], context=context)
+        try:
+            context = f"column={row.get('column', 'unknown')}, reg={row.get('reg', 'unknown')}, version={row.get('version', 'unknown')}"
+            value = row["dicionario_atributos"]
+
+            # Extra safety: convert NaN to None before JSON parsing
+            if pd.isna(value):
+                return None
+
+            return convert_string_to_json(value, context=context)
+        except Exception as e:
+            error_msg = f"ERROR in convert_with_context: {e}\nRow: {row.to_dict()}"
+            log(error_msg)
+            raise
 
     df["dicionario_atributos"] = df.apply(convert_with_context, axis=1)
 
@@ -661,6 +672,10 @@ def create_cadunico_dbt_consolidated_models(
                 )
                 dicionario_atributos = row["dicionario_atributos"]
 
+                # Force convert NaN to None (safety check in case the apply didn't work)
+                if pd.isna(dicionario_atributos):
+                    dicionario_atributos = None
+
                 # Validate dicionario_atributos type
                 if dicionario_atributos is not None and not isinstance(
                     dicionario_atributos, dict
@@ -668,7 +683,10 @@ def create_cadunico_dbt_consolidated_models(
                     error_msg = (
                         f"ERROR: dicionario_atributos should be a dict but got {type(dicionario_atributos)}\n"
                         f"  Column: {column}\n"
+                        f"  Reg: {row['reg']}\n"
+                        f"  Version: {row['version']}\n"
                         f"  Value: {dicionario_atributos}\n"
+                        f"  This indicates the JSON conversion did not work properly."
                     )
                     log(error_msg)
                     raise TypeError(error_msg)
