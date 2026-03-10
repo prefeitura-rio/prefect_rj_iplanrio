@@ -11,7 +11,7 @@ import os
 import random
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
@@ -202,9 +202,8 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         batch_payload["campaignName"] = f"{original_campaign_name}-{dispatch_date[:10]}-lote{i}"
 
         log(f"Disparando lote {i} de {total_batches} com {len(batch)} destinos")
-        print(f"DEBUG: Payload for batch {i}: {batch_payload}")
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=batch_payload)
-        print(f"DEBUG: {response.status_code} - {response.text}")
+
         if response.status_code != 201:
             log(f"Falha no disparo do lote {i}: {response.text}")
             response.raise_for_status()
@@ -631,15 +630,27 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
     return True
 
 
+def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
+        """Busca uma chave em um dicionário ignorando maiúsculas/minúsculas e retorna o valor."""
+        target_lower = target_key.lower()
+        if not isinstance(d, dict):
+            return None
+        for k, v in d.items():
+            if k.lower() == target_lower:
+                return v
+        return None
+
+
 @task
 def get_retry_destinations(
     id_hsm: int,
     original_destinations: List[Dict],
     billing_project_id: str,
-    attempt_number: int  # 2 para primeira retentativa, 3 para segunda...
+    attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
 ) -> List[Dict]:
     """
     Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
+    Suporta chaves com variações de maiúsculas/minúsculas e estruturas aninhadas.
 
     Exemplo de como deve estar o schema da query:
     {
@@ -655,7 +666,7 @@ def get_retry_destinations(
     }
     """
 
-    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagenm.
+    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
     query = f"""
         WITH status_por_disparo AS (
             SELECT
@@ -672,7 +683,7 @@ def get_retry_destinations(
                 ) AS id_status_disparo
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             WHERE templateId = {id_hsm}
-            -- AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+            AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
             GROUP BY targetExternalId, createDate
         ),
 
@@ -698,9 +709,10 @@ def get_retry_destinations(
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
-        failed_ids = set(failed_df['targetExternalId'].tolist())
+        failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
+        print(f"DEBUG: Primeiros IDs com falha detectados para retentativa: {failed_ids[:5]}... (total {len(failed_ids)})")
     except Exception as e:
-        log(f"Erro ao buscar falhas para a tentativa: {e}")
+        log(f"Erro ao buscar falhas para retentativa: {e}")
         return []
 
     if not failed_ids:
@@ -709,13 +721,17 @@ def get_retry_destinations(
 
     retry_destinations = []
     for dest in original_destinations:
-        others = dest.get('others', [])
-        # Se falhou e existe um telefone para esta tentativa (índice attempt_number-1)
-        # i=1 (1ª retentativa) -> attempt_number=1 -> acessa others[0]
-        if dest.get('externalId') in failed_ids and len(others) >= attempt_number:
+        # Busca externalId e others ignorando o "case"
+        ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
+        others = get_value_from_case_insensitive_key(dest, 'others') or []
+        print(f"DEBUG dest {dest}")
+        print(f"DEBUG: ext_id = {ext_id} others = {others}")
+
+        if ext_id is not None and str(ext_id) in failed_ids and len(others) >= attempt_number:
             new_dest = dest.copy()
             print(f"DEBUG: new_dest = {new_dest}, próximo num: {others[attempt_number - 1]}")
-            new_dest['to'] = others[attempt_number - 1]  # Pega o próximo telefone
+            # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
+            new_dest['to'] = others[attempt_number - 1]
             print(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
 
