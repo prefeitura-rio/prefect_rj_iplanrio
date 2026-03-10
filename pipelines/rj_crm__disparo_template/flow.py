@@ -280,21 +280,6 @@ def rj_crm__disparo_template(
 
         total_batches = ceil(len(final_destinations) / chunk_size)
 
-        # Send Discord notification for attempt
-        send_dispatch_success_notification(
-            total_dispatches=len(final_destinations),
-            dispatch_date=dispatch_date,
-            id_hsm=id_hsm,
-            campaign_name=campaign_name,
-            cost_center_id=cost_center_id,
-            total_batches=total_batches,
-            sample_destination=(final_destinations[0] if final_destinations else None),
-            test_mode=test_mode,
-            # whitelist_percentage=whitelist_percentage,
-            attempt_number=i + 1,  # Exibe 1 para o primeiro disparo, 2 para o retry...
-            total_attempt_number=max_dispatch_retries + 1,
-        )
-
         dfr = create_dispatch_dfr(
             id_hsm=id_hsm,
             original_destinations=final_destinations,
@@ -306,6 +291,21 @@ def rj_crm__disparo_template(
         print(f"DataFrame created with {len(dfr)} records for BigQuery upload")
 
         if not test_mode:
+            # Send Discord notification for attempt
+            send_dispatch_success_notification(
+                total_dispatches=len(final_destinations),
+                dispatch_date=dispatch_date,
+                id_hsm=id_hsm,
+                campaign_name=campaign_name,
+                cost_center_id=cost_center_id,
+                total_batches=total_batches,
+                sample_destination=(final_destinations[0] if final_destinations else None),
+                test_mode=test_mode,
+                # whitelist_percentage=whitelist_percentage,
+                attempt_number=i + 1,  # Exibe 1 para o primeiro disparo, 2 para o retry...
+                total_attempt_number=max_dispatch_retries + 1,
+            )
+
             partitions_path = create_date_partitions(
                 dataframe=dfr,
                 partition_column="dispatch_date",
@@ -333,3 +333,4 @@ def rj_crm__disparo_template(
                 dump_mode=dump_mode,
                 biglake_table=False,
             )
+    # force deploy

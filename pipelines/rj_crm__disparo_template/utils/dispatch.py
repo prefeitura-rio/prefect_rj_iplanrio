@@ -202,9 +202,9 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         batch_payload["campaignName"] = f"{original_campaign_name}-{dispatch_date[:10]}-lote{i}"
 
         log(f"Disparando lote {i} de {total_batches} com {len(batch)} destinos")
-
+        print(f"DEBUG: Payload for batch {i}: {batch_payload}")
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=batch_payload)
-
+        print(f"DEBUG: {response.status_code} - {response.text}")
         if response.status_code != 201:
             log(f"Falha no disparo do lote {i}: {response.text}")
             response.raise_for_status()
