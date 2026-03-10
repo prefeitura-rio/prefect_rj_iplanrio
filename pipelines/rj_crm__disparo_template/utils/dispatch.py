@@ -657,27 +657,39 @@ def get_retry_destinations(
 
     # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagenm.
     query = f"""
-        WITH ranked_messages AS (
+        WITH status_por_disparo AS (
             SELECT
                 targetExternalId,
-                max(
+                createDate,
+                MAX(
                     CASE
-                    WHEN status = "PROCESSING" THEN 1
-                    WHEN status = "FAILED" THEN 2
-                    WHEN status = "SENT" THEN 3
-                    WHEN status = "DELIVERED" THEN 4
-                    WHEN status = "READ" THEN 5
+                        WHEN status = "PROCESSING" THEN 1
+                        WHEN status = "FAILED" THEN 2
+                        WHEN status = "SENT" THEN 3
+                        WHEN status = "DELIVERED" THEN 4
+                        WHEN status = "READ" THEN 5
                     END
-                ) AS id_status_disparo,
-                row_number() over (partition by targetExternalId order by createDate desc) as rn
+                ) AS id_status_disparo
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             WHERE templateId = {id_hsm}
-                AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
-                group by 1
+            -- AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+            GROUP BY targetExternalId, createDate
+        ),
+
+        ranked AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY targetExternalId
+                    ORDER BY createDate DESC
+                ) AS rn
+            FROM status_por_disparo
         )
-        SELECT DISTINCT targetExternalId
-        FROM ranked_messages
-        WHERE id_status_disparo = 2 AND rn = 1
+
+        SELECT targetExternalId
+        FROM ranked
+        WHERE rn = 1
+        AND id_status_disparo = 2
         -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
     """
     try:
@@ -688,7 +700,7 @@ def get_retry_destinations(
         )
         failed_ids = set(failed_df['targetExternalId'].tolist())
     except Exception as e:
-        log(f"Erro ao buscar falhas para atentativa: {e}")
+        log(f"Erro ao buscar falhas para a tentativa: {e}")
         return []
 
     if not failed_ids:
