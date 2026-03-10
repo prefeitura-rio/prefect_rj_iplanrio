@@ -441,7 +441,7 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
     log("ASCENDING SEARCH")
     df_ascending = columns_version_control_diff(dataframe=dataframe.sort_values(["reg", "versao_layout_particao"]))
     # create new row for versions lass than versao_layout_anterior
-    versions = df_ascending["versao_layout_particao"].unique()
+    versions = df_ascending["versao_layout_particao"].unique().tolist()
     versions.sort()
 
     df_new = pd.DataFrame()
@@ -464,7 +464,7 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
     )
 
     # create new row for versions lass than versao_layout_anterior
-    versions = df_descending["versao_layout_particao"].unique()
+    versions = df_descending["versao_layout_particao"].unique().tolist()
     versions.sort()
     df_new = pd.DataFrame()
     diff = df_descending[df_descending["coluna_esta_versao_anterior"] == "False"]
