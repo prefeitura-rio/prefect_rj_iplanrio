@@ -515,14 +515,20 @@ def dump_dict_to_dbt_yaml(schema, schema_yaml_path):
 
 
 def convert_string_to_json(s):
-    if s is not None:
-        try:
-            return json.loads(str(s))
-        except Exception as e:
-            log(s)
-            raise BaseException(e)
-    else:
-        return s
+    # Check for None and NaN values
+    if pd.isna(s) or s is None:
+        return None
+
+    # Check for string representations of null values
+    s_str = str(s).strip().lower()
+    if s_str in ['nan', 'none', 'null', '']:
+        return None
+
+    try:
+        return json.loads(str(s))
+    except Exception as e:
+        log(s)
+        raise BaseException(e)
 
 
 def create_cadunico_dbt_consolidated_models(
