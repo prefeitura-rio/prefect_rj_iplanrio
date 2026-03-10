@@ -100,22 +100,17 @@ def query_bigquery(
 
 @task
 def fetch_pending_alerts(
-    environment: str,
     time_window_minutes: int = CORAlertAggregatorConstants.TIME_WINDOW_MINUTES.value,
 ) -> pd.DataFrame:
     """
     Busca alertas pendentes no BigQuery.
 
     Args:
-        environment: staging ou prod
         time_window_minutes: Janela de tempo em minutos
 
     Returns:
         DataFrame com alertas pendentes
     """
-    # Valida environment contra whitelist (previne SQL injection)
-    env_validated = validate_environment(environment)
-
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
     dataset = CORAlertAggregatorConstants.DATASET_ID.value
     queue_table = CORAlertAggregatorConstants.HISTORY_TABLE_ID.value
@@ -146,9 +141,7 @@ def fetch_pending_alerts(
         FROM `{billing_project}.{dataset}.{queue_table}` q
         LEFT JOIN `{sent_table_ref}` s
             ON q.alert_id = s.alert_id
-            AND s.environment = '{env_validated}'
         WHERE s.alert_id IS NULL
-            AND q.environment = '{env_validated}'
             AND q.latitude IS NOT NULL
             AND q.longitude IS NOT NULL
             AND CAST(q.created_at AS DATETIME) >= DATETIME_SUB(
@@ -172,8 +165,7 @@ def fetch_pending_alerts(
             CAST(created_at AS DATETIME) as created_at,
             environment
         FROM `{billing_project}.{dataset}.{queue_table}`
-        WHERE environment = '{env_validated}'
-            AND latitude IS NOT NULL
+        WHERE latitude IS NOT NULL
             AND longitude IS NOT NULL
             AND CAST(created_at AS DATETIME) >= DATETIME_SUB(
                 CURRENT_DATETIME('America/Sao_Paulo'),

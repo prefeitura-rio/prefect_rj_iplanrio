@@ -8,4 +8,6 @@ dependencies = [
     "google-cloud-bigquery>=3.25.0",
     "basedosdados==2.0.0b23",
     "gspread>=6.0.0",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
 ]
