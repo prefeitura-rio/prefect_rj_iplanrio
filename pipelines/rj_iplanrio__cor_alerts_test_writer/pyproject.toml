@@ -6,7 +6,7 @@ dependencies = [
     "httpx>=0.27.0",
     "pandas>=2.0.0",
     "google-cloud-bigquery>=3.25.0",
-    "basedosdados==2.0.0b23",
+    "basedosdados==2.0.3",
     "prefect==3.4.9",
     "prefect-docker>=0.6.5",
 ]
