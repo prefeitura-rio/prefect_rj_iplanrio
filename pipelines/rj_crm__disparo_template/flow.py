@@ -276,7 +276,7 @@ def rj_crm__disparo_template(
             chunk=chunk_size,
         )
 
-        print(f"Dispatch completed successfully for {len(final_destinations)} destinations on attempt {i}.")
+        print(f"Dispatch completed successfully for {len(final_destinations)} destinations on attempt {i+1}.")
 
         total_batches = ceil(len(final_destinations) / chunk_size)
 
