@@ -74,7 +74,9 @@ def handle_merged_cells(df):
         if pd.isna(row["reg"]):
             if not pd.isna(row["descricao"]):
                 df.loc[last_index_not_na, "descricao"] = (
-                    str(df.loc[last_index_not_na, "descricao"]) + "    \n" + str(row["descricao"]).strip()
+                    str(df.loc[last_index_not_na, "descricao"])
+                    + "    \n"
+                    + str(row["descricao"]).strip()
                 )
         else:
             last_index_not_na = index
@@ -107,7 +109,9 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
                     ini_col = int(col)
                     end_col = int(col) + len(table_cols) - 1
 
-                    table_data = df.iloc[ini_row : end_row + 1, ini_col : end_col + 1].copy()
+                    table_data = df.iloc[
+                        ini_row : end_row + 1, ini_col : end_col + 1
+                    ].copy()
                     table_data = table_data.reset_index(drop=True)
                     if len(table_data.columns) < len(table_cols):
                         table_data["observacoes"] = np.nan
@@ -130,14 +134,21 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
     found_versions = df_final["version"].unique().tolist()
     found_versions.sort()
     # Log consolidado de versões
-    version_info = f"PARSED VERSIONS: {found_versions}\nFiltered versions: {filter_versions}"
+    version_info = (
+        f"PARSED VERSIONS: {found_versions}\nFiltered versions: {filter_versions}"
+    )
     log(version_info)
 
     df_final = df_final[df_final["version"].isin(filter_versions)]
 
     df_final["column"] = df_final["arquivo_base_versao_7"].fillna("sem_nome")
     df_final["column"] = df_final["column"].apply(
-        lambda x: unidecode(x).replace("-", "_").replace(" ", "_").replace("/", "_").lower().strip()
+        lambda x: unidecode(x)
+        .replace("-", "_")
+        .replace(" ", "_")
+        .replace("/", "_")
+        .lower()
+        .strip()
     )
 
     df_final["reg_version"] = df_final["reg"] + "____" + df_final["version"]
@@ -166,7 +177,9 @@ def parse_tables_from_xlsx(xlsx_input, csv_output, target_pattern, filter_versio
     return df_final
 
 
-def parse_xlsx_files_and_save_partition(output_path: str, raw_filespaths_to_ingest: List) -> str:
+def parse_xlsx_files_and_save_partition(
+    output_path: str, raw_filespaths_to_ingest: List
+) -> str:
     shutil.rmtree(output_path, ignore_errors=True)
     for raw_file in raw_filespaths_to_ingest:
         name = str(raw_file).split("/")[-1]
@@ -176,7 +189,9 @@ def parse_xlsx_files_and_save_partition(output_path: str, raw_filespaths_to_inge
         csv_name = name.replace(".xlsx", ".csv").replace(".xls", ".csv")
 
         version_float = str(float(version[:2] + "." + version[2:]))
-        version_float = version_float if len(version_float) == 4 else f"{version_float}0"
+        version_float = (
+            version_float if len(version_float) == 4 else f"{version_float}0"
+        )
 
         df_final = parse_tables_from_xlsx(  # noqa
             xlsx_input=raw_file,
@@ -188,7 +203,9 @@ def parse_xlsx_files_and_save_partition(output_path: str, raw_filespaths_to_inge
     return str(output_path)
 
 
-def get_existing_partitions(prefix: str, bucket_name: str, dataset_id: str, table_id: str) -> List[str]:
+def get_existing_partitions(
+    prefix: str, bucket_name: str, dataset_id: str, table_id: str
+) -> List[str]:
     """
     Lista as partições já processadas na área de staging.
 
@@ -284,7 +301,9 @@ def download_files_from_storage_raw(
         else:
             action = "→ INCONSISTENTE"
 
-        comparison_msg += f"   {version}: staging={staging_status} raw={raw_status} {action}\n"
+        comparison_msg += (
+            f"   {version}: staging={staging_status} raw={raw_status} {action}\n"
+        )
     log(comparison_msg)
 
     log(
@@ -294,7 +313,9 @@ def download_files_from_storage_raw(
     return raw_filespaths_to_ingest
 
 
-def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_id, layout_table_id):
+def get_layout_table_from_staging(
+    project_id, dataset_id, registo_familia_table_id, layout_table_id
+):
     query = f"""
     WITH layout_unique_columns AS (
         SELECT
@@ -325,17 +346,19 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
     # Log consolidado de validação de colunas
     validation_info = f"VALIDATE COLUMN NAMES\n\nColumns Validation Query:\n{query}"
     log(validation_info)
-    df_validation = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
+    df_validation = bd.read_sql(
+        query=query, billing_project_id=project_id, from_file=True
+    )
 
     if df_validation is not None:
         columns_to_create = df_validation.to_dict(orient="records")
         if len(columns_to_create) >= 1:
-            columns_to_create_str = json.dumps(columns_to_create, indent=2, ensure_ascii=False)
+            columns_to_create_str = json.dumps(
+                columns_to_create, indent=2, ensure_ascii=False
+            )
 
             raise_msg = ""
-            raise_msg += (
-                "Antes de prosseguir as colunas abaixo precisam ser criadas na planilha dicionario_colunas_cadunico:\n"
-            )
+            raise_msg += "Antes de prosseguir as colunas abaixo precisam ser criadas na planilha dicionario_colunas_cadunico:\n"
             raise_msg += "https://docs.google.com/spreadsheets/d/1VgtSVom_s4QsJoOws6caPZxGfwYrpjpoSjbOrqhRbM8/edit?gid=542906575#gid=542906575\n\n"
             raise_msg += f"Colunas que devem ser inseridas:\n{columns_to_create_str}"
             raise ValueError(raise_msg)
@@ -362,13 +385,13 @@ def get_layout_table_from_staging(project_id, dataset_id, registo_familia_table_
 
     if dataframe is not None and not dataframe.empty:
         layout_versions = dataframe["versao_layout_particao"].tolist()
-        not_in_layout_versions = [version for version in versions if version not in layout_versions]  # noqa
+        not_in_layout_versions = [
+            version for version in versions if version not in layout_versions
+        ]  # noqa
         if not_in_layout_versions:
             raise_msg = ""
             raise_msg += "Please, upload the layouts to the storage raw:\n"
-            raise_msg += (
-                "https://console.cloud.google.com/storage/browser/rj-smas/raw/protecao_social_cadunico/layout\n\n"
-            )
+            raise_msg += "https://console.cloud.google.com/storage/browser/rj-smas/raw/protecao_social_cadunico/layout\n\n"
             raise_msg += "layout versions to be uploaded\n{not_in_layout_versions}"
 
             raise ValueError(raise_msg)
@@ -399,7 +422,9 @@ def columns_version_control_diff(dataframe: pd.DataFrame):
             version_columns = df_version["column"].tolist()
 
             next_version = table_versions[i + 1]
-            df_next_version = df_table[df_table["versao_layout_particao"] == next_version]
+            df_next_version = df_table[
+                df_table["versao_layout_particao"] == next_version
+            ]
             next_version_columns = df_next_version["column"].tolist()
 
             control_column_version = []
@@ -439,7 +464,9 @@ def columns_version_control_diff(dataframe: pd.DataFrame):
 
 def parse_columns_version_control(dataframe: pd.DataFrame):
     log("ASCENDING SEARCH")
-    df_ascending = columns_version_control_diff(dataframe=dataframe.sort_values(["reg", "versao_layout_particao"]))
+    df_ascending = columns_version_control_diff(
+        dataframe=dataframe.sort_values(["reg", "versao_layout_particao"])
+    )
     # create new row for versions lass than versao_layout_anterior
     versions = df_ascending["versao_layout_particao"].unique().tolist()
     versions.sort()
@@ -460,7 +487,9 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
 
     log("DESCENDING SEARCH")
     df_descending = columns_version_control_diff(
-        dataframe=dataframe.sort_values(["reg", "versao_layout_particao"], ascending=False)
+        dataframe=dataframe.sort_values(
+            ["reg", "versao_layout_particao"], ascending=False
+        )
     )
 
     # create new row for versions lass than versao_layout_anterior
@@ -514,21 +543,24 @@ def dump_dict_to_dbt_yaml(schema, schema_yaml_path):
     )
 
 
-def convert_string_to_json(s):
+def convert_string_to_json(s, context=None):
     # Check for None and NaN values
     if pd.isna(s) or s is None:
         return None
 
     # Check for string representations of null values
     s_str = str(s).strip().lower()
-    if s_str in ['nan', 'none', 'null', '']:
+    if s_str in ["nan", "none", "null", ""]:
         return None
 
     try:
         return json.loads(str(s))
     except Exception as e:
-        log(s)
-        raise BaseException(e)
+        context_msg = f" | Context: {context}" if context else ""
+        log(f"ERROR converting to JSON{context_msg}")
+        log(f"Value: {s}")
+        log(f"Type: {type(s)}")
+        raise BaseException(f"JSON parse error{context_msg}: {e}")
 
 
 def create_cadunico_dbt_consolidated_models(
@@ -543,14 +575,22 @@ def create_cadunico_dbt_consolidated_models(
 
     df = dataframe.copy()
     df["reg"] = df["reg"].apply(lambda x: x if len(x) > 1 else f"0{x}")
-    df["version"] = df["version"].str.replace(".", "").apply(lambda x: x if len(x) > 3 else f"0{x}")
+    df["version"] = (
+        df["version"].str.replace(".", "").apply(lambda x: x if len(x) > 3 else f"0{x}")
+    )
     df = df.sort_values(["reg", "versao_layout_particao"])
     df["version"] = np.where(
         df["coluna_esta_versao_anterior"] == "False",
         df["versao_layout_anterior"],
         df["version"],
     )
-    df["dicionario_atributos"] = df["dicionario_atributos"].apply(lambda s: convert_string_to_json(s))
+
+    # Apply conversion with context information
+    def convert_with_context(row):
+        context = f"column={row.get('column', 'unknown')}, reg={row.get('reg', 'unknown')}, version={row.get('version', 'unknown')}"
+        return convert_string_to_json(row["dicionario_atributos"], context=context)
+
+    df["dicionario_atributos"] = df.apply(convert_with_context, axis=1)
 
     # remove columns that are empty
     df = df[np.logical_not(df["column"].str.contains("vazio"))]
@@ -565,7 +605,11 @@ def create_cadunico_dbt_consolidated_models(
         schema = {"version": 2, "models": []}
         table_schema = {}
         table_model_name = tables_dict[table_number]
-        model_name = table_model_name if "test" not in model_dataset_id else f"{table_model_name}_test"
+        model_name = (
+            table_model_name
+            if "test" not in model_dataset_id
+            else f"{table_model_name}_test"
+        )
 
         tables = df[df["reg"] == table_number]
         versions = tables["version"].unique()
@@ -594,7 +638,11 @@ def create_cadunico_dbt_consolidated_models(
             table_version = table_version.sort_values("column")
             columns = table_version["column"].tolist()
             table_name_original = f"{model_name}_{version}"
-            table_name = f"{table_name_original}_test" if "test" in model_dataset_id else table_name_original
+            table_name = (
+                f"{table_name_original}_test"
+                if "test" in model_dataset_id
+                else table_name_original
+            )
             columns = []
             for index, row in table_version.iterrows():
                 column = row["column"]
@@ -606,21 +654,45 @@ def create_cadunico_dbt_consolidated_models(
                 ajuste_decimal = row["ajuste_decimal"]
                 col_in_last_version = row["coluna_esta_versao_anterior"]
 
-                col_name_padronizado = col_name_padronizado if col_name_padronizado is not None else col_name
+                col_name_padronizado = (
+                    col_name_padronizado
+                    if col_name_padronizado is not None
+                    else col_name
+                )
                 dicionario_atributos = row["dicionario_atributos"]
 
-                if dicionario_atributos is not None:
+                # Validate dicionario_atributos type
+                if dicionario_atributos is not None and not isinstance(
+                    dicionario_atributos, dict
+                ):
+                    error_msg = (
+                        f"ERROR: dicionario_atributos should be a dict but got {type(dicionario_atributos)}\n"
+                        f"  Column: {column}\n"
+                        f"  Value: {dicionario_atributos}\n"
+                    )
+                    log(error_msg)
+                    raise TypeError(error_msg)
+
+                if dicionario_atributos is not None and isinstance(
+                    dicionario_atributos, dict
+                ):
                     if "id_" in col_name_padronizado:
-                        col_name_padronizado_dict_atr = col_name_padronizado.replace("id_", "", 1)
+                        col_name_padronizado_dict_atr = col_name_padronizado.replace(
+                            "id_", "", 1
+                        )
                     else:
-                        raise Exception(f"col_name_padronizado: {col_name_padronizado} should have id_ in the name")
+                        raise Exception(
+                            f"col_name_padronizado: {col_name_padronizado} should have id_ in the name"
+                        )
 
                 if col_in_last_version == "False":
                     col_expression = (
                         f"\n    --column: {column}\n"
                         + f"    NULL AS {col_name_padronizado}, --Essa coluna não esta na versao posterior"
                     )
-                    if dicionario_atributos is not None:
+                    if dicionario_atributos is not None and isinstance(
+                        dicionario_atributos, dict
+                    ):
                         col_expression = (
                             col_expression
                             + f"\n    --column: {column}\n"
@@ -668,7 +740,20 @@ def create_cadunico_dbt_consolidated_models(
                         + f"    ) AS {col_name_padronizado},"
                     )
 
-                    if dicionario_atributos is not None:
+                    if dicionario_atributos is not None and isinstance(
+                        dicionario_atributos, dict
+                    ):
+                        # Double-check it's a valid dict before calling .keys()
+                        if not hasattr(dicionario_atributos, "keys"):
+                            error_msg = (
+                                f"ERROR: dicionario_atributos has no 'keys' method\n"
+                                f"  Column: {column}\n"
+                                f"  Type: {type(dicionario_atributos)}\n"
+                                f"  Value: {dicionario_atributos}"
+                            )
+                            log(error_msg)
+                            raise AttributeError(error_msg)
+
                         col_expression = (
                             col_expression
                             + f"\n    --column: {column}\n"
@@ -692,7 +777,11 @@ def create_cadunico_dbt_consolidated_models(
 
                 # get the description from the last version of the layout
                 if version == last_version:
-                    col_description = row["descricao"] if row["descricao"] is not None else "Sem descrição"
+                    col_description = (
+                        row["descricao"]
+                        if row["descricao"] is not None
+                        else "Sem descrição"
+                    )
                     col_description = (
                         re.sub(r"\s+", " ", col_description)
                         .replace(";", "\n")
@@ -710,7 +799,9 @@ def create_cadunico_dbt_consolidated_models(
                         "description": col_description,
                     }
                     table_schema["columns"].append(col_schema)
-                    if dicionario_atributos is not None:
+                    if dicionario_atributos is not None and isinstance(
+                        dicionario_atributos, dict
+                    ):
                         col_schema_dict_atr = {
                             "name": col_name_padronizado_dict_atr,
                             "description": col_description,
@@ -721,11 +812,15 @@ def create_cadunico_dbt_consolidated_models(
 
             table_query = ini_query + "\n".join(columns) + end_query
             table_query = table_query.replace("__project_id_replacer__", project_id)
-            table_query = table_query.replace("__dataset_id_replacer__", model_dataset_id)
+            table_query = table_query.replace(
+                "__dataset_id_replacer__", model_dataset_id
+            )
             table_query = table_query.replace("__table_id_replacer__", table_name)
             table_query = table_query.replace("__table_number_replacer__", table_number)
             table_query = table_query.replace("__version_replacer__", version)
-            table_query = table_query.replace("__model_table_id_replacer__", model_table_id)
+            table_query = table_query.replace(
+                "__model_table_id_replacer__", model_table_id
+            )
             final_query += table_query
         final_query = final_query.rsplit("UNION ALL", 1)[0]
         for item in table_schema["columns"]:
@@ -764,7 +859,9 @@ def create_cadunico_dbt_consolidated_models(
     log(f"created {len(log_created_models)} prod models : {json_log}")
 
 
-def create_layout_column_cross_version_control_bq_table(dataframe, dataset_id, table_id):
+def create_layout_column_cross_version_control_bq_table(
+    dataframe, dataset_id, table_id
+):
     new_dataframe = parse_columns_version_control(dataframe=dataframe)
 
     output_path = Path("/tmp/cadunico/final_layout")
@@ -847,7 +944,9 @@ def update_layout_from_storage_and_create_versions_dbt_models(
         output_path = str(output_path_result)
         logger.complete_phase(True, {"layouts_processados": files_to_process})
     else:
-        logger.complete_phase(True, {"layouts_novos": 0, "status": "nenhum arquivo novo"})
+        logger.complete_phase(
+            True, {"layouts_novos": 0, "status": "nenhum arquivo novo"}
+        )
 
     # FASE 2: Geração de Modelos DBT
     if raw_filespaths_to_ingest or force_create_models:
@@ -882,7 +981,9 @@ def update_layout_from_storage_and_create_versions_dbt_models(
         logger.complete_phase(
             True,
             {
-                "tabelas_processadas": (len(df_final["reg"].unique()) if not df_final.empty else 0),
+                "tabelas_processadas": (
+                    len(df_final["reg"].unique()) if not df_final.empty else 0
+                ),
                 "tipos_modelo": len(tables_dict),
             },
         )
