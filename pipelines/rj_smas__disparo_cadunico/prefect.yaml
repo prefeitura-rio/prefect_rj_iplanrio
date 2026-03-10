@@ -47,6 +47,7 @@ deployments:
       infisical_secret_path: /wetalkie
       whitelist_percentage: 100
       whitelist_environment: "staging"
+      flow_environment: production
   - name: rj-smas--disparo-cadunico--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__disparo_cadunico/flow.py:rj_smas__disparo_cadunico
@@ -70,6 +71,7 @@ deployments:
       infisical_secret_path: /wetalkie
       whitelist_percentage: 100
       whitelist_environment: "production"
+      flow_environment: production
     # schedules:
     #   - interval: 86400
     #     anchor_date: "2021-01-01T09:00:00"
