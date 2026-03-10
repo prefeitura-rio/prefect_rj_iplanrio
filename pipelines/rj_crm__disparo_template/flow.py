@@ -32,7 +32,9 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
+    filter_already_dispatched_phones_or_cpfs,
     format_query,
+    get_already_dispatched_data,
     get_destinations,
     get_retry_destinations,
     remove_duplicate_cpfs,
@@ -88,7 +90,7 @@ def rj_crm__disparo_template(
     filter_duplicated_phones: bool = True,
     filter_duplicated_cpfs: bool = True,
     sleep_minutes: int | None = 5,
-    max_dispatch_retries: int = 1,
+    max_dispatch_retries: int = 0,
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 0,
     whitelist_environment: str = "production",
@@ -116,9 +118,9 @@ def rj_crm__disparo_template(
         filter_duplicated_phones (bool, optional): If True, removes duplicate phone numbers from the destination list. Defaults to True.
         filter_duplicated_cpfs (bool, optional): If True, removes duplicate CPFs from the destination list. Defaults to True.
         sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
-        max_dispatch_retries (int): Maximum number of retry attempts using alternative phone numbers. Defaults to 1.
+        max_dispatch_retries (int): Maximum number of retry attempts using alternative phone numbers. Defaults to 0.
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
-        whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 30.
+        whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 0.
         whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
         flow_environment (str, optional): The environment where the flow is running (e.g., "staging", "production"). Defaults to "staging".
     """
@@ -177,7 +179,6 @@ def rj_crm__disparo_template(
         destinations=destinations,
         query=query_complete,
         billing_project_id=billing_project_id,
-        filter_dispatched_phones_or_cpfs=filter_dispatched_phones_or_cpfs,
     )
 
     validated_destinations = skip_flow_if_empty(
@@ -193,7 +194,7 @@ def rj_crm__disparo_template(
         )
         return  # flow termina aqui, nada downstream é agendado
 
-    # Remove duplicate CPFs if flag is set
+    # Remove duplicate CPFs if flag is set - This is our BASE list for retries
     base_destinations = remove_duplicate_cpfs(validated_destinations) if filter_duplicated_cpfs else validated_destinations
 
     print(f"Total unique destinations to dispatch: {len(base_destinations)}")
@@ -216,9 +217,9 @@ def rj_crm__disparo_template(
     current_attempt_destinations = base_destinations
 
     # RETRY LOOP
-    for i in range(1, max_dispatch_retries + 1):
+    for i in range(0, max_dispatch_retries + 1):
         
-        if i > 1:
+        if i > 0:
             print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
             retry_destinations = get_retry_destinations(
                 id_hsm=id_hsm,
@@ -234,17 +235,36 @@ def rj_crm__disparo_template(
             print(f"🚀 Found {len(retry_destinations)} destinations to retry for attempt {i}.")
             current_attempt_destinations = retry_destinations
 
-        # Filter duplicates (important as 'others' might have repetitions)
+            filter_dispatched_phones_or_cpfs = None if filter_dispatched_phones_or_cpfs == "cpf" else filter_dispatched_phones_or_cpfs
+
+        if filter_dispatched_phones_or_cpfs:
+            # 1. Primeiro Disparo (i=1): O filtro original (seja por CPF ou por Telefone) é aplicado normalmente, garantindo que ninguém que
+            # já tenha recebido a mensagem hoje seja processado.
+            # 2. Repescagem (i > 1):
+            #     * Se o filtro era por CPF, ele é desativado (None), pois o CPF já foi "tentado" no passo anterior e agora o objetivo é
+            #       justamente tentar outro número para esse mesmo CPF.
+            #     * Se o filtro era por Telefone, ele é mantido, garantindo que o novo número escolhido da lista others seja verificado no
+            #       BigQuery. Se esse número específico já tiver recebido um disparo (por outra campanha, por exemplo), ele será filtrado.
+
+            print(f"🔍 Checking if phone numbers were already dispatched today...")
+            already_dispatched_data = get_already_dispatched_data(billing_project_id=billing_project_id)
+            current_attempt_destinations = filter_already_dispatched_phones_or_cpfs(
+                destinations=current_attempt_destinations,
+                already_dispatched_df=already_dispatched_data,
+                field=filter_dispatched_phones_or_cpfs
+            )
+
+        # Filter duplicates (important as 'others' inside retries might have repetitions)
         final_destinations = remove_duplicate_phones(current_attempt_destinations) if filter_duplicated_phones else current_attempt_destinations
         
         dispatch_payload = create_dispatch_payload(
-            campaign_name=campaign_name if i == 1 else f"{campaign_name}-retry-{i}",
+            campaign_name=campaign_name if i == 0 else f"{campaign_name}-retry-{i}",
             cost_center_id=cost_center_id,
             destinations=final_destinations,
         )
 
         print(
-            f"\nStarting dispatch for id_hsm={id_hsm}, retry={i}, campaign_name={campaign_name}, example data {final_destinations[:5]}\n"
+            f"\nStarting dispatch for id_hsm={id_hsm}, attempt={i}, campaign_name={campaign_name}, example data {final_destinations[:5]}\n"
         )
         print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
         time.sleep(sleep_minutes * 60)
@@ -271,8 +291,8 @@ def rj_crm__disparo_template(
             sample_destination=(final_destinations[0] if final_destinations else None),
             test_mode=test_mode,
             # whitelist_percentage=whitelist_percentage,
-            attempt_number=i,
-            max_dispatch_retries=max_dispatch_retries,  
+            attempt_number=i + 1,  # Exibe 1 para o primeiro disparo, 2 para o retry...
+            total_attempt_number=max_dispatch_retries + 1,
         )
 
         dfr = create_dispatch_dfr(

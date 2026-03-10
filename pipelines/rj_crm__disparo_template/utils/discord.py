@@ -107,7 +107,7 @@ def send_dispatch_success_notification(
     test_mode: bool = False,
     # whitelist_percentage: int = 0,
     attempt_number: int = 1,
-    max_dispatch_retries: int = 3,
+    total_attempt_number: int = 1,
 ):
     """
     Envia notificação de sucesso de disparo para Discord.
@@ -136,7 +136,7 @@ def send_dispatch_success_notification(
 🆔 **ID HSM:** {id_hsm}
 📋 **Campanha:** {campaign_name}
 💰 **Centro de Custo:** {cost_center_id}
-*️⃣ **Tentativa:** {attempt_number} de {max_dispatch_retries}
+*️⃣ **Tentativa:** {attempt_number} de {total_attempt_number}
 """
 # 📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
 # 📖 **Quantidade de pessoas na Whitelist:** {int(whitelist_percentage*total_dispatches/100)}

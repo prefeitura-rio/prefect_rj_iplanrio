@@ -26,7 +26,7 @@ class DestinationInput(BaseModel):
     to: str = Field(..., description="Número de telefone (formato validado em etapa anterior)")
     externalId: str = Field(..., min_length=1, description="Identificador externo obrigatório")
     vars: Optional[Dict[str, Any]] = Field(default=None, description="Variáveis opcionais para template HSM")
-    # others: List[str] = Field(default_factory=list, description="Lista de telefones secundários para retentativas")
+    others: List[str] = Field(default_factory=list, description="Lista de telefones secundários para retentativas")
 
     @validator("to")
     def validate_phone(cls, v):
