@@ -442,6 +442,7 @@ def parse_columns_version_control(dataframe: pd.DataFrame):
     df_ascending = columns_version_control_diff(dataframe=dataframe.sort_values(["reg", "versao_layout_particao"]))
     # create new row for versions lass than versao_layout_anterior
     versions = df_ascending["versao_layout_particao"].unique()
+    versions = list(versions)
     versions.sort()
 
     df_new = pd.DataFrame()
