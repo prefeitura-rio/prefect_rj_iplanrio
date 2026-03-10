@@ -221,6 +221,9 @@ def rj_crm__disparo_template(
     for i in range(0, max_dispatch_retries + 1):
         
         if i > 0:
+            print(f"⚠️  Sleep {sleep_minutes} minutes before retry dispatch.")
+            time.sleep(sleep_minutes * 60)
+
             print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
             retry_destinations = get_retry_destinations(
                 id_hsm=id_hsm,
