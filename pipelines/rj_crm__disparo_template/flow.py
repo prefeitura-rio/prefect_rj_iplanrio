@@ -235,7 +235,7 @@ def rj_crm__disparo_template(
                 print(f"✅ No remaining failures found for retry attempt {i}. Ending retry loop.")
                 break
 
-            print(f"🚀 Found {len(retry_destinations)} destinations to retry for attempt {i}.")
+            print(f"🚀 Found {len(retry_destinations)} destinations for retry attempt {i}.")
             current_attempt_destinations = retry_destinations
 
             filter_dispatched_phones_or_cpfs = None if filter_dispatched_phones_or_cpfs == "cpf" else filter_dispatched_phones_or_cpfs
@@ -259,7 +259,11 @@ def rj_crm__disparo_template(
 
         # Filter duplicates (important as 'others' inside retries might have repetitions)
         final_destinations = remove_duplicate_phones(current_attempt_destinations) if filter_duplicated_phones else current_attempt_destinations
-        
+
+        if not final_destinations or len(final_destinations) == 0:
+            print("No destinations found. Exiting flow execution.")
+            return
+
         dispatch_payload = create_dispatch_payload(
             campaign_name=campaign_name if i == 0 else f"{campaign_name}-retry-{i}",
             cost_center_id=cost_center_id,
@@ -336,4 +340,3 @@ def rj_crm__disparo_template(
                 dump_mode=dump_mode,
                 biglake_table=False,
             )
-
