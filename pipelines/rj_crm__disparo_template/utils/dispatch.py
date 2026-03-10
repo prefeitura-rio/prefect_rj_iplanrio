@@ -709,8 +709,8 @@ def get_retry_destinations(
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
+        print(f"DEBUG: Primeiros IDs com falha detectados para retentativa: {failed_df.head()}... (total {failed_df.shape[0]})")
         failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
-        print(f"DEBUG: Primeiros IDs com falha detectados para retentativa: {failed_ids[:5]}... (total {len(failed_ids)})")
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
         return []
