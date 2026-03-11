@@ -144,6 +144,7 @@ def rj_crm__disparo_template(
     if test_mode:
         campaign_name = "teste-"+campaign_name
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
+        # force deploy
 
     api = access_api(
         infisical_secret_path,
