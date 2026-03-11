@@ -357,6 +357,29 @@ def filter_already_dispatched_phones_or_cpfs(
     return filtered_destinations
 
 
+def normalize_keys(d: Dict) -> Dict:
+        """Helper para normalizar chaves do dicionário para o padrão esperado pelo schema."""
+        if not isinstance(d, dict):
+            return d
+        
+        mapping = {
+            "celular_disparo": "to",
+            "to": "to",
+            "externalid": "externalId",
+            "vars": "vars",
+            "others": "others"
+        }
+        
+        normalized = {}
+        for k, v in d.items():
+            k_lower = k.lower()
+            if k_lower in mapping:
+                normalized[mapping[k_lower]] = v
+            else:
+                normalized[k] = v
+        return normalized
+
+
 @task
 def get_destinations(
     destinations: Union[None, List[Dict], str],
@@ -365,6 +388,7 @@ def get_destinations(
 ) -> List[Dict]:
     """
     Get destinations from the query or from the parameter with validation.
+    Normaliza chaves de forma insensível a maiúsculas/minúsculas.
     """
     if query:
         log("\nQuery was found")
@@ -373,11 +397,12 @@ def get_destinations(
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
         )
-        log(f"Resposta da query: {destinations_df.head()}")
+        log(f"Resposta da query: {destinations_df.iloc[0]}")
+        
+        # Pega a primeira coluna (que deve ser o JSON STRING)
         destinations_list = destinations_df.iloc[:, 0].tolist()
-        destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations_list]
-        if destinations:
-            print(f"Exemplo de destino após query: {destinations[0]}")
+        destinations = [json.loads(str(item)) for item in destinations_list]
+
     else:
         if isinstance(destinations, str):
             destinations = json.loads(destinations)
@@ -385,6 +410,11 @@ def get_destinations(
             return []
 
     if destinations:
+        print(f"Exemplo de destino antes da normalização: {destinations[0]}")
+        # Normaliza as chaves (ex: EXTERNALID -> externalId, celular_disparo -> to)
+        destinations = [normalize_keys(d) for d in destinations]
+        print(f"Exemplo de destino após a normalização: {destinations[0]}")
+
         validated_destinations, validation_stats = validate_destinations(destinations)
         log_validation_summary(validation_stats, "get_destinations")
         return [dest.dict() for dest in validated_destinations]
@@ -711,6 +741,7 @@ def get_retry_destinations(
         )
         print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
+        print(f"DEBUG failed_ids {failed_ids}")
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
         return []
