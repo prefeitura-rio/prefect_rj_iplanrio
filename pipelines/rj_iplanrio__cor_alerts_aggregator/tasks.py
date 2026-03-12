@@ -596,6 +596,7 @@ def write_clusters_to_google_sheets(
     dataframe: pd.DataFrame,
     spreadsheet_id: str,
     sheet_tab: str = CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
+    sheet_retention_hours: int = 24,
 ) -> int:
     """
     Escreve clusters no Google Sheet via API, com upsert por id_grupo.
@@ -690,6 +691,26 @@ def write_clusters_to_google_sheets(
         log(f"Header incompativel, Sheet recriado: {len(rows_to_append)} linhas")
         return len(rows_to_append)
     id_col_idx = header.index("id_grupo")
+
+    # Remover linhas mais antigas que sheet_retention_hours
+    cutoff = datetime.now(ZoneInfo("America/Sao_Paulo")) - timedelta(hours=sheet_retention_hours)
+    date_col_idx = COLUMNS.index("data_criacao")
+    stale_rows = []
+    for i in range(1, len(existing_values)):
+        row = existing_values[i]
+        if len(row) > date_col_idx:
+            try:
+                row_dt = datetime.strptime(row[date_col_idx], "%d/%m/%Y %H:%M:%S")
+                row_dt = row_dt.replace(tzinfo=ZoneInfo("America/Sao_Paulo"))
+                if row_dt < cutoff:
+                    stale_rows.append(i + 1)  # 1-based sheet row
+            except ValueError:
+                pass
+    if stale_rows:
+        for sheet_row in sorted(stale_rows, reverse=True):
+            worksheet.delete_rows(sheet_row)
+        log(f"Removidas {len(stale_rows)} linhas com mais de {sheet_retention_hours}h do Sheet")
+        existing_values = worksheet.get_all_values()
 
     # Mapa: aggregation_group_id -> indice de linha no Sheet (1-based, skip header)
     existing_map = {
