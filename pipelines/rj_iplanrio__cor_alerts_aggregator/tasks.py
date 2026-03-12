@@ -63,7 +63,20 @@ class AlertCluster:
     centroid_lng: float
     addresses: List[str]
     descriptions: List[str]
+    user_ids: List[str]
+    cluster_neighborhood: str
     severity: str  # Maior severidade do cluster
+
+
+def _format_numbered_multiline(values: List[str], empty_placeholder: str = "") -> str:
+    """Format a list as a numbered multiline string preserving item order."""
+    lines = []
+    for index, value in enumerate(values, start=1):
+        text = str(value).strip() if value is not None else ""
+        if not text:
+            text = empty_placeholder
+        lines.append(f"{index}. {text}".rstrip())
+    return "\n".join(lines)
 
 
 def get_bigquery_client(billing_project_id: str, bucket_name: str) -> bigquery.Client:
@@ -113,34 +126,35 @@ def fetch_pending_alerts(
     """
     billing_project = CORAlertAggregatorConstants.BILLING_PROJECT_ID.value
     dataset = CORAlertAggregatorConstants.DATASET_ID.value
-    queue_table = CORAlertAggregatorConstants.HISTORY_TABLE_ID.value
+    history_table = CORAlertAggregatorConstants.HISTORY_TABLE_ID.value
     sent_table = CORAlertAggregatorConstants.SENT_TABLE_ID.value
+    allowed_neighborhoods = CORAlertAggregatorConstants.ALLOWED_NEIGHBORHOODS.value
+    allowed_neighborhoods_sql = ", ".join(f"'{bairro}'" for bairro in allowed_neighborhoods)
+    allowed_neighborhoods_label = (
+        CORAlertAggregatorConstants.ALLOWED_NEIGHBORHOODS_LABEL.value
+    )
+    neighborhood_from_address_expr = """
+    CASE
+        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\bacari\\b') THEN 'acari'
+        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\b(jardim\\s+america|jd\\s+america)\\b') THEN 'jardim america'
+        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\bguaratiba\\b') THEN 'guaratiba'
+        ELSE ''
+    END
+    """
 
-    log(f"Buscando alertas em {billing_project}.{dataset}.{queue_table}")
+    log(f"Buscando alertas em {billing_project}.{dataset}.{history_table}")
 
     # Verifica se tabela de controle (cor_alerts_sent) existe
     sent_table_ref = f"{billing_project}.{dataset}.{sent_table}"
     sent_table_exists = _table_exists(sent_table_ref, billing_project)
 
-    # Busca alertas pendentes com coordenadas validas
-    # Filtra alertas ja enviados via tabela de controle (se existir)
-    # Expande janela um pouco para incluir alertas no limite
     if sent_table_exists:
-        query = f"""
-        SELECT
-            q.alert_id,
-            q.user_id,
-            q.alert_type,
-            q.severity,
-            q.description,
-            q.address,
-            q.latitude,
-            q.longitude,
-            CAST(q.created_at AS DATETIME) as created_at,
-            q.environment
-        FROM `{billing_project}.{dataset}.{queue_table}` q
+        from_clause = f"""
+        FROM `{billing_project}.{dataset}.{history_table}` q
         LEFT JOIN `{sent_table_ref}` s
             ON q.alert_id = s.alert_id
+        """
+        where_clause = f"""
         WHERE s.alert_id IS NULL
             AND q.latitude IS NOT NULL
             AND q.longitude IS NOT NULL
@@ -148,33 +162,57 @@ def fetch_pending_alerts(
                 CURRENT_DATETIME('America/Sao_Paulo'),
                 INTERVAL {time_window_minutes + 3} MINUTE
             )
-        ORDER BY created_at ASC
         """
     else:
         log(f"Tabela {sent_table_ref} nao existe ainda - buscando todos os alertas pendentes")
-        query = f"""
-        SELECT
-            alert_id,
-            user_id,
-            alert_type,
-            severity,
-            description,
-            address,
-            latitude,
-            longitude,
-            CAST(created_at AS DATETIME) as created_at,
-            environment
-        FROM `{billing_project}.{dataset}.{queue_table}`
-        WHERE latitude IS NOT NULL
-            AND longitude IS NOT NULL
-            AND CAST(created_at AS DATETIME) >= DATETIME_SUB(
+        from_clause = f"""
+        FROM `{billing_project}.{dataset}.{history_table}` q
+        """
+        where_clause = f"""
+        WHERE q.latitude IS NOT NULL
+            AND q.longitude IS NOT NULL
+            AND CAST(q.created_at AS DATETIME) >= DATETIME_SUB(
                 CURRENT_DATETIME('America/Sao_Paulo'),
                 INTERVAL {time_window_minutes + 3} MINUTE
             )
-        ORDER BY created_at ASC
         """
 
-    return query_bigquery(query, billing_project, billing_project)
+    total_query = f"""
+    SELECT COUNT(1) AS total_alertas
+    {from_clause}
+    {where_clause}
+    """
+    total_df = query_bigquery(total_query, billing_project, billing_project)
+    total_alertas = int(total_df.iloc[0]["total_alertas"]) if not total_df.empty else 0
+
+    query = f"""
+    SELECT
+        q.alert_id,
+        q.user_id,
+        q.alert_type,
+        q.severity,
+        q.description,
+        q.address,
+        q.latitude,
+        q.longitude,
+        ({neighborhood_from_address_expr}) AS bairro_raw,
+        ({neighborhood_from_address_expr}) AS bairro_normalizado,
+        CAST(q.created_at AS DATETIME) as created_at,
+        q.environment
+    {from_clause}
+    {where_clause}
+        AND ({neighborhood_from_address_expr}) IN ({allowed_neighborhoods_sql})
+    ORDER BY created_at ASC
+    """
+    eligible_alerts = query_bigquery(query, billing_project, billing_project)
+
+    filtered_alerts = max(total_alertas - len(eligible_alerts), 0)
+    log(
+        f"Filtro de bairros ({allowed_neighborhoods_label}): "
+        f"total={total_alertas}, elegiveis={len(eligible_alerts)}, filtrados={filtered_alerts}"
+    )
+
+    return eligible_alerts
 
 
 @task
@@ -260,11 +298,21 @@ def cluster_alerts_by_location(
         alert_ids = row["alert_ids"]
 
         # Buscar metadados do DataFrame original usando alert_ids
-        cluster_alerts = alerts_df[alerts_df["alert_id"].isin(alert_ids)]
+        cluster_alerts = alerts_df[alerts_df["alert_id"].isin(alert_ids)].copy()
+        cluster_alerts = cluster_alerts.sort_values(
+            by=["created_at", "alert_id"], ascending=True, kind="stable"
+        )
 
-        addresses = cluster_alerts["address"].tolist()
-        descriptions = cluster_alerts["description"].tolist()
-        severities = cluster_alerts["severity"].tolist()
+        addresses = cluster_alerts["address"].fillna("").astype(str).tolist()
+        descriptions = cluster_alerts["description"].fillna("").astype(str).tolist()
+        severities = cluster_alerts["severity"].fillna("").astype(str).str.lower().tolist()
+        user_ids = cluster_alerts["user_id"].fillna("").astype(str).tolist()
+        neighborhoods = (
+            cluster_alerts["bairro_normalizado"].fillna("").astype(str).tolist()
+            if "bairro_normalizado" in cluster_alerts.columns
+            else []
+        )
+        cluster_neighborhood = next((bairro for bairro in neighborhoods if bairro), "")
 
         # Determina severidade maxima do cluster
         max_severity = "critica" if "critica" in severities else "alta"
@@ -280,6 +328,8 @@ def cluster_alerts_by_location(
                 centroid_lng=row["centroid_lng"],
                 addresses=addresses,
                 descriptions=descriptions,
+                user_ids=user_ids,
+                cluster_neighborhood=cluster_neighborhood,
                 severity=max_severity,
             )
         )
@@ -444,13 +494,22 @@ def build_cluster_dataframe(
         agency_event_type = f"{type_code}: {relatos}"
 
     now_sp = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    formatted_addresses = _format_numbered_multiline(
+        cluster.addresses, empty_placeholder="endereco nao informado"
+    )
+    formatted_user_ids = _format_numbered_multiline(
+        cluster.user_ids, empty_placeholder="telefone nao informado"
+    )
 
     row = {
         "aggregation_group_id": aggregation_group_id,
         "event_id": str(uuid.uuid4()),
+        "bairro": cluster.cluster_neighborhood,
         "location": representative_address,
         "priority": priority,
         "agency_event_type_code": agency_event_type[:500],
+        "enderecos_ocorrencias": formatted_addresses,
+        "telefones_ocorrencias": formatted_user_ids,
         "created_date": now_sp.strftime("%d/%m/%Y %H:%M:%S"),
         "latitude": cluster.centroid_lat,
         "longitude": cluster.centroid_lng,
@@ -578,8 +637,11 @@ def write_clusters_to_google_sheets(
     COLUMN_MAPPING = {
         "created_date": "data_criacao",
         "alert_type": "tipo_alerta",
+        "bairro": "bairro",
         "location": "localizacao",
         "agency_event_type_code": "descricao_evento",
+        "enderecos_ocorrencias": "enderecos_ocorrencias",
+        "telefones_ocorrencias": "telefones_ocorrencias",
         "latitude": "latitude",
         "longitude": "longitude",
         "aggregation_group_id": "id_grupo",
@@ -592,8 +654,11 @@ def write_clusters_to_google_sheets(
     COLUMNS = [
         "data_criacao",
         "tipo_alerta",
+        "bairro",
         "localizacao",
         "descricao_evento",
+        "enderecos_ocorrencias",
+        "telefones_ocorrencias",
         "latitude",
         "longitude",
         "id_grupo",
@@ -614,9 +679,7 @@ def write_clusters_to_google_sheets(
         return len(rows_to_append)
 
     header = existing_values[0]
-    try:
-        id_col_idx = header.index("id_grupo")
-    except ValueError:
+    if header != COLUMNS:
         worksheet.clear()
         worksheet.append_row(COLUMNS)
         rows_to_append = [
@@ -626,6 +689,7 @@ def write_clusters_to_google_sheets(
         worksheet.append_rows(rows_to_append, value_input_option="RAW")
         log(f"Header incompativel, Sheet recriado: {len(rows_to_append)} linhas")
         return len(rows_to_append)
+    id_col_idx = header.index("id_grupo")
 
     # Mapa: aggregation_group_id -> indice de linha no Sheet (1-based, skip header)
     existing_map = {
