@@ -136,7 +136,7 @@ def fetch_pending_alerts(
     neighborhood_from_address_expr = """
     CASE
         WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\bacari\\b') THEN 'acari'
-        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\b(jardim\\s+america|jd\\s+america)\\b') THEN 'jardim america'
+        WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\b(jardim\\s+am[eé]rica|jd\\s+am[eé]rica)\\b') THEN 'jardim america'
         WHEN REGEXP_CONTAINS(LOWER(q.address), r'\\bguaratiba\\b') THEN 'guaratiba'
         ELSE ''
     END
@@ -195,13 +195,13 @@ def fetch_pending_alerts(
         q.address,
         q.latitude,
         q.longitude,
-        ({neighborhood_from_address_expr}) AS bairro_raw,
-        ({neighborhood_from_address_expr}) AS bairro_normalizado,
+        COALESCE(NULLIF(q.bairro_raw, ''), ({neighborhood_from_address_expr})) AS bairro_raw,
+        COALESCE(NULLIF(q.bairro_normalizado, ''), ({neighborhood_from_address_expr})) AS bairro_normalizado,
         CAST(q.created_at AS DATETIME) as created_at,
         q.environment
     {from_clause}
     {where_clause}
-        AND ({neighborhood_from_address_expr}) IN ({allowed_neighborhoods_sql})
+        AND COALESCE(NULLIF(q.bairro_normalizado, ''), ({neighborhood_from_address_expr})) IN ({allowed_neighborhoods_sql})
     ORDER BY created_at ASC
     """
     eligible_alerts = query_bigquery(query, billing_project, billing_project)
@@ -706,7 +706,7 @@ def write_clusters_to_google_sheets(
         agg_id = str(row.get("aggregation_group_id", ""))
 
         if agg_id in existing_map:
-            sheet_row_num = existing_map[agg_id] + 1  # +1 porque header e linha 1
+            sheet_row_num = existing_map[agg_id]
             cell_range = f"A{sheet_row_num}"
             updates.append({
                 "range": cell_range,
