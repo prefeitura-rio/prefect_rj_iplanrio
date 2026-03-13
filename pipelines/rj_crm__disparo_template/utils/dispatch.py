@@ -366,6 +366,7 @@ def normalize_keys(d: Dict) -> Dict:
             "celular_disparo": "to",
             "to": "to",
             "externalid": "externalId",
+            "external_id": "externalId",
             "vars": "vars",
             "others": "others"
         }
