@@ -129,7 +129,7 @@ def rj_smas__api_datametrica_agendamentos(
         "whitelist_environment": "production",
     }
     run_deployment(
-        name="rj_smas__disparo_cadunico/rj-smas--disparo-cadunico--prod",
+        name="rj-smas--disparo-cadunico/rj-smas--disparo-cadunico--prod",
         parameters=cadunico_params,
         timeout=0,
     )
