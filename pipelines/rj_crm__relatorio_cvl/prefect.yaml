@@ -60,7 +60,6 @@ deployments:
         flow_run_name: rj_crm__relatorio_cvl_monthly_run
         deployment_name: rj-crm--relatorio-cvl--prod
         parameters:
-          flow_environment: production
           dataset_id: brutos_wetalkie
           table_id: receptivo_sessoes_24h
           dump_mode: append
