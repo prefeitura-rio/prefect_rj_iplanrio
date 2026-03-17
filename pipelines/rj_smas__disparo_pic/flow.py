@@ -152,7 +152,6 @@ def rj_smas__disparo_pic(
             destinations=destinations,
             query=query_complete,
             billing_project_id=billing_project_id,
-            filter_dispatched_phones_or_cpfs=filter_dispatched_phones_or_cpfs,
         )
 
         validated_destinations = skip_flow_if_empty(
@@ -218,7 +217,6 @@ def rj_smas__disparo_pic(
                 total_batches=total_batches,
                 sample_destination=(unique_destinations[0] if unique_destinations else None),
                 test_mode=test_mode,
-                whitelist_percentage=whitelist_percentage,
             )
 
             dfr = create_dispatch_dfr(
