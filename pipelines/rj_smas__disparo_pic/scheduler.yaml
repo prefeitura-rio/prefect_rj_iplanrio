@@ -6,6 +6,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-disparoevento
     parameters:
+      flow_environment: production
       id_hsm: 184
       campaign_name: "smas-cartaopic-disparoevento"
       cost_center_id: 71
@@ -21,9 +22,10 @@ schedules:
       event_date_col: "DATA_ENTREGA"
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 100
+      whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
+      query_processor_name: null
       query: |
         WITH config AS (
         select date('{event_date_placeholder}') AS target_date
@@ -168,6 +170,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-lembrete
     parameters:
+      flow_environment: production
       id_hsm: 185
       campaign_name: "smas-cartaopic-lembrete"
       cost_center_id: 71
@@ -186,6 +189,7 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
+      query_processor_name: null
       query: |
         WITH config AS (
           select date('{event_date_placeholder}') AS target_date
@@ -330,6 +334,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-disparocras
     parameters:
+      flow_environment: production
       id_hsm: 195
       campaign_name: "smas-cartaopic-disparocras"
       cost_center_id: 71
@@ -345,9 +350,10 @@ schedules:
       event_date_col: "DATA_RETIRADA_CRAS"
       test_mode: false
       sleep_minutes: 5
-      whitelist_percentage: 100
+      whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
+      query_processor_name: null
       query: |
         WITH config AS (
         select date('{event_date_placeholder}') AS target_date
@@ -494,6 +500,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-disparofaltouevento
     parameters:
+      flow_environment: production
       id_hsm: 197
       campaign_name: "smas-cartaopic-disparofaltouevento"
       cost_center_id: 71
@@ -512,6 +519,7 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
+      query_processor_name: null
       query: |
         WITH config AS (
         select date('{event_date_placeholder}') AS target_date
