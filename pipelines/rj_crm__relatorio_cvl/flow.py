@@ -21,8 +21,8 @@ def rj_crm__relatorio_cvl(
     table_id: str | None = None,
     dump_mode: str | None = None,
     query: str | None = None,
-    start_date: str = None,
-    end_date: str = None,
+    start_date: str | None= None,
+    end_date: str | None = None,
 ):
     """
     Flow para gerar o relatório de sessões e clientes únicos.

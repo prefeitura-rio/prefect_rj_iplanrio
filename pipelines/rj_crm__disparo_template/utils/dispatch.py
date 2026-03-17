@@ -11,7 +11,7 @@ import os
 import random
 from datetime import datetime
 from math import ceil
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
@@ -155,6 +155,7 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
     # Convert DataFrame to list if needed
     if isinstance(destinations, pd.DataFrame):
         destinations = destinations.to_dict("records")
+    
 
     # Validate destinations first
     validated_destinations, validation_stats = validate_destinations(destinations)
@@ -167,8 +168,9 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
 
     log(f"Payload created successfully for {len(validated_destinations)} validated destinations")
 
-    # Return as dict for backward compatibility
-    return payload.dict()
+    # Retorna o dicionário EXCLUINDO o campo 'others' de todos os destinatários na lista
+    # Isso garante que a API não receba um campo que ela não conhece
+    return payload.dict(exclude={"destinations": {"__all__": {"others"}}})
 
 
 @task
@@ -200,7 +202,6 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         batch_payload["campaignName"] = f"{original_campaign_name}-{dispatch_date[:10]}-lote{i}"
 
         log(f"Disparando lote {i} de {total_batches} com {len(batch)} destinos")
-
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=batch_payload)
 
         if response.status_code != 201:
@@ -287,62 +288,97 @@ def check_api_status(api: object) -> bool:
         return False
 
 
+@task
+def get_already_dispatched_data(billing_project_id: str) -> pd.DataFrame:
+    """
+    Busca no BigQuery a lista de CPFs ou telefones que já tiveram um disparo
+    bem-sucedido ou em processamento hoje.
+    """
+    query = """
+        SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo, status
+        FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+        WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo")
+          AND status IN ("PROCESSING", "SENT", "DELIVERED", "READ")
+    """
+    log(f"Buscando disparos já realizados hoje para evitar duplicidade:\n{query}")
+    try:
+        df = download_data_from_bigquery(
+            query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
+        )
+        return df
+    except Exception as err:
+        log(f"Erro ao buscar disparos realizados: {err}. Retornando DataFrame vazio.", level="warning")
+        return pd.DataFrame(columns=["externalId", "celular_disparo", "status"])
+
+
+@task
 def filter_already_dispatched_phones_or_cpfs(
-    destinations: List[Dict], billing_project_id: str, bucket_name: str, field: str = "cpf"
+    destinations: List[Dict], 
+    already_dispatched_df: pd.DataFrame, 
+    field: str = "cpf"
 ) -> List[Dict]:
     """
     Filters out CPFs that have already been dispatched today.
 
     Args:
         destinations (List[Dict]): A list of destination dictionaries.
-        billing_project_id (str): GCP project ID for billing purposes.
-        bucket_name (str): GCS bucket name for credential loading.
+        already_dispatched_df (pd.DataFrame): A DataFrame containing already dispatched destinations.
         field (str): The field in the destination dict that contains the phone number.
             Field must be "cpf" or "phone_number"
 
     Returns:
         List[Dict]: A list of destination dictionaries that have not yet been dispatched.
     """
-    if not destinations:
-        return []
+    if not destinations or already_dispatched_df.empty:
+        return destinations
 
     if field not in ["cpf", "phone_number"]:
         log(f"\n⚠️  Invalid field '{field}' for filtering dispatched phones. Must be 'cpf' or 'phone_number'")
         return destinations
 
+    already_dispatched_df.rename(columns={"celular_disparo": "to"}, inplace=True)
+
     destinations_field = "externalId" if field == "cpf" else "to"
+    already_dispatched_field = "externalId" if field == "cpf" else "to"
 
-    phone_numbers = [d.get(destinations_field) for d in destinations if d.get(destinations_field)]
-    if not phone_numbers:
+    if already_dispatched_field not in already_dispatched_df.columns:
+        log(f"Coluna {already_dispatched_field} não encontrada nos dados de controle. Ignorando filtro.", level="warning")
         return destinations
 
-    query = """
-        SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo
-        FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-        WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo") AND status = "PROCESSING"
-    """
+    dispatched_set = set(already_dispatched_df[already_dispatched_field].tolist())
+    
+    filtered_destinations = [
+        dest for dest in destinations if dest.get(destinations_field) not in dispatched_set
+    ]
+    
+    removed_count = len(destinations) - len(filtered_destinations)
+    log(f"Filtro '{field}' aplicado: {removed_count} registros removidos por já terem disparos realizados hoje.")
+    
+    return filtered_destinations
 
-    log(f"Executing BigQuery query to find already dispatched phones:\n{query}")
-    try:
-        already_dispatched_df = download_data_from_bigquery(
-            query=query, billing_project_id=billing_project_id, bucket_name=bucket_name
-        )
-        already_dispatched_df.rename(columns={"celular_disparo": "to"}, inplace=True)
-        if destinations_field not in already_dispatched_df.columns:
-            log(f"Column {destinations_field} not found in BigQuery result. Returning original destinations.")
-            return destinations
-        already_dispatched_phones = set(already_dispatched_df[destinations_field].tolist())
-        log(f"Found {len(already_dispatched_phones)} phones already dispatched today.")
 
-        filtered_destinations = [
-            dest for dest in destinations if dest.get(destinations_field) not in already_dispatched_phones
-        ]
-        log(f"Filtered {len(destinations) - len(filtered_destinations)} destinations.")
-        return filtered_destinations
-    except Exception as err:
-        log(f"\n⚠️  Error filtering already dispatched phones: {err}")
-        log("Returning original destinations due to error in filtering.")
-        return destinations
+def normalize_keys(d: Dict) -> Dict:
+        """Helper para normalizar chaves do dicionário para o padrão esperado pelo schema."""
+        if not isinstance(d, dict):
+            return d
+        
+        mapping = {
+            "celular_disparo": "to",
+            "to": "to",
+            "externalid": "externalId",
+            "external_id": "externalId",
+            "vars": "vars",
+            "others": "others"
+        }
+        
+        normalized = {}
+        for k, v in d.items():
+            k_lower = k.lower()
+            if k_lower in mapping:
+                normalized[mapping[k_lower]] = v
+            else:
+                normalized[k] = v
+        return normalized
 
 
 @task
@@ -350,44 +386,38 @@ def get_destinations(
     destinations: Union[None, List[Dict], str],
     query: str,
     billing_project_id: str = "rj-crm-registry",
-    filter_dispatched_phones_or_cpfs: Union[None, str] = "cpf",
 ) -> List[Dict]:
     """
     Get destinations from the query or from the parameter with validation.
-    If filter_dispatched_phones_or_cpfs is provided, filters out already dispatched phones or CPFs.
-    This parameter must be None, "cpf" or "phone_number".
-
-    Returns validated destinations with mandatory externalId field.
+    Normaliza chaves de forma insensível a maiúsculas/minúsculas.
     """
     if query:
         log("\nQuery was found")
-
-        destinations = download_data_from_bigquery(
+        destinations_df = download_data_from_bigquery(
             query=query,
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
         )
-        log(f"response from query {destinations.head()}")
-        destinations = destinations.iloc[:, 0].tolist()
-        destinations = [json.loads(str(item).replace("celular_disparo", "to")) for item in destinations]
+        log(f"Resposta da query: {destinations_df.iloc[0]}")
+        
+        # Pega a primeira coluna (que deve ser o JSON STRING)
+        destinations_list = destinations_df.iloc[:, 0].tolist()
+        destinations = [json.loads(str(item)) for item in destinations_list]
+
     else:
         if isinstance(destinations, str):
             destinations = json.loads(destinations)
-        else: return []
+        else:
+            return []
 
-    if filter_dispatched_phones_or_cpfs:
-        destinations = filter_already_dispatched_phones_or_cpfs(
-            destinations=destinations,
-            billing_project_id=billing_project_id,
-            bucket_name=billing_project_id,
-            field=filter_dispatched_phones_or_cpfs
-        )
-
-    # Validate destinations using centralized validation
     if destinations:
+        print(f"Exemplo de destino antes da normalização: {destinations[0]}")
+        # Normaliza as chaves (ex: EXTERNALID -> externalId, celular_disparo -> to)
+        destinations = [normalize_keys(d) for d in destinations]
+        print(f"Exemplo de destino após a normalização: {destinations[0]}")
+
         validated_destinations, validation_stats = validate_destinations(destinations)
         log_validation_summary(validation_stats, "get_destinations")
-        # Convert back to dict format for backward compatibility
         return [dest.dict() for dest in validated_destinations]
 
     return []
@@ -629,3 +659,113 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
 
     log(f"\n✅  Active flow found for id_hsm={id_hsm} in environment={flow_environment}.")
     return True
+
+
+def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
+        """Busca uma chave em um dicionário ignorando maiúsculas/minúsculas e retorna o valor."""
+        target_lower = target_key.lower()
+        if not isinstance(d, dict):
+            return None
+        for k, v in d.items():
+            if k.lower() == target_lower:
+                return v
+        return None
+
+
+@task
+def get_retry_destinations(
+    id_hsm: int,
+    original_destinations: List[Dict],
+    billing_project_id: str,
+    attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
+) -> List[Dict]:
+    """
+    Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
+    Suporta chaves com variações de maiúsculas/minúsculas e estruturas aninhadas.
+
+    Exemplo de como deve estar o schema da query:
+    {
+       "celular_disparo": "5521999999999",
+       "externalId": "12345678901",
+       "vars": {
+         "nome_usuario": "João Silva"
+       },
+       "others": [
+         "5521888888888",
+         "5521777777777"
+      ]
+    }
+    """
+
+    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
+    query = f"""
+        WITH status_por_disparo AS (
+            SELECT
+                targetExternalId,
+                createDate,
+                MAX(
+                    CASE
+                        WHEN status = "PROCESSING" THEN 1
+                        WHEN status = "FAILED" THEN 2
+                        WHEN status = "SENT" THEN 3
+                        WHEN status = "DELIVERED" THEN 4
+                        WHEN status = "READ" THEN 5
+                    END
+                ) AS id_status_disparo
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE templateId = {id_hsm}
+            AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
+            GROUP BY targetExternalId, createDate
+        ),
+
+        ranked AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY targetExternalId
+                    ORDER BY createDate DESC
+                ) AS rn
+            FROM status_por_disparo
+        )
+
+        SELECT targetExternalId
+        FROM ranked
+        WHERE rn = 1
+        AND id_status_disparo = 2
+        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+    """
+    try:
+        failed_df = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id
+        )
+        print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
+        print(f"DEBUG failed_ids {failed_ids}")
+    except Exception as e:
+        log(f"Erro ao buscar falhas para retentativa: {e}")
+        return []
+
+    if not failed_ids:
+        log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
+        return []
+
+    retry_destinations = []
+    for dest in original_destinations:
+        # Busca externalId e others ignorando o "case"
+        ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
+        others = get_value_from_case_insensitive_key(dest, 'others') or []
+        print(f"DEBUG dest {dest}")
+        print(f"DEBUG: ext_id = {ext_id} others = {others}")
+
+        if ext_id is not None and str(ext_id) in failed_ids and len(others) >= attempt_number:
+            new_dest = dest.copy()
+            print(f"DEBUG: new_dest = {new_dest}, próximo num: {others[attempt_number - 1]}")
+            # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
+            new_dest['to'] = others[attempt_number - 1]
+            print(f"DEBUG: new_dest alterado = {new_dest}")
+            retry_destinations.append(new_dest)
+
+    log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
+    return retry_destinations
