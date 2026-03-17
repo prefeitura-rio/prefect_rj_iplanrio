@@ -6,6 +6,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-disparoevento
     parameters:
+      flow_environment: production
       id_hsm: 184
       campaign_name: "smas-cartaopic-disparoevento"
       cost_center_id: 71
@@ -169,6 +170,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-lembrete
     parameters:
+      flow_environment: production
       id_hsm: 185
       campaign_name: "smas-cartaopic-lembrete"
       cost_center_id: 71
@@ -332,6 +334,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-disparocras
     parameters:
+      flow_environment: production
       id_hsm: 195
       campaign_name: "smas-cartaopic-disparocras"
       cost_center_id: 71
@@ -497,6 +500,7 @@ schedules:
     active: false
     slug: daily-smas-cartaopic-disparofaltouevento
     parameters:
+      flow_environment: production
       id_hsm: 197
       campaign_name: "smas-cartaopic-disparofaltouevento"
       cost_center_id: 71

@@ -52,6 +52,7 @@ deployments:
       filter_duplicated_cpfs: false
       dump_mode: append
       infisical_secret_path: /wetalkie
+
   - name: rj-smas--disparo-pic--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smas__disparo_pic/flow.py:rj_smas__disparo_pic
