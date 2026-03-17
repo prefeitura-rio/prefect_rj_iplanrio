@@ -8,4 +8,6 @@ COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
 COPY ./pipelines/rj_sma__contracheques ./pipelines/rj_sma__contracheques/
 
+COPY ./src /opt/prefect/prefect_rj_iplanrio/src
+
 RUN uv sync --all-packages
