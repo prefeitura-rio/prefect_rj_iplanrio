@@ -20,6 +20,7 @@ from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
 from pipelines.rj_crm__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
     check_api_status,
+    check_flow_status,
     check_if_dispatch_approved,
     create_dispatch_dfr,
     create_dispatch_payload,
@@ -69,6 +70,7 @@ def rj_smas__disparo_pic(
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
     whitelist_environment: str = "staging",
+    flow_environment: str = "staging",
 ):
     dataset_id = dataset_id or PicLembreteConstants.PIC_DATASET_ID.value
     table_id = table_id or PicLembreteConstants.PIC_TABLE_ID.value
@@ -108,6 +110,16 @@ def rj_smas__disparo_pic(
 
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
     crd = inject_bd_credentials_task(environment="prod")  # noqa
+
+    flow_status = check_flow_status(
+        flow_environment=flow_environment,
+        id_hsm=id_hsm,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+    )
+    if flow_status is None:
+        print("Ending flow due to inactive status.")
+        return  # flow termina aqui, nada downstream é agendado
 
     df_dispatch_approved = task_download_data_from_bigquery(
         query=query_dispatch_approved,
