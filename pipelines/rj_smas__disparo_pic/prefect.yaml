@@ -103,6 +103,7 @@ deployments:
           whitelist_percentage: 0
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
+          query_processor_name:
           query: |
             WITH config AS (
             select date('{event_date_placeholder}') AS target_date
@@ -266,6 +267,7 @@ deployments:
           whitelist_percentage: 0
           infisical_secret_path: "/wetalkie"
           whitelist_environment: "production"
+          query_processor_name:
           query: |
             WITH config AS (
               select date('{event_date_placeholder}') AS target_date
