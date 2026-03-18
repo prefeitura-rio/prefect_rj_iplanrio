@@ -783,8 +783,10 @@ def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
         return set()
 
     if not failed_cpfs:
-        log(f"Nenhuma falha detectada para a tentativa as últimas 2 horas.")
+        log(f"Nenhuma falha detectada para nas últimas 2 horas.")
         return set()
+    
+    return failed_cpfs
     
 
 @task

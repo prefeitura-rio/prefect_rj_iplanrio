@@ -54,6 +54,12 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     """
     Sends a Discord notification when a flow run fails.
     """
+    # Only send notification if flow_environment is production
+    flow_environment = flow_run.parameters.get("flow_environment", "staging")
+    if flow_environment != "production":
+        print(f"Flow failed in {flow_environment} environment. Skipping Discord notification.")
+        return
+
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
     if not webhook_url:
         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
@@ -64,7 +70,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
 
     message = f"""
-    Prefect flow run failed!
+    Prefect flow run failed in PRODUCTION! 🚨
     📋 **Campanha:** {campaign_name}
     🆔 **Template ID:** {id_hsm}
     💰 **Centro de Custo:** {cost_center_id}
@@ -73,8 +79,8 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     send_discord_notification(webhook_url, message)
 
 
-# @flow(log_prints=True, on_failure=[send_discord_notification_on_failure])  ## TODO: descomentar
-@flow(log_prints=True)
+@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])  ## TODO: descomentar
+# @flow(log_prints=True)
 def rj_crm__disparo_template(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
