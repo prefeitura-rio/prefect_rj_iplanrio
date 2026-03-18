@@ -221,6 +221,12 @@ def rj_crm__disparo_template(
 
     if not base_destinations or len(base_destinations) == 0:
         print("No destinations found after filtering failed phones. Exiting flow execution.")
+        send_dispatch_no_destinations_found(
+            id_hsm,
+            campaign_name,
+            cost_center_id,
+            test_mode,
+        )
         return
 
     print(f"Total unique destinations to dispatch: {len(base_destinations)}")

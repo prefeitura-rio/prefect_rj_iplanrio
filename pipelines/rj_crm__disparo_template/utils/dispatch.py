@@ -398,6 +398,10 @@ def get_destinations(
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
         )
+        if not destinations_df or destinations_df.empty:
+            log("No destinations found from query. Returning empty list.")
+            return
+
         log(f"Resposta da query: {destinations_df.iloc[0]}")
         
         # Pega a primeira coluna (que deve ser o JSON STRING)

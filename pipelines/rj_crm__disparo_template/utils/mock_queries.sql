@@ -36,7 +36,7 @@ VALUES
   '21981111111', 
   '5501981111111',
   NULL, 
-  DATE '2026-03-15', 
+  current_date("America/Sao_Paulo"),
   '2269389', 
   'MATERNIDADE MARIA AMELIA BUARQUE DE HOLLANDA', 
   DATE '2026-03-13', 
@@ -45,12 +45,12 @@ VALUES
 ),
 -- Registro do Patrick
 (
-  '55566677788', 
+  '5', 
   'PATRICK TESTE', 
   '21971111111', 
   '5', 
   NULL, 
-  DATE '2026-03-16', 
+  current_date("America/Sao_Paulo"),
   '2291260', 
   'MATERNIDADE ALEXANDER FLEMING', 
   DATE '2026-03-16', 
