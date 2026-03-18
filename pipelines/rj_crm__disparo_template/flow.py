@@ -39,6 +39,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_retry_destinations,
     remove_duplicate_cpfs,
     remove_duplicate_phones,
+    remove_failed_phones,
 )
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import (
@@ -89,6 +90,7 @@ def rj_crm__disparo_template(
     filter_dispatched_phones_or_cpfs: str | None = "cpf",
     filter_duplicated_phones: bool = True,
     filter_duplicated_cpfs: bool = True,
+    filter_failed_phones: bool = False,
     sleep_minutes: int | None = 5,
     max_dispatch_retries: int = 0,
     infisical_secret_path: str = "/wetalkie",
@@ -117,6 +119,7 @@ def rj_crm__disparo_template(
         filter_dispatched_phones_or_cpfs (str, optional): If True, filters out phone numbers that have already been dispatched today. This parameter must be None, "cpf" or "phone_number". Defaults to "cpf".
         filter_duplicated_phones (bool, optional): If True, removes duplicate phone numbers from the destination list. Defaults to True.
         filter_duplicated_cpfs (bool, optional): If True, removes duplicate CPFs from the destination list. Defaults to True.
+        filter_failed_phones (bool, optional): If True, removes phone numbers that have already failed in last dispatch. Defaults to False.
         sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
         max_dispatch_retries (int): Maximum number of retry attempts using alternative phone numbers. Defaults to 0.
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
@@ -196,9 +199,22 @@ def rj_crm__disparo_template(
         return  # flow termina aqui, nada downstream é agendado
 
     # Remove duplicate CPFs if flag is set - This is our BASE list for retries
-    base_destinations = remove_duplicate_cpfs(validated_destinations) if filter_duplicated_cpfs else validated_destinations
+    remove_duplicate_destinations = remove_duplicate_cpfs(validated_destinations) if filter_duplicated_cpfs else validated_destinations
+    if not remove_duplicate_destinations or len(remove_duplicate_destinations) == 0:
+        print("No destinations found after filtering duplicate CPFs. Exiting flow execution.")
+        return
+
+    if filter_failed_phones:
+        base_destinations = remove_failed_phones(
+            id_hsm=id_hsm,
+            original_destinations=remove_duplicate_destinations,
+            billing_project_id=billing_project_id,
+        )
+    else:
+        base_destinations = remove_duplicate_destinations
+
     if not base_destinations or len(base_destinations) == 0:
-        print("No destinations found. Exiting flow execution.")
+        print("No destinations found after filtering failed phones. Exiting flow execution.")
         return
 
     print(f"Total unique destinations to dispatch: {len(base_destinations)}")

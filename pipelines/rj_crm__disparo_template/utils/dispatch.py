@@ -672,31 +672,12 @@ def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
         return None
 
 
-@task
-def get_retry_destinations(
-    id_hsm: int,
-    original_destinations: List[Dict],
-    billing_project_id: str,
-    attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
-) -> List[Dict]:
+def get_failed_phones(billing_project_id: str, id_hsm: int,) -> set:
     """
-    Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
-    Suporta chaves com variações de maiúsculas/minúsculas e estruturas aninhadas.
-
-    Exemplo de como deve estar o schema da query:
-    {
-       "celular_disparo": "5521999999999",
-       "externalId": "12345678901",
-       "vars": {
-         "nome_usuario": "João Silva"
-       },
-       "others": [
-         "5521888888888",
-         "5521777777777"
-      ]
-    }
+    Busca telefones tiveram falha de não ter whatsapp ou bloqueio no último disparo,
+    passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria
+    só necessário filtrar pela estratégia de envio.
     """
-
     # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
     query = f"""
         WITH status_por_disparo AS (
@@ -706,15 +687,13 @@ def get_retry_destinations(
                 MAX(
                     CASE
                         WHEN status = "PROCESSING" THEN 1
-                        WHEN status = "FAILED" THEN 2
+                        WHEN status = "FAILED"  and faultdescription like "%131026%" THEN 2
                         WHEN status = "SENT" THEN 3
                         WHEN status = "DELIVERED" THEN 4
                         WHEN status = "READ" THEN 5
                     END
                 ) AS id_status_disparo
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-            WHERE templateId = {id_hsm}
-            AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
             GROUP BY targetExternalId, createDate
         ),
 
@@ -743,9 +722,63 @@ def get_retry_destinations(
         print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
         print(f"DEBUG failed_ids {failed_ids}")
+        return failed_ids    
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
-        return []
+        return set()
+
+
+@task
+def remove_failed_phones(
+    id_hsm: int,
+    original_destinations: List[Dict],
+    billing_project_id: str,
+) -> List[Dict]:
+
+    failed_phones = get_failed_phones(billing_project_id=billing_project_id, id_hsm=id_hsm)
+
+    if not failed_phones:
+        return original_destinations
+
+    print(f"Filtering out {len(failed_phones)} destinations with previously failed phones.")
+    new_destinations = []
+    for dest in original_destinations:
+        # Busca externalId e others ignorando o "case"
+        ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
+
+        if ext_id is not None and str(ext_id) not in failed_phones:
+            new_destinations.append(dest)
+    
+    log(f"Removed {len(original_destinations) - len(new_destinations)} destinations with failed phones. Remaining destinations: {len(new_destinations)}.")
+    return new_destinations
+
+
+@task
+def get_retry_destinations(
+    id_hsm: int,
+    original_destinations: List[Dict],
+    billing_project_id: str,
+    attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
+) -> List[Dict]:
+    """
+    Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
+    Suporta chaves com variações de maiúsculas/minúsculas e estruturas aninhadas.
+
+    Exemplo de como deve estar o schema da query:
+    {
+       "celular_disparo": "5521999999999",
+       "externalId": "12345678901",
+       "vars": {
+         "nome_usuario": "João Silva"
+       },
+       "others": [
+         "5521888888888",
+         "5521777777777"
+      ]
+    }
+    """
+
+    failed_ids = get_failed_phones(billing_project_id=billing_project_id, id_hsm=id_hsm)
 
     if not failed_ids:
         log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
