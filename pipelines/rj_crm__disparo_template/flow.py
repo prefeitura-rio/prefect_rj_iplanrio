@@ -206,9 +206,9 @@ def rj_crm__disparo_template(
 
     if filter_failed_phones:
         base_destinations = remove_failed_phones(
-            id_hsm=id_hsm,
             original_destinations=remove_duplicate_destinations,
             billing_project_id=billing_project_id,
+            max_dispatch_retries=max_dispatch_retries,
         )
     else:
         base_destinations = remove_duplicate_destinations

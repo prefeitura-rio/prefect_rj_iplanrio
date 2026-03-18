@@ -672,11 +672,65 @@ def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
         return None
 
 
-def get_failed_phones(billing_project_id: str, id_hsm: int,) -> set:
+def get_failed_phones(billing_project_id: str) -> set:
     """
     Busca telefones tiveram falha de não ter whatsapp ou bloqueio no último disparo,
     passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria
     só necessário filtrar pela estratégia de envio.
+    """
+    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
+    query = f"""
+        WITH status_por_disparo AS (
+            SELECT
+                flatTarget,
+                createDate,
+                MAX(
+                    CASE
+                        WHEN status = "PROCESSING" THEN 1
+                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
+                        WHEN status = "SENT" THEN 3
+                        WHEN status = "DELIVERED" THEN 4
+                        WHEN status = "READ" THEN 5
+                    END
+                ) AS id_status_disparo
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            GROUP BY flatTarget, createDate
+        ),
+
+        ranked AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY flatTarget
+                    ORDER BY createDate DESC
+                ) AS rn
+            FROM status_por_disparo
+        )
+
+        SELECT flatTarget
+        FROM ranked
+        WHERE rn = 1
+        AND id_status_disparo = 2
+        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+    """
+    try:
+        failed_df = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id
+        )
+        print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        failed_phones = set(str(x) for x in failed_df['flatTarget'].tolist())
+        print(f"DEBUG failed_phones {failed_phones}")
+        return failed_phones    
+    except Exception as e:
+        log(f"Erro ao buscar falhas para retentativa: {e}")
+        return set()
+
+
+def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
+    """
+    Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
     """
     # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
     query = f"""
@@ -687,13 +741,15 @@ def get_failed_phones(billing_project_id: str, id_hsm: int,) -> set:
                 MAX(
                     CASE
                         WHEN status = "PROCESSING" THEN 1
-                        WHEN status = "FAILED"  and faultdescription like "%131026%" THEN 2
+                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
                         WHEN status = "SENT" THEN 3
                         WHEN status = "DELIVERED" THEN 4
                         WHEN status = "READ" THEN 5
                     END
                 ) AS id_status_disparo
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE templateId = {id_hsm}
+            AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
             GROUP BY targetExternalId, createDate
         ),
 
@@ -720,22 +776,25 @@ def get_failed_phones(billing_project_id: str, id_hsm: int,) -> set:
             bucket_name=billing_project_id
         )
         print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
-        failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
-        print(f"DEBUG failed_ids {failed_ids}")
-        return failed_ids    
+        failed_cpfs = set(str(x) for x in failed_df['targetExternalId'].tolist())
+        print(f"DEBUG failed_cpfs {failed_cpfs}")
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
         return set()
 
+    if not failed_cpfs:
+        log(f"Nenhuma falha detectada para a tentativa as últimas 2 horas.")
+        return set()
+    
 
 @task
 def remove_failed_phones(
-    id_hsm: int,
     original_destinations: List[Dict],
     billing_project_id: str,
+    max_dispatch_retries: int,
 ) -> List[Dict]:
 
-    failed_phones = get_failed_phones(billing_project_id=billing_project_id, id_hsm=id_hsm)
+    failed_phones = get_failed_phones(billing_project_id=billing_project_id)
 
     if not failed_phones:
         return original_destinations
@@ -743,12 +802,22 @@ def remove_failed_phones(
     print(f"Filtering out {len(failed_phones)} destinations with previously failed phones.")
     new_destinations = []
     for dest in original_destinations:
-        # Busca externalId e others ignorando o "case"
-        ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
+        # Busca to ignorando o "case"
+        to_number = get_value_from_case_insensitive_key(dest, 'to')
 
-        if ext_id is not None and str(ext_id) not in failed_phones:
+        # if to_number is not None and str(to_number) not in failed_phones and max_dispatch_retries==0:
+        #     new_destinations.append(dest)
+        if (to_number is None or str(to_number) in failed_phones) and max_dispatch_retries==0:
+            pass  # Se o telefone principal falhou e não há retentativas, removemos o destino completamente
+        elif str(to_number) in failed_phones and max_dispatch_retries>0:
+            # Atualiza o campo 'to' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
+            new_dest = dest.copy()
+            new_dest['to'] = None
+            print(f"DEBUG: new_dest já teve falha e foi alterado para None = {new_dest}")
+            new_destinations.append(new_dest)
+        else:
             new_destinations.append(dest)
-    
+
     log(f"Removed {len(original_destinations) - len(new_destinations)} destinations with failed phones. Remaining destinations: {len(new_destinations)}.")
     return new_destinations
 
@@ -778,7 +847,7 @@ def get_retry_destinations(
     }
     """
 
-    failed_ids = get_failed_phones(billing_project_id=billing_project_id, id_hsm=id_hsm)
+    failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, id_hsm=id_hsm)
 
     if not failed_ids:
         log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
@@ -789,10 +858,11 @@ def get_retry_destinations(
         # Busca externalId e others ignorando o "case"
         ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
         others = get_value_from_case_insensitive_key(dest, 'others') or []
+        to_number = get_value_from_case_insensitive_key(dest, 'to')
         print(f"DEBUG dest {dest}")
         print(f"DEBUG: ext_id = {ext_id} others = {others}")
 
-        if ext_id is not None and str(ext_id) in failed_ids and len(others) >= attempt_number:
+        if (ext_id is None or str(ext_id) in failed_ids or to_number is None) and len(others) >= attempt_number:
             new_dest = dest.copy()
             print(f"DEBUG: new_dest = {new_dest}, próximo num: {others[attempt_number - 1]}")
             # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
