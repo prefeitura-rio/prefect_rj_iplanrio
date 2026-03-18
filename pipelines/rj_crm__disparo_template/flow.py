@@ -136,7 +136,6 @@ def rj_crm__disparo_template(
     chunk_size = chunk_size or TemplateConstants.CHUNK_SIZE.value
     query = query or TemplateConstants.QUERY.value
     query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
-
     billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
 
     destinations = getenv_or_action("TEMPLATE__DESTINATIONS", action="ignore")
