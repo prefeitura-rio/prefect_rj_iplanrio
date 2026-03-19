@@ -243,11 +243,14 @@ def rj_crm__disparo_template(
     # RETRY LOOP
     for i in range(0, max_dispatch_retries + 1):
         
-        if i > 0:
-            print(f"⚠️  Sleep 5 minutes before retry dispatch.")
-            time.sleep(5 * 60)
+        if (i > 0 or filter_failed_phones) and max_dispatch_retries > 0:
+            if i > 0:
+                print(f"⚠️  Sleep 5 minutes before retry dispatch.")
+                time.sleep(3 * 60)
 
-            print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
+                print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
+            else:
+                print(f"\n⚠️  Fill with others phones for previously failed phones.")
             retry_destinations = get_retry_destinations(
                 id_hsm=id_hsm,
                 original_destinations=base_destinations,
