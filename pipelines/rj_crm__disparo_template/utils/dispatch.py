@@ -41,6 +41,7 @@ def add_contacts_to_whitelist(
     percentage_to_insert: int,
     group_name: str,
     environment: str,
+    force_add_on_whitelist_group: bool = False,
 ) -> None:
     """
     Adds a random percentage of contacts to a whitelist group.
@@ -119,7 +120,7 @@ def add_contacts_to_whitelist(
     group_id = group["id"]
 
     # Get existing numbers to avoid duplicates
-    existing_numbers_set = manager.get_existing_numbers_set()
+    existing_numbers_set = manager.get_existing_numbers_set(force_add_on_whitelist_group=force_add_on_whitelist_group)
     new_numbers_to_add = [num for num in selected_numbers if num not in existing_numbers_set]
 
     if not new_numbers_to_add:

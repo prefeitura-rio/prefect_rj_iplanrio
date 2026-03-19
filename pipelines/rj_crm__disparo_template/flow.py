@@ -104,6 +104,7 @@ def rj_crm__disparo_template(
     whitelist_percentage: int = 0,
     whitelist_environment: str = "production",
     flow_environment: str = "staging",
+    force_add_on_whitelist_group: bool = False,
 ):
     """
     Orchestrates the dispatch of templated messages via Wetalkie API.
@@ -133,6 +134,7 @@ def rj_crm__disparo_template(
         whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 0.
         whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
         flow_environment (str, optional): The environment where the flow is running (e.g., "staging", "production"). Defaults to "staging".
+        force_add_on_whitelist_group (bool, optional): If True, forces adding contacts to the whitelist group. Defaults to False.
     """
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
@@ -288,16 +290,17 @@ def rj_crm__disparo_template(
 
         # Add contacts to whitelist if percentage is set
         if whitelist_percentage > 0:
-            whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
+            whitelist_group_name = f"citizen-hsm-{campaign_name}"
             add_contacts_to_whitelist(
                 destinations=final_destinations,
                 percentage_to_insert=whitelist_percentage,
                 group_name=whitelist_group_name,
                 environment=whitelist_environment,
+                force_add_on_whitelist_group=force_add_on_whitelist_group,
             )
             
         dispatch_payload = create_dispatch_payload(
-            campaign_name=campaign_name if i == 0 else f"{campaign_name}-retry-{i}",
+            campaign_name=campaign_name,
             cost_center_id=cost_center_id,
             destinations=final_destinations,
         )

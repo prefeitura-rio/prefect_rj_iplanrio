@@ -223,12 +223,12 @@ class BetaGroupManager:
             "whitelisted": all_whitelisted,
         }
 
-    def get_existing_numbers_set(self) -> set:
+    def get_existing_numbers_set(self, force_add_on_whitelist_group: bool) -> set:
         """
         Returns a set with all numbers already registered on the whitelist
         """
         existing_numbers = set()
-        whitelist_data = self.get_whitelist()
+        whitelist_data = self.get_whitelist() if not force_add_on_whitelist_group else existing_numbers
 
         if not whitelist_data:
             return existing_numbers
