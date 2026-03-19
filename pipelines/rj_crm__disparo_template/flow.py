@@ -240,7 +240,6 @@ def rj_crm__disparo_template(
     # Destinos que serão processados na iteração atual do loop
     current_attempt_destinations = base_destinations
 
-    # force deploy
     # RETRY LOOP
     for i in range(0, max_dispatch_retries + 1):
         
