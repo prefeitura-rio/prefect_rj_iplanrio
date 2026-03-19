@@ -157,6 +157,11 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
     if isinstance(destinations, pd.DataFrame):
         destinations = destinations.to_dict("records")
     
+    # TODO: quando filtramos os telefones com failed e temos retentativa, o dado chega aqui com 
+    # to: None e others: [prox_num1, prox_num2...], mas o schema exige que to seja string.
+    # Poderia aqui remover esses casos do payload
+    # Exemplo do dado aqui: [{'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Rodolpho ', 'CC_WT_NOME': 'Rodolpho ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Patricia ', 'CC_WT_NOME': 'Patricia ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': '5592984212629', 'externalId': '00000000055', 'vars': {'NOME': 'Patrick ', 'CC_WT_NOME': 'Patrick ', 'CC_WT_CPF_CIDADAO': '00000000055'}, 'others': ['5592984212629']}]
+    # como não tem failed ele não entra no retry loop
 
     # Validate destinations first
     validated_destinations, validation_stats = validate_destinations(destinations)
@@ -852,12 +857,15 @@ def get_retry_destinations(
       ]
     }
     """
+    failed_ids = []
+    if attempt_number > 0:
+        # Só roda quando não for preencher os nulos gerados pela task remove_failed_phones 
+        failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, id_hsm=id_hsm)
 
-    failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, id_hsm=id_hsm)
-
-    if not failed_ids:
-        log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
-        return []
+        if not failed_ids or len(failed_ids) == 0:
+            log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
+            return []
+    
 
     retry_destinations = []
     for dest in original_destinations:
