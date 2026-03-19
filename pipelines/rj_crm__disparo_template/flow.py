@@ -231,16 +231,6 @@ def rj_crm__disparo_template(
 
     print(f"Total unique destinations to dispatch: {len(base_destinations)}")
 
-    # Add contacts to whitelist if percentage is set
-    if whitelist_percentage > 0:
-        whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
-        add_contacts_to_whitelist(
-            destinations=base_destinations,
-            percentage_to_insert=whitelist_percentage,
-            group_name=whitelist_group_name,
-            environment=whitelist_environment,
-        )
-
     if not api_status:
         print("API is not accessible. Ending flow execution.")
         return
@@ -296,6 +286,16 @@ def rj_crm__disparo_template(
             print("No destinations found. Exiting flow execution.")
             return
 
+        # Add contacts to whitelist if percentage is set
+        if whitelist_percentage > 0:
+            whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
+            add_contacts_to_whitelist(
+                destinations=final_destinations,
+                percentage_to_insert=whitelist_percentage,
+                group_name=whitelist_group_name,
+                environment=whitelist_environment,
+            )
+            
         dispatch_payload = create_dispatch_payload(
             campaign_name=campaign_name if i == 0 else f"{campaign_name}-retry-{i}",
             cost_center_id=cost_center_id,
