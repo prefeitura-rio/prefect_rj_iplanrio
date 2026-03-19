@@ -255,8 +255,8 @@ def rj_crm__disparo_template(
                 attempt_number=i
             )
 
-            if not retry_destinations:
-                print(f"✅ No remaining failures found for retry attempt {i}. Ending retry loop.")
+            if not retry_destinations or len(retry_destinations) == 0:
+                print(f"✅ No remaining phones found for retry attempt {i}. Ending retry loop.")
                 break
 
             print(f"🚀 Found {len(retry_destinations)} destinations for retry attempt {i}.")

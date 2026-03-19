@@ -31,8 +31,21 @@ INSERT INTO `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
 VALUES 
 -- Registro da Patricia
 (
-  '1', 
+  '11', 
   'PATRICIA TESTE', 
+  '21981111111', 
+  '5501981111111',
+  NULL, 
+  current_date("America/Sao_Paulo"),
+  '2269389', 
+  'MATERNIDADE MARIA AMELIA BUARQUE DE HOLLANDA', 
+  DATE '2026-03-13', 
+  1, 
+  'RN Nascido Vivo'
+),
+(
+  '11', 
+  'RODOLPHO TESTE', 
   '21981111111', 
   '5501981111111',
   NULL, 
@@ -45,7 +58,7 @@ VALUES
 ),
 -- Registro do Patrick
 (
-  '5', 
+  '55', 
   'PATRICK TESTE', 
   '21971111111', 
   '5', 
@@ -103,7 +116,7 @@ VALUES
   'AG-PAT-001', 
   'PATRICIA TESTE', 
   --CAST(CAST(FLOOR(RAND() * 100) + 1 AS INT64) AS STRING),
-  '1',
+  '11',
   '2269389', 
   'MATERNIDADE MARIA AMELIA BUARQUE DE HOLLANDA',
   current_datetime("America/Sao_Paulo"),
@@ -111,7 +124,24 @@ VALUES
   ARRAY<STRUCT<telefone_original STRING, origem STRING, prioridade STRING, telefone_valido_whatsapp STRING, motivo_invalidacao_telefone STRING>>[
     STRUCT('5511980000000', 'SISCEGONHA', '1', '5511980000000', NULL),
     STRUCT('5521981900148', 'SMS_ENRIQUECIMENTO', '2', '5521981900148', NULL),
-    STRUCT("5511984677798", 'CADASTRO_ANTIGO', '3', "5511984677798", null)
+    STRUCT("5521984677798", 'CADASTRO_ANTIGO', '3', "5521984677798", null)
+  ],
+  'ACOMPANHANTE DA PATRICIA',
+  STRUCT('5511900000000', '5511911111111', NULL)
+),
+(
+  'AG-PAT-001', 
+  'RODOLPHO TESTE', 
+  --CAST(CAST(FLOOR(RAND() * 100) + 1 AS INT64) AS STRING),
+  '22',
+  '2269389', 
+  'MATERNIDADE MARIA AMELIA BUARQUE DE HOLLANDA',
+  current_datetime("America/Sao_Paulo"),
+  DATETIME '2026-03-20 14:30:00',
+  ARRAY<STRUCT<telefone_original STRING, origem STRING, prioridade STRING, telefone_valido_whatsapp STRING, motivo_invalidacao_telefone STRING>>[
+    STRUCT('5521992868287', 'SISCEGONHA', '1', '5521992868287', NULL),
+    STRUCT('5521992868287', 'SMS_ENRIQUECIMENTO', '2', '5521992868287', NULL),
+    STRUCT("5521980375732", 'CADASTRO_ANTIGO', '3', "5521980375732", null)
   ],
   'ACOMPANHANTE DA PATRICIA',
   STRUCT('5511900000000', '5511911111111', NULL)
@@ -119,16 +149,17 @@ VALUES
 -- Registro Completo do Patrick
 (
   'AG-PAT-002', 
-  'PATRICK TESTE', 
+  'Chico TESTE', 
   --CAST(CAST(FLOOR(RAND() * 100) + 1 AS INT64) AS STRING),
-  '5',
+  '55',
   '2291260', 
   'MATERNIDADE ALEXANDER FLEMING',
   current_datetime("America/Sao_Paulo"),
   DATETIME '2026-03-22 08:00:00',
   ARRAY<STRUCT<telefone_original STRING, origem STRING, prioridade STRING, telefone_valido_whatsapp STRING, motivo_invalidacao_telefone STRING>>[
     STRUCT('5521981900148', 'SISCEGONHA', '1', '5521981900148', NULL),
-    STRUCT('5521991618434', 'SMS_ENRIQUECIMENTO', '2', '5521991618434', NULL)
+    STRUCT('5521991618434', 'SMS_ENRIQUECIMENTO', '2', '5521991618434', NULL),
+    STRUCT('5592984212629', 'SMS_ENRIQUECIMENTO', '3', '5592984212629', NULL)
   ],
   'ACOMPANHANTE DO PATRICK',
   STRUCT('5522900000000', '5521900000000', NULL)

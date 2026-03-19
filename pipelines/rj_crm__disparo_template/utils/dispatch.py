@@ -724,9 +724,8 @@ def get_failed_phones(billing_project_id: str) -> set:
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
-        print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_phones = set(str(x) for x in failed_df['flatTarget'].tolist())
-        print(f"DEBUG failed_phones {failed_phones}")
         return failed_phones    
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
@@ -806,7 +805,7 @@ def remove_failed_phones(
     if not failed_phones:
         return original_destinations
 
-    print(f"Filtering out {len(failed_phones)} destinations with previously failed phones.")
+    print(f"We have on DL {len(failed_phones)} destinations with previously failed phones.")
     new_destinations = []
     for dest in original_destinations:
         # Busca to ignorando o "case"
@@ -820,7 +819,7 @@ def remove_failed_phones(
             # Atualiza o campo 'to' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
             new_dest = dest.copy()
             new_dest['to'] = None
-            print(f"DEBUG: new_dest já teve falha e foi alterado para None = {new_dest}")
+            print(f"DEBUG: {to_number} falhou no último disparo e foi alterado para None = {new_dest}")
             new_destinations.append(new_dest)
         else:
             new_destinations.append(dest)
@@ -867,11 +866,9 @@ def get_retry_destinations(
         others = get_value_from_case_insensitive_key(dest, 'others') or []
         to_number = get_value_from_case_insensitive_key(dest, 'to')
         print(f"DEBUG dest {dest}")
-        print(f"DEBUG: ext_id = {ext_id} others = {others}")
 
         if (ext_id is None or str(ext_id) in failed_ids or to_number is None) and len(others) >= attempt_number:
             new_dest = dest.copy()
-            print(f"DEBUG: new_dest = {new_dest}, próximo num: {others[attempt_number - 1]}")
             # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
             new_dest['to'] = others[attempt_number - 1]
             print(f"DEBUG: new_dest alterado = {new_dest}")
