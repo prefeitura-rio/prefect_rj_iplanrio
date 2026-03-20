@@ -271,6 +271,44 @@ class BetaGroupManager:
                 print(f"Server response: {err.response.text}")
             return False
 
+    def remove_number_from_whitelist(self, phone_number: str) -> bool:
+        """
+        Removes a single phone number from the whitelist.
+        """
+        url = f"{self.api_base_url}/whitelist/{phone_number}"
+
+        try:
+            response = requests.delete(
+                url, headers=self.get_headers(), timeout=TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+            print(f"✅  Number {phone_number} removed from whitelist successfully!")
+            return True
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
+            print(f"⚠️  Error removing number {phone_number} from whitelist: {err}")
+            return False
+
+    def remove_numbers_bulk(self, phone_numbers: List[str]) -> bool:
+        """
+        Removes multiple phone numbers from the whitelist in bulk.
+        """
+        url = f"{self.api_base_url}/whitelist/bulk-remove"
+
+        payload = {"phone_numbers": phone_numbers}
+
+        try:
+            response = requests.post(
+                url, json=payload, headers=self.get_headers(), timeout=TIMEOUT_SECONDS
+            )
+            response.raise_for_status()
+            print(f"✅  Successfully removed {len(phone_numbers)} numbers from whitelist!")
+            return True
+        except (requests.exceptions.RequestException, requests.exceptions.Timeout) as err:
+            print(f"⚠️  Error removing numbers in bulk: {err}")
+            if hasattr(err, "response") and err.response is not None:
+                print(f"Server response: {err.response.text}")
+            return False
+
 
 def normalize_numbers(clean_number: str) -> List[str]:
     """

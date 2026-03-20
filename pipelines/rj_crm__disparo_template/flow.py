@@ -37,6 +37,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_already_dispatched_data,
     get_destinations,
     get_retry_destinations,
+    remove_contacts_from_whitelist,
     remove_duplicate_cpfs,
     remove_duplicate_phones,
     remove_failed_phones,
@@ -105,6 +106,7 @@ def rj_crm__disparo_template(
     whitelist_environment: str = "production",
     flow_environment: str = "staging",
     force_add_on_whitelist_group: bool = False,
+    whitelist_replace_contacts: bool = False,
 ):
     """
     Orchestrates the dispatch of templated messages via Wetalkie API.
@@ -135,6 +137,7 @@ def rj_crm__disparo_template(
         whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
         flow_environment (str, optional): The environment where the flow is running (e.g., "staging", "production"). Defaults to "staging".
         force_add_on_whitelist_group (bool, optional): If True, forces adding contacts to the whitelist group. Defaults to False.
+        whitelist_replace_contacts (bool, optional): If True, removes contacts from the whitelist before adding them. Defaults to True.
     """
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
@@ -294,6 +297,11 @@ def rj_crm__disparo_template(
         # Add contacts to whitelist if percentage is set
         if whitelist_percentage > 0:
             whitelist_group_name = f"citizen-hsm-{campaign_name}"
+            if whitelist_replace_contacts:
+                remove_contacts_from_whitelist(
+                    destinations=final_destinations,
+                    environment=whitelist_environment,
+                )
             add_contacts_to_whitelist(
                 destinations=final_destinations,
                 percentage_to_insert=whitelist_percentage,

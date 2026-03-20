@@ -138,6 +138,65 @@ def add_contacts_to_whitelist(
 
 
 @task
+def remove_contacts_from_whitelist(
+    destinations: List[Dict],
+    environment: str,
+) -> None:
+    """
+    Removes all contacts from the destinations list from the whitelist.
+
+    Args:
+        destinations (List[Dict]): List of destination data.
+        environment (str): The environment to run on ('staging' or 'production').
+    """
+    if not destinations:
+        print("\n⚠️  No destinations to remove from whitelist.")
+        return
+
+    phone_numbers = []
+    for dest in destinations:
+        try:
+            phone = dest.get("to")
+            if phone:
+                phone_numbers.append(phone)
+        except Exception as err:
+            print(f"\n⚠️  Warning: Could not process destination for removal: {dest}, error: {err}")
+
+    if not phone_numbers:
+        print("\n⚠️  No valid phone numbers found in destinations to remove from whitelist.")
+        return
+
+    # Remove duplicates to get the final list of numbers to remove
+    selected_numbers = list(set(phone_numbers))
+
+    print(f"Selected {len(selected_numbers)} contacts to remove from whitelist.")
+
+    try:
+        config = get_environment_config(environment)
+        validate_environment_config(config)
+    except ValueError as err:
+        print(f"\n⚠️  Configuration error: {err}")
+        return
+
+    manager = BetaGroupManager(
+        config["issuer"],
+        config["client_id"],
+        config["client_secret"],
+        config["api_base_url"],
+    )
+
+    if not manager.authenticate():
+        print("\n⚠️  Authentication failed. Cannot remove contacts from whitelist.")
+        return
+
+    # Remove in bulk directly (the API endpoint is global, no group needed)
+    if manager.remove_numbers_bulk(selected_numbers):
+        print(f"\n✅  Successfully removed {len(selected_numbers)} contacts from whitelist.")
+    else:
+        print(f"\n⚠️  Failed to remove contacts from whitelist.")
+
+
+@task
 def create_dispatch_payload(campaign_name: str, cost_center_id: int, destinations: Union[List, pd.DataFrame]) -> Dict:
     """
     Cria o payload para o dispatch com validação rigorosa
