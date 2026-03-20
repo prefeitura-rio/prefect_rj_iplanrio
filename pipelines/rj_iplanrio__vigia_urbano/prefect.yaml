@@ -37,8 +37,6 @@ deployments:
         image_pull_policy: Always
 
 
-
-
   - name: rj-iplanrio--vigia_urbano--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
@@ -57,6 +55,7 @@ deployments:
       timezone: America/Sao_Paulo
       slug: vw_RespostaOcorrencia # slug do schedule
       parameters:
+        dbt_model_name: raw_vigia_urbano__vw_resposta_ocorrencia # Nome do modelo no dbt
         table_id: vw_RespostaOcorrencia # Nome da tabela no BigQuery
         execute_query: |
           SELECT *
@@ -67,6 +66,7 @@ deployments:
       timezone: America/Sao_Paulo
       slug: vw_Auditoria # slug do schedule
       parameters:
+        dbt_model_name: raw_vigia_urbano__vw_auditoria # Nome do modelo no dbt
         table_id: vw_Auditoria # Nome da tabela no BigQuery
         execute_query: |
           SELECT *
@@ -77,6 +77,7 @@ deployments:
       timezone: America/Sao_Paulo
       slug: PerfilUsuario # slug do schedule
       parameters:
+        dbt_model_name: raw_vigia_urbano__perfil_usuario # Nome do modelo no dbt
         table_id: PerfilUsuario # Nome da tabela no BigQuery
         execute_query: |
           SELECT *
@@ -87,6 +88,7 @@ deployments:
       timezone: America/Sao_Paulo
       slug: Usuario # slug do schedule
       parameters:
+        dbt_model_name: raw_vigia_urbano__usuario # Nome do modelo no dbt
         table_id: Usuario # Nome da tabela no BigQuery
         execute_query: |
           SELECT *
@@ -97,6 +99,7 @@ deployments:
       timezone: America/Sao_Paulo
       slug: OrgaoUsuario # slug do schedule
       parameters:
+        dbt_model_name: raw_vigia_urbano__orgao_usuario # Nome do modelo no dbt
         table_id: OrgaoUsuario # Nome da tabela no BigQuery
         execute_query: |
           SELECT *
@@ -108,6 +111,7 @@ deployments:
       slug: Orgao # slug do schedule
       parameters:
         table_id: Orgao # Nome da tabela no BigQuery
+        dbt_model_name: raw_vigia_urbano__orgao # Nome do modelo no dbt
         execute_query: |
           SELECT *
           FROM vigiaurbano.Orgao
@@ -117,6 +121,7 @@ deployments:
       slug: TratamentoFator # slug do schedule
       parameters:
         table_id: TratamentoFator # Nome da tabela no BigQuery
+        dbt_model_name: raw_vigia_urbano__tratamento_fator # Nome do modelo no dbt
         execute_query: |
           SELECT *
           FROM vigiaurbano.TratamentoFator
