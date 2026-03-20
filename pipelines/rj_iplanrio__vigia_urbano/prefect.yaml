@@ -111,3 +111,13 @@ deployments:
         execute_query: |
           SELECT *
           FROM vigiaurbano.Orgao
+    
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: TratamentoFator # slug do schedule
+      parameters:
+        table_id: TratamentoFator # Nome da tabela no BigQuery
+        execute_query: |
+          select id, FatorId,UsuarioId,Resolvido,Justificativa,DataResolucao,CaminhoFoto,DataRegistro
+          from vigiaurbano.TratamentoFator
