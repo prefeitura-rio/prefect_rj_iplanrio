@@ -743,7 +743,7 @@ schedules:
             from remove_optout
             where rn=1
 
-    # Disparo SMS Puérperas Confirmação agendamento
+# Disparo SMS Puérperas Confirmação agendamento
   - interval: 86400
     anchor_date: "2021-01-01T11:00:00"
     timezone: America/Sao_Paulo
@@ -759,7 +759,7 @@ schedules:
         test_mode: false
         chunk_size: 1000
         dataset_id: brutos_wetalkie
-        campaign_name: sms-puerpera-disp1-gestante-v2
+        campaign_name: sms-puerpera
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
@@ -920,7 +920,7 @@ schedules:
                 where celular_disparo is not null
 
 
-    # Disparo SMS Puérperas D0 - Explicação do processo
+# Disparo SMS Puérperas D0 - Explicação do processo
   - interval: 3600
     anchor_date: "2021-01-01T11:10:00"
     timezone: America/Sao_Paulo
@@ -935,7 +935,7 @@ schedules:
         test_mode: false
         chunk_size: 1000
         dataset_id: brutos_wetalkie
-        campaign_name: sms-puerperas-disparo2.2
+        campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
@@ -1089,7 +1089,7 @@ schedules:
                 where celular_disparo is not null
 
 
-    # Disparo SMS Puérperas D1, D3, D5 e D10 - Pesquisa 1
+# Disparo SMS Puérperas D1, D3, D5 e D10 - Pesquisa 1
   - interval: 86400
     anchor_date: "2021-01-01T11:20:00"
     timezone: America/Sao_Paulo
@@ -1098,13 +1098,13 @@ schedules:
     flow_run_name: sms-puerperas-d1-d3-d5-d10
     parameters:
         id_hsm: 588
-        query_replacements: {"id_hsm_placeholder": 588}
+        query_replacements: {"id_hsm_placeholder": 588, "id_hsm_anterior_placeholder": 571}
         table_id: disparos_efetuados_teste
         dump_mode: append
         test_mode: false
         chunk_size: 1000
         dataset_id: brutos_wetalkie
-        campaign_name: sms-puerperas-disparo4-v3
+        campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
@@ -1218,10 +1218,20 @@ schedules:
                 ON f4.flatTarget = s.celular_disparo_rmi
             ),
 
-            filtra_disparados as (
-            -- verifica se esse celular já recebeu essa mesma mensagens nos últimos x dias
-                select filtra_falhas.*
+            filtra_recebeu_primeira_hsm as (
+            -- verifica se esse cpf recebeu a primeira mensagem nos últimos 50 dias
+                select distinct filtra_falhas.*
                 FROM filtra_falhas
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+                    where fl.flattarget is not null
+                    ),
+            filtra_disparados as (
+            -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
+                select filtra_recebeu_primeira_hsm.*
+                FROM filtra_recebeu_primeira_hsm
                 left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
                         -- on fl.flattarget = celular_disparo
                         on fl.targetexternalid = cpf
@@ -1268,6 +1278,1124 @@ schedules:
             from final
             where celular_disparo is not null
 
+
+# Disparo SMS Puérperas D7 - Pesquisa 2
+  - interval: 86400
+    anchor_date: "2021-01-01T11:20:00"
+    timezone: America/Sao_Paulo
+    active: true
+    slug: daily-sms-puerperas-d7
+    flow_run_name: sms-puerperas-d7
+    parameters:
+        id_hsm: 456
+        query_replacements: {"id_hsm_placeholder": 456, "id_hsm_anterior_placeholder": 571}
+        table_id: disparos_efetuados_teste
+        dump_mode: append
+        test_mode: false
+        chunk_size: 1000
+        dataset_id: brutos_wetalkie
+        campaign_name: sms-puerperas-d7
+        max_dispatch_retries: 3
+        sleep_minutes: 5
+        cost_center_id: 71
+        flow_environment: staging
+        whitelist_percentage: 100
+        infisical_secret_path: /wetalkie
+        whitelist_environment: production
+        filter_duplicated_cpfs: true
+        filter_duplicated_phones: false
+        filter_dispatched_phones_or_cpfs: null
+        filter_failed_phones: true
+        force_add_on_whitelist_group: true
+        whitelist_replace_contacts: true
+        query: |
+            -- Pesquisa 2
+            WITH segmentacao_original_raw AS (
+            SELECT
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                data_alta_internacao,
+                -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`,
+            from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+            WHERE cpf is not null
+                and cpf != '00000000000'
+            AND CURRENT_DATE('America/Sao_Paulo') in
+                    (
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)
+                    )
+                    and nome_maternidade_alta like '%MARIA AMELIA%'
+                
+            ),
+            telefones_siscegonha as (
+            select 
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
+                MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
+                MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
+                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
+            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            UNNEST(telefones_gestante) AS telefone
+            group by cpf
+            ),
+            segmentacao_original as (
+                select * from
+                segmentacao_original_raw
+                inner join telefones_siscegonha using (cpf)
+            )
+            , dados_rmi as (
+            -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
+                    SELECT
+                        cpf,
+                        `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,
+                    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+                    WHERE menor_idade is False
+                    and obito.indicador is False
+                    and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
+                    ),
+            enriquece_rmi as (
+                select
+                    segmentacao_original.*,
+                    dados_rmi.celular_disparo_rmi
+                from segmentacao_original
+                left join dados_rmi using(cpf)
+            )
+            , status_final_telefone AS (
+            -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
+            SELECT
+                flatTarget,
+                CASE
+                WHEN status = 'FAILED'  and faultdescription like '%131026%' THEN TRUE
+                ELSE FALSE
+                END AS falhou
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY flatTarget
+                ORDER BY createDate DESC
+            ) = 1
+            ),
+
+            filtra_falhas AS (
+            SELECT
+                distinct 
+                s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
+
+                IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
+                IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,
+                IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,
+                IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,
+
+                COALESCE(
+                IF(f1.falhou, NULL, s.celular_disparo_1),
+                IF(f2.falhou, NULL, s.celular_disparo_2),
+                IF(f3.falhou, NULL, s.celular_disparo_3),
+                IF(f4.falhou, NULL, s.celular_disparo_rmi)
+                ) AS celular_disparo
+
+            FROM enriquece_rmi s
+            LEFT JOIN status_final_telefone f1
+                ON f1.flatTarget = s.celular_disparo_1
+
+            LEFT JOIN status_final_telefone f2
+                ON f2.flatTarget = s.celular_disparo_2
+
+            LEFT JOIN status_final_telefone f3
+                ON f3.flatTarget = s.celular_disparo_3
+            
+            LEFT JOIN status_final_telefone f4
+                ON f4.flatTarget = s.celular_disparo_rmi
+            ),
+
+            filtra_recebeu_primeira_hsm as (
+            -- verifica se esse cpf recebeu a primeira mensagem nos últimos 50 dias
+                select distinct filtra_falhas.*
+                FROM filtra_falhas
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+                    where fl.flattarget is not null
+                    ),
+            filtra_disparados as (
+            -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
+                select filtra_recebeu_primeira_hsm.*
+                FROM filtra_recebeu_primeira_hsm
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        -- on fl.flattarget = celular_disparo
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                    where fl.flattarget is null
+            ),
+            final as (
+                select filtra_disparados.*
+                from filtra_disparados
+            )
+            SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                        celular_disparo,
+                        STRUCT(
+                            INITCAP(
+                            IF(
+                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                CONCAT(
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                nome
+                            )
+                            )  AS NOME,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                    nome
+                                )
+                            ) AS CC_WT_NOME,
+                            cpf AS CC_WT_CPF_CIDADAO,
+                            data_alta_internacao as CC_WT_DATA_ALTA,
+                            date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
+                        ) AS vars,
+                        ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                        CAST(cpf AS STRING) AS externalId
+                        )
+                    ) AS destination_data
+            from final
+            where celular_disparo is not null
+
+
+# Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
+  - interval: 86400
+    anchor_date: "2021-01-01T11:20:00"
+    timezone: America/Sao_Paulo
+    active: true
+    slug: daily-sms-puerperas-d13-d16-d19
+    flow_run_name: sms-puerperas-d13-d16-d19
+    parameters:
+        id_hsm: 562
+        query_replacements: {"id_hsm_placeholder": 562, "id_hsm_anterior_placeholder": 571}
+        table_id: disparos_efetuados_teste
+        dump_mode: append
+        test_mode: false
+        chunk_size: 1000
+        dataset_id: brutos_wetalkie
+        campaign_name: sms-puerperas
+        max_dispatch_retries: 3
+        sleep_minutes: 5
+        cost_center_id: 71
+        flow_environment: staging
+        whitelist_percentage: 100
+        infisical_secret_path: /wetalkie
+        whitelist_environment: production
+        filter_duplicated_cpfs: true
+        filter_duplicated_phones: false
+        filter_dispatched_phones_or_cpfs: null
+        filter_failed_phones: true
+        force_add_on_whitelist_group: true
+        whitelist_replace_contacts: true
+        query: |
+            -- Pesquisa 3
+            WITH segmentacao_original_raw AS (
+            SELECT
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                data_alta_internacao,
+                -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`,
+            from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+            WHERE cpf is not null
+                and cpf != '00000000000'
+            AND CURRENT_DATE('America/Sao_Paulo') in
+                    (
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
+                    )
+                    and nome_maternidade_alta like '%MARIA AMELIA%'
+            ),
+            telefones_siscegonha as (
+            select 
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
+                MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
+                MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
+                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
+            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            UNNEST(telefones_gestante) AS telefone
+            group by cpf
+            ),
+            segmentacao_original as (
+                select * from
+                segmentacao_original_raw
+                inner join telefones_siscegonha using (cpf)
+            )
+            , dados_rmi as (
+            -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
+                    SELECT
+                        cpf,
+                        `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,
+                    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+                    WHERE menor_idade is False
+                    and obito.indicador is False
+                    and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
+                    ),
+            enriquece_rmi as (
+                select
+                    segmentacao_original.*,
+                    dados_rmi.celular_disparo_rmi
+                from segmentacao_original
+                left join dados_rmi using(cpf)
+            )
+            , status_final_telefone AS (
+            -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
+            SELECT
+                flatTarget,
+                CASE
+                WHEN status = 'FAILED'  and faultdescription like '%131026%' THEN TRUE
+                ELSE FALSE
+                END AS falhou
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY flatTarget
+                ORDER BY createDate DESC
+            ) = 1
+            ),
+
+            filtra_falhas AS (
+            SELECT
+                distinct 
+                s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
+
+                IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
+                IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,
+                IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,
+                IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,
+
+                COALESCE(
+                IF(f1.falhou, NULL, s.celular_disparo_1),
+                IF(f2.falhou, NULL, s.celular_disparo_2),
+                IF(f3.falhou, NULL, s.celular_disparo_3),
+                IF(f4.falhou, NULL, s.celular_disparo_rmi)
+                ) AS celular_disparo
+
+            FROM enriquece_rmi s
+            LEFT JOIN status_final_telefone f1
+                ON f1.flatTarget = s.celular_disparo_1
+
+            LEFT JOIN status_final_telefone f2
+                ON f2.flatTarget = s.celular_disparo_2
+
+            LEFT JOIN status_final_telefone f3
+                ON f3.flatTarget = s.celular_disparo_3
+            
+            LEFT JOIN status_final_telefone f4
+                ON f4.flatTarget = s.celular_disparo_rmi
+            ),
+
+            filtra_recebeu_primeira_hsm as (
+            -- verifica se esse cpf recebeu a primeira mensagem nos últimos 50 dias
+                select distinct filtra_falhas.*
+                FROM filtra_falhas
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+                    where fl.flattarget is not null
+                    ),
+            filtra_disparados as (
+            -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
+                select filtra_recebeu_primeira_hsm.*
+                FROM filtra_recebeu_primeira_hsm
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        -- on fl.flattarget = celular_disparo
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 3 dias
+                    where fl.flattarget is null
+            ),
+            final as (
+                select
+                filtra_disparados.*,
+                from filtra_disparados
+            )
+            SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                        celular_disparo,
+                        STRUCT(
+                            INITCAP(
+                            IF(
+                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                CONCAT(
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                nome
+                            )
+                            )  AS NOME,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                    nome
+                                )
+                            ) AS CC_WT_NOME,
+                            cpf AS CC_WT_CPF_CIDADAO,
+                            data_alta_internacao as CC_WT_DATA_ALTA,
+                            date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
+                        ) AS vars,
+                        ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                        CAST(cpf AS STRING) AS externalId
+                        )
+                    ) AS destination_data
+            from final
+            where celular_disparo is not null
+
+
+# Disparo SMS Puérperas D22 - Pesquisa 4
+  - interval: 86400
+    anchor_date: "2021-01-01T11:20:00"
+    timezone: America/Sao_Paulo
+    active: true
+    slug: daily-sms-puerperas-d22
+    flow_run_name: sms-puerperas-d22
+    parameters:
+        id_hsm: 489
+        query_replacements: {"id_hsm_placeholder": 489, "id_hsm_anterior_placeholder": 571}
+        table_id: disparos_efetuados_teste
+        dump_mode: append
+        test_mode: false
+        chunk_size: 1000
+        dataset_id: brutos_wetalkie
+        campaign_name: sms-puerperas
+        max_dispatch_retries: 3
+        sleep_minutes: 5
+        cost_center_id: 71
+        flow_environment: staging
+        whitelist_percentage: 100
+        infisical_secret_path: /wetalkie
+        whitelist_environment: production
+        filter_duplicated_cpfs: true
+        filter_duplicated_phones: false
+        filter_dispatched_phones_or_cpfs: null
+        filter_failed_phones: true
+        force_add_on_whitelist_group: true
+        whitelist_replace_contacts: true
+        query: |
+            -- Pesquisa 4
+            WITH segmentacao_original_raw AS (
+            SELECT
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                data_alta_internacao,
+                -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`,
+            from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+            WHERE cpf is not null
+                and cpf != '00000000000'
+            AND CURRENT_DATE('America/Sao_Paulo') in
+                    (
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)
+                    )
+                    and nome_maternidade_alta like '%MARIA AMELIA%'                
+            ),
+            telefones_siscegonha as (
+            select 
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
+                MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
+                MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
+                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
+            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            UNNEST(telefones_gestante) AS telefone
+            group by cpf
+            ),
+            segmentacao_original as (
+                select * from
+                segmentacao_original_raw
+                inner join telefones_siscegonha using (cpf)
+            )
+            , dados_rmi as (
+            -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
+                    SELECT
+                        cpf,
+                        `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,
+                    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+                    WHERE menor_idade is False
+                    and obito.indicador is False
+                    and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
+                    ),
+            enriquece_rmi as (
+                select
+                    segmentacao_original.*,
+                    dados_rmi.celular_disparo_rmi
+                from segmentacao_original
+                left join dados_rmi using(cpf)
+            )
+            , status_final_telefone AS (
+            -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
+            SELECT
+                flatTarget,
+                CASE
+                WHEN status = 'FAILED'  and faultdescription like '%131026%' THEN TRUE
+                ELSE FALSE
+                END AS falhou
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY flatTarget
+                ORDER BY createDate DESC
+            ) = 1
+            ),
+
+            filtra_falhas AS (
+            SELECT
+                distinct 
+                s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
+
+                IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
+                IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,
+                IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,
+                IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,
+
+                COALESCE(
+                IF(f1.falhou, NULL, s.celular_disparo_1),
+                IF(f2.falhou, NULL, s.celular_disparo_2),
+                IF(f3.falhou, NULL, s.celular_disparo_3),
+                IF(f4.falhou, NULL, s.celular_disparo_rmi)
+                ) AS celular_disparo
+
+            FROM enriquece_rmi s
+            LEFT JOIN status_final_telefone f1
+                ON f1.flatTarget = s.celular_disparo_1
+
+            LEFT JOIN status_final_telefone f2
+                ON f2.flatTarget = s.celular_disparo_2
+
+            LEFT JOIN status_final_telefone f3
+                ON f3.flatTarget = s.celular_disparo_3
+            
+            LEFT JOIN status_final_telefone f4
+                ON f4.flatTarget = s.celular_disparo_rmi
+            ),
+
+            filtra_recebeu_primeira_hsm as (
+            -- verifica se esse cpf recebeu a primeira mensagem nos últimos 50 dias
+                select distinct filtra_falhas.*
+                FROM filtra_falhas
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+                    where fl.flattarget is not null
+                    ),
+            filtra_disparados as (
+            -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
+                select filtra_recebeu_primeira_hsm.*
+                FROM filtra_recebeu_primeira_hsm
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        -- on fl.flattarget = celular_disparo
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 200 dias/ 1x ao ano
+                    where fl.flattarget is null
+            ),
+            final as (
+                select
+                filtra_disparados.*,
+                from filtra_disparados
+            )
+            SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                        celular_disparo,
+                        STRUCT(
+                            INITCAP(
+                            IF(
+                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                CONCAT(
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                nome
+                            )
+                            )  AS NOME,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                    nome
+                                )
+                            ) AS CC_WT_NOME,
+                            cpf AS CC_WT_CPF_CIDADAO,
+                            data_alta_internacao as CC_WT_DATA_ALTA,
+                            date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
+                        ) AS vars,
+                        ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                        CAST(cpf AS STRING) AS externalId
+                        )
+                    ) AS destination_data
+            from final
+            where celular_disparo is not null
+
+
+# Disparo SMS Puérperas D25 e D28 - Pesquisa 5
+  - interval: 86400
+    anchor_date: "2021-01-01T11:20:00"
+    timezone: America/Sao_Paulo
+    active: true
+    slug: daily-sms-puerperas-d25-d28
+    flow_run_name: sms-puerperas-d25-d28
+    parameters:
+        id_hsm: 564
+        query_replacements: {"id_hsm_placeholder": 564, "id_hsm_anterior_placeholder": 571}
+        table_id: disparos_efetuados_teste
+        dump_mode: append
+        test_mode: false
+        chunk_size: 1000
+        dataset_id: brutos_wetalkie
+        campaign_name: sms-puerperas
+        max_dispatch_retries: 3
+        sleep_minutes: 5
+        cost_center_id: 71
+        flow_environment: staging
+        whitelist_percentage: 100
+        infisical_secret_path: /wetalkie
+        whitelist_environment: production
+        filter_duplicated_cpfs: true
+        filter_duplicated_phones: false
+        filter_dispatched_phones_or_cpfs: null
+        filter_failed_phones: true
+        force_add_on_whitelist_group: true
+        whitelist_replace_contacts: true
+        query: |
+            -- Pesquisa 5
+            WITH segmentacao_original_raw AS (
+            SELECT
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                data_alta_internacao,
+                -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`,
+            from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+            WHERE cpf is not null
+                and cpf != '00000000000'
+            AND CURRENT_DATE('America/Sao_Paulo') in
+                    (
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
+                    )
+                    and nome_maternidade_alta like '%MARIA AMELIA%'                
+            ),
+            telefones_siscegonha as (
+            select 
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
+                MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
+                MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
+                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
+            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            UNNEST(telefones_gestante) AS telefone
+            group by cpf
+            ),
+            segmentacao_original as (
+                select * from
+                segmentacao_original_raw
+                inner join telefones_siscegonha using (cpf)
+            )
+            , dados_rmi as (
+            -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
+                    SELECT
+                        cpf,
+                        `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,
+                    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+                    WHERE menor_idade is False
+                    and obito.indicador is False
+                    and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
+                    ),
+            enriquece_rmi as (
+                select
+                    segmentacao_original.*,
+                    dados_rmi.celular_disparo_rmi
+                from segmentacao_original
+                left join dados_rmi using(cpf)
+            )
+            , status_final_telefone AS (
+            -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
+            SELECT
+                flatTarget,
+                CASE
+                WHEN status = 'FAILED'  and faultdescription like '%131026%' THEN TRUE
+                ELSE FALSE
+                END AS falhou
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY flatTarget
+                ORDER BY createDate DESC
+            ) = 1
+            ),
+
+            filtra_falhas AS (
+            SELECT
+                distinct 
+                s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
+
+                IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
+                IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,
+                IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,
+                IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,
+
+                COALESCE(
+                IF(f1.falhou, NULL, s.celular_disparo_1),
+                IF(f2.falhou, NULL, s.celular_disparo_2),
+                IF(f3.falhou, NULL, s.celular_disparo_3),
+                IF(f4.falhou, NULL, s.celular_disparo_rmi)
+                ) AS celular_disparo
+
+            FROM enriquece_rmi s
+            LEFT JOIN status_final_telefone f1
+                ON f1.flatTarget = s.celular_disparo_1
+
+            LEFT JOIN status_final_telefone f2
+                ON f2.flatTarget = s.celular_disparo_2
+
+            LEFT JOIN status_final_telefone f3
+                ON f3.flatTarget = s.celular_disparo_3
+            
+            LEFT JOIN status_final_telefone f4
+                ON f4.flatTarget = s.celular_disparo_rmi
+            ),
+
+            filtra_recebeu_primeira_hsm as (
+            -- verifica se esse cpf recebeu a primeira mensagem nos últimos 50 dias
+                select distinct filtra_falhas.*
+                FROM filtra_falhas
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+                    where fl.flattarget is not null
+                    ),
+            filtra_disparados as (
+            -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
+                select filtra_recebeu_primeira_hsm.*
+                FROM filtra_recebeu_primeira_hsm
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        -- on fl.flattarget = celular_disparo
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 2 dias
+                    where fl.flattarget is null
+            ),
+            final as (
+                select
+                filtra_disparados.*,
+                from filtra_disparados
+            )
+            SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                        celular_disparo,
+                        STRUCT(
+                            INITCAP(
+                            IF(
+                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                CONCAT(
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                nome
+                            )
+                            )  AS NOME,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                    nome
+                                )
+                            ) AS CC_WT_NOME,
+                            cpf AS CC_WT_CPF_CIDADAO,
+                            data_alta_internacao as CC_WT_DATA_ALTA,
+                            date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
+                        ) AS vars,
+                        ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                        CAST(cpf AS STRING) AS externalId
+                        )
+                    ) AS destination_data
+            from final
+            where celular_disparo is not null
+
+
+# Disparo SMS Puérperas D34 - Pesquisa 6
+  - interval: 86400
+    anchor_date: "2021-01-01T11:20:00"
+    timezone: America/Sao_Paulo
+    active: true
+    slug: daily-sms-puerperas-d34
+    flow_run_name: sms-puerperas-d34
+    parameters:
+        id_hsm: 566
+        query_replacements: {"id_hsm_placeholder": 566, "id_hsm_anterior_placeholder": 571}
+        table_id: disparos_efetuados_teste
+        dump_mode: append
+        test_mode: false
+        chunk_size: 1000
+        dataset_id: brutos_wetalkie
+        campaign_name: sms-puerperas
+        max_dispatch_retries: 3
+        sleep_minutes: 5
+        cost_center_id: 71
+        flow_environment: staging
+        whitelist_percentage: 100
+        infisical_secret_path: /wetalkie
+        whitelist_environment: production
+        filter_duplicated_cpfs: true
+        filter_duplicated_phones: false
+        filter_dispatched_phones_or_cpfs: null
+        filter_failed_phones: true
+        force_add_on_whitelist_group: true
+        whitelist_replace_contacts: true
+        query: |
+            -- Pesquisa 6
+            WITH segmentacao_original_raw AS (
+            SELECT
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                data_alta_internacao,
+                -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`,
+            from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+            WHERE cpf is not null
+                and cpf != '00000000000'
+            AND CURRENT_DATE('America/Sao_Paulo') in
+                    (
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)
+                    )
+                    and nome_maternidade_alta like '%MARIA AMELIA%'                
+            ),
+            telefones_siscegonha as (
+            select 
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
+                MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
+                MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
+                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
+            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            UNNEST(telefones_gestante) AS telefone
+            group by cpf
+            ),
+            segmentacao_original as (
+                select * from
+                segmentacao_original_raw
+                inner join telefones_siscegonha using (cpf)
+            )
+            , dados_rmi as (
+            -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
+                    SELECT
+                        cpf,
+                        `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,
+                    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+                    WHERE menor_idade is False
+                    and obito.indicador is False
+                    and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
+                    ),
+            enriquece_rmi as (
+                select
+                    segmentacao_original.*,
+                    dados_rmi.celular_disparo_rmi
+                from segmentacao_original
+                left join dados_rmi using(cpf)
+            )
+            , status_final_telefone AS (
+            -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
+            SELECT
+                flatTarget,
+                CASE
+                WHEN status = 'FAILED'  and faultdescription like '%131026%' THEN TRUE
+                ELSE FALSE
+                END AS falhou
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY flatTarget
+                ORDER BY createDate DESC
+            ) = 1
+            ),
+
+            filtra_falhas AS (
+            SELECT
+                distinct 
+                s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
+
+                IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
+                IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,
+                IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,
+                IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,
+
+                COALESCE(
+                IF(f1.falhou, NULL, s.celular_disparo_1),
+                IF(f2.falhou, NULL, s.celular_disparo_2),
+                IF(f3.falhou, NULL, s.celular_disparo_3),
+                IF(f4.falhou, NULL, s.celular_disparo_rmi)
+                ) AS celular_disparo
+
+            FROM enriquece_rmi s
+            LEFT JOIN status_final_telefone f1
+                ON f1.flatTarget = s.celular_disparo_1
+
+            LEFT JOIN status_final_telefone f2
+                ON f2.flatTarget = s.celular_disparo_2
+
+            LEFT JOIN status_final_telefone f3
+                ON f3.flatTarget = s.celular_disparo_3
+            
+            LEFT JOIN status_final_telefone f4
+                ON f4.flatTarget = s.celular_disparo_rmi
+            ),
+
+            filtra_recebeu_primeira_hsm as (
+            -- verifica se esse cpf recebeu a primeira mensagem nos últimos 50 dias
+                select distinct filtra_falhas.*
+                FROM filtra_falhas
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+                    where fl.flattarget is not null
+                    ),
+            filtra_disparados as (
+            -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
+                select filtra_recebeu_primeira_hsm.*
+                FROM filtra_recebeu_primeira_hsm
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        -- on fl.flattarget = celular_disparo
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 200 dias/ 1x ao ano
+                    where fl.flattarget is null
+            ),
+            final as (
+                select
+                filtra_disparados.*,
+                from filtra_disparados
+            )
+            SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                        celular_disparo,
+                        STRUCT(
+                            INITCAP(
+                            IF(
+                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                CONCAT(
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                nome
+                            )
+                            )  AS NOME,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                    nome
+                                )
+                            ) AS CC_WT_NOME,
+                            cpf AS CC_WT_CPF_CIDADAO,
+                            data_alta_internacao as CC_WT_DATA_ALTA,
+                            date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
+                        ) AS vars,
+                        ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                        CAST(cpf AS STRING) AS externalId
+                        )
+                    ) AS destination_data
+            from final
+            where celular_disparo is not null
+
+
+# Disparo SMS Puérperas D40 - Pesquisa 7
+  - interval: 86400
+    anchor_date: "2021-01-01T11:20:00"
+    timezone: America/Sao_Paulo
+    active: true
+    slug: daily-sms-puerperas-d40
+    flow_run_name: sms-puerperas-d40
+    parameters:
+        id_hsm: 589
+        query_replacements: {"id_hsm_placeholder": 589, "id_hsm_anterior_placeholder": 571}
+        table_id: disparos_efetuados_teste
+        dump_mode: append
+        test_mode: false
+        chunk_size: 1000
+        dataset_id: brutos_wetalkie
+        campaign_name: sms-puerperas
+        max_dispatch_retries: 3
+        sleep_minutes: 5
+        cost_center_id: 71
+        flow_environment: staging
+        whitelist_percentage: 100
+        infisical_secret_path: /wetalkie
+        whitelist_environment: production
+        filter_duplicated_cpfs: true
+        filter_duplicated_phones: false
+        filter_dispatched_phones_or_cpfs: null
+        filter_failed_phones: true
+        force_add_on_whitelist_group: true
+        whitelist_replace_contacts: true
+        query: |
+            -- Pesquisa 7
+            WITH segmentacao_original_raw AS (
+            SELECT
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                data_alta_internacao,
+                -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`,
+            from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+            WHERE cpf is not null
+                and cpf != '00000000000'
+            AND CURRENT_DATE('America/Sao_Paulo') in
+                    (
+                    DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)
+                    )
+                    and nome_maternidade_alta like '%MARIA AMELIA%'                
+            ),
+            telefones_siscegonha as (
+            select 
+                lpad(cast(cpf as string) , 11, '0') as cpf,
+                MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
+                MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
+                MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
+                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
+            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            UNNEST(telefones_gestante) AS telefone
+            group by cpf
+            ),
+            segmentacao_original as (
+                select * from
+                segmentacao_original_raw
+                inner join telefones_siscegonha using (cpf)
+            )
+            , dados_rmi as (
+            -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
+                    SELECT
+                        cpf,
+                        `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,
+                    FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+                    WHERE menor_idade is False
+                    and obito.indicador is False
+                    and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
+                    ),
+            enriquece_rmi as (
+                select
+                    segmentacao_original.*,
+                    dados_rmi.celular_disparo_rmi
+                from segmentacao_original
+                left join dados_rmi using(cpf)
+            )
+            , status_final_telefone AS (
+            -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
+            SELECT
+                flatTarget,
+                CASE
+                WHEN status = 'FAILED'  and faultdescription like '%131026%' THEN TRUE
+                ELSE FALSE
+                END AS falhou
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY flatTarget
+                ORDER BY createDate DESC
+            ) = 1
+            ),
+
+            filtra_falhas AS (
+            SELECT
+                distinct 
+                s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
+
+                IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
+                IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,
+                IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,
+                IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,
+
+                COALESCE(
+                IF(f1.falhou, NULL, s.celular_disparo_1),
+                IF(f2.falhou, NULL, s.celular_disparo_2),
+                IF(f3.falhou, NULL, s.celular_disparo_3),
+                IF(f4.falhou, NULL, s.celular_disparo_rmi)
+                ) AS celular_disparo
+
+            FROM enriquece_rmi s
+            LEFT JOIN status_final_telefone f1
+                ON f1.flatTarget = s.celular_disparo_1
+
+            LEFT JOIN status_final_telefone f2
+                ON f2.flatTarget = s.celular_disparo_2
+
+            LEFT JOIN status_final_telefone f3
+                ON f3.flatTarget = s.celular_disparo_3
+            
+            LEFT JOIN status_final_telefone f4
+                ON f4.flatTarget = s.celular_disparo_rmi
+            ),
+
+            filtra_recebeu_primeira_hsm as (
+            -- verifica se esse cpf recebeu a primeira mensagem nos últimos 50 dias
+                select distinct filtra_falhas.*
+                FROM filtra_falhas
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+                    where fl.flattarget is not null
+                    ),
+            filtra_disparados as (
+            -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
+                select filtra_recebeu_primeira_hsm.*
+                FROM filtra_recebeu_primeira_hsm
+                left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                        -- on fl.flattarget = celular_disparo
+                        on fl.targetexternalid = cpf
+                        and fl.templateId = cast({id_hsm_placeholder} as int64)
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 200 dias/ 1x ao ano
+                    where fl.flattarget is null
+            ),
+            final as (
+                select
+                filtra_disparados.*,
+                from filtra_disparados
+            )
+            SELECT
+                TO_JSON_STRING(
+                    STRUCT(
+                        celular_disparo,
+                        STRUCT(
+                            INITCAP(
+                            IF(
+                                ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                CONCAT(
+                                    SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                nome
+                            )
+                            )  AS NOME,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '
+                                    ),
+                                    nome
+                                )
+                            ) AS CC_WT_NOME,
+                            cpf AS CC_WT_CPF_CIDADAO,
+                            data_alta_internacao as CC_WT_DATA_ALTA,
+                            date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
+                        ) AS vars,
+                        ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                        CAST(cpf AS STRING) AS externalId
+                        )
+                    ) AS destination_data
+            from final
+            where celular_disparo is not null
 
 
 #   # Daily schedule para flow smf-iptu-2025-em-atraso-prod-v1
