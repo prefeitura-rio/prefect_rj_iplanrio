@@ -46,5 +46,6 @@
   "filter_duplicated_phones": false,
   "filter_dispatched_phones_or_cpfs": null,
   "filter_failed_phones": false,
-  "force_add_on_whitelist_group": true
+  "force_add_on_whitelist_group": true,
+  "whitelist_replace_contacts" : true
 }

@@ -157,6 +157,7 @@ def remove_contacts_from_whitelist(
     for dest in destinations:
         try:
             phone = dest.get("to")
+            print(f"DEBUG: Processing destinations for removal, found phone: {phone} in destination: {dest}")
             if phone:
                 phone_numbers.append(phone)
         except Exception as err:
@@ -168,6 +169,7 @@ def remove_contacts_from_whitelist(
 
     # Remove duplicates to get the final list of numbers to remove
     selected_numbers = list(set(phone_numbers))
+    print(f"DEBUG: All phone_numbers {phone_numbers} \nUnique phone numbers identified for removal: {selected_numbers}")
 
     print(f"Selected {len(selected_numbers)} contacts to remove from whitelist.")
 
@@ -940,6 +942,8 @@ def get_retry_destinations(
             new_dest['to'] = others[attempt_number - 1]
             print(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
+        elif attempt_number == 0:
+            retry_destinations.append(dest)            
 
     log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
     return retry_destinations
