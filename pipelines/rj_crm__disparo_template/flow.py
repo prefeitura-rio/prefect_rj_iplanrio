@@ -80,8 +80,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     send_discord_notification(webhook_url, message)
 
 
-@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])  ## TODO: descomentar
-# @flow(log_prints=True)
+@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
 def rj_crm__disparo_template(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
