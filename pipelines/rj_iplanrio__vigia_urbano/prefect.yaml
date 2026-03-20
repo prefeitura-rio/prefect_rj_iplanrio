@@ -119,5 +119,5 @@ deployments:
       parameters:
         table_id: TratamentoFator # Nome da tabela no BigQuery
         execute_query: |
-          select id, FatorId,UsuarioId,Resolvido,Justificativa,DataResolucao,CaminhoFoto,DataRegistro
+          select id, FatorId, suarioId, Resolvido, Justificativa, DataResolucao, CaminhoFoto,DataRegistro
           from vigiaurbano.TratamentoFator
