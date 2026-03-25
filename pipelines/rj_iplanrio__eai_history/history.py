@@ -128,43 +128,46 @@ class GoogleAgentEngineHistory:
             suffix=now,
         )
 
-    async def get_history_bulk_from_last_checkpoint_id(
+    async def get_history_bulk_from_last_update(
         self,
-        last_checkpoint_id: str = "0",
+        last_update: str = "1970-01-01T00:00:00+00:00",
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
         max_user_save_limit: int = 100,
+        sql_limit: Optional[int] = None,
     ) -> Optional[str]:
         """
-        Get history bulk from last update.
+        Get history bulk for all users updated after last_update (ISO 8601 timestamp).
         """
+
+        log(f"last_update used as filter: '{last_update}'")
+
+        engine = self._checkpointer._engine
 
         query = f"""
         WITH new_checkpoints AS (
-            -- Passo 1: Busca SUPER RÁPIDA usando o índice para pegar todas as linhas novas.
-            -- Esta parte continua igual.
+            -- Filter rows whose checkpoint timestamp is newer than the cursor.
+            -- Uses checkpoint_ts_immutable() so the expression index is picked up.
             SELECT
                 thread_id,
                 type,
                 checkpoint,
                 checkpoint_id
             FROM "public"."checkpoints"
-            WHERE checkpoint_id > '{last_checkpoint_id}'
+            WHERE checkpoint_ts_immutable(checkpoint) > '{last_update}'::timestamptz
         )
 
-        -- Dentro do lote de novidades, seleciona APENAS o checkpoint mais recente
-        -- de cada thread ANTES de qualquer processamento pesado.
-        -- Esta operação é muito rápida.
+        -- Keep only the most recent checkpoint per thread.
         SELECT DISTINCT ON (thread_id)
             thread_id,
             type,
             checkpoint,
             checkpoint_id
         FROM new_checkpoints
-        ORDER BY thread_id, checkpoint_id DESC
+        ORDER BY thread_id, checkpoint_ts_immutable(checkpoint) DESC
+        {f"LIMIT {sql_limit}" if sql_limit else ""}
         """
 
-        engine = self._checkpointer._engine
         loader = await PostgresLoader.create(engine=engine, query=query)
         docs = await loader.aload()
         users_infos = [
