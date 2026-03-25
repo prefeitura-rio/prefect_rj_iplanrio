@@ -115,6 +115,7 @@ def fetch_history_data(
                 f"Nenhum arquivo encontrado em {final_data_path}. Retornando None.",
                 level="warning",
             )
+            return None
         else:
             log(
                 f"Arquivos encontrados em {final_data_path}: {len(files_fond)}\n{files_fond[:10]}"
