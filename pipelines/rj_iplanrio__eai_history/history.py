@@ -86,9 +86,14 @@ class GoogleAgentEngineHistory:
         # state = await self._checkpointer.aget(config=config)
 
         # use checkpoint_bytes from the query instead of making multiple aget requests
-        state = self._checkpointer.serde.loads_typed(
-            (checkpoint_type, checkpoint_bytes)
-        )
+        # After the DB migration, checkpoint is stored as JSONB and is already a dict,
+        # regardless of whether type is None (new rows) or 'msgpack' (migrated old rows).
+        if isinstance(checkpoint_bytes, dict):
+            state = checkpoint_bytes
+        else:
+            state = self._checkpointer.serde.loads_typed(
+                (checkpoint_type, checkpoint_bytes)
+            )
         if not state:
             log(f"No state found for user_id: {user_id}", level="warning")
             return

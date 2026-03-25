@@ -27,9 +27,11 @@ def rj_iplanrio__eai_history(  # noqa
     max_user_save_limit: int = 100,
     environment: str = "staging",
     dbt_select: str = "raw_eai_logs_history",
+    skip_bd_credentials: bool = False,
 ):
     rename_current_flow_run_task(new_name=environment)
-    inject_bd_credentials_task()
+    if not skip_bd_credentials:
+        inject_bd_credentials_task()
 
     last_checkpoint_id_task = get_last_checkpoint_id(
         dataset_id=dataset_id,
@@ -55,3 +57,11 @@ def rj_iplanrio__eai_history(  # noqa
             dump_mode="append",
         )
         execute_dbt_task(select=dbt_select, target="prod")
+
+
+if __name__ == "__main__":
+    rj_iplanrio__eai_history(
+        last_checkpoint_id="0",
+        environment="staging",
+        max_user_save_limit=10,
+    )
