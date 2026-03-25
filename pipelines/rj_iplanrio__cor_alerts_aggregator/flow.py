@@ -47,6 +47,7 @@ def rj_iplanrio__cor_alerts_aggregator(
     dry_run: bool = False,
     destination: str = "google_sheets",
     spreadsheet_id: str = "",
+    sheet_retention_hours: int = 24,
 ):
     """
     Agrega alertas COR pendentes e envia para API do COR ou BigQuery.
@@ -65,6 +66,7 @@ def rj_iplanrio__cor_alerts_aggregator(
         dry_run: Se True, nao envia para destino (apenas simula)
         destination: Destino dos alertas ("cor_api" ou "google_sheets")
         spreadsheet_id: ID do Google Sheet para escrita direta via API (destination=google_sheets)
+        sheet_retention_hours: Horas de retencao de linhas no Sheet (default: 24)
     """
     valid_destinations = CORAlertAggregatorConstants.VALID_DESTINATIONS.value
     if destination not in valid_destinations:
@@ -220,6 +222,7 @@ def rj_iplanrio__cor_alerts_aggregator(
                 dataframe=combined_df,
                 spreadsheet_id=spreadsheet_id,
                 sheet_tab=CORAlertAggregatorConstants.SHEETS_TAB_NAME.value,
+                sheet_retention_hours=sheet_retention_hours,
             )
             log(f"Sheets: {written} linhas escritas/atualizadas")
 

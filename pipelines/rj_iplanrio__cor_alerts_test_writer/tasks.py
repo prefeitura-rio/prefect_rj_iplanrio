@@ -81,6 +81,8 @@ def generate_single_alert(
         "address": alert_config.get("address", "Endereco de teste"),
         "latitude": alert_config["lat"],
         "longitude": alert_config["lng"],
+        "bairro_raw": alert_config.get("bairro_raw", ""),
+        "bairro_normalizado": alert_config.get("bairro_normalizado", ""),
         "created_at": now.strftime("%Y-%m-%d %H:%M:%S"),
         "environment": environment,
         "status": "pending",
@@ -118,7 +120,7 @@ def generate_mock_alerts(
     Gera alertas mockados baseado em cenario pre-definido.
 
     Args:
-        scenario: Nome do cenario ("single", "small_cluster", "large_cluster", "mixed", "edge_cases")
+        scenario: Nome do cenario ("single", "small_cluster", "large_cluster", "mixed", "neighborhood_filter", "edge_cases")
         environment: Ambiente alvo (staging ou prod)
 
     Returns:
