@@ -70,8 +70,9 @@ class GoogleAgentEngineHistory:
         self,
         user_id: str,
         checkpoint_id: str,
-        checkpoint_bytes: bytes,
-        checkpoint_type: str,
+        last_update: str,
+        blob_type: str,
+        blob_b64: str,
         save_path: str,
         session_timeout_seconds: Optional[int] = 3600,
         use_whatsapp_format: bool = True,
@@ -82,24 +83,11 @@ class GoogleAgentEngineHistory:
             log(f"Invalid user_id: {user_id}", level="warning")
             return
 
-        # config = RunnableConfig(configurable={"thread_id": user_id})
-        # state = await self._checkpointer.aget(config=config)
-
-        # use checkpoint_bytes from the query instead of making multiple aget requests
-        # After the DB migration, checkpoint is stored as JSONB and is already a dict,
-        # regardless of whether type is None (new rows) or 'msgpack' (migrated old rows).
-        if isinstance(checkpoint_bytes, dict):
-            state = checkpoint_bytes
-        else:
-            state = self._checkpointer.serde.loads_typed(
-                (checkpoint_type, checkpoint_bytes)
-            )
-        if not state:
-            log(f"No state found for user_id: {user_id}", level="warning")
-            return
-
-        messages = state.get("channel_values", {}).get("messages", [])
-        last_update = state.get("ts", None)
+        # LangGraph v4: messages blob was fetched in the bulk query and base64-encoded.
+        # Decode it here using the checkpointer's serde (handles msgpack and json).
+        import base64
+        blob_bytes = base64.b64decode(blob_b64)
+        messages = self._checkpointer.serde.loads_typed((blob_type, blob_bytes))
 
         payload = to_gateway_format(
             messages=messages,
@@ -144,27 +132,25 @@ class GoogleAgentEngineHistory:
 
         engine = self._checkpointer._engine
 
+        # LangGraph v4: channel_values in the checkpoint row is empty {}.
+        # Messages live in checkpoint_blobs as (thread_id, channel='messages', version, type, blob).
+        # We join checkpoints with checkpoint_blobs in one bulk query, returning the
+        # blob as base64 so PostgresLoader (text-only) can carry it. Python decodes
+        # each blob with the checkpointer's serde (handles both msgpack and json).
         query = f"""
-        WITH new_checkpoints AS (
-            -- Filter rows whose checkpoint timestamp is newer than the cursor.
-            -- Uses checkpoint_ts_immutable() so the expression index is picked up.
-            SELECT
-                thread_id,
-                type,
-                checkpoint,
-                checkpoint_id
-            FROM "public"."checkpoints"
-            WHERE checkpoint_ts_immutable(checkpoint) > '{last_update}'::timestamptz
-        )
-
-        -- Keep only the most recent checkpoint per thread.
-        SELECT DISTINCT ON (thread_id)
-            thread_id,
-            type,
-            checkpoint,
-            checkpoint_id
-        FROM new_checkpoints
-        ORDER BY thread_id, checkpoint_ts_immutable(checkpoint) DESC
+        SELECT DISTINCT ON (c.thread_id)
+            c.thread_id,
+            c.checkpoint_id,
+            c.checkpoint->>'ts'                                      AS ts,
+            cb.type                                                   AS blob_type,
+            encode(cb.blob, 'base64')                                AS blob_b64
+        FROM "public"."checkpoints" c
+        JOIN "public"."checkpoint_blobs" cb
+          ON  cb.thread_id = c.thread_id
+          AND cb.channel   = 'messages'
+          AND cb.version   = c.checkpoint->'channel_versions'->>'messages'
+        WHERE checkpoint_ts_immutable(c.checkpoint) > '{last_update}'::timestamptz
+        ORDER BY c.thread_id, checkpoint_ts_immutable(c.checkpoint) DESC
         {f"LIMIT {sql_limit}" if sql_limit else ""}
         """
 
@@ -173,9 +159,10 @@ class GoogleAgentEngineHistory:
         users_infos = [
             {
                 "user_id": doc.page_content,
-                "checkpoint_id": doc.metadata["checkpoint_id"],
-                "checkpoint_bytes": doc.metadata["checkpoint"],  # <<< EXTRAIA OS BYTES
-                "checkpoint_type": doc.metadata["type"],  # <<< EXTRAIA O TYPE
+                "checkpoint_id": doc.metadata.get("checkpoint_id", ""),
+                "ts": doc.metadata.get("ts", ""),
+                "blob_type": doc.metadata.get("blob_type", ""),
+                "blob_b64": doc.metadata.get("blob_b64", ""),
             }
             for doc in docs
         ]
@@ -184,16 +171,8 @@ class GoogleAgentEngineHistory:
             return None
         else:
             log(f"Found {len(users_infos)} users to process")
-            user_info_log = [
-                {
-                    "user_id": doc["user_id"],
-                    "checkpoint_id": doc["checkpoint_id"],
-                    "checkpoint_type": doc["checkpoint_type"],
-                }
-                for doc in users_infos[:3]
-            ]
             log(
-                f"First 3 users: {json.dumps(user_info_log, ensure_ascii=False, indent=2)}"
+                f"First 3 users: {[d['user_id'] for d in users_infos[:3]]}"
             )
 
         save_path = str(Path(f"/tmp/data/{uuid4()}"))
@@ -214,8 +193,9 @@ class GoogleAgentEngineHistory:
                 self._get_single_user_history(
                     user_id=user_info["user_id"],
                     checkpoint_id=user_info["checkpoint_id"],
-                    checkpoint_bytes=user_info["checkpoint_bytes"],
-                    checkpoint_type=user_info["checkpoint_type"],
+                    last_update=user_info["ts"],
+                    blob_type=user_info["blob_type"],
+                    blob_b64=user_info["blob_b64"],
                     save_path=save_path,
                     session_timeout_seconds=session_timeout_seconds,
                     use_whatsapp_format=use_whatsapp_format,
