@@ -869,18 +869,25 @@ schedules:
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: true
+      test_mode: false
       sleep_minutes: 5
       whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
-      filter_dispatched_phones_or_cpfs: "phone_number"
-      filter_duplicated_phones: true
-      filter_duplicated_cpfs: false
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
       query: |
         WITH telefones_acari AS (
           SELECT CAST(telefone_limpo AS STRING) AS telefone_limpo
           FROM `rj-crm-registry-dev.brutos_data_metrica.telefones_columbia`
+        ),
+
+        rmi AS (
+          SELECT cpf, telefone
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
+          WHERE menor_idade IS FALSE
+            AND obito.indicador IS FALSE
         ),
 
         telefones_rmi_principal AS (
@@ -889,8 +896,10 @@ schedules:
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
               CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)
             ) AS telefone_formatado
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+          FROM rmi
           WHERE rmi.telefone.principal.valor IS NOT NULL
+            AND rmi.telefone.principal.estrategia_envio != "NÃO ENVIAR"
+            AND rmi.telefone.principal.tipo = "CELULAR"
         ),
 
         telefones_rmi_alternativos AS (
@@ -899,9 +908,11 @@ schedules:
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
               CONCAT(IFNULL(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor)
             ) AS telefone_formatado
-          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
+          FROM rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
+            AND tel_alt.estrategia_envio != "NÃO ENVIAR"
+            AND tel_alt.tipo = "CELULAR"
         ),
 
         todos_telefones_rmi AS (
@@ -914,10 +925,10 @@ schedules:
           TO_JSON_STRING(STRUCT(
             a.telefone_limpo AS celular_disparo,
             STRUCT('sua região' AS REGIAO) AS vars,
-            COALESCE(r.cpf, a.telefone_limpo) AS externalId
+            r.cpf AS externalId
           )) AS destination_data
         FROM telefones_acari AS a
-        LEFT JOIN todos_telefones_rmi AS r
+        INNER JOIN todos_telefones_rmi AS r
           ON a.telefone_limpo = r.telefone_formatado
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo ORDER BY (r.cpf IS NOT NULL) DESC, r.cpf) = 1
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo ORDER BY r.cpf) = 1
 #             limit 200
