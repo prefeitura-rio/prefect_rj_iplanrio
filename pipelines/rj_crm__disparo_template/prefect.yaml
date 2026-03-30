@@ -70,7 +70,7 @@ deployments:
       filter_duplicated_cpfs: true
       infisical_secret_path: /wetalkie
     schedules:
-  # Daily schedule para flow cvl-pesquisa1746-prod
+  # Daily schedule para flow cvl-1746-survey-invitation-without-resolution-prod-v1
       - interval: 86400
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
@@ -475,8 +475,7 @@ deployments:
         parameters:
           flow_environment: production
           id_hsm: 239
-          query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 
-              200}
+          query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 200}
           campaign_name: pgm-divida-ativa-prod-v2
           cost_center_id: 71
           chunk_size: 1000
