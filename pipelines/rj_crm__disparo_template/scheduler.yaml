@@ -859,11 +859,11 @@ schedules:
     anchor_date: "2021-01-01T10:00:00"
     timezone: America/Sao_Paulo
     active: false
-    slug: one-shot-acari-columbia
-    flow_run_name: acari-columbia
+    slug: one-shot-acari-columbia-previsao-chuva
+    flow_run_name: acari-columbia-previsao-chuva
     parameters:
       id_hsm: 232
-      campaign_name: acari-columbia
+      campaign_name: acari-columbia-previsao-chuva
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
