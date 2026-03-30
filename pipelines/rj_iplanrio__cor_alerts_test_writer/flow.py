@@ -36,7 +36,7 @@ def rj_iplanrio__cor_alerts_test_writer(
 
     Args:
         environment: Ambiente alvo (staging ou prod, recomendado staging)
-        scenario: Cenario pre-definido ("single", "small_cluster", "large_cluster", "mixed", "edge_cases")
+        scenario: Cenario pre-definido ("single", "small_cluster", "large_cluster", "mixed", "neighborhood_filter", "edge_cases")
         cleanup_before: Remove dados de teste existentes antes de inserir
         cleanup_after: Remove dados apos insercao (util para testes temporarios)
         delay_between_alerts: Delay em segundos entre cada alerta (default: 10s)
