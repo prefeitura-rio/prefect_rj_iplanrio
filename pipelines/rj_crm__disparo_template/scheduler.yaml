@@ -897,7 +897,7 @@ schedules:
           SELECT
             rmi.cpf,
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
-              CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor)
+              CONCAT(IFNULL(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor)
             ) AS telefone_formatado
           FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
