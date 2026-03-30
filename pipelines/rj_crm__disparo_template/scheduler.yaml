@@ -853,4 +853,71 @@ schedules:
 #             cross join dia_semana_tb
 #             where dia_semana not in (1, 7)
 #             order by trat_subgrupo
+
+  # Disparo único para grupo WhatsApp Acari (Columbia)
+  - interval: 86400
+    anchor_date: "2021-01-01T10:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: one-shot-acari-columbia
+    flow_run_name: acari-columbia
+    parameters:
+      id_hsm: xxx
+      campaign_name: acari-columbia
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 5
+      whitelist_percentage: 0
+      infisical_secret_path: "/wetalkie"
+      whitelist_environment: "production"
+      flow_environment: "production"
+      filter_dispatched_phones_or_cpfs: "phone_number"
+      filter_duplicated_phones: true
+      filter_duplicated_cpfs: false
+      query: |
+        WITH telefones_acari AS (
+          SELECT CAST(telefone_limpo AS STRING) AS telefone_limpo
+          FROM `rj-crm-registry-dev.brutos_data_metrica.telefones_columbia`
+        ),
+
+        telefones_rmi_principal AS (
+          SELECT
+            rmi.cpf,
+            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+              CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)
+            ) AS telefone_formatado
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+          WHERE rmi.telefone.principal.valor IS NOT NULL
+        ),
+
+        telefones_rmi_alternativos AS (
+          SELECT
+            rmi.cpf,
+            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+              CONCAT(tel_alt.ddi, tel_alt.ddd, tel_alt.valor)
+            ) AS telefone_formatado
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi,
+          UNNEST(rmi.telefone.alternativo) AS tel_alt
+          WHERE tel_alt.valor IS NOT NULL
+        ),
+
+        todos_telefones_rmi AS (
+          SELECT * FROM telefones_rmi_principal
+          UNION ALL
+          SELECT * FROM telefones_rmi_alternativos
+        )
+
+        SELECT
+          TO_JSON_STRING(STRUCT(
+            a.telefone_limpo AS celular_disparo,
+            COALESCE(r.cpf, a.telefone_limpo) AS externalId
+          )) AS destination_data
+        FROM telefones_acari AS a
+        LEFT JOIN todos_telefones_rmi AS r
+          ON a.telefone_limpo = r.telefone_formatado
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo) = 1
 #             limit 200
