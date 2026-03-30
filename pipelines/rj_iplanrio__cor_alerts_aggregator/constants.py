@@ -22,6 +22,8 @@ class CORAlertAggregatorConstants(Enum):
 
     # Tipos de alerta validos
     VALID_ALERT_TYPES = ["enchente", "alagamento", "bolsao"]
+    ALLOWED_NEIGHBORHOODS = ["acari", "jardim america", "guaratiba"]
+    ALLOWED_NEIGHBORHOODS_LABEL = "Acari, Jardim América e Guaratiba"
 
     # Ambientes validos (whitelist para prevenir SQL injection)
     VALID_ENVIRONMENTS = ["staging", "prod"]
