@@ -874,7 +874,6 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
-      flow_environment: "production"
       filter_dispatched_phones_or_cpfs: "phone_number"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: false
