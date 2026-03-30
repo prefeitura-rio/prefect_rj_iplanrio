@@ -914,6 +914,7 @@ schedules:
         SELECT
           TO_JSON_STRING(STRUCT(
             a.telefone_limpo AS celular_disparo,
+            STRUCT('sua região' AS REGIAO) AS vars,
             COALESCE(r.cpf, a.telefone_limpo) AS externalId
           )) AS destination_data
         FROM telefones_acari AS a
