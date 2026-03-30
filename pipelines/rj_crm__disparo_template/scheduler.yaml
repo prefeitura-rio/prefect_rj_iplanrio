@@ -919,5 +919,5 @@ schedules:
         FROM telefones_acari AS a
         LEFT JOIN todos_telefones_rmi AS r
           ON a.telefone_limpo = r.telefone_formatado
-        QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo) = 1
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo ORDER BY (r.cpf IS NOT NULL) DESC, r.cpf) = 1
 #             limit 200
