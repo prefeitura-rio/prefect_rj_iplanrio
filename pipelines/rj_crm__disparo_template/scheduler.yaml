@@ -862,7 +862,7 @@ schedules:
     slug: one-shot-acari-columbia
     flow_run_name: acari-columbia
     parameters:
-      id_hsm: xxx
+      id_hsm: 232
       campaign_name: acari-columbia
       cost_center_id: 71
       chunk_size: 1000
