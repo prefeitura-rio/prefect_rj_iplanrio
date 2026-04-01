@@ -1115,7 +1115,7 @@ schedules:
             tel AS celular_disparo,
             CAST(r.cpf AS STRING) AS externalId
           FROM UNNEST(['5521995017615', '5521987474139', '5521971564238']) AS tel
-          INNER JOIN todos_telefones_rmi AS r ON tel = r.telefone_formatado
+          INNER JOIN telefones_rmi_principal AS r ON tel = r.telefone_formatado
           QUALIFY ROW_NUMBER() OVER (PARTITION BY tel ORDER BY r.cpf) = 1
         ),
 
@@ -1251,7 +1251,7 @@ schedules:
             tel AS celular_disparo,
             CAST(r.cpf AS STRING) AS externalId
           FROM UNNEST(['5521995017615', '5521987474139', '5521971564238']) AS tel
-          INNER JOIN todos_telefones_rmi AS r ON tel = r.telefone_formatado
+          INNER JOIN telefones_rmi_principal AS r ON tel = r.telefone_formatado
           QUALIFY ROW_NUMBER() OVER (PARTITION BY tel ORDER BY r.cpf) = 1
         ),
 
