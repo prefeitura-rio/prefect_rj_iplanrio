@@ -873,7 +873,7 @@ schedules:
                             -- on fl.flattarget = celular_disparo
                             on fl.targetexternalid = cpf  --filtra por telefone ou cpf?
                             and fl.templateId = cast({id_hsm_placeholder} as int64)
-                            and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)  and fl.status='PROCESSING'
+                            and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)  and fl.status in ('PROCESSING', 'SENT')
                         where fl.flattarget is null
                 ),
                 final as (
@@ -1050,7 +1050,7 @@ schedules:
                             -- on fl.flattarget = celular_disparo
                             on fl.targetexternalid = cpf
                             and fl.templateId = cast({id_hsm_placeholder} as int64)
-                            and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez por ano
+                            and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY)  and fl.status in ('PROCESSING', 'SENT') -- pessoa só recebe essa mensagem cerca de uma vez por ano podendo pegar mais de uma gravidez
                         where fl.flattarget is null
                 ),
                 final as (
@@ -1145,7 +1145,7 @@ schedules:
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
+                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade`,
             FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
             UNNEST(telefones_gestante) AS telefone
             group by cpf
@@ -1227,7 +1227,8 @@ schedules:
                         and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
                     where fl.flattarget is not null
-                    ),
+            ),
+
             filtra_disparados as (
             -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
                 select filtra_recebeu_primeira_hsm.*
@@ -1236,7 +1237,7 @@ schedules:
                         -- on fl.flattarget = celular_disparo
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
-                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 2 dias
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY) and fl.status in ('PROCESSING', 'SENT') -- pessoa só recebe essa mensagem uma vez a cada 2 dias
                     where fl.flattarget is null
             ),
             final as (
@@ -1324,8 +1325,8 @@ schedules:
                     DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'
-                
             ),
+
             telefones_siscegonha as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
@@ -1337,11 +1338,13 @@ schedules:
             UNNEST(telefones_gestante) AS telefone
             group by cpf
             ),
+
             segmentacao_original as (
                 select * from
                 segmentacao_original_raw
                 inner join telefones_siscegonha using (cpf)
             )
+
             , dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
                     SELECT
@@ -1352,6 +1355,7 @@ schedules:
                     and obito.indicador is False
                     and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
                     ),
+
             enriquece_rmi as (
                 select
                     segmentacao_original.*,
@@ -1359,6 +1363,7 @@ schedules:
                 from segmentacao_original
                 left join dados_rmi using(cpf)
             )
+
             , status_final_telefone AS (
             -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
             SELECT
@@ -1415,6 +1420,7 @@ schedules:
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
                     where fl.flattarget is not null
                     ),
+
             filtra_disparados as (
             -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
                 select filtra_recebeu_primeira_hsm.*
@@ -1423,7 +1429,8 @@ schedules:
                         -- on fl.flattarget = celular_disparo
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
-                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY)  and fl.status='PROCESSING' -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 300 DAY) 
+                        and fl.status in ('PROCESSING', 'SENT') -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
                     where fl.flattarget is null
             ),
             final as (
@@ -1601,7 +1608,8 @@ schedules:
                         and fl.templateId = cast({id_hsm_anterior_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
                     where fl.flattarget is not null
-                    ),
+            ),
+
             filtra_disparados as (
             -- verifica se esse cpf já recebeu essa mesma mensagens nos últimos x dias
                 select filtra_recebeu_primeira_hsm.*
