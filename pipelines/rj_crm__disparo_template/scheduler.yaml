@@ -1178,6 +1178,7 @@ schedules:
         SELECT
           TO_JSON_STRING(STRUCT(
             celular_disparo,
+            STRUCT(externalId AS CC_WT_CPF_CIDADAO) AS vars,
             externalId
           )) AS destination_data
         FROM todos
@@ -1334,6 +1335,7 @@ schedules:
         SELECT
           TO_JSON_STRING(STRUCT(
             celular_disparo,
+            STRUCT(externalId AS CC_WT_CPF_CIDADAO) AS vars,
             externalId
           )) AS destination_data
         FROM todos
