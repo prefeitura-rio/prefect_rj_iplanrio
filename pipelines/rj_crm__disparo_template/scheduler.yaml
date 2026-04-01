@@ -1110,6 +1110,15 @@ schedules:
           QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo ORDER BY r.cpf) = 1
         ),
 
+        numeros_fixos AS (
+          SELECT
+            tel AS celular_disparo,
+            CAST(r.cpf AS STRING) AS externalId
+          FROM UNNEST(['5521995017615', '5521987474139', '5521971564238']) AS tel
+          INNER JOIN todos_telefones_rmi AS r ON tel = r.telefone_formatado
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY tel ORDER BY r.cpf) = 1
+        ),
+
         amostra_acari AS (
           SELECT
             t.telefone_formatado AS celular_disparo,
@@ -1136,6 +1145,8 @@ schedules:
 
         todos AS (
           SELECT * FROM grupo_whatsapp
+          UNION ALL
+          SELECT * FROM numeros_fixos
           UNION ALL
           SELECT * FROM amostra_acari
           UNION ALL
@@ -1235,6 +1246,15 @@ schedules:
           QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo ORDER BY r.cpf) = 1
         ),
 
+        numeros_fixos AS (
+          SELECT
+            tel AS celular_disparo,
+            CAST(r.cpf AS STRING) AS externalId
+          FROM UNNEST(['5521995017615', '5521987474139', '5521971564238']) AS tel
+          INNER JOIN todos_telefones_rmi AS r ON tel = r.telefone_formatado
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY tel ORDER BY r.cpf) = 1
+        ),
+
         amostra_acari AS (
           SELECT
             t.telefone_formatado AS celular_disparo,
@@ -1261,6 +1281,8 @@ schedules:
 
         dia1 AS (
           SELECT * FROM grupo_whatsapp
+          UNION ALL
+          SELECT * FROM numeros_fixos
           UNION ALL
           SELECT * FROM amostra_acari
           UNION ALL
