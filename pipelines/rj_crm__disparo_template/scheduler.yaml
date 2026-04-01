@@ -1144,8 +1144,9 @@ schedules:
             CAST(rmi.cpf AS STRING) AS externalId
           FROM rmi
           INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
           WHERE LOWER(rmi.endereco.principal.bairro) = 'acari'
-            AND CAST(rmi.cpf AS STRING) NOT IN (SELECT externalId FROM grupo_whatsapp)
+            AND gw.externalId IS NULL
           ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
           LIMIT 640
         ),
@@ -1156,8 +1157,9 @@ schedules:
             CAST(rmi.cpf AS STRING) AS externalId
           FROM rmi
           INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
           WHERE LOWER(rmi.endereco.principal.bairro) = 'jardim maravilha'
-            AND CAST(rmi.cpf AS STRING) NOT IN (SELECT externalId FROM grupo_whatsapp)
+            AND gw.externalId IS NULL
           ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
           LIMIT 370
         ),
@@ -1280,8 +1282,9 @@ schedules:
             CAST(rmi.cpf AS STRING) AS externalId
           FROM rmi
           INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
           WHERE LOWER(rmi.endereco.principal.bairro) = 'acari'
-            AND CAST(rmi.cpf AS STRING) NOT IN (SELECT externalId FROM grupo_whatsapp)
+            AND gw.externalId IS NULL
           ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
           LIMIT 640
         ),
@@ -1292,8 +1295,9 @@ schedules:
             CAST(rmi.cpf AS STRING) AS externalId
           FROM rmi
           INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
           WHERE LOWER(rmi.endereco.principal.bairro) = 'jardim maravilha'
-            AND CAST(rmi.cpf AS STRING) NOT IN (SELECT externalId FROM grupo_whatsapp)
+            AND gw.externalId IS NULL
           ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
           LIMIT 370
         ),
@@ -1315,7 +1319,8 @@ schedules:
             CAST(rmi.cpf AS STRING) AS externalId
           FROM rmi
           INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
-          WHERE CAST(rmi.cpf AS STRING) NOT IN (SELECT externalId FROM dia1)
+          LEFT JOIN dia1 ON CAST(rmi.cpf AS STRING) = dia1.externalId
+          WHERE dia1.externalId IS NULL
           ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:43')))
           LIMIT 1000
         ),
