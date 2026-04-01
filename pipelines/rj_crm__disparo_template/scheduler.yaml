@@ -418,7 +418,10 @@ schedules:
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
       query: |
-        -- ===================== 1) CELULARES VÁLIDOS (PF) E *MÓVEIS* =====================
+        -- ===================== 1) MATERIALIZA =====================
+        -- ===================== 1.1) CELULARES VÁLIDOS (PF) E *MÓVEIS* =====================
+        CREATE TEMP TABLE tmp_grupos AS
+
         WITH celulares_validos AS (
         SELECT
             cpf,
@@ -430,8 +433,8 @@ schedules:
             CONCAT(IFNULL(telefone.principal.ddi, '55'), telefone.principal.ddd, telefone.principal.valor)
             ) AS celular_disparo,
             CASE
-            WHEN pf.telefone.principal.estrategia_envio IN ("ENVIAR") THEN 0
-            WHEN pf.telefone.principal.estrategia_envio IN ("TESTAR") THEN 1
+            WHEN pf.telefone.principal.estrategia_envio = "ENVIAR" THEN 0
+            WHEN pf.telefone.principal.estrategia_envio = "TESTAR" THEN 1
             ELSE 2
             END AS phone_priority,
             pf.telefone.principal.estrategia_envio,
@@ -452,8 +455,8 @@ schedules:
         FROM celulares_validos
         LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             ON fl.targetexternalid = cpf
-        AND fl.templateId IN (196, 239)
-        AND fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)
+            AND fl.templateId IN (196, 239)
+            AND fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)
         WHERE fl.flattarget IS NULL
         ),
 
@@ -490,7 +493,6 @@ schedules:
             THEN FALSE
             ELSE TRUE
             END AS esta_pagando
-
         FROM contribuintes p
         LEFT JOIN UNNEST(
             ARRAY(
@@ -502,7 +504,7 @@ schedules:
         WHERE cdas_associadas.situacao_cda.descricao_situacao_cda IN ('Inscrita','Cobrança')
         ),
 
-        -- ===================== 4) BASE COM PAGAMENTOS =====================
+        -- ===================== 1.2) BASE COM PAGAMENTOS =====================
         -- soma por cpf e cda primeiro, já que temos mais de uma linha por cda
         base_ AS (
         SELECT
@@ -520,7 +522,7 @@ schedules:
             valor_saldo_devido
         ),
 
-        -- ===================== 5) UMA LINHA POR CPF =====================
+        -- ===================== 1.3) UMA LINHA POR CPF =====================
         per_cpf AS (
         SELECT
             b.cpf,
@@ -529,7 +531,6 @@ schedules:
             MAX(cm.nome_rmi) AS nome,
             MAX(cm.celular_disparo) AS celular_disparo,
             MAX(cm.phone_priority) AS phone_priority,
-            MAX(cm.estrategia_envio) AS estrategia_envio,
             MAX(b.data_geracao_cda) AS dt_ultima_cda,
             COUNT(b.id_certidao_divida_ativa) AS n_cdas_ativas,
             SUM(b.valor_saldo_devido) AS soma_divida_total,
@@ -540,25 +541,24 @@ schedules:
         ),
 
         elegiveis_divida_ativa AS (
-        SELECT
-            *,
-            IF(soma_divida_total <= 3500 AND esta_pagando = FALSE AND idade < 60, TRUE, FALSE) AS elegivel_divida_ativa
+        SELECT *
         FROM per_cpf
-        WHERE dt_ultima_cda >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
+        WHERE soma_divida_total <= 3500
+            AND esta_pagando = FALSE
+            AND idade < 60
+            AND dt_ultima_cda >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
         ),
 
-        -- ===================== 6) RANDOMIZAÇÃO DETERMINÍSTICA =====================
+        -- ===================== 1.4) RANDOMIZAÇÃO DETERMINÍSTICA =====================
         randomizados AS (
-        SELECT
-            *,
+        SELECT *,
             ROW_NUMBER() OVER (
             ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(cpf AS STRING), '|seed:17041993')))
             ) AS ordem_sorteio
         FROM elegiveis_divida_ativa
-        WHERE elegivel_divida_ativa = TRUE
         ),
 
-        -- ===================== 7) ATRIBUIÇÃO A GRUPOS ESCALONADOS =====================
+        -- ===================== 1.5) ATRIBUIÇÃO A GRUPOS ESCALONADOS =====================
         grupos_escalonados AS (
         SELECT
             *,
@@ -575,7 +575,26 @@ schedules:
         FROM randomizados
         )
 
-        -- ===================== 8) SAÍDA JSON =====================
+        SELECT * FROM grupos_escalonados;
+
+        -- ===================== 2) INSERT: Insere dados da tabela de teste ab =====================
+        INSERT INTO `rj-crm-registry.ab_test.divida_ativa`
+        SELECT
+        cpf,
+        celular_disparo,
+        nome,
+        grupo_escalonado,
+        ordem_sorteio,
+        tamanho_alvo_grupo,
+        soma_divida_total,
+        n_cdas_ativas,
+        esta_pagando,
+        idade,
+        CURRENT_TIMESTAMP(),
+        cast(cpf as int) as cpf_particao
+        FROM tmp_grupos;
+
+        -- ===================== 3) Estrutura dados para o disparo =====================
         SELECT
         TO_JSON_STRING(
             STRUCT(
@@ -609,9 +628,9 @@ schedules:
             CAST(cpf AS STRING) AS externalId
             )
         ) AS destination_data
-        FROM grupos_escalonados
+        FROM tmp_grupos
         ORDER BY ordem_sorteio
-        limit cast({limit_placeholder} as int64)
+        LIMIT cast({limit_placeholder} as int64);
 
 # Daily schedule para flow pgm-divida-ativa-lembrete-prod-v1
   - interval: 86400
