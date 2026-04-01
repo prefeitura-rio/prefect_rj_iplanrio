@@ -1086,7 +1086,8 @@ schedules:
             rmi.cpf,
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
               CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)
-            ) AS telefone_formatado
+            ) AS telefone_formatado,
+            1 AS origem
           FROM rmi
           WHERE rmi.telefone.principal.valor IS NOT NULL
             AND rmi.telefone.principal.estrategia_envio != "NÃO ENVIAR"
@@ -1098,7 +1099,8 @@ schedules:
             rmi.cpf,
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
               CONCAT(IFNULL(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor)
-            ) AS telefone_formatado
+            ) AS telefone_formatado,
+            2 AS origem
           FROM rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
@@ -1116,7 +1118,7 @@ schedules:
           SELECT cpf, telefone_formatado
           FROM todos_telefones_rmi
           WHERE telefone_formatado IS NOT NULL
-          QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY telefone_formatado) = 1
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY origem ASC, telefone_formatado) = 1
         ),
 
         grupo_whatsapp AS (
@@ -1225,7 +1227,8 @@ schedules:
             rmi.cpf,
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
               CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)
-            ) AS telefone_formatado
+            ) AS telefone_formatado,
+            1 AS origem
           FROM rmi
           WHERE rmi.telefone.principal.valor IS NOT NULL
             AND rmi.telefone.principal.estrategia_envio != "NÃO ENVIAR"
@@ -1237,7 +1240,8 @@ schedules:
             rmi.cpf,
             `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
               CONCAT(IFNULL(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor)
-            ) AS telefone_formatado
+            ) AS telefone_formatado,
+            2 AS origem
           FROM rmi,
           UNNEST(rmi.telefone.alternativo) AS tel_alt
           WHERE tel_alt.valor IS NOT NULL
@@ -1255,7 +1259,7 @@ schedules:
           SELECT cpf, telefone_formatado
           FROM todos_telefones_rmi
           WHERE telefone_formatado IS NOT NULL
-          QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY telefone_formatado) = 1
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY origem ASC, telefone_formatado) = 1
         ),
 
         grupo_whatsapp AS (
