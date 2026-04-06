@@ -46,8 +46,6 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
 from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
-    printar,
-    skip_flow_if_empty,
 )
 
 ## force deploy
@@ -138,6 +136,8 @@ def rj_crm__disparo_template(
         force_add_on_whitelist_group (bool, optional): If True, forces adding contacts to the whitelist group. Defaults to False.
         whitelist_replace_contacts (bool, optional): If True, removes contacts from the whitelist before adding them. Defaults to True.
     """
+    # force deploy
+
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
     dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value
@@ -195,11 +195,7 @@ def rj_crm__disparo_template(
         billing_project_id=billing_project_id,
     )
 
-    validated_destinations = skip_flow_if_empty(
-        data=destinations_result,
-        message="No destinations found from query. Skipping flow execution.",
-    )
-    if validated_destinations is None:
+    if destinations_result is None or len(destinations_result) == 0:
         send_dispatch_no_destinations_found(
             id_hsm,
             campaign_name,
@@ -209,7 +205,7 @@ def rj_crm__disparo_template(
         return  # flow termina aqui, nada downstream é agendado
 
     # Remove duplicate CPFs if flag is set - This is our BASE list for retries
-    remove_duplicate_destinations = remove_duplicate_cpfs(validated_destinations) if filter_duplicated_cpfs else validated_destinations
+    remove_duplicate_destinations = remove_duplicate_cpfs(destinations_result) if filter_duplicated_cpfs else destinations_result
     if not remove_duplicate_destinations or len(remove_duplicate_destinations) == 0:
         print("No destinations found after filtering duplicate CPFs. Exiting flow execution.")
         return

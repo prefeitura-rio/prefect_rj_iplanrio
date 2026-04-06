@@ -465,9 +465,9 @@ def get_destinations(
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
         )
-        if destinations_df is None or destinations_df.empty:
+        if destinations_df is None or destinations_df.empty or destinations_df.shape[1] == 0:
             log("No destinations found from query. Returning empty list.")
-            return
+            return []
 
         log(f"Resposta da query: {destinations_df.iloc[0]}")
         
