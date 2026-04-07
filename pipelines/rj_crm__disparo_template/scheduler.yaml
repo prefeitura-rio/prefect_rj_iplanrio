@@ -1268,8 +1268,8 @@ schedules:
     slug: daily-sms-puerperas-d0
     flow_run_name: sms-puerperas-d0
     parameters:
-        id_hsm: 571
-        query_replacements: {"id_hsm_placeholder": 571}
+        id_hsm: 610
+        query_replacements: {"id_hsm_placeholder": 610}
         table_id: disparos_efetuados_teste
         dump_mode: append
         test_mode: false
@@ -1436,7 +1436,7 @@ schedules:
         id_hsm: 588
         query_replacements:
             id_hsm_placeholder: 588
-            id_hsm_anterior_placeholder: 571
+            id_hsm_anterior_placeholder: 610
             pesquisa_id: "Pesquisa 1"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 1 DAY),
@@ -1476,7 +1476,7 @@ schedules:
         id_hsm: 456
         query_replacements:
             id_hsm_placeholder: 456
-            id_hsm_anterior_placeholder: 571
+            id_hsm_anterior_placeholder: 610
             pesquisa_id: "Pesquisa 2"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)"
             intervalo_filtro_disparados: 300
@@ -1512,7 +1512,7 @@ schedules:
         id_hsm: 562
         query_replacements:
             id_hsm_placeholder: 562
-            id_hsm_anterior_placeholder: 571
+            id_hsm_anterior_placeholder: 610
             pesquisa_id: "Pesquisa 3"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
@@ -1551,7 +1551,7 @@ schedules:
         id_hsm: 489
         query_replacements:
             id_hsm_placeholder: 489
-            id_hsm_anterior_placeholder: 571
+            id_hsm_anterior_placeholder: 610
             pesquisa_id: "Pesquisa 4"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)"
             intervalo_filtro_disparados: 300
@@ -1587,7 +1587,7 @@ schedules:
         id_hsm: 564
         query_replacements:
             id_hsm_placeholder: 564
-            id_hsm_anterior_placeholder: 571
+            id_hsm_anterior_placeholder: 610
             pesquisa_id: "Pesquisa 5"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
@@ -1625,7 +1625,7 @@ schedules:
         id_hsm: 566
         query_replacements:
             id_hsm_placeholder: 566
-            id_hsm_anterior_placeholder: 571
+            id_hsm_anterior_placeholder: 610
             pesquisa_id: "Pesquisa 6"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
             intervalo_filtro_disparados: 300
@@ -1661,7 +1661,7 @@ schedules:
         id_hsm: 589
         query_replacements:
             id_hsm_placeholder: 589
-            id_hsm_anterior_placeholder: 571
+            id_hsm_anterior_placeholder: 610
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 300

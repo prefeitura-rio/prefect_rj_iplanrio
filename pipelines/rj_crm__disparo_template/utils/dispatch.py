@@ -31,6 +31,7 @@ from pipelines.rj_crm__disparo_template.utils.validators import (
 from pipelines.rj_crm__disparo_template.utils.whitelist import (
     BetaGroupManager,
     get_environment_config,
+    normalize_numbers,
     validate_environment_config,
 )
 
@@ -129,7 +130,14 @@ def add_contacts_to_whitelist(
 
     print(f"Adding {len(new_numbers_to_add)} new contacts to group '{group_name}' (ID: {group_id}).")
 
-    if manager.add_numbers_to_group(group_id, new_numbers_to_add):
+    normalized_numbers = []
+    for num in new_numbers_to_add:
+        normalized_numbers.extend(normalize_numbers(num))
+    
+    # Remove duplicates to avoid redundant API calls
+    unique_normalized_numbers = list(set(normalized_numbers))
+
+    if manager.add_numbers_to_group(group_id, unique_normalized_numbers):
         print("\n✅  Successfully added contacts to the whitelist.")
     else:
         message = "\n⚠️  Failed to add contacts to the whitelist."
