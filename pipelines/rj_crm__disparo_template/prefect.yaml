@@ -1188,11 +1188,12 @@ deployments:
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
           query: |
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante,
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -1200,25 +1201,20 @@ deployments:
                 AND DATE(data_alta_internacao) between
                         DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY) and CURRENT_DATE('America/Sao_Paulo')
                         and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
-                    
                 ),
-                telefones_siscegonha as (
+                telefones as (
                 select 
                     lpad(cast(cpf as string) , 11, '0') as cpf,
+                    nome,
+                    MAX(data_alta_internacao) as data_alta_internacao,
                     MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                     MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                     MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                    -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-                FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+                FROM segmentacao_original,
                 UNNEST(telefones_gestante) AS telefone
-                group by cpf
+                group by cpf, nome
                 ),
-                segmentacao_original as (
-                    select * from
-                    segmentacao_original_raw
-                    inner join telefones_siscegonha using (cpf)
-                )
-                , dados_rmi as (
+                dados_rmi as (
                 -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
                         SELECT
                             cpf,
@@ -1227,15 +1223,15 @@ deployments:
                         WHERE menor_idade is False
                         and obito.indicador is False
                         and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
-                        ),
+                ),
                 enriquece_rmi as (
                     select
-                        segmentacao_original.*,
+                        telefones.*,
                         dados_rmi.celular_disparo_rmi
-                        from segmentacao_original
+                        from telefones
                     left join dados_rmi using(cpf)
-                )
-                , status_final_telefone AS (
+                ),
+                status_final_telefone AS (
                 -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
                 SELECT
                     flatTarget,
@@ -1347,7 +1343,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
             intervalo_filtro_disparados: 1
-            condicao_status_disparados: "fl.status in ('PROCESSING', 'SENT')"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -1368,11 +1363,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -1383,21 +1379,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -1411,9 +1403,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -1479,7 +1471,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -1537,7 +1529,6 @@ deployments:
             pesquisa_id: "Pesquisa 2"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status in ('PROCESSING', 'SENT')"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -1558,11 +1549,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -1573,21 +1565,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -1601,9 +1589,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -1669,7 +1657,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -1730,7 +1718,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
             intervalo_filtro_disparados: 2
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -1751,11 +1738,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -1766,21 +1754,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -1794,9 +1778,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -1862,7 +1846,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -1920,7 +1904,6 @@ deployments:
             pesquisa_id: "Pesquisa 4"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -1941,11 +1924,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -1956,21 +1940,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -1984,9 +1964,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -2052,7 +2032,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -2112,7 +2092,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
             intervalo_filtro_disparados: 1
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -2133,11 +2112,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -2148,21 +2128,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -2176,9 +2152,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -2244,7 +2220,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -2302,7 +2278,6 @@ deployments:
             pesquisa_id: "Pesquisa 6"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -2323,11 +2298,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -2338,21 +2314,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -2366,9 +2338,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -2434,7 +2406,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -2492,7 +2464,6 @@ deployments:
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -2513,11 +2484,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -2528,21 +2500,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -2556,9 +2524,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -2624,7 +2592,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -3946,11 +3914,12 @@ deployments:
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
           query: |
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante,
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -3958,25 +3927,20 @@ deployments:
                 AND DATE(data_alta_internacao) between
                         DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY) and CURRENT_DATE('America/Sao_Paulo')
                         and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
-                    
                 ),
-                telefones_siscegonha as (
+                telefones as (
                 select 
                     lpad(cast(cpf as string) , 11, '0') as cpf,
+                    nome,
+                    MAX(data_alta_internacao) as data_alta_internacao,
                     MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                     MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                     MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                    -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-                FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+                FROM segmentacao_original,
                 UNNEST(telefones_gestante) AS telefone
-                group by cpf
+                group by cpf, nome
                 ),
-                segmentacao_original as (
-                    select * from
-                    segmentacao_original_raw
-                    inner join telefones_siscegonha using (cpf)
-                )
-                , dados_rmi as (
+                dados_rmi as (
                 -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
                         SELECT
                             cpf,
@@ -3985,15 +3949,15 @@ deployments:
                         WHERE menor_idade is False
                         and obito.indicador is False
                         and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
-                        ),
+                ),
                 enriquece_rmi as (
                     select
-                        segmentacao_original.*,
+                        telefones.*,
                         dados_rmi.celular_disparo_rmi
-                        from segmentacao_original
+                        from telefones
                     left join dados_rmi using(cpf)
-                )
-                , status_final_telefone AS (
+                ),
+                status_final_telefone AS (
                 -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
                 SELECT
                     flatTarget,
@@ -4105,7 +4069,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
             intervalo_filtro_disparados: 1
-            condicao_status_disparados: "fl.status in ('PROCESSING', 'SENT')"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -4126,11 +4089,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -4141,21 +4105,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -4169,9 +4129,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -4237,7 +4197,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -4295,7 +4255,6 @@ deployments:
             pesquisa_id: "Pesquisa 2"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status in ('PROCESSING', 'SENT')"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -4316,11 +4275,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -4331,21 +4291,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -4359,9 +4315,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -4427,7 +4383,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -4488,7 +4444,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
             intervalo_filtro_disparados: 2
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -4509,11 +4464,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -4524,21 +4480,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -4552,9 +4504,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -4620,7 +4572,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -4678,7 +4630,6 @@ deployments:
             pesquisa_id: "Pesquisa 4"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -4699,11 +4650,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -4714,21 +4666,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -4742,9 +4690,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -4810,7 +4758,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -4870,7 +4818,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
             intervalo_filtro_disparados: 1
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -4891,11 +4838,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -4906,21 +4854,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -4934,9 +4878,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -5002,7 +4946,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -5060,7 +5004,6 @@ deployments:
             pesquisa_id: "Pesquisa 6"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -5081,11 +5024,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -5096,21 +5040,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -5124,9 +5064,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -5192,7 +5132,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -5250,7 +5190,6 @@ deployments:
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -5271,11 +5210,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -5286,21 +5226,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -5314,9 +5250,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -5382,7 +5318,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -6704,11 +6640,12 @@ deployments:
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
           query: |
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante,
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -6716,25 +6653,20 @@ deployments:
                 AND DATE(data_alta_internacao) between
                         DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY) and CURRENT_DATE('America/Sao_Paulo')
                         and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
-                    
                 ),
-                telefones_siscegonha as (
+                telefones as (
                 select 
                     lpad(cast(cpf as string) , 11, '0') as cpf,
+                    nome,
+                    MAX(data_alta_internacao) as data_alta_internacao,
                     MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                     MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                     MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                    -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-                FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+                FROM segmentacao_original,
                 UNNEST(telefones_gestante) AS telefone
-                group by cpf
+                group by cpf, nome
                 ),
-                segmentacao_original as (
-                    select * from
-                    segmentacao_original_raw
-                    inner join telefones_siscegonha using (cpf)
-                )
-                , dados_rmi as (
+                dados_rmi as (
                 -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
                         SELECT
                             cpf,
@@ -6743,15 +6675,15 @@ deployments:
                         WHERE menor_idade is False
                         and obito.indicador is False
                         and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
-                        ),
+                ),
                 enriquece_rmi as (
                     select
-                        segmentacao_original.*,
+                        telefones.*,
                         dados_rmi.celular_disparo_rmi
-                        from segmentacao_original
+                        from telefones
                     left join dados_rmi using(cpf)
-                )
-                , status_final_telefone AS (
+                ),
+                status_final_telefone AS (
                 -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
                 SELECT
                     flatTarget,
@@ -6863,7 +6795,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
             intervalo_filtro_disparados: 1
-            condicao_status_disparados: "fl.status in ('PROCESSING', 'SENT')"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -6884,11 +6815,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -6899,21 +6831,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -6927,9 +6855,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -6995,7 +6923,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -7053,7 +6981,6 @@ deployments:
             pesquisa_id: "Pesquisa 2"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status in ('PROCESSING', 'SENT')"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -7074,11 +7001,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -7089,21 +7017,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -7117,9 +7041,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -7185,7 +7109,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -7246,7 +7170,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
             intervalo_filtro_disparados: 2
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -7267,11 +7190,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -7282,21 +7206,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -7310,9 +7230,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -7378,7 +7298,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -7436,7 +7356,6 @@ deployments:
             pesquisa_id: "Pesquisa 4"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -7457,11 +7376,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -7472,21 +7392,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -7500,9 +7416,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -7568,7 +7484,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -7628,7 +7544,6 @@ deployments:
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
             intervalo_filtro_disparados: 1
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -7649,11 +7564,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -7664,21 +7580,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -7692,9 +7604,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -7760,7 +7672,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -7818,7 +7730,6 @@ deployments:
             pesquisa_id: "Pesquisa 6"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -7839,11 +7750,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -7854,21 +7766,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -7882,9 +7790,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -7950,7 +7858,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
@@ -8008,7 +7916,6 @@ deployments:
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 300
-            condicao_status_disparados: "fl.status='PROCESSING'"
           table_id: disparos_efetuados_teste
           dump_mode: append
           test_mode: false
@@ -8029,11 +7936,12 @@ deployments:
           whitelist_replace_contacts: true
           query: |
             -- {pesquisa_id}
-            WITH segmentacao_original_raw AS (
+            WITH segmentacao_original AS (
                 SELECT
                     lpad(cast(cpf as string) , 11, '0') as cpf,
                     nome,
                     data_alta_internacao,
+                    telefones_gestante
                     -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
                 from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
@@ -8044,21 +7952,17 @@ deployments:
                     )
                     and nome_maternidade_alta like '%MARIA AMELIA%'                
             ),
-            telefones_siscegonha as (
+            telefones as (
             select 
                 lpad(cast(cpf as string) , 11, '0') as cpf,
+                nome,
+                MAX(data_alta_internacao) as data_alta_internacao,
                 MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
                 MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                 MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade_teste`,
-            FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+            FROM segmentacao_original,
             UNNEST(telefones_gestante) AS telefone
-            group by cpf
-            ),
-            segmentacao_original as (
-                select * from
-                segmentacao_original_raw
-                inner join telefones_siscegonha using (cpf)
+            group by cpf, nome
             ),
             dados_rmi as (
             -- os dados do rmi serão usados apenas caso a puérpera não tenha nenhum telefone atribuido
@@ -8072,9 +7976,9 @@ deployments:
             ),
             enriquece_rmi as (
                 select
-                    segmentacao_original.*,
+                    telefones.*,
                     dados_rmi.celular_disparo_rmi
-                from segmentacao_original
+                from telefones
                 left join dados_rmi using(cpf)
             ),
             status_final_telefone AS (
@@ -8140,7 +8044,7 @@ deployments:
                         on fl.targetexternalid = cpf
                         and fl.templateId = cast({id_hsm_placeholder} as int64)
                         and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY) 
-                        and {condicao_status_disparados} -- pessoa só recebe essa mensagem uma vez a cada 300 dias/ 1x ao ano
+                        and fl.status in ('PROCESSING', 'SENT')
                     where fl.flattarget is null
             ),
             final as (
