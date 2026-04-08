@@ -130,6 +130,7 @@ def add_contacts_to_whitelist(
 
     print(f"Adding {len(new_numbers_to_add)} new contacts to group '{group_name}' (ID: {group_id}).")
 
+    # Add numbers with and without 9 after ddd
     normalized_numbers = []
     for num in new_numbers_to_add:
         normalized_numbers.extend(normalize_numbers(num))
@@ -178,8 +179,15 @@ def remove_contacts_from_whitelist(
         print("\n⚠️  No valid phone numbers found in destinations to remove from whitelist.")
         return
 
+    # Add numbers on list with and without 9 after ddd
+    normalized_numbers = []
+    for num in phone_numbers:
+        normalized_numbers.extend(normalize_numbers(num))
+    print(f"Numbers to remove from whitelist: {phone_numbers}")
+    print(f"Normalized numbers to remove: {normalized_numbers}")
+    
     # Remove duplicates to get the final list of numbers to remove
-    selected_numbers = list(set(phone_numbers))
+    selected_numbers = list(set(normalized_numbers))
     print(f"DEBUG: All phone_numbers {phone_numbers} \nUnique phone numbers identified for removal: {selected_numbers}")
 
     print(f"Selected {len(selected_numbers)} contacts to remove from whitelist.")
