@@ -133,9 +133,12 @@ def add_contacts_to_whitelist(
     normalized_numbers = []
     for num in new_numbers_to_add:
         normalized_numbers.extend(normalize_numbers(num))
+    print(f"New numbers to add: {new_numbers_to_add}")
+    print(f"Normalized numbers to add: {normalized_numbers}")
     
     # Remove duplicates to avoid redundant API calls
     unique_normalized_numbers = list(set(normalized_numbers))
+    print(f"Unique Normalized numbers to add: {unique_normalized_numbers}")
 
     if manager.add_numbers_to_group(group_id, unique_normalized_numbers):
         print("\n✅  Successfully added contacts to the whitelist.")
