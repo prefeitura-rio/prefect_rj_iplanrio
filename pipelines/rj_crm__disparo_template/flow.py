@@ -37,15 +37,15 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_already_dispatched_data,
     get_destinations,
     get_retry_destinations,
+    remove_contacts_from_whitelist,
     remove_duplicate_cpfs,
     remove_duplicate_phones,
+    remove_failed_phones,
 )
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
-    printar,
-    skip_flow_if_empty,
 )
 
 ## force deploy
@@ -53,6 +53,12 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     """
     Sends a Discord notification when a flow run fails.
     """
+    # Only send notification if flow_environment is production
+    flow_environment = flow_run.parameters.get("flow_environment", "staging")
+    if flow_environment != "production":
+        print(f"Flow failed in {flow_environment} environment. Skipping Discord notification.")
+        return
+
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
     if not webhook_url:
         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
@@ -63,7 +69,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
 
     message = f"""
-    Prefect flow run failed!
+    Prefect flow run failed in PRODUCTION! 🚨
     📋 **Campanha:** {campaign_name}
     🆔 **Template ID:** {id_hsm}
     💰 **Centro de Custo:** {cost_center_id}
@@ -89,12 +95,15 @@ def rj_crm__disparo_template(
     filter_dispatched_phones_or_cpfs: str | None = "cpf",
     filter_duplicated_phones: bool = True,
     filter_duplicated_cpfs: bool = True,
+    filter_failed_phones: bool = False,
     sleep_minutes: int | None = 5,
     max_dispatch_retries: int = 0,
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 0,
     whitelist_environment: str = "production",
     flow_environment: str = "staging",
+    force_add_on_whitelist_group: bool = False,
+    whitelist_replace_contacts: bool = False,
 ):
     """
     Orchestrates the dispatch of templated messages via Wetalkie API.
@@ -117,14 +126,17 @@ def rj_crm__disparo_template(
         filter_dispatched_phones_or_cpfs (str, optional): If True, filters out phone numbers that have already been dispatched today. This parameter must be None, "cpf" or "phone_number". Defaults to "cpf".
         filter_duplicated_phones (bool, optional): If True, removes duplicate phone numbers from the destination list. Defaults to True.
         filter_duplicated_cpfs (bool, optional): If True, removes duplicate CPFs from the destination list. Defaults to True.
+        filter_failed_phones (bool, optional): If True, removes phone numbers that have already failed in last dispatch. Defaults to False.
         sleep_minutes (int, optional): The number of minutes to wait before initiating the dispatch. Defaults to 5.
         max_dispatch_retries (int): Maximum number of retry attempts using alternative phone numbers. Defaults to 0.
         infisical_secret_path (str, optional): The path in Infisical where Wetalkie API secrets are stored. Defaults to "/wetalkie".
         whitelist_percentage (int, optional): The percentage of contacts to add to a whitelist group. Defaults to 0.
         whitelist_environment (str, optional): The environment for the whitelist (e.g., "staging", "production"). Defaults to "staging".
         flow_environment (str, optional): The environment where the flow is running (e.g., "staging", "production"). Defaults to "staging".
+        force_add_on_whitelist_group (bool, optional): If True, forces adding contacts to the whitelist group. Defaults to False.
+        whitelist_replace_contacts (bool, optional): If True, removes contacts from the whitelist before adding them. Defaults to True.
     """
-    # force deploy
+    # force deploy ##
 
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
@@ -135,7 +147,6 @@ def rj_crm__disparo_template(
     chunk_size = chunk_size or TemplateConstants.CHUNK_SIZE.value
     query = query or TemplateConstants.QUERY.value
     query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
-
     billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
 
     destinations = getenv_or_action("TEMPLATE__DESTINATIONS", action="ignore")
@@ -184,11 +195,7 @@ def rj_crm__disparo_template(
         billing_project_id=billing_project_id,
     )
 
-    validated_destinations = skip_flow_if_empty(
-        data=destinations_result,
-        message="No destinations found from query. Skipping flow execution.",
-    )
-    if validated_destinations is None:
+    if destinations_result is None or len(destinations_result) == 0:
         send_dispatch_no_destinations_found(
             id_hsm,
             campaign_name,
@@ -198,22 +205,31 @@ def rj_crm__disparo_template(
         return  # flow termina aqui, nada downstream é agendado
 
     # Remove duplicate CPFs if flag is set - This is our BASE list for retries
-    base_destinations = remove_duplicate_cpfs(validated_destinations) if filter_duplicated_cpfs else validated_destinations
+    remove_duplicate_destinations = remove_duplicate_cpfs(destinations_result) if filter_duplicated_cpfs else destinations_result
+    if not remove_duplicate_destinations or len(remove_duplicate_destinations) == 0:
+        print("No destinations found after filtering duplicate CPFs. Exiting flow execution.")
+        return
+
+    if filter_failed_phones:
+        base_destinations = remove_failed_phones(
+            original_destinations=remove_duplicate_destinations,
+            billing_project_id=billing_project_id,
+            max_dispatch_retries=max_dispatch_retries,
+        )
+    else:
+        base_destinations = remove_duplicate_destinations
+
     if not base_destinations or len(base_destinations) == 0:
-        print("No destinations found. Exiting flow execution.")
+        print("No destinations found after filtering failed phones. Exiting flow execution.")
+        send_dispatch_no_destinations_found(
+            id_hsm,
+            campaign_name,
+            cost_center_id,
+            test_mode,
+        )
         return
 
     print(f"Total unique destinations to dispatch: {len(base_destinations)}")
-
-    # Add contacts to whitelist if percentage is set
-    if whitelist_percentage > 0:
-        whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
-        add_contacts_to_whitelist(
-            destinations=base_destinations,
-            percentage_to_insert=whitelist_percentage,
-            group_name=whitelist_group_name,
-            environment=whitelist_environment,
-        )
 
     if not api_status:
         print("API is not accessible. Ending flow execution.")
@@ -225,11 +241,14 @@ def rj_crm__disparo_template(
     # RETRY LOOP
     for i in range(0, max_dispatch_retries + 1):
         
-        if i > 0:
-            print(f"⚠️  Sleep 5 minutes before retry dispatch.")
-            time.sleep(5 * 60)
+        if (i > 0 or filter_failed_phones) and max_dispatch_retries > 0:
+            if i > 0:
+                print(f"⚠️  Sleep 5 minutes before retry dispatch.")
+                time.sleep(3 * 60)
 
-            print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
+                print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
+            else:
+                print(f"\n⚠️  Fill with others phones for previously failed phones.")
             retry_destinations = get_retry_destinations(
                 id_hsm=id_hsm,
                 original_destinations=base_destinations,
@@ -237,8 +256,8 @@ def rj_crm__disparo_template(
                 attempt_number=i
             )
 
-            if not retry_destinations:
-                print(f"✅ No remaining failures found for retry attempt {i}. Ending retry loop.")
+            if not retry_destinations or len(retry_destinations) == 0:
+                print(f"✅ No remaining phones found for retry attempt {i}. Ending retry loop.")
                 break
 
             print(f"🚀 Found {len(retry_destinations)} destinations for retry attempt {i}.")
@@ -270,8 +289,24 @@ def rj_crm__disparo_template(
             print("No destinations found. Exiting flow execution.")
             return
 
+        # Add contacts to whitelist if percentage is set
+        if whitelist_percentage > 0:
+            whitelist_group_name = f"citizen-hsm-{campaign_name}"
+            if whitelist_replace_contacts:
+                remove_contacts_from_whitelist(
+                    destinations=final_destinations,
+                    environment=whitelist_environment,
+                )
+            add_contacts_to_whitelist(
+                destinations=final_destinations,
+                percentage_to_insert=whitelist_percentage,
+                group_name=whitelist_group_name,
+                environment=whitelist_environment,
+                force_add_on_whitelist_group=force_add_on_whitelist_group,
+            )
+            
         dispatch_payload = create_dispatch_payload(
-            campaign_name=campaign_name if i == 0 else f"{campaign_name}-retry-{i}",
+            campaign_name=campaign_name,
             cost_center_id=cost_center_id,
             destinations=final_destinations,
         )
