@@ -1086,7 +1086,7 @@ schedules:
 
   # Disparo SMS Puérperas Confirmação agendamento
   - interval: 86400
-    anchor_date: "2021-01-01T11:00:00"
+    anchor_date: "2021-01-01T15:00:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerpera-confirma-agendamento
@@ -1095,24 +1095,25 @@ schedules:
         id_hsm: 573
         query_replacements: {"id_hsm_placeholder": 573}
         id_hsm_placeholder: 573
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
         dataset_id: brutos_wetalkie
-        campaign_name: sms-puerpera
+        campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
-        whitelist_percentage: 0
+        flow_environment: production
+        whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
         filter_duplicated_cpfs: true
         filter_duplicated_phones: false
         filter_dispatched_phones_or_cpfs: null
         filter_failed_phones: true
-        force_add_on_whitelist_group: false
+        force_add_on_whitelist_group: true
+        whitelist_replace_contacts: true
         query: |
             WITH segmentacao_original AS (
                 SELECT
@@ -1131,10 +1132,10 @@ schedules:
 
                 WHERE cpf is not null
                     and cpf != '00000000000'
-                AND DATE(data_hora_criacao_agendamento) =
+                    AND time(data_hora_agendamento_visita_maternidade) != '00:00:00'
+                    AND DATE(data_hora_criacao_agendamento) =
                         DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY)
                         and nome_maternidade_agendada like '%MARIA AMELIA%'
-
                 GROUP BY
                     cpf,
                     nome,
@@ -1262,7 +1263,7 @@ schedules:
 
   # Disparo SMS Puérperas D0 - Explicação do processo
   - interval: 3600
-    anchor_date: "2021-01-01T11:10:00"
+    anchor_date: "2021-01-01T15:10:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d0
@@ -1270,7 +1271,7 @@ schedules:
     parameters:
         id_hsm: 610
         query_replacements: {"id_hsm_placeholder": 610}
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
@@ -1279,7 +1280,7 @@ schedules:
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
@@ -1427,7 +1428,7 @@ schedules:
 
   # Disparo SMS Puérperas D1, D3, D5 e D10 - Pesquisa 1
   - interval: 86400
-    anchor_date: "2021-01-01T11:20:00"
+    anchor_date: "2021-01-01T15:20:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d1-d3-d5-d10
@@ -1444,7 +1445,7 @@ schedules:
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
             intervalo_filtro_disparados: 1
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
@@ -1453,7 +1454,7 @@ schedules:
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
@@ -1467,7 +1468,7 @@ schedules:
 
   # Disparo SMS Puérperas D7 - Pesquisa 2
   - interval: 86400
-    anchor_date: "2021-01-01T11:20:00"
+    anchor_date: "2021-01-01T15:20:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d7
@@ -1480,16 +1481,16 @@ schedules:
             pesquisa_id: "Pesquisa 2"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)"
             intervalo_filtro_disparados: 300
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
         dataset_id: brutos_wetalkie
-        campaign_name: sms-puerperas-d7
+        campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
@@ -1503,7 +1504,7 @@ schedules:
 
   # Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
   - interval: 86400
-    anchor_date: "2021-01-01T11:20:00"
+    anchor_date: "2021-01-01T15:20:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d13-d16-d19
@@ -1518,8 +1519,8 @@ schedules:
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
-            intervalo_filtro_disparados: 2
-        table_id: disparos_efetuados_teste
+            intervalo_filtro_disparados: 1
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
@@ -1528,7 +1529,7 @@ schedules:
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
@@ -1542,7 +1543,7 @@ schedules:
 
   # Disparo SMS Puérperas D22 - Pesquisa 4
   - interval: 86400
-    anchor_date: "2021-01-01T11:20:00"
+    anchor_date: "2021-01-01T15:20:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d22
@@ -1555,7 +1556,7 @@ schedules:
             pesquisa_id: "Pesquisa 4"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)"
             intervalo_filtro_disparados: 300
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
@@ -1564,7 +1565,7 @@ schedules:
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
@@ -1578,7 +1579,7 @@ schedules:
 
   # Disparo SMS Puérperas D25 e D28 - Pesquisa 5
   - interval: 86400
-    anchor_date: "2021-01-01T11:20:00"
+    anchor_date: "2021-01-01T15:20:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d25-d28
@@ -1593,7 +1594,7 @@ schedules:
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
             intervalo_filtro_disparados: 1
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
@@ -1602,7 +1603,7 @@ schedules:
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
@@ -1616,7 +1617,7 @@ schedules:
 
   # Disparo SMS Puérperas D34 - Pesquisa 6
   - interval: 86400
-    anchor_date: "2021-01-01T11:20:00"
+    anchor_date: "2021-01-01T15:20:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d34
@@ -1629,7 +1630,7 @@ schedules:
             pesquisa_id: "Pesquisa 6"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
             intervalo_filtro_disparados: 300
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
@@ -1638,7 +1639,7 @@ schedules:
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
@@ -1652,7 +1653,7 @@ schedules:
 
  # Disparo SMS Puérperas D40 - Pesquisa 7
   - interval: 86400
-    anchor_date: "2021-01-01T11:20:00"
+    anchor_date: "2021-01-01T15:20:00"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d40
@@ -1665,7 +1666,7 @@ schedules:
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 300
-        table_id: disparos_efetuados_teste
+        table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
         chunk_size: 1000
@@ -1674,7 +1675,7 @@ schedules:
         max_dispatch_retries: 3
         sleep_minutes: 5
         cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
         whitelist_environment: production
