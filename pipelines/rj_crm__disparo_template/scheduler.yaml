@@ -1094,7 +1094,6 @@ schedules:
     parameters:
         id_hsm: 573
         query_replacements: {"id_hsm_placeholder": 573}
-        id_hsm_placeholder: 573
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
