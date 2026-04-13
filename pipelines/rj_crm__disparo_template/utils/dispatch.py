@@ -31,6 +31,7 @@ from pipelines.rj_crm__disparo_template.utils.validators import (
 from pipelines.rj_crm__disparo_template.utils.whitelist import (
     BetaGroupManager,
     get_environment_config,
+    normalize_numbers,
     validate_environment_config,
 )
 
@@ -41,6 +42,7 @@ def add_contacts_to_whitelist(
     percentage_to_insert: int,
     group_name: str,
     environment: str,
+    force_add_on_whitelist_group: bool = False,
 ) -> None:
     """
     Adds a random percentage of contacts to a whitelist group.
@@ -119,7 +121,7 @@ def add_contacts_to_whitelist(
     group_id = group["id"]
 
     # Get existing numbers to avoid duplicates
-    existing_numbers_set = manager.get_existing_numbers_set()
+    existing_numbers_set = manager.get_existing_numbers_set(force_add_on_whitelist_group=force_add_on_whitelist_group)
     new_numbers_to_add = [num for num in selected_numbers if num not in existing_numbers_set]
 
     if not new_numbers_to_add:
@@ -128,12 +130,91 @@ def add_contacts_to_whitelist(
 
     print(f"Adding {len(new_numbers_to_add)} new contacts to group '{group_name}' (ID: {group_id}).")
 
-    if manager.add_numbers_to_group(group_id, new_numbers_to_add):
+    # Add numbers with and without 9 after ddd
+    normalized_numbers = []
+    for num in new_numbers_to_add:
+        normalized_numbers.extend(normalize_numbers(num))
+    print(f"New numbers to add: {new_numbers_to_add}")
+    print(f"Normalized numbers to add: {normalized_numbers}")
+    
+    # Remove duplicates to avoid redundant API calls
+    unique_normalized_numbers = list(set(normalized_numbers))
+    print(f"Unique Normalized numbers to add: {unique_normalized_numbers}")
+
+    if manager.add_numbers_to_group(group_id, unique_normalized_numbers):
         print("\n✅  Successfully added contacts to the whitelist.")
     else:
         message = "\n⚠️  Failed to add contacts to the whitelist."
         print(message)
         raise PrefectException(message)
+
+
+@task
+def remove_contacts_from_whitelist(
+    destinations: List[Dict],
+    environment: str,
+) -> None:
+    """
+    Removes all contacts from the destinations list from the whitelist.
+
+    Args:
+        destinations (List[Dict]): List of destination data.
+        environment (str): The environment to run on ('staging' or 'production').
+    """
+    if not destinations:
+        print("\n⚠️  No destinations to remove from whitelist.")
+        return
+
+    phone_numbers = []
+    for dest in destinations:
+        try:
+            phone = dest.get("to")
+            print(f"DEBUG: Processing destinations for removal, found phone: {phone} in destination: {dest}")
+            if phone:
+                phone_numbers.append(phone)
+        except Exception as err:
+            print(f"\n⚠️  Warning: Could not process destination for removal: {dest}, error: {err}")
+
+    if not phone_numbers:
+        print("\n⚠️  No valid phone numbers found in destinations to remove from whitelist.")
+        return
+
+    # Add numbers on list with and without 9 after ddd
+    normalized_numbers = []
+    for num in phone_numbers:
+        normalized_numbers.extend(normalize_numbers(num))
+    print(f"Numbers to remove from whitelist: {phone_numbers}")
+    print(f"Normalized numbers to remove: {normalized_numbers}")
+    
+    # Remove duplicates to get the final list of numbers to remove
+    selected_numbers = list(set(normalized_numbers))
+    print(f"DEBUG: All phone_numbers {phone_numbers} \nUnique phone numbers identified for removal: {selected_numbers}")
+
+    print(f"Selected {len(selected_numbers)} contacts to remove from whitelist.")
+
+    try:
+        config = get_environment_config(environment)
+        validate_environment_config(config)
+    except ValueError as err:
+        print(f"\n⚠️  Configuration error: {err}")
+        return
+
+    manager = BetaGroupManager(
+        config["issuer"],
+        config["client_id"],
+        config["client_secret"],
+        config["api_base_url"],
+    )
+
+    if not manager.authenticate():
+        print("\n⚠️  Authentication failed. Cannot remove contacts from whitelist.")
+        return
+
+    # Remove in bulk directly (the API endpoint is global, no group needed)
+    if manager.remove_numbers_bulk(selected_numbers):
+        print(f"\n✅  Successfully removed {len(selected_numbers)} contacts from whitelist.")
+    else:
+        print(f"\n⚠️  Failed to remove contacts from whitelist.")
 
 
 @task
@@ -156,6 +237,11 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
     if isinstance(destinations, pd.DataFrame):
         destinations = destinations.to_dict("records")
     
+    # TODO: quando filtramos os telefones com failed e temos retentativa, o dado chega aqui com 
+    # to: None e others: [prox_num1, prox_num2...], mas o schema exige que to seja string.
+    # Poderia aqui remover esses casos do payload
+    # Exemplo do dado aqui: [{'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Rodolpho ', 'CC_WT_NOME': 'Rodolpho ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Patricia ', 'CC_WT_NOME': 'Patricia ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': '5592984212629', 'externalId': '00000000055', 'vars': {'NOME': 'Patrick ', 'CC_WT_NOME': 'Patrick ', 'CC_WT_CPF_CIDADAO': '00000000055'}, 'others': ['5592984212629']}]
+    # como não tem failed ele não entra no retry loop
 
     # Validate destinations first
     validated_destinations, validation_stats = validate_destinations(destinations)
@@ -398,6 +484,10 @@ def get_destinations(
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id,
         )
+        if destinations_df is None or destinations_df.empty or destinations_df.shape[1] == 0:
+            log("No destinations found from query. Returning empty list.")
+            return []
+
         log(f"Resposta da query: {destinations_df.iloc[0]}")
         
         # Pega a primeira coluna (que deve ser o JSON STRING)
@@ -672,31 +762,65 @@ def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
         return None
 
 
-@task
-def get_retry_destinations(
-    id_hsm: int,
-    original_destinations: List[Dict],
-    billing_project_id: str,
-    attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
-) -> List[Dict]:
+def get_failed_phones(billing_project_id: str) -> set:
     """
-    Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
-    Suporta chaves com variações de maiúsculas/minúsculas e estruturas aninhadas.
-
-    Exemplo de como deve estar o schema da query:
-    {
-       "celular_disparo": "5521999999999",
-       "externalId": "12345678901",
-       "vars": {
-         "nome_usuario": "João Silva"
-       },
-       "others": [
-         "5521888888888",
-         "5521777777777"
-      ]
-    }
+    Busca telefones tiveram falha de não ter whatsapp ou bloqueio no último disparo,
+    passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria
+    só necessário filtrar pela estratégia de envio.
     """
+    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
+    query = f"""
+        WITH status_por_disparo AS (
+            SELECT
+                flatTarget,
+                createDate,
+                MAX(
+                    CASE
+                        WHEN status = "PROCESSING" THEN 1
+                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
+                        WHEN status = "SENT" THEN 3
+                        WHEN status = "DELIVERED" THEN 4
+                        WHEN status = "READ" THEN 5
+                    END
+                ) AS id_status_disparo
+            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            GROUP BY flatTarget, createDate
+        ),
 
+        ranked AS (
+            SELECT
+                *,
+                ROW_NUMBER() OVER (
+                    PARTITION BY flatTarget
+                    ORDER BY createDate DESC
+                ) AS rn
+            FROM status_por_disparo
+        )
+
+        SELECT flatTarget
+        FROM ranked
+        WHERE rn = 1
+        AND id_status_disparo = 2
+        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+    """
+    try:
+        failed_df = download_data_from_bigquery(
+            query=query,
+            billing_project_id=billing_project_id,
+            bucket_name=billing_project_id
+        )
+        print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        failed_phones = set(str(x) for x in failed_df['flatTarget'].tolist())
+        return failed_phones    
+    except Exception as e:
+        log(f"Erro ao buscar falhas para retentativa: {e}")
+        return set()
+
+
+def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
+    """
+    Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
+    """
     # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
     query = f"""
         WITH status_por_disparo AS (
@@ -706,7 +830,7 @@ def get_retry_destinations(
                 MAX(
                     CASE
                         WHEN status = "PROCESSING" THEN 1
-                        WHEN status = "FAILED" THEN 2
+                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
                         WHEN status = "SENT" THEN 3
                         WHEN status = "DELIVERED" THEN 4
                         WHEN status = "READ" THEN 5
@@ -741,31 +865,104 @@ def get_retry_destinations(
             bucket_name=billing_project_id
         )
         print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
-        failed_ids = set(str(x) for x in failed_df['targetExternalId'].tolist())
-        print(f"DEBUG failed_ids {failed_ids}")
+        failed_cpfs = set(str(x) for x in failed_df['targetExternalId'].tolist())
+        print(f"DEBUG failed_cpfs {failed_cpfs}")
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
-        return []
+        return set()
 
-    if not failed_ids:
-        log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
-        return []
+    if not failed_cpfs:
+        log(f"Nenhuma falha detectada para nas últimas 2 horas.")
+        return set()
+    
+    return failed_cpfs
+    
+
+@task
+def remove_failed_phones(
+    original_destinations: List[Dict],
+    billing_project_id: str,
+    max_dispatch_retries: int,
+) -> List[Dict]:
+
+    failed_phones = get_failed_phones(billing_project_id=billing_project_id)
+
+    if not failed_phones:
+        return original_destinations
+
+    print(f"We have on DL {len(failed_phones)} destinations with previously failed phones.")
+    new_destinations = []
+    for dest in original_destinations:
+        # Busca to ignorando o "case"
+        to_number = get_value_from_case_insensitive_key(dest, 'to')
+
+        # if to_number is not None and str(to_number) not in failed_phones and max_dispatch_retries==0:
+        #     new_destinations.append(dest)
+        if (to_number is None or str(to_number) in failed_phones) and max_dispatch_retries==0:
+            pass  # Se o telefone principal falhou e não há retentativas, removemos o destino completamente
+        elif str(to_number) in failed_phones and max_dispatch_retries>0:
+            # Atualiza o campo 'to' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
+            new_dest = dest.copy()
+            new_dest['to'] = None
+            print(f"DEBUG: {to_number} falhou no último disparo e foi alterado para None = {new_dest}")
+            new_destinations.append(new_dest)
+        else:
+            new_destinations.append(dest)
+
+    log(f"Removed {len(original_destinations) - len(new_destinations)} destinations with failed phones. Remaining destinations: {len(new_destinations)}.")
+    return new_destinations
+
+
+@task
+def get_retry_destinations(
+    id_hsm: int,
+    original_destinations: List[Dict],
+    billing_project_id: str,
+    attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
+) -> List[Dict]:
+    """
+    Identifica quais CPFs falharam e prepara a lista para retentativa com o próximo número da lista 'others'.
+    Suporta chaves com variações de maiúsculas/minúsculas e estruturas aninhadas.
+
+    Exemplo de como deve estar o schema da query:
+    {
+       "celular_disparo": "5521999999999",
+       "externalId": "12345678901",
+       "vars": {
+         "nome_usuario": "João Silva"
+       },
+       "others": [
+         "5521888888888",
+         "5521777777777"
+      ]
+    }
+    """
+    failed_ids = []
+    if attempt_number > 0:
+        # Só roda quando não for preencher os nulos gerados pela task remove_failed_phones 
+        failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, id_hsm=id_hsm)
+
+        if not failed_ids or len(failed_ids) == 0:
+            log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
+            return []
+    
 
     retry_destinations = []
     for dest in original_destinations:
         # Busca externalId e others ignorando o "case"
         ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
         others = get_value_from_case_insensitive_key(dest, 'others') or []
+        to_number = get_value_from_case_insensitive_key(dest, 'to')
         print(f"DEBUG dest {dest}")
-        print(f"DEBUG: ext_id = {ext_id} others = {others}")
 
-        if ext_id is not None and str(ext_id) in failed_ids and len(others) >= attempt_number:
+        if (ext_id is None or str(ext_id) in failed_ids or to_number is None) and len(others) >= attempt_number:
             new_dest = dest.copy()
-            print(f"DEBUG: new_dest = {new_dest}, próximo num: {others[attempt_number - 1]}")
             # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
             new_dest['to'] = others[attempt_number - 1]
             print(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
+        elif attempt_number == 0:
+            retry_destinations.append(dest)            
 
     log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
     return retry_destinations
