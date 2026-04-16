@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import json
 import os
+from typing import Any, Dict
 
 import pandas as pd
 import requests
@@ -9,9 +10,21 @@ from prefect import task
 
 def requests_get_compstat(
                         result: str,
-                        endpoint : str = "blitz-leiseca",
+                        endpoint : str,
                         url_base : str = "https://compstat.bugarintec.com.br/compstat/api/",
-                        token_estatic : str = "compstat-rio-static-token-2026-fm-qmd") -> json:
+                        token_estatic : str = "compstat-rio-static-token-2026-fm-qmd") -> Dict[str, Any]:
+    """
+    Faz requisição GET para a API do Compstat e retorna dados específicos.
+
+    Args:
+        result (str): Chave do resultado desejado no JSON retornado.
+        endpoint (str): Endpoint da API a ser acessado.
+        url_base (str): URL base da API. Padrão: "https://compstat.bugarintec.com.br/compstat/api/"
+        token_estatic (str): Token de autenticação estático. Padrão: "compstat-rio-static-token-2026-fm-qmd"
+
+    Returns:
+        json: Dados extraídos da chave especificada no parâmetro 'result'.
+    """
 
     url = f"{url_base}{endpoint}"
 
@@ -33,7 +46,22 @@ def json_compstat_to_dataframe(
     result: str,
     endpoint,
 ) -> pd.DataFrame:
+    """
+    Converte dados JSON da API Compstat em DataFrame e salva como CSV.
 
+    Args:
+        table_id (str): Identificador da tabela. Suporta 'blitz_lei_seca' e 'subareas'.
+        result (str): Chave do resultado desejado no JSON retornado da API.
+        endpoint: Endpoint da API Compstat a ser acessado.
+
+    Returns:
+        str: Caminho do arquivo CSV salvo.
+
+    Raises:
+        - Processa dados de forma diferente conforme o table_id:
+        - 'blitz_lei_seca': Normaliza JSON diretamente e salva CSV.
+        - 'subareas': Extrai dados aninhados de 'qmds' e 'elementos', explode e concatena.
+    """
     requests = requests_get_compstat(
         result=result,
         endpoint=endpoint
