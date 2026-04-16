@@ -39,7 +39,6 @@ def requests_get_compstat(
     results = data.get(result)
     return results
 
-
 @task
 def json_compstat_to_dataframe(
     table_id: str,
@@ -66,14 +65,15 @@ def json_compstat_to_dataframe(
         result=result,
         endpoint=endpoint
     )
-    path = os.path.join(os.getcwd(), f"pipelines/rj_ssm__compstat/{table_id}/data.csv")
-    os.makedirs(path, exist_ok=True)
+    path = os.path.join(os.getcwd(), f"pipelines/rj_ssm__compstat/{table_id}/")
+    os.makedirs(path , exist_ok=True)
+    output_path = os.path.join(path, "data.csv")
 
     # ! Tabela blitz/lei_seca
     if table_id == "blitz_lei_seca":
 
         df = pd.json_normalize(requests)
-        df.to_csv(path, index=False)
+        df.to_csv(output_path, index=False)
 
 
     # ! Tabela subareas
@@ -94,6 +94,8 @@ def json_compstat_to_dataframe(
             ],
             axis=1
         )
-        df_final.to_csv(path, index=False)
 
-    return path
+        df.to_csv(output_path, index=False)
+
+    return output_path
+
