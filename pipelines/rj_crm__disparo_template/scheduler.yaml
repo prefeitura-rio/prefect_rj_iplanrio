@@ -1798,4 +1798,380 @@ schedules:
 #             cross join dia_semana_tb
 #             where dia_semana not in (1, 7)
 #             order by trat_subgrupo
-#             limit 200
+
+  # Disparo dia 1 - grupo WhatsApp Acari (Columbia) + amostra RMI
+  - interval: 86400
+    anchor_date: "2021-01-01T10:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: one-shot-acari-columbia-previsao-chuva-dia1
+    flow_run_name: acari-columbia-previsao-chuva-dia1
+    parameters:
+      id_hsm: 232
+      campaign_name: acari-columbia-previsao-chuva-dia1
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      test_mode: false
+      sleep_minutes: 5
+      whitelist_percentage: 0
+      infisical_secret_path: "/wetalkie"
+      whitelist_environment: "production"
+      flow_environment: "production"
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
+      query: |
+        WITH
+        -- 1. Números do grupo WhatsApp Acari (planilha ingerida no datalake)
+        telefones_acari AS (
+          SELECT CAST(telefone_limpo AS STRING) AS telefone_limpo
+          FROM `rj-crm-registry-dev.brutos_data_metrica.telefones_columbia`
+        ),
+
+        -- 2. Base do RMI: exclui menores de idade e falecidos
+        rmi AS (
+          SELECT cpf, telefone, endereco
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
+          WHERE menor_idade IS FALSE
+            AND obito.indicador IS FALSE
+        ),
+
+        -- 3. Telefone principal de cada pessoa no RMI
+        --    Filtros: apenas celulares com estratégia de envio permitida
+        --    origem=1 para ter prioridade sobre os alternativos
+        telefones_rmi_principal AS (
+          SELECT
+            rmi.cpf,
+            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+              CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)
+            ) AS telefone_formatado,
+            1 AS origem
+          FROM rmi
+          WHERE rmi.telefone.principal.valor IS NOT NULL
+            AND rmi.telefone.principal.estrategia_envio != "NÃO ENVIAR"
+            AND rmi.telefone.principal.tipo = "CELULAR"
+        ),
+
+        -- 4. Telefones alternativos (origem=2): usados como fallback quando
+        --    o principal não existe ou não passa nos filtros
+        telefones_rmi_alternativos AS (
+          SELECT
+            rmi.cpf,
+            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+              CONCAT(IFNULL(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor)
+            ) AS telefone_formatado,
+            2 AS origem
+          FROM rmi,
+          UNNEST(rmi.telefone.alternativo) AS tel_alt
+          WHERE tel_alt.valor IS NOT NULL
+            AND tel_alt.estrategia_envio != "NÃO ENVIAR"
+            AND tel_alt.tipo = "CELULAR"
+        ),
+
+        -- 5. União de todos os telefones válidos do RMI (principal + alternativos)
+        todos_telefones_rmi AS (
+          SELECT * FROM telefones_rmi_principal
+          UNION ALL
+          SELECT * FROM telefones_rmi_alternativos
+        ),
+
+        -- 6. Um telefone por CPF: ordena por origem ASC para garantir que o
+        --    principal (origem=1) seja sempre preferido sobre o alternativo (origem=2)
+        telefone_por_cpf AS (
+          SELECT cpf, telefone_formatado
+          FROM todos_telefones_rmi
+          WHERE telefone_formatado IS NOT NULL
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY origem ASC, telefone_formatado) = 1
+        ),
+
+        -- 7. Cruza os números do grupo WhatsApp Acari com o RMI para recuperar o CPF
+        --    Quem não tiver CPF no RMI é descartado
+        grupo_whatsapp AS (
+          SELECT
+            a.telefone_limpo AS celular_disparo,
+            CAST(r.cpf AS STRING) AS externalId
+          FROM telefones_acari AS a
+          INNER JOIN todos_telefones_rmi AS r
+            ON a.telefone_limpo = r.telefone_formatado
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo ORDER BY r.cpf) = 1
+        ),
+
+        -- 8. Números hardcoded adicionados manualmente
+        --    Join apenas contra o telefone principal para garantir os filtros
+        numeros_fixos AS (
+          SELECT
+            tel AS celular_disparo,
+            CAST(r.cpf AS STRING) AS externalId
+          FROM UNNEST(['5521995017615', '5521987474139', '5521971564238']) AS tel
+          INNER JOIN telefones_rmi_principal AS r ON tel = r.telefone_formatado
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY tel ORDER BY r.cpf) = 1
+        ),
+
+        -- 9. 640 pessoas aleatórias do bairro Acari (excluindo quem já está no grupo WhatsApp)
+        --    Seleção determinística via FARM_FINGERPRINT com seed fixa
+        amostra_acari AS (
+          SELECT
+            t.telefone_formatado AS celular_disparo,
+            CAST(rmi.cpf AS STRING) AS externalId
+          FROM rmi
+          INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
+          WHERE LOWER(rmi.endereco.principal.bairro) = 'acari'
+            AND gw.externalId IS NULL
+          ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
+          LIMIT 640
+        ),
+
+        -- 10. 370 pessoas aleatórias do bairro Jardim Maravilha (mesma lógica)
+        amostra_jardim_maravilha AS (
+          SELECT
+            t.telefone_formatado AS celular_disparo,
+            CAST(rmi.cpf AS STRING) AS externalId
+          FROM rmi
+          INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
+          WHERE LOWER(rmi.endereco.principal.bairro) = 'jardim maravilha'
+            AND gw.externalId IS NULL
+          ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
+          LIMIT 370
+        ),
+
+        -- 11. Une todos os grupos e deduplica por CPF
+        --     Em caso de CPF duplicado entre grupos, mantém uma linha qualquer
+        todos AS (
+          SELECT * FROM grupo_whatsapp
+          UNION ALL
+          SELECT * FROM numeros_fixos
+          UNION ALL
+          SELECT * FROM amostra_acari
+          UNION ALL
+          SELECT * FROM amostra_jardim_maravilha
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY externalId ORDER BY externalId) = 1
+        )
+
+        -- 12. Formata o payload JSON esperado pelo pipeline de disparo
+        SELECT
+          TO_JSON_STRING(STRUCT(
+            celular_disparo,
+            STRUCT(externalId AS CC_WT_CPF_CIDADAO) AS vars,
+            externalId
+          )) AS destination_data
+        FROM todos
+
+  # Disparo dia 2 - mesmas pessoas do dia 1 + 1000 novos do RMI
+  - interval: 86400
+    anchor_date: "2021-01-01T10:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: one-shot-acari-columbia-previsao-chuva-dia2
+    flow_run_name: acari-columbia-previsao-chuva-dia2
+    parameters:
+      id_hsm: 232
+      campaign_name: acari-columbia-previsao-chuva-dia2
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      test_mode: false
+      sleep_minutes: 5
+      whitelist_percentage: 0
+      infisical_secret_path: "/wetalkie"
+      whitelist_environment: "production"
+      flow_environment: "production"
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
+      query: |
+        WITH
+        -- 1. Números do grupo WhatsApp Acari (planilha ingerida no datalake)
+        telefones_acari AS (
+          SELECT CAST(telefone_limpo AS STRING) AS telefone_limpo
+          FROM `rj-crm-registry-dev.brutos_data_metrica.telefones_columbia`
+        ),
+
+        -- 2. Base do RMI: exclui menores de idade e falecidos
+        rmi AS (
+          SELECT cpf, telefone, endereco
+          FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
+          WHERE menor_idade IS FALSE
+            AND obito.indicador IS FALSE
+        ),
+
+        -- 3. Telefone principal de cada pessoa no RMI
+        --    Filtros: apenas celulares com estratégia de envio permitida
+        --    origem=1 para ter prioridade sobre os alternativos
+        telefones_rmi_principal AS (
+          SELECT
+            rmi.cpf,
+            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+              CONCAT("55", rmi.telefone.principal.ddd, rmi.telefone.principal.valor)
+            ) AS telefone_formatado,
+            1 AS origem
+          FROM rmi
+          WHERE rmi.telefone.principal.valor IS NOT NULL
+            AND rmi.telefone.principal.estrategia_envio != "NÃO ENVIAR"
+            AND rmi.telefone.principal.tipo = "CELULAR"
+        ),
+
+        -- 4. Telefones alternativos (origem=2): usados como fallback quando
+        --    o principal não existe ou não passa nos filtros
+        telefones_rmi_alternativos AS (
+          SELECT
+            rmi.cpf,
+            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+              CONCAT(IFNULL(tel_alt.ddi, "55"), tel_alt.ddd, tel_alt.valor)
+            ) AS telefone_formatado,
+            2 AS origem
+          FROM rmi,
+          UNNEST(rmi.telefone.alternativo) AS tel_alt
+          WHERE tel_alt.valor IS NOT NULL
+            AND tel_alt.estrategia_envio != "NÃO ENVIAR"
+            AND tel_alt.tipo = "CELULAR"
+        ),
+
+        -- 5. União de todos os telefones válidos do RMI (principal + alternativos)
+        todos_telefones_rmi AS (
+          SELECT * FROM telefones_rmi_principal
+          UNION ALL
+          SELECT * FROM telefones_rmi_alternativos
+        ),
+
+        -- 6. Um telefone por CPF: ordena por origem ASC para garantir que o
+        --    principal (origem=1) seja sempre preferido sobre o alternativo (origem=2)
+        telefone_por_cpf AS (
+          SELECT cpf, telefone_formatado
+          FROM todos_telefones_rmi
+          WHERE telefone_formatado IS NOT NULL
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY origem ASC, telefone_formatado) = 1
+        ),
+
+        -- 7. Cruza os números do grupo WhatsApp Acari com o RMI para recuperar o CPF
+        --    Quem não tiver CPF no RMI é descartado
+        grupo_whatsapp AS (
+          SELECT
+            a.telefone_limpo AS celular_disparo,
+            CAST(r.cpf AS STRING) AS externalId
+          FROM telefones_acari AS a
+          INNER JOIN todos_telefones_rmi AS r
+            ON a.telefone_limpo = r.telefone_formatado
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY a.telefone_limpo ORDER BY r.cpf) = 1
+        ),
+
+        -- 8. Números hardcoded adicionados manualmente
+        --    Join apenas contra o telefone principal para garantir os filtros
+        numeros_fixos AS (
+          SELECT
+            tel AS celular_disparo,
+            CAST(r.cpf AS STRING) AS externalId
+          FROM UNNEST(['5521995017615', '5521987474139', '5521971564238']) AS tel
+          INNER JOIN telefones_rmi_principal AS r ON tel = r.telefone_formatado
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY tel ORDER BY r.cpf) = 1
+        ),
+
+        -- 9. 640 pessoas aleatórias do bairro Acari (excluindo quem já está no grupo WhatsApp)
+        --    Seleção determinística via FARM_FINGERPRINT com seed fixa
+        amostra_acari AS (
+          SELECT
+            t.telefone_formatado AS celular_disparo,
+            CAST(rmi.cpf AS STRING) AS externalId
+          FROM rmi
+          INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
+          WHERE LOWER(rmi.endereco.principal.bairro) = 'acari'
+            AND gw.externalId IS NULL
+          ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
+          LIMIT 640
+        ),
+
+        -- 10. 370 pessoas aleatórias do bairro Jardim Maravilha (mesma lógica)
+        amostra_jardim_maravilha AS (
+          SELECT
+            t.telefone_formatado AS celular_disparo,
+            CAST(rmi.cpf AS STRING) AS externalId
+          FROM rmi
+          INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN grupo_whatsapp AS gw ON CAST(rmi.cpf AS STRING) = gw.externalId
+          WHERE LOWER(rmi.endereco.principal.bairro) = 'jardim maravilha'
+            AND gw.externalId IS NULL
+          ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:42')))
+          LIMIT 370
+        ),
+
+        -- 11. Replica exatamente a seleção do dia 1 (mesma seed, mesmos grupos)
+        --     para garantir que as mesmas pessoas recebam o disparo no dia 2
+        dia1 AS (
+          SELECT * FROM grupo_whatsapp
+          UNION ALL
+          SELECT * FROM numeros_fixos
+          UNION ALL
+          SELECT * FROM amostra_acari
+          UNION ALL
+          SELECT * FROM amostra_jardim_maravilha
+          QUALIFY ROW_NUMBER() OVER (PARTITION BY externalId ORDER BY externalId) = 1
+        ),
+
+        -- 12. 1000 pessoas novas do RMI que NÃO estavam no dia 1
+        --     Seed diferente (43) para garantir seleção independente
+        novos_rmi AS (
+          SELECT
+            t.telefone_formatado AS celular_disparo,
+            CAST(rmi.cpf AS STRING) AS externalId
+          FROM rmi
+          INNER JOIN telefone_por_cpf AS t ON rmi.cpf = t.cpf
+          LEFT JOIN dia1 ON CAST(rmi.cpf AS STRING) = dia1.externalId
+          WHERE dia1.externalId IS NULL
+          ORDER BY ABS(FARM_FINGERPRINT(CONCAT(CAST(rmi.cpf AS STRING), '|seed:43')))
+          LIMIT 1000
+        ),
+
+        -- 13. Une dia1 + novos (sem dedup necessário: novos_rmi já exclui dia1)
+        todos AS (
+          SELECT * FROM dia1
+          UNION ALL
+          SELECT * FROM novos_rmi
+        )
+
+        -- 14. Formata o payload JSON esperado pelo pipeline de disparo
+        SELECT
+          TO_JSON_STRING(STRUCT(
+            celular_disparo,
+            STRUCT(externalId AS CC_WT_CPF_CIDADAO) AS vars,
+            externalId
+          )) AS destination_data
+        FROM todos
+
+  # Disparo pontual para números específicos (teste Acari Columbia)
+  - interval: 86400
+    anchor_date: "2021-01-01T10:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: one-shot-acari-columbia-previsao-chuva-numeros-especificos
+    flow_run_name: acari-columbia-previsao-chuva-numeros-especificos
+    parameters:
+      id_hsm: 232
+      campaign_name: acari-columbia-previsao-chuva-numeros-especificos
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      test_mode: false
+      sleep_minutes: 5
+      whitelist_percentage: 0
+      infisical_secret_path: "/wetalkie"
+      whitelist_environment: "production"
+      flow_environment: "production"
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
+      query: |
+        SELECT
+          TO_JSON_STRING(STRUCT(
+            telefone AS celular_disparo,
+            '15300219797' AS externalId
+          )) AS destination_data
+        FROM UNNEST(['5521985573582', '5521985833324', '5592984212629']) AS telefone
