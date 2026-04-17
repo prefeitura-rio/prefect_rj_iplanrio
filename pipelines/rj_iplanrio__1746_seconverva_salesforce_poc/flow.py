@@ -30,8 +30,20 @@ SELECT DISTINCT
     ch.ds_chamado AS [descricao_abertura],
     an.ds_andamento AS [resposta_finalizacao],
     lg.no_logradouro AS [endereco_logradouro],
+    iplan.no_logradouro_completo AS [endereco_logradouro_completo],
     ch.ds_endereco_numero AS [endereco_numero],
+    ch.ds_endereco_complemento AS [endereco_complemento],
+    ch.ds_endereco_referencia AS [endereco_referencia],
     br.no_bairro AS [bairro],
+    bl.id_logradouro_fk AS [id_logradouro_ipp],
+    bl.id_bairro_fk AS [id_bairro_ipp],
+    COALESCE(sc_num.nu_coord_x, sc_rua.nu_coord_x) AS [coord_utm_x],
+    COALESCE(sc_num.nu_coord_y, sc_rua.nu_coord_Y) AS [coord_utm_y],
+    CASE
+        WHEN sc_num.id_coordenada IS NOT NULL THEN 'numero'
+        WHEN sc_rua.id_coordenada IS NOT NULL THEN 'logradouro'
+        ELSE NULL
+    END AS [coord_precisao],
     oc.no_origem_ocorrencia AS [canal_abertura],
     pe.no_pessoa AS [nome_cidadao],
     pe.ds_cpf AS [cpf_cidadao],
@@ -123,6 +135,21 @@ LEFT JOIN tb_logradouro AS lg WITH (NOLOCK)
     ON lg.id_logradouro = bl.id_logradouro_fk
 LEFT JOIN tb_bairro AS br WITH (NOLOCK)
     ON br.id_bairro = bl.id_bairro_fk
+
+-- Dados enriquecidos do IPP (nome completo do logradouro, tipo)
+LEFT JOIN st_bairro_logradouro_iplan AS iplan WITH (NOLOCK)
+    ON iplan.id_logradouro = bl.id_logradouro_fk
+    AND iplan.id_bairro = bl.id_bairro_fk
+
+-- Coordenada UTM por logradouro+numero exato
+LEFT JOIN st_coordenada AS sc_num WITH (NOLOCK)
+    ON sc_num.id_logradouro_fk = bl.id_logradouro_fk
+    AND sc_num.ds_endereco_numero = ch.ds_endereco_numero
+
+-- Fallback: coordenada do ponto central do logradouro (sem numero)
+LEFT JOIN st_coordenada AS sc_rua WITH (NOLOCK)
+    ON sc_rua.id_logradouro_fk = bl.id_logradouro_fk
+    AND sc_rua.ds_endereco_numero IS NULL
 
 WHERE
     uo.id_unidade_organizacional = 182
@@ -294,7 +321,30 @@ def post_process(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # ------------------------------------------------------------------
-    # 5. Remover colunas brutas substituídas
+    # 5. Converter coordenadas UTM (SIRGAS2000 zona 23S) → lat/long WGS84
+    # ------------------------------------------------------------------
+    if "coord_utm_x" in df.columns and "coord_utm_y" in df.columns:
+        try:
+            from pyproj import Transformer
+            transformer = Transformer.from_crs("EPSG:31983", "EPSG:4326", always_xy=True)
+
+            def _utm_to_latlong(row):
+                x = row["coord_utm_x"]
+                y = row["coord_utm_y"]
+                if pd.isna(x) or pd.isna(y):
+                    return pd.Series({"latitude": None, "longitude": None})
+                lon, lat = transformer.transform(float(x), float(y))
+                return pd.Series({"latitude": round(lat, 7), "longitude": round(lon, 7)})
+
+            coords = df.apply(_utm_to_latlong, axis=1)
+            df["latitude"] = coords["latitude"]
+            df["longitude"] = coords["longitude"]
+            logger.info("Conversão UTM → lat/long concluída.")
+        except ImportError:
+            logger.warning("pyproj não instalado. Mantendo coordenadas UTM brutas.")
+
+    # ------------------------------------------------------------------
+    # 6. Remover colunas brutas substituídas
     # ------------------------------------------------------------------
     cols_remover = [
         c

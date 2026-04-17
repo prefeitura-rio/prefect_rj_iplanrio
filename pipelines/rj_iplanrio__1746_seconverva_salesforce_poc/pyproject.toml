@@ -7,6 +7,7 @@ dependencies = [
     "pymssql",
     "gspread",
     "google-auth",
+    "pyproj",
 ]
 
 [tool.uv.sources]
