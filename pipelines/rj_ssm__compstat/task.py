@@ -39,6 +39,7 @@ def requests_get_compstat(
     results = data.get(result)
     return results
 
+
 @task
 def json_compstat_to_dataframe(
     table_id: str,
@@ -85,7 +86,7 @@ def json_compstat_to_dataframe(
 
         df = df.explode('elementos')
 
-        df_elementos = pd.json_normalize(df['elementos'], sep='_')
+        df_elementos = pd.json_normalize(df['elementos'], sep='_').rename(columns={"descricao" : "descricao_subarea"})
 
         df_final = pd.concat(
             [
@@ -98,3 +99,4 @@ def json_compstat_to_dataframe(
         df_final.to_csv(output_path, index=False)
 
     return output_path
+
