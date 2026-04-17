@@ -39,7 +39,6 @@ def requests_get_compstat(
     results = data.get(result)
     return results
 
-@task
 def json_compstat_to_dataframe(
     table_id: str,
     result: str,
@@ -95,7 +94,9 @@ def json_compstat_to_dataframe(
             axis=1
         )
 
-        df.to_csv(output_path, index=False)
+        df_final.to_csv(output_path, index=False)
 
     return output_path
 
+
+json_compstat_to_dataframe(table_id="subareas", result="subareas", endpoint="qmd")
