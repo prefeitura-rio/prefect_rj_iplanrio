@@ -375,3 +375,48 @@ deployments:
             [Tot_Mov],
             [alu_id]
           FROM GestaoEscolar.dbo.VW_BI_Movimentacao_lgpd
+
+# Schedule para tabela Avaliação (append com particionamento por ano)
+    - interval: 86400
+      anchor_date: "2022-01-01T02:10:00"
+      timezone: America/Sao_Paulo
+      slug: avaliacao
+      parameters:
+        table_id: avaliacao
+        dump_mode: append
+        partition_columns: Ano
+        partition_date_format: "%Y"
+        break_query_frequency: year
+        break_query_start: current_year
+        break_query_end: current_year
+        execute_query: |
+            SELECT
+                [Ano],
+                [COC],
+                [tpc_nome],
+                [tur_codigo],
+                [Reunião_Pais],
+                [Frequencia],
+                [Conceito],
+                [GLB],
+                [MAT],
+                [POR],
+                [CIE],
+                [GEO],
+                [HIS],
+                [EFI],
+                [ING],
+                [ESP],
+                [FRA],
+                [ALE],
+                [AVI],
+                [APL],
+                [ACE],
+                [TEA],
+                [MUS],
+                [cur_id],
+                [crp_id],
+                [tur_id],
+                [alu_id],
+                [mtu_id]
+            FROM GestaoEscolar.dbo.VW_BI_Avaliacao

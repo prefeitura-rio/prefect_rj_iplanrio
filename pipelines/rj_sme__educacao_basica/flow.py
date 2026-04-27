@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# Register flow 27/06/2024 - 15:09
 """
 This flow is used to dump the database to the BIGQUERY
 """
