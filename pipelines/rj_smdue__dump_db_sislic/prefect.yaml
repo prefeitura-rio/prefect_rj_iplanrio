@@ -1068,10 +1068,9 @@ deployments:
         parameters:
           table_id: registro_cancelamento_produto
           execute_query: |
-           SELECT
-           cod_dlf,
-           tipo,
-           Nr_documento,
-           dt_cancelamento
-
-        FROM SMU_PRD.dbo.tbLIC_DocCancelados
+            SELECT
+            cod_dlf,
+            tipo,
+            Nr_documento,
+            dt_cancelamento
+            FROM SMU_PRD.dbo.tbLIC_DocCancelados
