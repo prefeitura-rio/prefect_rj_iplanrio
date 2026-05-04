@@ -19,7 +19,7 @@ from pymongo.collection import Collection
 from pymongoarrow.api import Schema, aggregate_arrow_all
 from pytz import UTC
 
-from pipelines import utils
+from pipelines.rj_iplanrio__taxirio import utils
 
 
 @task
