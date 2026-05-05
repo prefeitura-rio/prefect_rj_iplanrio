@@ -28,7 +28,7 @@ def rj_smdue__dump_db_sislic(
     execute_query: str = "execute_query",
     dataset_id: str = "adm_licenca_urbanismo",
     table_id: str = "table_id",
-    infisical_secret_path: str = "/db_sislic",
+    infisical_secret_path: str = "/db-sislic",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
     partition_columns: Optional[str] = None,
@@ -57,7 +57,7 @@ def rj_smdue__dump_db_sislic(
         execute_query: Query SQL a ser executada
         dataset_id: ID do dataset no BigQuery (padrão: adm_licenca_urbanismo)
         table_id: ID da tabela no BigQuery
-        infisical_secret_path: Caminho do secret no Infisical (padrão: /db_sislic)
+        infisical_secret_path: Caminho do secret no Infisical (padrão: /db-sislic)
         dump_mode: Modo de dump (overwrite/append)
         partition_date_format: Formato da data de particionamento
         partition_columns: Colunas de particionamento
