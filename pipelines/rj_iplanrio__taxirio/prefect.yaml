@@ -10,14 +10,14 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj_iplanrio__taxirio-{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+      tag: "rj_iplanrio__taxirio-{{ get-commit-hash.stdout }}"
       dockerfile: pipelines/rj_iplanrio__taxirio/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
       requires: prefect-docker>=0.6.5
-      image_name: "{% raw %}{{ build-image.image_name }}{% endraw %}"
-      tag: "{% raw %}{{ build-image.tag }}{% endraw %}"
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
 
 pull:
   - prefect.deployments.steps.set_working_directory:
@@ -25,25 +25,25 @@ pull:
 
 deployments:
   - name: rj-iplanrio--taxirio--staging
-    version: "{% raw %}{{ build-image.tag }}{% endraw %}"
+    version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__taxirio/flow.py:rj_iplanrio__taxirio
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
-        image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
   - name: rj-iplanrio--taxirio--prod
-    version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+    version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__taxirio/flow.py:rj_iplanrio__taxirio
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
-        image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
