@@ -9,10 +9,16 @@ build:
 
   - prefect_docker.deployments.steps.build_docker_image:
       id: build-image
+      requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
       tag: "rj_iplanrio__nf_agent-{{ get-commit-hash.stdout }}"
       dockerfile: pipelines/rj_iplanrio__nf_agent/Dockerfile
-      push: true
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
 
 deployments:
   - name: rj-iplanrio--nf-agent--prod
