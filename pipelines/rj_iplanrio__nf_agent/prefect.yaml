@@ -1,0 +1,46 @@
+name: rj_iplanrio__nf_agent
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__nf_agent-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__nf_agent/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+deployments:
+  - name: rj-iplanrio--nf-agent--prod
+    entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:nf_processing_flow
+    work_pool:
+      name: k3s-pool
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__nf_agent -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+      # BQ input: read unprocessed documents from this view/table
+      bq_input_table: "rj-nf-agent.dev_poc_cgm_osinfo.vw_desepesas_recorte"
+      # BQ status control table (idempotent upsert after each batch)
+      bq_status_table: "rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento"
+      # Number of documents to process per run
+      batch_size: 1000
+      # GCS path prefix for partitioned output CSVs
+      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo"
+      # SQLite cache path inside the container (ephemeral; no persistence between runs)
+      db_path: "/tmp/nf_pipeline_cache.db"
+      gcs_bucket: "rj-nf-agent"
+      workers: 200
+      mode: "full"
