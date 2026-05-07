@@ -14,6 +14,7 @@ from typing import Any
 
 from iplanrio.pipelines_utils.env import getenv_or_action
 from prefect import task
+from prefect.cache_policies import NO_CACHE
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongoarrow.api import Schema, aggregate_arrow_all
@@ -38,7 +39,7 @@ def get_mongodb_client(connection: str) -> MongoClient:
     return MongoClient(connection)
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def get_mongodb_collection(client: MongoClient, database: str, collection: str) -> Collection:
     """
     Obtém uma collection do MongoDB.
@@ -56,7 +57,7 @@ def get_mongodb_collection(client: MongoClient, database: str, collection: str) 
     return client[database][collection]
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def get_dates_for_dump_mode(
     dump_mode: str,
     collection: Collection,
@@ -94,7 +95,7 @@ def get_dates_for_dump_mode(
     return start, end
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def dump_collection_from_mongodb(
     collection: Collection,
     path: str,
@@ -133,7 +134,7 @@ def dump_collection_from_mongodb(
     return root_path
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def dump_collection_from_mongodb_per_period(
     collection: Collection,
     path: str,
