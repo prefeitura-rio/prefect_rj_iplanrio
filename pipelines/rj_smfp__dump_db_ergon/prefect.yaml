@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-pgm--dump-db-ergon--staging
+  - name: rj-smfp--dump-db-ergon--staging
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smfp__dump_db_ergon/flow.py:rj_smfp__dump_db_ergon
     work_pool:
