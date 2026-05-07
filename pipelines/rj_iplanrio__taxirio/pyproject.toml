@@ -1,0 +1,14 @@
+[project]
+name = "rj_iplanrio__taxirio"
+version = "0.1.0"
+description = "Pipeline para dump de collections do MongoDB do TaxiRio para BigQuery"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "pymongo>=4.0.0",
+    "pymongoarrow>=1.0.0",
+    "pyarrow>=10.0.0",
+    "pytz>=2023.3",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

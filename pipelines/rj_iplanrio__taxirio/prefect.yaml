@@ -1,0 +1,138 @@
+name: rj_iplanrio__taxirio
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__taxirio-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__taxirio/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--taxirio--staging
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__taxirio/flow.py:rj_iplanrio__taxirio
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  - name: rj-iplanrio--taxirio--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__taxirio/flow.py:rj_iplanrio__taxirio
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__taxirio -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # ========================================
+    # Tabelas com schedule MENSAL (every_month)
+    # ========================================
+
+    # Cities - Dump mensal da collection cities
+    - interval: 2592000  # 30 dias em segundos
+      anchor_date: "2024-09-01T00:00:00"
+      timezone: America/Sao_Paulo
+      slug: cities-monthly
+      parameters:
+        table_id: cities
+
+    # Drivers - Dump mensal da collection drivers
+    - interval: 2592000  # 30 dias em segundos
+      anchor_date: "2024-09-01T00:00:00"
+      timezone: America/Sao_Paulo
+      slug: drivers-monthly
+      parameters:
+        table_id: drivers
+
+    # Discounts - Dump mensal da collection discounts
+    - interval: 2592000  # 30 dias em segundos
+      anchor_date: "2024-09-01T00:00:00"
+      timezone: America/Sao_Paulo
+      slug: discounts-monthly
+      parameters:
+        table_id: discounts
+
+    # Payment Methods - Dump mensal da collection paymentmethods
+    - interval: 2592000  # 30 dias em segundos
+      anchor_date: "2024-09-01T00:00:00"
+      timezone: America/Sao_Paulo
+      slug: paymentmethods-monthly
+      parameters:
+        table_id: paymentmethods
+
+    # Ranking Races - Dump mensal da collection rankingraces
+    - interval: 2592000  # 30 dias em segundos
+      anchor_date: "2024-09-01T00:00:00"
+      timezone: America/Sao_Paulo
+      slug: rankingraces-monthly
+      parameters:
+        table_id: rankingraces
+
+    # Metrics Driver Unoccupieds - Dump mensal da collection metricsdriverunoccupieds
+    - interval: 2592000  # 30 dias em segundos
+      anchor_date: "2024-09-01T00:00:00"
+      timezone: America/Sao_Paulo
+      slug: metricsdriverunoccupieds-monthly
+      parameters:
+        table_id: metricsdriverunoccupieds
+
+    # ========================================
+    # Tabelas com schedule SEMANAL (every_week)
+    # ========================================
+
+    # Users - Dump semanal da collection users
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-02T00:00:00"
+      timezone: America/Sao_Paulo
+      slug: users-weekly
+      parameters:
+        table_id: users
+
+    # ========================================
+    # Tabelas com schedule DIÁRIO (every_day)
+    # ========================================
+
+    # Races - Dump incremental diário da collection races
+    - interval: 86400  # 1 dia em segundos
+      anchor_date: "2025-04-28T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: races-daily
+      parameters:
+        table_id: races
+        dump_mode: append
+        frequency: D
+
+    # Passengers - Dump incremental diário da collection passengers
+    - interval: 86400  # 1 dia em segundos
+      anchor_date: "2025-04-28T01:00:00"
+      timezone: America/Sao_Paulo
+      slug: passengers-daily
+      parameters:
+        table_id: passengers
+        dump_mode: append
+        frequency: D
