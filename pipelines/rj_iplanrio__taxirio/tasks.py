@@ -220,7 +220,5 @@ def dump_collection_from_mongodb_per_period(
     return root_path
 
 @task
-def acess_api_infisical(
-    infisical_db_connection : str = "DB_CONNECTION_STRING",
-)
+def acess_api_infisical(infisical_db_connection : str = "DB_CONNECTION_STRING"):
     return infisical_db_connection
