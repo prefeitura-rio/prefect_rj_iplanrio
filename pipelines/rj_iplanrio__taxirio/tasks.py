@@ -11,14 +11,15 @@ from datetime import datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
+
+from iplanrio.pipelines_utils.env import getenv_or_action
 from prefect import task
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongoarrow.api import Schema, aggregate_arrow_all
 from pytz import UTC
-from pipelines.rj_iplanrio__taxirio import utils
-from iplanrio.pipelines_utils.env import getenv_or_action
 
+from pipelines.rj_iplanrio__taxirio import utils
 
 
 @task

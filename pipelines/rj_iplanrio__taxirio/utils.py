@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import pyarrow.parquet as pq
-from prefect import context
+from prefect import get_run_logger
 from pyarrow import Table
 from pymongo.collection import Collection
 from pytz import UTC
@@ -26,7 +26,8 @@ def log(message: str, level: str = "info") -> None:
         msg = f"Invalid log level: {level}"
         raise ValueError(msg)
 
-    context.logger.log(levels[level], message)
+    logger = get_run_logger()
+    logger.log(levels[level], message)
 
 
 def get_mongodb_date_in_collection(
