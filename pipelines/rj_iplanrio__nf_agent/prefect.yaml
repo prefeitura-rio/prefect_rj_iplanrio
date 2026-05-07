@@ -39,7 +39,7 @@ deployments:
     parameters:
       bq_input_table: "rj-nf-agent.dev_poc_cgm_osinfo.vw_desepesas_recorte_staging"
       bq_status_table: "rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento_staging"
-      batch_size: 10
+      batch_size: 20
       gcs_output_base_path: "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo"
       db_path: "/tmp/nf_pipeline_cache.db"
       gcs_bucket: "rj-nf-agent"

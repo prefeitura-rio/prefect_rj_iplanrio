@@ -12,6 +12,8 @@ COPY ./src ./src/
 COPY ./pipelines/rj_iplanrio__nf_agent ./pipelines/rj_iplanrio__nf_agent/
 RUN uv sync --package rj_iplanrio__nf_agent
 
+ENV VIRTUAL_ENV=/opt/prefect/prefect_rj_iplanrio/.venv
+
 RUN git clone https://github.com/prefeitura-rio/agent-nf-validator.git /opt/agent-nf-validator
 RUN uv pip install -r /opt/agent-nf-validator/requirements.txt
 
