@@ -1,0 +1,150 @@
+name: rj_smfp__atividade_economica
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smfp__atividade_economica-{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+      dockerfile: pipelines/rj_smfp__atividade_economica/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{% raw %}{{ build-image.image_name }}{% endraw %}"
+      tag: "{% raw %}{{ build-image.tag }}{% endraw %}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # Deployment de staging para testes
+  - name: rj-smfp--atividade-economica--staging
+    version: "{% raw %}{{ build-image.tag }}{% endraw %}"
+    entrypoint: pipelines/rj_smfp__atividade_economica/flow.py:rj_smfp__atividade_economica
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
+        command: uv run --package rj_smfp__atividade_economica -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  # Deployment de produção com schedules para todas as tabelas
+  - name: rj-smfp--atividade-economica--prod
+    version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
+    entrypoint: pipelines/rj_smfp__atividade_economica/flow.py:rj_smfp__atividade_economica
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
+        command: uv run --package rj_smfp__atividade_economica -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # ========================================
+    # TABELAS DE FATOS (FACT)
+    # ========================================
+
+    # Tabela: fact_fatoalvaras
+    # Descrição: Fato de Alvarás com dados quantitativos e relacionamentos
+    - interval: 86400 # Executa diariamente (24h)
+      anchor_date: "2022-03-21T02:00:00" # Data de início em UTC
+      timezone: America/Sao_Paulo
+      slug: fact-fatoalvaras-daily
+      parameters:
+        table_id: fact_fatoalvaras
+
+    # Tabela: fact_fatocp
+    # Descrição: Fato de Consultas Prévias
+    - interval: 86400
+      anchor_date: "2022-03-21T02:10:00"
+      timezone: America/Sao_Paulo
+      slug: fact-fatocp-daily
+      parameters:
+        table_id: fact_fatocp
+
+    # ========================================
+    # TABELAS DIMENSÃO (TAB)
+    # ========================================
+
+    # Tabela: tab_alvara
+    # Descrição: Dimensão de Alvarás com informações descritivas
+    - interval: 86400
+      anchor_date: "2022-03-21T02:20:00"
+      timezone: America/Sao_Paulo
+      slug: tab-alvara-daily
+      parameters:
+        table_id: tab_alvara
+
+    # Tabela: tab_atvprocesso
+    # Descrição: Dimensão de Atividades de Processo
+    - interval: 86400
+      anchor_date: "2022-03-21T02:30:00"
+      timezone: America/Sao_Paulo
+      slug: tab-atvprocesso-daily
+      parameters:
+        table_id: tab_atvprocesso
+
+    # Tabela: tab_cae
+    # Descrição: Dimensão de CAE (Código de Atividade Econômica)
+    - interval: 86400
+      anchor_date: "2022-03-21T02:40:00"
+      timezone: America/Sao_Paulo
+      slug: tab-cae-daily
+      parameters:
+        table_id: tab_cae
+
+    # Tabela: tab_cnae
+    # Descrição: Dimensão de CNAE (Classificação Nacional de Atividades Econômicas)
+    - interval: 86400
+      anchor_date: "2022-03-21T02:50:00"
+      timezone: America/Sao_Paulo
+      slug: tab-cnae-daily
+      parameters:
+        table_id: tab_cnae
+
+    # Tabela: tab_consulta
+    # Descrição: Dimensão de Consultas Prévias
+    - interval: 86400
+      anchor_date: "2022-03-21T03:00:00"
+      timezone: America/Sao_Paulo
+      slug: tab-consulta-daily
+      parameters:
+        table_id: tab_consulta
+
+    # Tabela: tab_direcionamento
+    # Descrição: Dimensão de Direcionamento de processos
+    - interval: 86400
+      anchor_date: "2022-03-21T03:10:00"
+      timezone: America/Sao_Paulo
+      slug: tab-direcionamento-daily
+      parameters:
+        table_id: tab_direcionamento
+
+    # Tabela: tab_tipocontribuinte_tipocontribuint
+    # Descrição: Dimensão de Tipos de Contribuinte
+    - interval: 86400
+      anchor_date: "2022-03-21T03:20:00"
+      timezone: America/Sao_Paulo
+      slug: tab-tipocontribuinte-daily
+      parameters:
+        table_id: tab_tipocontribuinte_tipocontribuint
+
+    # Tabela: tab_tiposolicitacao
+    # Descrição: Dimensão de Tipos de Solicitação
+    - interval: 86400
+      anchor_date: "2022-03-21T03:30:00"
+      timezone: America/Sao_Paulo
+      slug: tab-tiposolicitacao-daily
+      parameters:
+        table_id: tab_tiposolicitacao
