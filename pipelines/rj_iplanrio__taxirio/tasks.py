@@ -23,7 +23,7 @@ from pytz import UTC
 from pipelines.rj_iplanrio__taxirio import utils
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def get_mongodb_client(connection: str) -> MongoClient:
     """
     Cria um client MongoDB a partir da string de conexão.
@@ -195,5 +195,17 @@ def dump_collection_from_mongodb_per_period(
     return root_path
 
 @task
-def acess_api_infisical(infisical_db_connection : str = "DB_CONNECTION_STRING"):
-    return getenv_or_action(infisical_db_connection)
+def acess_api_infisical(infisical_db_connection: str = "DB_CONNECTION_STRING"):
+    """
+    Acessa o Infisical para obter a string de conexão do MongoDB.
+
+    Args:
+        infisical_db_connection: Nome da variável no Infisical
+
+    Returns:
+        String de conexão do MongoDB
+    """
+    utils.log("Acessando API do Infisical para obter credenciais do MongoDB")
+    connection_string = getenv_or_action(infisical_db_connection)
+    utils.log(f"Conexão obtida do Infisical: {connection_string}")
+    return connection_string
