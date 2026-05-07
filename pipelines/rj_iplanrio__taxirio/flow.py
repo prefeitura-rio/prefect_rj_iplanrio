@@ -133,10 +133,3 @@ def rj_iplanrio__taxirio(
     )
 
     return upload_table
-
-
-rj_iplanrio__taxirio(
-    table_id = "cities",
-    path = "output",
-    dataset_id = Constants.DATASET_ID.value,
-)
