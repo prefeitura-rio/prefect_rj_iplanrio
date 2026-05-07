@@ -17,6 +17,7 @@ from prefect import flow
 
 from pipelines.rj_iplanrio__taxirio.constants import TABLE_CONFIGS, Constants
 from pipelines.rj_iplanrio__taxirio.tasks import (
+    acess_api_infisical,
     dump_collection_from_mongodb,
     dump_collection_from_mongodb_per_period,
     get_dates_for_dump_mode,
@@ -82,13 +83,10 @@ def rj_iplanrio__taxirio(
     # Importar dinamicamente o módulo mongodb da tabela
     mongodb_module = importlib.import_module(f"pipelines.rj_iplanrio__taxirio.{table_id}.mongodb")
     schema = mongodb_module.schema
-
+    db_connection_info = acess_api_infisical()
     # Obter conexão com MongoDB
     connection_string = get_mongodb_connection_string(
-        secret_name=secret_name,
-        secret_path=get_database_username_and_password_from_secret_task(
-            infisical_secret_path=Constants.INFISICAL_SECRET_PATH.value
-        ),
+        db_connection_info
     )
 
     client = get_mongodb_client(connection=connection_string)
@@ -131,7 +129,7 @@ def rj_iplanrio__taxirio(
             partition_cols=config.partition_cols,
         )
 
-    # Upload para BigQuery
+    # Upload para BigQueryç
     upload_table = create_table_and_upload_to_gcs_task(
         data_path=data_path,
         dataset_id=dataset_id,

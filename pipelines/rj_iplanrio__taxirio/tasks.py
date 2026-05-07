@@ -12,6 +12,9 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
+from iplanrio.pipelines_templates.dump_db.tasks import (
+    get_database_username_and_password_from_secret_task,
+)
 from prefect import task
 from prefeitura_rio.pipelines_utils.infisical import get_secret
 from pymongo import MongoClient
@@ -36,6 +39,7 @@ def get_mongodb_connection_string(secret_name: str, secret_path: str = "/taxirio
     """
     utils.log("Obtendo string de conexão do MongoDB do Infisical")
 
+    get_database_username_and_password_from_secret_task(infisical_secret_path=secret_path)
     connection = get_secret(
         secret_name=secret_name,
         path=secret_path,
@@ -200,9 +204,7 @@ def dump_collection_from_mongodb_per_period(
     )
 
     for start, end in pairwise(dates):
-        utils.log(
-            f"Processando período: {start.strftime('%Y-%m-%d')} até {end.strftime('%Y-%m-%d')}"
-        )
+        utils.log(f"Processando período: {start.strftime('%Y-%m-%d')} até {end.strftime('%Y-%m-%d')}")
 
         data = aggregate_arrow_all(
             collection,
@@ -216,3 +218,9 @@ def dump_collection_from_mongodb_per_period(
     utils.log(f"Dump por período concluído: {root_path}")
 
     return root_path
+
+@task
+def acess_api_infisical(
+    infisical_db_connection : str = "DB_CONNECTION_STRING",
+)
+    return infisical_db_connection
