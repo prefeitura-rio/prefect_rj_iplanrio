@@ -4,9 +4,6 @@ version = "0.1.0"
 description = "Pipeline para dump de collections do MongoDB do TaxiRio para BigQuery"
 dependencies = [
     "prefect_rj_iplanrio",
-    "prefect==3.4.9",
-    "prefect-docker>=0.6.5",
-    "prefeitura-rio[actions] @ git+https://github.com/prefeitura-rio/prefeitura-rio@54593ddff444158b0ecbab5514c5cde4d44012c0",
     "pymongo>=4.0.0",
     "pymongoarrow>=1.0.0",
     "pyarrow>=10.0.0",
