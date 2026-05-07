@@ -11,41 +11,14 @@ from datetime import datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
 from typing import Any
-
-from iplanrio.pipelines_templates.dump_db.tasks import (
-    get_database_username_and_password_from_secret_task,
-)
 from prefect import task
-from prefeitura_rio.pipelines_utils.infisical import get_secret
 from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongoarrow.api import Schema, aggregate_arrow_all
 from pytz import UTC
-
 from pipelines.rj_iplanrio__taxirio import utils
+from iplanrio.pipelines_utils.env import getenv_or_action
 
-
-@task
-def get_mongodb_connection_string(secret_name: str, secret_path: str = "/taxirio") -> str:
-    """
-    Obtém a string de conexão do MongoDB a partir do Infisical.
-
-    Args:
-        secret_name: Nome do secret no Infisical
-        secret_path: Caminho do secret no Infisical
-
-    Returns:
-        String de conexão do MongoDB
-    """
-    utils.log("Obtendo string de conexão do MongoDB do Infisical")
-
-    get_database_username_and_password_from_secret_task(infisical_secret_path=secret_path)
-    connection = get_secret(
-        secret_name=secret_name,
-        path=secret_path,
-    )
-
-    return connection[secret_name]
 
 
 @task
@@ -221,4 +194,4 @@ def dump_collection_from_mongodb_per_period(
 
 @task
 def acess_api_infisical(infisical_db_connection : str = "DB_CONNECTION_STRING"):
-    return infisical_db_connection
+    return getenv_or_action(infisical_db_connection)

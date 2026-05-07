@@ -9,7 +9,6 @@ consolidando a lógica que antes estava distribuída em múltiplos flows.
 import importlib
 from typing import Optional
 
-from iplanrio.pipelines_templates.dump_db.tasks import get_database_username_and_password_from_secret_task
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
@@ -23,7 +22,6 @@ from pipelines.rj_iplanrio__taxirio.tasks import (
     get_dates_for_dump_mode,
     get_mongodb_client,
     get_mongodb_collection,
-    get_mongodb_connection_string,
 )
 
 
@@ -32,7 +30,6 @@ def rj_iplanrio__taxirio(
     table_id: str,
     path: str = "output",
     dataset_id: str = Constants.DATASET_ID.value,
-    secret_name: str = Constants.MONGODB_CONNECTION_STRING.value,
     dump_mode: Optional[str] = None,
     frequency: Optional[str] = None,
 ):
@@ -85,11 +82,8 @@ def rj_iplanrio__taxirio(
     schema = mongodb_module.schema
     db_connection_info = acess_api_infisical()
     # Obter conexão com MongoDB
-    connection_string = get_mongodb_connection_string(
-        db_connection_info
-    )
 
-    client = get_mongodb_client(connection=connection_string)
+    client = get_mongodb_client(connection=db_connection_info)
 
     collection = get_mongodb_collection(
         client=client,
@@ -139,3 +133,10 @@ def rj_iplanrio__taxirio(
     )
 
     return upload_table
+
+
+rj_iplanrio__taxirio(
+    table_id = "cities",
+    path = "output",
+    dataset_id = Constants.DATASET_ID.value,
+)
