@@ -1,0 +1,68 @@
+name: rj_iplanrio__nf_agent
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__nf_agent-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__nf_agent/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--nf-agent--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:nf_processing_flow
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__nf_agent -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      bq_input_table: "rj-nf-agent.dev_poc_cgm_osinfo.vw_desepesas_recorte_staging"
+      bq_status_table: "rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento_staging"
+      batch_size: 20
+      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo"
+      db_path: "/tmp/nf_pipeline_cache.db"
+      gcs_bucket: "rj-nf-agent"
+      workers: 200
+      mode: "full"
+
+  - name: rj-iplanrio--nf-agent--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:nf_processing_flow
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__nf_agent -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+      bq_input_table: "rj-nf-agent.dev_poc_cgm_osinfo.vw_desepesas_recorte"
+      bq_status_table: "rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento"
+      batch_size: 1000
+      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo"
+      db_path: "/tmp/nf_pipeline_cache.db"
+      gcs_bucket: "rj-nf-agent"
+      workers: 200
+      mode: "full"
