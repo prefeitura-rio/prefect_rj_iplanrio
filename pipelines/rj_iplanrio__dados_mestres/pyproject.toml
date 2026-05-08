@@ -3,8 +3,10 @@ name = "rj_iplanrio__dados_mestres"
 version = "0.1.0"
 description = "Pipeline dados_mestres da secretaria iplanrio"
 dependencies = [
+    "iplanrio",
     "prefect_rj_iplanrio",
 ]
 
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
+iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }

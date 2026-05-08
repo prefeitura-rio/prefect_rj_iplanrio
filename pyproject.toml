@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
   "idna>=3.10",
-  "iplanrio",
   "pandas>=2.2.3",
   "pre-commit>=4.5.1",
   "prefect==3.4.9",
@@ -17,9 +16,6 @@ dependencies = [
 [tool.uv]
 link-mode = "copy"
 override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0"]
-
-[tool.uv.sources]
-iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
 
 [tool.uv.workspace]
 members = ["pipelines/*"]
