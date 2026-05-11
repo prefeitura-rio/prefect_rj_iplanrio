@@ -73,8 +73,3 @@ def rj_iplanrio__sici(
     )
 
     logger.info("Flow concluído com sucesso!")
-
-
-if __name__ == "__main__":
-    # Para testes locais
-    rj_iplanrio__sici()
