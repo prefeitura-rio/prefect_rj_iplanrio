@@ -1,4 +1,8 @@
 [project]
 name = "rj_iplanrio__nf_agent"
 version = "0.1.0"
-dependencies = []
+description = "Pipeline de validação de notas fiscais da secretaria iplanrio"
+dependencies = [
+    "prefect>=3.4.9",
+    "prefect-docker>=0.6.5",
+]

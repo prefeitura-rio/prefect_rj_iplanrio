@@ -3998,6 +3998,16 @@ requires-dist = [
 name = "rj-iplanrio-nf-agent"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__nf_agent" }
+dependencies = [
+    { name = "prefect" },
+    { name = "prefect-docker" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "prefect", specifier = ">=3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
+]
 
 [[package]]
 name = "rj-iplanrio-run-dbt"
