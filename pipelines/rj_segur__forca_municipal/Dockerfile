@@ -7,6 +7,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
 
-COPY ./pipelines/rj_rj-segur__forca_municipal ./pipelines/rj_rj-segur__forca_municipal/
+COPY ./pipelines/rj_segur__forca_municipal ./pipelines/rj_segur__forca_municipal/
 
-RUN uv sync --package rj_rj-segur__forca_municipal
+RUN uv sync --package rj_segur__forca_municipal
