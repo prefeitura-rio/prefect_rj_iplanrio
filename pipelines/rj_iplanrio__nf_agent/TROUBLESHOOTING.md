@@ -21,4 +21,12 @@
 **Causa raiz confirmada:** `google-generativeai>=0.4.0` requer `protobuf<6.0.0`, mas o workspace tem `override-dependencies = ["grpcio-status==1.78.0"]` que exige `protobuf>=6.31.1`. Conflito irresolvível dentro do mesmo ambiente.
 **Fix:** dependências compatíveis movidas para `pyproject.toml` (resolvidas via `uv sync`). `google-generativeai` instalado isoladamente via `pip install --target /opt/agent-packages` no Dockerfile, adicionado ao `PYTHONPATH`.
 **Fix definitivo pendente:** migrar `agent-nf-validator` de `google-generativeai` para `google-genai` (novo SDK), que é compatível com protobuf>=6.x. Requer alterar imports em `core/classifiers/gemini_classifier.py` e dependências.
-**Status:** 🔄 workaround aplicado, testando.
+**Status:** ✅ workaround funcional — pipeline apareceu no dashboard e executou.
+
+### #5 — BigQuery NotFound: tabela não encontrada em location US
+**Erro:** `NotFound: Table rj-nf-agent:dev_poc_cgm_osinfo.vw_desepesas_recorte_staging was not found in location US`
+**Suspeita A:** dataset está em `southamerica-east1`, mas `bigquery.Client` em `bq_input_reader.py` não especifica `location`, usando `US` por padrão.
+**Suspeita B:** a view `vw_desepesas_recorte_staging` não existe no dataset de staging.
+**Fix (se A):** adicionar `location="southamerica-east1"` ao `bigquery.Client(...)` em `agent-nf-validator/run_poc/bq_input_reader.py`.
+**Fix (se B):** criar a view no BigQuery.
+**Status:** 🔄 pendente — verificar região e existência do dataset no console GCP.
