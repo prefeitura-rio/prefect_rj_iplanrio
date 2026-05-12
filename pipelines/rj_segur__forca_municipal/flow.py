@@ -74,9 +74,9 @@ def rj_segur__forca_municipal(
         biglake_table=biglake_table,
     )
 
-rj_segur__forca_municipal(
-  table_id = "qmd_plano",
-  dump_mode = "overwrite",
-  dataset_id = "forca_municipal",
-  biglake_table = True
-)
+# rj_segur__forca_municipal(
+#   table_id = "qmd_plano",
+#   dump_mode = "overwrite",
+#   dataset_id = "forca_municipal",
+#   biglake_table = True
+# )
