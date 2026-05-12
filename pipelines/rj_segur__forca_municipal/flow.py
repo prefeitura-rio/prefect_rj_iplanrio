@@ -51,7 +51,7 @@ def rj_segur__forca_municipal(
     # TODO: Se precisar testar os dados localmente, descomente o proxy em task.py
     """
     rename_current_flow_run_task(new_name=f"{dataset_id}.{table_id}")
-    #inject_bd_credentials_task(environment="prod")
+    inject_bd_credentials_task(environment="prod")
 
     # Obtém o endpoint da API baseado no table_id (se não foi fornecido)
     if endpoint is None:
