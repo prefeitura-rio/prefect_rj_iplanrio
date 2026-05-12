@@ -10,11 +10,13 @@ COPY ./src ./src/
 
 COPY ./pipelines/rj_iplanrio__nf_agent ./pipelines/rj_iplanrio__nf_agent/
 
+RUN git clone https://github.com/prefeitura-rio/agent-nf-validator.git /opt/agent-nf-validator
+
 RUN uv sync --package rj_iplanrio__nf_agent
 
-ENV VIRTUAL_ENV=/opt/prefect/prefect_rj_iplanrio/.venv
+# google-generativeai requires protobuf<6.0 which conflicts with the workspace's
+# grpcio-status==1.78.0 (protobuf>=6.31.1). Install it isolated via pip --target
+# so it doesn't interfere with uv's dependency resolution.
+RUN pip install --target /opt/agent-packages google-generativeai>=0.4.0
 
-RUN git clone https://github.com/prefeitura-rio/agent-nf-validator.git /opt/agent-nf-validator
-RUN uv pip install -r /opt/agent-nf-validator/requirements-prefect.txt
-
-ENV PYTHONPATH="/opt/agent-nf-validator:${PYTHONPATH}"
+ENV PYTHONPATH="/opt/agent-nf-validator:/opt/agent-packages:${PYTHONPATH}"

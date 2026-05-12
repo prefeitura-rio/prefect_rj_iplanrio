@@ -5,4 +5,18 @@ description = "Pipeline de validação de notas fiscais da secretaria iplanrio"
 dependencies = [
     "prefect>=3.4.9",
     "prefect-docker>=0.6.5",
+    "numpy>=1.24.0",
+    "pillow>=10.0.0",
+    "PyMuPDF>=1.23.0",
+    "pdf2image>=1.16.0",
+    "pypdf",
+    "google-auth>=2.0.0",
+    "google-cloud-bigquery>=3.0.0",
+    "google-cloud-storage>=2.0.0",
+    "google-cloud-vision>=3.4.0",
+    "pandas>=2.0.0",
+    "openpyxl",
+    "tqdm>=4.66.0",
+    "pyyaml>=6.0.0",
+    "python-dotenv>=1.0.0",
 ]
