@@ -1,4 +1,4 @@
-name: rj-segur__forca_municipal
+name: rj_segur__forca_municipal
 prefect-version: 3.4.3
 
 build:
@@ -10,8 +10,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: "rj-segur__forca_municipal-{{ get-commit-hash.stdout }}"
-      dockerfile: pipelines/rj-segur__forca_municipal/Dockerfile
+      tag: "rj_segur__forca_municipal-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_segur__forca_municipal/Dockerfile
 
 push:
   - prefect_docker.deployments.steps.push_docker_image:
@@ -24,26 +24,26 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-segur--forca_municipal--staging
+  - name: rj_segur--forca_municipal--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj-segur__forca_municipal/flow.py:rj-segur__forca_municipal
+    entrypoint: pipelines/rj_segur__forca_municipal/flow.py:rj_segur__forca_municipal
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj-segur__forca_municipal -- prefect flow-run execute
+        command: uv run --package rj_segur__forca_municipal -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-  - name: rj-segur--forca_municipal--prod
+  - name: rj_segur--forca_municipal--prod
     version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj-segur__forca_municipal/flow.py:rj-segur__forca_municipal
+    entrypoint: pipelines/rj_segur__forca_municipal/flow.py:rj_segur__forca_municipal
     work_pool:
       name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj-segur__forca_municipal -- prefect flow-run execute
+        command: uv run --package rj_segur__forca_municipal -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
