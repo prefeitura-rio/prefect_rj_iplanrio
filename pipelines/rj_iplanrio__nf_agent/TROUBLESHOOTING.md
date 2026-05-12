@@ -49,3 +49,10 @@
 **Fix (se B):** criar a view no BigQuery.
 **Status:** 🔄 pendente — verificar região e existência do dataset no console GCP.
 
+
+### #9 — KeyError: 'classificacao_modelo'
+**Erro:** `KeyError('classificacao_modelo')` em `processor.py` linha 2103.
+**Causa raiz:** `results_df` fica vazio quando nenhum PDF do BQ é encontrado no GCS bucket. `pd.DataFrame([])` não tem colunas, então qualquer acesso por nome falha.
+**Fix:** guard `if results_df.empty` nas linhas 1493 e 2103 de `processor.py`. Adicionado log `[DIAG]` para mostrar amostras de nomes BQ vs GCS e facilitar diagnóstico de mismatch.
+**Causa raiz pendente:** investigar por que nenhum PDF da `vw_despesas_recorte_teste` bate com os filenames no GCS (ver logs [DIAG] na próxima execução).
+**Status:** ✅ bug de código corrigido — causa raiz a investigar via logs.
