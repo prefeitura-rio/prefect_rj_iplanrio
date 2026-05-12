@@ -47,9 +47,11 @@ def rj_segur__forca_municipal(
             table_id="ocorrencias_ativas",
             endpoint="/ocorrencias/custom"
         )
+
+    # TODO: Se precisar testar os dados localmente, descomente o proxy em task.py
     """
     rename_current_flow_run_task(new_name=f"{dataset_id}.{table_id}")
-    inject_bd_credentials_task(environment="prod")
+    #inject_bd_credentials_task(environment="prod")
 
     # Obtém o endpoint da API baseado no table_id (se não foi fornecido)
     if endpoint is None:
@@ -63,7 +65,7 @@ def rj_segur__forca_municipal(
     # Extrai dados da API
     path = get_single_endpoint(endpoint, paginated=True, page_size=100)
 
-    # Carrega no BigQuery
+    #Carrega no BigQuery
     create_table_and_upload_to_gcs_task(
         data_path=path,
         dataset_id=dataset_id,
@@ -71,3 +73,10 @@ def rj_segur__forca_municipal(
         dump_mode=dump_mode,
         biglake_table=biglake_table,
     )
+
+rj_segur__forca_municipal(
+  table_id = "qmd_plano",
+  dump_mode = "overwrite",
+  dataset_id = "forca_municipal",
+  biglake_table = True
+)
