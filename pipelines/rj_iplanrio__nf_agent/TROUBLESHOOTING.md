@@ -23,6 +23,12 @@
 **Fix definitivo pendente:** migrar `agent-nf-validator` de `google-generativeai` para `google-genai` (novo SDK), que é compatível com protobuf>=6.x. Requer alterar imports em `core/classifiers/gemini_classifier.py` e dependências.
 **Status:** ✅ workaround funcional — pipeline apareceu no dashboard e executou.
 
+### #7 — KeyError: 'descricao_limpa'
+**Erro:** `KeyError('descricao_limpa')` em `processor.py` linha 1624.
+**Causa raiz:** `vw_despesas_recorte_teste` vem de `rj-cvl.adm_contrato_gestao.despesas` via `SELECT d.*`, que expõe `descricao` mas não `descricao_limpa`. A tabela original `osinfo_despesas_recorte` tinha `descricao_limpa` pré-computada via `REGEXP_REPLACE(descricao, r'(?i)\.pdf$', '')`.
+**Fix:** `bq_input_reader.py` deriva `descricao_limpa` de `descricao` após fetch quando a coluna não existe no dataframe.
+**Status:** ✅ corrigido em `agent-nf-validator/run_poc/bq_input_reader.py`.
+
 ### #6 — BadRequest: type mismatch no JOIN de id_documento (STRING vs INT64)
 **Erro:** `No matching signature for operator = for argument types: STRING, INT64 at [5:18]`
 **Causa raiz:** `vw_despesas_recorte_teste` expõe `id_documento` como `STRING`, mas `controle_processamento_staging` tem `id_documento` como `INTEGER`. O JOIN em `bq_input_reader.py` usava `=` direto sem cast.
