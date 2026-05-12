@@ -35,6 +35,12 @@
 **Fix:** substituído `v.id_documento = c.id_documento` por `CAST(v.id_documento AS STRING) = CAST(c.id_documento AS STRING)` em `read_unprocessed_batch` e `count_pending`.
 **Status:** ✅ corrigido em `agent-nf-validator/run_poc/bq_input_reader.py`.
 
+### #8 — FileNotFoundError: gcs-pdf-list.csv não existe no container
+**Erro:** `FileNotFoundError: /opt/agent-nf-validator/run_poc/gcs-pdf-list.csv`
+**Causa raiz:** `processor.py` chama `get_available_pdf_filenames_from_csv()` que espera um CSV pré-gerado localmente (artefato de dev para evitar chamadas à API GCS). No container esse arquivo não existe.
+**Fix:** `gcs_downloader.py` agora faz fallback para `get_available_pdf_filenames()` (listagem via GCS API) quando o CSV não é encontrado.
+**Status:** ✅ corrigido em `agent-nf-validator/run_poc/gcs_downloader.py`.
+
 ### #5 — BigQuery NotFound: tabela não encontrada em location US
 **Erro:** `NotFound: Table rj-nf-agent:dev_poc_cgm_osinfo.vw_desepesas_recorte_staging was not found in location US`
 **Suspeita A:** dataset está em `southamerica-east1`, mas `bigquery.Client` em `bq_input_reader.py` não especifica `location`, usando `US` por padrão.
@@ -42,3 +48,4 @@
 **Fix (se A):** adicionar `location="southamerica-east1"` ao `bigquery.Client(...)` em `agent-nf-validator/run_poc/bq_input_reader.py`.
 **Fix (se B):** criar a view no BigQuery.
 **Status:** 🔄 pendente — verificar região e existência do dataset no console GCP.
+
