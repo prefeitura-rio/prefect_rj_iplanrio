@@ -1,0 +1,111 @@
+name: rj-segur__forca_municipal
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj-segur__forca_municipal-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj-segur__forca_municipal/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-segur--forca_municipal--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj-segur__forca_municipal/flow.py:rj-segur__forca_municipal
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj-segur__forca_municipal -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+  - name: rj-segur--forca_municipal--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj-segur__forca_municipal/flow.py:rj-segur__forca_municipal
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj-segur__forca_municipal -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # Exemplo de schedule overwrite
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:05:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: unidades_ativas # slug do schedule
+      parameters:
+        table_id: unidades_ativas
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:10:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: unidades_historico # slug do schedule
+      parameters:
+        table_id: unidades_historico
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:15:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: ocorrencias_ativas # slug do schedule
+      parameters:
+        table_id: ocorrencias_ativas
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:20:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: ocorrencias_historico # slug do schedule
+      parameters:
+        table_id: ocorrencias_historico
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:25:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: ocorrencias_ativas_v2 # slug do schedule
+      parameters:
+        table_id: ocorrencias_ativas_v2
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:30:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: qmd # slug do schedule
+      parameters:
+        table_id: qmd
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:35:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: qmd_ativos # slug do schedule
+      parameters:
+        table_id: qmd_ativos
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:40:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: qmd_servicos # slug do schedule
+      parameters:
+        table_id: qmd_servicos
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:45:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: qmd_missoes # slug do schedule
+      parameters:
+        table_id: qmd_missoes
+    - interval: 86400 # executa a cada 24h
+      anchor_date: "2022-01-01T01:50:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: qmd_plano # slug do schedule
+      parameters:
+        table_id: qmd_plano
