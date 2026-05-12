@@ -23,6 +23,12 @@
 **Fix definitivo pendente:** migrar `agent-nf-validator` de `google-generativeai` para `google-genai` (novo SDK), que é compatível com protobuf>=6.x. Requer alterar imports em `core/classifiers/gemini_classifier.py` e dependências.
 **Status:** ✅ workaround funcional — pipeline apareceu no dashboard e executou.
 
+### #6 — BadRequest: type mismatch no JOIN de id_documento (STRING vs INT64)
+**Erro:** `No matching signature for operator = for argument types: STRING, INT64 at [5:18]`
+**Causa raiz:** `vw_despesas_recorte_teste` expõe `id_documento` como `STRING`, mas `controle_processamento_staging` tem `id_documento` como `INTEGER`. O JOIN em `bq_input_reader.py` usava `=` direto sem cast.
+**Fix:** substituído `v.id_documento = c.id_documento` por `CAST(v.id_documento AS STRING) = CAST(c.id_documento AS STRING)` em `read_unprocessed_batch` e `count_pending`.
+**Status:** ✅ corrigido em `agent-nf-validator/run_poc/bq_input_reader.py`.
+
 ### #5 — BigQuery NotFound: tabela não encontrada em location US
 **Erro:** `NotFound: Table rj-nf-agent:dev_poc_cgm_osinfo.vw_desepesas_recorte_staging was not found in location US`
 **Suspeita A:** dataset está em `southamerica-east1`, mas `bigquery.Client` em `bq_input_reader.py` não especifica `location`, usando `US` por padrão.
