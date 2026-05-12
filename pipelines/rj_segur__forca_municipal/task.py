@@ -74,7 +74,7 @@ class APIToDataFrame:
                 proxy=self.proxy,
                 verify=self.verify_ssl,
             ) as client:
-                print(f"Autenticando em {login_url}...")
+                print(f"Autenticando em {login_url} ...")
                 response = client.post(login_url, json=credentials)
                 response.raise_for_status()
 
@@ -375,7 +375,7 @@ def get_single_endpoint(endpoint: str, **kwargs) -> Optional[str]:
         base_url=API_CONFIG["base_url"],
         username=API_CONFIG["username"],
         password=API_CONFIG["password"],
-        proxy=API_CONFIG["proxy"],
+        # proxy=API_CONFIG["proxy"],
         verify_ssl=API_CONFIG["verify_ssl"],
     )
 
