@@ -71,7 +71,7 @@ class APIToDataFrame:
 
         try:
             with httpx.Client(
-                proxy=self.proxy,
+                # proxy=self.proxy,
                 verify=self.verify_ssl,
             ) as client:
                 print(f"Autenticando em {login_url} ...")
@@ -127,7 +127,7 @@ class APIToDataFrame:
                 response = client.get(url, params=params, headers=headers)
             else:
                 with httpx.Client(
-                    proxy=self.proxy,
+                    # proxy=self.proxy,
                     verify=self.verify_ssl,
                     # timeout=self.timeout
                 ) as temp_client:
@@ -286,7 +286,7 @@ class APIToDataFrame:
 
         try:
             with httpx.Client(
-                proxy=self.proxy,
+                # proxy=self.proxy,
                 verify=self.verify_ssl,
                 # timeout=self.timeout
             ) as client:
