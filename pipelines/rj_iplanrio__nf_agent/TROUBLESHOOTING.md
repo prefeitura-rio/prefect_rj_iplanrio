@@ -62,3 +62,9 @@
 **Causa raiz:** `GCSDownloader` usa `base_path="pdfs"` hardcoded, mas PDFs estão em `staging/brutos_osinfo_mongo/files_pdfs/`. A view `vw_despesas_recorte_teste` inclui `pdf_url_download` com a URL GCS correta.
 **Fix:** Quando `pdf_url_download` está no dataframe, extrai o `base_path` da URL e configura `gcs_downloader.default_base_path`. Pula o listing do bucket (a view já garante existência via INNER JOIN). `GCSDownloader` agora expõe `default_base_path` mutável.
 **Status:** ✅ corrigido em `gcs_downloader.py` e `processor.py`.
+
+### #11 — ValueError: dataset_id must be provided
+**Erro:** `ValueError('dataset_id must be provided or BIGQUERY_DATASET_ID env var must be set')`
+**Causa raiz:** `BigQueryWriter` exige `project_id`/`dataset_id` via env vars (`BIGQUERY_PROJECT_ID`, `BIGQUERY_DATASET_ID`) que não estão configuradas no container.
+**Fix:** `run_pipeline.py` agora extrai project e dataset do `bq_status_table` (formato `project.dataset.table`) quando as env vars não estão setadas. Sem necessidade de novos parâmetros ou secrets.
+**Status:** ✅ corrigido em `agent-nf-validator/run_poc/run_pipeline.py`.
