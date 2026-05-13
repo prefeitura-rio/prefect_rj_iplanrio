@@ -19,6 +19,9 @@ def nf_processing_flow(
     gcs_bucket: str | None = None,
     workers: int = 200,
     mode: str = "full",
+    deployment_name: str | None = None,
+    requests_per_minute: int = 600,
+    max_concurrent: int = 50,
 ) -> None:
     import sys
 
@@ -36,4 +39,39 @@ def nf_processing_flow(
         gcs_bucket=gcs_bucket,
         workers=workers,
         mode=mode,
+        requests_per_minute=requests_per_minute,
+        max_concurrent=max_concurrent,
     )
+
+    if not deployment_name:
+        print("[Flow] deployment_name not set — skipping self-trigger check")
+        return
+
+    from run_poc.bq_input_reader import BQInputReader  # noqa: PLC0415
+    from prefect.deployments import run_deployment  # noqa: PLC0415
+
+    reader = BQInputReader()
+    pending = reader.count_pending(bq_input_table, bq_status_table)
+    print(f"[Flow] {pending:,} documents still pending after this batch")
+
+    if pending > 0:
+        print(f"[Flow] Triggering next batch → {deployment_name}")
+        run_deployment(
+            name=deployment_name,
+            parameters={
+                "bq_input_table": bq_input_table,
+                "bq_status_table": bq_status_table,
+                "batch_size": batch_size,
+                "gcs_output_base_path": gcs_output_base_path,
+                "db_path": db_path,
+                "gcs_bucket": gcs_bucket,
+                "workers": workers,
+                "mode": mode,
+                "deployment_name": deployment_name,
+                "requests_per_minute": requests_per_minute,
+                "max_concurrent": max_concurrent,
+            },
+            timeout=0,  # fire-and-forget, don't block waiting for next run
+        )
+    else:
+        print("[Flow] Queue exhausted — no more batches to trigger")
