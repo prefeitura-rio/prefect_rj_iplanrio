@@ -32,9 +32,9 @@ class APIToDataFrame:
         base_url: str,
         username: str,
         password: str,
-        proxy: Optional[str] = None,
+        # proxy: Optional[str] = None,
         verify_ssl: bool = False,
-        timeout: int = 30
+        # timeout: int = 30
     ):
         """
         Inicializa o conversor de API para DataFrames.
@@ -50,9 +50,9 @@ class APIToDataFrame:
         self.base_url = base_url.rstrip('/')
         self.username = username
         self.password = password
-        self.proxy = proxy
+        # self.proxy = proxy
         self.verify_ssl = verify_ssl
-        self.timeout = timeout
+        # self.timeout = timeout
         self.access_token = None
         self.expiration_time = None
 
@@ -129,7 +129,7 @@ class APIToDataFrame:
                 with httpx.Client(
                     proxy=self.proxy,
                     verify=self.verify_ssl,
-                    timeout=self.timeout
+                    # timeout=self.timeout
                 ) as temp_client:
                     response = temp_client.get(url, params=params, headers=headers)
 
@@ -288,7 +288,7 @@ class APIToDataFrame:
             with httpx.Client(
                 proxy=self.proxy,
                 verify=self.verify_ssl,
-                timeout=self.timeout
+                # timeout=self.timeout
             ) as client:
 
                 if paginated:
@@ -366,9 +366,9 @@ def get_single_endpoint(endpoint: str, **kwargs) -> Optional[str]:
     Exemplo:
         path = get_single_endpoint("/unidades/ativas", paginated=True, page_size=100)
     """
-    from pathlib import Path
+    from pathlib import Path  # noqa: PLC0415
 
-    from pipelines.rj_segur__forca_municipal.constants import API_CONFIG
+    from pipelines.rj_segur__forca_municipal.constants import API_CONFIG  # noqa: PLC0415
 
     # Usa configurações do constants.py
     converter = APIToDataFrame(
