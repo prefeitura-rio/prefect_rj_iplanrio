@@ -63,7 +63,7 @@ def rj_segur__forca_municipal(
         print(f"📍 Usando endpoint customizado: {endpoint}")
 
     # Extrai dados da API
-    path = get_single_endpoint(endpoint, paginated=True, page_size=100)
+    path = get_single_endpoint(endpoint, paginated=True, page_size=250)
 
     #Carrega no BigQuery
     create_table_and_upload_to_gcs_task(
