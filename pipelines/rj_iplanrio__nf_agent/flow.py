@@ -42,12 +42,26 @@ def nf_processing_flow(
         max_concurrent=max_concurrent,
     )
 
-    # Use the runtime deployment ID to self-trigger — avoids hardcoding the name.
+    # Look up the current flow run's deployment ID via the client.
     from prefect.runtime import flow_run as current_run  # noqa: PLC0415
 
-    deployment_id = current_run.deployment_id
+    flow_run_id = current_run.id
+    if not flow_run_id:
+        print("[Flow] Not running as a flow run — skipping self-trigger check")
+        return
+
+    from prefect import get_client  # noqa: PLC0415
+    from prefect.utilities.asyncutils import run_coro_as_sync  # noqa: PLC0415
+
+    async def _get_deployment_id():
+        async with get_client() as client:
+            fr = await client.read_flow_run(flow_run_id)
+            return fr.deployment_id
+
+    deployment_id = run_coro_as_sync(_get_deployment_id())
+
     if not deployment_id:
-        print("[Flow] Not running as a deployment — skipping self-trigger check")
+        print("[Flow] Flow run has no deployment — skipping self-trigger check")
         return
 
     from run_poc.bq_input_reader import BQInputReader  # noqa: PLC0415
