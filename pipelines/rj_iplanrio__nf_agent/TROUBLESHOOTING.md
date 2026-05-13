@@ -68,3 +68,9 @@
 **Causa raiz:** `BigQueryWriter` exige `project_id`/`dataset_id` via env vars (`BIGQUERY_PROJECT_ID`, `BIGQUERY_DATASET_ID`) que não estão configuradas no container.
 **Fix:** `run_pipeline.py` agora extrai project e dataset do `bq_status_table` (formato `project.dataset.table`) quando as env vars não estão setadas. Sem necessidade de novos parâmetros ou secrets.
 **Status:** ✅ corrigido em `agent-nf-validator/run_poc/run_pipeline.py`.
+
+### #12 — Forbidden: bigquery.tables.create negado em dev_poc_cgm_osinfo
+**Erro:** `403 Access Denied: Permission bigquery.tables.create denied on dataset rj-nf-agent:dev_poc_cgm_osinfo`
+**Causa raiz:** `upsert_status` criava uma tabela temp (`controle_..._tmp_YYYYMMDDHHMMSS`) no mesmo dataset para fazer MERGE. A SA não tem permissão de criar tabelas nesse dataset.
+**Fix:** substituído por MERGE com `UNNEST` inline — os dados vão direto na query SQL sem precisar de tabela intermediária. Requer apenas permissão de UPDATE/INSERT na tabela de controle.
+**Status:** ✅ corrigido em `agent-nf-validator/run_poc/bigquery_writer.py`.
