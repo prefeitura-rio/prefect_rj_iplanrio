@@ -34,7 +34,7 @@ class APIToDataFrame:
         password: str,
         # proxy: Optional[str] = None,
         verify_ssl: bool = False,
-        # timeout: int = 30
+        timeout: int = 300
     ):
         """
         Inicializa o conversor de API para DataFrames.
@@ -52,7 +52,7 @@ class APIToDataFrame:
         self.password = password
         # self.proxy = proxy
         self.verify_ssl = verify_ssl
-        # self.timeout = timeout
+        self.timeout = timeout
         self.access_token = None
         self.expiration_time = None
 
@@ -73,6 +73,7 @@ class APIToDataFrame:
             with httpx.Client(
                 # proxy=self.proxy,
                 verify=self.verify_ssl,
+                timeout=self.timeout
             ) as client:
                 print(f"Autenticando em {login_url} ...")
                 response = client.post(login_url, json=credentials)
@@ -128,7 +129,7 @@ class APIToDataFrame:
                 with httpx.Client(
                     # proxy=self.proxy,
                     verify=self.verify_ssl,
-                    # timeout=self.timeout
+                    timeout=self.timeout
                 ) as temp_client:
                     response = temp_client.get(url, params=params, headers=headers)
             print(f"Requisição GET {url} com params {params} - status: {response.status_code}")
@@ -287,7 +288,7 @@ class APIToDataFrame:
             with httpx.Client(
                 # proxy=self.proxy,
                 verify=self.verify_ssl,
-                # timeout=self.timeout
+                timeout=self.timeout
             ) as client:
 
                 if paginated:
