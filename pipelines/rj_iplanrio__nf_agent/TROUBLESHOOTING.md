@@ -56,3 +56,9 @@
 **Fix:** guard `if results_df.empty` nas linhas 1493 e 2103 de `processor.py`. Adicionado log `[DIAG]` para mostrar amostras de nomes BQ vs GCS e facilitar diagnóstico de mismatch.
 **Causa raiz pendente:** investigar por que nenhum PDF da `vw_despesas_recorte_teste` bate com os filenames no GCS (ver logs [DIAG] na próxima execução).
 **Status:** ✅ bug de código corrigido — causa raiz a investigar via logs.
+
+### #10 — GCS listing retorna vazio (prefix errado) / PDFs não baixados
+**Erro:** `[DIAG] Primeiros filenames do GCS: []` — nenhum PDF encontrado, `results_df` vazio.
+**Causa raiz:** `GCSDownloader` usa `base_path="pdfs"` hardcoded, mas PDFs estão em `staging/brutos_osinfo_mongo/files_pdfs/`. A view `vw_despesas_recorte_teste` inclui `pdf_url_download` com a URL GCS correta.
+**Fix:** Quando `pdf_url_download` está no dataframe, extrai o `base_path` da URL e configura `gcs_downloader.default_base_path`. Pula o listing do bucket (a view já garante existência via INNER JOIN). `GCSDownloader` agora expõe `default_base_path` mutável.
+**Status:** ✅ corrigido em `gcs_downloader.py` e `processor.py`.
