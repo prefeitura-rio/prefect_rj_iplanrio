@@ -69,6 +69,12 @@
 **Fix:** `run_pipeline.py` agora extrai project e dataset do `bq_status_table` (formato `project.dataset.table`) quando as env vars não estão setadas. Sem necessidade de novos parâmetros ou secrets.
 **Status:** ✅ corrigido em `agent-nf-validator/run_poc/run_pipeline.py`.
 
+### #13 — TypeError: nf_processing_flow() got an unexpected keyword argument 'requests_per_minute'
+**Erro:** `TypeError: nf_processing_flow() got an unexpected keyword argument 'requests_per_minute'`
+**Causa raiz:** `flow.py` foi atualizado com novos parâmetros (`requests_per_minute`, `max_concurrent`, `deployment_name`) mas a imagem Docker foi construída antes de `agent-nf-validator` ter os mesmos parâmetros em `run_pipeline.py`. O `git clone` do Dockerfile capturou a versão antiga.
+**Fix:** commit e push das mudanças em `agent-nf-validator/run_poc/run_pipeline.py` para master; rebuild da imagem Docker via novo commit neste repo.
+**Status:** ✅ corrigido — `agent-nf-validator` atualizado em master (commit 7519f1e).
+
 ### #12 — Forbidden: bigquery.tables.create negado em dev_poc_cgm_osinfo
 **Erro:** `403 Access Denied: Permission bigquery.tables.create denied on dataset rj-nf-agent:dev_poc_cgm_osinfo`
 **Causa raiz:** `upsert_status` criava uma tabela temp (`controle_..._tmp_YYYYMMDDHHMMSS`) no mesmo dataset para fazer MERGE. A SA não tem permissão de criar tabelas nesse dataset.
