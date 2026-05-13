@@ -121,7 +121,6 @@ class APIToDataFrame:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
 
         headers = {"Authorization": f"Bearer {self.access_token}"}
-
         try:
             if client:
                 response = client.get(url, params=params, headers=headers)
@@ -132,7 +131,7 @@ class APIToDataFrame:
                     # timeout=self.timeout
                 ) as temp_client:
                     response = temp_client.get(url, params=params, headers=headers)
-
+            print(f"Requisição GET {url} com params {params} - status: {response.status_code}")
             response.raise_for_status()
             return response.json()
 
@@ -140,7 +139,7 @@ class APIToDataFrame:
             print(f"Erro HTTP {e.response.status_code} ao requisitar {url}: {e.response.text[:200]}")
             return None
         except Exception as e:
-            print(f"Erro ao requisitar {url}: {e}")
+            print(f"Erro ao requisitar {url} : {e}")
             return None
 
     def _extract_data_from_response(self, response_data: Dict) -> Optional[List]:
@@ -249,10 +248,10 @@ class APIToDataFrame:
 
                         print(f"    ✓ {len(json_df.columns)} sub-colunas criadas")
                     else:
-                        logger.warning(f"    ✗ Nenhuma sub-coluna criada para {col}")
+                        print(f"    ✗ Nenhuma sub-coluna criada para {col}")
 
                 except Exception as e:
-                    logger.warning(f"    ✗ Falha ao expandir {col}: {e}")
+                    print(f"    ✗ Falha ao expandir {col}: {e}")
 
         return df_expanded
 
@@ -278,7 +277,7 @@ class APIToDataFrame:
             DataFrame com os dados ou None em caso de erro
         """
         if not self.access_token:
-            logger.error("Não autenticado. Execute authenticate() primeiro.")
+            print("Não autenticado. Execute authenticate() primeiro.")
             return None
 
         all_records = []
@@ -335,8 +334,8 @@ class APIToDataFrame:
 
             # Converte para DataFrame
             if not all_records:
-                logger.warning(f"Nenhum registro encontrado em {endpoint}")
-                return pd.DataFrame()
+                print(f"Nenhum registro encontrado em {endpoint}")
+                return None
 
             df = pd.json_normalize(all_records) if normalize else pd.DataFrame(all_records)
             print(f"✓ DataFrame inicial criado: {len(df)} linhas × {len(df.columns)} colunas")
@@ -348,7 +347,7 @@ class APIToDataFrame:
             return df
 
         except Exception as e:
-            logger.error(f"Erro ao converter para DataFrame: {e}")
+            print(f"Erro ao converter para DataFrame: {e}")
             return None
 
 @task
