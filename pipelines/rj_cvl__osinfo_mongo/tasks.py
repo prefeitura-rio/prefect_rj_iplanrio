@@ -916,6 +916,7 @@ def _reconstruct_pdfs_from_temp_files(
     dest_gcs_path: str,
     bucket_name: str,
     max_workers: int = 10,
+    metadata_source_table: str = "rj-nf-agent.brutos_osinfo_mongo.files_pdfs_status",
 ) -> dict[str, dict]:
     """
     Reconstruct PDFs from temporary parquet files and upload to GCS
@@ -925,6 +926,8 @@ def _reconstruct_pdfs_from_temp_files(
         dest_gcs_path: Destination path in GCS for PDFs (e.g., "staging/dataset/files_pdfs")
         bucket_name: GCS bucket name
         max_workers: Number of parallel processing threads (default: 10)
+        metadata_source_table: BigQuery table with files_id -> filename mapping
+            (default: "rj-nf-agent.brutos_osinfo_mongo.files_pdfs_status")
 
     Returns:
         Updated processing_results dict with pdf_reconstructed_at and pdf_reconstruction_failed fields
@@ -961,12 +964,11 @@ def _reconstruct_pdfs_from_temp_files(
 
     # Step 1: Fetch metadata from BigQuery (1 query for all file_ids)
     file_ids = list(temp_files_map.keys())
-    metadata_query = """
+    metadata_query = f"""
       SELECT
-        files_id as file_id,
-        filename,
-        contenttype
-      FROM `rj-nf-agent.poc_osinfo_ia.target_files`
+        files_id,
+        filename
+      FROM `{metadata_source_table}`
       WHERE files_id IN UNNEST(@file_ids)
     """
 
@@ -979,7 +981,7 @@ def _reconstruct_pdfs_from_temp_files(
 
     print(f"Fetching metadata for {len(file_ids):,} files from BigQuery...")
     metadata_df = client.query(metadata_query, job_config=job_config).to_dataframe()
-    metadata_dict = metadata_df.set_index('file_id').to_dict('index')
+    metadata_dict = metadata_df.set_index('files_id').to_dict('index')
 
     print(f"Loaded metadata for {len(metadata_dict):,} files")
 
@@ -1051,6 +1053,8 @@ def update_processing_metadata(
     dataset_id: str,
     metadata_table_id: str,
     processing_results: dict[str, dict],
+    project_id: str = "rj-nf-agent",
+    use_staging_dataset: bool = False,
 ) -> int:
     """
     Update BigQuery metadata table with processing status
@@ -1069,6 +1073,8 @@ def update_processing_metadata(
                 },
                 ...
             }
+        project_id: GCP project where the metadata table lives (default: "rj-nf-agent")
+        use_staging_dataset: If True, appends "_staging" suffix to dataset_id (default: False)
 
     Returns:
         Number of rows written to BigQuery
@@ -1080,7 +1086,7 @@ def update_processing_metadata(
     for file_id, result in processing_results.items():
         # Ensure all schema fields are present (set None for missing PDF fields)
         row = {
-            "file_id": file_id,
+            "files_id": file_id,
             "chunks_captured_at": result.get("chunks_captured_at"),
             "chunks_gcs_path": result.get("chunks_gcs_path"),
             "chunks_not_found": result.get("chunks_not_found", False),
@@ -1092,11 +1098,12 @@ def update_processing_metadata(
     df = pd.DataFrame(rows)
 
     # Write to BigQuery
-    client = bigquery.Client()
-    table_ref = f"{dataset_id}_staging.{metadata_table_id}"
+    client = bigquery.Client(project=project_id)
+    dataset_ref = f"{dataset_id}_staging" if use_staging_dataset else dataset_id
+    table_ref = f"{project_id}.{dataset_ref}.{metadata_table_id}"
 
     schema = [
-        bigquery.SchemaField("file_id", "STRING", mode="REQUIRED"),
+        bigquery.SchemaField("files_id", "STRING", mode="REQUIRED"),
         bigquery.SchemaField("chunks_captured_at", "TIMESTAMP", mode="NULLABLE"),
         bigquery.SchemaField("chunks_gcs_path", "STRING", mode="NULLABLE"),
         bigquery.SchemaField("chunks_not_found", "BOOLEAN", mode="NULLABLE"),
