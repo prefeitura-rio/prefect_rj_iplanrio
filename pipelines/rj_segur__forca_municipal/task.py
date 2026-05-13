@@ -119,7 +119,7 @@ class APIToDataFrame:
             return None
 
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
-        breakpoint()
+
         headers = {"Authorization": f"Bearer {self.access_token}"}
 
         try:
