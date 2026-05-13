@@ -45,7 +45,6 @@ deployments:
       gcs_bucket: "rj-nf-agent"
       workers: 200
       mode: "full"
-      deployment_name: "nf_processing_flow/rj-iplanrio--nf-agent--staging"
       requests_per_minute: 600
       max_concurrent: 50
 
@@ -69,6 +68,5 @@ deployments:
       gcs_bucket: "rj-nf-agent"
       workers: 200
       mode: "full"
-      deployment_name: "nf_processing_flow/rj-iplanrio--nf-agent--prod"
       requests_per_minute: 600
       max_concurrent: 50

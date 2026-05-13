@@ -19,7 +19,6 @@ def nf_processing_flow(
     gcs_bucket: str | None = None,
     workers: int = 200,
     mode: str = "full",
-    deployment_name: str | None = None,
     requests_per_minute: int = 600,
     max_concurrent: int = 50,
 ) -> None:
@@ -43,8 +42,12 @@ def nf_processing_flow(
         max_concurrent=max_concurrent,
     )
 
-    if not deployment_name:
-        print("[Flow] deployment_name not set — skipping self-trigger check")
+    # Use the runtime deployment ID to self-trigger — avoids hardcoding the name.
+    from prefect.runtime import flow_run as current_run  # noqa: PLC0415
+
+    deployment_id = current_run.deployment_id
+    if not deployment_id:
+        print("[Flow] Not running as a deployment — skipping self-trigger check")
         return
 
     from run_poc.bq_input_reader import BQInputReader  # noqa: PLC0415
@@ -55,9 +58,9 @@ def nf_processing_flow(
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
     if pending > 0:
-        print(f"[Flow] Triggering next batch → {deployment_name}")
+        print(f"[Flow] Triggering next batch (deployment_id={deployment_id})")
         run_deployment(
-            name=deployment_name,
+            name=deployment_id,  # UUID accepted directly, no name lookup needed
             parameters={
                 "bq_input_table": bq_input_table,
                 "bq_status_table": bq_status_table,
@@ -67,7 +70,6 @@ def nf_processing_flow(
                 "gcs_bucket": gcs_bucket,
                 "workers": workers,
                 "mode": mode,
-                "deployment_name": deployment_name,
                 "requests_per_minute": requests_per_minute,
                 "max_concurrent": max_concurrent,
             },
