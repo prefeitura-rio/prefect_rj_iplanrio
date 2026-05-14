@@ -69,6 +69,18 @@
 **Fix:** `run_pipeline.py` agora extrai project e dataset do `bq_status_table` (formato `project.dataset.table`) quando as env vars não estão setadas. Sem necessidade de novos parâmetros ou secrets.
 **Status:** ✅ corrigido em `agent-nf-validator/run_poc/run_pipeline.py`.
 
+### #15 — Batch query retorna 0 linhas mas count_pending mostra pendentes
+**Erro:** `[BQInputReader] Got 0 rows across 0 PDFs` com count_pending retornando N > 0.
+**Causa raiz:** `REGEXP_REPLACE(descricao, r'(?i)\.pdf$', '')` retorna NULL quando `descricao` é NULL. `NULL = NULL` é FALSE em SQL, então o `INNER JOIN` elimina todas as linhas. `count_pending` não usa `descricao`, então permanece correto. Adicionalmente, a view já entrega `descricao` sem sufixo `.pdf`, tornando o REGEXP_REPLACE desnecessário.
+**Fix:** removido `REGEXP_REPLACE`; query usa `COALESCE(descricao, CAST(id_documento AS STRING))` como chave de agrupamento — nunca NULL.
+**Status:** ✅ corrigido em `agent-nf-validator/run_poc/bq_input_reader.py`.
+
+### #14 — ObjectNotFound ao tentar auto-trigger (deployment name errado)
+**Erro:** `ObjectNotFound` no `run_deployment(name="nf_processing_flow/rj-iplanrio--nf-agent--staging")`.
+**Causa raiz:** nome hardcoded não corresponde ao nome registrado no servidor Prefect.
+**Fix:** usa `prefect.runtime.flow_run.id` para buscar o `deployment_id` do flow run atual via `client.read_flow_run()`, então chama `run_deployment(name=<UUID>)` — sem lookup por nome.
+**Status:** ✅ corrigido em `flow.py`.
+
 ### #13 — TypeError: nf_processing_flow() got an unexpected keyword argument 'requests_per_minute'
 **Erro:** `TypeError: nf_processing_flow() got an unexpected keyword argument 'requests_per_minute'`
 **Causa raiz:** `flow.py` foi atualizado com novos parâmetros (`requests_per_minute`, `max_concurrent`, `deployment_name`) mas a imagem Docker foi construída antes de `agent-nf-validator` ter os mesmos parâmetros em `run_pipeline.py`. O `git clone` do Dockerfile capturou a versão antiga.
