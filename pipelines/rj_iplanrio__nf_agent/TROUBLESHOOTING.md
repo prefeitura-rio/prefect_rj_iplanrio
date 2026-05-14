@@ -69,6 +69,19 @@
 **Fix:** `run_pipeline.py` agora extrai project e dataset do `bq_status_table` (formato `project.dataset.table`) quando as env vars não estão setadas. Sem necessidade de novos parâmetros ou secrets.
 **Status:** ✅ corrigido em `agent-nf-validator/run_poc/run_pipeline.py`.
 
+### #16 — max_retries: documentos com muitos erros excluídos permanentemente
+
+**Feature:** `max_retries` (default: 3) define quantas vezes um documento pode ser re-tentado após erro.
+**Implementação:** `retry_count` incrementado no MERGE a cada erro. `read_unprocessed_batch` e `count_pending` filtram documentos com `retry_count >= max_retries`.
+**DDL necessário (rodar no BQ Console):**
+```sql
+ALTER TABLE `rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento_staging`
+  ADD COLUMN IF NOT EXISTS retry_count INT64;
+ALTER TABLE `rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento`
+  ADD COLUMN IF NOT EXISTS retry_count INT64;
+```
+**Status:** ✅ implementado — `bq_input_reader.py`, `bigquery_writer.py`, `run_pipeline.py`, `flow.py`, `prefect.yaml`.
+
 ### #15 — Batch query retorna 0 linhas mas count_pending mostra pendentes
 **Erro:** `[BQInputReader] Got 0 rows across 0 PDFs` com count_pending retornando N > 0.
 **Causa raiz:** `REGEXP_REPLACE(descricao, r'(?i)\.pdf$', '')` retorna NULL quando `descricao` é NULL. `NULL = NULL` é FALSE em SQL, então o `INNER JOIN` elimina todas as linhas. `count_pending` não usa `descricao`, então permanece correto. Adicionalmente, a view já entrega `descricao` sem sufixo `.pdf`, tornando o REGEXP_REPLACE desnecessário.

@@ -22,6 +22,7 @@ def nf_processing_flow(
     mode: str = "full",
     requests_per_minute: int = 600,
     max_concurrent: int = 50,
+    max_retries: int = 3,
     session_id: str | None = None,
 ) -> None:
     import sys
@@ -63,6 +64,7 @@ def nf_processing_flow(
         mode=mode,
         requests_per_minute=requests_per_minute,
         max_concurrent=max_concurrent,
+        max_retries=max_retries,
     )
 
     finished_at = datetime.utcnow()
@@ -152,7 +154,7 @@ def nf_processing_flow(
         print("[Flow] Flow run has no deployment — skipping self-trigger check")
         return
 
-    pending = reader.count_pending(bq_input_table, bq_status_table)
+    pending = reader.count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
     if pending > 0:
@@ -173,6 +175,7 @@ def nf_processing_flow(
                 "mode": mode,
                 "requests_per_minute": requests_per_minute,
                 "max_concurrent": max_concurrent,
+                "max_retries": max_retries,
                 "session_id": session_id,
             },
             timeout=0,

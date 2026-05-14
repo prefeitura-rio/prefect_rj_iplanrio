@@ -48,6 +48,7 @@ deployments:
       mode: "full"
       requests_per_minute: 600
       max_concurrent: 50
+      max_retries: 3
 
   - name: rj-iplanrio--nf-agent--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -72,3 +73,4 @@ deployments:
       mode: "full"
       requests_per_minute: 600
       max_concurrent: 50
+      max_retries: 3
