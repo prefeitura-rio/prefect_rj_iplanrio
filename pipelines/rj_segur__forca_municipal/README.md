@@ -141,12 +141,12 @@ A pipeline usa autenticação configurada em `constants.py`:
 
 ```python
 API_CONFIG = {
-    "base_url": "https://data.corio-oncall.com.br:8086/api",
-    "username": "RestAPI",
-    "password": "@Hexagon2024",
-    "proxy": "http://proxy.squirrel-regulus.ts.net:3128",
-    "verify_ssl": False,
-    "timeout": 30,
+    "base_url": "",
+    "username": "",
+    "password": "",
+    "proxy": "",
+    "verify_ssl": "",
+    "timeout": "",
 }
 ```
 
