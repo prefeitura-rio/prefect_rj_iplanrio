@@ -19,7 +19,7 @@ link-mode = "copy"
 override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0"]
 
 [tool.uv.sources]
-iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", rev = "3c977bfdadab52dbf47d0a93d8ea8e646a61121d" }
+iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
 
 [tool.uv.workspace]
 members = ["pipelines/*"]
