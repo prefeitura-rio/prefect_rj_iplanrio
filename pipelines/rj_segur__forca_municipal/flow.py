@@ -19,7 +19,7 @@ from pipelines.rj_segur__forca_municipal.task import get_single_endpoint
 @flow(log_prints=True)
 def rj_segur__forca_municipal(
     table_id: str,
-    dataset_id: Optional[str] = "forca_municipal",
+    dataset_id: Optional[str] = "brutos_forca_municipal",
     endpoint: Optional[str] = None,
     dump_mode: str = "overwrite",
     biglake_table: bool = True,
@@ -32,7 +32,7 @@ def rj_segur__forca_municipal(
                   Valores válidos: unidades_ativas, unidades_historico, unit_positions,
                   ocorrencias_ativas, ocorrencias_historico, ocorrencias_ativas_v2,
                   qmd, qmd_ativos, qmd_servicos, qmd_missoes, qmd_plano
-        dataset_id: ID do dataset no BigQuery (padrão: "forca_municipal")
+        dataset_id: ID do dataset no BigQuery (padrão: "brutos_forca_municipal")
         endpoint: Endpoint da API (opcional). Se não informado, usa o mapeamento
                   do table_id via EndpointConfig
         dump_mode: Modo de escrita no BigQuery ("overwrite" ou "append")
@@ -77,6 +77,6 @@ def rj_segur__forca_municipal(
 # rj_segur__forca_municipal(
 #   table_id = "qmd_plano",
 #   dump_mode = "overwrite",
-#   dataset_id = "forca_municipal",
+#   dataset_id = "brutos_forca_municipal",
 #   biglake_table = True
 # )
