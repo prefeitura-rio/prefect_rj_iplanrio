@@ -32,6 +32,10 @@ def nf_processing_flow(
     sys.path.insert(0, "/opt/agent-nf-validator/run_poc")
     from run_poc.run_pipeline import nf_processing_flow as _impl  # noqa: PLC0415
     from run_poc.bq_input_reader import BQInputReader  # noqa: PLC0415
+    from run_poc.credentials_helper import inject_credentials_from_env  # noqa: PLC0415
+
+    # Inject GCP credentials from Infisical before any GCP client is created
+    inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
 
     # Generate session_id if this is the first flow in the chain
     if not session_id:
