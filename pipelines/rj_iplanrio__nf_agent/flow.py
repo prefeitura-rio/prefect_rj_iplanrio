@@ -43,10 +43,12 @@ def nf_processing_flow(
 
     # Snapshot status counts before the batch
     counts_before = reader.count_by_status(bq_input_table, bq_status_table)
-    processado_before = counts_before.get("processado", 0)
-    erro_before = counts_before.get("erro", 0)
-    print(f"[Flow] Before: processado={processado_before}, erro={erro_before}, "
-          f"pendente={counts_before.get('pendente', 0)}")
+    proc_before = counts_before.get("processado", {"docs": 0, "pdfs": 0})
+    erro_before = counts_before.get("erro", {"docs": 0, "pdfs": 0})
+    pend_before = counts_before.get("pendente", {"docs": 0, "pdfs": 0})
+    print(f"[Flow] Before: processado={proc_before['docs']} docs/{proc_before['pdfs']} PDFs, "
+          f"erro={erro_before['docs']} docs/{erro_before['pdfs']} PDFs, "
+          f"pendente={pend_before['docs']} docs/{pend_before['pdfs']} PDFs")
 
     started_at = datetime.utcnow()
 
@@ -68,24 +70,32 @@ def nf_processing_flow(
 
     # Snapshot status counts after the batch
     counts_after = reader.count_by_status(bq_input_table, bq_status_table)
-    processado_after = counts_after.get("processado", 0)
-    erro_after = counts_after.get("erro", 0)
-    pending_after = counts_after.get("pendente", 0)
+    proc_after = counts_after.get("processado", {"docs": 0, "pdfs": 0})
+    erro_after = counts_after.get("erro", {"docs": 0, "pdfs": 0})
+    pend_after = counts_after.get("pendente", {"docs": 0, "pdfs": 0})
 
-    pdfs_processed = max(0, processado_after - processado_before)
-    pdfs_failed = max(0, erro_after - erro_before)
-    avg_sec_per_pdf = round(duration_seconds / pdfs_processed, 2) if pdfs_processed > 0 else 0.0
-    pending_total = pending_after + erro_after  # pendente + erro = still needs processing
-    est_remaining_min = round(pending_total * avg_sec_per_pdf / 60, 1) if avg_sec_per_pdf > 0 else None
+    docs_processed = max(0, proc_after["docs"] - proc_before["docs"])
+    pdfs_processed = max(0, proc_after["pdfs"] - proc_before["pdfs"])
+    docs_failed    = max(0, erro_after["docs"] - erro_before["docs"])
+    pdfs_failed    = max(0, erro_after["pdfs"] - erro_before["pdfs"])
+
+    # pending = still needs processing (pendente + erro)
+    pending_docs = pend_after["docs"] + erro_after["docs"]
+    pending_pdfs = pend_after["pdfs"] + erro_after["pdfs"]
+
+    avg_sec_per_pdf  = round(duration_seconds / pdfs_processed,  2) if pdfs_processed  > 0 else 0.0
+    avg_sec_per_doc  = round(duration_seconds / docs_processed,  2) if docs_processed  > 0 else 0.0
+    est_remaining_min = round(pending_pdfs * avg_sec_per_pdf / 60, 1) if avg_sec_per_pdf > 0 else None
 
     print(
         f"\n[Flow] ── Batch summary ──────────────────────\n"
         f"[Flow]   Session:        {session_id}\n"
-        f"[Flow]   Processed:      {pdfs_processed} PDFs\n"
-        f"[Flow]   Failed:         {pdfs_failed} PDFs\n"
+        f"[Flow]   Processed:      {pdfs_processed} PDFs / {docs_processed} docs\n"
+        f"[Flow]   Failed:         {pdfs_failed} PDFs / {docs_failed} docs\n"
         f"[Flow]   Duration:       {duration_seconds / 60:.1f} min\n"
         f"[Flow]   Avg / PDF:      {avg_sec_per_pdf:.1f} sec\n"
-        f"[Flow]   Pending:        {pending_total} PDFs\n"
+        f"[Flow]   Avg / doc:      {avg_sec_per_doc:.1f} sec\n"
+        f"[Flow]   Pending:        {pending_pdfs} PDFs / {pending_docs} docs\n"
         + (f"[Flow]   Est. remaining: ~{est_remaining_min} min\n" if est_remaining_min else "")
         + f"[Flow] ──────────────────────────────────────"
     )
@@ -110,9 +120,13 @@ def nf_processing_flow(
                     "finished_at": finished_at,
                     "duration_seconds": duration_seconds,
                     "pdfs_processed": pdfs_processed,
+                    "docs_processed": docs_processed,
                     "pdfs_failed": pdfs_failed,
-                    "pending_after": pending_total,
+                    "docs_failed": docs_failed,
+                    "pending_pdfs": pending_pdfs,
+                    "pending_docs": pending_docs,
                     "avg_sec_per_pdf": avg_sec_per_pdf,
+                    "avg_sec_per_doc": avg_sec_per_doc,
                     "batch_size": batch_size,
                     "requests_per_minute": requests_per_minute,
                     "max_concurrent": max_concurrent,
