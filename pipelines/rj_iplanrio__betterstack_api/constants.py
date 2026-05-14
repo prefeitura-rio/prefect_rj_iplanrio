@@ -7,7 +7,6 @@ class BetterStackConstants(Enum):
     Constantes utilizadas na pipeline do BetterStack.
     """
 
-    BASE_URL_V2 = "https://uptime.betterstack.com/api/v2"
     BASE_URL_V3 = "https://uptime.betterstack.com/api/v3"
 
 
@@ -15,7 +14,6 @@ class BetterStackConstants(Enum):
     # Dataset e Tabelas
     DATASET_ID = "brutos_betterstack"
     BILLING_PROJECT_ID = "rj-iplanrio"
-    TABLE_ID_RESPONSE_TIMES = "eai_gateway_response_times"
     TABLE_ID_INCIDENTS = "eai_gateway_incidents"
 
     # Configurações de execução

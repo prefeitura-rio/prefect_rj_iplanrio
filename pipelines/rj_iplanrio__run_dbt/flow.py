@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ruff: disable=C0301,PTH118,PTH109,PTH110,PTH103,B904,B904,PTH118,PTH112
 """
-Migrated DBT Transform Flow from Prefect 1.4 to 3.0..
+Migrated DBT Transform Flow from Prefect 1.4 to 3.0.
 """
 
 import os
@@ -191,7 +191,9 @@ def create_dbt_report(
     Creates a report based on the results of running dbt commands.
     """
     try:
-        logs = process_dbt_logs(log_path=os.path.join(repository_path, "logs", "dbt.log"))
+        logs = process_dbt_logs(
+            log_path=os.path.join(repository_path, "logs", "dbt.log")
+        )
     except Exception as e:
         log(f"Warning: Could not process DBT logs: {e}", level="warning")
         logs = None
@@ -213,17 +215,23 @@ def create_dbt_report(
                 if command_result.status == "fail":
                     is_successful = False
                     general_report.append(f"- 🛑 FAIL: {summarizer(command_result)}")
-                    if hasattr(command_result, "node") and hasattr(command_result.node, "name"):
+                    if hasattr(command_result, "node") and hasattr(
+                        command_result.node, "name"
+                    ):
                         failed_models.append(command_result.node.name)
                 elif command_result.status == "error":
                     is_successful = False
                     general_report.append(f"- ❌ ERROR: {summarizer(command_result)}")
-                    if hasattr(command_result, "node") and hasattr(command_result.node, "name"):
+                    if hasattr(command_result, "node") and hasattr(
+                        command_result.node, "name"
+                    ):
                         failed_models.append(command_result.node.name)
                 elif command_result.status == "warn":
                     has_warnings = True
                     general_report.append(f"- ⚠️ WARN: {summarizer(command_result)}")
-                    if hasattr(command_result, "node") and hasattr(command_result.node, "name"):
+                    if hasattr(command_result, "node") and hasattr(
+                        command_result.node, "name"
+                    ):
                         failed_models.append(command_result.node.name)
 
     # Sort and log the general report
@@ -251,7 +259,9 @@ def create_dbt_report(
         if parameters.get("flag"):
             param_report.append(f"- Flag: `{parameters.get('flag')}`")
 
-        param_report.append(f"- GitHub Repo: `{parameters.get('github_repo').rsplit('/', 1)[-1].removesuffix('.git')}`")
+        param_report.append(
+            f"- GitHub Repo: `{parameters.get('github_repo').rsplit('/', 1)[-1].removesuffix('.git')}`"
+        )
 
         param_report = "\n".join(param_report)
         param_report += " \n"
@@ -264,7 +274,9 @@ def create_dbt_report(
         command = parameters.get("command")
         emoji = "❌" if not fully_successful else "✅"
         complement = "com Erros" if not fully_successful else "sem Erros"
-        message = f"{param_report}\n{general_report}" if include_report else param_report
+        message = (
+            f"{param_report}\n{general_report}" if include_report else param_report
+        )
 
         send_message(
             title=f"{emoji} [{bigquery_project}] - Execução `dbt {command}` finalizada {complement}",
@@ -279,7 +291,9 @@ def create_dbt_report(
 
 
 @task
-def download_dbt_artifacts_from_gcs(environment: str, gcs_buckets: GcsBucket) -> Optional[str]:
+def download_dbt_artifacts_from_gcs(
+    environment: str, gcs_buckets: GcsBucket
+) -> Optional[str]:
     """
     Retrieves the dbt artifacts from Google Cloud Storage.
 
@@ -394,7 +408,9 @@ def rj_iplanrio__run_dbt(
     download_repository_task = download_repository(git_repository_path=github_repo)
 
     # Download dbt artifacts
-    download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(environment=target, gcs_buckets=gcs_buckets)
+    download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(
+        environment=target, gcs_buckets=gcs_buckets
+    )
 
     # Install dbt packages
     install_dbt_packages = install_dbt_dependencies()

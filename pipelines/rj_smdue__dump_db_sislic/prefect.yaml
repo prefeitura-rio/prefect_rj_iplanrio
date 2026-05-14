@@ -1,0 +1,1086 @@
+name: rj_smdue__dump_db_sislic
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smdue__dump_db_sislic-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smdue__dump_db_sislic/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-smdue--dump-db-sislic--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smdue__dump_db_sislic/flow.py:rj_smdue__dump_db_sislic
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smdue__dump_db_sislic -- prefect flow-run execute
+        image_pull_policy: Always
+  - name: rj-smdue--dump-db-sislic--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smdue__dump_db_sislic/flow.py:rj_smdue__dump_db_sislic
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smdue__dump_db_sislic -- prefect flow-run execute
+        image_pull_policy: Always
+    schedules:
+      - interval: 86400
+        anchor_date: "2022-12-19T01:00:00"
+        timezone: America/Sao_Paulo
+        slug: documento
+        parameters:
+          table_id: documento
+          execute_query: |
+            SELECT
+                codDocumento,
+                numDocumento,
+                codOrgao,
+                codTipoDocumento,
+                MatricCadastrador,
+                dtAbertura,
+                dtCadastroSistema,
+                codAssunto,
+                codDocumentoOrigem,
+                descStatus,
+                ID_CLASSIFICACAO_PROCESSO,
+                ID_ORIGEM_CLASSIFICACAO_PROCESSO,
+                ID_TIPO_PROCESSO,
+                ANO_REQUERIMENTO,
+                NUMERO_REQUERIMENTO
+            FROM SMU_PRD.dbo.tbPTI_Documentos
+      - interval: 86400
+        anchor_date: "2022-12-19T01:05:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_documento
+        parameters:
+          table_id: tipo_documento
+          execute_query: |
+            SELECT
+                codTipoDocumento,
+                descTipoDocumento
+            FROM SMU_PRD.dbo.tbPTI_TiposDocumentos
+      - interval: 86400
+        anchor_date: "2022-12-19T01:10:00"
+        timezone: America/Sao_Paulo
+        slug: assunto_processo
+        parameters:
+          table_id: assunto_processo
+          execute_query: |
+            SELECT
+                codAssuntoN1,
+                codAssuntoN2,
+                codAssuntoN3,
+                codAssunto,
+                Status,
+                codAssunto_ReqOnLine,
+                Exige_Endereco,
+                Exige_ProcessoConstrucao,
+                Exige_CPF_CNPJ_Requerente,
+                AssuntoProcessoRio
+            FROM SMU_PRD.dbo.tbPTI_Assunto
+      - interval: 86400
+        anchor_date: "2022-12-19T01:15:00"
+        timezone: America/Sao_Paulo
+        slug: assunto_nivel_1
+        parameters:
+          table_id: assunto_nivel_1
+          execute_query: |
+            SELECT
+                descNivel1,
+                codAssuntoN1
+            FROM SMU_PRD.dbo.tbPTI_AssuntosNivel1
+      - interval: 86400
+        anchor_date: "2022-12-19T01:20:00"
+        timezone: America/Sao_Paulo
+        slug: assunto_nivel_2
+        parameters:
+          table_id: assunto_nivel_2
+          execute_query: |
+            SELECT
+                descNivel2,
+                codAssuntoN2
+            FROM SMU_PRD.dbo.tbPTI_AssuntosNivel2
+      - interval: 86400
+        anchor_date: "2022-12-19T01:25:00"
+        timezone: America/Sao_Paulo
+        slug: assunto_nivel_3
+        parameters:
+          table_id: assunto_nivel_3
+          execute_query: |
+            SELECT
+                descNivel3,
+                codAssuntoN3
+            FROM SMU_PRD.dbo.tbPTI_AssuntosNivel3
+      - interval: 86400
+        anchor_date: "2022-12-19T01:30:00"
+        timezone: America/Sao_Paulo
+        slug: logradouro
+        parameters:
+          table_id: logradouro
+          execute_query: |
+            SELECT
+                codLogra,
+                codLograSMF,
+                codTipoLogra,
+                codNobreza,
+                descPrepo,
+                nomLogra
+            FROM SMU_PRD.dbo.tbLogra_Logradouros
+      - interval: 86400
+        anchor_date: "2022-12-19T01:35:00"
+        timezone: America/Sao_Paulo
+        slug: bairro_logradouro
+        parameters:
+          table_id: bairro_logradouro
+          execute_query: |
+            SELECT
+                codLogra,
+                codBairro
+            FROM SMU_PRD.dbo.tbLogra_LograBairros
+      - interval: 86400
+        anchor_date: "2022-12-19T01:40:00"
+        timezone: America/Sao_Paulo
+        slug: bairro
+        parameters:
+          table_id: bairro
+          execute_query: |
+            SELECT
+                codBairro,
+                nomBairro,
+                codOrgaoSMU,
+                codRa
+            FROM SMU_PRD.dbo.tbLogra_Bairros
+      - interval: 86400
+        anchor_date: "2022-12-19T01:45:00"
+        timezone: America/Sao_Paulo
+        slug: tramite_processo
+        parameters:
+          table_id: tramite_processo
+          execute_query: |
+            SELECT
+                codTramite,
+                matricCadastrador,
+                codDocumento,
+                dtCadastro,
+                dtSaida,
+                vfDestinoOrgao,
+                codDestino,
+                matricOrigem,
+                matricDestino,
+                codOrigem,
+                status
+            FROM SMU_PRD.dbo.tbPTI_Tramites
+      - interval: 86400
+        anchor_date: "2022-12-19T01:50:00"
+        timezone: America/Sao_Paulo
+        slug: requerente_processo_documento
+        parameters:
+          table_id: requerente_processo_documento
+          execute_query: |
+            SELECT
+                codPessoa,
+                nomPessoa,
+                telPessoa,
+                EmailPessoa,
+                CPF_CNPJ,
+                vfFisica,
+                identidade,
+                emissor,
+                cep,
+                dtCadastro,
+                matricCadastrador,
+                Bairro,
+                UF,
+                codLogra,
+                descLogra,
+                numero,
+                compend,
+                municipio,
+                inscmunicipal
+            FROM SMU_PRD.dbo.tbPTI_Pessoas
+      - interval: 86400
+        anchor_date: "2022-12-19T01:55:00"
+        timezone: America/Sao_Paulo
+        slug: requerente_processo
+        parameters:
+          table_id: requerente_processo
+          execute_query: |
+            SELECT
+                codDocumento,
+                codPessoa,
+                matricCadastrador,
+                dtCadastro
+            FROM SMU_PRD.dbo.tbPTI_ProcessosRequerentes
+      - interval: 86400
+        anchor_date: "2022-12-19T02:00:00"
+        timezone: America/Sao_Paulo
+        slug: endereco_obra_processo
+        parameters:
+          table_id: endereco_obra_processo
+          execute_query: |
+            SELECT
+                codDocumento,
+                codEndereco,
+                vfPrincipal,
+                matricCadastrador,
+                dtCadastro
+            FROM SMU_PRD.dbo.tbPTI_EnderecosProcessos
+      - interval: 86400
+        anchor_date: "2022-12-19T02:05:00"
+        timezone: America/Sao_Paulo
+        slug: orgao_tramitacao_processo
+        parameters:
+          table_id: orgao_tramitacao_processo
+          execute_query: |
+            SELECT
+                codOrgaoSMU,
+                codOrgaoSici,
+                sigla,
+                nomOrgao,
+                cancelado,
+                COD_Secretaria,
+                permiteAgendamento
+            FROM SMU_PRD.dbo.tbLogra_Orgaos
+      - interval: 86400
+        anchor_date: "2022-12-19T02:10:00"
+        timezone: America/Sao_Paulo
+        slug: classificacao_processo
+        parameters:
+          table_id: classificacao_processo
+          execute_query: |
+            SELECT
+                ID_CLASSIFICACAO_PROCESSO,
+                DS_CLASSIFICACAO_PROCESSO
+            FROM SMU_PRD.dbo.tbPTI_ClassificacaoProcesso
+      - interval: 86400
+        anchor_date: "2022-12-19T02:15:00"
+        timezone: America/Sao_Paulo
+        slug: processo_apenso
+        parameters:
+          table_id: processo_apenso
+          execute_query: |
+            SELECT
+                codDocumentoPrincipal,
+                codDocumentoApenso,
+                MatricCadastrador
+            FROM SMU_PRD.dbo.tbPTI_Apensos
+      - interval: 86400
+        anchor_date: "2022-12-19T02:20:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_processo
+        parameters:
+          table_id: tipo_processo
+          execute_query: |
+            SELECT
+                ID_TIPO_PROCESSO,
+                DS_TIPO_PROCESSO
+            FROM SMU_PRD.dbo.tbPTI_TiposProcessos
+      - interval: 86400
+        anchor_date: "2022-12-19T02:25:00"
+        timezone: America/Sao_Paulo
+        slug: orgao_origem_classificacao
+        parameters:
+          table_id: orgao_origem_classificacao
+          execute_query: |
+            SELECT
+                ID_ORIGEM_CLASSIFICACAO_PROCESSO,
+                DS_ORIGEM_CLASSIFICACAO_PROCESSO
+            FROM SMU_PRD.dbo.tbPTI_OrigemClassificacaoProcesso
+      - interval: 86400
+        anchor_date: "2022-12-19T02:30:00"
+        timezone: America/Sao_Paulo
+        slug: area_protecao_processo
+        parameters:
+          table_id: area_protecao_processo
+          execute_query: |
+            SELECT
+                ID_AREA_GRAU,
+                ID_AREA_PROTECAO_CULTURAL,
+                ID_GRAU_PROTECAO,
+                ANTERIOR_1938,
+                SITIO_RIO_PATRIMONIO_MUNDIAL
+            FROM SMU_PRD.dbo.tbPTI_IRPH_Complemento_Area_Grau_Protecao
+      - interval: 86400
+        anchor_date: "2022-12-19T02:35:00"
+        timezone: America/Sao_Paulo
+        slug: processo_irph
+        parameters:
+          table_id: processo_irph
+          execute_query: |
+            SELECT
+                ID_IRPH_DOCTO,
+                CODDOCUMENTO,
+                DESCRICAO
+            FROM SMU_PRD.dbo.tbPTI_IRPH_Complemento_Processo
+      - interval: 86400
+        anchor_date: "2022-12-19T02:40:00"
+        timezone: America/Sao_Paulo
+        slug: preo
+        parameters:
+          table_id: preo
+          execute_query: |
+            SELECT
+                ID_PREO,
+                CODDOCUMENTO,
+                NOME_PREO,
+                CPF_PREO,
+                EMAIL_PREO,
+                TELEFONE_PREO,
+                TIPO_REGISTRO_PREO,
+                NUMERO_REGISTRO_PREO,
+                TIPO_CONSELHO_PREO,
+                NUMERO_CONSELHO_PREO,
+                ID_PROFISSAO
+            FROM SMU_PRD.dbo.tbPTI_PREO
+      - interval: 86400
+        anchor_date: "2022-12-19T02:45:00"
+        timezone: America/Sao_Paulo
+        slug: prpa
+        parameters:
+          table_id: prpa
+          execute_query: |
+            SELECT
+                ID_PRPA,
+                CODDOCUMENTO,
+                NOME_PRPA,
+                CPF_PRPA,
+                EMAIL_PRPA,
+                TELEFONE_PRPA,
+                TIPO_REGISTRO_PRPA,
+                NUMERO_REGISTRO_PRPA,
+                TIPO_CONSELHO_PRPA,
+                NUMERO_CONSELHO_PRPA,
+                ID_PROFISSAO
+            FROM SMU_PRD.dbo.tbPTI_PRPA
+      - interval: 86400
+        anchor_date: "2022-12-19T02:50:00"
+        timezone: America/Sao_Paulo
+        slug: profissao_preo_prpa
+        parameters:
+          table_id: profissao_preo_prpa
+          execute_query: |
+            SELECT
+                ID_PROFISSAO,
+                DS_PROFISSAO
+            FROM SMU_PRD.dbo.tbPTI_Profissao
+      - interval: 86400
+        anchor_date: "2022-12-19T02:55:00"
+        timezone: America/Sao_Paulo
+        slug: despacho
+        parameters:
+          table_id: despacho
+          execute_query: |
+            SELECT
+                codTramite,
+                codParecer,
+                REPLACE(REPLACE(CAST(descDespacho AS VARCHAR(MAX)), CHAR(13), ' '), CHAR(10), ' ') AS descDespacho
+            FROM SMU_PRD.dbo.tbPTI_Despachos
+      - interval: 86400
+        anchor_date: "2022-12-19T03:00:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_parecer_tramite
+        parameters:
+          table_id: tipo_parecer_tramite
+          execute_query: |
+            SELECT
+                codParecer,
+                descParecer,
+                vfGeraPublicacao,
+                descClassificacao,
+                PUBLICACAO_FRENTE_DO
+            FROM SMU_PRD.dbo.tbPTI_TiposPareceres
+      - interval: 86400
+        anchor_date: "2022-12-19T03:05:00"
+        timezone: America/Sao_Paulo
+        slug: linha_publicacao_tramite
+        parameters:
+          table_id: linha_publicacao_tramite
+          execute_query: |
+            SELECT
+                codLinha,
+                codTramite,
+                codPublicacao,
+                dtExpediente,
+                codOrgao,
+                descTipoDespacho,
+                numero,
+                REPLACE(REPLACE(CAST(texto AS VARCHAR(MAX)), CHAR(13), ' '), CHAR(10), ' ') AS texto,
+                REPLACE(REPLACE(CAST(texto_final AS VARCHAR(MAX)), CHAR(13), ' '), CHAR(10), ' ') AS texto_final,
+                requerente,
+                dtCadastro,
+                matricLiberador,
+                dtliberacao
+            FROM SMU_PRD.dbo.tbPTI_Linha
+      - interval: 86400
+        anchor_date: "2022-12-19T03:10:00"
+        timezone: America/Sao_Paulo
+        slug: endereco_produto_pedido
+        parameters:
+          table_id: endereco_produto_pedido
+          execute_query: |
+            SELECT
+                codEndereco,
+                codLogra,
+                numPorta,
+                complPorta,
+                codBairro,
+                numPAL,
+                numQuadra,
+                numLote,
+                vfMunicipal,
+                UF,
+                numPAA,
+                dtCadastro,
+                matricCadastrador,
+                CEP,
+                InscricaoIMOVEL,
+                ID_TpInscricaoIMOVEL
+            FROM SMU_PRD.dbo.tbPTI_Enderecos
+      - interval: 86400
+        anchor_date: "2022-12-19T03:15:00"
+        timezone: America/Sao_Paulo
+        slug: publicacao_domrj
+        parameters:
+          table_id: publicacao_domrj
+          execute_query: |
+            SELECT
+                codPublicacao,
+                dtEnvio,
+                dtPublicacao,
+                dtPrevista
+            FROM SMU_PRD.dbo.tbPTI_Publicacao
+      - interval: 86400
+        anchor_date: "2022-12-19T03:20:00"
+        timezone: America/Sao_Paulo
+        slug: area_protecao_cultural
+        parameters:
+          table_id: area_protecao_cultural
+          execute_query: |
+            SELECT
+                ID_AREA_PROTECAO_CULTURAL,
+                DS_AREA_PROTECAO_CULTURAL
+            FROM SMU_PRD.dbo.tbPTI_IRPH_Area_Protecao_Cultural tpiapc
+      - interval: 86400
+        anchor_date: "2022-12-19T03:25:00"
+        timezone: America/Sao_Paulo
+        slug: grau_protecao_area
+        parameters:
+          table_id: grau_protecao_area
+          execute_query: |
+            SELECT
+                ID_GRAU_PROTECAO,
+                DS_GRAU_PROTECAO
+            FROM SMU_PRD.dbo.tbPTI_IRPH_Grau_Protecao
+      - interval: 86400
+        anchor_date: "2022-12-19T03:30:00"
+        timezone: America/Sao_Paulo
+        slug: alvara_obra_privada
+        parameters:
+          table_id: alvara_obra_privada
+          execute_query: |
+            SELECT
+                num_lic,
+                licenca,
+                num_proc,
+                cod_dlf,
+                Dt_emissao,
+                Dt_Inicio_Validade,
+                Prazo,
+                dt_Venc,
+                Dt_alvara,
+                Num_darm_pg,
+                Vl_Lic,
+                Requerente,
+                CNPJ_CPF,
+                clogra,
+                tipo,
+                nobreza,
+                preposicao,
+                nomelogra,
+                num,
+                complemento,
+                paa,
+                pal,
+                PLT,
+                quadra,
+                lote,
+                cb,
+                zona,
+                subzona,
+                cep,
+                bsmp,
+                num_suple,
+                InscricaoIMOVEL,
+                ID_TpInscricaoIMOVEL,
+                Uso_atividade,
+                Implantacao,
+                tot_edif,
+                area_constr,
+                area_acrescida,
+                area_reduzida,
+                area_util,
+                AREA_TOTAL_EDIFICADA,
+                AREA_EXISTENTE_DECLARADA_RESPONSAVEL,
+                AreaTotal_Loteamento,
+                MetrosLineares_ObrasUrbanizacao,
+                VagasExternasDescobertas,
+                VagasExternasCobertas,
+                VagasPavimentos,
+                nome_preo,
+                crea_preo,
+                RRT_ART_PREO,
+                Nome_PRPA,
+                Crea_PRPA,
+                RRT_ART_PRPA,
+                Grupamento,
+                Tot_etapas,
+                Tot_edif_etapa,
+                area_tot_etapa,
+                Lic_concedida,
+                Edif_Pav,
+                ConcedeNumeracao,
+                NumConcedida,
+                OBS,
+                mat_func,
+                cancelado,
+                licgratis,
+                OrgaoCentral,
+                CODORGAO_ESPECIAL,
+                OrdemEmissao,
+                Licenca_Loteamento,
+                LicencaAvulsa,
+                LoteamentoNovoModelo,
+                AprovacaoParcelamento,
+                Totalunidades,
+                LicOnLine_ID_Requerimento
+            FROM SMU_PRD.dbo.tbLIC_Licencas
+      - interval: 86400
+        anchor_date: "2022-12-19T03:35:00"
+        timezone: America/Sao_Paulo
+        slug: endereco_obra_alvara
+        parameters:
+          table_id: endereco_obra_alvara
+          execute_query: |
+            SELECT
+                ID_Endereco,
+                Num_lic,
+                cLogra,
+                Tipo,
+                Nobreza,
+                Preposicao,
+                NomeLogra,
+                Num
+            FROM SMU_PRD.dbo.tbLIC_EnderecosLicenca
+      - interval: 86400
+        anchor_date: "2022-12-19T03:40:00"
+        timezone: America/Sao_Paulo
+        slug: edificacao_obra_licenca
+        parameters:
+          table_id: edificacao_obra_licenca
+          execute_query: |
+            SELECT
+                id_edif,
+                Num_Edif,
+                Num_lic,
+                Cod_Tp_edif,
+                cod_Compl_Tp_Edif,
+                cod_Compl_Tp_Edif2,
+                Compl_Livre,
+                area_edif,
+                area_acresc,
+                area_reduzida,
+                area_util,
+                embasamento,
+                RecebeNumeracao,
+                ContaEdificacao,
+                Qtd_Edif
+            FROM SMU_PRD.dbo.tbLIC_EdificacoesLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T03:45:00"
+        timezone: America/Sao_Paulo
+        slug: endereco_edificacao
+        parameters:
+          table_id: endereco_edificacao
+          execute_query: |
+            SELECT
+                id_edif,
+                ID_Endereco
+            FROM SMU_PRD.dbo.tbLIC_EnderecosEdificacao
+      - interval: 86400
+        anchor_date: "2022-12-19T03:50:00"
+        timezone: America/Sao_Paulo
+        slug: pavimento_edificacao_obra
+        parameters:
+          table_id: pavimento_edificacao_obra
+          execute_query: |
+            SELECT
+                Id_Pav,
+                Num_lic,
+                Id_Edif,
+                Pavimento,
+                Tot_pav,
+                tot_vagasCobertas,
+                Tot_VagasDescobertas
+            FROM SMU_PRD.dbo.tbLIC_PavimentosLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T03:55:00"
+        timezone: America/Sao_Paulo
+        slug: subdivisao_edificacao_obra
+        parameters:
+          table_id: subdivisao_edificacao_obra
+          execute_query: |
+            SELECT
+                Id_SubDivisao,
+                num_lic,
+                id_edif,
+                descSubDivisao
+            FROM SMU_PRD.dbo.tbLIC_SubDivisoesEdificacao
+      - interval: 86400
+        anchor_date: "2022-12-19T04:00:00"
+        timezone: America/Sao_Paulo
+        slug: unidade_edificacao_obra
+        parameters:
+          table_id: unidade_edificacao_obra
+          execute_query: |
+            SELECT
+                Id_Unid,
+                num_lic,
+                id_edif,
+                id_SubDivisao,
+                cod_unidade,
+                ComplTipo_Unid,
+                quant_unid,
+                Num_recebida,
+                area_unid
+            FROM SMU_PRD.dbo.tbLIC_UnidadesLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T04:05:00"
+        timezone: America/Sao_Paulo
+        slug: darm_licenca_alvara
+        parameters:
+          table_id: darm_licenca_alvara
+          execute_query: |
+            SELECT
+                Num_Darm,
+                cod_Classe,
+                cod_Tipo_Lic,
+                cod_Lic,
+                cod_Compl_Lic,
+                compl_Livre,
+                Valor,
+                Formula
+            FROM SMU_PRD.dbo.tbLIC_LicencasDARMs
+      - interval: 86400
+        anchor_date: "2022-12-19T04:10:00"
+        timezone: America/Sao_Paulo
+        slug: darm_alvara
+        parameters:
+          table_id: darm_alvara
+          execute_query: |
+            SELECT
+                num_Darm,
+                DARM,
+                Num_Lic,
+                CNPJ_CPF,
+                Cod_Receita,
+                Dt_Emissao,
+                Dt_Venc,
+                Dt_Pagamento,
+                Competencia,
+                Mora,
+                Multa,
+                Valor_Darm_Inicial,
+                ValorDarm,
+                Cancelado,
+                Dt_Calculo,
+                InscIPTU,
+                Avulso
+            FROM SMU_PRD.dbo.tbLIC_DARMS
+      - interval: 86400
+        anchor_date: "2022-12-19T04:15:00"
+        timezone: America/Sao_Paulo
+        slug: licenca_alvara
+        parameters:
+          table_id: licenca_alvara
+          execute_query: |
+            SELECT
+                Id_Lic,
+                num_lic,
+                id_edif,
+                cod_classe,
+                cod_tipo_lic,
+                cod_lic,
+                cod_compl_lic,
+                Compl_Livre,
+                Dec9218,
+                OutroDec,
+                ObrasConcluidas
+            FROM SMU_PRD.dbo.tbLIC_LicencasEdificacoes
+      - interval: 86400
+        anchor_date: "2022-12-19T04:20:00"
+        timezone: America/Sao_Paulo
+        slug: loteamento_alvara
+        parameters:
+          table_id: loteamento_alvara
+          execute_query: |
+            SELECT
+                num_lic,
+                LotesVinculados,
+                ComprLograProjetados,
+                TotalLotesPrimitivosRemembramento,
+                TotalLotesRemembrados,
+                TotalLotesPrimitivosDesmembramento,
+                TotalLotesDesmembrados,
+                TotalLotesPrimitivosReDesmembramento,
+                TotalLotesReDesmembrados,
+                TotalAreasPrivativasPrimitivas,
+                TotalAreasPrivativasResultantes
+            FROM SMU_PRD.dbo.tbLIC_ComplementacaoLicencaLoteamento
+      - interval: 86400
+        anchor_date: "2022-12-19T04:25:00"
+        timezone: America/Sao_Paulo
+        slug: licenca_substituida
+        parameters:
+          table_id: licenca_substituida
+          execute_query: |
+            SELECT
+                num_Lic_Substituida,
+                num_lic_Nova,
+                DtSubstituicao,
+                Motivo,
+                Retificacao,
+                RetificacaoTotal,
+                RecalculoDarm_Liberado
+            FROM SMU_PRD.dbo.tbLIC_LicencasSubstituidas
+      - interval: 86400
+        anchor_date: "2022-12-19T04:30:00"
+        timezone: America/Sao_Paulo
+        slug: licenca_loteamento
+        parameters:
+          table_id: licenca_loteamento
+          execute_query: |
+            SELECT
+                Id_Lote,
+                num_lic,
+                Quantidade,
+                Categoria,
+                TpLote
+            FROM SMU_PRD.dbo.tbLIC_IdentificacaoLotesLicenca
+      - interval: 86400
+        anchor_date: "2022-12-19T04:35:00"
+        timezone: America/Sao_Paulo
+        slug: restricao_alvara
+        parameters:
+          table_id: restricao_alvara
+          execute_query: |
+            SELECT
+                Id_Rest,
+                num_lic,
+                cod_Restricao,
+                Compl_Restricao,
+                REPLACE(REPLACE(CAST(Outra_restricao AS VARCHAR(MAX)), CHAR(13), ' '), CHAR(10), ' ') AS Outra_restricao,
+                Data_Baixa,
+                BAIXA_EXOFFICIO
+            FROM SMU_PRD.dbo.tbLIC_RestricoesLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T04:40:00"
+        timezone: America/Sao_Paulo
+        slug: restricao_fase
+        parameters:
+          table_id: restricao_fase
+          execute_query: |
+            SELECT
+                Cod_restricao,
+                Cod_fase,
+                desc_restricao,
+                Tipo_Compl,
+                Compl,
+                ATIVO
+            FROM SMU_PRD.dbo.tbLic_restricoes
+      - interval: 86400
+        anchor_date: "2022-12-19T04:45:00"
+        timezone: America/Sao_Paulo
+        slug: fase_obra
+        parameters:
+          table_id: fase_obra
+          execute_query: |
+            SELECT
+                Cod_Fase,
+                Abrev_Fase,
+                OrdemImp
+            FROM SMU_PRD.dbo.tbLic_FasesObras
+      - interval: 86400
+        anchor_date: "2022-12-19T04:50:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_edificacao
+        parameters:
+          table_id: tipo_edificacao
+          execute_query: |
+            SELECT
+                Cod_TpEdificacao,
+                Desc_TpEdificacao
+            FROM SMU_PRD.dbo.tbLic_TiposEdificacoes
+      - interval: 86400
+        anchor_date: "2022-12-19T04:55:00"
+        timezone: America/Sao_Paulo
+        slug: compl_1_tipo_edificacao
+        parameters:
+          table_id: compl_1_tipo_edificacao
+          execute_query: |
+            SELECT
+                Cod_TpEdificacao,
+                Cod_Compl_TpEdificacao,
+                Compl_TpEdificacao
+            FROM SMU_PRD.dbo.tbLic_ComplTpEdificacoes1
+      - interval: 86400
+        anchor_date: "2022-12-19T05:00:00"
+        timezone: America/Sao_Paulo
+        slug: compl_2_tipo_edificacao
+        parameters:
+          table_id: compl_2_tipo_edificacao
+          execute_query: |
+            SELECT
+                cod_Edif,
+                cod_compl_TpEdificacao,
+                cod_compl_tpEdificacao2,
+                Compl2
+            FROM SMU_PRD.dbo.tbLic_ComplTpEdificacoes2
+      - interval: 86400
+        anchor_date: "2022-12-19T05:05:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_licenca_acao_requerente
+        parameters:
+          table_id: tipo_licenca_acao_requerente
+          execute_query: |
+            SELECT
+                COD_LIC,
+                DESCR_LIC,
+                TAB_AUX_CATEGORIA,
+                TAB_AUX_AREA,
+                GRATIS,
+                COMPL,
+                Compl_Obrigatorio
+            FROM SMU_PRD.dbo.tbLic_DescricoesLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T05:10:00"
+        timezone: America/Sao_Paulo
+        slug: compl_tipo_licenca_acao_requerente
+        parameters:
+          table_id: compl_tipo_licenca_acao_requerente
+          execute_query: |
+            SELECT
+                COD_LIC,
+                COD_COMPL_LIC,
+                COMPL,
+                GRATIS
+            FROM SMU_PRD.dbo.tbLic_ComplementosTpLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T05:15:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_licenca_acao_prefeitura_2
+        parameters:
+          table_id: tipo_licenca_acao_prefeitura_2
+          execute_query: |
+            SELECT
+                COD_TIPO_LIC,
+                DESCR_TIPO_LIC
+            FROM SMU_PRD.dbo.tbLic_TiposLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T05:20:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_licenca_acao_prefeitura_1
+        parameters:
+          table_id: tipo_licenca_acao_prefeitura_1
+          execute_query: |
+            SELECT
+                cod_classe,
+                descr_classe
+            FROM SMU_PRD.dbo.tbLIC_ClassesLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T05:25:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_licenca_acao_prefeitura_4
+        parameters:
+          table_id: tipo_licenca_acao_prefeitura_4
+          execute_query: |
+            SELECT
+                cod_lic,
+                cod_compl_lic,
+                compl
+            FROM SMU_PRD.dbo.tbLic_ComplementosTpLicencas
+      - interval: 86400
+        anchor_date: "2022-12-19T05:30:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_unidade
+        parameters:
+          table_id: tipo_unidade
+          execute_query: |
+            SELECT
+                Cod_Unidade,
+                Desc_Unidade,
+                Desc_unidade_Plural
+            FROM SMU_PRD.dbo.tbLIC_Unidades
+      - interval: 86400
+        anchor_date: "2022-12-19T05:35:00"
+        timezone: America/Sao_Paulo
+        slug: certidao_habite_se
+        parameters:
+          table_id: certidao_habite_se
+          execute_query: |
+            SELECT
+                 Num_Hab
+                ,Num_Proc
+                ,Num_Lic
+                ,Habite_se
+                ,Cod_DLF
+                ,Dt_Emissao
+                ,Dt_Certidao
+                ,Matricula_RGI
+                ,Nr_Oficio_RGI
+                ,Pal
+                ,DescricaoLote
+                ,Numeracao_Habitavel
+                ,Mat_Tec_Resp
+                ,Cancelado
+                ,Habite_se_Total
+                ,OBS
+            FROM SMU_PRD.dbo.tbLIC_Habite_se
+      - interval: 86400
+        anchor_date: "2022-12-19T05:40:00"
+        timezone: America/Sao_Paulo
+        slug: tipo_inscricao_imovel
+        parameters:
+          table_id: tipo_inscricao_imovel
+          execute_query: |
+            SELECT
+                ID_tpInscricaoImovel,
+                TpInscricaoImovel
+            FROM SMU_PRD.dbo.tbPTI_TiposInscricaoImovel
+      - interval: 86400
+        anchor_date: "2022-12-19T05:45:00"
+        timezone: America/Sao_Paulo
+        slug: regiao_administrativa
+        parameters:
+          table_id: regiao_administrativa
+          execute_query: |
+            SELECT
+                codRA
+                ,nomRA
+                ,codAP
+            FROM SMU_PRD.dbo.tbLogra_Ras
+      - interval: 86400
+        anchor_date: "2022-12-19T05:50:00"
+        timezone: America/Sao_Paulo
+        slug: orgao_licenciamento
+        parameters:
+          table_id: orgao_licenciamento
+          execute_query: |
+            SELECT
+                CodOrgao
+                ,CodOrgaoSigma
+                ,Ativo
+            FROM dbo.tbLIC_Orgaos
+      - interval: 86400
+        anchor_date: "2022-12-19T05:55:00"
+        timezone: America/Sao_Paulo
+        slug: unidade_habite_se
+        parameters:
+          table_id: unidade_habite_se
+          execute_query: |
+            SELECT ID
+                ,Num_Hab
+                ,Id_edif
+                ,Quant_Edif
+                ,Cod_Unidade
+                ,Quant_Unidade
+                ,Area
+            FROM SMU_PRD.dbo.tbLIC_UnidadesHabite_se
+      - interval: 86400
+        anchor_date: "2022-12-19T06:00:00"
+        timezone: America/Sao_Paulo
+        slug: certidao_aceitacao
+        parameters:
+          table_id: certidao_aceitacao
+          execute_query: |
+            SELECT Num_Aceitacao
+                ,Num_Proc
+                ,Num_Lic
+                ,Aceitacao
+                ,Cod_DLF
+                ,Dt_Emissao
+                ,Dt_Certidao
+                ,Matricula_RGI
+                ,Nr_Oficio_RGI
+                ,PAL
+                ,DescricaoLote
+                ,Mat_Tec_Resp
+                ,Cancelado
+                ,Obs
+            FROM SMU_PRD.dbo.tbLIC_Aceitacoes
+      - interval: 86400
+        anchor_date: "2022-12-19T06:05:00"
+        timezone: America/Sao_Paulo
+        slug: georeferencia_endereco_obra_processo
+        parameters:
+          table_id: georeferencia_endereco_obra_processo
+          execute_query: |
+            SELECT
+            id_processo,
+            id_processo_sislic,
+            nu_processo,
+            cd_logradouro,
+            nu_porta,
+            nu_pal,
+            id_bairro_sislic,
+            id_ra_sislic,
+            no_bairro,
+            shape
+            FROM SMU_PRD.dbo.tbGEOSISLIC_processo
+      - interval: 86400
+        anchor_date: "2022-12-19T06:10:00"
+        timezone: America/Sao_Paulo
+        slug: licenca_transferida
+        parameters:
+          table_id: licenca_transferida
+          execute_query: |
+            SELECT
+            num_lic_Origem,
+            num_lic_Destino,
+            DtTransferencia,
+            CODORGAOSIGMA_ORIGEM,
+            CODORGAOSIGMA_DESTINO
+            FROM SMU_PRD.dbo.tbLIC_LicencasTransferidasCLU_CRU
+      - interval: 86400
+        anchor_date: "2022-12-19T06:15:00"
+        timezone: America/Sao_Paulo
+        slug: registro_cancelamento_produto
+        parameters:
+          table_id: registro_cancelamento_produto
+          execute_query: |
+            SELECT
+            cod_dlf,
+            tipo,
+            Nr_documento,
+            dt_cancelamento
+            FROM SMU_PRD.dbo.tbLIC_DocCancelados

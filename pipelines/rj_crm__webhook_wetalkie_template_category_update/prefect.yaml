@@ -44,7 +44,7 @@ deployments:
             content_previous_category,
             content_message_template_name
           FROM
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_*`
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_*`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
@@ -71,7 +71,7 @@ deployments:
             content_previous_category,
             content_message_template_name
           FROM
-            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_2025_*`
+            `rj-crm-registry.brutos_wetalkie_staging.template_category_update_*`
             WHERE 1=1
             AND phone_number = '5521991952121'
             AND account = '1'
