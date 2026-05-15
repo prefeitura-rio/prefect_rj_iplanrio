@@ -102,6 +102,7 @@ class FMApi:
         all_items: list = []
         page = 1
         total_pages: Optional[int] = None
+        full_url = f"{self.base_url}{path}"
         while True:
             with self._client() as client:
                 resp = self._get_page(client, path, page, page_size, extra_params)
@@ -113,13 +114,17 @@ class FMApi:
             if total_pages is None:
                 total_pages = body.get("totalPages", 1)
             if not silent and total_pages > 1:
-                log(f"[{path}] página {page}/{total_pages} (+{len(items)} itens)")
+                params: dict = {"page": f"{page}/{total_pages}", "pageSize": page_size}
+                if extra_params:
+                    params.update(extra_params)
+                params_str = ", ".join(f"{k}={v}" for k, v in params.items())
+                log(f"GET {full_url} [{params_str}] → +{len(items)} itens")
             if page >= total_pages:
                 break
             page += 1
         if not silent:
             pages_str = f"{total_pages} página(s)" if total_pages else "1 página"
-            log(f"[{path}] {len(all_items)} itens em {pages_str}")
+            log(f"GET {full_url} — {len(all_items)} itens em {pages_str}")
         return all_items
 
     def get_single(self, path: str) -> dict:
@@ -255,7 +260,7 @@ def fetch_qmd_details_task(
     rows: list = []
     total = len(qmd_ids)
     for i, qmd_id in enumerate(qmd_ids, start=1):
-        log(f"QMD {i}/{total} (id={qmd_id})")
+        log(f"QMD {i}/{total} — GET {api.base_url}{endpoint}/{qmd_id}")
         body = api.get_single(f"{endpoint}/{qmd_id}")
         row = {
             k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
@@ -301,7 +306,7 @@ def fetch_qmd_kml_task(
     rows: list = []
     total = len(qmd_ids)
     for i, qmd_id in enumerate(qmd_ids, start=1):
-        log(f"KML {i}/{total} (id={qmd_id})")
+        log(f"KML {i}/{total} — GET {api.base_url}/api/qmd/{qmd_id}/kml")
         try:
             kml_content = api.get_raw(f"/api/qmd/{qmd_id}/kml")
         except Exception as exc:
