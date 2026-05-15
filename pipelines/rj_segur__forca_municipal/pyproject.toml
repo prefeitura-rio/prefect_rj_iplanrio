@@ -3,6 +3,7 @@ name = "rj_segur__forca_municipal"
 version = "0.1.0"
 description = "Pipeline forca_municipal da secretaria rj-segur"
 dependencies = [
+    "fastkml>=1.4.0",
     "prefect_rj_iplanrio",
 ]
 
