@@ -44,6 +44,7 @@ members = [
     "rj-pgm-divida-ativa",
     "rj-pic-disparos-email",
     "rj-segovi-dump-db-1746",
+    "rj-segur-forca-municipal",
     "rj-setur-turismo-fluxo-visitantes",
     "rj-smas-api-datametrica-agendamentos",
     "rj-smas-cadunico",
@@ -53,6 +54,7 @@ members = [
     "rj-sme-brutos-core-sso",
     "rj-sme-brutos-gestao-escolar",
     "rj-sme-educacao-basica",
+    "rj-smfp-atividade-economica",
     "rj-smfp-dump-db-ergon",
     "rj-smfp-sigma",
     "rj-smi-siscob",
@@ -4149,6 +4151,17 @@ dependencies = [
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
+name = "rj-segur-forca-municipal"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_segur__forca_municipal" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
 name = "rj-setur-turismo-fluxo-visitantes"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_setur__turismo_fluxo_visitantes" }
@@ -4374,6 +4387,17 @@ requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 name = "rj-sme-educacao-basica"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_sme__educacao_basica" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-smfp-atividade-economica"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_smfp__atividade_economica" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
 ]
