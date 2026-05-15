@@ -5,78 +5,84 @@ Flow para extrair dados da API CIVITAS/CORIO (Força Municipal) e enviar para Bi
 Sistema: HxGN OnCall - Gestão de Ocorrências e Unidades da Guarda Municipal RJ
 """
 
-from typing import Optional
-
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_segur__forca_municipal.constants import EndpointConfig
-from pipelines.rj_segur__forca_municipal.task import get_single_endpoint
+from pipelines.rj_segur__forca_municipal.task import (
+    fetch_endpoint_task,
+    get_authenticated_api_task,
+    save_partitions_task,
+)
+
+# Mapeamento de table_id → endpoint da API HxGN OnCall
+ENDPOINT_MAP: dict[str, str] = {
+    "unidades_ativas": "/api/unidades/ativas",
+    "unidades_historico": "/api/unidades/historico",
+    "ocorrencias_ativas": "/api/ocorrencias/ativas",
+    "ocorrencias_historico": "/api/ocorrencias/historico",
+    "ocorrencias_ativas_v2": "/api/ocorrencias/ativas/v2",
+    "qmd": "/api/qmd",
+    "qmd_servicos": "/api/qmd/servicos",
+    "qmd_missoes": "/api/qmd/missao",
+    "qmd_plano": "/api/qmd/plano",
+    "qmd_ativos": "/api/qmd/ativos",
+}
 
 
 @flow(log_prints=True)
 def rj_segur__forca_municipal(
     table_id: str,
-    dataset_id: Optional[str] = "brutos_forca_municipal",
-    endpoint: Optional[str] = None,
-    dump_mode: str = "overwrite",
+    dataset_id: str = "brutos_forca_municipal",
+    dump_mode: str = "append",
     biglake_table: bool = True,
+    page_size: int = 500,
 ):
     """
-    Extrai dados da API CIVITAS/CORIO e carrega no BigQuery.
+    Extrai dados de um endpoint da API HxGN OnCall (Força Municipal) e carrega no BigQuery.
+
+    Cada execução:
+      1. Autentica na API.
+      2. Busca todos os registros do endpoint (paginado).
+      3. Adiciona coluna updated_at com o datetime da extração (America/São Paulo).
+      4. Salva os dados em partições parquet por data de updated_at.
+      5. Faz upload para GCS e cria/atualiza a tabela no BigQuery.
 
     Args:
-        table_id: ID da tabela no BigQuery (também usado para identificar o endpoint).
-                  Valores válidos: unidades_ativas, unidades_historico, unit_positions,
+        table_id: Tabela alvo. Opções: unidades_ativas, unidades_historico,
                   ocorrencias_ativas, ocorrencias_historico, ocorrencias_ativas_v2,
-                  qmd, qmd_ativos, qmd_servicos, qmd_missoes, qmd_plano
-        dataset_id: ID do dataset no BigQuery (padrão: "brutos_forca_municipal")
-        endpoint: Endpoint da API (opcional). Se não informado, usa o mapeamento
-                  do table_id via EndpointConfig
-        dump_mode: Modo de escrita no BigQuery ("overwrite" ou "append")
-        biglake_table: Se True, cria tabela BigLake
-
-    Examples:
-        # Extrai unidades ativas usando mapeamento automático
-        rj_segur__forca_municipal(table_id="unidades_ativas")
-
-        # Extrai ocorrências com endpoint customizado
-        rj_segur__forca_municipal(
-            table_id="ocorrencias_ativas",
-            endpoint="/ocorrencias/custom"
-        )
-
-    # TODO: Se precisar testar os dados localmente, descomente o proxy em task.py
+                  qmd, qmd_servicos, qmd_missoes, qmd_plano, qmd_ativos.
+        dataset_id: Dataset do BigQuery.
+        dump_mode: "append" para acumular dados, "overwrite" para substituir.
+        biglake_table: Se deve criar tabela como BigLake.
+        page_size: Registros por página (max 500).
     """
     rename_current_flow_run_task(new_name=f"{dataset_id}.{table_id}")
     inject_bd_credentials_task(environment="prod")
 
-    # Obtém o endpoint da API baseado no table_id (se não foi fornecido)
-    if endpoint is None:
-        endpoint = EndpointConfig.get_endpoint(table_id)
-        print(f"📍 Endpoint identificado: {endpoint}")
-        print(f"📝 Descrição: {EndpointConfig.get_description(table_id)}")
-        print(f"📂 Categoria: {EndpointConfig.get_category(table_id)}")
-    else:
-        print(f"📍 Usando endpoint customizado: {endpoint}")
+    if table_id not in ENDPOINT_MAP:
+        raise ValueError(
+            f"table_id '{table_id}' inválido. Opções: {list(ENDPOINT_MAP.keys())}"
+        )
 
-    # Extrai dados da API
-    path = get_single_endpoint(endpoint, paginated=True, page_size=250)
+    endpoint = ENDPOINT_MAP[table_id]
 
-    #Carrega no BigQuery
+    api = get_authenticated_api_task()
+    df = fetch_endpoint_task(api=api, endpoint=endpoint, page_size=page_size)
+
+    if df.empty:
+        log(f"Nenhum dado retornado de {endpoint}. Encerrando flow.")
+        return
+
+    path = save_partitions_task(df=df, table_id=table_id)
+
     create_table_and_upload_to_gcs_task(
         data_path=path,
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
+        source_format="parquet",
     )
-
-# rj_segur__forca_municipal(
-#   table_id = "qmd_plano",
-#   dump_mode = "overwrite",
-#   dataset_id = "brutos_forca_municipal",
-#   biglake_table = True
-# )

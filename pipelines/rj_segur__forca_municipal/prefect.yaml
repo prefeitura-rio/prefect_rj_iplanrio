@@ -35,6 +35,7 @@ deployments:
         command: uv run --package rj_segur__forca_municipal -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+
   - name: rj_segur--forca_municipal--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_segur__forca_municipal/flow.py:rj_segur__forca_municipal
@@ -48,64 +49,84 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-    # Exemplo de schedule overwrite
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:05:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: unidades_ativas # slug do schedule
-      parameters:
-        table_id: unidades_ativas
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:10:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: unidades_historico # slug do schedule
-      parameters:
-        table_id: unidades_historico
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:15:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: ocorrencias_ativas # slug do schedule
-      parameters:
-        table_id: ocorrencias_ativas
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:20:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: ocorrencias_historico # slug do schedule
-      parameters:
-        table_id: ocorrencias_historico
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:25:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: ocorrencias_ativas_v2 # slug do schedule
-      parameters:
-        table_id: ocorrencias_ativas_v2
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:30:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: qmd # slug do schedule
-      parameters:
-        table_id: qmd
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:35:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: qmd_ativos # slug do schedule
-      parameters:
-        table_id: qmd_ativos
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:40:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: qmd_servicos # slug do schedule
-      parameters:
-        table_id: qmd_servicos
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:45:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: qmd_missoes # slug do schedule
-      parameters:
-        table_id: qmd_missoes
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:50:00" # Data de inicio do schedule em UTC
-      timezone: America/Sao_Paulo
-      slug: qmd_plano # slug do schedule
-      parameters:
-        table_id: qmd_plano
+      # Alta frequência (a cada 5 minutos) — dados de estado atual
+      - interval: 300
+        anchor_date: "2025-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: unidades_ativas
+        parameters:
+          table_id: unidades_ativas
+          dump_mode: append
+
+      - interval: 300
+        anchor_date: "2025-01-01T00:01:00"
+        timezone: America/Sao_Paulo
+        slug: ocorrencias_ativas
+        parameters:
+          table_id: ocorrencias_ativas
+          dump_mode: append
+
+      - interval: 300
+        anchor_date: "2025-01-01T00:02:00"
+        timezone: America/Sao_Paulo
+        slug: ocorrencias_ativas_v2
+        parameters:
+          table_id: ocorrencias_ativas_v2
+          dump_mode: append
+
+      # Frequência diária — dados históricos e de configuração
+      - interval: 86400
+        anchor_date: "2025-01-01T02:00:00"
+        timezone: America/Sao_Paulo
+        slug: unidades_historico
+        parameters:
+          table_id: unidades_historico
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T02:15:00"
+        timezone: America/Sao_Paulo
+        slug: ocorrencias_historico
+        parameters:
+          table_id: ocorrencias_historico
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T03:00:00"
+        timezone: America/Sao_Paulo
+        slug: qmd
+        parameters:
+          table_id: qmd
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T03:05:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_servicos
+        parameters:
+          table_id: qmd_servicos
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T03:10:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_missoes
+        parameters:
+          table_id: qmd_missoes
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T03:15:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_plano
+        parameters:
+          table_id: qmd_plano
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T03:20:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_ativos
+        parameters:
+          table_id: qmd_ativos
+          dump_mode: append
