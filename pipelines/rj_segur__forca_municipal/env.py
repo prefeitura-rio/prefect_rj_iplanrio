@@ -11,12 +11,18 @@ if os.path.exists("pipelines/rj_segur__forca_municipal/.env"):  # noqa
         dotenv_path="pipelines/rj_segur__forca_municipal/.env", override=True
     )
 
-API_FORCA_MUNICIPAL__API_LOGIN = getenv_or_action(key="API_FORCA_MUNICIPAL__API_LOGIN")
-API_FORCA_MUNICIPAL__API_PASSWORD = getenv_or_action(
-    key="API_FORCA_MUNICIPAL__API_PASSWORD"
+API_FORCA_MUNICIPAL__API_LOGIN = getenv_or_action(
+    key="API_FORCA_MUNICIPAL__API_LOGIN", action="ignore"
 )
-API_FORCA_MUNICIPAL__API_URL = getenv_or_action(key="API_FORCA_MUNICIPAL__API_URL")
+API_FORCA_MUNICIPAL__API_PASSWORD = getenv_or_action(
+    key="API_FORCA_MUNICIPAL__API_PASSWORD", action="ignore"
+)
+API_FORCA_MUNICIPAL__API_URL = getenv_or_action(
+    key="API_FORCA_MUNICIPAL__API_URL", action="ignore"
+)
 API_FORCA_MUNICIPAL__USE_PROXY_URL = str(
-    getenv_or_action(key="API_FORCA_MUNICIPAL__USE_PROXY_URL")
+    getenv_or_action(key="API_FORCA_MUNICIPAL__USE_PROXY_URL", action="ignore") or ""
 ).strip().lower() in ("true", "1", "yes")
-API_FORCA_MUNICIPAL__PROXY_URL = getenv_or_action(key="API_FORCA_MUNICIPAL__PROXY_URL")
+API_FORCA_MUNICIPAL__PROXY_URL = getenv_or_action(
+    key="API_FORCA_MUNICIPAL__PROXY_URL", action="ignore"
+)

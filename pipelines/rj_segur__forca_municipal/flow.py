@@ -85,4 +85,5 @@ def rj_segur__forca_municipal(
         dump_mode=dump_mode,
         biglake_table=biglake_table,
         source_format="parquet",
+        only_staging_dataset=True,
     )
