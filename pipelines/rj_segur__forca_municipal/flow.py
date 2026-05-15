@@ -47,7 +47,7 @@ ALL_TABLE_IDS = set(ENDPOINT_MAP) | SPECIAL_ENDPOINTS
 
 @flow(log_prints=True)
 def rj_segur__forca_municipal(
-    table_id: str,
+    table_id: str = "table_id",
     dataset_id: str = "brutos_forca_municipal",
     dump_mode: str = "append",
     biglake_table: bool = True,
