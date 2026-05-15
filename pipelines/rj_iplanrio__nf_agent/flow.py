@@ -134,6 +134,7 @@ def nf_processing_flow(
                     "avg_sec_per_pdf": avg_sec_per_pdf,
                     "avg_sec_per_doc": avg_sec_per_doc,
                     "batch_size": batch_size,
+                    "workers": workers,
                     "requests_per_minute": requests_per_minute,
                     "max_concurrent": max_concurrent,
                 },
