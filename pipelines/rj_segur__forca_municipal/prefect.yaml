@@ -130,3 +130,28 @@ deployments:
         parameters:
           table_id: qmd_ativos
           dump_mode: append
+
+      - interval: 300
+        anchor_date: "2025-01-01T00:03:00"
+        timezone: America/Sao_Paulo
+        slug: unit_positions
+        parameters:
+          table_id: unit_positions
+          dump_mode: append
+          # data_inicio e data_fim omitidos → usa a data atual automaticamente
+
+      - interval: 86400
+        anchor_date: "2025-01-01T03:25:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_detalhes
+        parameters:
+          table_id: qmd_detalhes
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T03:30:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_kml
+        parameters:
+          table_id: qmd_kml
+          dump_mode: append

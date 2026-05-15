@@ -218,6 +218,19 @@ wheels = [
 ]
 
 [[package]]
+name = "arrow"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+    { name = "tzdata" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/33/032cdc44182491aa708d06a68b62434140d8c50820a087fac7af37703357/arrow-1.4.0.tar.gz", hash = "sha256:ed0cc050e98001b8779e84d461b0098c4ac597e88704a655582b21d116e526d7", size = 152931, upload-time = "2025-10-18T17:46:46.761Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/c9/d7977eaacb9df673210491da99e6a247e93df98c715fc43fd136ce1d3d33/arrow-1.4.0-py3-none-any.whl", hash = "sha256:749f0769958ebdc79c173ff0b0670d59051a535fa26e8eba02953dc19eb43205", size = 68797, upload-time = "2025-10-18T17:46:45.663Z" },
+]
+
+[[package]]
 name = "asgi-lifespan"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -887,6 +900,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/20/b5/23b216d9d985a956623b6bd12d4086b60f0059b27799f23016af04a74ea1/fastjsonschema-2.21.2.tar.gz", hash = "sha256:b1eb43748041c880796cd077f1a07c3d94e93ae84bba5ed36800a33554ae05de", size = 374130, upload-time = "2025-08-14T18:49:36.666Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/a8/20d0723294217e47de6d9e2e40fd4a9d2f7c4b6ef974babd482a59743694/fastjsonschema-2.21.2-py3-none-any.whl", hash = "sha256:1c797122d0a86c5cace2e54bf4e819c36223b552017172f32c5c024a6b77e463", size = 24024, upload-time = "2025-08-14T18:49:34.776Z" },
+]
+
+[[package]]
+name = "fastkml"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "arrow" },
+    { name = "pygeoif" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d9/b4/490e0e3eea8ceb92cd859e931534283cf4f9d7cff495e2f110c23121d1af/fastkml-1.4.0.tar.gz", hash = "sha256:f9e09062f2e6557acb3618ecf6783a9329f4bb3f7e1d070a1b4d7bfab718e278", size = 91480, upload-time = "2025-11-04T09:58:40.346Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/73/f70d48a91a9915ebb7215d41d7500f991c6f5b56d9d9d7e571e6df462b77/fastkml-1.4.0-py3-none-any.whl", hash = "sha256:9df25e165df9aebd0dea48ad76f10defd3553d61f88e37c03156772eeb357342", size = 114407, upload-time = "2025-11-04T09:58:37.417Z" },
 ]
 
 [[package]]
@@ -2946,6 +2973,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pygeoif"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/02/2e/c6660ceea2fc28feefdfb0389bf53b5d0e0ba92aaba72e813901cb0552ed/pygeoif-1.6.0.tar.gz", hash = "sha256:eb0efa59c6573ea2cadce69a7ea9d2d10394b895ed47831c00d44752219c01be", size = 40915, upload-time = "2025-10-01T10:02:13.429Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c3/7f/c803c39fa76fe055bc4154fb6e897185ad21946820a2227283e0a20eeb35/pygeoif-1.6.0-py3-none-any.whl", hash = "sha256:02f84807dadbaf1941c4bb2a9ef1ebac99b1b0404597d2602efdbb58910c69c9", size = 27976, upload-time = "2025-10-01T10:02:12.19Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.19.2"
 source = { registry = "https://pypi.org/simple" }
@@ -4143,11 +4182,15 @@ name = "rj-segur-forca-municipal"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_segur__forca_municipal" }
 dependencies = [
+    { name = "fastkml" },
     { name = "prefect-rj-iplanrio" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+requires-dist = [
+    { name = "fastkml", specifier = ">=1.4.0" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
 
 [[package]]
 name = "rj-setur-turismo-fluxo-visitantes"
