@@ -73,6 +73,15 @@ deployments:
         parameters:
           table_id: ocorrencias_ativas_v2
           dump_mode: append
+      
+      - interval: 60
+        anchor_date: "2025-01-01T00:03:00"
+        timezone: America/Sao_Paulo
+        slug: unit_positions
+        parameters:
+          table_id: unit_positions
+          dump_mode: append
+          # data_inicio e data_fim omitidos → usa a data atual automaticamente
 
       # Frequência diária — dados históricos e de configuração
       - interval: 86400
@@ -130,15 +139,6 @@ deployments:
         parameters:
           table_id: qmd_ativos
           dump_mode: append
-
-      - interval: 300
-        anchor_date: "2025-01-01T00:03:00"
-        timezone: America/Sao_Paulo
-        slug: unit_positions
-        parameters:
-          table_id: unit_positions
-          dump_mode: append
-          # data_inicio e data_fim omitidos → usa a data atual automaticamente
 
       - interval: 86400
         anchor_date: "2025-01-01T03:25:00"
