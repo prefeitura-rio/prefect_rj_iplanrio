@@ -98,11 +98,11 @@ O schema é estável — novos campos no KML vão para `extended_data` sem quebr
 
 ## Variáveis de ambiente
 
-Definidas via secret `prefect-jobs-secrets` no Kubernetes (staging usa o mesmo secret):
+Definidas via secrets do INFISICAL (`prefect-jobs-secrets`):
 
 | Variável | Descrição |
 |---|---|
-| `API_FORCA_MUNICIPAL__API_URL` | URL base da API (ex: `https://data.corio-oncall.com.br:8086`) |
+| `API_FORCA_MUNICIPAL__API_URL` | URL base da API (ex: `https://api_forca.com.br:port`) |
 | `API_FORCA_MUNICIPAL__API_LOGIN` | Usuário para autenticação (`POST /api/login`) |
 | `API_FORCA_MUNICIPAL__API_PASSWORD` | Senha para autenticação |
 | `API_FORCA_MUNICIPAL__USE_PROXY_URL` | `true` para rotear via proxy (desenvolvimento local) |
