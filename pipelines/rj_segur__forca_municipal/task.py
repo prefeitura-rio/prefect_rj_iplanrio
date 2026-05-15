@@ -168,6 +168,11 @@ def save_partitions_task(df: pd.DataFrame, table_id: str) -> str:
     savepath = f"/tmp/rj_segur__forca_municipal/{table_id}/{uuid.uuid4()}"
     Path(savepath).mkdir(parents=True, exist_ok=True)
     df, partition_cols = parse_date_columns(df, "updated_at")
+
+    # Converte todas as colunas para string antes de particionar,
+    cols_to_str = [c for c in df.columns]
+    df[cols_to_str] = df[cols_to_str].astype(str)
+
     to_partitions(
         data=df,
         partition_columns=partition_cols,
