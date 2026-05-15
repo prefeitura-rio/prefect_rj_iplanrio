@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Flow para extrair dados da API CIVITAS/CORIO (Força Municipal) e enviar para BigQuery.
+Flow para extrair dados da API CIVITAS/CORIO (Força Municipal) e enviar para BigQuery
 
 Sistema: HxGN OnCall - Gestão de Ocorrências e Unidades da Guarda Municipal RJ
 """
