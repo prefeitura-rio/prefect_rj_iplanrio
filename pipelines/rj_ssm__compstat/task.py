@@ -11,8 +11,9 @@ from prefect import task
 def requests_get_compstat(
                         result: str,
                         endpoint : str,
-                        url_base : str = "https://compstat.bugarintec.com.br/compstat/api/",
-                        token_estatic : str = "compstat-rio-static-token-2026-fm-qmd") -> Dict[str, Any]:
+                        token_estatic : str,
+                        url_base : str = "https://compstat.bugarintec.com.br/compstat/api/"
+                        ) -> Dict[str, Any]:
     """
     Faz requisição GET para a API do Compstat e retorna dados específicos.
 
@@ -20,7 +21,7 @@ def requests_get_compstat(
         result (str): Chave do resultado desejado no JSON retornado.
         endpoint (str): Endpoint da API a ser acessado.
         url_base (str): URL base da API. Padrão: "https://compstat.bugarintec.com.br/compstat/api/"
-        token_estatic (str): Token de autenticação estático. Padrão: "compstat-rio-static-token-2026-fm-qmd"
+        token_estatic (str): Token de autenticação estático. Padrão: ""
 
     Returns:
         json: Dados extraídos da chave especificada no parâmetro 'result'.
