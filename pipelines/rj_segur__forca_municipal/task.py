@@ -8,11 +8,10 @@ import json
 import uuid
 import warnings
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Optional
 
-import basedosdados as bd
 import pandas as pd
 from fastkml import KML
 from iplanrio.pipelines_utils.logging import log
@@ -29,6 +28,7 @@ from pipelines.rj_segur__forca_municipal.constants import (
 )
 from pipelines.rj_segur__forca_municipal.hash_registry import (
     is_hash_registered,
+    query_distinct_ids,
     register_hash,
 )
 
@@ -48,6 +48,55 @@ class SaveResult:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_date_range(
+    data_inicio: str,
+    data_fim: str,
+    hora_inicio: str,
+    hora_fim: str,
+) -> tuple[str, str, str, str]:
+    """
+    Valida e normaliza os parâmetros de data/hora do intervalo.
+
+    Retorna (data_inicio, data_fim, hora_inicio, hora_fim) normalizados via
+    isoformat, garantindo strings canônicas independente do input.
+    Levanta ValueError com mensagem clara em caso de formato inválido ou
+    inconsistência lógica entre os valores.
+    """
+    try:
+        d_inicio = date.fromisoformat(data_inicio)
+    except ValueError:
+        raise ValueError(f"data_inicio inválida: '{data_inicio}'. Use YYYY-MM-DD.")
+
+    try:
+        d_fim = date.fromisoformat(data_fim)
+    except ValueError:
+        raise ValueError(f"data_fim inválida: '{data_fim}'. Use YYYY-MM-DD.")
+
+    if d_inicio > d_fim:
+        raise ValueError(
+            f"data_inicio ({data_inicio}) deve ser <= data_fim ({data_fim})."
+        )
+
+    today = datetime.now(tz=SP_TZ).date()
+    if d_fim > today:
+        log(
+            f"data_fim ({data_fim}) está no futuro — a API provavelmente retornará vazio.",
+            level="warning",
+        )
+
+    try:
+        time.fromisoformat(hora_inicio)
+    except ValueError:
+        raise ValueError(f"hora_inicio inválida: '{hora_inicio}'. Use HH:MM:SS.")
+
+    try:
+        time.fromisoformat(hora_fim)
+    except ValueError:
+        raise ValueError(f"hora_fim inválida: '{hora_fim}'. Use HH:MM:SS.")
+
+    return d_inicio.isoformat(), d_fim.isoformat(), hora_inicio, hora_fim
 
 
 def _content_hash(df: pd.DataFrame) -> str:
@@ -86,7 +135,8 @@ def extract_simple_task(
 @task
 def extract_unit_positions_task(
     endpoint_unit_positions: str,
-    endpoint_unidades: str,
+    project_id: str,
+    dataset_id: str,
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
     hora_inicio: str = "00:00:00",
@@ -94,29 +144,42 @@ def extract_unit_positions_task(
     page_size: int = DEFAULT_PAGE_SIZE,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> pd.DataFrame:
-    """Busca posições GPS de todas as unidades ativas para o intervalo especificado."""
+    """Busca posições GPS de todas as unidades históricas para o intervalo especificado."""
     if data_inicio is None:
-        data_inicio = datetime.now(tz=SP_TZ).strftime("%Y-%m-%d")
+        data_inicio = (datetime.now(tz=SP_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
     if data_fim is None:
         data_fim = data_inicio
 
+    data_inicio, data_fim, hora_inicio, hora_fim = _parse_date_range(
+        data_inicio, data_fim, hora_inicio, hora_fim
+    )
+
     log(f"Período: {data_inicio} {hora_inicio} → {data_fim} {hora_fim}")
+
+    unit_ids = query_distinct_ids(
+        project_id=project_id,
+        query=f"""
+            SELECT DISTINCT UnitId
+            FROM `{project_id}.{dataset_id}_staging.unidades_historico`
+            WHERE data_particao BETWEEN DATE_SUB(DATE('{data_inicio}'), INTERVAL 7 DAY)
+                                    AND DATE('{data_fim}')
+              AND UnitId IS NOT NULL
+        """,
+    )
+    log(
+        f"{len(unit_ids)} unidades encontradas no histórico BQ ({data_inicio} - 7 → {data_fim})"
+    )
+
+    if not unit_ids:
+        log("Nenhuma unidade no histórico BQ.", level="warning")
+        return pd.DataFrame()
 
     async def _run() -> list:
         sem = asyncio.Semaphore(concurrency)
+        total = len(unit_ids)
+        completed = 0
+
         async with FMApi() as api:
-            units = await api.get_paginated(
-                endpoint_unidades, page_size=page_size, sem=sem
-            )
-            unit_ids = [u["UnitId"] for u in units if u.get("UnitId")]
-            log(f"{len(unit_ids)} unidades ativas encontradas")
-
-            if not unit_ids:
-                log("Nenhuma unidade ativa encontrada.", level="warning")
-                return []
-
-            total = len(unit_ids)
-            completed = 0
 
             async def _fetch_unit(uid: str) -> list:
                 nonlocal completed
@@ -150,23 +213,32 @@ def extract_unit_positions_task(
 
 @task
 def extract_qmd_details_task(
-    endpoint_qmd: str,
     endpoint_qmd_detalhes: str,
+    project_id: str,
+    dataset_id: str,
     page_size: int = DEFAULT_PAGE_SIZE,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> pd.DataFrame:
-    """Busca detalhes completos de todos os QMDs (missões, serviços, execuções)."""
+    """Busca detalhes completos de todos os QMDs históricos (missões, serviços, execuções)."""
+
+    qmd_ids = query_distinct_ids(
+        project_id=project_id,
+        query=f"""
+            SELECT DISTINCT Id
+            FROM `{project_id}.{dataset_id}_staging.qmd`
+            WHERE data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+              AND Id IS NOT NULL
+        """,
+    )
+    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (D-7) — buscando detalhes...")
+
+    if not qmd_ids:
+        log("Nenhum QMD no histórico BQ.", level="warning")
+        return pd.DataFrame()
 
     async def _run() -> list:
         sem = asyncio.Semaphore(concurrency)
         async with FMApi() as api:
-            qmds = await api.get_paginated(endpoint_qmd, page_size=page_size, sem=sem)
-            qmd_ids = [q["Id"] for q in qmds if q.get("Id")]
-            log(f"{len(qmd_ids)} QMDs encontrados — buscando detalhes...")
-
-            if not qmd_ids:
-                log("Nenhum QMD encontrado.", level="warning")
-                return []
 
             total = len(qmd_ids)
             completed = 0
@@ -199,26 +271,35 @@ def extract_qmd_details_task(
 
 @task
 def extract_qmd_kml_task(
-    endpoint_qmd: str,
     endpoint_qmd_kml: str,
+    project_id: str,
+    dataset_id: str,
     page_size: int = DEFAULT_PAGE_SIZE,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> pd.DataFrame:
-    """Busca KMLs de todos os QMDs e extrai geometrias e metadados."""
+    """Busca KMLs de todos os QMDs históricos e extrai geometrias e metadados."""
+
+    qmd_ids = query_distinct_ids(
+        project_id=project_id,
+        query=f"""
+            SELECT DISTINCT Id
+            FROM `{project_id}.{dataset_id}_staging.qmd`
+            WHERE data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+              AND Id IS NOT NULL
+        """,
+    )
+    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (D-7) — buscando KMLs...")
+
+    if not qmd_ids:
+        log("Nenhum QMD no histórico BQ.", level="warning")
+        return pd.DataFrame()
 
     async def _run() -> list:
         sem = asyncio.Semaphore(concurrency)
+        total = len(qmd_ids)
+        completed = 0
+
         async with FMApi() as api:
-            qmds = await api.get_paginated(endpoint_qmd, page_size=page_size, sem=sem)
-            qmd_ids = [q["Id"] for q in qmds if q.get("Id")]
-            log(f"{len(qmd_ids)} QMDs encontrados — buscando KMLs...")
-
-            if not qmd_ids:
-                log("Nenhum QMD encontrado.", level="warning")
-                return []
-
-            total = len(qmd_ids)
-            completed = 0
 
             async def _fetch_kml(qmd_id: str) -> list:
                 nonlocal completed
@@ -297,6 +378,7 @@ def extract_qmd_kml_task(
 def save_partitions_task(
     df: pd.DataFrame,
     table_id: str,
+    project_id: str,
     dataset_id: str = "brutos_forca_municipal",
 ) -> Optional[SaveResult]:
     """
@@ -317,8 +399,6 @@ def save_partitions_task(
     )
 
     content_hash = _content_hash(df)
-
-    project_id = bd.Base()._get_project_id("prod")
 
     if is_hash_registered(content_hash, dataset_id, table_id, project_id):
         log(
