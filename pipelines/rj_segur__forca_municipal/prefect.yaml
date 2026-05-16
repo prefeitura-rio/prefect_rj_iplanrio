@@ -74,7 +74,7 @@ deployments:
           table_id: ocorrencias_ativas_v2
           dump_mode: append
       
-      - interval: 60
+      - interval: 300
         anchor_date: "2025-01-01T00:03:00"
         timezone: America/Sao_Paulo
         slug: unit_positions
