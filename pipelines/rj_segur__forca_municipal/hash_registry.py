@@ -44,6 +44,18 @@ def _get_bq_client(project_id: str) -> bigquery.Client:
     return bigquery.Client(credentials=credentials, project=project_id)
 
 
+def query_distinct_ids(project_id: str, query: str) -> list[str]:
+    """
+    Executa uma query BQ e retorna lista de valores distintos da primeira coluna.
+
+    Projetado para buscar IDs de tabelas de histórico com filtro de partição.
+    A query deve usar data_particao para partition pruning (evitar full scan).
+    """
+    client = _get_bq_client(project_id)
+    rows = client.query(query).result()
+    return [str(row[0]) for row in rows if row[0] is not None]
+
+
 def _create_registry_table(client: bigquery.Client, table_full: str) -> None:
     """Cria a tabela do registry (o dataset é criado pelo basedosdados)."""
     ddl = f"""
