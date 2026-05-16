@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Flow para extrair dados da API CIVITAS/CORIO (Força Municipal) e enviar para BigQuery
+Flow para extrair dados da API CIVITAS/CORIO (Força Municipal) e enviar para BigQuery.
 
 Sistema: HxGN OnCall - Gestão de Ocorrências e Unidades da Guarda Municipal RJ
 """
@@ -13,36 +13,22 @@ from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
+from pipelines.rj_segur__forca_municipal.constants import (
+    DEFAULT_CONCURRENCY,
+    DEFAULT_PAGE_SIZE,
+    ENDPOINT_MAP,
+)
 from pipelines.rj_segur__forca_municipal.task import (
-    fetch_endpoint_task,
-    fetch_qmd_details_task,
-    fetch_qmd_kml_task,
-    fetch_unit_positions_task,
-    get_authenticated_api_task,
+    SaveResult,
+    extract_qmd_details_task,
+    extract_qmd_kml_task,
+    extract_simple_task,
+    extract_unit_positions_task,
+    register_hash_task,
     save_partitions_task,
 )
 
-# Endpoints paginados simples: table_id → path
-ENDPOINT_MAP: dict[str, str] = {
-    "unidades_ativas": "/api/unidades/ativas",
-    "unidades_historico": "/api/unidades/historico",
-    "ocorrencias_ativas": "/api/ocorrencias/ativas",
-    "ocorrencias_historico": "/api/ocorrencias/historico",
-    "ocorrencias_ativas_v2": "/api/ocorrencias/ativas/v2",
-    "qmd": "/api/qmd",
-    "qmd_servicos": "/api/qmd/servicos",
-    "qmd_missoes": "/api/qmd/missao",
-    "qmd_plano": "/api/qmd/plano",
-    "qmd_ativos": "/api/qmd/ativos",
-    "unit_positions": "/api/unit/positions",
-    "qmd_detalhes": "/api/qmd",
-    "qmd_kml": "/api/qmd",
-}
-
-# Endpoints com lógica própria (não entram no ENDPOINT_MAP)
-SPECIAL_ENDPOINTS = {"unit_positions", "qmd_detalhes", "qmd_kml"}
-
-ALL_TABLE_IDS = set(ENDPOINT_MAP) | SPECIAL_ENDPOINTS
+ALL_TABLE_IDS = set(ENDPOINT_MAP)
 
 
 @flow(log_prints=True)
@@ -51,7 +37,8 @@ def rj_segur__forca_municipal(
     dataset_id: str = "brutos_forca_municipal",
     dump_mode: str = "append",
     biglake_table: bool = True,
-    page_size: int = 500,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    concurrency: int = DEFAULT_CONCURRENCY,
     # Parâmetros de janela temporal — usados apenas por unit_positions
     # Se None, usa a data atual (America/São Paulo). Passe valores explícitos para backfill.
     data_inicio: Optional[str] = None,
@@ -71,6 +58,7 @@ def rj_segur__forca_municipal(
         dump_mode: "append" para acumular dados, "overwrite" para substituir.
         biglake_table: Se deve criar tabela como BigLake.
         page_size: Registros por página (max 500).
+        concurrency: Número máximo de requisições HTTP simultâneas.
         data_inicio: Data de início para unit_positions (YYYY-MM-DD). Default: hoje.
         data_fim: Data de fim para unit_positions (YYYY-MM-DD). Default: data_inicio.
         hora_inicio: Hora de início para unit_positions (HH:MM:SS). Default: 00:00:00.
@@ -84,50 +72,65 @@ def rj_segur__forca_municipal(
             f"table_id '{table_id}' inválido. Opções: {sorted(ALL_TABLE_IDS)}"
         )
 
-    api = get_authenticated_api_task()
-
+    log(f"Configurado para {concurrency} requisições simultâneas.")
     if table_id == "unit_positions":
-        df = fetch_unit_positions_task(
-            api=api,
+        df = extract_unit_positions_task(
+            endpoint_unit_positions=ENDPOINT_MAP[table_id],
+            endpoint_unidades=ENDPOINT_MAP["unidades_ativas"],
             data_inicio=data_inicio,
             data_fim=data_fim,
             hora_inicio=hora_inicio,
             hora_fim=hora_fim,
             page_size=page_size,
-            endpoint=ENDPOINT_MAP[table_id],
-            endpoint_unidades_ativas=ENDPOINT_MAP["unidades_ativas"],
+            concurrency=concurrency,
         )
     elif table_id == "qmd_detalhes":
-        df = fetch_qmd_details_task(
-            api=api,
-            page_size=page_size,
-            endpoint=ENDPOINT_MAP[table_id],
+        df = extract_qmd_details_task(
             endpoint_qmd=ENDPOINT_MAP["qmd"],
+            endpoint_qmd_detalhes=ENDPOINT_MAP[table_id],
+            page_size=page_size,
+            concurrency=concurrency,
         )
     elif table_id == "qmd_kml":
-        df = fetch_qmd_kml_task(
-            api=api,
-            page_size=page_size,
-            endpoint=ENDPOINT_MAP[table_id],
+        df = extract_qmd_kml_task(
             endpoint_qmd=ENDPOINT_MAP["qmd"],
+            endpoint_qmd_kml=ENDPOINT_MAP["qmd_kml"],
+            page_size=page_size,
+            concurrency=concurrency,
         )
     else:
-        df = fetch_endpoint_task(
-            api=api, endpoint=ENDPOINT_MAP[table_id], page_size=page_size
+        df = extract_simple_task(
+            endpoint=ENDPOINT_MAP[table_id],
+            page_size=page_size,
+            concurrency=concurrency,
         )
 
     if df.empty:
         log(f"Nenhum dado retornado para {table_id}. Encerrando flow.")
         return
 
-    path = save_partitions_task(df=df, table_id=table_id)
+    result: Optional[SaveResult] = save_partitions_task(
+        df=df, table_id=table_id, dataset_id=dataset_id
+    )
+
+    if result is None:
+        log(
+            f"Conteúdo de {dataset_id}_staging.{table_id} não mudou desde a última extração — sem upload."
+        )
+        return
 
     create_table_and_upload_to_gcs_task(
-        data_path=path,
+        data_path=result.path,
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
         source_format="parquet",
         only_staging_dataset=True,
+    )
+
+    register_hash_task(
+        result=result,
+        dataset_id=dataset_id,
+        table_id=table_id,
     )

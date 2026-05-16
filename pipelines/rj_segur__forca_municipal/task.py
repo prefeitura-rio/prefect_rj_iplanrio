@@ -1,173 +1,81 @@
 # -*- coding: utf-8 -*-
-"""Tasks para extração de dados da API CIVITAS/HxGN OnCall (Força Municipal)."""
+"""Tasks do pipeline rj_segur__forca_municipal."""
 
+import asyncio
 import hashlib
+import io
 import json
+from multiprocessing import context
 import uuid
-from datetime import datetime
+import warnings
+from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
-from zoneinfo import ZoneInfo
 
-import httpx
+import basedosdados as bd
 import pandas as pd
+from fastkml import KML
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
 from prefect import task
+from prefect.context import TaskRunContext, get_run_context
 
-from pipelines.rj_segur__forca_municipal import env
+from pipelines.rj_segur__forca_municipal.client import FMApi
+from pipelines.rj_segur__forca_municipal.constants import (
+    DEFAULT_CONCURRENCY,
+    DEFAULT_PAGE_SIZE,
+    SP_TZ,
+    TMP_BASE,
+)
+from pipelines.rj_segur__forca_municipal.hash_registry import (
+    is_hash_registered,
+    register_hash,
+)
 
-SP_TZ = ZoneInfo("America/Sao_Paulo")
-PAGE_SIZE = 500
+
+@dataclass
+class SaveResult:
+    path: str
+    content_hash: str
+    partition_date: date
+    now: datetime
+    project_id: str
+    row_count: int
+    col_count: int
+    parquet_size_mb: float
 
 
-class FMApi:
-    """Cliente HTTP para a API CIVITAS/HxGN OnCall (Força Municipal)."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
-    def __init__(self, base_url: str, proxy_url: Optional[str] = None):
-        self.base_url = base_url.rstrip("/")
-        self.proxy_url = proxy_url
-        self.token: Optional[str] = None
 
-    def _client(self) -> httpx.Client:
-        kwargs: dict = {"verify": False, "timeout": 60.0}
-        if self.proxy_url:
-            kwargs["proxy"] = self.proxy_url
-        return httpx.Client(**kwargs)
+def _content_hash(df: pd.DataFrame) -> str:
+    """Gera um hash MD5 truncado (12 chars) do conteúdo bruto do DataFrame."""
+    raw = pd.util.hash_pandas_object(df, index=False).values.tobytes()  # type: ignore[attr-defined]
+    return hashlib.md5(raw).hexdigest()[:12]
 
-    @property
-    def _headers(self) -> dict:
-        if not self.token:
-            raise ValueError("Not authenticated. Call authenticate() first.")
-        return {"Authorization": f"Bearer {self.token}"}
 
-    def authenticate(self, username: str, password: str) -> None:
-        """Autentica na API, armazena o token e guarda as credenciais para re-auth."""
-        self._username = username
-        self._password = password
-        with self._client() as client:
-            resp = client.post(
-                f"{self.base_url}/api/login",
-                json={"userName": username, "password": password},
-            )
-            resp.raise_for_status()
-            self.token = resp.json()["accessToken"]
-        log(f"Autenticado em {self.base_url}")
-
-    def _reauth(self) -> None:
-        """Re-autentica usando as credenciais armazenadas."""
-        if not hasattr(self, "_username"):
-            raise RuntimeError(
-                "Cannot re-authenticate: credentials not stored. Call authenticate() first."
-            )
-        log("Token expirado (401) — re-autenticando...", level="warning")
-        self.authenticate(self._username, self._password)
-
-    def _get_page(
-        self,
-        client: httpx.Client,
-        path: str,
-        page: int,
-        page_size: int,
-        extra_params: Optional[dict] = None,
-    ) -> httpx.Response:
-        """Faz GET de uma página, re-autentica e tenta novamente em caso de 401."""
-        params = {"page": page, "pageSize": page_size}
-        if extra_params:
-            params.update(extra_params)
-        resp = client.get(
-            f"{self.base_url}{path}", headers=self._headers, params=params
-        )
-        if resp.status_code == 401:
-            self._reauth()
-            resp = client.get(
-                f"{self.base_url}{path}", headers=self._headers, params=params
-            )
-        resp.raise_for_status()
-        return resp
-
-    def get_paginated(
-        self,
-        path: str,
-        page_size: int = PAGE_SIZE,
-        extra_params: Optional[dict] = None,
-        silent: bool = False,
-    ) -> list:
-        """Busca todas as páginas de um endpoint paginado.
-
-        Args:
-            silent: Se True, suprime logs de progresso por página (útil quando
-                    chamado em loops para evitar flood de logs).
-        """
-        all_items: list = []
-        page = 1
-        total_pages: Optional[int] = None
-        full_url = f"{self.base_url}{path}"
-        while True:
-            with self._client() as client:
-                resp = self._get_page(client, path, page, page_size, extra_params)
-                body = resp.json()
-            items = body.get("data", [])
-            if not items:
-                break
-            all_items.extend(items)
-            if total_pages is None:
-                total_pages = body.get("totalPages", 1)
-            if not silent and total_pages > 1:
-                params: dict = {"page": f"{page}/{total_pages}", "pageSize": page_size}
-                if extra_params:
-                    params.update(extra_params)
-                params_str = ", ".join(f"{k}={v}" for k, v in params.items())
-                log(f"GET {full_url} [{params_str}] → +{len(items)} itens")
-            if page >= total_pages:
-                break
-            page += 1
-        if not silent:
-            pages_str = f"{total_pages} página(s)" if total_pages else "1 página"
-            log(f"GET {full_url} — {len(all_items)} itens em {pages_str}")
-        return all_items
-
-    def get_single(self, path: str) -> dict:
-        """GET simples sem paginação, retorna o corpo JSON da resposta."""
-        with self._client() as client:
-            resp = client.get(f"{self.base_url}{path}", headers=self._headers)
-            if resp.status_code == 401:
-                self._reauth()
-                resp = client.get(f"{self.base_url}{path}", headers=self._headers)
-            resp.raise_for_status()
-            return resp.json()
-
-    def get_raw(self, path: str) -> str:
-        """GET simples sem paginação, retorna o corpo da resposta como texto bruto."""
-        with self._client() as client:
-            resp = client.get(f"{self.base_url}{path}", headers=self._headers)
-            if resp.status_code == 401:
-                self._reauth()
-                resp = client.get(f"{self.base_url}{path}", headers=self._headers)
-            resp.raise_for_status()
-            return resp.text
+# ---------------------------------------------------------------------------
+# Extraction tasks
+# ---------------------------------------------------------------------------
 
 
 @task
-def get_authenticated_api_task() -> FMApi:
-    """Cria e autentica o cliente da API Força Municipal."""
-    use_proxy = env.API_FORCA_MUNICIPAL__USE_PROXY_URL
-    proxy_url = env.API_FORCA_MUNICIPAL__PROXY_URL if use_proxy else None
-    api = FMApi(base_url=env.API_FORCA_MUNICIPAL__API_URL, proxy_url=proxy_url)
-    log(f"Conectando à API{' via proxy' if use_proxy else ''}: {api.base_url}")
-    api.authenticate(
-        username=env.API_FORCA_MUNICIPAL__API_LOGIN,
-        password=env.API_FORCA_MUNICIPAL__API_PASSWORD,
-    )
-    return api
-
-
-@task
-def fetch_endpoint_task(
-    api: FMApi, endpoint: str, page_size: int = PAGE_SIZE
+def extract_simple_task(
+    endpoint: str,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> pd.DataFrame:
-    """Busca todos os registros de um endpoint paginado e retorna um DataFrame."""
-    items = api.get_paginated(path=endpoint, page_size=page_size)
+    """Extrai todos os registros de um endpoint paginado."""
+
+    async def _run() -> list:
+        sem = asyncio.Semaphore(concurrency)
+        async with FMApi() as api:
+            return await api.get_paginated(endpoint, page_size=page_size, sem=sem)
+
+    items = asyncio.run(_run())
     if not items:
         log(f"Nenhum dado retornado de {endpoint}", level="warning")
         return pd.DataFrame()
@@ -177,22 +85,17 @@ def fetch_endpoint_task(
 
 
 @task
-def fetch_unit_positions_task(
-    api: FMApi,
+def extract_unit_positions_task(
+    endpoint_unit_positions: str,
+    endpoint_unidades: str,
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
     hora_inicio: str = "00:00:00",
     hora_fim: str = "23:59:59",
-    page_size: int = PAGE_SIZE,
-    endpoint: str = "/api/unit/positions",
-    endpoint_unidades_ativas: str = "/api/unidades/ativas",
+    page_size: int = DEFAULT_PAGE_SIZE,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> pd.DataFrame:
-    """
-    Busca posições GPS de todas as unidades ativas para o intervalo especificado.
-
-    Se data_inicio/data_fim não forem fornecidos, usa a data atual (America/São Paulo).
-    Ideal para backfill: passe data_inicio e data_fim para um período histórico.
-    """
+    """Busca posições GPS de todas as unidades ativas para o intervalo especificado."""
     if data_inicio is None:
         data_inicio = datetime.now(tz=SP_TZ).strftime("%Y-%m-%d")
     if data_fim is None:
@@ -200,204 +103,247 @@ def fetch_unit_positions_task(
 
     log(f"Período: {data_inicio} {hora_inicio} → {data_fim} {hora_fim}")
 
-    units = api.get_paginated(endpoint_unidades_ativas, page_size=page_size)
-    unit_ids = [u["UnitId"] for u in units if u.get("UnitId")]
-    log(f"{len(unit_ids)} unidades ativas encontradas")
+    async def _run() -> list:
+        sem = asyncio.Semaphore(concurrency)
+        async with FMApi() as api:
+            units = await api.get_paginated(
+                endpoint_unidades, page_size=page_size, sem=sem
+            )
+            unit_ids = [u["UnitId"] for u in units if u.get("UnitId")]
+            log(f"{len(unit_ids)} unidades ativas encontradas")
 
-    if not unit_ids:
-        log("Nenhuma unidade ativa encontrada.", level="warning")
-        return pd.DataFrame()
+            if not unit_ids:
+                log("Nenhuma unidade ativa encontrada.", level="warning")
+                return []
 
-    all_positions: list = []
-    total_units = len(unit_ids)
-    for i, unit_id in enumerate(unit_ids, start=1):
-        positions = api.get_paginated(
-            endpoint,
-            page_size=page_size,
-            extra_params={
-                "unitId": unit_id,
-                "dataInicio": data_inicio,
-                "dataFim": data_fim,
-                "horaInicio": hora_inicio,
-                "horaFim": hora_fim,
-            },
-            silent=True,
-        )
-        log(f"Unidade {i}/{total_units} ({unit_id}): {len(positions)} posições")
-        all_positions.extend(positions)
+            total = len(unit_ids)
+            completed = 0
 
+            async def _fetch_unit(uid: str) -> list:
+                nonlocal completed
+                positions = await api.get_paginated(
+                    endpoint_unit_positions,
+                    page_size=page_size,
+                    extra_params={
+                        "unitId": uid,
+                        "dataInicio": data_inicio,
+                        "dataFim": data_fim,
+                        "horaInicio": hora_inicio,
+                        "horaFim": hora_fim,
+                    },
+                    sem=sem,
+                )
+                completed += 1
+                log(f"Unidade {completed}/{total} ({uid}): {len(positions)} posições")
+                return positions
+
+            results = await asyncio.gather(*[_fetch_unit(uid) for uid in unit_ids])
+            return [p for sub in results for p in sub]
+
+    all_positions = asyncio.run(_run())
     if not all_positions:
         log("Nenhuma posição encontrada para o período.", level="warning")
         return pd.DataFrame()
-
     df = pd.DataFrame(all_positions)
-    log(f"Total: {df.shape[0]} posições de {total_units} unidades")
+    log(f"Total: {df.shape[0]} posições")
     return df
 
 
 @task
-def fetch_qmd_details_task(
-    api: FMApi,
-    page_size: int = PAGE_SIZE,
-    endpoint: str = "/api/qmd",
-    endpoint_qmd: str = "/api/qmd",
+def extract_qmd_details_task(
+    endpoint_qmd: str,
+    endpoint_qmd_detalhes: str,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> pd.DataFrame:
-    """
-    Busca detalhes completos de todos os QMDs (missões, serviços, execuções).
+    """Busca detalhes completos de todos os QMDs (missões, serviços, execuções)."""
 
-    Faz primeiro GET /api/qmd para obter os IDs e depois GET /api/qmd/{id}
-    para cada um. Campos aninhados (missoes, servicos, execucoes) são serializados
-    como JSON string para compatibilidade com BigQuery.
-    """
-    qmds = api.get_paginated(endpoint_qmd, page_size=page_size)
-    qmd_ids = [q["Id"] for q in qmds if q.get("Id")]
-    log(f"{len(qmd_ids)} QMDs encontrados — buscando detalhes...")
+    async def _run() -> list:
+        sem = asyncio.Semaphore(concurrency)
+        async with FMApi() as api:
+            qmds = await api.get_paginated(endpoint_qmd, page_size=page_size, sem=sem)
+            qmd_ids = [q["Id"] for q in qmds if q.get("Id")]
+            log(f"{len(qmd_ids)} QMDs encontrados — buscando detalhes...")
 
-    if not qmd_ids:
-        log("Nenhum QMD encontrado.", level="warning")
+            if not qmd_ids:
+                log("Nenhum QMD encontrado.", level="warning")
+                return []
+
+            total = len(qmd_ids)
+            completed = 0
+
+            async def _fetch_one(qmd_id: str) -> dict:
+                nonlocal completed
+                body = await api.get_json(endpoint_qmd_detalhes.format(id=qmd_id))
+                completed += 1
+                log(f"QMD {completed}/{total} ({qmd_id}) — detalhes obtidos")
+                return {
+                    k: (
+                        json.dumps(v, ensure_ascii=False)
+                        if isinstance(v, (list, dict))
+                        else v
+                    )
+                    for k, v in body.items()
+                }
+
+            return list(
+                await asyncio.gather(*[_fetch_one(qmd_id) for qmd_id in qmd_ids])
+            )
+
+    rows = asyncio.run(_run())
+    if not rows:
         return pd.DataFrame()
-
-    rows: list = []
-    total = len(qmd_ids)
-    for i, qmd_id in enumerate(qmd_ids, start=1):
-        log(f"QMD {i}/{total} — GET {api.base_url}{endpoint}/{qmd_id}")
-        body = api.get_single(f"{endpoint}/{qmd_id}")
-        row = {
-            k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
-            for k, v in body.items()
-        }
-        rows.append(row)
-
     df = pd.DataFrame(rows)
     log(f"DataFrame: {df.shape[0]} linhas × {df.shape[1]} colunas")
     return df
 
 
 @task
-def fetch_qmd_kml_task(
-    api: FMApi,
-    page_size: int = PAGE_SIZE,
-    endpoint: str = "/api/qmd",
-    endpoint_qmd: str = "/api/qmd",
+def extract_qmd_kml_task(
+    endpoint_qmd: str,
+    endpoint_qmd_kml: str,
+    page_size: int = DEFAULT_PAGE_SIZE,
+    concurrency: int = DEFAULT_CONCURRENCY,
 ) -> pd.DataFrame:
-    """
-    Busca arquivos KML de todos os QMDs e extrai todas as geometrias e metadados.
+    """Busca KMLs de todos os QMDs e extrai geometrias e metadados."""
 
-    Usa fastkml para parsear o KML sem perda de informação. Uma linha por
-    Placemark com colunas fixas (qmd_id, kml_folder, name, description,
-    geometry_wkt, geometry_type) e extended_data como JSON com todos os campos
-    extras — o schema é estável mesmo que o KML evolua.
+    async def _run() -> list:
+        sem = asyncio.Semaphore(concurrency)
+        async with FMApi() as api:
+            qmds = await api.get_paginated(endpoint_qmd, page_size=page_size, sem=sem)
+            qmd_ids = [q["Id"] for q in qmds if q.get("Id")]
+            log(f"{len(qmd_ids)} QMDs encontrados — buscando KMLs...")
 
-    Em BigQuery: ST_GEOGFROMTEXT(geometry_wkt) converte para GEOGRAPHY.
-    """
-    import io
-    import warnings
+            if not qmd_ids:
+                log("Nenhum QMD encontrado.", level="warning")
+                return []
 
-    from fastkml import KML
+            total = len(qmd_ids)
+            completed = 0
 
-    qmds = api.get_paginated(endpoint_qmd, page_size=page_size)
-    qmd_ids = [q["Id"] for q in qmds if q.get("Id")]
-    log(f"{len(qmd_ids)} QMDs encontrados — buscando KMLs...")
+            async def _fetch_kml(qmd_id: str) -> list:
+                nonlocal completed
+                try:
+                    kml_text = await api.get_text(endpoint_qmd_kml.format(id=qmd_id))
+                except Exception as exc:
+                    completed += 1
+                    log(f"QMD {qmd_id}: KML não disponível ({exc})", level="warning")
+                    return []
 
-    if not qmd_ids:
-        log("Nenhum QMD encontrado.", level="warning")
-        return pd.DataFrame()
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        k = KML.parse(io.StringIO(kml_text), strict=False)
+                except Exception as exc:
+                    completed += 1
+                    log(f"QMD {qmd_id}: erro ao parsear KML ({exc})", level="warning")
+                    return []
 
-    rows: list = []
-    total = len(qmd_ids)
-    for i, qmd_id in enumerate(qmd_ids, start=1):
-        log(f"KML {i}/{total} — GET {api.base_url}/api/qmd/{qmd_id}/kml")
-        try:
-            kml_content = api.get_raw(f"/api/qmd/{qmd_id}/kml")
-        except Exception as exc:
-            log(f"QMD {qmd_id}: KML não disponível ({exc})", level="warning")
-            continue
+                doc = next(iter(k.features), None)
+                if not doc:
+                    completed += 1
+                    log(f"QMD {qmd_id}: KML sem Document.", level="warning")
+                    return []
 
-        try:
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                k = KML.parse(io.StringIO(kml_content), strict=False)
-        except Exception as exc:
-            log(f"QMD {qmd_id}: erro ao parsear KML ({exc})", level="warning")
-            continue
+                rows = []
+                for folder in getattr(doc, "features", []):
+                    folder_name = getattr(folder, "name", None)
+                    for placemark in getattr(folder, "features", []):
+                        geom = getattr(placemark, "geometry", None)
+                        ed = getattr(placemark, "extended_data", None)
+                        ed_dict: dict = {}
+                        if ed:
+                            for elem in getattr(ed, "elements", []):
+                                key = getattr(elem, "name", None)
+                                if key:
+                                    ed_dict[key] = getattr(elem, "value", None)
+                        rows.append(
+                            {
+                                "qmd_id": qmd_id,
+                                "kml_folder": folder_name,
+                                "name": getattr(placemark, "name", None),
+                                "description": getattr(placemark, "description", None),
+                                "geometry_wkt": geom.wkt if geom else None,
+                                "geometry_type": geom.geom_type if geom else None,
+                                "extended_data": (
+                                    json.dumps(ed_dict, ensure_ascii=False)
+                                    if ed_dict
+                                    else None
+                                ),
+                            }
+                        )
 
-        document = next(iter(k.features), None)
-        if document is None:
-            log(f"QMD {qmd_id}: KML sem Document.", level="warning")
-            continue
+                completed += 1
+                log(f"KML {completed}/{total} ({qmd_id}): {len(rows)} placemarks")
+                return rows
 
-        for folder in document.features:
-            folder_name = getattr(folder, "name", None)
-            for placemark in getattr(folder, "features", []):
-                geom = getattr(placemark, "geometry", None)
-                ed = getattr(placemark, "extended_data", None)
-                ed_dict: dict = {}
-                if ed is not None:
-                    for elem in getattr(ed, "elements", []):
-                        key = getattr(elem, "name", None)
-                        if key is not None:
-                            ed_dict[key] = getattr(elem, "value", None)
+            results = await asyncio.gather(*[_fetch_kml(qmd_id) for qmd_id in qmd_ids])
+            return [r for sub in results for r in sub]
 
-                rows.append(
-                    {
-                        "qmd_id": qmd_id,
-                        "kml_folder": folder_name,
-                        "name": getattr(placemark, "name", None),
-                        "description": getattr(placemark, "description", None),
-                        "geometry_wkt": geom.wkt if geom is not None else None,
-                        "geometry_type": geom.geom_type if geom is not None else None,
-                        "extended_data": (
-                            json.dumps(ed_dict, ensure_ascii=False) if ed_dict else None
-                        ),
-                    }
-                )
-
+    rows = asyncio.run(_run())
     if not rows:
         log("Nenhum KML retornado.", level="warning")
         return pd.DataFrame()
-
     df = pd.DataFrame(rows)
     log(f"DataFrame: {df.shape[0]} linhas × {df.shape[1]} colunas")
     return df
 
 
-def _content_hash(df: pd.DataFrame) -> str:
-    """Gera um hash MD5 truncado (12 chars) do conteúdo bruto do DataFrame."""
-    raw = pd.util.hash_pandas_object(df, index=False).values.tobytes()
-    return hashlib.md5(raw).hexdigest()[:12]
+# ---------------------------------------------------------------------------
+# Transform / save task
+# ---------------------------------------------------------------------------
 
 
 @task
-def save_partitions_task(df: pd.DataFrame, table_id: str) -> str:
+def save_partitions_task(
+    df: pd.DataFrame,
+    table_id: str,
+    dataset_id: str = "brutos_forca_municipal",
+) -> Optional[SaveResult]:
     """
-    Adiciona updated_at e id_hash ao DataFrame, salva em partições Hive (parquet)
-    particionadas pela data de updated_at.
+    Adiciona updated_at e id_hash ao DataFrame, salva em partições Hive (parquet).
 
     Fluxo:
       1. Calcula hash MD5 do conteúdo bruto da API (antes de qualquer coluna extra).
-      2. Adiciona updated_at (datetime America/São Paulo) e id_hash ao DataFrame.
-      3. Particiona por data de updated_at e salva como parquet com id_hash como sufixo.
+      2. Consulta o hash registry no BQ — se o hash já existir em qualquer partição,
+         encerra sem escrever nada (evita duplicatas cross-partition).
+      3. Adiciona updated_at (datetime America/São Paulo) e id_hash ao DataFrame.
+      4. Particiona por data de updated_at e salva como parquet com id_hash como sufixo.
 
-    Estrutura de arquivo:
-      <savepath>/ano_particao=<Y>/mes_particao=<M>/data_particao=<D>/data_<hash>.parquet
-
-    Mesmo conteúdo da API → mesmo id_hash → mesmo nome de arquivo no GCS → overwrite
-    sem duplicata. Dados diferentes → novo arquivo na partição → histórico de estados.
-
-    Retorna o caminho raiz das partições.
+    O registro do hash no BQ é responsabilidade do flow, após upload bem-sucedido.
+    Retorna SaveResult com path, hash e datas, ou None se o hash já estava registrado.
     """
+    df = df.sort_values(by=sorted(df.columns), na_position="first").reset_index(
+        drop=True
+    )
+
     content_hash = _content_hash(df)
+
+    project_id = bd.Base()._get_project_id("prod")
+
+    if is_hash_registered(content_hash, dataset_id, table_id, project_id):
+        log(
+            f"Hash {content_hash} já registrado para {project_id}.{dataset_id}_staging.{table_id}"
+            " — conteúdo não mudou, skip."
+        )
+        return None
+
+    # Captura metadados antes de adicionar colunas extras
+    row_count = len(df)
+    col_count = len(df.columns)
+
     now = datetime.now(tz=SP_TZ).replace(tzinfo=None)
+    partition_date = now.date()
+
     df = df.copy()
     df["id_hash"] = content_hash
     df["updated_at"] = now
 
-    savepath = f"/tmp/rj_segur__forca_municipal/{table_id}/{uuid.uuid4()}"
+    savepath = f"{TMP_BASE}/{table_id}/{uuid.uuid4()}"
     Path(savepath).mkdir(parents=True, exist_ok=True)
-    df, partition_cols = parse_date_columns(df, "updated_at")
 
-    cols_to_str = [c for c in df.columns]
-    df[cols_to_str] = df[cols_to_str].astype(str)
+    df, partition_cols = parse_date_columns(df, "updated_at")
+    df = df.astype(str)
 
     to_partitions(
         data=df,
@@ -406,5 +352,49 @@ def save_partitions_task(df: pd.DataFrame, table_id: str) -> str:
         data_type="parquet",
         suffix=content_hash,
     )
-    log(f"Partições salvas: {savepath} (hash={content_hash})")
-    return savepath
+
+    parquet_size_mb = round(
+        sum(f.stat().st_size for f in Path(savepath).rglob("*.parquet"))
+        / (1024 * 1024),
+        4,
+    )
+
+    log(
+        f"Partições salvas: {savepath} (hash={content_hash}, {row_count} linhas, {parquet_size_mb} MB)"
+    )
+    return SaveResult(
+        path=savepath,
+        content_hash=content_hash,
+        partition_date=partition_date,
+        now=now,
+        project_id=project_id,
+        row_count=row_count,
+        col_count=col_count,
+        parquet_size_mb=parquet_size_mb,
+    )
+
+
+@task
+def register_hash_task(
+    result: SaveResult,
+    dataset_id: str,
+    table_id: str,
+) -> None:
+    """Registra o hash no BQ após upload bem-sucedido."""
+
+    context = get_run_context()
+    flow_run_id = None
+    if isinstance(context, TaskRunContext):
+        flow_run_id = str(context.task_run.flow_run_id)
+    register_hash(
+        content_hash=result.content_hash,
+        dataset_id=dataset_id,
+        table_id=table_id,
+        project_id=result.project_id,
+        partition_date=result.partition_date,
+        now=result.now,
+        flow_run_id=flow_run_id,
+        row_count=result.row_count,
+        col_count=result.col_count,
+        parquet_size_mb=result.parquet_size_mb,
+    )
