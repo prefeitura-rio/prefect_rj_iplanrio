@@ -86,8 +86,10 @@ def is_hash_registered(
     registry_table: str = "hash_registry",
 ) -> bool:
     """
-    Verifica se o hash já existe nos últimos HASH_REGISTRY_LOOKBACK_DAYS dias.
+    Verifica se o hash já existe na janela MAX(partition_date) - HASH_REGISTRY_LOOKBACK_DAYS.
 
+    Ancora o lookback na partição mais recente do registry, não em CURRENT_DATE(),
+    garantindo que períodos sem coleta não abram janela para duplicatas.
     O dataset do registry é derivado de dataset_id: f"{dataset_id}_staging".
     Retorna False (sem criar tabela) se o dataset/tabela não existir.
     """
@@ -99,7 +101,10 @@ def is_hash_registered(
         WHERE dataset_id   = @dataset_id
           AND table_id     = @table_id
           AND id_hash      = @id_hash
-          AND partition_date >= DATE_SUB(CURRENT_DATE(), INTERVAL {HASH_REGISTRY_LOOKBACK_DAYS} DAY)
+          AND partition_date >= DATE_SUB(
+              (SELECT MAX(partition_date) FROM `{table_full}`),
+              INTERVAL {HASH_REGISTRY_LOOKBACK_DAYS} DAY
+          )
         LIMIT 1
     """
     job_config = bigquery.QueryJobConfig(

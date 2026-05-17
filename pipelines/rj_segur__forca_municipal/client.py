@@ -26,6 +26,7 @@ from pipelines.rj_segur__forca_municipal.constants import (
     API_CONNECT_TIMEOUT,
     API_TIMEOUT,
     DEFAULT_PAGE_SIZE,
+    MAX_PAGE_RETRIES,
     MAX_RETRIES,
     RETRY_MAX_WAIT,
     RETRY_MIN_WAIT,
@@ -41,9 +42,17 @@ def _is_retryable(exc: BaseException) -> bool:
 
 def _log_retry(retry_state: RetryCallState) -> None:
     exc = retry_state.outcome.exception() if retry_state.outcome else None
+    args = retry_state.args  # (self, method, path)
+    self_ = args[0] if len(args) > 0 else None
+    method = args[1] if len(args) > 1 else "?"
+    path = args[2] if len(args) > 2 else "?"
+    params = retry_state.kwargs.get("params")
+    base_url = getattr(self_, "_base_url", "?")
+    params_str = f" params={params}" if params else ""
     log(
         f"Tentativa {retry_state.attempt_number}/{MAX_RETRIES} falhou"
-        f" ({type(exc).__name__}: {exc}) — retentando...",
+        f" ({type(exc).__name__}: {exc})"
+        f" — {method} {base_url}{path}{params_str} — retentando...",
         level="warning",
     )
 
@@ -150,8 +159,16 @@ class FMApi:
         page_size: int = DEFAULT_PAGE_SIZE,
         extra_params: Optional[dict] = None,
         sem: Optional[asyncio.Semaphore] = None,
+        max_page_retries: int = MAX_PAGE_RETRIES,
     ) -> list[dict]:
-        """Busca página 1, descobre totalPages, paraleliza o restante."""
+        """
+        Busca página 1, descobre totalPages, paraleliza o restante.
+
+        Páginas que falham após os retries do _request são coletadas e
+        reagrupadas em rounds adicionais (max_page_retries). Se ao final
+        ainda houver páginas com falha, levanta RuntimeError — nunca
+        retorna resultado parcial silenciosamente.
+        """
         ctx = sem or asyncio.Semaphore(100)
         full_url = f"{self._base_url}{path}"
 
@@ -197,9 +214,42 @@ class FMApi:
             )
             return page_items
 
-        results = await asyncio.gather(*[_fetch(p) for p in range(2, total_pages + 1)])
-        for r in results:
-            items.extend(r)
+        pages_map: dict[int, list[dict]] = {}
+        pending: set[int] = set(range(2, total_pages + 1))
+
+        for attempt in range(max_page_retries + 1):
+            if not pending:
+                break
+
+            if attempt > 0:
+                log(
+                    f"GET {full_url} — retentando {len(pending)} página(s) que falharam"
+                    f" (round {attempt}/{max_page_retries})...",
+                    level="warning",
+                )
+
+            outcomes = await asyncio.gather(
+                *[_fetch(p) for p in sorted(pending)],
+                return_exceptions=True,
+            )
+
+            still_pending: set[int] = set()
+            for page, outcome in zip(sorted(pending), outcomes):
+                if isinstance(outcome, Exception):
+                    still_pending.add(page)
+                else:
+                    pages_map[page] = outcome  # type: ignore[assignment]
+
+            pending = still_pending
+
+        if pending:
+            raise RuntimeError(
+                f"GET {full_url} — {len(pending)} página(s) falharam definitivamente"
+                f" após {max_page_retries + 1} tentativa(s): páginas {sorted(pending)}"
+            )
+
+        for page in range(2, total_pages + 1):
+            items.extend(pages_map.pop(page))
 
         log(f"GET {full_url} — total: {len(items)} itens em {total_pages} página(s)")
         return items
