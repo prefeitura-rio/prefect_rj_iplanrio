@@ -17,6 +17,7 @@ from prefect import flow
 from pipelines.rj_segur__forca_municipal.constants import (
     DEFAULT_CONCURRENCY,
     DEFAULT_PAGE_SIZE,
+    DEFAULT_UNIT_CONCURRENCY,
     ENDPOINT_MAP,
 )
 from pipelines.rj_segur__forca_municipal.task import (
@@ -41,11 +42,14 @@ def rj_segur__forca_municipal(
     page_size: int = DEFAULT_PAGE_SIZE,
     concurrency: int = DEFAULT_CONCURRENCY,
     # Parâmetros de janela temporal — usados apenas por unit_positions
-    # Se None, usa a data atual (America/São Paulo). Passe valores explícitos para backfill.
+    # Se None, usa D-1 (America/São Paulo). Passe valores explícitos para backfill.
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
     hora_inicio: str = "00:00:00",
     hora_fim: str = "23:59:59",
+    # Quantas unidades buscar em paralelo — independente de concurrency (páginas).
+    # Requests simultâneos efetivos = unit_concurrency × concurrency.
+    unit_concurrency: int = DEFAULT_UNIT_CONCURRENCY,
 ):
     """
     Extrai dados de um endpoint da API HxGN OnCall (Força Municipal) e carrega no BigQuery.
@@ -86,6 +90,7 @@ def rj_segur__forca_municipal(
             hora_fim=hora_fim,
             page_size=page_size,
             concurrency=concurrency,
+            unit_concurrency=unit_concurrency,
         )
     elif table_id == "qmd_detalhes":
         df = extract_qmd_details_task(

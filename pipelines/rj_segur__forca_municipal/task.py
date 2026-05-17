@@ -23,6 +23,7 @@ from pipelines.rj_segur__forca_municipal.client import FMApi
 from pipelines.rj_segur__forca_municipal.constants import (
     DEFAULT_CONCURRENCY,
     DEFAULT_PAGE_SIZE,
+    DEFAULT_UNIT_CONCURRENCY,
     HASH_REGISTRY_LOOKBACK_DAYS,
     SP_TZ,
     TMP_BASE,
@@ -144,6 +145,7 @@ def extract_unit_positions_task(
     hora_fim: str = "23:59:59",
     page_size: int = DEFAULT_PAGE_SIZE,
     concurrency: int = DEFAULT_CONCURRENCY,
+    unit_concurrency: int = DEFAULT_UNIT_CONCURRENCY,
 ) -> pd.DataFrame:
     """Busca posições GPS de todas as unidades históricas para o intervalo especificado."""
     if data_inicio is None:
@@ -179,7 +181,8 @@ def extract_unit_positions_task(
         return pd.DataFrame()
 
     async def _run() -> list:
-        sem = asyncio.Semaphore(concurrency)
+        page_sem = asyncio.Semaphore(concurrency)
+        unit_sem = asyncio.Semaphore(unit_concurrency)
         total = len(unit_ids)
         completed = 0
 
@@ -187,18 +190,19 @@ def extract_unit_positions_task(
 
             async def _fetch_unit(uid: str) -> list:
                 nonlocal completed
-                positions = await api.get_paginated(
-                    endpoint_unit_positions,
-                    page_size=page_size,
-                    extra_params={
-                        "unitId": uid,
-                        "dataInicio": data_inicio,
-                        "dataFim": data_fim,
-                        "horaInicio": hora_inicio,
-                        "horaFim": hora_fim,
-                    },
-                    sem=sem,
-                )
+                async with unit_sem:
+                    positions = await api.get_paginated(
+                        endpoint_unit_positions,
+                        page_size=page_size,
+                        extra_params={
+                            "unitId": uid,
+                            "dataInicio": data_inicio,
+                            "dataFim": data_fim,
+                            "horaInicio": hora_inicio,
+                            "horaFim": hora_fim,
+                        },
+                        sem=page_sem,
+                    )
                 completed += 1
                 log(f"Unidade {completed}/{total} ({uid}): {len(positions)} posições")
                 return positions

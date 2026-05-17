@@ -8,8 +8,9 @@ from zoneinfo import ZoneInfo
 SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
 
 # Paginação e concorrência
-DEFAULT_PAGE_SIZE: Final = 100
+DEFAULT_PAGE_SIZE: Final = 500
 DEFAULT_CONCURRENCY: Final = 5
+DEFAULT_UNIT_CONCURRENCY: Final = 1
 
 # Timeouts HTTP (segundos)
 API_TIMEOUT: Final = 120.0
