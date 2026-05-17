@@ -18,7 +18,7 @@ from pipelines.rj_iplanrio__sici.tasks import (
 )
 
 
-@flow(name="IPLANRIO: SICI API - Dump to BigQuery", log_prints=True)
+@flow(log_prints=True)
 def rj_iplanrio__sici(
     dataset_id: str,
     table_id: str,
