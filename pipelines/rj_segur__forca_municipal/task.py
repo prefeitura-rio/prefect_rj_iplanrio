@@ -102,9 +102,9 @@ def _parse_date_range(
 
 
 def _content_hash(df: pd.DataFrame) -> str:
-    """Gera um hash MD5 truncado (12 chars) do conteúdo bruto do DataFrame."""
+    """Gera um hash MD5 truncado (16 chars) do conteúdo bruto do DataFrame."""
     raw = pd.util.hash_pandas_object(df, index=False).values.tobytes()  # type: ignore[attr-defined]
-    return hashlib.md5(raw).hexdigest()[:12]
+    return hashlib.md5(raw).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -174,7 +174,9 @@ def extract_unit_positions_task(
               AND UnitId IS NOT NULL
         """,
     )
-    log(f"{len(unit_ids)} unidades encontradas no histórico BQ (MAX(data_particao) - {lookback}d)")
+    log(
+        f"{len(unit_ids)} unidades encontradas no histórico BQ (MAX(data_particao) - {lookback}d)"
+    )
 
     if not unit_ids:
         log("Nenhuma unidade no histórico BQ.", level="warning")
@@ -242,7 +244,9 @@ def extract_qmd_details_task(
               AND Id IS NOT NULL
         """,
     )
-    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (MAX(data_particao) - {HASH_REGISTRY_LOOKBACK_DAYS}d) — buscando detalhes...")
+    log(
+        f"{len(qmd_ids)} QMDs encontrados no histórico BQ (MAX(data_particao) - {HASH_REGISTRY_LOOKBACK_DAYS}d) — buscando detalhes..."
+    )
 
     if not qmd_ids:
         log("Nenhum QMD no histórico BQ.", level="warning")
@@ -304,7 +308,9 @@ def extract_qmd_kml_task(
               AND Id IS NOT NULL
         """,
     )
-    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (MAX(data_particao) - {HASH_REGISTRY_LOOKBACK_DAYS}d) — buscando KMLs...")
+    log(
+        f"{len(qmd_ids)} QMDs encontrados no histórico BQ (MAX(data_particao) - {HASH_REGISTRY_LOOKBACK_DAYS}d) — buscando KMLs..."
+    )
 
     if not qmd_ids:
         log("Nenhum QMD no histórico BQ.", level="warning")
