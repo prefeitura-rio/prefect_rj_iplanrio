@@ -8,17 +8,20 @@ from zoneinfo import ZoneInfo
 SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
 
 # Paginação e concorrência
-DEFAULT_PAGE_SIZE: Final = 500
-DEFAULT_CONCURRENCY: Final = 10
+DEFAULT_PAGE_SIZE: Final = 100
+DEFAULT_CONCURRENCY: Final = 5
 
 # Timeouts HTTP (segundos)
-API_TIMEOUT: Final = 60.0
+API_TIMEOUT: Final = 120.0
 API_CONNECT_TIMEOUT: Final = 10.0
 
-# Retry (tempos em segundos)
-MAX_RETRIES: Final = 3
+# Retry por request (tenacity) — tempos em segundos
+MAX_RETRIES: Final = 5
 RETRY_MIN_WAIT: Final = 1
-RETRY_MAX_WAIT: Final = 10
+RETRY_MAX_WAIT: Final = 60
+
+# Retry por página — rounds extras após o gather inicial falhar em alguma página
+MAX_PAGE_RETRIES: Final = 2
 
 # Endpoints: table_id → path da API
 # Ordem reflete o schedule de execução (ver prefect.yaml).
@@ -32,7 +35,6 @@ ENDPOINT_MAP: Final[dict[str, str]] = {
     "ocorrencias_historico": "/api/ocorrencias/historico",
     # 02:45–02:55 — sem dependências, pequenos
     "qmd_servicos": "/api/qmd/servicos",
-    "qmd_missoes": "/api/qmd/missao",
     "qmd_plano": "/api/qmd/plano",
     # 03:00 — alta frequência (a cada 5 min)
     "ocorrencias_ativas_v2": "/api/ocorrencias/ativas/v2",

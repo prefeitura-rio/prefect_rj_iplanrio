@@ -23,6 +23,7 @@ from pipelines.rj_segur__forca_municipal.client import FMApi
 from pipelines.rj_segur__forca_municipal.constants import (
     DEFAULT_CONCURRENCY,
     DEFAULT_PAGE_SIZE,
+    HASH_REGISTRY_LOOKBACK_DAYS,
     SP_TZ,
     TMP_BASE,
 )
@@ -156,19 +157,22 @@ def extract_unit_positions_task(
 
     log(f"Período: {data_inicio} {hora_inicio} → {data_fim} {hora_fim}")
 
+    n_days = (date.fromisoformat(data_fim) - date.fromisoformat(data_inicio)).days
+    lookback = HASH_REGISTRY_LOOKBACK_DAYS + n_days
+    _tbl = f"`{project_id}.{dataset_id}_staging.unidades_historico`"
     unit_ids = query_distinct_ids(
         project_id=project_id,
         query=f"""
             SELECT DISTINCT UnitId
-            FROM `{project_id}.{dataset_id}_staging.unidades_historico`
-            WHERE data_particao BETWEEN DATE_SUB(DATE('{data_inicio}'), INTERVAL 7 DAY)
-                                    AND DATE('{data_fim}')
+            FROM {_tbl}
+            WHERE DATE(data_particao) >= DATE_SUB(
+                DATE((SELECT MAX(data_particao) FROM {_tbl})),
+                INTERVAL {lookback} DAY
+            )
               AND UnitId IS NOT NULL
         """,
     )
-    log(
-        f"{len(unit_ids)} unidades encontradas no histórico BQ ({data_inicio} - 7 → {data_fim})"
-    )
+    log(f"{len(unit_ids)} unidades encontradas no histórico BQ (MAX(data_particao) - {lookback}d)")
 
     if not unit_ids:
         log("Nenhuma unidade no histórico BQ.", level="warning")
@@ -221,16 +225,20 @@ def extract_qmd_details_task(
 ) -> pd.DataFrame:
     """Busca detalhes completos de todos os QMDs históricos (missões, serviços, execuções)."""
 
+    _tbl = f"`{project_id}.{dataset_id}_staging.qmd`"
     qmd_ids = query_distinct_ids(
         project_id=project_id,
         query=f"""
             SELECT DISTINCT Id
-            FROM `{project_id}.{dataset_id}_staging.qmd`
-            WHERE data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+            FROM {_tbl}
+            WHERE DATE(data_particao) >= DATE_SUB(
+                DATE((SELECT MAX(data_particao) FROM {_tbl})),
+                INTERVAL {HASH_REGISTRY_LOOKBACK_DAYS} DAY
+            )
               AND Id IS NOT NULL
         """,
     )
-    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (D-7) — buscando detalhes...")
+    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (MAX(data_particao) - {HASH_REGISTRY_LOOKBACK_DAYS}d) — buscando detalhes...")
 
     if not qmd_ids:
         log("Nenhum QMD no histórico BQ.", level="warning")
@@ -279,16 +287,20 @@ def extract_qmd_kml_task(
 ) -> pd.DataFrame:
     """Busca KMLs de todos os QMDs históricos e extrai geometrias e metadados."""
 
+    _tbl = f"`{project_id}.{dataset_id}_staging.qmd`"
     qmd_ids = query_distinct_ids(
         project_id=project_id,
         query=f"""
             SELECT DISTINCT Id
-            FROM `{project_id}.{dataset_id}_staging.qmd`
-            WHERE data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 7 DAY)
+            FROM {_tbl}
+            WHERE DATE(data_particao) >= DATE_SUB(
+                DATE((SELECT MAX(data_particao) FROM {_tbl})),
+                INTERVAL {HASH_REGISTRY_LOOKBACK_DAYS} DAY
+            )
               AND Id IS NOT NULL
         """,
     )
-    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (D-7) — buscando KMLs...")
+    log(f"{len(qmd_ids)} QMDs encontrados no histórico BQ (MAX(data_particao) - {HASH_REGISTRY_LOOKBACK_DAYS}d) — buscando KMLs...")
 
     if not qmd_ids:
         log("Nenhum QMD no histórico BQ.", level="warning")
@@ -394,9 +406,8 @@ def save_partitions_task(
     O registro do hash no BQ é responsabilidade do flow, após upload bem-sucedido.
     Retorna SaveResult com path, hash e datas, ou None se o hash já estava registrado.
     """
-    df = df.sort_values(by=sorted(df.columns), na_position="first").reset_index(
-        drop=True
-    )
+    df.sort_values(by=sorted(df.columns), na_position="first", inplace=True)
+    df.reset_index(drop=True, inplace=True)
 
     content_hash = _content_hash(df)
 
@@ -414,7 +425,6 @@ def save_partitions_task(
     now = datetime.now(tz=SP_TZ).replace(tzinfo=None)
     partition_date = now.date()
 
-    df = df.copy()
     df["id_hash"] = content_hash
     df["updated_at"] = now
 
