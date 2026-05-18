@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Flow unificado para dump de tabelas do banco de dados SISCOR - SECONSERVA.
+Flow unificado para dump de tabelas do banco de dados SISCOR - SECONSERVA
 
 Este flow é responsável por extrair dados do banco SQL Server SISCOR
 (Sistema de Conservação e Obras) e carregar no BigQuery. Processa qualquer
