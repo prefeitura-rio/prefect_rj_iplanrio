@@ -26,6 +26,7 @@ from pipelines.rj_segur__forca_municipal.constants import (
     API_CONNECT_TIMEOUT,
     API_TIMEOUT,
     DEFAULT_PAGE_SIZE,
+    MAX_PAGE_RETRIES,
     MAX_RETRIES,
     RETRY_MAX_WAIT,
     RETRY_MIN_WAIT,
@@ -41,9 +42,17 @@ def _is_retryable(exc: BaseException) -> bool:
 
 def _log_retry(retry_state: RetryCallState) -> None:
     exc = retry_state.outcome.exception() if retry_state.outcome else None
+    args = retry_state.args  # (self, method, path)
+    self_ = args[0] if len(args) > 0 else None
+    method = args[1] if len(args) > 1 else "?"
+    path = args[2] if len(args) > 2 else "?"
+    params = retry_state.kwargs.get("params")
+    base_url = getattr(self_, "_base_url", "?")
+    params_str = f" params={params}" if params else ""
+    n = retry_state.attempt_number
     log(
-        f"Tentativa {retry_state.attempt_number}/{MAX_RETRIES} falhou"
-        f" ({type(exc).__name__}: {exc}) — retentando...",
+        f"↺ [{n}/{MAX_RETRIES}] {method} {base_url}{path}{params_str}"
+        f" — {type(exc).__name__}: {exc}",
         level="warning",
     )
 
@@ -139,10 +148,123 @@ class FMApi:
         return resp
 
     async def get_json(self, path: str, params: Optional[dict] = None) -> dict:
-        return (await self._request("GET", path, params=params)).json()
+        return (await self._request(method="GET", path=path, params=params)).json()
 
     async def get_text(self, path: str, params: Optional[dict] = None) -> str:
-        return (await self._request("GET", path, params=params)).text
+        return (await self._request(method="GET", path=path, params=params)).text
+
+    async def get_first(
+        self,
+        path: str,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        extra_params: Optional[dict] = None,
+        sem: Optional[asyncio.Semaphore] = None,
+    ) -> tuple[int, list[dict]]:
+        """Busca página 1 e retorna (total_pages, first_items)."""
+        ctx = sem or asyncio.Semaphore(1)
+        full_url = f"{self._base_url}{path}"
+        extra_str = (
+            ", ".join(f"{k}={v}" for k, v in extra_params.items())
+            if extra_params
+            else ""
+        )
+        params: dict = {"page": 1, "pageSize": page_size}
+        if extra_params:
+            params.update(extra_params)
+
+        async with ctx:
+            first = await self.get_json(path=path, params=params)
+
+        items: list[dict] = list(first.get("data", []))
+        total_pages: int = first.get("totalPages", 1)
+        extra_log = f", {extra_str}" if extra_str else ""
+        pct = round(1 / total_pages * 100) if total_pages else 100
+        log(
+            f"GET {full_url}"
+            f" [página 1/{total_pages} ({pct}%), pageSize={page_size}{extra_log}]"
+            f" → {len(items)} itens"
+        )
+        return total_pages, items
+
+    async def get_pages_range(
+        self,
+        path: str,
+        page_start: int,
+        page_end: int,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        extra_params: Optional[dict] = None,
+        sem: Optional[asyncio.Semaphore] = None,
+        max_page_retries: int = MAX_PAGE_RETRIES,
+    ) -> list[dict]:
+        """
+        Busca páginas [page_start, page_end] concorrentemente. Retorna em ordem de página.
+
+        Páginas que falham são reagrupadas em rounds adicionais (max_page_retries).
+        Levanta RuntimeError se ainda houver falhas após todos os rounds.
+        """
+        if page_start > page_end:
+            return []
+
+        ctx = sem or asyncio.Semaphore(100)
+        full_url = f"{self._base_url}{path}"
+        extra_str = (
+            ", ".join(f"{k}={v}" for k, v in extra_params.items())
+            if extra_params
+            else ""
+        )
+        extra_log = f", {extra_str}" if extra_str else ""
+
+        total_in_range = page_end - page_start + 1
+
+        async def _fetch(page: int) -> list[dict]:
+            p: dict = {"page": page, "pageSize": page_size}
+            if extra_params:
+                p.update(extra_params)
+            async with ctx:
+                body = await self.get_json(path=path, params=p)
+            page_items: list[dict] = body.get("data", [])
+            pct = round((page - page_start + 1) / total_in_range * 100)
+            log(
+                f"GET {full_url}"
+                f" [página {page}/{page_end} ({pct}%), pageSize={page_size}{extra_log}]"
+                f" → {len(page_items)} itens"
+            )
+            return page_items
+
+        pages_map: dict[int, list[dict]] = {}
+        pending: set[int] = set(range(page_start, page_end + 1))
+
+        for attempt in range(max_page_retries + 1):
+            if not pending:
+                break
+            if attempt > 0:
+                log(
+                    f"↺ Round {attempt}/{max_page_retries} — {len(pending)} página(s)"
+                    f" pendentes: {sorted(pending)}",
+                    level="warning",
+                )
+            outcomes = await asyncio.gather(
+                *[_fetch(p) for p in sorted(pending)],
+                return_exceptions=True,
+            )
+            still_pending: set[int] = set()
+            for page, outcome in zip(sorted(pending), outcomes):
+                if isinstance(outcome, Exception):
+                    still_pending.add(page)
+                else:
+                    pages_map[page] = outcome  # type: ignore[assignment]
+            pending = still_pending
+
+        if pending:
+            raise RuntimeError(
+                f"GET {full_url} — {len(pending)} página(s) falharam definitivamente"
+                f" após {max_page_retries + 1} tentativa(s): páginas {sorted(pending)}"
+            )
+
+        items: list[dict] = []
+        for page in range(page_start, page_end + 1):
+            items.extend(pages_map.pop(page))
+        return items
 
     async def get_paginated(
         self,
@@ -150,56 +272,27 @@ class FMApi:
         page_size: int = DEFAULT_PAGE_SIZE,
         extra_params: Optional[dict] = None,
         sem: Optional[asyncio.Semaphore] = None,
+        max_page_retries: int = MAX_PAGE_RETRIES,
     ) -> list[dict]:
-        """Busca página 1, descobre totalPages, paraleliza o restante."""
-        ctx = sem or asyncio.Semaphore(100)
-        full_url = f"{self._base_url}{path}"
-
-        extra_str = (
-            ", ".join(f"{k}={v}" for k, v in extra_params.items())
-            if extra_params
-            else ""
+        """Busca todas as páginas de uma vez. Mantido para retrocompatibilidade."""
+        total_pages, first_items = await self.get_first(
+            path=path, page_size=page_size, extra_params=extra_params, sem=sem
         )
-
-        params: dict = {"page": 1, "pageSize": page_size}
-        if extra_params:
-            params.update(extra_params)
-
-        async with ctx:
-            first = await self.get_json(path, params=params)
-
-        items: list[dict] = list(first.get("data", []))
-        total_pages: int = first.get("totalPages", 1)
-
-        extra_log = f", {extra_str}" if extra_str else ""
-        log(
-            f"GET {full_url}"
-            f" [page=1/{total_pages}, pageSize={page_size}{extra_log}]"
-            f" → {len(items)} itens"
-        )
-
         if total_pages <= 1:
-            return items
-
+            return first_items
+        full_url = f"{self._base_url}{path}"
         log(f"GET {full_url} — {total_pages} páginas, buscando em paralelo...")
-
-        async def _fetch(page: int) -> list[dict]:
-            p: dict = {"page": page, "pageSize": page_size}
-            if extra_params:
-                p.update(extra_params)
-            async with ctx:
-                body = await self.get_json(path, params=p)
-            page_items: list[dict] = body.get("data", [])
-            log(
-                f"GET {full_url}"
-                f" [page={page}/{total_pages}, pageSize={page_size}{extra_log}]"
-                f" → {len(page_items)} itens"
-            )
-            return page_items
-
-        results = await asyncio.gather(*[_fetch(p) for p in range(2, total_pages + 1)])
-        for r in results:
-            items.extend(r)
-
-        log(f"GET {full_url} — total: {len(items)} itens em {total_pages} página(s)")
-        return items
+        rest = await self.get_pages_range(
+            path=path,
+            page_start=2,
+            page_end=total_pages,
+            page_size=page_size,
+            extra_params=extra_params,
+            sem=sem,
+            max_page_retries=max_page_retries,
+        )
+        log(
+            f"GET {full_url} — total: {len(first_items) + len(rest)} itens"
+            f" em {total_pages} página(s)"
+        )
+        return first_items + rest
