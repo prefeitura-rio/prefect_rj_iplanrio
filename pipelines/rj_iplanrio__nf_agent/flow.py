@@ -162,7 +162,8 @@ def nf_processing_flow(
     pending = reader.count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
-    if pending > 0:
+    batch_did_work = (pdfs_processed + pdfs_failed) > 0
+    if pending > 0 and batch_did_work:
         from prefect.deployments import run_deployment  # noqa: PLC0415
 
         print(f"[Flow] Triggering next batch (deployment_id={deployment_id})")
@@ -185,6 +186,8 @@ def nf_processing_flow(
             },
             timeout=0,
         )
+    elif pending > 0:
+        print("[Flow] Batch processed nothing despite pending docs — all remaining may be at max retries. Stopping chain.")
     else:
         print("[Flow] Queue exhausted — no more batches to trigger")
 
