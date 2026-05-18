@@ -51,17 +51,9 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-    # ========================================
-    # TABELAS DE PROCESSOS DE OBRAS - SISCOR
-    # ========================================
-
-    # Tabela: processo_autorizacao_obra
-    # Descrição: Processos de autorização de obras públicas e privadas
-    # Contém informações sobre requerentes, executores, pareceres, localização
-    # e situação dos processos de obras da SECONSERVA
-    - interval: "86400" # Executa diariamente (24h em segundos)
-      anchor_date: "2022-12-19T01:00:00" # Data de início em UTC-3 (America/Sao_Paulo)
-      timezone: America/Sao_Paulo
-      slug: processo-autorizacao-obra-daily
-      parameters:
-        table_id: processo_autorizacao_obra
+      - interval: "86400" # Executa diariamente (24h em segundos)
+        anchor_date: "2022-12-19T01:00:00" # Data de início em UTC-3 (America/Sao_Paulo)
+        timezone: America/Sao_Paulo
+        slug: processo-autorizacao-obra-daily
+        parameters:
+          table_id: processo_autorizacao_obra
