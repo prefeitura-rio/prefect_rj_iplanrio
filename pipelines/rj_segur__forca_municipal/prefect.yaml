@@ -84,14 +84,6 @@ deployments:
           dump_mode: append
 
       - interval: 86400
-        anchor_date: "2025-01-01T02:50:00"
-        timezone: America/Sao_Paulo
-        slug: qmd_missoes
-        parameters:
-          table_id: qmd_missoes
-          dump_mode: append
-
-      - interval: 86400
         anchor_date: "2025-01-01T02:55:00"
         timezone: America/Sao_Paulo
         slug: qmd_plano
