@@ -34,16 +34,16 @@ O parâmetro `table_id` do flow determina qual endpoint é consumido e qual task
 
 | `table_id` | Endpoint | Schedule (BRT) | Tipo | Task |
 |---|---|---|---|---|
-| `unidades_historico` | `/api/unidades/historico` | 02:00 diário | snapshot | standard |
-| `qmd` | `/api/qmd` | 02:20 diário | snapshot | standard |
-| `ocorrencias_historico` | `/api/ocorrencias/historico` | 02:25 diário | snapshot | standard |
-| `qmd_servicos` | `/api/qmd/servicos` | 02:45 diário | snapshot | standard |
+| `ocorrencias_ativas_v2` | `/api/ocorrencias/ativas/v2` | 00:00 a cada 5 min | série | standard |
+| `unidades_historico` | `/api/unidades/historico` | 01:00 diário | snapshot | standard |
+| `qmd` | `/api/qmd` | 01:20 diário | snapshot | standard |
+| `ocorrencias_historico` | `/api/ocorrencias/historico` | 01:25 diário | snapshot | standard |
+| `qmd_servicos` | `/api/qmd/servicos` | 01:45 diário | snapshot | standard |
+| `qmd_plano` | `/api/qmd/plano` | 01:50 diário | snapshot | standard |
+| `unit_positions` | `/api/unit/positions` | 03:00 diário | snapshot por data GPS | unit_positions |
+| `qmd_detalhes` | `/api/qmd/{id}` | 03:20 diário | snapshot | qmd_details |
+| `qmd_kml` | `/api/qmd/{id}/kml` | 03:40 diário | snapshot | qmd_kml |
 | `qmd_missoes` | `/api/qmd/missao` | — sem schedule ⚠️ | snapshot | standard |
-| `qmd_plano` | `/api/qmd/plano` | 02:55 diário | snapshot | standard |
-| `ocorrencias_ativas_v2` | `/api/ocorrencias/ativas/v2` | a cada 5 min | série | standard |
-| `unit_positions` | `/api/unit/positions` | 04:00 diário | snapshot por data GPS | unit_positions |
-| `qmd_detalhes` | `/api/qmd/{id}` | 04:20 diário | snapshot | qmd_details |
-| `qmd_kml` | `/api/qmd/{id}/kml` | 04:40 diário | snapshot | qmd_kml |
 | `unidades_ativas` | `/api/unidades/ativas` | — sem schedule | série | standard |
 | `ocorrencias_ativas` | `/api/ocorrencias/ativas` | — sem schedule | série | standard |
 | `qmd_ativos` | `/api/qmd/ativos` | — sem schedule | série | standard |
@@ -56,7 +56,7 @@ O parâmetro `table_id` do flow determina qual endpoint é consumido e qual task
 
 **Série** (`ocorrencias_ativas_v2`, `unidades_ativas`, `ocorrencias_ativas`): sem pre-delete. O suffix do arquivo inclui o timestamp do run, acumulando múltiplos snapshots intradiários na mesma partição.
 
-**Dependências de schedule**: `unit_positions` (04:00) aguarda 2 h após `unidades_historico` (02:00). `qmd_detalhes` e `qmd_kml` aguardam 2 h e 2 h20 após `qmd` (02:20), respectivamente.
+**Dependências de schedule**: `unit_positions` (03:00) aguarda 2 h após `unidades_historico` (01:00). `qmd_detalhes` e `qmd_kml` aguardam 2 h e 2 h20 após `qmd` (01:20), respectivamente.
 
 ---
 
