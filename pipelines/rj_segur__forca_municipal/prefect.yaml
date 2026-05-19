@@ -49,9 +49,19 @@ deployments:
         image_pull_policy: Always
 
     schedules:
+      # ── Alta frequência (snapshot de estado atual) ────────────────────────
+      - interval: 300
+        anchor_date: "2025-01-01T00:00:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: ocorrencias_ativas_v2
+        parameters:
+          table_id: ocorrencias_ativas_v2
+          dump_mode: append
+
+
       # ── Históricos (lentos, sem dependentes, primeira janela) ──────────────
       - interval: 86400
-        anchor_date: "2025-01-01T02:00:00"
+        anchor_date: "2025-01-01T01:00:00-03:00"
         timezone: America/Sao_Paulo
         slug: unidades_historico
         parameters:
@@ -59,7 +69,7 @@ deployments:
           dump_mode: append
 
       - interval: 86400
-        anchor_date: "2025-01-01T02:20:00"
+        anchor_date: "2025-01-01T01:20:00-03:00"
         timezone: America/Sao_Paulo
         slug: qmd
         parameters:
@@ -67,7 +77,7 @@ deployments:
           dump_mode: append
 
       - interval: 86400
-        anchor_date: "2025-01-01T02:25:00"
+        anchor_date: "2025-01-01T01:25:00-03:00"
         timezone: America/Sao_Paulo
         slug: ocorrencias_historico
         parameters:
@@ -76,7 +86,7 @@ deployments:
 
       # ── Sem dependências (pequenos, 5 min de intervalo) ───────────────────
       - interval: 86400
-        anchor_date: "2025-01-01T02:45:00"
+        anchor_date: "2025-01-01T01:45:00-03:00"
         timezone: America/Sao_Paulo
         slug: qmd_servicos
         parameters:
@@ -84,26 +94,17 @@ deployments:
           dump_mode: append
 
       - interval: 86400
-        anchor_date: "2025-01-01T02:55:00"
+        anchor_date: "2025-01-01T01:50:00-03:00"
         timezone: America/Sao_Paulo
         slug: qmd_plano
         parameters:
           table_id: qmd_plano
           dump_mode: append
 
-      # ── Alta frequência (snapshot de estado atual) ────────────────────────
-      - interval: 300
-        anchor_date: "2025-01-01T03:00:00"
-        timezone: America/Sao_Paulo
-        slug: ocorrencias_ativas_v2
-        parameters:
-          table_id: ocorrencias_ativas_v2
-          dump_mode: append
-
       # ── Downstream (dependem de upstream acima, janela mín. 2h) ──────────
-      # unit_positions depende de unidades_historico (02:00 → 04:00 = 2h)
+      # unit_positions depende de unidades_historico (01:00 → 03:00 = 2h)
       - interval: 86400
-        anchor_date: "2025-01-01T04:00:00"
+        anchor_date: "2025-01-01T03:00:00-03:00"
         timezone: America/Sao_Paulo
         slug: unit_positions
         parameters:
@@ -111,18 +112,18 @@ deployments:
           dump_mode: append
           # data_inicio e data_fim omitidos → resolve D-1 automaticamente
 
-      # qmd_detalhes depende de qmd (02:20 → 04:20 = 2h)
+      # qmd_detalhes depende de qmd (01:20 → 03:20 = 2h)
       - interval: 86400
-        anchor_date: "2025-01-01T04:20:00"
+        anchor_date: "2025-01-01T03:20:00-03:00"
         timezone: America/Sao_Paulo
         slug: qmd_detalhes
         parameters:
           table_id: qmd_detalhes
           dump_mode: append
 
-      # qmd_kml depende de qmd (02:20 → 04:40 = 2h20)
+      # qmd_kml depende de qmd (01:20 → 03:40 = 2h20)
       - interval: 86400
-        anchor_date: "2025-01-01T04:40:00"
+        anchor_date: "2025-01-01T03:40:00-03:00"
         timezone: America/Sao_Paulo
         slug: qmd_kml
         parameters:
