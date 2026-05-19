@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Utilitários gerais do pipeline rj_segur__forca_municipal."""
 
+import hashlib
+import json
 from datetime import date, datetime, timedelta
 from typing import Generator, Iterator, Optional
 
@@ -8,6 +10,23 @@ from fastkml import Placemark
 from iplanrio.pipelines_utils.logging import log
 
 from pipelines.rj_segur__forca_municipal.constants import SP_TZ
+
+
+def _add_id_hash(data: list[dict]) -> list[dict]:
+    """Adiciona id_hash a cada row com base nos dados brutos da API.
+
+    Hasheado antes da criação do DataFrame para evitar inconsistências de dtype
+    inference do pandas (ex: coluna inferida como int64 num run e float64 em outro
+    quando None aparece). json.dumps com sort_keys garante representação canônica
+    e determinística independente de tipo ou ordem de chaves.
+
+    Usa os 32 chars do MD5 (64 bits) — suficiente para o volume dessa API.
+    """
+    for row in data:
+        row["id_hash"] = hashlib.md5(
+            json.dumps(row, sort_keys=True, ensure_ascii=False).encode()
+        ).hexdigest()
+    return data
 
 
 def _parse_date_range(data_inicio: str, data_fim: str) -> tuple[str, str]:
