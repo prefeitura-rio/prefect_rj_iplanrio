@@ -1,0 +1,68 @@
+name: rj_smfp__porte_empresa
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smfp__porte_empresa-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smfp__porte_empresa/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # Deployment de staging para testes
+  - name: rj-smfp--porte-empresa--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smfp__porte_empresa/flow.py:rj_smfp__porte_empresa
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__porte_empresa -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  # Deployment de produção com schedule semanal
+  - name: rj-smfp--porte-empresa--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smfp__porte_empresa/flow.py:rj_smfp__porte_empresa
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__porte_empresa -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # ========================================
+    # TABELA: situacao_cadastral
+    # ========================================
+
+    # Tabela: situacao_cadastral
+    # Descrição: Dados de CNPJ, Razão Social, Porte e Situação Cadastral das empresas
+    # Fonte: Receita Federal (SDI.ReceitaFederal.Vw_PorteEmpresa_Sigma)
+    # Frequência: Semanal (a cada 7 dias)
+    # Particionamento: Mensal por dt_SituacaoCadastral
+    - interval: 604800  # 7 dias em segundos (7 * 24 * 60 * 60)
+      anchor_date: "2022-10-30T23:00:00"  # Data original do schedule Prefect 1.4
+      timezone: America/Sao_Paulo
+      slug: situacao-cadastral-weekly
+      parameters:
+        table_id: situacao_cadastral
