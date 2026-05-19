@@ -20,7 +20,7 @@ def _add_id_hash(data: list[dict]) -> list[dict]:
     quando None aparece). json.dumps com sort_keys garante representação canônica
     e determinística independente de tipo ou ordem de chaves.
 
-    Usa os 32 chars do MD5 (64 bits) — suficiente para o volume dessa API.
+    Usa os 32 chars do MD5 (128 bits) — suficiente para o volume dessa API.
     """
     for row in data:
         row["id_hash"] = hashlib.md5(
