@@ -16,13 +16,15 @@ from typing import Optional
 import httpx
 import pandas as pd
 from fastkml import KML
-from pandas.core.util.hashing import hash_pandas_object
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
 from prefect import task
 
-from pipelines.rj_segur__forca_municipal.bq import delete_gcs_partition, query_distinct_ids
+from pipelines.rj_segur__forca_municipal.bq import (
+    delete_gcs_partition,
+    query_distinct_ids,
+)
 from pipelines.rj_segur__forca_municipal.client import FMApi
 from pipelines.rj_segur__forca_municipal.constants import (
     DEFAULT_CONCURRENCY,
@@ -37,6 +39,7 @@ from pipelines.rj_segur__forca_municipal.constants import (
     TMP_BASE,
 )
 from pipelines.rj_segur__forca_municipal.utils import (
+    _add_id_hash,
     _cycle_prefix,
     _date_range,
     _iter_placemarks,
@@ -76,12 +79,9 @@ def _process_cycle(
     if not data:
         return False
 
-    df = pd.DataFrame(data)
+    data = _add_id_hash(data=data)
+    df = pd.DataFrame(data=data, dtype=object)
     row_count, col_count = len(df), len(df.columns)
-
-    # id_hash: calculado antes de adicionar updated_at para refletir apenas dados da API
-    hashes = hash_pandas_object(df, index=False)
-    df["id_hash"] = [f"{h:016x}" for h in hashes]
 
     # updated_at: mesmo timestamp para todos os ciclos do run
     df["updated_at"] = updated_at
@@ -379,7 +379,9 @@ def run_unit_positions_task(
                 async def _day_batches(day: str) -> AsyncGenerator[list[dict], None]:
                     nonlocal errors
                     for batch_start in range(0, n_units, unit_id_concurrency):
-                        batch_ids = unit_ids[batch_start : batch_start + unit_id_concurrency]
+                        batch_ids = unit_ids[
+                            batch_start : batch_start + unit_id_concurrency
+                        ]
                         outcomes = await asyncio.gather(
                             *[_fetch_unit_day(uid=uid, day=day) for uid in batch_ids],
                             return_exceptions=True,
