@@ -604,14 +604,15 @@ schedules:
             CASE
             WHEN pf.telefone.principal.estrategia_envio = "ENVIAR" THEN 0
             WHEN pf.telefone.principal.estrategia_envio = "TESTAR" THEN 1
-            ELSE 2
+            WHEN pf.telefone.principal.estrategia_envio = "EVITAR" THEN 2
+            ELSE 3
             END AS phone_priority,
             pf.telefone.principal.estrategia_envio,
             pf.telefone.principal.qualidade
         FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
         WHERE pf.telefone.principal.qualidade = 'VALIDO'
             AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
-            AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
+            AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR", "EVITAR")
             AND pf.telefone.principal.tipo = "CELULAR"
             AND pf.telefone.principal.valor IS NOT NULL
             AND pf.menor_idade IS FALSE
@@ -713,10 +714,10 @@ schedules:
         elegiveis_divida_ativa AS (
         SELECT *
         FROM per_cpf
-        WHERE soma_divida_total <= 3500
+        WHERE soma_divida_total <= 6000
             AND esta_pagando = FALSE
-            AND idade < 60
-            AND dt_ultima_cda >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
+            AND idade <= 80
+            AND dt_ultima_cda >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 MONTH)
         ),
 
         -- ===================== 1.4) RANDOMIZAÇÃO DETERMINÍSTICA =====================
