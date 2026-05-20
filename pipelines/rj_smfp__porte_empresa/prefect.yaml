@@ -38,31 +38,31 @@ deployments:
         image_pull_policy: Always
 
   # Deployment de produção com schedule semanal
-  - name: rj-smfp--porte-empresa--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_smfp__porte_empresa/flow.py:rj_smfp__porte_empresa
-    work_pool:
-      name: k3s-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_smfp__porte_empresa -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
-        image_pull_policy: Always
+  # - name: rj-smfp--porte-empresa--prod
+  #   version: "{{ get-commit-hash.stdout }}"
+  #   entrypoint: pipelines/rj_smfp__porte_empresa/flow.py:rj_smfp__porte_empresa
+  #   work_pool:
+  #     name: k3s-pool
+  #     work_queue_name: default
+  #     job_variables:
+  #       image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+  #       command: uv run --package rj_smfp__porte_empresa -- prefect flow-run execute
+  #       secretName: prefect-jobs-secrets
+  #       image_pull_policy: Always
 
-    schedules:
-    # ========================================
-    # TABELA: situacao_cadastral
-    # ========================================
+  #   schedules:
+  #   # ========================================
+  #   # TABELA: situacao_cadastral
+  #   # ========================================
 
-    # Tabela: situacao_cadastral
-    # Descrição: Dados de CNPJ, Razão Social, Porte e Situação Cadastral das empresas
-    # Fonte: Receita Federal (SDI.ReceitaFederal.Vw_PorteEmpresa_Sigma)
-    # Frequência: Semanal (a cada 7 dias)
-    # Particionamento: Mensal por dt_SituacaoCadastral
-    - interval: 604800  # 7 dias em segundos (7 * 24 * 60 * 60)
-      anchor_date: "2022-10-30T23:00:00"  # Data original do schedule Prefect 1.4
-      timezone: America/Sao_Paulo
-      slug: situacao-cadastral-weekly
-      parameters:
-        table_id: situacao_cadastral
+  #   # Tabela: situacao_cadastral
+  #   # Descrição: Dados de CNPJ, Razão Social, Porte e Situação Cadastral das empresas
+  #   # Fonte: Receita Federal (SDI.ReceitaFederal.Vw_PorteEmpresa_Sigma)
+  #   # Frequência: Semanal (a cada 7 dias)
+  #   # Particionamento: Mensal por dt_SituacaoCadastral
+  #   - interval: 604800  # 7 dias em segundos (7 * 24 * 60 * 60)
+  #     anchor_date: "2022-10-30T23:00:00"  # Data original do schedule Prefect 1.4
+  #     timezone: America/Sao_Paulo
+  #     slug: situacao-cadastral-weekly
+  #     parameters:
+  #       table_id: situacao_cadastral
