@@ -3666,7 +3666,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.12.15" },
-    { name = "dbt-bigquery", specifier = ">=1.10.1" },
+    { name = "dbt-bigquery", specifier = "==1.11.1" },
     { name = "discord-py", specifier = ">=2.5.2" },
     { name = "gitpython", specifier = ">=3.1.44" },
     { name = "pip", specifier = ">=25.1.1" },
