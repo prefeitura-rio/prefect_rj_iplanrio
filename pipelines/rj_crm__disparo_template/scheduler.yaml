@@ -1320,7 +1320,7 @@ schedules:
                 WHERE cpf is not null
                     and cpf != '00000000000'
                 AND DATE(data_alta_internacao) between
-                        DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY) and CURRENT_DATE('America/Sao_Paulo')
+                        DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 2 DAY) and CURRENT_DATE('America/Sao_Paulo')
                         and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
                 ),
                 telefones as (
