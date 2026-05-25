@@ -953,13 +953,19 @@ def get_retry_destinations(
         ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
         others = get_value_from_case_insensitive_key(dest, 'others') or []
         to_number = get_value_from_case_insensitive_key(dest, 'to')
-        print(f"DEBUG dest {dest}")
+        log(f"DEBUG dest {dest}")
 
-        if (ext_id is None or str(ext_id) in failed_ids or to_number is None) and attempt_number > 0 and len(others) >= attempt_number:
+        # Condições de elegibilidade para retry: telefone faltando/inválido + retry attempt válido
+        is_ext_missing = (ext_id is None)
+        is_failed_id = (str(ext_id) in failed_ids)
+        is_to_number_missing = (to_number is None)
+        can_retry = (attempt_number > 0 and len(others) >= attempt_number)
+
+        if (is_ext_missing or is_failed_id or is_to_number_missing) and can_retry:
             new_dest = dest.copy()
             # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
             new_dest['to'] = others[attempt_number - 1]
-            print(f"DEBUG: new_dest alterado = {new_dest}")
+            log(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
         elif attempt_number == 0:
             retry_destinations.append(dest)            
