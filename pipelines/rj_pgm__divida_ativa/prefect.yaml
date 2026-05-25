@@ -409,17 +409,20 @@ deployments:
       timezone: America/Sao_Paulo
       slug: inscritos_divida_ativa
       parameters:
-        table_id: inscritos_divida_ativa
-        dump_mode: append
-        partition_columns: anoInscricao
-        partition_date_format: "%Y"
-        lower_bound_date: current_year
-        execute_query: |
-          SELECT
-            Nome,
-            Cpf_Cnpj,
-            Cpf_Cnpj_formatado,
-            anoInscricao,
-            valDebito,
-            ultima_atualizacao
-          FROM DAM_PRD.dbo.vwInscritosDividaAtiva
+              table_id: inscritos_divida_ativa
+              dump_mode: append
+              partition_columns: anoInscricao
+              partition_date_format: "%Y"
+              lower_bound_date: current_year
+              break_query_frequency: year
+              break_query_end: current_year
+              break_query_start: current_year
+              execute_query: |
+                SELECT
+                  Nome,
+                  Cpf_Cnpj,
+                  Cpf_Cnpj_formatado,
+                  anoInscricao,
+                  valDebito,
+                  ultima_atualizacao
+                FROM DAM_PRD.dbo.vwInscritosDividaAtiva
