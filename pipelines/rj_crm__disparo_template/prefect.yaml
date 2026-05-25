@@ -513,7 +513,7 @@ deployments:
             WITH celulares_validos AS (
             SELECT
                 cpf,
-                COALESCE(nome_social, nome) AS nome_rmi,
+                COALESCE(if(nome_social = "", null, nome_social), nome) AS nome_rmi,
                 pf.obito.indicador AS obito_indicador,
                 nascimento.data AS dt_nasc,
                 DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), nascimento.data, YEAR) AS idade,
@@ -537,6 +537,7 @@ deployments:
                 AND pf.menor_idade IS FALSE
                 AND pf.obito.indicador IS FALSE
                 AND nascimento.data IS NOT NULL
+                AND EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) NOT IN (1, 7)
             ),
 
             filtra_disparados AS (
@@ -554,7 +555,7 @@ deployments:
             -- filtra PF e nome antes do unnest
             SELECT
                 LPAD(CAST(p.cpf_cnpj AS STRING), 11, '0') AS cpf,
-                nome,
+                coalesce(nome_rmi, nome) as nome,
                 cdas_associadas,
                 tipo_pessoa,
                 saldo_devido_cdas,
@@ -820,7 +821,7 @@ deployments:
                 ),
                 remove_optout as (
                     select remove_duplicados.*,
-                    coalesce(pf.nome_social, pf.nome) as nome,
+                    COALESCE(if(pf.nome_social = "", null, pf.nome_social), pf.nome) AS nome,
                     from remove_duplicados
                     left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
                     where pf.telefone.principal.indicador_optout = false
@@ -1238,7 +1239,6 @@ deployments:
                 -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
                     and cpf != '00000000000'
-                    and len(cpf) = 11
                 AND DATE(data_alta_internacao) between
                         DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 2 DAY) and CURRENT_DATE('America/Sao_Paulo')
                         and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
