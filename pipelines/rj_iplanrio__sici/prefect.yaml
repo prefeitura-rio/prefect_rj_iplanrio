@@ -1,0 +1,62 @@
+name: rj_iplanrio__sici
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_iplanrio__sici-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_iplanrio__sici/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-iplanrio--sici--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_iplanrio__sici/flow.py:rj_iplanrio__sici
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__sici -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  - name: rj-iplanrio--sici--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_iplanrio__sici/flow.py:rj_iplanrio__sici
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_iplanrio__sici -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+      # Schedule diário para dump de órgãos do SICI
+      - interval: 86400  # Executa a cada 24 horas (1 dia)
+        anchor_date: "2024-07-17T18:00:00"  # Data de início do schedule (convertido de 2024-07-17 18h America/Sao_Paulo)
+        timezone: America/Sao_Paulo
+        slug: sici-orgaos-daily
+        parameters:
+          dataset_id: unidades_administrativas
+          table_id: orgaos
+          wsdl: "http://sici.rio.rj.gov.br/Servico/WebServiceSICI.asmx?wsdl"
+          dump_mode: overwrite
+          biglake_table: true
