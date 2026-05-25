@@ -1038,25 +1038,25 @@ deployments:
                 ,Cancelado
                 ,Obs
             FROM SMU_PRD.dbo.tbLIC_Aceitacoes
-      - interval: 86400
-        anchor_date: "2022-12-19T06:05:00"
-        timezone: America/Sao_Paulo
-        slug: georeferencia_endereco_obra_processo
-        parameters:
-          table_id: georeferencia_endereco_obra_processo
-          execute_query: |
-            SELECT
-            id_processo,
-            id_processo_sislic,
-            nu_processo,
-            cd_logradouro,
-            nu_porta,
-            nu_pal,
-            id_bairro_sislic,
-            id_ra_sislic,
-            no_bairro,
-            shape
-            FROM SMU_PRD.dbo.tbGEOSISLIC_processo
+      # - interval: 86400
+      #   anchor_date: "2022-12-19T06:05:00"
+      #   timezone: America/Sao_Paulo
+      #   slug: georeferencia_endereco_obra_processo
+      #   parameters:
+      #     table_id: georeferencia_endereco_obra_processo
+      #     execute_query: |
+      #       SELECT
+      #       id_processo,
+      #       id_processo_sislic,
+      #       nu_processo,
+      #       cd_logradouro,
+      #       nu_porta,
+      #       nu_pal,
+      #       id_bairro_sislic,
+      #       id_ra_sislic,
+      #       no_bairro,
+      #       shape
+      #       FROM SMU_PRD.dbo.tbGEOSISLIC_processo
       - interval: 86400
         anchor_date: "2022-12-19T06:10:00"
         timezone: America/Sao_Paulo
