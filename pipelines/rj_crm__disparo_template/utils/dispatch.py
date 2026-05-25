@@ -955,7 +955,7 @@ def get_retry_destinations(
         to_number = get_value_from_case_insensitive_key(dest, 'to')
         print(f"DEBUG dest {dest}")
 
-        if (ext_id is None or str(ext_id) in failed_ids or to_number is None) and len(others) >= attempt_number:
+        if (ext_id is None or str(ext_id) in failed_ids or to_number is None) and attempt_number > 0 and len(others) >= attempt_number:
             new_dest = dest.copy()
             # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
             new_dest['to'] = others[attempt_number - 1]
