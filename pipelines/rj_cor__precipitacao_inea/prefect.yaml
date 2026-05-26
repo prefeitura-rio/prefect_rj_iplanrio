@@ -35,12 +35,6 @@ deployments:
         command: uv run --package rj_cor__precipitacao_inea -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-    parameters:
-      dataset_id_pluviometric: "clima_pluviometro_staging"
-      table_id_pluviometric: "taxa_precipitacao_inea"
-      dataset_id_fluviometric: "clima_fluviometro_staging"
-      table_id_fluviometric: "lamina_agua_inea"
-      dump_mode: "append"
 
   - name: rj-cor--precipitacao-inea--prod
     version: "{{ get-commit-hash.stdout }}"

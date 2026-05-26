@@ -35,12 +35,6 @@ deployments:
         command: uv run --package rj_cor__precipitacao_alertario -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-    parameters:
-      dataset_id: "clima_pluviometro_staging"
-      table_id_pluviometric: "taxa_precipitacao_alertario"
-      table_id_meteorological: "meteorologia_alertario"
-      dump_mode_pluviometric: "append"
-      dump_mode_meteorological: "append"
 
   - name: rj-cor--precipitacao-alertario--prod
     version: "{{ get-commit-hash.stdout }}"
