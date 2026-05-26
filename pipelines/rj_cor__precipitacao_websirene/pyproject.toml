@@ -2,6 +2,7 @@
 name = "rj_cor__precipitacao_websirene"
 version = "0.1.0"
 description = "Pipeline precipitacao_websirene da rj_cor"
+
 dependencies = [
     "prefect_rj_iplanrio",
 ]
