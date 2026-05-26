@@ -1105,8 +1105,7 @@ schedules:
         where rn=1
 
   # Disparo SMS Puérperas Confirmação agendamento
-  - interval: 86400
-    anchor_date: "2021-01-01T15:00:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerpera-confirma-agendamento
@@ -1281,8 +1280,7 @@ schedules:
                 where celular_disparo is not null
 
   # Disparo SMS Puérperas D0 - Explicação do processo
-  - interval: 3600
-    anchor_date: "2021-01-01T15:10:00"
+  - cron: "0 14 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d0
@@ -1446,8 +1444,7 @@ schedules:
                 where celular_disparo is not null
 
   # Disparo SMS Puérperas D1, D3, D5 e D10 - Pesquisa 1
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d1-d3-d5-d10
@@ -1486,8 +1483,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D7 - Pesquisa 2
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d7
@@ -1522,8 +1518,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d13-d16-d19
@@ -1561,8 +1556,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D22 - Pesquisa 4
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d22
@@ -1597,8 +1591,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D25 e D28 - Pesquisa 5
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d25-d28
@@ -1635,8 +1628,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D34 - Pesquisa 6
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d34
@@ -1671,8 +1663,7 @@ schedules:
         query: *puerperas_query_template
 
  # Disparo SMS Puérperas D40 - Pesquisa 7
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d40
