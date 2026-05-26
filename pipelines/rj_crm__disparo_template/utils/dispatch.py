@@ -967,7 +967,8 @@ def get_retry_destinations(
             new_dest['to'] = others[attempt_number - 1]
             log(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
-        elif attempt_number == 0:
+        elif attempt_number == 0 and to_number is not None:
+            # Primeira tentativa: só adiciona se tiver telefone válido
             retry_destinations.append(dest)            
 
     log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
