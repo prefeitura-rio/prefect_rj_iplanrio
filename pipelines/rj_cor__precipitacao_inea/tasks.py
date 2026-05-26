@@ -185,7 +185,6 @@ def transform_inea_data_task(dfr: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFr
 
     # === Criar DataFrame Pluviométrico ===
     pluviometric_cols = [
-    pluviometric_cols = [
         "id_estacao",
         "data_medicao",
         "acumulado_chuva_15_min",
