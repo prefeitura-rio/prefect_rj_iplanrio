@@ -33,7 +33,6 @@ def rj_cor__meteorologia_inmet(
     dump_mode: str = "append",
     data_inicio: Optional[str] = "",
     data_fim: Optional[str] = "",
-    materialize_after_dump: bool = False,
 ):
     """
     Flow principal para coleta e carga de dados meteorológicos do INMET no BigQuery.

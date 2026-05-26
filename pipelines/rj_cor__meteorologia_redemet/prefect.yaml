@@ -58,35 +58,3 @@ deployments:
       table_id: meteorologia_redemet
       first_date: null
       last_date: null
-
-  - name: rj-cor--meteorologia-redemet-estacoes--staging
-    version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_cor__meteorologia_redemet/flow.py:rj_cor__meteorologia_redemet_estacoes
-    work_pool:
-      name: k3s-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cor__meteorologia_redemet -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
-        image_pull_policy: Always
-
-  - name: rj-cor--meteorologia-redemet-estacoes--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_cor__meteorologia_redemet/flow.py:rj_cor__meteorologia_redemet_estacoes
-    work_pool:
-      name: k3s-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cor__meteorologia_redemet -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
-        image_pull_policy: Always
-    schedules:
-      - interval: 2592000
-        anchor_date: "2023-01-01T00:12:00"
-        timezone: America/Sao_Paulo
-        slug: meteorologia-redemet-estacoes-monthly
-        parameters:
-          dataset_id: clima_estacao_meteorologica
-          table_id: estacoes_redemet
