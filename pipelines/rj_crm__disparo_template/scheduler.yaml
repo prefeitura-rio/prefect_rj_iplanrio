@@ -143,7 +143,7 @@ x-templates:
                     data_alta_internacao as CC_WT_DATA_ALTA,
                     date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
                 ) AS vars,
-                ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others,
                 CAST(cpf AS STRING) AS externalId
                 )
             ) AS destination_data
@@ -1272,7 +1272,7 @@ schedules:
                                 TIME(data_hora_agendamento_visita_maternidade) as HORA,
                                 time(data_hora_agendamento_visita_maternidade) as CC_WT_HORA
                             ) AS vars,
-                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others,
                             CAST(cpf AS STRING) AS externalId
                             )
                         ) AS destination_data
@@ -1437,7 +1437,7 @@ schedules:
                                 ) AS CC_WT_NOME,
                                 cpf AS CC_WT_CPF_CIDADAO
                             ) AS vars,
-                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others,
                             CAST(cpf AS STRING) AS externalId
                             )
                         ) AS destination_data
