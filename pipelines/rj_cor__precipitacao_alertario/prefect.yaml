@@ -1,0 +1,66 @@
+name: rj_cor__precipitacao_alertario
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_cor__precipitacao_alertario-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_cor__precipitacao_alertario/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-cor--precipitacao-alertario--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_cor__precipitacao_alertario/flow.py:rj_cor__precipitacao_alertario
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cor__precipitacao_alertario -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    parameters:
+      dataset_id: "clima_pluviometro_staging"
+      table_id_pluviometric: "taxa_precipitacao_alertario"
+      table_id_meteorological: "meteorologia_alertario"
+      dump_mode_pluviometric: "append"
+      dump_mode_meteorological: "append"
+
+  - name: rj-cor--precipitacao-alertario--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_cor__precipitacao_alertario/flow.py:rj_cor__precipitacao_alertario
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cor__precipitacao_alertario -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    schedules:
+      - interval: 120
+        anchor_date: "2021-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: precipitacao-alertario-2min
+        parameters:
+          dataset_id: "clima_pluviometro"
+          table_id_pluviometric: "taxa_precipitacao_alertario"
+          table_id_meteorological: "meteorologia_alertario"
+          dump_mode_pluviometric: "append"
+          dump_mode_meteorological: "append"
