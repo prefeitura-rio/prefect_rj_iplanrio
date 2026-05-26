@@ -3,16 +3,10 @@ name = "rj_cor__meteorologia_inmet"
 version = "0.1.0"
 description = "Pipeline para coleta de dados meteorológicos do INMET - COR"
 dependencies = [
-    "prefect>=3.0.0",
-    "pandas>=2.0.0",
+    "prefect_rj_iplanrio",
     "pendulum>=3.0.0",
-    "requests>=2.31.0",
-    "importlib_metadata>=8.0",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
 
-[tool.hatch.build.targets.wheel]
-packages = ["pipelines/rj_cor__meteorologia_inmet"]
