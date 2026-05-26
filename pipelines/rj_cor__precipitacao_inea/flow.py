@@ -108,7 +108,6 @@ def rj_cor__precipitacao_inea(
         dataset_id=dataset_id_pluviometric,
         table_id=table_id_pluviometric,
         dump_mode=dump_mode,
-        wait=prepath_pluviometric,
     )
 
     # Step 5b: Fazer upload de dados fluviométricos
@@ -118,7 +117,6 @@ def rj_cor__precipitacao_inea(
         dataset_id=dataset_id_fluviometric,
         table_id=table_id_fluviometric,
         dump_mode=dump_mode,
-        wait=prepath_fluviometric,
     )
 
     print("✅ Flow concluído com sucesso!")

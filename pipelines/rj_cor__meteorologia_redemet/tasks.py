@@ -294,8 +294,7 @@ def download_stations_data_task() -> pd.DataFrame:
         - Retorna estações de todo o Brasil (filtro para RJ será feito na transformação)
         - Dados incluem: código, nome, latitude, longitude, altitude
     """
-    # Obter token da API do REDEMET via variável de ambiente
-    # Em produção, usar: get_infisical_secret_task(secret_path="/", secret_name="REDEMET_TOKEN")["REDEMET_TOKEN"]
+
     redemet_token = getenv_or_action("REDEMET_TOKEN")
 
     base_url = f"https://api-redemet.decea.mil.br/aerodromos/?api_key={redemet_token}"
