@@ -99,7 +99,7 @@ def rj_cor__precipitacao_alertario(
     )
 
     # Step 4a: Injetar credenciais e fazer upload para BigQuery (dados pluviométricos)
-    print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id}.{table_id_pluviometric})...")
+    print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id_pluviometric}.{table_id_pluviometric})...")
     inject_bd_credentials_task(environment="prod")
     create_table_and_upload_to_gcs_task(
         data_path=str(prepath_pluviometric),
