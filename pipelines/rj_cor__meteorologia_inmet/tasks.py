@@ -109,7 +109,7 @@ def download_meteorological_data_task(data_inicio: str, data_fim: str) -> pd.Dat
     for id_estacao in estacoes_unicas:
         base_url = "https://apitempo.inmet.gov.br/token/estacao"
         url = f"{base_url}/{data_inicio}/{data_fim}/{id_estacao}/{token}"
-
+        print(f"Coletando dados da estação {id_estacao} para o período {data_inicio} a {data_fim}...")
         res = requests.get(url, timeout=30)
 
         if res.status_code != http_ok:

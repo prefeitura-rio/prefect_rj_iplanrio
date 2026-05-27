@@ -8,7 +8,7 @@ localizadas no município do Rio de Janeiro e carregar no BigQuery.
 Os dados incluem informações sobre temperatura, pressão, umidade, velocidade do vento,
 precipitação e radiação solar, coletados a cada hora.
 
-Migrado de Prefect 1.4 para Prefect 3.0.
+Migrado de Prefect 1.4 para Prefect 3.0..
 """
 
 from typing import Optional
