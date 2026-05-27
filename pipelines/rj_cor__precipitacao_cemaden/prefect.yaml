@@ -37,23 +37,23 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
-  - name: rj-cor--precipitacao-cemaden--prod
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_cor__precipitacao_cemaden/flow.py:rj_cor__precipitacao_cemaden
-    work_pool:
-      name: k3s-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: uv run --package rj_cor__precipitacao_cemaden -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
-        image_pull_policy: Always
-    schedules:
-      - interval: 300
-        anchor_date: "2023-01-01T00:01:00"
-        timezone: America/Sao_Paulo
-        slug: precipitacao-cemaden-5min
-        parameters:
-          dataset_id: "clima_pluviometro"
-          table_id: "taxa_precipitacao_cemaden"
-          dump_mode: "append"
+  # - name: rj-cor--precipitacao-cemaden--prod
+  #   version: "{{ get-commit-hash.stdout }}"
+  #   entrypoint: pipelines/rj_cor__precipitacao_cemaden/flow.py:rj_cor__precipitacao_cemaden
+  #   work_pool:
+  #     name: k3s-pool
+  #     work_queue_name: default
+  #     job_variables:
+  #       image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+  #       command: uv run --package rj_cor__precipitacao_cemaden -- prefect flow-run execute
+  #       secretName: prefect-jobs-secrets
+  #       image_pull_policy: Always
+  #   schedules:
+  #     - interval: 300
+  #       anchor_date: "2023-01-01T00:01:00"
+  #       timezone: America/Sao_Paulo
+  #       slug: precipitacao-cemaden-5min
+  #       parameters:
+  #         dataset_id: "clima_pluviometro"
+  #         table_id: "taxa_precipitacao_cemaden"
+  #         dump_mode: "append"

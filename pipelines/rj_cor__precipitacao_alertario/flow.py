@@ -6,8 +6,8 @@ Migrado de Prefect 1.4 para Prefect 3.0.
 """
 from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
-    inject_bd_credentials_task,
 )
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from prefect import flow
 
 from pipelines.rj_cor__precipitacao_alertario.tasks import (
@@ -104,7 +104,6 @@ def rj_cor__precipitacao_alertario(
         dataset_id=dataset_id,
         table_id=table_id_pluviometric,
         dump_mode=dump_mode_pluviometric,
-        wait=prepath_pluviometric,
     )
 
     # Step 4b: Fazer upload para BigQuery (dados meteorológicos)
@@ -114,7 +113,6 @@ def rj_cor__precipitacao_alertario(
         dataset_id=dataset_id,
         table_id=table_id_meteorological,
         dump_mode=dump_mode_meteorological,
-        wait=prepath_meteorological,
     )
 
     print("✅ Flow concluído com sucesso!")
@@ -122,5 +120,5 @@ def rj_cor__precipitacao_alertario(
     print(f"   - Dados meteorológicos salvos em: {dataset_id}.{table_id_meteorological}")
 
 
-# if __name__ == "__main__":
-#     rj_cor__precipitacao_alertario()
+if __name__ == "__main__":
+    rj_cor__precipitacao_alertario()
