@@ -20,7 +20,8 @@ from pipelines.rj_cor__precipitacao_alertario.tasks import (
 
 @flow(log_prints=True)
 def rj_cor__precipitacao_alertario(
-    dataset_id: str = "clima_pluviometro",
+    dataset_id_pluviometric: str = "clima_pluviometro",
+    dataset_id_meteorological: str = "clima_estacao_meteorologica",
     table_id_pluviometric: str = "taxa_precipitacao_alertario",
     table_id_meteorological: str = "meteorologia_alertario",
     dump_mode_pluviometric: str = "append",
@@ -38,7 +39,8 @@ def rj_cor__precipitacao_alertario(
     por data de medição.
 
     Args:
-        dataset_id: ID do dataset no BigQuery.
+        dataset_id_pluviometric: ID do dataset no BigQuery para dados pluviométricos.
+        dataset_id_meteorological: ID do dataset no BigQuery para dados meteorológicos.
         table_id_pluviometric: ID da tabela de dados pluviométricos.
         table_id_meteorological: ID da tabela de dados meteorológicos.
         dump_mode_pluviometric: Modo de salvamento para dados pluviométricos
@@ -101,23 +103,23 @@ def rj_cor__precipitacao_alertario(
     inject_bd_credentials_task(environment="prod")
     create_table_and_upload_to_gcs_task(
         data_path=str(prepath_pluviometric),
-        dataset_id=dataset_id,
+        dataset_id=dataset_id_pluviometric,
         table_id=table_id_pluviometric,
         dump_mode=dump_mode_pluviometric,
     )
 
     # Step 4b: Fazer upload para BigQuery (dados meteorológicos)
-    print(f"☁️  Fazendo upload dos dados meteorológicos para BigQuery ({dataset_id}.{table_id_meteorological})...")
+    print(f"☁️  Fazendo upload dos dados meteorológicos para BigQuery ({dataset_id_meteorological}.{table_id_meteorological})...")
     create_table_and_upload_to_gcs_task(
         data_path=str(prepath_meteorological),
-        dataset_id=dataset_id,
+        dataset_id=dataset_id_meteorological,
         table_id=table_id_meteorological,
         dump_mode=dump_mode_meteorological,
     )
 
     print("✅ Flow concluído com sucesso!")
-    print(f"   - Dados pluviométricos salvos em: {dataset_id}.{table_id_pluviometric}")
-    print(f"   - Dados meteorológicos salvos em: {dataset_id}.{table_id_meteorological}")
+    print(f"   - Dados pluviométricos salvos em: {dataset_id_pluviometric}.{table_id_pluviometric}")
+    print(f"   - Dados meteorológicos salvos em: {dataset_id_meteorological}.{table_id_meteorological}")
 
 
 if __name__ == "__main__":
