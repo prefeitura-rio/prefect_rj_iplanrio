@@ -97,11 +97,3 @@ def rj_cor__meteorologia_redemet(
         dump_mode="append",
     )
 
-
-    # Teste do flow de dados meteorológicos
-    rj_cor__meteorologia_redemet(
-        dataset_id="clima_estacao_meteorologica",
-        table_id="meteorologia_redemet",
-        first_date="2023-10-13",
-        last_date="2026-05-25",
-    )
