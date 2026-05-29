@@ -49,7 +49,7 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     schedules:
-      - interval: 300
+      - interval: 900
         anchor_date: "2023-01-01T00:01:00"
         timezone: America/Sao_Paulo
         slug: precipitacao-inea-5min
