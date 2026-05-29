@@ -150,7 +150,6 @@ deployments:
           break_query_frequency: month
           break_query_start: current_month
           break_query_end: current_month
-          offset: 1
           execute_query: |
             SELECT  tur_id,
                     alu_id,
