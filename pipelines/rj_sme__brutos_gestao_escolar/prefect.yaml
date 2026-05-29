@@ -76,8 +76,9 @@ deployments:
           partition_columns: taa_dataAlteracao_converted
           partition_date_format: "%Y-%m-%d"
           break_query_frequency: day
-          break_query_start: current_day
-          break_query_end: current_day
+          break_query_start: previous_day
+          break_query_end: previous_day
+          offset: 1
           execute_query: |
             SELECT
                 tud_id,
@@ -149,6 +150,7 @@ deployments:
           break_query_frequency: month
           break_query_start: current_month
           break_query_end: current_month
+          offset: 1
           execute_query: |
             SELECT  tur_id,
                     alu_id,
