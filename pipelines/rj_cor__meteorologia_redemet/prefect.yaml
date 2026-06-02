@@ -1,4 +1,3 @@
-# Teste em staging.
 name: rj_cor__meteorologia_redemet
 prefect-version: 3.4.3
 
@@ -50,11 +49,11 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 3600
-        anchor_date: "2023-01-01T00:10:00"
+        anchor_date: "2023-01-01T04:10:00"
         timezone: America/Sao_Paulo
         slug: meteorologia-redemet-hourly
-    parameters:
-      dataset_id: clima_estacao_meteorologica
-      table_id: meteorologia_redemet
-      first_date: null
-      last_date: null
+        parameters:
+          dataset_id: clima_estacao_meteorologica
+          table_id: meteorologia_redemet
+          first_date: null
+          last_date: null

@@ -1,4 +1,3 @@
-# Teste em staging..
 name: rj_cor__precipitacao_alertario
 prefect-version: 3.4.3
 
@@ -54,7 +53,8 @@ deployments:
         timezone: America/Sao_Paulo
         slug: precipitacao-alertario-2min
         parameters:
-          dataset_id: "clima_pluviometro"
+          dataset_id_pluviometric: "clima_pluviometro"
+          dataset_id_meteorological: "clima_estacao_meteorologica"
           table_id_pluviometric: "taxa_precipitacao_alertario"
           table_id_meteorological: "meteorologia_alertario"
           dump_mode_pluviometric: "append"

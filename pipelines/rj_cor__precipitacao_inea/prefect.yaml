@@ -1,4 +1,3 @@
-# Teste em staging..
 name: rj_cor__precipitacao_inea
 prefect-version: 3.4.3
 
@@ -52,7 +51,7 @@ deployments:
       - interval: 900
         anchor_date: "2023-01-01T00:01:00"
         timezone: America/Sao_Paulo
-        slug: precipitacao-inea-5min
+        slug: precipitacao-inea-15min
         parameters:
           dataset_id_pluviometric: "clima_pluviometro"
           table_id_pluviometric: "taxa_precipitacao_inea"
