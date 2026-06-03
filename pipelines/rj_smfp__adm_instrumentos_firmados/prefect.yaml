@@ -62,7 +62,7 @@ deployments:
     # Modo: Overwrite (substitui dados completos diariamente)
     # Campos: 24 campos incluindo dados do instrumento, favorecido, valores e datas
     - interval: 86400  # 1 dia em segundos (24 * 60 * 60)
-      anchor_date: "2022-03-21T01:00:00"  # Data original do schedule Prefect 1.4
+      anchor_date: "2022-03-21T23:00:00" # UTC: 23:00hrs / BRT: 20:00hrs
       timezone: America/Sao_Paulo
       slug: instrumento-firmado-daily
       parameters:

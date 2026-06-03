@@ -52,7 +52,7 @@ deployments:
 
     schedules:
       - interval: "86400" # Executa diariamente (24h em segundos)
-        anchor_date: "2022-12-19T01:00:00" # Data de início em UTC-3 (America/Sao_Paulo)
+        anchor_date: "2022-12-19T23:00:00" # UTC: 23:00hrs / BRT: 20:00hrs
         timezone: America/Sao_Paulo
         slug: processo-autorizacao-obra-daily
         parameters:

@@ -35,7 +35,7 @@ deployments:
         command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-        
+
   - name: rj-cgm--osinfo_rh--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cgm__osinfo_rh/flow.py:rj_cgm__osinfo_rh
@@ -51,7 +51,7 @@ deployments:
     schedules:
     # Exemplo de schedule overwrite
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:00:00" # UTC: 07:00hrs / BRT: 04:00hrs
       timezone: America/Sao_Paulo
       slug: dc_conselho # slug do schedule
       parameters:
@@ -64,7 +64,7 @@ deployments:
           FROM `rh`.`dc_conselho`;
     # Exemplo de schedule incremental
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:05:00" # UTC: 07:05hrs / BRT: 04:05hrs
       timezone: America/Sao_Paulo
       slug: dc_grau_instrucao # slug do schedule
       parameters:
@@ -78,7 +78,7 @@ deployments:
           FROM `rh`.`dc_grau_instrucao`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:10:00" # UTC: 07:10hrs / BRT: 04:10hrs
       timezone: America/Sao_Paulo
       slug: dc_raca_cor # slug do schedule
       parameters:
@@ -91,7 +91,7 @@ deployments:
           FROM `rh`.`dc_raca_cor`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:15:00" # UTC: 07:15hrs / BRT: 04:15hrs
       timezone: America/Sao_Paulo
       slug: dc_sexo # slug do schedule
       parameters:
@@ -104,7 +104,7 @@ deployments:
           FROM `rh`.`dc_sexo`;
     # Exemplo de schedule incremental
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:20:00" # UTC: 07:20hrs / BRT: 04:20hrs
       timezone: America/Sao_Paulo
       slug: dc_tipo_vinculacao # slug do schedule
       parameters:
@@ -117,7 +117,7 @@ deployments:
           FROM `rh`.`dc_tipo_vinculacao`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:25:00" # UTC: 07:25hrs / BRT: 04:25hrs
       timezone: America/Sao_Paulo
       slug: tb_cbo # slug do schedule
       parameters:
@@ -131,7 +131,7 @@ deployments:
           FROM `rh`.`tb_cbo`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:30:00" # UTC: 07:30hrs / BRT: 04:30hrs
       timezone: America/Sao_Paulo
       slug: tb_cbo_bkp # slug do schedule
       parameters:
@@ -145,7 +145,7 @@ deployments:
           FROM `rh`.`tb_cbo_bkp`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:40:00" # UTC: 07:40hrs / BRT: 04:40hrs
       timezone: America/Sao_Paulo
       slug: tb_colunas_valores # slug do schedule
       parameters:
@@ -168,7 +168,7 @@ deployments:
           FROM `rh`.`tb_colunas_valores`;
     # Exemplo de schedule incremental
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:45:00" # UTC: 07:45hrs / BRT: 04:45hrs
       timezone: America/Sao_Paulo
       slug: tb_folha_pagamento # slug do schedule
       parameters:
@@ -192,7 +192,7 @@ deployments:
           FROM `rh`.`tb_folha_pagamento`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:50:00" # UTC: 07:50hrs / BRT: 04:50hrs
       timezone: America/Sao_Paulo
       slug: tb_funcionario # slug do schedule
       parameters:
@@ -220,7 +220,7 @@ deployments:
 
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T07:55:00" # UTC: 07:55hrs / BRT: 04:55hrs
       timezone: America/Sao_Paulo
       slug: tb_grupo # slug do schedule
       parameters:
@@ -235,7 +235,7 @@ deployments:
           FROM `rh`.`tb_grupo`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T08:00:00" # UTC: 08:00hrs / BRT: 05:00hrs
       timezone: America/Sao_Paulo
       slug: tb_provisionamento # slug do schedule
       parameters:
@@ -255,7 +255,7 @@ deployments:
           FROM `rh`.`tb_provisionamento`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T08:05:00" # UTC: 08:05hrs / BRT: 05:05hrs
       timezone: America/Sao_Paulo
       slug: tb_valores_folha_pagamento # slug do schedule
       parameters:
@@ -269,7 +269,7 @@ deployments:
           FROM `rh`.`tb_valores_folha_pagamento`;
     # Exemplo de schedule incremental
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T08:10:00" # UTC: 08:10hrs / BRT: 05:10hrs
       timezone: America/Sao_Paulo
       slug: tb_valores_provisionamento # slug do schedule
       parameters:
@@ -283,7 +283,7 @@ deployments:
           FROM `rh`.`tb_valores_provisionamento`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T08:15:00" # UTC: 08:15hrs / BRT: 05:15hrs
       timezone: America/Sao_Paulo
       slug: tb_vinculo_trabalho # slug do schedule
       parameters:
@@ -315,7 +315,7 @@ deployments:
 
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T08:20:00" # UTC: 08:20hrs / BRT: 05:20hrs
       timezone: America/Sao_Paulo
       slug: dc_unidade_federacao # slug do schedule
       parameters:
@@ -329,7 +329,7 @@ deployments:
           FROM `common`.`dc_unidade_federacao`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T08:25:00" # UTC: 08:25hrs / BRT: 05:25hrs
       timezone: America/Sao_Paulo
       slug: dc_municipio # slug do schedule
       parameters:
@@ -343,7 +343,7 @@ deployments:
           FROM `common`.`dc_municipio`;
 
     - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      anchor_date: "2022-01-01T08:30:00" # UTC: 08:30hrs / BRT: 05:30hrs
       timezone: America/Sao_Paulo
       slug: categoria # slug do schedule
       parameters:
@@ -359,4 +359,3 @@ deployments:
               `FLG_ATIVO`,
               `CNES_OBRIGATORIO`
             FROM `osinfo`.`categoria`;
-  
