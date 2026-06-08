@@ -46,7 +46,7 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 86400
-        anchor_date: "2022-12-19T01:00:00"
+        anchor_date: "2026-06-08T01:00:00"
         timezone: America/Sao_Paulo
         slug: documento
         parameters:
@@ -70,7 +70,7 @@ deployments:
                 NUMERO_REQUERIMENTO
             FROM SMU_PRD.dbo.tbPTI_Documentos
       - interval: 86400
-        anchor_date: "2022-12-19T01:05:00"
+        anchor_date: "2026-06-08T01:05:00"
         timezone: America/Sao_Paulo
         slug: tipo_documento
         parameters:
@@ -81,7 +81,7 @@ deployments:
                 descTipoDocumento
             FROM SMU_PRD.dbo.tbPTI_TiposDocumentos
       - interval: 86400
-        anchor_date: "2022-12-19T01:10:00"
+        anchor_date: "2026-06-08T01:10:00"
         timezone: America/Sao_Paulo
         slug: assunto_processo
         parameters:
@@ -100,7 +100,7 @@ deployments:
                 AssuntoProcessoRio
             FROM SMU_PRD.dbo.tbPTI_Assunto
       - interval: 86400
-        anchor_date: "2022-12-19T01:15:00"
+        anchor_date: "2026-06-08T01:15:00"
         timezone: America/Sao_Paulo
         slug: assunto_nivel_1
         parameters:
@@ -111,7 +111,7 @@ deployments:
                 codAssuntoN1
             FROM SMU_PRD.dbo.tbPTI_AssuntosNivel1
       - interval: 86400
-        anchor_date: "2022-12-19T01:20:00"
+        anchor_date: "2026-06-08T01:20:00"
         timezone: America/Sao_Paulo
         slug: assunto_nivel_2
         parameters:
@@ -122,7 +122,7 @@ deployments:
                 codAssuntoN2
             FROM SMU_PRD.dbo.tbPTI_AssuntosNivel2
       - interval: 86400
-        anchor_date: "2022-12-19T01:25:00"
+        anchor_date: "2026-06-08T01:25:00"
         timezone: America/Sao_Paulo
         slug: assunto_nivel_3
         parameters:
@@ -133,7 +133,7 @@ deployments:
                 codAssuntoN3
             FROM SMU_PRD.dbo.tbPTI_AssuntosNivel3
       - interval: 86400
-        anchor_date: "2022-12-19T01:30:00"
+        anchor_date: "2026-06-08T01:30:00"
         timezone: America/Sao_Paulo
         slug: logradouro
         parameters:
@@ -148,7 +148,7 @@ deployments:
                 nomLogra
             FROM SMU_PRD.dbo.tbLogra_Logradouros
       - interval: 86400
-        anchor_date: "2022-12-19T01:35:00"
+        anchor_date: "2026-06-08T01:35:00"
         timezone: America/Sao_Paulo
         slug: bairro_logradouro
         parameters:
@@ -159,7 +159,7 @@ deployments:
                 codBairro
             FROM SMU_PRD.dbo.tbLogra_LograBairros
       - interval: 86400
-        anchor_date: "2022-12-19T01:40:00"
+        anchor_date: "2026-06-08T01:40:00"
         timezone: America/Sao_Paulo
         slug: bairro
         parameters:
@@ -172,7 +172,7 @@ deployments:
                 codRa
             FROM SMU_PRD.dbo.tbLogra_Bairros
       - interval: 86400
-        anchor_date: "2022-12-19T01:45:00"
+        anchor_date: "2026-06-08T01:45:00"
         timezone: America/Sao_Paulo
         slug: tramite_processo
         parameters:
@@ -192,7 +192,7 @@ deployments:
                 status
             FROM SMU_PRD.dbo.tbPTI_Tramites
       - interval: 86400
-        anchor_date: "2022-12-19T01:50:00"
+        anchor_date: "2026-06-08T01:50:00"
         timezone: America/Sao_Paulo
         slug: requerente_processo_documento
         parameters:
@@ -220,7 +220,7 @@ deployments:
                 inscmunicipal
             FROM SMU_PRD.dbo.tbPTI_Pessoas
       - interval: 86400
-        anchor_date: "2022-12-19T01:55:00"
+        anchor_date: "2026-06-08T01:55:00"
         timezone: America/Sao_Paulo
         slug: requerente_processo
         parameters:
@@ -233,7 +233,7 @@ deployments:
                 dtCadastro
             FROM SMU_PRD.dbo.tbPTI_ProcessosRequerentes
       - interval: 86400
-        anchor_date: "2022-12-19T02:00:00"
+        anchor_date: "2026-06-08T02:00:00"
         timezone: America/Sao_Paulo
         slug: endereco_obra_processo
         parameters:
@@ -247,7 +247,7 @@ deployments:
                 dtCadastro
             FROM SMU_PRD.dbo.tbPTI_EnderecosProcessos
       - interval: 86400
-        anchor_date: "2022-12-19T02:05:00"
+        anchor_date: "2026-06-08T02:05:00"
         timezone: America/Sao_Paulo
         slug: orgao_tramitacao_processo
         parameters:
@@ -263,7 +263,7 @@ deployments:
                 permiteAgendamento
             FROM SMU_PRD.dbo.tbLogra_Orgaos
       - interval: 86400
-        anchor_date: "2022-12-19T02:10:00"
+        anchor_date: "2026-06-08T02:10:00"
         timezone: America/Sao_Paulo
         slug: classificacao_processo
         parameters:
@@ -274,7 +274,7 @@ deployments:
                 DS_CLASSIFICACAO_PROCESSO
             FROM SMU_PRD.dbo.tbPTI_ClassificacaoProcesso
       - interval: 86400
-        anchor_date: "2022-12-19T02:15:00"
+        anchor_date: "2026-06-08T02:15:00"
         timezone: America/Sao_Paulo
         slug: processo_apenso
         parameters:
@@ -286,7 +286,7 @@ deployments:
                 MatricCadastrador
             FROM SMU_PRD.dbo.tbPTI_Apensos
       - interval: 86400
-        anchor_date: "2022-12-19T02:20:00"
+        anchor_date: "2026-06-08T02:20:00"
         timezone: America/Sao_Paulo
         slug: tipo_processo
         parameters:
@@ -297,7 +297,7 @@ deployments:
                 DS_TIPO_PROCESSO
             FROM SMU_PRD.dbo.tbPTI_TiposProcessos
       - interval: 86400
-        anchor_date: "2022-12-19T02:25:00"
+        anchor_date: "2026-06-08T02:25:00"
         timezone: America/Sao_Paulo
         slug: orgao_origem_classificacao
         parameters:
@@ -308,7 +308,7 @@ deployments:
                 DS_ORIGEM_CLASSIFICACAO_PROCESSO
             FROM SMU_PRD.dbo.tbPTI_OrigemClassificacaoProcesso
       - interval: 86400
-        anchor_date: "2022-12-19T02:30:00"
+        anchor_date: "2026-06-08T02:30:00"
         timezone: America/Sao_Paulo
         slug: area_protecao_processo
         parameters:
@@ -322,7 +322,7 @@ deployments:
                 SITIO_RIO_PATRIMONIO_MUNDIAL
             FROM SMU_PRD.dbo.tbPTI_IRPH_Complemento_Area_Grau_Protecao
       - interval: 86400
-        anchor_date: "2022-12-19T02:35:00"
+        anchor_date: "2026-06-08T02:35:00"
         timezone: America/Sao_Paulo
         slug: processo_irph
         parameters:
@@ -334,7 +334,7 @@ deployments:
                 DESCRICAO
             FROM SMU_PRD.dbo.tbPTI_IRPH_Complemento_Processo
       - interval: 86400
-        anchor_date: "2022-12-19T02:40:00"
+        anchor_date: "2026-06-08T02:40:00"
         timezone: America/Sao_Paulo
         slug: preo
         parameters:
@@ -354,7 +354,7 @@ deployments:
                 ID_PROFISSAO
             FROM SMU_PRD.dbo.tbPTI_PREO
       - interval: 86400
-        anchor_date: "2022-12-19T02:45:00"
+        anchor_date: "2026-06-08T02:45:00"
         timezone: America/Sao_Paulo
         slug: prpa
         parameters:
@@ -374,7 +374,7 @@ deployments:
                 ID_PROFISSAO
             FROM SMU_PRD.dbo.tbPTI_PRPA
       - interval: 86400
-        anchor_date: "2022-12-19T02:50:00"
+        anchor_date: "2026-06-08T02:50:00"
         timezone: America/Sao_Paulo
         slug: profissao_preo_prpa
         parameters:
@@ -385,7 +385,7 @@ deployments:
                 DS_PROFISSAO
             FROM SMU_PRD.dbo.tbPTI_Profissao
       - interval: 86400
-        anchor_date: "2022-12-19T02:55:00"
+        anchor_date: "2026-06-08T02:55:00"
         timezone: America/Sao_Paulo
         slug: despacho
         parameters:
@@ -397,7 +397,7 @@ deployments:
                 REPLACE(REPLACE(CAST(descDespacho AS VARCHAR(MAX)), CHAR(13), ' '), CHAR(10), ' ') AS descDespacho
             FROM SMU_PRD.dbo.tbPTI_Despachos
       - interval: 86400
-        anchor_date: "2022-12-19T03:00:00"
+        anchor_date: "2026-06-08T03:00:00"
         timezone: America/Sao_Paulo
         slug: tipo_parecer_tramite
         parameters:
@@ -411,7 +411,7 @@ deployments:
                 PUBLICACAO_FRENTE_DO
             FROM SMU_PRD.dbo.tbPTI_TiposPareceres
       - interval: 86400
-        anchor_date: "2022-12-19T03:05:00"
+        anchor_date: "2026-06-08T03:05:00"
         timezone: America/Sao_Paulo
         slug: linha_publicacao_tramite
         parameters:
@@ -433,7 +433,7 @@ deployments:
                 dtliberacao
             FROM SMU_PRD.dbo.tbPTI_Linha
       - interval: 86400
-        anchor_date: "2022-12-19T03:10:00"
+        anchor_date: "2026-06-08T03:10:00"
         timezone: America/Sao_Paulo
         slug: endereco_produto_pedido
         parameters:
@@ -458,7 +458,7 @@ deployments:
                 ID_TpInscricaoIMOVEL
             FROM SMU_PRD.dbo.tbPTI_Enderecos
       - interval: 86400
-        anchor_date: "2022-12-19T03:15:00"
+        anchor_date: "2026-06-08T03:15:00"
         timezone: America/Sao_Paulo
         slug: publicacao_domrj
         parameters:
@@ -471,7 +471,7 @@ deployments:
                 dtPrevista
             FROM SMU_PRD.dbo.tbPTI_Publicacao
       - interval: 86400
-        anchor_date: "2022-12-19T03:20:00"
+        anchor_date: "2026-06-08T03:20:00"
         timezone: America/Sao_Paulo
         slug: area_protecao_cultural
         parameters:
@@ -482,7 +482,7 @@ deployments:
                 DS_AREA_PROTECAO_CULTURAL
             FROM SMU_PRD.dbo.tbPTI_IRPH_Area_Protecao_Cultural tpiapc
       - interval: 86400
-        anchor_date: "2022-12-19T03:25:00"
+        anchor_date: "2026-06-08T03:25:00"
         timezone: America/Sao_Paulo
         slug: grau_protecao_area
         parameters:
@@ -493,7 +493,7 @@ deployments:
                 DS_GRAU_PROTECAO
             FROM SMU_PRD.dbo.tbPTI_IRPH_Grau_Protecao
       - interval: 86400
-        anchor_date: "2022-12-19T03:30:00"
+        anchor_date: "2026-06-08T03:30:00"
         timezone: America/Sao_Paulo
         slug: alvara_obra_privada
         parameters:
@@ -576,7 +576,7 @@ deployments:
                 LicOnLine_ID_Requerimento
             FROM SMU_PRD.dbo.tbLIC_Licencas
       - interval: 86400
-        anchor_date: "2022-12-19T03:35:00"
+        anchor_date: "2026-06-08T03:35:00"
         timezone: America/Sao_Paulo
         slug: endereco_obra_alvara
         parameters:
@@ -593,7 +593,7 @@ deployments:
                 Num
             FROM SMU_PRD.dbo.tbLIC_EnderecosLicenca
       - interval: 86400
-        anchor_date: "2022-12-19T03:40:00"
+        anchor_date: "2026-06-08T03:40:00"
         timezone: America/Sao_Paulo
         slug: edificacao_obra_licenca
         parameters:
@@ -617,7 +617,7 @@ deployments:
                 Qtd_Edif
             FROM SMU_PRD.dbo.tbLIC_EdificacoesLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T03:45:00"
+        anchor_date: "2026-06-08T03:45:00"
         timezone: America/Sao_Paulo
         slug: endereco_edificacao
         parameters:
@@ -628,7 +628,7 @@ deployments:
                 ID_Endereco
             FROM SMU_PRD.dbo.tbLIC_EnderecosEdificacao
       - interval: 86400
-        anchor_date: "2022-12-19T03:50:00"
+        anchor_date: "2026-06-08T03:50:00"
         timezone: America/Sao_Paulo
         slug: pavimento_edificacao_obra
         parameters:
@@ -644,7 +644,7 @@ deployments:
                 Tot_VagasDescobertas
             FROM SMU_PRD.dbo.tbLIC_PavimentosLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T03:55:00"
+        anchor_date: "2026-06-08T03:55:00"
         timezone: America/Sao_Paulo
         slug: subdivisao_edificacao_obra
         parameters:
@@ -657,7 +657,7 @@ deployments:
                 descSubDivisao
             FROM SMU_PRD.dbo.tbLIC_SubDivisoesEdificacao
       - interval: 86400
-        anchor_date: "2022-12-19T04:00:00"
+        anchor_date: "2026-06-08T04:00:00"
         timezone: America/Sao_Paulo
         slug: unidade_edificacao_obra
         parameters:
@@ -675,7 +675,7 @@ deployments:
                 area_unid
             FROM SMU_PRD.dbo.tbLIC_UnidadesLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T04:05:00"
+        anchor_date: "2026-06-08T04:05:00"
         timezone: America/Sao_Paulo
         slug: darm_licenca_alvara
         parameters:
@@ -692,7 +692,7 @@ deployments:
                 Formula
             FROM SMU_PRD.dbo.tbLIC_LicencasDARMs
       - interval: 86400
-        anchor_date: "2022-12-19T04:10:00"
+        anchor_date: "2026-06-08T04:10:00"
         timezone: America/Sao_Paulo
         slug: darm_alvara
         parameters:
@@ -718,7 +718,7 @@ deployments:
                 Avulso
             FROM SMU_PRD.dbo.tbLIC_DARMS
       - interval: 86400
-        anchor_date: "2022-12-19T04:15:00"
+        anchor_date: "2026-06-08T04:15:00"
         timezone: America/Sao_Paulo
         slug: licenca_alvara
         parameters:
@@ -738,7 +738,7 @@ deployments:
                 ObrasConcluidas
             FROM SMU_PRD.dbo.tbLIC_LicencasEdificacoes
       - interval: 86400
-        anchor_date: "2022-12-19T04:20:00"
+        anchor_date: "2026-06-08T04:20:00"
         timezone: America/Sao_Paulo
         slug: loteamento_alvara
         parameters:
@@ -758,7 +758,7 @@ deployments:
                 TotalAreasPrivativasResultantes
             FROM SMU_PRD.dbo.tbLIC_ComplementacaoLicencaLoteamento
       - interval: 86400
-        anchor_date: "2022-12-19T04:25:00"
+        anchor_date: "2026-06-08T04:25:00"
         timezone: America/Sao_Paulo
         slug: licenca_substituida
         parameters:
@@ -774,7 +774,7 @@ deployments:
                 RecalculoDarm_Liberado
             FROM SMU_PRD.dbo.tbLIC_LicencasSubstituidas
       - interval: 86400
-        anchor_date: "2022-12-19T04:30:00"
+        anchor_date: "2026-06-08T04:30:00"
         timezone: America/Sao_Paulo
         slug: licenca_loteamento
         parameters:
@@ -788,7 +788,7 @@ deployments:
                 TpLote
             FROM SMU_PRD.dbo.tbLIC_IdentificacaoLotesLicenca
       - interval: 86400
-        anchor_date: "2022-12-19T04:35:00"
+        anchor_date: "2026-06-08T04:35:00"
         timezone: America/Sao_Paulo
         slug: restricao_alvara
         parameters:
@@ -804,7 +804,7 @@ deployments:
                 BAIXA_EXOFFICIO
             FROM SMU_PRD.dbo.tbLIC_RestricoesLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T04:40:00"
+        anchor_date: "2026-06-08T04:40:00"
         timezone: America/Sao_Paulo
         slug: restricao_fase
         parameters:
@@ -819,7 +819,7 @@ deployments:
                 ATIVO
             FROM SMU_PRD.dbo.tbLic_restricoes
       - interval: 86400
-        anchor_date: "2022-12-19T04:45:00"
+        anchor_date: "2026-06-08T04:45:00"
         timezone: America/Sao_Paulo
         slug: fase_obra
         parameters:
@@ -831,7 +831,7 @@ deployments:
                 OrdemImp
             FROM SMU_PRD.dbo.tbLic_FasesObras
       - interval: 86400
-        anchor_date: "2022-12-19T04:50:00"
+        anchor_date: "2026-06-08T04:50:00"
         timezone: America/Sao_Paulo
         slug: tipo_edificacao
         parameters:
@@ -842,7 +842,7 @@ deployments:
                 Desc_TpEdificacao
             FROM SMU_PRD.dbo.tbLic_TiposEdificacoes
       - interval: 86400
-        anchor_date: "2022-12-19T04:55:00"
+        anchor_date: "2026-06-08T04:55:00"
         timezone: America/Sao_Paulo
         slug: compl_1_tipo_edificacao
         parameters:
@@ -854,7 +854,7 @@ deployments:
                 Compl_TpEdificacao
             FROM SMU_PRD.dbo.tbLic_ComplTpEdificacoes1
       - interval: 86400
-        anchor_date: "2022-12-19T05:00:00"
+        anchor_date: "2026-06-08T05:00:00"
         timezone: America/Sao_Paulo
         slug: compl_2_tipo_edificacao
         parameters:
@@ -867,7 +867,7 @@ deployments:
                 Compl2
             FROM SMU_PRD.dbo.tbLic_ComplTpEdificacoes2
       - interval: 86400
-        anchor_date: "2022-12-19T05:05:00"
+        anchor_date: "2026-06-08T05:05:00"
         timezone: America/Sao_Paulo
         slug: tipo_licenca_acao_requerente
         parameters:
@@ -883,7 +883,7 @@ deployments:
                 Compl_Obrigatorio
             FROM SMU_PRD.dbo.tbLic_DescricoesLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T05:10:00"
+        anchor_date: "2026-06-08T05:10:00"
         timezone: America/Sao_Paulo
         slug: compl_tipo_licenca_acao_requerente
         parameters:
@@ -896,7 +896,7 @@ deployments:
                 GRATIS
             FROM SMU_PRD.dbo.tbLic_ComplementosTpLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T05:15:00"
+        anchor_date: "2026-06-08T05:15:00"
         timezone: America/Sao_Paulo
         slug: tipo_licenca_acao_prefeitura_2
         parameters:
@@ -907,7 +907,7 @@ deployments:
                 DESCR_TIPO_LIC
             FROM SMU_PRD.dbo.tbLic_TiposLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T05:20:00"
+        anchor_date: "2026-06-08T05:20:00"
         timezone: America/Sao_Paulo
         slug: tipo_licenca_acao_prefeitura_1
         parameters:
@@ -918,7 +918,7 @@ deployments:
                 descr_classe
             FROM SMU_PRD.dbo.tbLIC_ClassesLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T05:25:00"
+        anchor_date: "2026-06-08T05:25:00"
         timezone: America/Sao_Paulo
         slug: tipo_licenca_acao_prefeitura_4
         parameters:
@@ -930,7 +930,7 @@ deployments:
                 compl
             FROM SMU_PRD.dbo.tbLic_ComplementosTpLicencas
       - interval: 86400
-        anchor_date: "2022-12-19T05:30:00"
+        anchor_date: "2026-06-08T05:30:00"
         timezone: America/Sao_Paulo
         slug: tipo_unidade
         parameters:
@@ -942,7 +942,7 @@ deployments:
                 Desc_unidade_Plural
             FROM SMU_PRD.dbo.tbLIC_Unidades
       - interval: 86400
-        anchor_date: "2022-12-19T05:35:00"
+        anchor_date: "2026-06-08T05:35:00"
         timezone: America/Sao_Paulo
         slug: certidao_habite_se
         parameters:
@@ -967,7 +967,7 @@ deployments:
                 ,OBS
             FROM SMU_PRD.dbo.tbLIC_Habite_se
       - interval: 86400
-        anchor_date: "2022-12-19T05:40:00"
+        anchor_date: "2026-06-08T05:40:00"
         timezone: America/Sao_Paulo
         slug: tipo_inscricao_imovel
         parameters:
@@ -978,7 +978,7 @@ deployments:
                 TpInscricaoImovel
             FROM SMU_PRD.dbo.tbPTI_TiposInscricaoImovel
       - interval: 86400
-        anchor_date: "2022-12-19T05:45:00"
+        anchor_date: "2026-06-08T05:45:00"
         timezone: America/Sao_Paulo
         slug: regiao_administrativa
         parameters:
@@ -990,7 +990,7 @@ deployments:
                 ,codAP
             FROM SMU_PRD.dbo.tbLogra_Ras
       - interval: 86400
-        anchor_date: "2022-12-19T05:50:00"
+        anchor_date: "2026-06-08T05:50:00"
         timezone: America/Sao_Paulo
         slug: orgao_licenciamento
         parameters:
@@ -1002,7 +1002,7 @@ deployments:
                 ,Ativo
             FROM dbo.tbLIC_Orgaos
       - interval: 86400
-        anchor_date: "2022-12-19T05:55:00"
+        anchor_date: "2026-06-08T05:55:00"
         timezone: America/Sao_Paulo
         slug: unidade_habite_se
         parameters:
@@ -1017,7 +1017,7 @@ deployments:
                 ,Area
             FROM SMU_PRD.dbo.tbLIC_UnidadesHabite_se
       - interval: 86400
-        anchor_date: "2022-12-19T06:00:00"
+        anchor_date: "2026-06-08T06:00:00"
         timezone: America/Sao_Paulo
         slug: certidao_aceitacao
         parameters:
@@ -1039,7 +1039,7 @@ deployments:
                 ,Obs
             FROM SMU_PRD.dbo.tbLIC_Aceitacoes
       # - interval: 86400
-      #   anchor_date: "2022-12-19T06:05:00"
+      #   anchor_date: "2026-06-08T06:05:00"
       #   timezone: America/Sao_Paulo
       #   slug: georeferencia_endereco_obra_processo
       #   parameters:
@@ -1058,7 +1058,7 @@ deployments:
       #       shape
       #       FROM SMU_PRD.dbo.tbGEOSISLIC_processo
       - interval: 86400
-        anchor_date: "2022-12-19T06:10:00"
+        anchor_date: "2026-06-08T06:10:00"
         timezone: America/Sao_Paulo
         slug: licenca_transferida
         parameters:
@@ -1072,7 +1072,7 @@ deployments:
             CODORGAOSIGMA_DESTINO
             FROM SMU_PRD.dbo.tbLIC_LicencasTransferidasCLU_CRU
       - interval: 86400
-        anchor_date: "2022-12-19T06:15:00"
+        anchor_date: "2026-06-08T06:15:00"
         timezone: America/Sao_Paulo
         slug: registro_cancelamento_produto
         parameters:
