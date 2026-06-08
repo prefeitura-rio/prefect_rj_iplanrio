@@ -53,7 +53,7 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-      - interval: "86400" # Executa diariamente (24h em segundos)
+      - interval: 86400 # Executa diariamente (24h em segundos)
         anchor_date: "2022-12-19T23:00:00" # UTC: 23:00hrs / BRT: 20:00hrs
         timezone: America/Sao_Paulo
         slug: processo-autorizacao-obra-daily
