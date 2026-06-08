@@ -113,17 +113,12 @@ deployments:
           table_id: despesa
           dump_mode: append
           break_query_start: "2012-01-01"
-          break_query_end: "2026-01-01"
+          break_query_end: "current_day"
           partition_columns: "data_referencia"
           break_query_frequency: "year"
           partition_date_format: "%Y-%m-%d"
           biglake_table: false
-          execute_query: SELECT `ID_DOCUMENTO`, `COD_OS` as `COD_ORGANIZACAO`, `COD_UNIDADE`, `DATA_ENVIO`, `ID_TIPO_DOCUMENTO`,
-            `CODIGO_FISCAL`, `CNPJ`, `RAZAO`, `CPF`, `NOME`, `NUM_DOCUMENTO`, `SERIE`, `DESCRICAO`, `DATA_EMISSAO`, `DATA_VENCIMENTO`,
-            `DATA_PAGAMENTO`, `DATA_APURACAO`, `VALOR_DOCUMENTO`, `VALOR_PAGO`, `ID_DESPESA`, `ID_RUBRICA`, `ID_CONTRATO`, `ID_CONTA_BANCARIA`,
-            `REF_MES` as `REFERENCIA_MES`, `REF_ANO` as `REFERENCIA_ANO`, `COD_BANCARIO`, `flg_justificativa` as `FLG_JUSTIFICATIVA`,
-            `PMT_MES` as `PARCELAMENTO_MES`, `PMT_TOTAL` as `PARCELAMENTO_TOTAL`, `ID_IMAGEM`, `nf_validada_sigma` as `NF_VALIDADA_SIGMA`,
-            `dt_hora_validacao` as `DATA_VALIDACAO` FROM `osinfo`.`documento`;
+          execute_query: SELECT ID_DOCUMENTO, COD_OS AS COD_ORGANIZACAO, COD_UNIDADE, DATA_ENVIO, ID_TIPO_DOCUMENTO, CODIGO_FISCAL, CNPJ, RAZAO, CPF, NOME, NUM_DOCUMENTO, SERIE, DESCRICAO, DATA_EMISSAO, DATA_VENCIMENTO, DATA_PAGAMENTO, DATA_APURACAO, VALOR_DOCUMENTO, VALOR_PAGO, ID_DESPESA, ID_RUBRICA, ID_CONTRATO, ID_CONTA_BANCARIA, REF_MES AS REFERENCIA_MES, REF_ANO AS REFERENCIA_ANO, COD_BANCARIO, flg_justificativa AS FLG_JUSTIFICATIVA, PMT_MES AS PARCELAMENTO_MES, PMT_TOTAL AS PARCELAMENTO_TOTAL, ID_IMAGEM, nf_validada_sigma AS NF_VALIDADA_SIGMA, dt_hora_validacao AS DATA_VALIDACAO, DATE(CONCAT(REF_ANO, '-01-01')) AS data_referencia FROM `osinfo`.`documento` WHERE REF_ANO IS NOT NULL;
       - interval: 86400
         anchor_date: '2025-07-15T07:05:00'
         timezone: America/Sao_Paulo
