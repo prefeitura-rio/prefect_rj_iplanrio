@@ -26,6 +26,7 @@ pull:
 deployments:
   # Deployment de staging para testes
   - name: rj-seconserva--infraestrutura-siscor-obras--staging
+    tags: [staging]
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_seconserva__infraestrutura_siscor_obras/flow.py:rj_seconserva__infraestrutura_siscor_obras
     work_pool:
@@ -39,6 +40,7 @@ deployments:
 
   # Deployment de produção com schedules para todas as tabelas
   - name: rj-seconserva--infraestrutura-siscor-obras--prod
+    tags: [prod]
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_seconserva__infraestrutura_siscor_obras/flow.py:rj_seconserva__infraestrutura_siscor_obras
     work_pool:
