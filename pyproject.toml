@@ -19,7 +19,7 @@ link-mode = "copy"
 override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0", "click>=8.3.0,<9.0"]
 
 [tool.uv.sources]
-iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git", branch = "fix-query-mysql" }
+iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
 
 [tool.uv.workspace]
 members = ["pipelines/*"]
