@@ -49,7 +49,7 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 2592000
-        anchor_date: "2023-01-01T04:15:00"
+        anchor_date: "2023-01-01T08:15:00" # UTC: 08:15hrs / BRT: 05:15hrs
         timezone: America/Sao_Paulo
         slug: meteorologia-redemet-estacoes-monthly
         parameters:

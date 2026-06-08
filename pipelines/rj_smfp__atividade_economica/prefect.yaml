@@ -58,7 +58,7 @@ deployments:
     # Tabela: fact_fatoalvaras
     # Descrição: Fato de Alvarás com dados quantitativos e relacionamentos
     - interval: 86400 # Executa diariamente (24h)
-      anchor_date: "2022-03-21T02:00:00" # Data de início em UTC
+      anchor_date: "2022-03-21T05:05:00" # UTC: 05:05hrs / BRT: 02:05hrs
       timezone: America/Sao_Paulo
       slug: fact-fatoalvaras-daily
       parameters:
@@ -67,7 +67,7 @@ deployments:
     # Tabela: fact_fatocp
     # Descrição: Fato de Consultas Prévias
     - interval: 86400
-      anchor_date: "2022-03-21T02:10:00"
+      anchor_date: "2022-03-21T05:10:00" # UTC: 05:10hrs / BRT: 02:10hrs
       timezone: America/Sao_Paulo
       slug: fact-fatocp-daily
       parameters:
@@ -80,7 +80,7 @@ deployments:
     # Tabela: tab_alvara
     # Descrição: Dimensão de Alvarás com informações descritivas
     - interval: 86400
-      anchor_date: "2022-03-21T02:20:00"
+      anchor_date: "2022-03-21T05:15:00" # UTC: 05:15hrs / BRT: 02:15hrs
       timezone: America/Sao_Paulo
       slug: tab-alvara-daily
       parameters:
@@ -89,7 +89,7 @@ deployments:
     # Tabela: tab_atvprocesso
     # Descrição: Dimensão de Atividades de Processo
     - interval: 86400
-      anchor_date: "2022-03-21T02:30:00"
+      anchor_date: "2022-03-21T05:20:00" # UTC: 05:20hrs / BRT: 02:20hrs
       timezone: America/Sao_Paulo
       slug: tab-atvprocesso-daily
       parameters:
@@ -98,7 +98,7 @@ deployments:
     # Tabela: tab_cae
     # Descrição: Dimensão de CAE (Código de Atividade Econômica)
     - interval: 86400
-      anchor_date: "2022-03-21T02:40:00"
+      anchor_date: "2022-03-21T05:25:00" # UTC: 05:25hrs / BRT: 02:25hrs
       timezone: America/Sao_Paulo
       slug: tab-cae-daily
       parameters:
@@ -107,7 +107,7 @@ deployments:
     # Tabela: tab_cnae
     # Descrição: Dimensão de CNAE (Classificação Nacional de Atividades Econômicas)
     - interval: 86400
-      anchor_date: "2022-03-21T02:50:00"
+      anchor_date: "2022-03-21T05:30:00" # UTC: 05:30hrs / BRT: 02:30hrs
       timezone: America/Sao_Paulo
       slug: tab-cnae-daily
       parameters:
@@ -116,7 +116,7 @@ deployments:
     # Tabela: tab_consulta
     # Descrição: Dimensão de Consultas Prévias
     - interval: 86400
-      anchor_date: "2022-03-21T03:00:00"
+      anchor_date: "2022-03-21T05:35:00" # UTC: 05:35hrs / BRT: 02:35hrs
       timezone: America/Sao_Paulo
       slug: tab-consulta-daily
       parameters:
@@ -125,7 +125,7 @@ deployments:
     # Tabela: tab_direcionamento
     # Descrição: Dimensão de Direcionamento de processos
     - interval: 86400
-      anchor_date: "2022-03-21T03:10:00"
+      anchor_date: "2022-03-21T05:40:00" # UTC: 05:40hrs / BRT: 02:40hrs
       timezone: America/Sao_Paulo
       slug: tab-direcionamento-daily
       parameters:
@@ -134,7 +134,7 @@ deployments:
     # Tabela: tab_tipocontribuinte_tipocontribuint
     # Descrição: Dimensão de Tipos de Contribuinte
     - interval: 86400
-      anchor_date: "2022-03-21T03:20:00"
+      anchor_date: "2022-03-21T05:45:00" # UTC: 05:45hrs / BRT: 02:45hrs
       timezone: America/Sao_Paulo
       slug: tab-tipocontribuinte-daily
       parameters:
@@ -143,7 +143,7 @@ deployments:
     # Tabela: tab_tiposolicitacao
     # Descrição: Dimensão de Tipos de Solicitação
     - interval: 86400
-      anchor_date: "2022-03-21T03:30:00"
+      anchor_date: "2022-03-21T05:50:00" # UTC: 05:50hrs / BRT: 02:50hrs
       timezone: America/Sao_Paulo
       slug: tab-tiposolicitacao-daily
       parameters:
