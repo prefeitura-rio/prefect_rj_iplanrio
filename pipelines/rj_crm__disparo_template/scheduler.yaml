@@ -1460,7 +1460,7 @@ schedules:
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 3 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
-            intervalo_filtro_disparados: 1
+            intervalo_filtro_disparados: 300
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
@@ -1533,7 +1533,7 @@ schedules:
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
-            intervalo_filtro_disparados: 1
+            intervalo_filtro_disparados: 300
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
@@ -1605,7 +1605,7 @@ schedules:
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
-            intervalo_filtro_disparados: 1
+            intervalo_filtro_disparados: 300
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
