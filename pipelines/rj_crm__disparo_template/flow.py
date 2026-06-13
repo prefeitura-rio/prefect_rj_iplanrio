@@ -36,16 +36,21 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     format_query,
     get_already_dispatched_data,
     get_destinations,
+    get_failed_cpfs,
+    get_failed_phones,
     get_retry_destinations,
     remove_contacts_from_whitelist,
     remove_duplicate_cpfs,
     remove_duplicate_phones,
     remove_failed_phones,
+    save_csv_for_sftp,
+    send_to_sftp,
 )
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
+    task_download_data_from_bigquery,
 )
 
 ## force deploy
@@ -76,6 +81,309 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     ⚠️ **Mensagem:** {state.message}
     """
     send_discord_notification(webhook_url, message)
+
+
+@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
+def rj_crm__disparo_template_sf(
+    # Parâmetros opcionais para override manual na UI.
+    id_hsm: int | None = None,
+    campaign_name: str | None = None,
+    cost_center_id: int | None = None,
+    dataset_id: str | None = None,
+    table_id: str | None = None,
+    dump_mode: str | None = None,
+    test_mode: bool | None = True,
+    query: str | None = None,
+    query_processor_name: str | None = None,
+    query_replacements: dict | None = None,
+    filter_dispatched_phones_or_cpfs: str | None = "cpf",
+    filter_duplicated_phones: bool = True,
+    filter_duplicated_cpfs: bool = True,
+    filter_failed_phones: bool = False,
+    sleep_minutes: int | None = 5,
+    max_dispatch_retries: int = 0,
+    infisical_secret_path: str = "/crm_disparo_template",
+    data_extension_filename: str | None = None,
+    whitelist_percentage: int = 0,
+    whitelist_environment: str = "production",
+    flow_environment: str = "staging",
+    force_add_on_whitelist_group: bool = False,
+    whitelist_replace_contacts: bool = False,
+):
+    """
+    Orchestrates the dispatch of templated messages via Salesforce SFTP.
+
+    Fetches destinations from BigQuery, applies filters, generates a CSV with
+    a 'telefone' column (renamed from 'to') plus all query fields, saves it to
+    disk, and uploads it to the configured SFTP server.
+    Dispatch results are also logged to BigQuery.
+
+    SFTP credentials (sf_sftp_host, sf_sftp_user, sf_sftp_password) must be available
+    as environment variables injected from Infisical at infisical_secret_path.
+
+    Args:
+        id_hsm (int, optional): The ID of the HSM template.
+        campaign_name (str, optional): The name of the dispatch campaign.
+        cost_center_id (int, optional): The ID of the cost center.
+        chunk_size (int, optional): Kept for interface compatibility; not used for SFTP batching.
+        dataset_id (str, optional): BigQuery dataset ID for dispatch logs.
+        table_id (str, optional): BigQuery table ID for dispatch logs.
+        dump_mode (str, optional): BigQuery dump mode (e.g., "append").
+        test_mode (bool, optional): If True, runs in test mode. Defaults to True.
+        query (str, optional): SQL query to retrieve destinations.
+        query_processor_name (str, optional): Name of the query processor.
+        query_replacements (dict, optional): Replacements for query placeholders.
+        filter_dispatched_phones_or_cpfs (str, optional): None, "cpf" or "phone_number". Defaults to "cpf".
+        filter_duplicated_phones (bool, optional): Remove duplicate phones. Defaults to True.
+        filter_duplicated_cpfs (bool, optional): Remove duplicate CPFs. Defaults to True.
+        filter_failed_phones (bool, optional): Remove phones that failed in last dispatch. Defaults to False.
+        sleep_minutes (int, optional): Minutes to sleep before dispatch. Defaults to 5.
+        max_dispatch_retries (int): Maximum retry attempts with alternative phones. Defaults to 0.
+        infisical_secret_path (str, optional): Infisical path for SFTP credentials. Defaults to "/sftp".
+        sftp_remote_path (str, optional): Remote directory on the SFTP server. Defaults to "/".
+        whitelist_percentage (int, optional): Percentage of contacts to whitelist. Defaults to 0.
+        whitelist_environment (str, optional): Whitelist environment. Defaults to "production".
+        flow_environment (str, optional): Flow environment ("staging" or "production"). Defaults to "staging".
+        force_add_on_whitelist_group (bool, optional): Force add to whitelist group. Defaults to False.
+        whitelist_replace_contacts (bool, optional): Remove contacts before adding to whitelist. Defaults to False.
+    """
+
+    dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
+    table_id = table_id or TemplateConstants.TABLE_ID.value
+    dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value
+    id_hsm = id_hsm or TemplateConstants.ID_HSM.value
+    campaign_name = campaign_name or TemplateConstants.CAMPAIGN_NAME.value
+    cost_center_id = cost_center_id or TemplateConstants.COST_CENTER_ID.value
+    query = query or TemplateConstants.QUERY.value
+    query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
+    billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
+
+    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
+    crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
+
+    flow_status = check_flow_status(
+        flow_environment=flow_environment,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+        id_hsm=id_hsm,
+        campaign_name=campaign_name,
+    )
+    if flow_status is None:
+        print("Ending flow due to inactive status.")
+        return
+
+    if test_mode:
+        campaign_name = "teste-" + campaign_name
+        print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
+
+    if query_replacements:
+        query_complete = format_query(
+            raw_query=query,
+            replacements=query_replacements,
+            query_processor_name=query_processor_name,
+        )
+    else:
+        query_complete = query
+    print(f"\n⚠️  Query dispatch:\n{query_complete}")
+
+    # O disparo SF trabalha com o DataFrame plano retornado pela query.
+    # A query deve retornar as colunas: telefone, others (lista), e demais campos do disparo.
+    df = task_download_data_from_bigquery(
+        query=query_complete,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+    )
+
+    if df is None or df.empty:
+        send_dispatch_no_destinations_found(id_hsm, campaign_name, cost_center_id, test_mode)
+        return
+
+    print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
+
+    # Dedup por CPF — base para o loop de retentativas
+    if filter_duplicated_cpfs and "externalId" in df.columns:
+        n_before = len(df)
+        df = df.drop_duplicates(subset=["externalId"])
+        print(f"Removed {n_before - len(df)} duplicate CPFs. Remaining: {len(df)}")
+
+    if df.empty:
+        print("No destinations found after filtering duplicate CPFs. Exiting flow execution.")
+        return
+
+    # Remove telefones que falharam no último disparo
+    if filter_failed_phones:
+        # TODO: get_failed_phones queries fluxo_atendimento (Wetalkie). Substituir por tabela SF quando disponível.
+        failed_phones = get_failed_phones(billing_project_id=billing_project_id)
+        if failed_phones:
+            if max_dispatch_retries > 0:
+                # Marca como None para que o loop de retry use o próximo número de 'others'
+                df.loc[df["telefone"].isin(failed_phones), "telefone"] = None
+            else:
+                df = df[~df["telefone"].isin(failed_phones)]
+
+        if df.empty:
+            send_dispatch_no_destinations_found(id_hsm, campaign_name, cost_center_id, test_mode)
+            return
+
+    print(f"Total unique destinations to dispatch: {len(df)}")
+    base_df = df.copy()
+
+    # RETRY LOOP
+    for i in range(0, max_dispatch_retries + 1):
+
+        if i == 0:
+            current_df = base_df.copy()
+            # No primeiro disparo, exclui linhas com telefone None (marcadas por filter_failed_phones)
+            current_df = current_df.dropna(subset=["telefone"])
+        else:
+            if "others" in base_df.columns and not base_df["others"].apply(
+                lambda x: isinstance(x, list) and len(x) >= i
+            ).any():
+                print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
+                break
+
+            print(f"⚠️  Sleep 3 minutes before retry dispatch.")
+            time.sleep(3 * 60)
+            print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}...")
+
+            # TODO: get_failed_cpfs queries fluxo_atendimento (Wetalkie). Substituir por tabela SF quando disponível.
+            failed_cpfs = get_failed_cpfs(billing_project_id=billing_project_id, id_hsm=id_hsm)
+
+            if not failed_cpfs:
+                print(f"✅ No failed CPFs found for retry attempt {i}. Ending retry loop.")
+                break
+
+            # Seleciona as linhas dos CPFs que falharam e aplica o próximo número de 'others'
+            retry_df = base_df[base_df["externalId"].isin(failed_cpfs)].copy()
+            if "others" not in retry_df.columns or retry_df.empty:
+                print(f"No others column or no rows for retry attempt {i}.")
+                break
+
+            retry_df["telefone"] = retry_df["others"].apply(
+                lambda x: x[i - 1] if isinstance(x, list) and len(x) >= i else None
+            )
+            current_df = retry_df.dropna(subset=["telefone"])
+
+            if current_df.empty:
+                print(f"✅ No retry phones available for attempt {i}. Ending retry loop.")
+                break
+
+            print(f"🚀 Found {len(current_df)} destinations for retry attempt {i}.")
+
+        # Filtro de já disparados
+        # No retry por CPF, desliga o filtro de CPF (o mesmo CPF deve tentar outro número)
+        current_filter = filter_dispatched_phones_or_cpfs
+        if i > 0 and current_filter == "cpf":
+            current_filter = None
+
+        if current_filter:
+            # TODO: fluxo_atendimento é tabela Wetalkie. Substituir por tabela de controle SF quando disponível.
+            print(f"🔍 Checking if phones were already dispatched today...")
+            already_dispatched_df = get_already_dispatched_data(billing_project_id=billing_project_id)
+            already_dispatched_df = already_dispatched_df.rename(columns={"celular_disparo": "telefone"})
+
+            n_before = len(current_df)
+            if current_filter == "cpf" and "externalId" in already_dispatched_df.columns:
+                dispatched_set = set(already_dispatched_df["externalId"].dropna().tolist())
+                current_df = current_df[~current_df["externalId"].isin(dispatched_set)]
+            elif current_filter == "phone_number" and "telefone" in already_dispatched_df.columns:
+                dispatched_set = set(already_dispatched_df["telefone"].dropna().tolist())
+                current_df = current_df[~current_df["telefone"].isin(dispatched_set)]
+            print(f"Removed {n_before - len(current_df)} already dispatched. Remaining: {len(current_df)}")
+
+        # Dedup por telefone (retries podem introduzir duplicatas)
+        if filter_duplicated_phones and "telefone" in current_df.columns:
+            n_before = len(current_df)
+            current_df = current_df.drop_duplicates(subset=["telefone"])
+            print(f"Removed {n_before - len(current_df)} duplicate phones.")
+
+        if current_df.empty:
+            print("No destinations found. Exiting flow execution.")
+            return
+
+        print(f"Total destinations for attempt {i}: {len(current_df)}")
+
+        # Whitelist (funções esperam List[Dict] com chave 'to')
+        if whitelist_percentage > 0:
+            whitelist_group_name = f"citizen-hsm-{campaign_name}"
+            whitelist_dests = [{"to": phone} for phone in current_df["telefone"].tolist()]
+            if whitelist_replace_contacts:
+                remove_contacts_from_whitelist(destinations=whitelist_dests, environment=whitelist_environment)
+            add_contacts_to_whitelist(
+                destinations=whitelist_dests,
+                percentage_to_insert=whitelist_percentage,
+                group_name=whitelist_group_name,
+                environment=whitelist_environment,
+                force_add_on_whitelist_group=force_add_on_whitelist_group,
+            )
+
+        print(f"\nStarting SF dispatch for id_hsm={id_hsm}, attempt={i}, campaign_name={campaign_name}")
+        print(f"Sample data:\n{current_df.head(2).to_dict('records')}")
+        print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
+        time.sleep(sleep_minutes * 60)
+
+        # Salva CSV (dropa 'others') e registra data do disparo
+        csv_path, dispatch_date = save_csv_for_sftp(
+            df=current_df,
+            data_extension_filename=data_extension_filename or campaign_name,
+        )
+
+        send_to_sftp(
+            csv_path=csv_path,
+            infisical_secret_path=infisical_secret_path,
+        )
+
+        print(f"CSV enviado para SFTP com {len(current_df)} destinatários na tentativa {i+1}.")
+
+        if not test_mode:
+            send_dispatch_success_notification(
+                total_dispatches=len(current_df),
+                dispatch_date=dispatch_date,
+                id_hsm=id_hsm,
+                campaign_name=campaign_name,
+                cost_center_id=cost_center_id,
+                total_batches=1,
+                sample_destination=(current_df.iloc[0].to_dict() if not current_df.empty else None),
+                test_mode=test_mode,
+                attempt_number=i + 1,
+                total_attempt_number=max_dispatch_retries + 1,
+            )
+
+            # Log para BQ: adiciona metadados ao DataFrame do disparo
+            log_df = current_df.drop(columns=["others"], errors="ignore").copy()
+            log_df["id_hsm"] = id_hsm
+            log_df["dispatch_date"] = dispatch_date
+            log_df["campaignName"] = campaign_name
+            log_df["costCenterId"] = cost_center_id
+
+            partitions_path = create_date_partitions(
+                dataframe=log_df,
+                partition_column="dispatch_date",
+                file_format="csv",
+                root_folder="./data_dispatch/",
+            )
+
+            if not partitions_path:
+                raise ValueError("partitions_path is None - partition creation failed")
+
+            if not os.path.exists(partitions_path):
+                raise ValueError(f"partitions_path does not exist: {partitions_path}")
+
+            print(f"Generated partitions_path: {partitions_path}")
+            if os.path.exists(partitions_path):
+                files_in_path = []
+                for root, dirs, files in os.walk(partitions_path):  # pylint: disable=unused-variable
+                    files_in_path.extend([os.path.join(root, f) for f in files])
+                print(f"Files in partitions path: {files_in_path}")
+
+            create_table_and_upload_to_gcs_task(
+                data_path=partitions_path,
+                dataset_id=dataset_id,
+                table_id=table_id,
+                dump_mode=dump_mode,
+                biglake_table=False,
+            )
+
 
 
 @flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
@@ -154,6 +462,17 @@ def rj_crm__disparo_template(
     rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
     crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
 
+    flow_status = check_flow_status(
+        flow_environment=flow_environment,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+        id_hsm=id_hsm,
+        campaign_name=campaign_name,
+    )
+    if flow_status is None:
+        print("Ending flow due to inactive status.")
+        return  # flow termina aqui, nada downstream é agendado
+
     if test_mode:
         campaign_name = "teste-"+campaign_name
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
@@ -168,16 +487,6 @@ def rj_crm__disparo_template(
     )
 
     api_status = check_api_status(api)
-
-    flow_status = check_flow_status(
-        flow_environment=flow_environment,
-        id_hsm=id_hsm,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
-    if flow_status is None:
-        print("Ending flow due to inactive status.")
-        return  # flow termina aqui, nada downstream é agendado
 
     if query_replacements:
         query_complete = format_query(

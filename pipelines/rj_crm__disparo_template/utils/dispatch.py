@@ -14,6 +14,7 @@ from math import ceil
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
+from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
@@ -677,27 +678,43 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
 
 
 @task
-def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: str, bucket_name: str) -> Optional[bool]:
+def check_flow_status(
+    flow_environment: str,
+    billing_project_id: str,
+    bucket_name: str,
+    id_hsm: Optional[int] = None,
+    campaign_name: Optional[str] = None,
+) -> Optional[bool]:
     """
     Verifica se o fluxo está ativo e dentro do prazo de validade consultando o BigQuery.
     Args:
         flow_environment: Ambiente do fluxo ('staging' ou 'production')
-        id_hsm: ID do template HSM
         billing_project_id: ID do projeto GCP para billing
         bucket_name: Nome do bucket GCS para carregamento de credenciais
+        id_hsm: ID do template HSM
+        campaign_name: Nome da campanha
     Returns:
         True se o fluxo estiver ativo e válido, None caso contrário."""
 
-    log(f"\nStarting flow status check for id_hsm={id_hsm} in environment={flow_environment}.")
+    log(f"\nStarting flow status check for id_hsm={id_hsm}, campaign_name={campaign_name} in environment={flow_environment}.")
 
     if flow_environment not in ["staging", "production"]:
         log(f"\n⚠️  Invalid flow_environment: {flow_environment}. Must be 'staging' or 'production'.")
         return None
 
+    if not id_hsm and not campaign_name:
+        log(f"\n⚠️  Either id_hsm or campaign_name must be provided.")
+        return None
+
+    if campaign_name:
+        filter_condition = f"nome_campanha = '{campaign_name}'"
+    else:
+        filter_condition = f"id_hsm = '{id_hsm}'"
+
     query = f"""
         SELECT ativo, data_limite_disparo, nome_campanha
         FROM `rj-crm-registry.brutos_wetalkie_staging.disparos_ativos`
-        WHERE id_hsm = '{id_hsm}' AND ambiente = '{flow_environment}'
+        WHERE {filter_condition} AND ambiente = '{flow_environment}'
         LIMIT 1
     """
     dfr = download_data_from_bigquery(
@@ -972,3 +989,78 @@ def get_retry_destinations(
 
     log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
     return retry_destinations
+
+
+@task
+def save_csv_for_sftp(
+    df: pd.DataFrame,
+    data_extension_filename: str,
+    output_folder: str = "./data_sftp/",
+) -> Tuple[str, str]:
+    """
+    Salva o DataFrame da query como CSV para envio ao Salesforce via SFTP.
+    A coluna 'others' é excluída por ser interna ao controle de retentativas.
+
+    Returns:
+        Tuple[str, str]: (caminho do arquivo CSV salvo, data do disparo)
+    """
+    now = datetime.now(timezone("America/Sao_Paulo"))
+    dispatch_date = now.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = now.strftime("%Y%m%d%H%M%S")
+
+    csv_df = df.drop(columns=["others"], errors="ignore")
+
+    os.makedirs(output_folder, exist_ok=True)
+    filename = f"{data_extension_filename}_{timestamp}.csv"
+    csv_path = os.path.join(output_folder, filename)
+    csv_df.to_csv(csv_path, index=False)
+
+    log(f"CSV criado em {csv_path} com {len(csv_df)} registros")
+    return csv_path, dispatch_date
+
+
+@task
+def send_to_sftp(
+    csv_path: str,
+    infisical_secret_path: str = None,
+    sftp_host: str = None,
+    sftp_user: str = None,
+    sftp_password: str = None,
+    sftp_port: int = 22,
+    sftp_remote_path: str = "/",
+) -> None:
+    """
+    Envia um arquivo CSV para o servidor SFTP do Salesforce.
+
+    Args:
+        csv_path: Caminho local do CSV a ser enviado
+        infisical_secret_path: Caminho no Infisical para buscar as credenciais
+        sftp_host: Endereço do servidor SFTP (opcional se infisical_secret_path for fornecido)
+        sftp_user: Usuário SFTP (opcional se infisical_secret_path for fornecido)
+        sftp_password: Senha SFTP (opcional se infisical_secret_path for fornecido)
+        sftp_port: Porta do servidor SFTP (padrão: 22)
+        sftp_remote_path: Diretório remoto onde o arquivo será depositado
+    """
+    import paramiko
+
+    if infisical_secret_path:
+        prefix = infisical_secret_path.lstrip("/").replace("/", "_")
+        sftp_host = sftp_host or getenv_or_action(f"{prefix}_host")
+        sftp_user = sftp_user or getenv_or_action(f"{prefix}_user")
+        sftp_password = sftp_password or getenv_or_action(f"{prefix}_password")
+        sftp_port = int(getenv_or_action(f"{prefix}_port", sftp_port))
+        sftp_remote_path = getenv_or_action(f"{prefix}_remote_path", sftp_remote_path)
+
+    filename = os.path.basename(csv_path)
+    remote_file = f"{sftp_remote_path.rstrip('/')}/{filename}"
+
+    log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
+    transport = paramiko.Transport((sftp_host, int(sftp_port)))
+    try:
+        transport.connect(username=sftp_user, password=sftp_password)
+        sftp_client = paramiko.SFTPClient.from_transport(transport)
+        sftp_client.put(csv_path, remote_file)
+        sftp_client.close()
+        log(f"CSV enviado com sucesso para SFTP: {remote_file}")
+    finally:
+        transport.close()
