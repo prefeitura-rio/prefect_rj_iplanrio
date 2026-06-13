@@ -294,7 +294,6 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         if response.status_code != 201:
             log(f"Falha no disparo do lote {i}: {response.text}")
             response.raise_for_status()
-            raise Exception(f"Dispatch failed: {response.text}")
 
         log(f"Disparo do lote {i} realizado com sucesso!")
 
@@ -779,6 +778,7 @@ def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
         return None
 
 
+@task
 def get_failed_phones(billing_project_id: str) -> set:
     """
     Busca telefones tiveram falha de não ter whatsapp ou bloqueio no último disparo,
@@ -834,6 +834,7 @@ def get_failed_phones(billing_project_id: str) -> set:
         return set()
 
 
+@task
 def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
     """
     Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
