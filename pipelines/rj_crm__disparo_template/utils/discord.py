@@ -52,9 +52,10 @@ def send_discord_notification(webhook_url: str = None, message: str = 'No messag
     """
     if not webhook_url:
         log(
-            "Discord webhook URL not provided. Using default.",
+            "Discord webhook URL not provided. Skipping notification.",
             level="warning",
         )
+        return
 
     try:
         asyncio.run(_send_discord_webhook(webhook_url, message))
