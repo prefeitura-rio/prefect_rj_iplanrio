@@ -734,11 +734,10 @@ def check_flow_status(
         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
 
     if not row.get("ativo") or row.get("ativo") not in (1, "1"):
-        log(f"\n⚠️  Flow is not active for id_hsm={id_hsm} in environment={flow_environment}.")
+        log(f"\n⚠️  Flow is not active for {row.get('nome_campanha')} in environment={flow_environment}.")
         message = f"""
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
-    🆔 **Template ID:** {id_hsm}
     💻 **Ambiente:** {flow_environment}
 
     Desligue o scheduler no prefect ou mude o status para ativo para reativar o fluxo.
