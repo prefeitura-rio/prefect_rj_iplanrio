@@ -1046,12 +1046,12 @@ def send_to_sftp(
 
     if infisical_secret_path:
         # prefix = infisical_secret_path.lstrip("/").replace("/", "_")
-        prefix = infisical_secret_path.upper().replace("-", "_").replace("/", "")
-        sftp_host = sftp_host or getenv_or_action(f"{prefix}__sf_sftp_host")
-        sftp_user = sftp_user or getenv_or_action(f"{prefix}__sf_sftp_user")
-        sftp_password = sftp_password or getenv_or_action(f"{prefix}_sf_sftp_password")
-        sftp_port = int(getenv_or_action(f"{prefix}_sf_sftp_port", sftp_port))
-        sftp_remote_path = getenv_or_action(f"{prefix}_sf_sftp_remote_path", sftp_remote_path)
+        # prefix = infisical_secret_path.upper().replace("-", "_").replace("/", "")
+        sftp_host = sftp_host or getenv_or_action("sf_sftp_host")
+        sftp_user = sftp_user or getenv_or_action("sf_sftp_user")
+        sftp_password = sftp_password or getenv_or_action("sf_sftp_password")
+        sftp_port = int(getenv_or_action("sf_sftp_port", sftp_port))
+        sftp_remote_path = getenv_or_action("sf_sftp_remote_path", sftp_remote_path)
 
     filename = os.path.basename(csv_path)
     remote_file = f"{sftp_remote_path.rstrip('/')}/{filename}"
