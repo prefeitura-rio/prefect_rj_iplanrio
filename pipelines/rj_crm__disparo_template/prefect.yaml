@@ -20,6 +20,82 @@ pull:
   - prefect.deployments.steps.set_working_directory:
       directory: /opt/prefect/prefect_rj_iplanrio
 deployments:
+
+  - name: rj-crm--disparo-template-sf--staging
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__disparo_template -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      campaign_name: disparo-template-sf
+      cost_center_id: 71
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados_sf
+      dump_mode: append
+      filter_dispatched_phones_or_cpfs: cpf
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
+      infisical_secret_path: /crm_disparo_template
+    schedules:
+      - interval: 864000000
+        anchor_date: "2021-01-01T13:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: test-salesforce
+        flow_run_name: test-salesforce
+        parameters:
+          flow_environment: staging
+          id_hsm: null
+          campaign_name: confirma_agendamento_cadunico_prod_v2
+          cost_center_id: 71
+          dataset_id: brutos_wetalkie
+          table_id: disparos_efetuados_sf
+          dump_mode: append
+          test_mode: true
+          sleep_minutes: 1
+          filter_dispatched_phones_or_cpfs: null
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          whitelist_percentage: 0
+          infisical_secret_path: "/crm_disparo_template"
+          whitelist_environment: "production"
+          filter_failed_phones: false
+          force_add_on_whitelist_group: false
+          whitelist_replace_contacts: false
+          data_extension_filename: whatsapp_cadunico
+          query: |-
+            select
+                * from rj-crm-registry-dev.teste.agendamento_cadunico_teste
+
+  - name: rj-crm--disparo-template-sf--prod
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__disparo_template -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    parameters:
+      campaign_name: disparo-template-sf
+      cost_center_id: 71
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados_sf
+      dump_mode: append
+      filter_dispatched_phones_or_cpfs: cpf
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: true
+      infisical_secret_path: /crm_disparo_template
+    schedules:
+
   - name: rj-crm--disparo-template--staging
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template
@@ -44,8 +120,7 @@ deployments:
       filter_duplicated_cpfs: true
       infisical_secret_path: /wetalkie
     schedules:
-
-# Schedule para alterar celular na whitelist
+  # Schedule para alterar celular na whitelist
       - interval: 864000000
         anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo
@@ -1841,77 +1916,3 @@ deployments:
           whitelist_replace_contacts: true
           query: *puerperas_query_template
 
-  - name: rj-crm--disparo-template-sf--staging
-    version: '{{ build-image.tag }}'
-    entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
-    work_pool:
-      name: default-pool
-      work_queue_name: default
-      job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "uv run --package rj_crm__disparo_template -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets-staging
-        image_pull_policy: Always
-    parameters:
-      campaign_name: disparo-template-sf
-      cost_center_id: 71
-      dataset_id: brutos_wetalkie
-      table_id: disparos_efetuados_sf
-      dump_mode: append
-      filter_dispatched_phones_or_cpfs: cpf
-      filter_duplicated_phones: false
-      filter_duplicated_cpfs: true
-      infisical_secret_path: /crm_disparo_template
-    schedules:
-      - interval: 864000000
-        anchor_date: "2021-01-01T13:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: test-salesforce
-        flow_run_name: test-salesforce
-        parameters:
-          flow_environment: staging
-          id_hsm: null
-          campaign_name: confirma_agendamento_cadunico_prod_v2
-          cost_center_id: 71
-          dataset_id: brutos_wetalkie
-          table_id: disparos_efetuados_sf
-          dump_mode: append
-          test_mode: true
-          sleep_minutes: 1
-          filter_dispatched_phones_or_cpfs: null
-          filter_duplicated_phones: false
-          filter_duplicated_cpfs: false
-          whitelist_percentage: 0
-          infisical_secret_path: "/crm_disparo_template"
-          whitelist_environment: "production"
-          filter_failed_phones: false
-          force_add_on_whitelist_group: false
-          whitelist_replace_contacts: false
-          data_extension_filename: whatsapp_cadunico
-          query: |-
-            select
-                * from rj-crm-registry-dev.teste.agendamento_cadunico_teste
-
-  - name: rj-crm--disparo-template-sf--prod
-    version: '{{ get-commit-hash.stdout }}'
-    entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
-    work_pool:
-      name: default-pool
-      work_queue_name: default
-      job_variables:
-        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "uv run --package rj_crm__disparo_template -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets
-        image_pull_policy: Always
-    parameters:
-      campaign_name: disparo-template-sf
-      cost_center_id: 71
-      dataset_id: brutos_wetalkie
-      table_id: disparos_efetuados_sf
-      dump_mode: append
-      filter_dispatched_phones_or_cpfs: cpf
-      filter_duplicated_phones: false
-      filter_duplicated_cpfs: true
-      infisical_secret_path: /crm_disparo_template
-    schedules:
