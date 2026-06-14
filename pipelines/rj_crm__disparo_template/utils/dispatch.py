@@ -1043,6 +1043,12 @@ def send_to_sftp(
         sftp_remote_path: Diretório remoto onde o arquivo será depositado
     """
 
+    _sftp_keys = {k: v[:4] + "****" for k, v in os.environ.items() if "sftp" in k.lower() or "crm_disparo" in k.lower() or "salesforce" in k.lower()}
+    log(f"DEBUG env vars relacionadas a SFTP/CRM: {_sftp_keys}")
+    if len(_sftp_keys) == 0:
+        _sftp_keys = {k: v[:4] + "****" for k, v in os.environ.items()}
+        log(f"DEBUG2 env vars: {_sftp_keys}")
+
     if infisical_secret_path:
         # prefix = infisical_secret_path.lstrip("/").replace("/", "_")
         # prefix = infisical_secret_path.upper().replace("-", "_").replace("/", "")
