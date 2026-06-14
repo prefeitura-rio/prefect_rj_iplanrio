@@ -1055,8 +1055,13 @@ def send_to_sftp(
     filename = os.path.basename(csv_path)
     remote_file = f"{sftp_remote_path.rstrip('/')}/{filename}"
 
+    SFTP_TIMEOUT_SECONDS = 30
+    SFTP_KEEPALIVE_SECONDS = 15
+
     log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
     transport = paramiko.Transport((sftp_host, int(sftp_port)))
+    transport.set_keepalive(SFTP_KEEPALIVE_SECONDS)
+    transport.settimeout(SFTP_TIMEOUT_SECONDS)
     try:
         transport.connect(username=sftp_user, password=sftp_password)
         sftp_client = paramiko.SFTPClient.from_transport(transport)

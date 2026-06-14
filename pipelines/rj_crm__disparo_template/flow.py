@@ -114,7 +114,7 @@ def rj_crm__disparo_template_sf(
     Orchestrates the dispatch of templated messages via Salesforce SFTP.
 
     Fetches destinations from BigQuery, applies filters, generates a CSV with
-    a 'telefone' column (renamed from 'to') plus all query fields, saves it to
+    a 'telefone' plus all query fields, saves it to
     disk, and uploads it to the configured SFTP server.
     Dispatch results are also logged to BigQuery.
 
