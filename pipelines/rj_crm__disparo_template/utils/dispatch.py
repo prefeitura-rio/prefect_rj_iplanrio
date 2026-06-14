@@ -14,6 +14,7 @@ from math import ceil
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
+import paramiko
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
@@ -1036,21 +1037,21 @@ def send_to_sftp(
     Args:
         csv_path: Caminho local do CSV a ser enviado
         infisical_secret_path: Caminho no Infisical para buscar as credenciais
-        sftp_host: Endereço do servidor SFTP (opcional se infisical_secret_path for fornecido)
-        sftp_user: Usuário SFTP (opcional se infisical_secret_path for fornecido)
-        sftp_password: Senha SFTP (opcional se infisical_secret_path for fornecido)
+        sftp_host: Endereço do servidor SFTP
+        sftp_user: Usuário SFTP
+        sftp_password: Senha SFTP
         sftp_port: Porta do servidor SFTP (padrão: 22)
         sftp_remote_path: Diretório remoto onde o arquivo será depositado
     """
-    import paramiko
 
     if infisical_secret_path:
-        prefix = infisical_secret_path.lstrip("/").replace("/", "_")
-        sftp_host = sftp_host or getenv_or_action(f"{prefix}_host")
-        sftp_user = sftp_user or getenv_or_action(f"{prefix}_user")
-        sftp_password = sftp_password or getenv_or_action(f"{prefix}_password")
-        sftp_port = int(getenv_or_action(f"{prefix}_port", sftp_port))
-        sftp_remote_path = getenv_or_action(f"{prefix}_remote_path", sftp_remote_path)
+        # prefix = infisical_secret_path.lstrip("/").replace("/", "_")
+        prefix = infisical_secret_path.upper().replace("-", "_").replace("/", "")
+        sftp_host = sftp_host or getenv_or_action(f"{prefix}__sf_sftp_host")
+        sftp_user = sftp_user or getenv_or_action(f"{prefix}__sf_sftp_user")
+        sftp_password = sftp_password or getenv_or_action(f"{prefix}_sf_sftp_password")
+        sftp_port = int(getenv_or_action(f"{prefix}_sf_sftp_port", sftp_port))
+        sftp_remote_path = getenv_or_action(f"{prefix}_sf_sftp_remote_path", sftp_remote_path)
 
     filename = os.path.basename(csv_path)
     remote_file = f"{sftp_remote_path.rstrip('/')}/{filename}"
