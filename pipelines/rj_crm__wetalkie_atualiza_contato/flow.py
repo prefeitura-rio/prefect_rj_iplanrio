@@ -23,6 +23,7 @@ from pipelines.rj_crm__wetalkie_atualiza_contato.utils.tasks import (
 )
 
 
+# force deploy
 @flow(log_prints=True)
 def rj_crm__wetalkie_atualiza_contato(
     # Parâmetros opcionais para override manual na UI
