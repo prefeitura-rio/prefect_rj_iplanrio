@@ -269,7 +269,7 @@ deployments:
         parameters:
           table_id: historico_alteracoes
           dump_mode: append
-          break_query_start: "2012-01-01"
+          break_query_start: "2014-01-01"
           break_query_end: "current_day"
           partition_columns: "data_referencia"
           break_query_frequency: "year"
