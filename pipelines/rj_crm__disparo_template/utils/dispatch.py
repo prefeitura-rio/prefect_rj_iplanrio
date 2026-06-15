@@ -1058,7 +1058,7 @@ def send_to_sftp(
         sftp_user = sftp_user or getenv_or_action("sf_sftp_user")
         sftp_password = sftp_password or getenv_or_action("sf_sftp_password")
         sftp_port = int(getenv_or_action("sf_sftp_port", sftp_port))
-        sftp_remote_path = getenv_or_action("sf_sftp_remote_path", sftp_remote_path)
+        sftp_remote_path = getenv_or_action("sf_sftp_path", sftp_remote_path)
 
     filename = os.path.basename(csv_path)
     remote_file = f"{sftp_remote_path.rstrip('/')}/{filename}"
@@ -1101,10 +1101,6 @@ def send_to_sftp(
             password=sftp_password,
             look_for_keys=False,
             allow_agent=False,
-            disabled_algorithms={
-                'pubkeys': ['rsa-sha2-256', 'rsa-sha2-512'],
-                'server_host_key_algorithms': ['rsa-sha2-256', 'rsa-sha2-512']
-            }
         )
         
         sftp = ssh.open_sftp()
@@ -1113,9 +1109,10 @@ def send_to_sftp(
         # Listagem do diretório inicial para debug
         try:
             log(f"Diretório atual (pwd): {sftp.getcwd()}")
+            log(f"Diretório de destino: {sftp_remote_path}")
             log(f"Conteúdo do diretório inicial: {sftp.listdir('.')}")
         except Exception as e:
-            log.warning(f"Não foi possível listar o diretório inicial: {e}")
+            log(f"Não foi possível listar o diretório inicial: {e}")
         
         if sftp_remote_path and sftp_remote_path != '/':
             try:
@@ -1123,13 +1120,6 @@ def send_to_sftp(
                 log(f"Alterado para o diretório: {sftp_remote_path}")
             except IOError:
                 log(f"Diretório {sftp_remote_path} não encontrado. Tentando criar...")
-                # try:
-                #     sftp.mkdir(remote_path)
-                #     sftp.chdir(remote_path)
-                #     log(f"Diretório {remote_path} criado e acessado.")
-                # except IOError as e:
-                #     log.error(f"Erro de permissão ao tentar criar/acessar {remote_path}: {e}")
-                #     log("Tentando prosseguir no diretório raiz...")
 
         for local_file in [csv_path]:
             if os.path.exists(local_file):
@@ -1139,11 +1129,11 @@ def send_to_sftp(
                 sftp.put(local_file, file_name)
                 log(f"Arquivo {file_name} enviado com sucesso.")
             else:
-                log.warning(f"Arquivo não encontrado: {local_file}")
+                log(f"Arquivo não encontrado: {local_file}")
         sftp.close()
         
     except Exception as e:
-        log.error(f"Erro: {str(e)}")
+        log(f"Erro: {str(e)}")
     finally:
         if ssh:
             ssh.close()
