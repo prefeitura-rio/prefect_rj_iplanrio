@@ -1007,7 +1007,8 @@ def save_csv_for_sftp(
     """
     now = datetime.now(timezone("America/Sao_Paulo"))
     dispatch_date = now.strftime("%Y-%m-%d %H:%M:%S")
-    timestamp = now.strftime("%Y%m%d%H%M%S")
+    # timestamp = now.strftime("%Y%m%d%H%M%S")  # TODO: alterar para salvar em segundos
+    timestamp = now.strftime("%Y%m%d%H%M")
 
     csv_df = df.drop(columns=["others"], errors="ignore")
 
