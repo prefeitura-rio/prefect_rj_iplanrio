@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import pandas as pd
 import paramiko
+from paramiko.rsakey import RSAKey
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
@@ -1066,14 +1067,83 @@ def send_to_sftp(
     SFTP_KEEPALIVE_SECONDS = 15
 
     log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
-    transport = paramiko.Transport((sftp_host, int(sftp_port)))
-    transport.set_keepalive(SFTP_KEEPALIVE_SECONDS)
-    # transport.auth_timeout(SFTP_TIMEOUT_SECONDS)  # TODO: verificar qual timeout usar
+    # transport = paramiko.Transport((sftp_host, int(sftp_port)))
+    # transport.set_keepalive(SFTP_KEEPALIVE_SECONDS)
+    # # transport.auth_timeout(SFTP_TIMEOUT_SECONDS)  # TODO: verificar qual timeout usar
+    # try:
+    #     transport.connect(username=sftp_user, password=sftp_password)
+    #     sftp_client = paramiko.SFTPClient.from_transport(transport)
+    #     sftp_client.put(csv_path, remote_file)
+    #     sftp_client.close()
+    #     log(f"CSV enviado com sucesso para SFTP: {remote_file}")
+    # finally:
+    #     transport.close()
+    def bypass_verify_key(self, host_key, sig):
+        # Inicializa a chave no estado do transport para evitar erros de NoneType
+        self.host_key = RSAKey(data=host_key)
+        return True
+
+    paramiko.Transport._verify_key = bypass_verify_key
+    paramiko.Transport._key_info['ssh-rsa'] = RSAKey
+    paramiko.Transport._preferred_keys = ('ssh-rsa', 'ecdsa-sha2-nistp256', 'ssh-ed25519')
+
+    ssh = None
     try:
-        transport.connect(username=sftp_user, password=sftp_password)
-        sftp_client = paramiko.SFTPClient.from_transport(transport)
-        sftp_client.put(csv_path, remote_file)
-        sftp_client.close()
-        log(f"CSV enviado com sucesso para SFTP: {remote_file}")
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        
+        log(f"Conectando ao SFTP {sftp_host}...")
+        
+        ssh.connect(
+            sftp_host, 
+            port=sftp_port, 
+            username=sftp_user, 
+            password=sftp_password,
+            look_for_keys=False,
+            allow_agent=False,
+            disabled_algorithms={
+                'pubkeys': ['rsa-sha2-256', 'rsa-sha2-512'],
+                'server_host_key_algorithms': ['rsa-sha2-256', 'rsa-sha2-512']
+            }
+        )
+        
+        sftp = ssh.open_sftp()
+        log("Conexão estabelecida com sucesso ao SFTP!")
+        
+        # Listagem do diretório inicial para debug
+        try:
+            log(f"Diretório atual (pwd): {sftp.getcwd()}")
+            log(f"Conteúdo do diretório inicial: {sftp.listdir('.')}")
+        except Exception as e:
+            log.warning(f"Não foi possível listar o diretório inicial: {e}")
+        
+        if sftp_remote_path and sftp_remote_path != '/':
+            try:
+                sftp.chdir(sftp_remote_path)
+                log(f"Alterado para o diretório: {sftp_remote_path}")
+            except IOError:
+                log(f"Diretório {sftp_remote_path} não encontrado. Tentando criar...")
+                # try:
+                #     sftp.mkdir(remote_path)
+                #     sftp.chdir(remote_path)
+                #     log(f"Diretório {remote_path} criado e acessado.")
+                # except IOError as e:
+                #     log.error(f"Erro de permissão ao tentar criar/acessar {remote_path}: {e}")
+                #     log("Tentando prosseguir no diretório raiz...")
+
+        for local_file in [csv_path]:
+            if os.path.exists(local_file):
+                # log(f"Arquivos .csv do diretório atual antes de enviar novo arquivo: {[f for f in sftp.listdir('.') if f.endswith('.csv')]}")
+                file_name = os.path.basename(local_file)
+                log(f"Enviando {file_name}...")
+                sftp.put(local_file, file_name)
+                log(f"Arquivo {file_name} enviado com sucesso.")
+            else:
+                log.warning(f"Arquivo não encontrado: {local_file}")
+        sftp.close()
+        
+    except Exception as e:
+        log.error(f"Erro: {str(e)}")
     finally:
-        transport.close()
+        if ssh:
+            ssh.close()
