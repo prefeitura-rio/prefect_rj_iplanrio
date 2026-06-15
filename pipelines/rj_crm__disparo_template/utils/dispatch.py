@@ -1067,7 +1067,7 @@ def send_to_sftp(
     log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
     transport = paramiko.Transport((sftp_host, int(sftp_port)))
     transport.set_keepalive(SFTP_KEEPALIVE_SECONDS)
-    transport.settimeout(SFTP_TIMEOUT_SECONDS)
+    # transport.auth_timeout(SFTP_TIMEOUT_SECONDS)  # TODO: verificar qual timeout usar
     try:
         transport.connect(username=sftp_user, password=sftp_password)
         sftp_client = paramiko.SFTPClient.from_transport(transport)
