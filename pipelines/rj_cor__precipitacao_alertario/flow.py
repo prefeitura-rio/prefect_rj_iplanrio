@@ -4,6 +4,8 @@ Flow para coleta e processamento de dados de precipitação do AlertaRio - COR.
 
 Migrado de Prefect 1.4 para Prefect 3.0.
 """
+from typing import Optional
+
 from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
@@ -20,12 +22,12 @@ from pipelines.rj_cor__precipitacao_alertario.tasks import (
 
 @flow(log_prints=True)
 def rj_cor__precipitacao_alertario(
-    dataset_id_pluviometric: str = "clima_pluviometro",
-    dataset_id_meteorological: str = "clima_estacao_meteorologica",
-    table_id_pluviometric: str = "taxa_precipitacao_alertario",
-    table_id_meteorological: str = "meteorologia_alertario",
-    dump_mode_pluviometric: str = "append",
-    dump_mode_meteorological: str = "append",
+    dataset_id_pluviometric: Optional[str],
+    table_id_pluviometric: Optional[str],
+    dataset_id_meteorological: Optional[str] = None,
+    table_id_meteorological: Optional[str] = None,
+    dump_mode_pluviometric: Optional[str] = "append",
+    dump_mode_meteorological: Optional[str] = "append",
 ):
     """
     Flow para coleta de dados de precipitação e meteorologia do AlertaRio.
@@ -68,59 +70,56 @@ def rj_cor__precipitacao_alertario(
         - Dados pluviométricos incluem acumulados de chuva em diversos intervalos
         - Dados meteorológicos incluem temperatura, umidade, pressão e vento
     """
+    inject_bd_credentials_task(environment="prod")
     print("🌧️  Iniciando coleta de dados do AlertaRio...")
 
     # Step 1: Download dos dados do AlertaRio (retorna 2 DataFrames)
     print("📥 Fazendo download dos dados do AlertaRio...")
     dfr_pluviometric, dfr_meteorological = download_alertario_data_task()
 
-    # Step 2a: Transformar dados pluviométricos
-    print("🔄 Transformando dados pluviométricos...")
-    dfr_pluviometric_transformed = transform_pluviometric_data_task(dfr_pluviometric)
+    if dataset_id_pluviometric is not None:
+        print("🔄 Transformando dados pluviométricos...")
+        dfr_pluviometric_transformed = transform_pluviometric_data_task(dfr_pluviometric)
+        print("💾 Salvando dados pluviométricos em partições...")
+        prepath_pluviometric = save_data_to_partitions_task(
+            dfr=dfr_pluviometric_transformed,
+            data_name="pluviometric",
+            partition_column="data_medicao",
+        )
 
-    # Step 2b: Transformar dados meteorológicos
-    print("🔄 Transformando dados meteorológicos...")
-    dfr_meteorological_transformed = transform_meteorological_data_task(dfr_meteorological)
+        print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id_pluviometric}.{table_id_pluviometric})...")
+        create_table_and_upload_to_gcs_task(
+            data_path=str(prepath_pluviometric),
+            dataset_id=dataset_id_pluviometric,
+            table_id=table_id_pluviometric,
+            dump_mode=dump_mode_pluviometric,
+        )
+        print(f"   - Dados pluviométricos salvos em: {dataset_id_pluviometric}.{table_id_pluviometric}")
+    else:
+        print("⚠️  dataset_id_pluviometric não fornecido. Pulando upload dos dados pluviométricos para BigQuery.")
 
-    # Step 3a: Salvar dados pluviométricos em partições
-    print("💾 Salvando dados pluviométricos em partições...")
-    prepath_pluviometric = save_data_to_partitions_task(
-        dfr=dfr_pluviometric_transformed,
-        data_name="pluviometric",
-        partition_column="data_medicao",
-    )
 
-    # Step 3b: Salvar dados meteorológicos em partições
-    print("💾 Salvando dados meteorológicos em partições...")
-    prepath_meteorological = save_data_to_partitions_task(
-        dfr=dfr_meteorological_transformed,
-        data_name="meteorological",
-        partition_column="data_medicao",
-    )
+    if dataset_id_meteorological is not None:
+        print("🔄 Transformando dados meteorológicos...")
+        dfr_meteorological_transformed = transform_meteorological_data_task(dfr_meteorological)
+        print("💾 Salvando dados meteorológicos em partições...")
+        prepath_meteorological = save_data_to_partitions_task(
+            dfr=dfr_meteorological_transformed,
+            data_name="meteorological",
+            partition_column="data_medicao",
+        )
 
-    # Step 4a: Injetar credenciais e fazer upload para BigQuery (dados pluviométricos)
-    print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id_pluviometric}.{table_id_pluviometric})...")
-    inject_bd_credentials_task(environment="prod")
-    create_table_and_upload_to_gcs_task(
-        data_path=str(prepath_pluviometric),
-        dataset_id=dataset_id_pluviometric,
-        table_id=table_id_pluviometric,
-        dump_mode=dump_mode_pluviometric,
-    )
+        # Step 4b: Fazer upload para BigQuery (dados meteorológicos)
+        print(f"☁️  Fazendo upload dos dados meteorológicos para BigQuery ({dataset_id_meteorological}.{table_id_meteorological})...")
+        create_table_and_upload_to_gcs_task(
+            data_path=str(prepath_meteorological),
+            dataset_id=dataset_id_meteorological,
+            table_id=table_id_meteorological,
+            dump_mode=dump_mode_meteorological,
+        )
 
-    # Step 4b: Fazer upload para BigQuery (dados meteorológicos)
-    print(f"☁️  Fazendo upload dos dados meteorológicos para BigQuery ({dataset_id_meteorological}.{table_id_meteorological})...")
-    create_table_and_upload_to_gcs_task(
-        data_path=str(prepath_meteorological),
-        dataset_id=dataset_id_meteorological,
-        table_id=table_id_meteorological,
-        dump_mode=dump_mode_meteorological,
-    )
+        print(f"  - Dados meteorológicos salvos em: {dataset_id_meteorological}.{table_id_meteorological}")
+    else:
+        print("⚠️  dataset_id_meteorological não fornecido. Pulando upload dos dados meteorológicos para BigQuery.")
 
     print("✅ Flow concluído com sucesso!")
-    print(f"   - Dados pluviométricos salvos em: {dataset_id_pluviometric}.{table_id_pluviometric}")
-    print(f"   - Dados meteorológicos salvos em: {dataset_id_meteorological}.{table_id_meteorological}")
-
-
-if __name__ == "__main__":
-    rj_cor__precipitacao_alertario()
