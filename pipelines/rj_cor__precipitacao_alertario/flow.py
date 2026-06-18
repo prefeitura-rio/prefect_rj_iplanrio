@@ -120,6 +120,6 @@ def rj_cor__precipitacao_alertario(
 
         print(f"  - Dados meteorológicos salvos em: {dataset_id_meteorological}.{table_id_meteorological}")
     else:
-        print("⚠️  dataset_id_meteorological não fornecido. Pulando upload dos dados meteorológicos para BigQuery.")
+        print("⚠️ dataset_id_meteorological não fornecido. Pulando upload dos dados meteorológicos para BigQuery.")
 
     print("✅ Flow concluído com sucesso!")
