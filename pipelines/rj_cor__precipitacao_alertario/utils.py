@@ -120,8 +120,8 @@ def to_partitions(
         # Construir caminho do diretório de partição
         partition_path = savepath
         for col, val in zip(partition_columns, partition_values_list):
-            val = val.lstrip("0")
-            partition_path = partition_path / f"{col}={val}"
+            dir_name = col.replace("_particao", "")
+            partition_path = partition_path / f"{dir_name}={val}"
 
         # Criar diretório se não existir
         partition_path.mkdir(parents=True, exist_ok=True)
