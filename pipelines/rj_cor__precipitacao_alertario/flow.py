@@ -87,7 +87,7 @@ def rj_cor__precipitacao_alertario(
             partition_column="data_medicao",
         )
 
-        print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id_pluviometric}.{table_id_pluviometric})..")
+        print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id_pluviometric}.{table_id_pluviometric})")
         create_table_and_upload_to_gcs_task(
             data_path=str(prepath_pluviometric),
             dataset_id=dataset_id_pluviometric,
