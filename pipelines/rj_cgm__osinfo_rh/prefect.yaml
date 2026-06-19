@@ -254,19 +254,19 @@ deployments:
             `PROV_OBSERVACAO`
           FROM `rh`.`tb_provisionamento`;
 
-    - interval: 86400 # executa a cada 24h
-      anchor_date: "2022-01-01T08:05:00" # UTC: 08:05hrs / BRT: 05:05hrs
-      timezone: America/Sao_Paulo
-      slug: tb_valores_folha_pagamento # slug do schedule
-      parameters:
-        table_id: tb_valores_folha_pagamento # Nome da tabela no BigQuery
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `FPTO_CD_FOLHA`,
-            `RHCO_COD_COLUNA`,
-            `VLFP_VL_VALOR`
-          FROM `rh`.`tb_valores_folha_pagamento`;
+    # - interval: 86400 # executa a cada 24h
+    #   anchor_date: "2022-01-01T08:05:00" # UTC: 08:05hrs / BRT: 05:05hrs
+    #   timezone: America/Sao_Paulo
+    #   slug: tb_valores_folha_pagamento # slug do schedule
+    #   parameters:
+    #     table_id: tb_valores_folha_pagamento # Nome da tabela no BigQuery
+    #     dump_mode: overwrite
+    #     execute_query: |
+    #       SELECT
+    #         `FPTO_CD_FOLHA`,
+    #         `RHCO_COD_COLUNA`,
+    #         `VLFP_VL_VALOR`
+    #       FROM `rh`.`tb_valores_folha_pagamento`;
     # Exemplo de schedule incremental
     - interval: 86400 # executa a cada 24h
       anchor_date: "2022-01-01T08:10:00" # UTC: 08:10hrs / BRT: 05:10hrs
