@@ -262,20 +262,20 @@ deployments:
             as `TELEFONE_1_RAMAL`, `forn_telefone_2` as `TELEFONE_2`, `forn_telefone_2_ramal` as `TELEFONE_2_RAMAL`, `forn_telefone_fax`
             as `TELEFONE_FAX`, `forn_email` as `EMAIL`, `forn_pessoa_contato` as `CONTATO`, `id_imagem` as `ID_IMAGEM`, `id_log_importacao`
             as `ID_LOG_IMPORTACAO`, `cod_os` as `COD_ORGANIZACAO`, `data_envio` as `DATA_ENVIO        DATA_ENVIO` FROM `osinfo_V2`.`si_fornecedor`;
-      - interval: 86400
-        anchor_date: '2026-06-08T08:15:00'
-        timezone: America/Sao_Paulo
-        slug: historico_alteracoes
-        parameters:
-          table_id: historico_alteracoes
-          dump_mode: append
-          break_query_start: "2014-01-01"
-          break_query_end: "current_day"
-          partition_columns: "data_referencia"
-          break_query_frequency: "year"
-          partition_date_format: "%Y-%m-%d"
-          biglake_table: true
-          execute_query: SELECT `hial_id_historico_alteracoes` as `ID_HISTORICO_ALTERACOES`, `tipo_arquivo_id` as `ID_TIPO_ARQUIVO`, `cod_usuario` as `COD_USUARIO`, `cod_os` as `COD_ORGANIZACAO`, `hial_data_modificacao` as `DATA_MODIFICACAO`, `hial_valor_anterior` as `VALOR_ANTERIOR`, `hial_valor_novo` as `VALOR_NOVO`, `hial_mes_ref` as `MES_REFERENCIA`, `hial_ano_ref` as `ANO_REFERENCIA`, `hial_id_registro` as `ID_REGISTRO`, `hial_tipo_alteracao` as `TIPO_ALTERACAO`, DATE(CONCAT(hial_ano_ref, '-01-01')) AS data_referencia  FROM `osinfo_V2`.`tb_historico_alteracoes`  WHERE hial_ano_ref IS NOT NULL
+      # - interval: 86400
+      #   anchor_date: '2026-06-08T08:15:00'
+      #   timezone: America/Sao_Paulo
+      #   slug: historico_alteracoes
+      #   parameters:
+      #     table_id: historico_alteracoes
+      #     dump_mode: append
+      #     break_query_start: "2014-01-01"
+      #     break_query_end: "current_day"
+      #     partition_columns: "data_referencia"
+      #     break_query_frequency: "year"
+      #     partition_date_format: "%Y-%m-%d"
+      #     biglake_table: true
+      #     execute_query: SELECT `hial_id_historico_alteracoes` as `ID_HISTORICO_ALTERACOES`, `tipo_arquivo_id` as `ID_TIPO_ARQUIVO`, `cod_usuario` as `COD_USUARIO`, `cod_os` as `COD_ORGANIZACAO`, `hial_data_modificacao` as `DATA_MODIFICACAO`, `hial_valor_anterior` as `VALOR_ANTERIOR`, `hial_valor_novo` as `VALOR_NOVO`, `hial_mes_ref` as `MES_REFERENCIA`, `hial_ano_ref` as `ANO_REFERENCIA`, `hial_id_registro` as `ID_REGISTRO`, `hial_tipo_alteracao` as `TIPO_ALTERACAO`, DATE(CONCAT(hial_ano_ref, '-01-01')) AS data_referencia  FROM `osinfo_V2`.`tb_historico_alteracoes`  WHERE hial_ano_ref IS NOT NULL
       - interval: 86400
         anchor_date: '2026-06-08T08:20:00'
         timezone: America/Sao_Paulo
