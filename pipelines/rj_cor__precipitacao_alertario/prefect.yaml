@@ -62,10 +62,10 @@ deployments:
           dump_mode_pluviometric: "append"
           dump_mode_meteorological: "append"
 
-      - interval: 120
+      - interval: 300
         anchor_date: "2021-01-01T00:00:00"
         timezone: America/Sao_Paulo
-        slug: precipitacao-alertario-2min
+        slug: precipitacao-alertario-5min
         parameters:
           dataset_id_pluviometric: "clima_pluviometro"
           table_id_pluviometric: "taxa_precipitacao_alertario_5min"
