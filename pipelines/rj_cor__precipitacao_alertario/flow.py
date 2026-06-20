@@ -74,7 +74,7 @@ def rj_cor__precipitacao_alertario(
     print("🌧️  Iniciando coleta de dados do AlertaRio...")
 
     # Step 1: Download dos dados do AlertaRio (retorna 2 DataFrames)
-    print("📥 Fazendo download dos dados do AlertaRio...")
+    print("📥 Fazendo download dos dados do AlertaRio..")
     dfr_pluviometric, dfr_meteorological = download_alertario_data_task()
 
     if dataset_id_pluviometric is not None:
