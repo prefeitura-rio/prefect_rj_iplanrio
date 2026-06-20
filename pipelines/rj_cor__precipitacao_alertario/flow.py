@@ -71,7 +71,6 @@ def rj_cor__precipitacao_alertario(
         - Dados pluviométricos incluem acumulados de chuva em diversos intervalos
         - Dados meteorológicos incluem temperatura, umidade, pressão e vento
     """
-    rename_current_flow_run_task
     inject_bd_credentials_task(environment="prod")
     print("🌧️  Iniciando coleta de dados do AlertaRio...")
 
