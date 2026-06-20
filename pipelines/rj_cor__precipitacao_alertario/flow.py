@@ -10,6 +10,7 @@ from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_cor__precipitacao_alertario.tasks import (
@@ -74,10 +75,11 @@ def rj_cor__precipitacao_alertario(
     print("🌧️  Iniciando coleta de dados do AlertaRio...")
 
     # Step 1: Download dos dados do AlertaRio (retorna 2 DataFrames)
-    print("📥 Fazendo download dos dados do AlertaRio...")
+    print("📥 Fazendo download dos dados do AlertaRio..")
     dfr_pluviometric, dfr_meteorological = download_alertario_data_task()
 
     if dataset_id_pluviometric is not None:
+        rename_current_flow_run_task(new_name=f"{dataset_id_pluviometric}.{table_id_pluviometric}")
         print("🔄 Transformando dados pluviométricos...")
         dfr_pluviometric_transformed = transform_pluviometric_data_task(dfr_pluviometric)
         print("💾 Salvando dados pluviométricos em partições...")
@@ -100,6 +102,7 @@ def rj_cor__precipitacao_alertario(
 
 
     if dataset_id_meteorological is not None:
+        rename_current_flow_run_task(new_name=f"{dataset_id_pluviometric}.{table_id_pluviometric}")
         print("🔄 Transformando dados meteorológicos...")
         dfr_meteorological_transformed = transform_meteorological_data_task(dfr_meteorological)
         print("💾 Salvando dados meteorológicos em partições...")
