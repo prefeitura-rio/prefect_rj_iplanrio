@@ -36,7 +36,7 @@ async def send_discord_webhook(
     """
     # Select webhook URL based on destination
 
-    webhook_url = os.getenv("DBT-RUN__DISCORD_WEBHOOK_URL_NOTIFICATIONS")
+    webhook_url = getenv_or_action("DBT-RUN__DISCORD_WEBHOOK_URL_NOTIFICATIONS")
     if len(text_content) > 2000:
         raise ValueError(f"Message content is too long: {len(text_content)} > 2000 characters.")
 
