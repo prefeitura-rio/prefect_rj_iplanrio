@@ -59,7 +59,7 @@ def add_token_github_repo(repository_url: str) -> str:
         somethintg like https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
 
     Returns:
-        str: The repository URL with the GitHub token added if it's a private repository
+        str: The repository URL with the GitHub token added if it's a private repository.
     """
     if "GITHUB_TOKEN" in repository_url:
         log("Adding GitHub token to the repository URL from infisical variable GITHUB_TOKEN")
