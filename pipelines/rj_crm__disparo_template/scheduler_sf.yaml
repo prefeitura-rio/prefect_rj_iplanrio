@@ -164,7 +164,7 @@ schedules:
       campaign_name: cvl-pesquisa1746-prod
       cost_center_id: 71
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
@@ -372,7 +372,7 @@ schedules:
       campaign_name: cvl-pesquisa1746-prod
       cost_center_id: 71
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
@@ -578,7 +578,7 @@ schedules:
       campaign_name: pgm-divida-ativa-prod-v2
       cost_center_id: 71
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
@@ -820,7 +820,7 @@ schedules:
       campaign_name: pgm-divida-ativa-lembrete-prod-v1
       cost_center_id: 71
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
@@ -969,7 +969,7 @@ schedules:
       campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
       cost_center_id: 71
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
@@ -1121,7 +1121,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1296,7 +1296,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1469,7 +1469,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1504,7 +1504,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1542,7 +1542,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1577,7 +1577,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1614,7 +1614,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1649,7 +1649,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1684,7 +1684,7 @@ schedules:
         dump_mode: append
         test_mode: false
         chunk_size: 1000
-        dataset_id: brutos_wetalkie
+        dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
@@ -1714,7 +1714,7 @@ schedules:
       campaign_name: change-whitelist
       cost_center_id: 71
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
@@ -1751,7 +1751,7 @@ schedules:
       campaign_name: confirma_agendamento_cadunico_prod_v2
       cost_center_id: 71
       chunk_size: 1000
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_salesforce
       table_id: disparos_efetuados_teste
       dump_mode: append
       test_mode: true
