@@ -31,6 +31,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     check_flow_status,
     create_dispatch_dfr,
     create_dispatch_payload,
+    create_log_df,
     dispatch,
     filter_already_dispatched_phones_or_cpfs,
     format_query,
@@ -46,6 +47,8 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     save_csv_for_sftp,
     send_to_sftp,
 )
+# pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.validators import validate_sf_dataframe
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
@@ -198,6 +201,10 @@ def rj_crm__disparo_template_sf(
         send_dispatch_no_destinations_found(id_hsm, campaign_name, cost_center_id, test_mode)
         return
 
+    # Valida colunas obrigatórias para o log SF: SubscriberKey e telefone.
+    # Lança ValueError imediatamente se alguma estiver ausente ou com dados inválidos.
+    validate_sf_dataframe(df, campaign_name)
+
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
 
     # Dedup por CPF — base para o loop de retentativas
@@ -213,6 +220,7 @@ def rj_crm__disparo_template_sf(
     # Remove telefones que falharam no último disparo
     if filter_failed_phones:
         # TODO: get_failed_phones queries fluxo_atendimento (Wetalkie). Substituir por tabela SF quando disponível.
+        # TODO: trocar externalId por SubscriberKey
         failed_phones = get_failed_phones(billing_project_id=billing_project_id)
         if failed_phones:
             if max_dispatch_retries > 0:
@@ -349,12 +357,12 @@ def rj_crm__disparo_template_sf(
                 total_attempt_number=max_dispatch_retries + 1,
             )
 
-            # Log para BQ: adiciona metadados ao DataFrame do disparo
-            log_df = current_df.drop(columns=["others"], errors="ignore").copy()
-            log_df["id_hsm"] = id_hsm
-            log_df["dispatch_date"] = dispatch_date
-            log_df["campaignName"] = campaign_name
-            log_df["costCenterId"] = cost_center_id
+            # Log para BQ: schema fixo com coluna `data` em JSON para camada bronze
+            log_df = create_log_df(
+                df=current_df,
+                dispatch_date=dispatch_date,
+                campaign_name=campaign_name,
+            )
 
             partitions_path = create_date_partitions(
                 dataframe=log_df,

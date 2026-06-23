@@ -26,6 +26,7 @@ from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notifi
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.schemas import SfDispatchRow  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.validators import (
     log_validation_summary,
     validate_destinations,
@@ -358,6 +359,92 @@ def create_dispatch_dfr(
         log(f"WARNING: Found {null_external_ids} records with null externalId after validation")
 
     return dfr
+
+
+@task
+def create_log_df(
+    df: pd.DataFrame,
+    dispatch_date: str,
+    campaign_name: str,
+) -> pd.DataFrame:
+    """
+    Constrói o DataFrame de log para a camada bronze do BigQuery a partir do
+    DataFrame de disparo do flow SF.
+
+    Schema de saída fixo (independente da query):
+        dispatch_date  | campaign_name | SubscriberKey | telefone | data
+
+    - dispatch_date e campaign_name são metadados do disparo.
+    - SubscriberKey e telefone são as colunas de identificação obrigatórias.
+    - data: JSON string com todas as colunas restantes do DataFrame (excluindo
+      'others', 'dispatch_date', 'campaign_name', 'SubscriberKey', 'telefone').
+
+    Cada linha é validada via SfDispatchRow (Pydantic) antes de ser incluída.
+    Linhas inválidas são logadas e descartadas; se nenhuma linha for válida,
+    lança ValueError.
+
+    Args:
+        df: DataFrame de disparo (current_df), já filtrado e sem 'others'.
+        dispatch_date: String com a data/hora do disparo.
+        campaign_name: Nome da campanha.
+
+    Returns:
+        DataFrame com colunas: dispatch_date, campaign_name, SubscriberKey, telefone, data.
+
+    Raises:
+        ValueError: Se nenhuma linha for válida após validação.
+    """
+    # Colunas que viram campos fixos no schema de saída — não entram no JSON de `data`
+    fixed_columns = {"dispatch_date", "campaign_name", "SubscriberKey", "telefone"}
+
+    # Colunas do df que sobram para o JSON de `data`
+    extra_columns = [col for col in df.columns if col not in fixed_columns]
+
+    records = []
+    invalid_count = 0
+
+    for i, row in df.iterrows():
+        try:
+            validated = SfDispatchRow(
+                dispatch_date=str(dispatch_date),
+                campaign_name=str(campaign_name),
+                SubscriberKey=str(row.get("SubscriberKey", "")),
+                telefone=str(row.get("telefone", "")),
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            invalid_count += 1
+            log(f"create_log_df: linha {i} descartada por validação inválida: {e}")
+            continue
+
+        # Monta o JSON com os campos extras, convertendo tipos não-serializáveis para string
+        extra_data = {}
+        for col in extra_columns:
+            val = row.get(col)
+            # Converte tipos pandas/numpy não serializáveis
+            if hasattr(val, "item"):
+                val = val.item()
+            extra_data[col] = val
+
+        records.append({
+            "dispatch_date": validated.dispatch_date,
+            "campaign_name": validated.campaign_name,
+            "SubscriberKey": validated.SubscriberKey,
+            "telefone": validated.telefone,
+            "data": json.dumps(extra_data, ensure_ascii=False, default=str),
+        })
+
+    if not records:
+        raise ValueError(
+            f"create_log_df: nenhuma linha válida após validação. "
+            f"{invalid_count} linhas descartadas."
+        )
+
+    if invalid_count > 0:
+        log(f"create_log_df: {invalid_count} linhas descartadas por validação inválida.")
+
+    log_df = pd.DataFrame(records, columns=["dispatch_date", "campaign_name", "SubscriberKey", "telefone", "data"])
+    log(f"create_log_df: DataFrame de log criado com {len(log_df)} registros.")
+    return log_df
 
 
 @task
@@ -1008,15 +1095,16 @@ def save_csv_for_sftp(
     """
     now = datetime.now(timezone("America/Sao_Paulo"))
     dispatch_date = now.strftime("%Y-%m-%d %H:%M:%S")
-    # timestamp = now.strftime("%Y%m%d%H%M%S")  # TODO: alterar para salvar em segundos
-    timestamp = now.strftime("%Y%m%d%H%M")
+    timestamp = now.strftime("%Y%m%d%H%M%S")  # TODO: alterar para salvar em segundos
+    # timestamp = now.strftime("%Y%m%d%H%M")
 
     csv_df = df.drop(columns=["others"], errors="ignore")
+    csv_df["LOCALE"] = "BR"
 
     os.makedirs(output_folder, exist_ok=True)
     filename = f"{data_extension_filename}_{timestamp}.csv"
     csv_path = os.path.join(output_folder, filename)
-    csv_df.to_csv(csv_path, index=False)
+    csv_df.to_csv(csv_path, index=False, sep=";")
 
     log(f"CSV criado em {csv_path} com {len(csv_df)} registros")
     return csv_path, dispatch_date
