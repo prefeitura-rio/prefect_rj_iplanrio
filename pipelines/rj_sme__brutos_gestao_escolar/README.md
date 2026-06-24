@@ -6,8 +6,8 @@ As tabelas de Gestão Escolar são administradas pela Secretaria Municipal de Ed
 
 ## 2. Contatos
 1. Equipe Responsável:
-1. Nome Responsável:
-2. Email Responsável
+1. Nome do Responsável:
+2. Email do Responsável
 
 ## 2. Fonte de Dados
 
