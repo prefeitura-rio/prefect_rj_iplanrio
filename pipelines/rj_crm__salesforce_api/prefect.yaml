@@ -39,13 +39,9 @@ deployments:
       infisical_secret_path: /salesforce_marketing_cloud
     schedules:
 
-      # -------------------------------------------------------------------
-      # GET - Todos os assets (paginação automática)
-      # Rota: GET /asset/v1/content/assets
-      # Tabela destino: content_assets
-      # -------------------------------------------------------------------
+      # GET - Todos os assets (paginacao automatica)
       - interval: 86400
-        anchor_date: "2021-01-01T13:00:00"
+        anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
         slug: get-content-assets
@@ -61,13 +57,9 @@ deployments:
           dump_mode: append
           infisical_secret_path: /salesforce_marketing_cloud
 
-      # -------------------------------------------------------------------
-      # POST /query - Assets do tipo jsonmessage com view whatsAppTemplate
-      # Rota: POST /asset/v1/content/assets/query
-      # Tabela destino: content_assets_whatsapp_template
-      # -------------------------------------------------------------------
+      # POST /query - Assets jsonmessage com view whatsAppTemplate
       - interval: 86400
-        anchor_date: "2021-01-01T13:00:00"
+        anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
         slug: post-content-assets-whatsapp-template
@@ -99,7 +91,7 @@ deployments:
           infisical_secret_path: /salesforce_marketing_cloud
 
   # -----------------------------------------------------------------------
-  # Deployment de produção
+  # Deployment de producao
   # -----------------------------------------------------------------------
   - name: rj-crm--salesforce-api--prod
     version: '{{ get-commit-hash.stdout }}'
@@ -116,13 +108,9 @@ deployments:
       infisical_secret_path: /salesforce_marketing_cloud
     schedules:
 
-      # -------------------------------------------------------------------
-      # GET - Todos os assets (paginação automática)
-      # Rota: GET /asset/v1/content/assets
-      # Tabela destino: content_assets
-      # -------------------------------------------------------------------
+      # GET - Todos os assets (paginacao automatica)
       - interval: 86400
-        anchor_date: "2021-01-01T13:00:00"
+        anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
         slug: get-content-assets
@@ -138,18 +126,14 @@ deployments:
           dump_mode: append
           infisical_secret_path: /salesforce_marketing_cloud
 
-      # -------------------------------------------------------------------
-      # POST /query - Assets do tipo jsonmessage com view whatsAppTemplate
-      # Rota: POST /asset/v1/content/assets/query
-      # Tabela destino: content_assets_whatsapp_template
-      # -------------------------------------------------------------------
+      # POST /query - Assets jsonmessage com view whatsAppTemplate
       - interval: 86400
-        anchor_date: "2021-01-01T13:00:00"
+        anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
         slug: post-content-assets-whatsapp-template
         flow_run_name: post-content-assets-whatsapp-template
-false        parameters:
+        parameters:
           route: "/asset/v1/content/assets/query"
           http_method: post
           body_json:
@@ -174,24 +158,3 @@ false        parameters:
           dataset_id: brutos_salesforce
           dump_mode: append
           infisical_secret_path: /salesforce_marketing_cloud
-
-      # -------------------------------------------------------------------
-      # Adicione novas rotas aqui seguindo o mesmo padrão:
-      #
-      # - interval: 86400
-        anchor_date: "2021-01-01T13:00:00"
-      #   timezone: America/Sao_Paulo
-      #   active: false
-      #   slug: sfmc-<nome>
-      #   flow_run_name: sfmc-<nome>
-      #   parameters:
-      #     route: "/caminho/da/rota"
-      #     http_method: get   # ou post
-      #     query_params: {}   # apenas para GET
-      #     body_json: {}      # apenas para POST
-      #     page_size: 200
-      #     table_id: <nome_da_tabela>
-      #     dataset_id: brutos_salesforce
-      #     dump_mode: append
-      #     infisical_secret_path: /salesforce_marketing_cloud
-      # -------------------------------------------------------------------
