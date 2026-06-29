@@ -81,6 +81,14 @@ def rj_crm__salesforce_api(
 
     rename_current_flow_run_task(new_name=f"sfmc_api__{http_method}__{table_id}")
     inject_bd_credentials_task(environment="prod")
+
+    # Debug: lista todas as keys disponíveis no ambiente (K8s Secret montado)
+    # Útil para confirmar quais variáveis do Infisical chegaram ao pod
+    all_env_keys = sorted(os.environ.keys())
+    print(f"[SFMC] Todas as keys no ambiente do pod ({len(all_env_keys)} total):")
+    print("\n".join(all_env_keys))
+    sfmc_keys = [k for k in all_env_keys if k.startswith("sfmc_")]
+    print(f"[SFMC] Keys com prefixo 'sfmc_': {sfmc_keys}")
     # force deploy
     # 1. Chamar a rota da SFMC REST API (GET ou POST, com paginação automática)
     records = fetch_sfmc_route(
