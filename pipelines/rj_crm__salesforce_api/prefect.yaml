@@ -40,24 +40,60 @@ deployments:
     schedules:
 
       # -------------------------------------------------------------------
-      # Rota: GET /asset/v1/content/assets/{assetId}
+      # GET - Todos os assets (paginação automática)
+      # Rota: GET /asset/v1/content/assets
       # Tabela destino: content_assets
-      # Frequência: diária às 06:00 BRT (09:00 UTC)
       # -------------------------------------------------------------------
-      - cron: "0 9 * * *"
+      - interval: 86400
+        anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo
         active: false
-        slug: sfmc-content-assets
-        flow_run_name: sfmc-content-assets
+        slug: get-content-assets
+        flow_run_name: get-content-assets
         parameters:
-          route: "/asset/v1/content/assets/{assetId}"
-          route_params:
-            # Substitua pelo assetId real que deseja ingerir.
-            # Para ingestão em lote, use a rota sem parâmetro de path:
-            # route: "/asset/v1/content/assets"
-            # query_params: {"$pageSize": 50, "scope": "Ours,Shared"}
-            assetId: "12345"
+          route: "/asset/v1/content/assets"
+          http_method: get
+          query_params:
+            scope: "Ours,Shared"
+          page_size: 200
           table_id: content_assets
+          dataset_id: brutos_salesforce
+          dump_mode: append
+          infisical_secret_path: /salesforce_marketing_cloud
+
+      # -------------------------------------------------------------------
+      # POST /query - Assets do tipo jsonmessage com view whatsAppTemplate
+      # Rota: POST /asset/v1/content/assets/query
+      # Tabela destino: content_assets_whatsapp_template
+      # -------------------------------------------------------------------
+      - interval: 86400
+        anchor_date: "2021-01-01T13:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-assets-whatsapp-template
+        flow_run_name: post-content-assets-whatsapp-template
+        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          body_json:
+            query:
+              leftOperand:
+                property: "assetType.name"
+                simpleOperator: "equal"
+                value: "jsonmessage"
+              logicalOperator: "AND"
+              rightOperand:
+                property: "availableViews"
+                simpleOperator: "mustContain"
+                value: "whatsAppTemplate"
+            fields:
+              - "id"
+              - "name"
+              - "customerKey"
+              - "views"
+              - "availableViews"
+          page_size: 100
+          table_id: content_assets_whatsapp_template
           dataset_id: brutos_salesforce
           dump_mode: append
           infisical_secret_path: /salesforce_marketing_cloud
@@ -81,20 +117,60 @@ deployments:
     schedules:
 
       # -------------------------------------------------------------------
-      # Rota: GET /asset/v1/content/assets/{assetId}
+      # GET - Todos os assets (paginação automática)
+      # Rota: GET /asset/v1/content/assets
       # Tabela destino: content_assets
-      # Frequência: diária às 06:00 BRT (09:00 UTC)
       # -------------------------------------------------------------------
-      - cron: "0 9 * * *"
+      - interval: 86400
+        anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo
         active: false
-        slug: sfmc-content-assets
-        flow_run_name: sfmc-content-assets
+        slug: get-content-assets
+        flow_run_name: get-content-assets
         parameters:
-          route: "/asset/v1/content/assets/{assetId}"
-          route_params:
-            assetId: "12345"
+          route: "/asset/v1/content/assets"
+          http_method: get
+          query_params:
+            scope: "Ours,Shared"
+          page_size: 200
           table_id: content_assets
+          dataset_id: brutos_salesforce
+          dump_mode: append
+          infisical_secret_path: /salesforce_marketing_cloud
+
+      # -------------------------------------------------------------------
+      # POST /query - Assets do tipo jsonmessage com view whatsAppTemplate
+      # Rota: POST /asset/v1/content/assets/query
+      # Tabela destino: content_assets_whatsapp_template
+      # -------------------------------------------------------------------
+      - interval: 86400
+        anchor_date: "2021-01-01T13:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-assets-whatsapp-template
+        flow_run_name: post-content-assets-whatsapp-template
+false        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          body_json:
+            query:
+              leftOperand:
+                property: "assetType.name"
+                simpleOperator: "equal"
+                value: "jsonmessage"
+              logicalOperator: "AND"
+              rightOperand:
+                property: "availableViews"
+                simpleOperator: "mustContain"
+                value: "whatsAppTemplate"
+            fields:
+              - "id"
+              - "name"
+              - "customerKey"
+              - "views"
+              - "availableViews"
+          page_size: 100
+          table_id: content_assets_whatsapp_template
           dataset_id: brutos_salesforce
           dump_mode: append
           infisical_secret_path: /salesforce_marketing_cloud
@@ -102,15 +178,18 @@ deployments:
       # -------------------------------------------------------------------
       # Adicione novas rotas aqui seguindo o mesmo padrão:
       #
-      # - cron: "0 9 * * *"
+      # - interval: 86400
+        anchor_date: "2021-01-01T13:00:00"
       #   timezone: America/Sao_Paulo
       #   active: false
-      #   slug: sfmc-<nome-da-rota>
-      #   flow_run_name: sfmc-<nome-da-rota>
+      #   slug: sfmc-<nome>
+      #   flow_run_name: sfmc-<nome>
       #   parameters:
       #     route: "/caminho/da/rota"
-      #     route_params: {}
-      #     query_params: {}
+      #     http_method: get   # ou post
+      #     query_params: {}   # apenas para GET
+      #     body_json: {}      # apenas para POST
+      #     page_size: 200
       #     table_id: <nome_da_tabela>
       #     dataset_id: brutos_salesforce
       #     dump_mode: append
