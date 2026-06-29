@@ -15,12 +15,12 @@ Métodos suportados (parâmetro http_method no flow):
 """
 
 import json
-import os
 from datetime import date
 from typing import Any, Literal
 
 import pandas as pd
 import requests
+from iplanrio.pipelines_utils.env import getenv_or_action
 from prefect import task
 
 
@@ -31,16 +31,19 @@ from prefect import task
 def _get_sfmc_credentials() -> dict[str, str]:
     """
     Lê as credenciais da SFMC a partir das variáveis de ambiente
-    (injetadas pelo Infisical via inject_bd_credentials_task ou secretName).
+    injetadas pelo Infisical (via secretName no job do Kubernetes).
+
+    As variáveis são lidas com getenv_or_action, que lança erro claro
+    caso a variável não esteja definida no ambiente.
 
     Returns:
         dict com as chaves: client_id, client_secret, auth_url, rest_base_url
     """
     return {
-        "client_id": os.environ["sfmc_client_id"],
-        "client_secret": os.environ["sfmc_client_secret"],
-        "auth_url": os.environ["sfmc_auth_url"].rstrip("/"),
-        "rest_base_url": os.environ["sfmc_rest_base_url"].rstrip("/"),
+        "client_id": getenv_or_action("sfmc_client_id"),
+        "client_secret": getenv_or_action("sfmc_client_secret"),
+        "auth_url": getenv_or_action("sfmc_auth_url").rstrip("/"),
+        "rest_base_url": getenv_or_action("sfmc_rest_base_url").rstrip("/"),
     }
 
 
