@@ -25,7 +25,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_crm__salesforce_api.constants import SalesforceAPIConstants
+from pipelines.rj_crm__salesforce_api.constants import APIConstants
 from pipelines.rj_crm__salesforce_api.tasks import build_dataframe, fetch_sfmc_route
 from pipelines.rj_crm__disparo_template.utils.tasks import create_date_partitions
 
@@ -72,12 +72,12 @@ def rj_crm__salesforce_api(
         infisical_secret_path: Path no Infisical para as credenciais da SFMC.
                                Padrão: "/salesforce_marketing_cloud".
     """
-    dataset_id = dataset_id or SalesforceAPIConstants.DATASET_ID.value
-    dump_mode = dump_mode or SalesforceAPIConstants.DUMP_MODE.value
-    infisical_secret_path = infisical_secret_path or SalesforceAPIConstants.INFISICAL_SECRET_PATH.value
-    root_folder = SalesforceAPIConstants.ROOT_FOLDER.value
-    file_format = SalesforceAPIConstants.FILE_FORMAT.value
-    partition_column = SalesforceAPIConstants.PARTITION_COLUMN.value
+    dataset_id = dataset_id or APIConstants.DATASET_ID.value
+    dump_mode = dump_mode or APIConstants.DUMP_MODE.value
+    infisical_secret_path = infisical_secret_path or APIConstants.INFISICAL_SECRET_PATH.value
+    root_folder = APIConstants.ROOT_FOLDER.value
+    file_format = APIConstants.FILE_FORMAT.value
+    partition_column = APIConstants.PARTITION_COLUMN.value
 
     rename_current_flow_run_task(new_name=f"sfmc_api__{http_method}__{table_id}")
     inject_bd_credentials_task(environment="prod")
