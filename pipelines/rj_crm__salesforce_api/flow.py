@@ -81,7 +81,7 @@ def rj_crm__salesforce_api(
 
     rename_current_flow_run_task(new_name=f"sfmc_api__{http_method}__{table_id}")
     inject_bd_credentials_task(environment="prod")
-
+    # force deploy
     # 1. Chamar a rota da SFMC REST API (GET ou POST, com paginação automática)
     records = fetch_sfmc_route(
         route=route,
