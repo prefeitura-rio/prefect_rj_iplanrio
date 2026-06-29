@@ -83,6 +83,7 @@ def rj_crm__salesforce_api(
     inject_bd_credentials_task(environment="prod")
 
     # 1. Chamar a rota da SFMC REST API (GET ou POST, com paginação automática)
+    # force deploy
     records = fetch_sfmc_route(
         route=route,
         http_method=http_method,
