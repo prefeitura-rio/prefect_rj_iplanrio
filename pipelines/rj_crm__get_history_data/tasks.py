@@ -290,7 +290,7 @@ def fetch_de_field_types(
 @task
 def build_historico_dataframe(results: List[Dict[str, Any]]) -> None:
     """
-    Constrói e loga um DataFrame com uma linha por registro de cada DE.
+    Constrói e loga um DataFrame com uma linha por registro de cada DE e faz o log.
 
     Colunas:
         de_name  - nome da Data Extension
