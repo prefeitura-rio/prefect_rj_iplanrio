@@ -7,7 +7,9 @@ from prefect import flow
 
 from pipelines.rj_crm__get_history_data.tasks import (
     authenticate_sfmc,
+    build_historico_dataframe,
     fetch_data_extension_data,
+    fetch_de_field_types,
     list_data_extensions_historico,
     process_historico_extraction,
 )
@@ -61,12 +63,19 @@ def rj_crm__get_history_data(
                 de_name=de["name"],
                 rest_uri=rest_uri,
             )
+            field_types = fetch_de_field_types(
+                access_token=access_token,
+                customer_key=de["external_key"],
+                de_name=de["name"],
+                soap_uri=soap_uri,
+            )
             extraction_results.append({
                 "de_name": de["name"],
                 "external_key": de["external_key"],
                 "status": "success",
                 "total_rows": len(rows),
-                "sample": rows[0] if rows else None,
+                "dados": rows,
+                "tipos": field_types,
             })
         except Exception as exc:
             print(f"Erro ao extrair DE '{de['name']}': {exc}")
@@ -75,8 +84,10 @@ def rj_crm__get_history_data(
                 "external_key": de["external_key"],
                 "status": "error",
                 "total_rows": 0,
+                "dados": [],
+                "tipos": [],
                 "error": str(exc),
             })
 
-    summary = process_historico_extraction(results=extraction_results)
-    return summary
+    process_historico_extraction(results=extraction_results)
+    build_historico_dataframe(results=extraction_results)
