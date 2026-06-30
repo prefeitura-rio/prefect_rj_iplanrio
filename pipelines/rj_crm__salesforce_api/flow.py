@@ -89,7 +89,7 @@ def rj_crm__salesforce_api(
     print("\n".join(all_env_keys))
     sfmc_keys = [k for k in all_env_keys if k.startswith("sfmc_")]
     print(f"[SFMC] Keys com prefixo 'sfmc_': {sfmc_keys}")
-    # force deploy
+
     # 1. Chamar a rota da SFMC REST API (GET ou POST, com paginação automática)
     records = fetch_sfmc_route(
         route=route,
