@@ -28,8 +28,8 @@ def rj_crm__get_history_data(
         4. Loga resumo estruturado (totais, amostras, erros)
 
     Args:
-        rest_uri: URI REST do SFMC. Se não fornecido, usa env SFMC_REST_URI.
-        soap_uri: URI SOAP do SFMC. Se não fornecido, usa env SFMC_SOAP_URI.
+        rest_uri: URI REST do SFMC. Se não fornecido, usa env API_SFMC_REST_BASE_URL.
+        soap_uri: URI SOAP do SFMC. Se não fornecido, usa env API_SFMC_SOAP_BASE_URL.
     """
     rest_uri = rest_uri or os.getenv("API_SFMC_REST_BASE_URL", "")
     soap_uri = soap_uri or os.getenv("API_SFMC_SOAP_BASE_URL", "")
