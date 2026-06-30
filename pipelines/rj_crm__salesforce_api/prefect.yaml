@@ -39,22 +39,43 @@ deployments:
       infisical_secret_path: /api-sfmc
     schedules:
 
-      # GET - Todos os assets (paginacao automatica)
+      # GET - Todos os assets do Content Builder (sem filtro)
       - interval: 86400
         anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
-        slug: get-content-assets
-        flow_run_name: get-content-assets
+        slug: get-content-builder-asset
+        flow_run_name: get-content-builder-asset
         parameters:
           route: "/asset/v1/content/assets"
           http_method: get
           query_params:
             scope: "Ours,Shared"
           page_size: 200
-          table_id: content_assets
+          table_id: content_builder_asset
           dataset_id: brutos_salesforce
-          dump_mode: append
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # POST /query - Templates (assetType.id = 235)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-builder-template
+        flow_run_name: post-content-builder-template
+        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          body_json:
+            query:
+              property: "assetType.id"
+              simpleOperator: "equal"
+              value: 235
+          page_size: 100
+          table_id: content_builder_template
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
       # POST /query - Assets jsonmessage com view whatsAppTemplate
@@ -62,32 +83,15 @@ deployments:
         anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
-        slug: post-content-assets-whatsapp-template
-        flow_run_name: post-content-assets-whatsapp-template
+        slug: post-content-asset
+        flow_run_name: post-content-asset
         parameters:
           route: "/asset/v1/content/assets/query"
           http_method: post
-          body_json:
-            query:
-              leftOperand:
-                property: "assetType.name"
-                simpleOperator: "equal"
-                value: "jsonmessage"
-              logicalOperator: "AND"
-              rightOperand:
-                property: "availableViews"
-                simpleOperator: "mustContain"
-                value: "whatsAppTemplate"
-            fields:
-              - "id"
-              - "name"
-              - "customerKey"
-              - "views"
-              - "availableViews"
           page_size: 100
-          table_id: content_assets_whatsapp_template
+          table_id: content_asset
           dataset_id: brutos_salesforce
-          dump_mode: append
+          dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
   # -----------------------------------------------------------------------
@@ -108,22 +112,43 @@ deployments:
       infisical_secret_path: /api-sfmc
     schedules:
 
-      # GET - Todos os assets (paginacao automatica)
+      # GET - Todos os assets do Content Builder (sem filtro)
       - interval: 86400
         anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
-        slug: get-content-assets
-        flow_run_name: get-content-assets
+        slug: get-content-builder-asset
+        flow_run_name: get-content-builder-asset
         parameters:
           route: "/asset/v1/content/assets"
           http_method: get
           query_params:
             scope: "Ours,Shared"
           page_size: 200
-          table_id: content_assets
+          table_id: content_builder_asset
           dataset_id: brutos_salesforce
-          dump_mode: append
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # POST /query - Templates (assetType.id = 235)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-builder-template
+        flow_run_name: post-content-builder-template
+        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          body_json:
+            query:
+              property: "assetType.id"
+              simpleOperator: "equal"
+              value: 235
+          page_size: 100
+          table_id: content_builder_template
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
       # POST /query - Assets jsonmessage com view whatsAppTemplate
@@ -131,30 +156,13 @@ deployments:
         anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
-        slug: post-content-assets-whatsapp-template
-        flow_run_name: post-content-assets-whatsapp-template
+        slug: post-content-asset
+        flow_run_name: post-content-asset
         parameters:
           route: "/asset/v1/content/assets/query"
           http_method: post
-          body_json:
-            query:
-              leftOperand:
-                property: "assetType.name"
-                simpleOperator: "equal"
-                value: "jsonmessage"
-              logicalOperator: "AND"
-              rightOperand:
-                property: "availableViews"
-                simpleOperator: "mustContain"
-                value: "whatsAppTemplate"
-            fields:
-              - "id"
-              - "name"
-              - "customerKey"
-              - "views"
-              - "availableViews"
           page_size: 100
-          table_id: content_assets_whatsapp_template
+          table_id: content_asset
           dataset_id: brutos_salesforce
-          dump_mode: append
+          dump_mode: overwrite
           infisical_secret_path: /api-sfmc
