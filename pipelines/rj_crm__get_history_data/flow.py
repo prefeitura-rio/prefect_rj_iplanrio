@@ -31,13 +31,13 @@ def rj_crm__get_history_data(
         rest_uri: URI REST do SFMC. Se não fornecido, usa env SFMC_REST_URI.
         soap_uri: URI SOAP do SFMC. Se não fornecido, usa env SFMC_SOAP_URI.
     """
-    rest_uri = rest_uri or os.getenv("SFMC_REST_URI", "")
-    soap_uri = soap_uri or os.getenv("SFMC_SOAP_URI", "")
+    rest_uri = rest_uri or os.getenv("API_SFMC_REST_BASE_URL", "")
+    soap_uri = soap_uri or os.getenv("API_SFMC_SOAP_BASE_URL", "")
 
     if not rest_uri:
-        raise ValueError("SFMC_REST_URI não definida. Passe via parâmetro ou variável de ambiente.")
+        raise ValueError("API_SFMC_REST_BASE_URL não definida. Passe via parâmetro ou variável de ambiente.")
     if not soap_uri:
-        raise ValueError("SFMC_SOAP_URI não definida. Passe via parâmetro ou variável de ambiente.")
+        raise ValueError("API_SFMC_SOAP_BASE_URL não definida. Passe via parâmetro ou variável de ambiente.")
 
     access_token = authenticate_sfmc()
 
