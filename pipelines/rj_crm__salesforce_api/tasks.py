@@ -40,10 +40,10 @@ def _get_sfmc_credentials() -> dict[str, str]:
         dict com as chaves: client_id, client_secret, auth_url, rest_base_url
     """
     return {
-        "client_id": getenv_or_action("sfmc_client_id"),
-        "client_secret": getenv_or_action("sfmc_client_secret"),
-        "auth_url": getenv_or_action("sfmc_auth_url").rstrip("/"),
-        "rest_base_url": getenv_or_action("sfmc_rest_base_url").rstrip("/"),
+        "client_id": getenv_or_action("API_SFMC_CLIENT_ID"),
+        "client_secret": getenv_or_action("API_SFMC_CLIENT_SECRET"),
+        "auth_url": getenv_or_action("API_SFMC_AUTH_URL").rstrip("/"),
+        "rest_base_url": getenv_or_action("API_SFMC_REST_BASE_URL").rstrip("/"),
     }
 
 
