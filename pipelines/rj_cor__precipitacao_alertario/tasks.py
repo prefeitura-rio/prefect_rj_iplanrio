@@ -48,7 +48,7 @@ def download_alertario_data_task() -> Tuple[pd.DataFrame, pd.DataFrame]:
     http_ok = 200
 
     try:
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, timeout=30, verify=False)
 
         if response.status_code == http_ok:
             soup = BeautifulSoup(response.text, "html.parser")
