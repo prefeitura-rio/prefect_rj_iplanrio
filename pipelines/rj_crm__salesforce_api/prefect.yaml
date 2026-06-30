@@ -36,7 +36,7 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
-      infisical_secret_path: /salesforce_marketing_cloud
+      infisical_secret_path: /api-sfmc
     schedules:
 
       # GET - Todos os assets (paginacao automatica)
@@ -55,7 +55,7 @@ deployments:
           table_id: content_assets
           dataset_id: brutos_salesforce
           dump_mode: append
-          infisical_secret_path: /salesforce_marketing_cloud
+          infisical_secret_path: /api-sfmc
 
       # POST /query - Assets jsonmessage com view whatsAppTemplate
       - interval: 86400
@@ -88,7 +88,7 @@ deployments:
           table_id: content_assets_whatsapp_template
           dataset_id: brutos_salesforce
           dump_mode: append
-          infisical_secret_path: /salesforce_marketing_cloud
+          infisical_secret_path: /api-sfmc
 
   # -----------------------------------------------------------------------
   # Deployment de producao
@@ -105,7 +105,7 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
-      infisical_secret_path: /salesforce_marketing_cloud
+      infisical_secret_path: /api-sfmc
     schedules:
 
       # GET - Todos os assets (paginacao automatica)
@@ -124,7 +124,7 @@ deployments:
           table_id: content_assets
           dataset_id: brutos_salesforce
           dump_mode: append
-          infisical_secret_path: /salesforce_marketing_cloud
+          infisical_secret_path: /api-sfmc
 
       # POST /query - Assets jsonmessage com view whatsAppTemplate
       - interval: 86400
@@ -157,4 +157,4 @@ deployments:
           table_id: content_assets_whatsapp_template
           dataset_id: brutos_salesforce
           dump_mode: append
-          infisical_secret_path: /salesforce_marketing_cloud
+          infisical_secret_path: /api-sfmc
