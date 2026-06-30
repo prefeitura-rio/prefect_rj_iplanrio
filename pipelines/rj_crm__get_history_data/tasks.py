@@ -223,6 +223,116 @@ def fetch_data_extension_data(
 
 
 @task
+def fetch_de_field_types(
+    access_token: str,
+    customer_key: str,
+    de_name: str,
+    soap_uri: str,
+) -> List[Dict[str, str]]:
+    """
+    Retorna o schema (nome + tipo + pk) de uma Data Extension via SOAP API.
+    Usa ObjectType=DataExtensionField filtrado por DataExtension.CustomerKey.
+    """
+    endpoint = f"{soap_uri.rstrip('/')}/Service.asmx"
+    headers = {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": "Retrieve",
+    }
+
+    envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope
+    xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+    xmlns="http://exacttarget.com/wsdl/partnerAPI">
+    <soapenv:Header>
+        <fueloauth xmlns="http://exacttarget.com/wsdl/partnerAPI">{access_token}</fueloauth>
+    </soapenv:Header>
+    <soapenv:Body>
+        <RetrieveRequestMsg>
+            <RetrieveRequest>
+                <ObjectType>DataExtensionField</ObjectType>
+                <Properties>Name</Properties>
+                <Properties>FieldType</Properties>
+                <Properties>IsRequired</Properties>
+                <Properties>IsPrimaryKey</Properties>
+                <Filter xsi:type="SimpleFilterPart">
+                    <Property>DataExtension.CustomerKey</Property>
+                    <SimpleOperator>equals</SimpleOperator>
+                    <Value>{customer_key}</Value>
+                </Filter>
+            </RetrieveRequest>
+        </RetrieveRequestMsg>
+    </soapenv:Body>
+</soapenv:Envelope>""".encode("utf-8")
+
+    response = requests.post(endpoint, data=envelope, headers=headers, timeout=60)
+    response.raise_for_status()
+
+    root = ET.fromstring(response.text)
+    body = root.find(f"{{{_SOAP_NS}}}Body")
+    response_msg = body.find(f"{{{_ET_NS}}}RetrieveResponseMsg")
+
+    fields = []
+    for result in response_msg.findall(f"{{{_ET_NS}}}Results"):
+        fields.append({
+            "name": result.findtext(f"{{{_ET_NS}}}Name", default=""),
+            "type": result.findtext(f"{{{_ET_NS}}}FieldType", default=""),
+            "is_pk": result.findtext(f"{{{_ET_NS}}}IsPrimaryKey", default="false"),
+        })
+
+    log(f"  [{de_name}] Schema: {len(fields)} campos | "
+        f"phone={next((f['name'] for f in fields if f['type'].lower() == 'phone'), None)} | "
+        f"pk={next((f['name'] for f in fields if f['is_pk'].lower() == 'true'), None)}")
+    return fields
+
+
+@task
+def build_historico_dataframe(results: List[Dict[str, Any]]) -> None:
+    """
+    Constrói e loga um DataFrame com uma linha por registro de cada DE.
+
+    Colunas:
+        de_name  - nome da Data Extension
+        telefone - valor da coluna de tipo Phone
+        pk_de    - valor da coluna que é Primary Key
+        data     - todos os campos do registro em JSON
+    """
+    import json
+
+    import pandas as pd
+
+    rows = []
+    for result in results:
+        if result.get("status") != "success":
+            continue
+
+        de_name = result["de_name"]
+        dados = result.get("dados", [])
+        field_types = result.get("tipos", [])
+
+        phone_col = next((f["name"] for f in field_types if f["type"].lower() == "phone"), None)
+        pk_col = next((f["name"] for f in field_types if f["is_pk"].lower() == "true"), None)
+
+        for item in dados:
+            keys = item.get("keys", item)
+            rows.append({
+                "de_name": de_name,
+                "telefone": keys.get(phone_col) if phone_col else None,
+                "pk_de": keys.get(pk_col) if pk_col else None,
+                "data": json.dumps(keys, ensure_ascii=False),
+            })
+
+    df = pd.DataFrame(rows, columns=["de_name", "telefone", "pk_de", "data"])
+
+    log("=" * 60)
+    log("DATAFRAME HISTORICO SFMC")
+    log(f"Shape: {df.shape[0]} linhas x {df.shape[1]} colunas")
+    log("=" * 60)
+    log(f"\n{df.to_string()}")
+
+
+@task
 def process_historico_extraction(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Agrega resultados da extração e loga resumo estruturado.
