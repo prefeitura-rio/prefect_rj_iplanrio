@@ -24,17 +24,15 @@ def authenticate_sfmc() -> str:
     Autentica com Salesforce Marketing Cloud via OAuth2 e retorna o access token.
     POST {SFMC_AUTH_URI}/v2/token
     """
-    auth_uri = os.getenv("SFMC_AUTH_URI", "")
-    client_id = os.getenv("SFMC_CLIENT_ID", "")
-    client_secret = os.getenv("SFMC_CLIENT_SECRET", "")
-    account_id = os.getenv("SFMC_ACCOUNT_ID", "")
+    auth_uri = os.getenv("API_SFMC_AUTH_URL", "")
+    client_id = os.getenv("API_SFMC_CLIENT_ID", "")
+    client_secret = os.getenv("API_SFMC_CLIENT_SECRET", "")
 
     missing = [
         name for name, val in {
-            "SFMC_AUTH_URI": auth_uri,
-            "SFMC_CLIENT_ID": client_id,
-            "SFMC_CLIENT_SECRET": client_secret,
-            "SFMC_ACCOUNT_ID": account_id,
+            "API_SFMC_AUTH_URL": auth_uri,
+            "API_SFMC_CLIENT_ID": client_id,
+            "API_SFMC_CLIENT_SECRET": client_secret,
         }.items()
         if not val
     ]
@@ -46,7 +44,6 @@ def authenticate_sfmc() -> str:
         "grant_type": "client_credentials",
         "client_id": client_id,
         "client_secret": client_secret,
-        "account_id": account_id,
     }
 
     log(f"Autenticando no SFMC via {url}")
