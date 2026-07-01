@@ -30,7 +30,7 @@ from pipelines.rj_crm__salesforce_api.tasks import build_dataframe, fetch_sfmc_r
 from pipelines.rj_crm__disparo_template.utils.tasks import create_date_partitions
 
 
-# force deploy
+# force deployyy
 @flow(log_prints=True)
 def rj_crm__salesforce_api(
     route: str,

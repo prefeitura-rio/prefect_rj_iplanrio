@@ -65,10 +65,58 @@ deployments:
         slug: get-content-builder-journey
         flow_run_name: get-content-builder-journey
         parameters:
-          route: "interaction/v1/interactions?extras=activities"
+          route: "/interaction/v1/interactions?extras=activities"
           http_method: get
           page_size: 200
           table_id: content_builder_journey
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-event-definitions
+        flow_run_name: get-event-definitions
+        parameters:
+          route: "/interaction/v1/eventDefinitions"
+          http_method: get
+          page_size: 200
+          table_id: event_definition
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-data-extensions
+        flow_run_name: get-data-extensions
+        parameters:
+          route: "/data/v1/customobjects"
+          http_method: get
+          page_size: 200
+          table_id: data_extension
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-publication-lists
+        flow_run_name: get-publication-lists
+        parameters:
+          route: "/contacts/v1/lists"
+          http_method: get
+          page_size: 200
+          table_id: publication_list
           dataset_id: brutos_salesforce
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
@@ -110,7 +158,7 @@ deployments:
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
-  # -----------------------------------------------------------------------
+   # -----------------------------------------------------------------------
   # Deployment de producao
   # -----------------------------------------------------------------------
   - name: rj-crm--salesforce-api--prod
@@ -136,10 +184,58 @@ deployments:
         slug: get-content-builder-journey
         flow_run_name: get-content-builder-journey
         parameters:
-          route: "interaction/v1/interactions?extras=activities"
+          route: "/interaction/v1/interactions?extras=activities"
           http_method: get
           page_size: 200
           table_id: content_builder_journey
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-event-definitions
+        flow_run_name: get-event-definitions
+        parameters:
+          route: "/interaction/v1/eventDefinitions"
+          http_method: get
+          page_size: 200
+          table_id: event_definition
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-data-extensions
+        flow_run_name: get-data-extensions
+        parameters:
+          route: "/data/v1/customobjects"
+          http_method: get
+          page_size: 200
+          table_id: data_extension
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-publication-lists
+        flow_run_name: get-publication-lists
+        parameters:
+          route: "/contacts/v1/lists"
+          http_method: get
+          page_size: 200
+          table_id: publication_list
           dataset_id: brutos_salesforce
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
