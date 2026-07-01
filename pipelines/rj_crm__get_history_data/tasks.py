@@ -4,18 +4,31 @@ Tasks para pipeline CRM Get History Data (SFMC)
 Extrai dados de Data Extensions com sufixo 'historico' do Salesforce Marketing Cloud
 """
 
+import json
 import os
-import xml.etree.ElementTree as ET
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import date, datetime, timedelta
+from typing import Any, Dict, List, Optional
 
+import pandas as pd
 import requests
+from google.cloud import bigquery
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__get_history_data.constants import GetHistoryDataConstants
-
-_SOAP_NS = "http://schemas.xmlsoap.org/soap/envelope/"
-_ET_NS = "http://exacttarget.com/wsdl/partnerAPI"
+from pipelines.rj_crm__get_history_data.utils.bigquery import (
+    ensure_historico_tables,
+    get_bq_client,
+    historico_table_schema,
+    truncate_and_load_tmp_table,
+)
+from pipelines.rj_crm__get_history_data.utils.sfmc import (
+    build_field_types_soap_envelope,
+    build_soap_envelope,
+    normalize_field_name,
+    parse_field_types_soap_response,
+    parse_soap_response,
+)
 
 
 @task
@@ -60,70 +73,6 @@ def authenticate_sfmc() -> str:
     return access_token
 
 
-def _build_soap_envelope(access_token: str, continue_request_id: Optional[str] = None) -> bytes:
-    """Monta o envelope SOAP para listagem de DataExtensions."""
-    if continue_request_id:
-        body_inner = f"""
-        <RetrieveRequestMsg>
-            <RetrieveRequest>
-                <ContinueRequest>{continue_request_id}</ContinueRequest>
-            </RetrieveRequest>
-        </RetrieveRequestMsg>
-        """
-    else:
-        body_inner = """
-        <RetrieveRequestMsg>
-            <RetrieveRequest>
-                <ObjectType>DataExtension</ObjectType>
-                <Properties>Name</Properties>
-                <Properties>CustomerKey</Properties>
-                <Properties>ObjectID</Properties>
-            </RetrieveRequest>
-        </RetrieveRequestMsg>
-        """
-
-    envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope
-    xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-    xmlns="http://exacttarget.com/wsdl/partnerAPI">
-    <soapenv:Header>
-        <fueloauth xmlns="http://exacttarget.com/wsdl/partnerAPI">{access_token}</fueloauth>
-    </soapenv:Header>
-    <soapenv:Body>
-        {body_inner}
-    </soapenv:Body>
-</soapenv:Envelope>"""
-    return envelope.encode("utf-8")
-
-
-def _parse_soap_response(xml_text: str) -> Tuple[str, str, List[Dict[str, str]]]:
-    """
-    Parseia a resposta SOAP de listagem de DataExtensions.
-    Retorna (overall_status, request_id, lista de DEs)
-    """
-    root = ET.fromstring(xml_text)
-    body = root.find(f"{{{_SOAP_NS}}}Body")
-    response_msg = body.find(f"{{{_ET_NS}}}RetrieveResponseMsg")
-
-    overall_status = response_msg.findtext(f"{{{_ET_NS}}}OverallStatus", default="")
-    request_id = response_msg.findtext(f"{{{_ET_NS}}}RequestID", default="")
-
-    results = []
-    for result in response_msg.findall(f"{{{_ET_NS}}}Results"):
-        name = result.findtext(f"{{{_ET_NS}}}Name", default="")
-        customer_key = result.findtext(f"{{{_ET_NS}}}CustomerKey", default="")
-        object_id = result.findtext(f"{{{_ET_NS}}}ObjectID", default="")
-        results.append({
-            "name": name,
-            "external_key": customer_key,
-            "object_id": object_id,
-        })
-
-    return overall_status, request_id, results
-
-
 @task
 def list_data_extensions_historico(access_token: str, soap_uri: str) -> List[Dict[str, str]]:
     """
@@ -149,11 +98,11 @@ def list_data_extensions_historico(access_token: str, soap_uri: str) -> List[Dic
 
     while True:
         log(f"Buscando DataExtensions - página SOAP {page}")
-        envelope = _build_soap_envelope(access_token, continue_request_id)
+        envelope = build_soap_envelope(access_token, continue_request_id)
         response = requests.post(endpoint, data=envelope, headers=headers, timeout=60)
         response.raise_for_status()
 
-        overall_status, request_id, results = _parse_soap_response(response.text)
+        overall_status, request_id, results = parse_soap_response(response.text)
         log(f"Página SOAP {page}: status={overall_status}, DEs retornadas={len(results)}")
         all_des.extend(results)
 
@@ -239,47 +188,12 @@ def fetch_de_field_types(
         "SOAPAction": "Retrieve",
     }
 
-    envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope
-    xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-    xmlns="http://exacttarget.com/wsdl/partnerAPI">
-    <soapenv:Header>
-        <fueloauth xmlns="http://exacttarget.com/wsdl/partnerAPI">{access_token}</fueloauth>
-    </soapenv:Header>
-    <soapenv:Body>
-        <RetrieveRequestMsg>
-            <RetrieveRequest>
-                <ObjectType>DataExtensionField</ObjectType>
-                <Properties>Name</Properties>
-                <Properties>FieldType</Properties>
-                <Properties>IsRequired</Properties>
-                <Properties>IsPrimaryKey</Properties>
-                <Filter xsi:type="SimpleFilterPart">
-                    <Property>DataExtension.CustomerKey</Property>
-                    <SimpleOperator>equals</SimpleOperator>
-                    <Value>{customer_key}</Value>
-                </Filter>
-            </RetrieveRequest>
-        </RetrieveRequestMsg>
-    </soapenv:Body>
-</soapenv:Envelope>""".encode("utf-8")
+    envelope = build_field_types_soap_envelope(access_token, customer_key)
 
     response = requests.post(endpoint, data=envelope, headers=headers, timeout=60)
     response.raise_for_status()
 
-    root = ET.fromstring(response.text)
-    body = root.find(f"{{{_SOAP_NS}}}Body")
-    response_msg = body.find(f"{{{_ET_NS}}}RetrieveResponseMsg")
-
-    fields = []
-    for result in response_msg.findall(f"{{{_ET_NS}}}Results"):
-        fields.append({
-            "name": result.findtext(f"{{{_ET_NS}}}Name", default=""),
-            "type": result.findtext(f"{{{_ET_NS}}}FieldType", default=""),
-            "is_pk": result.findtext(f"{{{_ET_NS}}}IsPrimaryKey", default="false"),
-        })
+    fields = parse_field_types_soap_response(response.text)
 
     log(f"  [{de_name}] Schema: {len(fields)} campos | "
         f"phone={next((f['name'] for f in fields if f['type'].lower() == 'phone'), None)} | "
@@ -288,20 +202,17 @@ def fetch_de_field_types(
 
 
 @task
-def build_historico_dataframe(results: List[Dict[str, Any]]) -> None:
+def build_historico_dataframe(results: List[Dict[str, Any]]) -> pd.DataFrame:
     """
-    Constrói e loga um DataFrame com uma linha por registro de cada DE e faz o log.
+    Constrói, loga e retorna um DataFrame com uma linha por registro de cada DE.
 
     Colunas:
-        de_name  - nome da Data Extension
-        telefone - valor da coluna de tipo Phone
-        pk_de    - valor da coluna que é Primary Key
-        data     - todos os campos do registro em JSON
+        de_nome      - nome da Data Extension
+        telefone     - valor da coluna de tipo Phone
+        id_de        - valor da coluna que é Primary Key
+        entrada_data - valor do campo cujo nome contém "data de entrada"
+        dados_json   - todos os campos do registro em JSON
     """
-    import json
-
-    import pandas as pd
-
     rows = []
     for result in results:
         if result.get("status") != "success":
@@ -313,23 +224,144 @@ def build_historico_dataframe(results: List[Dict[str, Any]]) -> None:
 
         phone_col = next((f["name"] for f in field_types if f["type"].lower() == "phone"), None)
         pk_col = next((f["name"] for f in field_types if f["is_pk"].lower() == "true"), None)
+        entrada_data_col = next(
+            (f["name"] for f in field_types if "data de entrada" in normalize_field_name(f["name"])), None
+        )
+        if entrada_data_col is None:
+            date_cols = [f["name"] for f in field_types if f["type"].lower() == "date"]
+            if len(date_cols) == 1:
+                entrada_data_col = date_cols[0]
 
         for item in dados:
-            keys = item.get("keys", item)
+            # O REST API do SFMC retorna cada registro como {"keys": {...}, "values": {...}};
+            # campos que não são PK só existem em "values", então é preciso mesclar os dois.
+            if isinstance(item, dict) and ("keys" in item or "values" in item):
+                record = {**item.get("keys", {}), **item.get("values", {})}
+            else:
+                record = item
             rows.append({
-                "de_name": de_name,
-                "telefone": keys.get(phone_col) if phone_col else None,
-                "pk_de": keys.get(pk_col) if pk_col else None,
-                "data": json.dumps(keys, ensure_ascii=False),
+                "de_nome": de_name,
+                "telefone": record.get(phone_col) if phone_col else None,
+                "id_de": record.get(pk_col) if pk_col else None,
+                "entrada_data": record.get(entrada_data_col) if entrada_data_col else None,
+                "dados_json": json.dumps(record, ensure_ascii=False),
             })
 
-    df = pd.DataFrame(rows, columns=["de_name", "telefone", "pk_de", "data"])
+    df = pd.DataFrame(rows, columns=["de_nome", "telefone", "id_de", "entrada_data", "dados_json"])
 
     log("=" * 60)
     log("DATAFRAME HISTORICO SFMC")
     log(f"Shape: {df.shape[0]} linhas x {df.shape[1]} colunas")
     log("=" * 60)
     log(f"\n{df.to_string()}")
+
+    return df
+
+
+@task
+def filter_recent_and_partition(df: pd.DataFrame, window_days: int) -> pd.DataFrame:
+    """
+    Filtra o DataFrame consolidado para manter apenas registros com entrada_data
+    dentro dos últimos `window_days` dias. Linhas sem entrada_data parseável
+    (DEs sem coluna de data) são sempre mantidas, pois não é possível avaliar
+    sua idade.
+
+    Adiciona data_particao (DATE): a entrada_data parseada, ou a data de
+    execução para linhas sem entrada_data. Usada para o particionamento
+    mensal das tabelas no BigQuery.
+    """
+    df = df.copy()
+    entrada_parsed = pd.to_datetime(df["entrada_data"], errors="coerce", utc=True).dt.tz_localize(None)
+    cutoff = datetime.now() - timedelta(days=window_days)
+
+    keep_mask = entrada_parsed.isna() | (entrada_parsed >= cutoff)
+    total_antes = len(df)
+    df = df[keep_mask].copy()
+    entrada_parsed = entrada_parsed[keep_mask]
+
+    log(
+        f"Janela de {window_days} dias: {total_antes} -> {len(df)} linha(s) "
+        f"({total_antes - len(df)} descartada(s) por entrada_data antiga)."
+    )
+
+    df["data_particao"] = entrada_parsed.dt.date
+    df["data_particao"] = df["data_particao"].fillna(date.today())
+
+    key_columns = list(GetHistoryDataConstants.MERGE_KEY_COLUMNS.value)
+    df = df.drop_duplicates(subset=key_columns).reset_index(drop=True)
+
+    return df
+
+
+@task
+def load_recent_data_to_tmp_table(
+    df: pd.DataFrame,
+    project_id: str,
+    dataset_id: str,
+    tmp_table_id: str,
+    final_table_id: str,
+) -> bigquery.Client:
+    """
+    Garante que as tabelas nativas existam, trunca a tabela temporária e
+    carrega nela os dados recentes (já filtrados pela janela de dias).
+    """
+    client = get_bq_client(project_id=project_id)
+    ensure_historico_tables(
+        client=client,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        tmp_table_id=tmp_table_id,
+        final_table_id=final_table_id,
+    )
+    truncate_and_load_tmp_table(
+        client=client,
+        df=df,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        tmp_table_id=tmp_table_id,
+    )
+    return client
+
+
+@task
+def merge_tmp_into_historico(
+    client: bigquery.Client,
+    project_id: str,
+    dataset_id: str,
+    tmp_table_id: str,
+    final_table_id: str,
+) -> None:
+    """
+    Faz o MERGE da tabela temporária na tabela final histórica: atualiza
+    registros já existentes (mesma chave de dedup) e insere os novos. Nunca
+    apaga nada da tabela final.
+    """
+    key_columns = list(GetHistoryDataConstants.MERGE_KEY_COLUMNS.value)
+    all_columns = [field.name for field in historico_table_schema()]
+    update_columns = [col for col in all_columns if col not in key_columns]
+
+    target = f"`{project_id}.{dataset_id}.{final_table_id}`"
+    source = f"`{project_id}.{dataset_id}.{tmp_table_id}`"
+    on_clause = " AND ".join(f"T.{col} IS NOT DISTINCT FROM S.{col}" for col in key_columns)
+    update_clause = ", ".join(f"{col} = S.{col}" for col in update_columns)
+    insert_columns = ", ".join(all_columns)
+    insert_values = ", ".join(f"S.{col}" for col in all_columns)
+
+    query = f"""
+        MERGE {target} AS T
+        USING {source} AS S
+        ON {on_clause}
+        WHEN MATCHED THEN
+          UPDATE SET {update_clause}
+        WHEN NOT MATCHED THEN
+          INSERT ({insert_columns})
+          VALUES ({insert_values})
+    """
+
+    log(f"Executando MERGE em {project_id}.{dataset_id}.{final_table_id}:\n{query}")
+    job = client.query(query)
+    job.result()
+    log(f"MERGE concluído: {job.num_dml_affected_rows} linha(s) afetada(s).")
 
 
 @task
