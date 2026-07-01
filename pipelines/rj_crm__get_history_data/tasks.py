@@ -233,11 +233,15 @@ def build_historico_dataframe(results: List[Dict[str, Any]]) -> pd.DataFrame:
                 record = {**item.get("keys", {}), **item.get("values", {})}
             else:
                 record = item
+            # A REST API do SFMC devolve as chaves do registro em lowercase,
+            # mas o schema (SOAP) informa o nome "oficial" do campo com a
+            # capitalização original — por isso o lookup precisa ser case-insensitive.
+            record_lower = {k.lower(): v for k, v in record.items()}
             rows.append({
                 "de_nome": de_name,
-                "telefone": record.get(phone_col) if phone_col else None,
-                "id_de": record.get(pk_col) if pk_col else None,
-                "entrada_data": record.get(entrada_data_col) if entrada_data_col else None,
+                "telefone": record_lower.get(phone_col.lower()) if phone_col else None,
+                "id_de": record_lower.get(pk_col.lower()) if pk_col else None,
+                "entrada_data": record_lower.get(entrada_data_col.lower()) if entrada_data_col else None,
                 "dados_json": json.dumps(record, ensure_ascii=False),
             })
 
