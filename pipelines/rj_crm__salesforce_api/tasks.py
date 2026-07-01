@@ -160,6 +160,7 @@ def _fetch_all_pages_post(
         }
         print(f"[SFMC][POST] Buscando página {page} (pageSize={page_size})...")
 
+        print(f"[SFMC][POST] Body enviado: {json.dumps(page_body, indent=2)}")
         response = requests.post(url, headers=headers, json=page_body, timeout=60)
         response.raise_for_status()
         data = response.json()

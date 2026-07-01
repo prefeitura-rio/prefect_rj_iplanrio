@@ -39,20 +39,36 @@ deployments:
       infisical_secret_path: /api-sfmc
     schedules:
 
-      # GET - Todos os assets do Content Builder (sem filtro)
+      # # GET - Todos os assets do Content Builder (sem filtro)
+      # - interval: 86400
+      #   anchor_date: "2021-01-01T09:00:00"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-content-builder-asset
+      #   flow_run_name: get-content-builder-asset
+      #   parameters:
+      #     route: "/asset/v1/content/assets"
+      #     http_method: get
+      #     query_params:
+      #       scope: "Ours,Shared"
+      #     page_size: 200
+      #     table_id: content_builder_asset
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
+
+      # GET - Todos as jornadas do Content Builder (sem filtro)
       - interval: 86400
         anchor_date: "2021-01-01T09:00:00"
         timezone: America/Sao_Paulo
         active: false
-        slug: get-content-builder-asset
-        flow_run_name: get-content-builder-asset
+        slug: get-content-builder-journey
+        flow_run_name: get-content-builder-journey
         parameters:
-          route: "/asset/v1/content/assets"
+          route: "interaction/v1/interactions?extras=activities"
           http_method: get
-          query_params:
-            scope: "Ours,Shared"
           page_size: 200
-          table_id: content_builder_asset
+          table_id: content_builder_journey
           dataset_id: brutos_salesforce
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
@@ -111,6 +127,22 @@ deployments:
     parameters:
       infisical_secret_path: /api-sfmc
     schedules:
+
+      # GET - Todos as jornadas do Content Builder (sem filtro)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-content-builder-journey
+        flow_run_name: get-content-builder-journey
+        parameters:
+          route: "interaction/v1/interactions?extras=activities"
+          http_method: get
+          page_size: 200
+          table_id: content_builder_journey
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
 
       # GET - Todos os assets do Content Builder (sem filtro)
       - interval: 86400
