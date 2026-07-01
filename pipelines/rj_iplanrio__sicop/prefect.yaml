@@ -237,7 +237,9 @@ deployments:
         timezone: America/Sao_Paulo
         slug: despacho
         parameters:
-          table_id: processo
+          table_id: tramitacao_processo
           dump_mode: overwrite
           execute_query: |
-            SELECT num_processo, data_processo, tipo_documento, documento,
+            SELECT num_processo, seq, num_guia, mat_despacho, mat_dig_tramitacao, dt_dig_tramitacao,
+                   mat_dig_recebimento, dt_dig_recebimento, --cod_despacho, data_despacho, data_saida,
+                   org_origem, org_destino, org_transcritor from sicop.vw_tramitacao_processo_dlk
