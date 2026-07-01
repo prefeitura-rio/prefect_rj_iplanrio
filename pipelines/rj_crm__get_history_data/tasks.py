@@ -14,6 +14,7 @@ import requests
 from google.cloud import bigquery
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
+from prefect.cache_policies import NO_CACHE
 
 from pipelines.rj_crm__get_history_data.constants import GetHistoryDataConstants
 from pipelines.rj_crm__get_history_data.utils.bigquery import (
@@ -97,7 +98,6 @@ def list_data_extensions_historico(access_token: str, soap_uri: str) -> List[Dic
     page = 0
 
     while True:
-        log(f"Buscando DataExtensions - página SOAP {page}")
         envelope = build_soap_envelope(access_token, continue_request_id)
         response = requests.post(endpoint, data=envelope, headers=headers, timeout=60)
         response.raise_for_status()
@@ -118,8 +118,8 @@ def list_data_extensions_historico(access_token: str, soap_uri: str) -> List[Dic
     historico_des = [de for de in all_des if de["name"].lower().endswith(suffix)]
 
     log(f"Total de DEs encontradas: {len(all_des)}, com sufixo '{suffix}': {len(historico_des)}")
-    for de in historico_des:
-        log(f"  -> {de['name']} (key={de['external_key']}, id={de['object_id']})")
+    if historico_des:
+        log(f"  -> {', '.join(de['name'] for de in historico_des)}")
 
     return historico_des
 
@@ -160,7 +160,6 @@ def fetch_data_extension_data(
         page_count = data.get("pageCount", 1)
         items = data.get("items", [])
 
-        log(f"  [{de_name}] Página {page}/{page_count}: {len(items)} registros")
         all_rows.extend(items)
 
         if page >= page_count:
@@ -249,11 +248,7 @@ def build_historico_dataframe(results: List[Dict[str, Any]]) -> pd.DataFrame:
 
     df = pd.DataFrame(rows, columns=["de_nome", "telefone", "id_de", "entrada_data", "dados_json"])
 
-    log("=" * 60)
-    log("DATAFRAME HISTORICO SFMC")
-    log(f"Shape: {df.shape[0]} linhas x {df.shape[1]} colunas")
-    log("=" * 60)
-    log(f"\n{df.to_string()}")
+    log(f"DataFrame historico SFMC: {df.shape[0]} linhas x {df.shape[1]} colunas")
 
     return df
 
@@ -293,7 +288,7 @@ def filter_recent_and_partition(df: pd.DataFrame, window_days: int) -> pd.DataFr
     return df
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def load_recent_data_to_tmp_table(
     df: pd.DataFrame,
     project_id: str,
@@ -323,7 +318,7 @@ def load_recent_data_to_tmp_table(
     return client
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def merge_tmp_into_historico(
     client: bigquery.Client,
     project_id: str,

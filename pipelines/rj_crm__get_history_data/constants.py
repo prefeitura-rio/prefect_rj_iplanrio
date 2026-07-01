@@ -24,7 +24,7 @@ class GetHistoryDataConstants(Enum):
     GCP_SFMC_DESTINATION_PROJECT_ID = "rj-crm-registry"
     GCP_SFMC_DESTINATION_DATASET_ID = "brutos_salesforce_staging"
     GCP_SFMC_TMP_TABLE_ID = "historico_sfmc_tmp"
-    GCP_SFMC_FINAL_TABLE_ID = "historico_sfmcßß"
+    GCP_SFMC_FINAL_TABLE_ID = "historico_sfmc"
 
     # Janela (em dias) de entrada_data considerada a cada execução
     WINDOW_DAYS = 30
