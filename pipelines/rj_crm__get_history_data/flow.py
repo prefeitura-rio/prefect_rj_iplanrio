@@ -83,7 +83,6 @@ def rj_crm__get_history_data(
             rows = fetch_data_extension_data(
                 access_token=access_token,
                 external_key=de["external_key"],
-                de_name=de["name"],
                 rest_uri=rest_uri,
             )
             field_types = fetch_de_field_types(

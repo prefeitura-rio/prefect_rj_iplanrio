@@ -128,7 +128,6 @@ def list_data_extensions_historico(access_token: str, soap_uri: str) -> List[Dic
 def fetch_data_extension_data(
     access_token: str,
     external_key: str,
-    de_name: str,
     rest_uri: str,
 ) -> List[Dict[str, Any]]:
     """
@@ -138,7 +137,6 @@ def fetch_data_extension_data(
     Args:
         access_token: Token OAuth2 do SFMC
         external_key: CustomerKey da DE
-        de_name: Nome da DE (para logging)
         rest_uri: URI base do endpoint REST (ex: https://mcXXX.rest.marketingcloudapis.com)
 
     Returns:
@@ -149,8 +147,6 @@ def fetch_data_extension_data(
 
     all_rows: List[Dict[str, Any]] = []
     page = 1
-
-    log(f"Iniciando extração de '{de_name}' (key={external_key})")
 
     while True:
         response = requests.get(base_url, headers=headers, params={"$page": page}, timeout=60)
@@ -166,7 +162,6 @@ def fetch_data_extension_data(
             break
         page += 1
 
-    log(f"  [{de_name}] Extração concluída: {len(all_rows)} registros no total")
     return all_rows
 
 
@@ -366,7 +361,7 @@ def process_historico_extraction(results: List[Dict[str, Any]]) -> Dict[str, Any
 
     Args:
         results: Lista de dicts com resultado por DE
-                 (campos: de_name, external_key, status, total_rows, sample, error)
+                 (campos: de_name, external_key, status, total_rows, error)
 
     Returns:
         Dict com metadados: des_sucesso, des_erro, total_registros, detalhes
@@ -381,11 +376,6 @@ def process_historico_extraction(results: List[Dict[str, Any]]) -> Dict[str, Any
     log(f"DEs processadas com sucesso : {len(des_sucesso)}")
     log(f"DEs com erro                : {len(des_erro)}")
     log(f"Total de registros extraidos: {total_registros}")
-
-    if des_sucesso:
-        log("\nAmostras (1 linha por DE):")
-        for r in des_sucesso:
-            log(f"  [{r['de_name']}] total={r['total_rows']} | amostra={r.get('sample')}")
 
     if des_erro:
         log("\nErros detalhados:")
