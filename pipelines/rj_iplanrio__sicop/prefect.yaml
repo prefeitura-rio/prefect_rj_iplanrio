@@ -219,7 +219,7 @@ deployments:
       - interval: 86400
         anchor_date: '2025-07-20T06:00:00' # UTC: 06:00hrs / BRT: 03:00hrs
         timezone: America/Sao_Paulo
-        slug: despacho
+        slug: processo2
         parameters:
           table_id: processo2
           dump_mode: overwrite
@@ -235,7 +235,7 @@ deployments:
       - interval: 86400
         anchor_date: '2025-07-20T06:00:00' # UTC: 06:00hrs / BRT: 03:00hrs
         timezone: America/Sao_Paulo
-        slug: despacho
+        slug: tramitacao_processo
         parameters:
           table_id: tramitacao_processo
           dump_mode: overwrite
