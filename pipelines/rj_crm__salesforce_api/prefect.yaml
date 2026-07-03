@@ -1,0 +1,168 @@
+name: rj_crm__salesforce_api
+prefect-version: 3.4.3
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__salesforce_api-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__salesforce_api/Dockerfile
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: '{{ build-image.image_name }}'
+      tag: '{{ build-image.tag }}'
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+deployments:
+
+  # -----------------------------------------------------------------------
+  # Deployment de staging
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-api--staging
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_crm__salesforce_api/flow.py:rj_crm__salesforce_api
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      infisical_secret_path: /api-sfmc
+    schedules:
+
+      # GET - Todos os assets do Content Builder (sem filtro)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-content-builder-asset
+        flow_run_name: get-content-builder-asset
+        parameters:
+          route: "/asset/v1/content/assets"
+          http_method: get
+          query_params:
+            scope: "Ours,Shared"
+          page_size: 200
+          table_id: content_builder_asset
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # POST /query - Templates (assetType.id = 235)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-builder-template
+        flow_run_name: post-content-builder-template
+        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          body_json:
+            query:
+              property: "assetType.id"
+              simpleOperator: "equal"
+              value: 235
+          page_size: 100
+          table_id: content_builder_template
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # POST /query - Assets jsonmessage com view whatsAppTemplate
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-asset
+        flow_run_name: post-content-asset
+        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          page_size: 100
+          table_id: content_asset
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+  # -----------------------------------------------------------------------
+  # Deployment de producao
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-api--prod
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint: pipelines/rj_crm__salesforce_api/flow.py:rj_crm__salesforce_api
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    parameters:
+      infisical_secret_path: /api-sfmc
+    schedules:
+
+      # GET - Todos os assets do Content Builder (sem filtro)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-content-builder-asset
+        flow_run_name: get-content-builder-asset
+        parameters:
+          route: "/asset/v1/content/assets"
+          http_method: get
+          query_params:
+            scope: "Ours,Shared"
+          page_size: 200
+          table_id: content_builder_asset
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # POST /query - Templates (assetType.id = 235)
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-builder-template
+        flow_run_name: post-content-builder-template
+        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          body_json:
+            query:
+              property: "assetType.id"
+              simpleOperator: "equal"
+              value: 235
+          page_size: 100
+          table_id: content_builder_template
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # POST /query - Assets jsonmessage com view whatsAppTemplate
+      - interval: 86400
+        anchor_date: "2021-01-01T09:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: post-content-asset
+        flow_run_name: post-content-asset
+        parameters:
+          route: "/asset/v1/content/assets/query"
+          http_method: post
+          page_size: 100
+          table_id: content_asset
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
