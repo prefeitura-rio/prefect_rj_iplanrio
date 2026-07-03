@@ -185,7 +185,7 @@ def create_dbt_report(
     bigquery_project: str,
     flow_info: dict,
     github_issue_repository: str,
-    send_discord_report: bool,
+    send_discord_report: bool = False,
 ) -> None:
     """
     Creates a report based on the results of running dbt commands.
@@ -405,7 +405,7 @@ def rj_iplanrio__run_dbt(
     log(f"Flow environment: {flow_info['flow_environment']}", level="info")
 
     # Download repository
-    download_repository(git_repository_path=github_repo)
+    download_repository_task = download_repository(git_repository_path=github_repo)
 
     # Download dbt artifacts
     download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(
@@ -413,10 +413,10 @@ def rj_iplanrio__run_dbt(
     )
 
     # Install dbt packages
-    install_dbt_dependencies()
+    install_dbt_packages = install_dbt_dependencies()
 
     # Execute DBT command
-    execute_dbt(
+    running_results = execute_dbt(
         command=command,
         target=target,
         select=select,
@@ -426,14 +426,14 @@ def rj_iplanrio__run_dbt(
     )
 
     # Create summary report
-    # dbt_report = create_dbt_report(
-    #     running_results=running_results,
-    #     repository_path=download_repository_task,
-    #     bigquery_project=bigquery_project,
-    #     flow_info=flow_info,
-    #     github_issue_repository=github_repo,
-    #     send_discord_report=send_discord_report,
-    # )
+    dbt_report = create_dbt_report(
+        running_results=running_results,
+        repository_path=download_repository_task,
+        bigquery_project=bigquery_project,
+        flow_info=flow_info,
+        github_issue_repository=github_repo,
+        # send_discord_report=send_discord_report,
+    )
 
     # Upload dbt artifacts to GCS if needed
     if flow_info["flow_environment"] == "prod" and command in [
@@ -442,4 +442,4 @@ def rj_iplanrio__run_dbt(
     ]:
         upload_dbt_artifacts_to_gcs(environment=target, gcs_buckets=gcs_buckets)
 
-    return
+    return dbt_report
