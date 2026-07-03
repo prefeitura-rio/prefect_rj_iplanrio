@@ -55,7 +55,7 @@ deployments:
         slug: dbt_daily_freshness
         parameters:
           command: "source freshness"
-          send_discord_report: true
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"
@@ -70,7 +70,7 @@ deployments:
         parameters:
           command: "build"
           select: "tag:daily"
-          send_discord_report: true
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"
@@ -86,7 +86,7 @@ deployments:
         parameters:
           command: "build"
           select: "tag:weekly"
-          send_discord_report: true
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"
@@ -103,7 +103,7 @@ deployments:
         parameters:
           command: "build"
           select: "+tag:hourly"
-          send_discord_report: true
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"
