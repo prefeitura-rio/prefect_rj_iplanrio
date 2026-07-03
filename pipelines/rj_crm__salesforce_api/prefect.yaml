@@ -1,3 +1,5 @@
+# https://developer.salesforce.com/docs/marketing/marketing-cloud/references/mc_rest_assets?meta=Summary
+
 name: rj_crm__salesforce_api
 prefect-version: 3.4.3
 build:
@@ -40,8 +42,7 @@ deployments:
     schedules:
 
       # # GET - Todos os assets do Content Builder (sem filtro)
-      # - interval: 86400
-      #   anchor_date: "2021-01-01T09:00:00"
+      # - cron: "0 9,11,13,15,17 * * 1-5"
       #   timezone: America/Sao_Paulo
       #   active: false
       #   slug: get-content-builder-asset
@@ -58,8 +59,7 @@ deployments:
       #     infisical_secret_path: /api-sfmc
 
       # GET - Todos as jornadas do Content Builder (sem filtro)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: get-content-builder-journey
@@ -74,8 +74,7 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: get-event-definitions
@@ -89,41 +88,40 @@ deployments:
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
-      # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: get-data-extensions
-        flow_run_name: get-data-extensions
-        parameters:
-          route: "/data/v1/customobjects"
-          http_method: get
-          page_size: 200
-          table_id: data_extension
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
+      # # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
+      # # ERRO 400: /data/v1/customobjects exige $search obrigatorio — nao suporta listagem irrestrita
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-data-extensions
+      #   flow_run_name: get-data-extensions
+      #   parameters:
+      #     route: "/data/v1/customobjects"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: data_extension
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
 
-      # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: get-publication-lists
-        flow_run_name: get-publication-lists
-        parameters:
-          route: "/contacts/v1/lists"
-          http_method: get
-          page_size: 200
-          table_id: publication_list
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
+      # # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
+      # # ERRO 404: /contacts/v1/lists nao existe na REST API — listas sao acessiveis apenas via SOAP
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-publication-lists
+      #   flow_run_name: get-publication-lists
+      #   parameters:
+      #     route: "/contacts/v1/lists"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: publication_list
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
 
       # POST /query - Templates (assetType.id = 235)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: post-content-builder-template
@@ -143,8 +141,7 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # POST /query - Assets jsonmessage com view whatsAppTemplate
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: post-content-asset
@@ -177,8 +174,7 @@ deployments:
     schedules:
 
       # GET - Todos as jornadas do Content Builder (sem filtro)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: get-content-builder-journey
@@ -193,8 +189,7 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: get-event-definitions
@@ -208,41 +203,40 @@ deployments:
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
-      # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: get-data-extensions
-        flow_run_name: get-data-extensions
-        parameters:
-          route: "/data/v1/customobjects"
-          http_method: get
-          page_size: 200
-          table_id: data_extension
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
+      # # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
+      # # ERRO 400: /data/v1/customobjects exige $search obrigatorio — nao suporta listagem irrestrita
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-data-extensions
+      #   flow_run_name: get-data-extensions
+      #   parameters:
+      #     route: "/data/v1/customobjects"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: data_extension
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
 
-      # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: get-publication-lists
-        flow_run_name: get-publication-lists
-        parameters:
-          route: "/contacts/v1/lists"
-          http_method: get
-          page_size: 200
-          table_id: publication_list
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
+      # # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
+      # # ERRO 404: /contacts/v1/lists nao existe na REST API — listas sao acessiveis apenas via SOAP
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-publication-lists
+      #   flow_run_name: get-publication-lists
+      #   parameters:
+      #     route: "/contacts/v1/lists"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: publication_list
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
 
       # GET - Todos os assets do Content Builder (sem filtro)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: get-content-builder-asset
@@ -259,8 +253,7 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # POST /query - Templates (assetType.id = 235)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: post-content-builder-template
@@ -280,8 +273,8 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # POST /query - Assets jsonmessage com view whatsAppTemplate
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      # https://developer.salesforce.com/docs/marketing/marketing-cloud/references/mc_rest_assets?meta=getAssetsAdvancedQuery
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: post-content-asset
