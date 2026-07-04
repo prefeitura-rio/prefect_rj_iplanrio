@@ -140,20 +140,6 @@ deployments:
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
-      # POST /query - Assets jsonmessage com view whatsAppTemplate
-      - cron: "0 9,11,13,15,17 * * 1-5"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: post-content-asset
-        flow_run_name: post-content-asset
-        parameters:
-          route: "/asset/v1/content/assets/query"
-          http_method: post
-          page_size: 100
-          table_id: content_asset
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
 
    # -----------------------------------------------------------------------
   # Deployment de producao
@@ -176,7 +162,7 @@ deployments:
       # GET - Todos as jornadas do Content Builder (sem filtro)
       - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: get-content-builder-journey
         flow_run_name: get-content-builder-journey
         parameters:
@@ -191,7 +177,7 @@ deployments:
       # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
       - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: get-event-definitions
         flow_run_name: get-event-definitions
         parameters:
@@ -238,7 +224,7 @@ deployments:
       # GET - Todos os assets do Content Builder (sem filtro)
       - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: get-content-builder-asset
         flow_run_name: get-content-builder-asset
         parameters:
@@ -255,7 +241,7 @@ deployments:
       # POST /query - Templates (assetType.id = 235)
       - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: post-content-builder-template
         flow_run_name: post-content-builder-template
         parameters:
@@ -272,18 +258,3 @@ deployments:
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
-      # POST /query - Assets jsonmessage com view whatsAppTemplate
-      # https://developer.salesforce.com/docs/marketing/marketing-cloud/references/mc_rest_assets?meta=getAssetsAdvancedQuery
-      - cron: "0 9,11,13,15,17 * * 1-5"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: post-content-asset
-        flow_run_name: post-content-asset
-        parameters:
-          route: "/asset/v1/content/assets/query"
-          http_method: post
-          page_size: 100
-          table_id: content_asset
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
