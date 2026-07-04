@@ -1,3 +1,5 @@
+# https://developer.salesforce.com/docs/marketing/marketing-cloud/references/mc_rest_assets?meta=Summary
+
 name: rj_crm__salesforce_api
 prefect-version: 3.4.3
 build:
@@ -39,27 +41,87 @@ deployments:
       infisical_secret_path: /api-sfmc
     schedules:
 
-      # GET - Todos os assets do Content Builder (sem filtro)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      # # GET - Todos os assets do Content Builder (sem filtro)
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-content-builder-asset
+      #   flow_run_name: get-content-builder-asset
+      #   parameters:
+      #     route: "/asset/v1/content/assets"
+      #     http_method: get
+      #     query_params:
+      #       scope: "Ours,Shared"
+      #     page_size: 200
+      #     table_id: content_builder_asset
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
+
+      # GET - Todos as jornadas do Content Builder (sem filtro)
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
-        slug: get-content-builder-asset
-        flow_run_name: get-content-builder-asset
+        slug: get-content-builder-journey
+        flow_run_name: get-content-builder-journey
         parameters:
-          route: "/asset/v1/content/assets"
+          route: "/interaction/v1/interactions?extras=activities"
           http_method: get
-          query_params:
-            scope: "Ours,Shared"
           page_size: 200
-          table_id: content_builder_asset
+          table_id: content_builder_journey
           dataset_id: brutos_salesforce
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
+      # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
+      - cron: "0 9,11,13,15,17 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: get-event-definitions
+        flow_run_name: get-event-definitions
+        parameters:
+          route: "/interaction/v1/eventDefinitions"
+          http_method: get
+          page_size: 200
+          table_id: event_definition
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
+      # # ERRO 400: /data/v1/customobjects exige $search obrigatorio — nao suporta listagem irrestrita
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-data-extensions
+      #   flow_run_name: get-data-extensions
+      #   parameters:
+      #     route: "/data/v1/customobjects"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: data_extension
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
+
+      # # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
+      # # ERRO 404: /contacts/v1/lists nao existe na REST API — listas sao acessiveis apenas via SOAP
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-publication-lists
+      #   flow_run_name: get-publication-lists
+      #   parameters:
+      #     route: "/contacts/v1/lists"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: publication_list
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
+
       # POST /query - Templates (assetType.id = 235)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: post-content-builder-template
@@ -78,23 +140,8 @@ deployments:
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
-      # POST /query - Assets jsonmessage com view whatsAppTemplate
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: post-content-asset
-        flow_run_name: post-content-asset
-        parameters:
-          route: "/asset/v1/content/assets/query"
-          http_method: post
-          page_size: 100
-          table_id: content_asset
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
 
-  # -----------------------------------------------------------------------
+   # -----------------------------------------------------------------------
   # Deployment de producao
   # -----------------------------------------------------------------------
   - name: rj-crm--salesforce-api--prod
@@ -112,11 +159,72 @@ deployments:
       infisical_secret_path: /api-sfmc
     schedules:
 
-      # GET - Todos os assets do Content Builder (sem filtro)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      # GET - Todos as jornadas do Content Builder (sem filtro)
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
+        slug: get-content-builder-journey
+        flow_run_name: get-content-builder-journey
+        parameters:
+          route: "/interaction/v1/interactions?extras=activities"
+          http_method: get
+          page_size: 200
+          table_id: content_builder_journey
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # GET - Event Definitions (liga jornadas aos templates HSM e DEs de entrada)
+      - cron: "0 9,11,13,15,17 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: get-event-definitions
+        flow_run_name: get-event-definitions
+        parameters:
+          route: "/interaction/v1/eventDefinitions"
+          http_method: get
+          page_size: 200
+          table_id: event_definition
+          dataset_id: brutos_salesforce
+          dump_mode: overwrite
+          infisical_secret_path: /api-sfmc
+
+      # # GET - Data Extensions (catalogo de DEs: nome, chave, campos)
+      # # ERRO 400: /data/v1/customobjects exige $search obrigatorio — nao suporta listagem irrestrita
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-data-extensions
+      #   flow_run_name: get-data-extensions
+      #   parameters:
+      #     route: "/data/v1/customobjects"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: data_extension
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
+
+      # # GET - Listas de publicacao (opt-outs e unsubscribes por campanha)
+      # # ERRO 404: /contacts/v1/lists nao existe na REST API — listas sao acessiveis apenas via SOAP
+      # - cron: "0 9,11,13,15,17 * * 1-5"
+      #   timezone: America/Sao_Paulo
+      #   active: false
+      #   slug: get-publication-lists
+      #   flow_run_name: get-publication-lists
+      #   parameters:
+      #     route: "/contacts/v1/lists"
+      #     http_method: get
+      #     page_size: 200
+      #     table_id: publication_list
+      #     dataset_id: brutos_salesforce
+      #     dump_mode: overwrite
+      #     infisical_secret_path: /api-sfmc
+
+      # GET - Todos os assets do Content Builder (sem filtro)
+      - cron: "0 9,11,13,15,17 * * 1-5"
+        timezone: America/Sao_Paulo
+        active: true
         slug: get-content-builder-asset
         flow_run_name: get-content-builder-asset
         parameters:
@@ -131,10 +239,9 @@ deployments:
           infisical_secret_path: /api-sfmc
 
       # POST /query - Templates (assetType.id = 235)
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
+      - cron: "0 9,11,13,15,17 * * 1-5"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: post-content-builder-template
         flow_run_name: post-content-builder-template
         parameters:
@@ -151,18 +258,3 @@ deployments:
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
 
-      # POST /query - Assets jsonmessage com view whatsAppTemplate
-      - interval: 86400
-        anchor_date: "2021-01-01T09:00:00"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: post-content-asset
-        flow_run_name: post-content-asset
-        parameters:
-          route: "/asset/v1/content/assets/query"
-          http_method: post
-          page_size: 100
-          table_id: content_asset
-          dataset_id: brutos_salesforce
-          dump_mode: overwrite
-          infisical_secret_path: /api-sfmc
