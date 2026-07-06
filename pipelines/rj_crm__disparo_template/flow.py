@@ -11,6 +11,7 @@ from math import ceil
 import pendulum
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
@@ -112,6 +113,7 @@ def rj_crm__disparo_template_sf(
     flow_environment: str = "staging",
     force_add_on_whitelist_group: bool = False,
     whitelist_replace_contacts: bool = False,
+    materialize_after_sftp: bool = True,
 ):
     """
     Orchestrates the dispatch of templated messages via Salesforce SFTP.
@@ -203,14 +205,14 @@ def rj_crm__disparo_template_sf(
 
     # Valida colunas obrigatórias para o log SF: SubscriberKey e telefone.
     # Lança ValueError imediatamente se alguma estiver ausente ou com dados inválidos.
-    validate_sf_dataframe(df, campaign_name)
+    validate_sf_dataframe(df, campaign_name) ## TODO: validar
 
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
 
     # Dedup por CPF — base para o loop de retentativas
-    if filter_duplicated_cpfs and "externalId" in df.columns:
+    if filter_duplicated_cpfs and "SubscriberKey" in df.columns:
         n_before = len(df)
-        df = df.drop_duplicates(subset=["externalId"])
+        df = df.drop_duplicates(subset=["SubscriberKey"])
         print(f"Removed {n_before - len(df)} duplicate CPFs. Remaining: {len(df)}")
 
     if df.empty:
@@ -262,7 +264,7 @@ def rj_crm__disparo_template_sf(
                 break
 
             # Seleciona as linhas dos CPFs que falharam e aplica o próximo número de 'others'
-            retry_df = base_df[base_df["externalId"].isin(failed_cpfs)].copy()
+            retry_df = base_df[base_df["SubscriberKey"].isin(failed_cpfs)].copy()
             if "others" not in retry_df.columns or retry_df.empty:
                 print(f"No others column or no rows for retry attempt {i}.")
                 break
@@ -342,6 +344,17 @@ def rj_crm__disparo_template_sf(
         )
 
         print(f"CSV enviado para SFTP com {len(current_df)} destinatários na tentativa {i+1}.")
+
+        if materialize_after_sftp:
+            print("⏳ Aguardando 20 minutos antes de materializar o modelo dbt raw_salesforce_delivery_receipt...")
+            time.sleep(20 * 60)
+            github_token = getenv_or_action("GITHUB_TOKEN")
+            git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+            execute_dbt_task(
+                select="raw_salesforce_delivery_receipt",
+                target="prod",
+                git_repository_path=git_repository_path,
+            )
 
         if not test_mode:
             send_dispatch_success_notification(

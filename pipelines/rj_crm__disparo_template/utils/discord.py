@@ -100,9 +100,7 @@ def send_dispatch_no_destinations_found(
 def send_dispatch_success_notification(
     total_dispatches: int,
     dispatch_date: str,
-    id_hsm: int,
     campaign_name: str,
-    cost_center_id: int,
     total_batches: int,
     sample_destination: dict = None,
     test_mode: bool = False,
@@ -134,9 +132,7 @@ def send_dispatch_success_notification(
 📊 **Quantidade:** {total_dispatches} disparos
 📦 **Lotes:** {total_batches} lotes
 🕐 **Hora:** {dispatch_date}
-🆔 **ID HSM:** {id_hsm}
 📋 **Campanha:** {campaign_name}
-💰 **Centro de Custo:** {cost_center_id}
 *️⃣ **Tentativa:** {attempt_number} de {total_attempt_number}
 """
 # 📄 **Porcentagem de pessoas na Whitelist:** {whitelist_percentage}%
