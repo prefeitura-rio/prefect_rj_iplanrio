@@ -178,7 +178,6 @@ def rj_crm__disparo_template_sf(
         return
 
     if test_mode:
-        campaign_name = "teste-" + campaign_name
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
 
     if query_replacements:
@@ -346,12 +345,12 @@ def rj_crm__disparo_template_sf(
         print(f"CSV enviado para SFTP com {len(current_df)} destinatários na tentativa {i+1}.")
 
         if materialize_after_sftp:
-            print("⏳ Aguardando 20 minutos antes de materializar o modelo dbt raw_salesforce_delivery_receipt...")
-            time.sleep(20 * 60)
+            print("⏳ Aguardando 20 minutos antes de materializar o modelo dbt int_crm_status_disparo...")
+            time.sleep(20 * 60) if not test_mode else time.sleep(1)
             github_token = getenv_or_action("GITHUB_TOKEN")
             git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
             execute_dbt_task(
-                select="raw_salesforce_delivery_receipt",
+                select="+int_crm_status_disparo",
                 target="prod",
                 git_repository_path=git_repository_path,
             )
@@ -573,7 +572,7 @@ def rj_crm__disparo_template(
         
         if (i > 0 or filter_failed_phones) and max_dispatch_retries > 0:
             if i > 0:
-                print(f"⚠️  Sleep 5 minutes before retry dispatch.")
+                print(f"⚠️  Sleep 3 minutes before retry dispatch.")
                 time.sleep(3 * 60)
 
                 print(f"\n⚠️  Starting retry attempt {i} for id_hsm={id_hsm}. Checking for remaining failures...")
