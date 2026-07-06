@@ -50,7 +50,6 @@ enriquece_rmi as (
 -- Chave de busca agora é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).
 status_final_telefone AS (
     -- verifica se telefones já tiveram falha, passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria só necessário filtrar pela estratégia de envio
-    -- qualquer falha conta (não só o código 131026 de "número sem WhatsApp")
     SELECT
         contato_telefone AS flatTarget,
         indicador_falha AS falhou
