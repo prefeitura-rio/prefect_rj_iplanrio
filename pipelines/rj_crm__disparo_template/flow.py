@@ -107,6 +107,7 @@ def rj_crm__disparo_template_sf(
     max_dispatch_retries: int = 0,
     infisical_secret_path: str = "/crm_disparo_template",
     data_extension_filename: str | None = None,
+    de_columns: list[str] | None = None,
     whitelist_percentage: int = 0,
     whitelist_environment: str = "production",
     flow_environment: str = "staging",
@@ -143,6 +144,10 @@ def rj_crm__disparo_template_sf(
         sleep_minutes (int, optional): Minutes to sleep before dispatch. Defaults to 5.
         max_dispatch_retries (int): Maximum retry attempts with alternative phones. Defaults to 0.
         infisical_secret_path (str, optional): Infisical path for SFTP credentials. Defaults to "/sftp".
+        de_columns (list[str], optional): Lista de campos (além de telefone/SubscriberKey) que a
+            Data Extension espera. Quando informada, o CSV enviado ao SFTP é restrito a essas
+            colunas — qualquer coluna de controle interno da query (ex.: 'others', 'externalId')
+            é descartada antes do envio.
         sftp_remote_path (str, optional): Remote directory on the SFTP server. Defaults to "/".
         whitelist_percentage (int, optional): Percentage of contacts to whitelist. Defaults to 0.
         whitelist_environment (str, optional): Whitelist environment. Defaults to "production".
@@ -330,10 +335,11 @@ def rj_crm__disparo_template_sf(
         print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
         time.sleep(sleep_minutes * 60)
 
-        # Salva CSV (dropa 'others') e registra data do disparo
+        # Salva CSV (restrito a telefone/SubscriberKey/de_columns) e registra data do disparo
         csv_path, dispatch_date = save_csv_for_sftp(
             df=current_df,
             data_extension_filename=data_extension_filename or campaign_name,
+            de_columns=de_columns,
         )
 
         send_to_sftp(

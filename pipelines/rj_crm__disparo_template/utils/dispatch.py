@@ -1084,11 +1084,16 @@ def get_retry_destinations(
 def save_csv_for_sftp(
     df: pd.DataFrame,
     data_extension_filename: str,
+    de_columns: Optional[List[str]] = None,
     output_folder: str = "./data_sftp/",
 ) -> Tuple[str, str]:
     """
     Salva o DataFrame da query como CSV para envio ao Salesforce via SFTP.
-    A coluna 'others' é excluída por ser interna ao controle de retentativas.
+
+    Se `de_columns` for informado, o CSV é restrito a 'telefone' + 'SubscriberKey' +
+    `de_columns` (os campos que a Data Extension espera) — qualquer coluna de controle
+    interno do flow (ex.: 'others', 'externalId') é descartada, mesmo que a query as
+    retorne. Sem `de_columns`, mantém o comportamento legado de só descartar 'others'.
 
     Returns:
         Tuple[str, str]: (caminho do arquivo CSV salvo, data do disparo)
@@ -1098,7 +1103,11 @@ def save_csv_for_sftp(
     timestamp = now.strftime("%Y%m%d%H%M%S")  # TODO: alterar para salvar em segundos
     # timestamp = now.strftime("%Y%m%d%H%M")
 
-    csv_df = df.drop(columns=["others"], errors="ignore")
+    if de_columns is not None:
+        keep_columns = [col for col in ["telefone", "SubscriberKey", *de_columns] if col in df.columns]
+        csv_df = df[keep_columns].copy()
+    else:
+        csv_df = df.drop(columns=["others"], errors="ignore")
     csv_df["LOCALE"] = "BR"
 
     os.makedirs(output_folder, exist_ok=True)
