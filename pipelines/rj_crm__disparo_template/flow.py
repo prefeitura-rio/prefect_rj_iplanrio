@@ -8,6 +8,7 @@ Flow to dispatch templated messages via Wetalkie API
 import os
 import time
 from math import ceil
+from pathlib import Path
 import pendulum
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
@@ -98,6 +99,7 @@ def rj_crm__disparo_template_sf(
     dump_mode: str | None = None,
     test_mode: bool | None = True,
     query: str | None = None,
+    query_file: str | None = None,
     query_processor_name: str | None = None,
     query_replacements: dict | None = None,
     filter_dispatched_phones_or_cpfs: str | None = "cpf",
@@ -137,6 +139,8 @@ def rj_crm__disparo_template_sf(
         dump_mode (str, optional): BigQuery dump mode (e.g., "append").
         test_mode (bool, optional): If True, runs in test mode. Defaults to True.
         query (str, optional): SQL query to retrieve destinations.
+        query_file (str, optional): Path (relative to this file) to a .sql file to use as the
+            query instead of passing the raw SQL in `query`. Takes precedence over `query`.
         query_processor_name (str, optional): Name of the query processor.
         query_replacements (dict, optional): Replacements for query placeholders.
         filter_dispatched_phones_or_cpfs (str, optional): None, "cpf" or "phone_number". Defaults to "cpf".
@@ -164,7 +168,7 @@ def rj_crm__disparo_template_sf(
     id_hsm = id_hsm or TemplateConstants.ID_HSM.value
     campaign_name = campaign_name or TemplateConstants.CAMPAIGN_NAME.value
     cost_center_id = cost_center_id or TemplateConstants.COST_CENTER_ID.value
-    query = query or TemplateConstants.QUERY.value
+    query = (Path(__file__).parent / query_file).read_text() if query_file else query or TemplateConstants.QUERY.value
     query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
     billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
 

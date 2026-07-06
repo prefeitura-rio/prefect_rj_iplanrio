@@ -1,6 +1,6 @@
 -- Tabela de controle (kill-switch operacional) consultada por check_flow_status()
 -- em pipelines/rj_crm__disparo_template/utils/dispatch.py.
--- Espelha o schema de rj-crm-registry.brutos_wetalkie_staging.disparos_ativos,
+-- Espelha o schema de rj-crm-registry.brutos_wetalkie.disparos_ativos,
 -- mas no dataset novo do Salesforce.
 --
 -- Como funciona a checagem (check_flow_status):
@@ -16,7 +16,7 @@
 --   1) active: true no scheduler do Prefect (senão o flow nem roda)
 --   2) uma linha aqui com ativo='1' pro ambiente certo (senão o flow roda e termina cedo)
 
-CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce_staging.disparos_ativos` (
+CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce.disparos_ativos` (
   id_hsm STRING,
   nome_campanha STRING,
   ambiente STRING,
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce_staging.disparos_a
 -- PIC (smascartaoprimeirainfanciaprodv27 / ...lembreteprodv4) NAO está incluído aqui
 -- de propósito: o scheduler deles está active:false e sem query ainda.
 
-INSERT INTO `rj-crm-registry.brutos_salesforce_staging.disparos_ativos`
+INSERT INTO `rj-crm-registry.brutos_salesforce.disparos_ativos`
   (id_hsm, nome_campanha, ambiente, ativo, data_limite_disparo)
 VALUES
   ('291', 'cvl_pesquisa_1746_sem_resolucao_prod_v1', 'staging', '1', NULL),
