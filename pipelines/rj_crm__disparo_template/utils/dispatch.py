@@ -867,14 +867,22 @@ def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
 
 
 @task
-def get_failed_phones(billing_project_id: str) -> set:
+def get_failed_phones(billing_project_id: str, campaign_name: str = None) -> set:
     """
-    Busca telefones tiveram falha de não ter whatsapp ou bloqueio no último disparo,
+    Busca telefones que tiveram falha de não ter whatsapp ou bloqueio no último disparo,
     passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria
     só necessário filtrar pela estratégia de envio.
+
+    Combina (UNION) duas fontes:
+    1. fluxo_atendimento (Wetalkie): falha 131026 no último disparo dos últimos 6 meses.
+    2. int_crm_status_disparo (Salesforce/dbt): indicador_falha nos últimos 6 meses.
+       Se campaign_name for informado, filtra também pelo nome da jornada nessa segunda query.
     """
     # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
+    campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
+
     query = f"""
+        -- Fonte 1: Wetalkie — falha 131026 no último disparo dos últimos 6 meses
         WITH status_por_disparo AS (
             SELECT
                 flatTarget,
@@ -882,13 +890,14 @@ def get_failed_phones(billing_project_id: str) -> set:
                 MAX(
                     CASE
                         WHEN status = "PROCESSING" THEN 1
-                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
+                        WHEN status = "FAILED" and (faultdescription like "%131026%" or faultdescription LIKE "%131048%") THEN 2
                         WHEN status = "SENT" THEN 3
                         WHEN status = "DELIVERED" THEN 4
                         WHEN status = "READ" THEN 5
                     END
                 ) AS id_status_disparo
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE DATE(createDate) >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
             GROUP BY flatTarget, createDate
         ),
 
@@ -900,13 +909,27 @@ def get_failed_phones(billing_project_id: str) -> set:
                     ORDER BY createDate DESC
                 ) AS rn
             FROM status_por_disparo
+        ),
+
+        wetalkie_failed AS (
+            SELECT flatTarget AS telefone
+            FROM ranked
+            WHERE rn = 1
+            AND id_status_disparo = 2
+            -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+        ),
+
+        -- Fonte 2: int_crm_status_disparo (Salesforce) — falha nos últimos 6 meses
+        sf_failed AS (
+            SELECT DISTINCT contato_telefone AS telefone
+            FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+            WHERE indicador_quarentena = TRUE
+            {campaign_filter}
         )
 
-        SELECT flatTarget
-        FROM ranked
-        WHERE rn = 1
-        AND id_status_disparo = 2
-        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+        SELECT telefone FROM wetalkie_failed
+        UNION DISTINCT
+        SELECT telefone FROM sf_failed
     """
     try:
         failed_df = download_data_from_bigquery(
@@ -915,54 +938,25 @@ def get_failed_phones(billing_project_id: str) -> set:
             bucket_name=billing_project_id
         )
         print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
-        failed_phones = set(str(x) for x in failed_df['flatTarget'].tolist())
-        return failed_phones    
+        failed_phones = set(str(x) for x in failed_df['telefone'].tolist())
+        return failed_phones
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
         return set()
 
 
 @task
-def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
+def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     """
     Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
     """
-    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
     query = f"""
-        WITH status_por_disparo AS (
-            SELECT
-                targetExternalId,
-                createDate,
-                MAX(
-                    CASE
-                        WHEN status = "PROCESSING" THEN 1
-                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
-                        WHEN status = "SENT" THEN 3
-                        WHEN status = "DELIVERED" THEN 4
-                        WHEN status = "READ" THEN 5
-                    END
-                ) AS id_status_disparo
-            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-            WHERE templateId = {id_hsm}
-            AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
-            GROUP BY targetExternalId, createDate
-        ),
-
-        ranked AS (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY targetExternalId
-                    ORDER BY createDate DESC
-                ) AS rn
-            FROM status_por_disparo
-        )
-
-        SELECT targetExternalId
-        FROM ranked
-        WHERE rn = 1
-        AND id_status_disparo = 2
-        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+        -- Agora só teremos Salesforce como fonte
+        SELECT DISTINCT cpf
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE indicador_quarentena = TRUE
+        AND envio_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
+        AND LOWER(nome_hsm) = LOWER('{campaign_name}') if campaign_name else ''
     """
     try:
         failed_df = download_data_from_bigquery(
@@ -971,7 +965,7 @@ def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
             bucket_name=billing_project_id
         )
         print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
-        failed_cpfs = set(str(x) for x in failed_df['targetExternalId'].tolist())
+        failed_cpfs = set(str(x) for x in failed_df['cpf'].tolist())
         print(f"DEBUG failed_cpfs {failed_cpfs}")
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
@@ -1144,9 +1138,8 @@ def send_to_sftp(
 
     _sftp_keys = {k: v[:4] + "****" for k, v in os.environ.items() if "sftp" in k.lower() or "crm_disparo" in k.lower() or "salesforce" in k.lower()}
     log(f"DEBUG env vars relacionadas a SFTP/CRM: {_sftp_keys}")
-    if len(_sftp_keys) == 0:
-        _sftp_keys = {k: v + "****" for k, v in os.environ.items()}
-        log(f"DEBUG2 env vars: {_sftp_keys}")
+    _sftp_keys = {k: v[-4:] + "****" for k, v in os.environ.items()}
+    log(f"DEBUG2 env vars: {_sftp_keys}")
 
     if infisical_secret_path:
         # prefix = infisical_secret_path.lstrip("/").replace("/", "_")
