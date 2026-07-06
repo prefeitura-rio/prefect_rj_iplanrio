@@ -801,7 +801,7 @@ def check_flow_status(
 
     query = f"""
         SELECT ativo, data_limite_disparo, nome_campanha
-        FROM `rj-crm-registry.brutos_salesforce_staging.disparos_ativos`
+        FROM `rj-crm-registry.brutos_salesforce.disparos_ativos`
         WHERE {filter_condition} AND ambiente = '{flow_environment}'
         LIMIT 1
     """
