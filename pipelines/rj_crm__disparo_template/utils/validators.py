@@ -7,12 +7,14 @@ Funções centralizadas de validação para pipeline de template
 Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 
+import os
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from pydantic import ValidationError
 
+from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.schemas import (
     DestinationInput,
@@ -284,15 +286,17 @@ def validate_campaign_name(
     total = results[0]["total"] if results else 0
 
     if total == 0:
-        log(
-            f"ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm "
+        message = f"""
+            ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm "
             "da tabela rj-crm-registry.brutos_salesforce.jornada. "
-            "Verifique o nome da campanha e tente novamente."
-        )
-        print(
-            f"[validate_campaign_name_in_bigquery] campaign_name='{campaign_name}' não existe "
-            "em rj-crm-registry.brutos_salesforce.jornada (hsm.nome_hsm). Encerrando o flow."
-        )
+            "Verifique o nome da campanha e tente novamente. Encerrando o flow."
+        """
+        log(message)
+        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+        if not webhook_url:
+            print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        else:
+            send_discord_notification(webhook_url, message)
         return None
 
     log(f"campaign_name='{campaign_name}' validado com sucesso ({total} registro(s) encontrado(s)).")
