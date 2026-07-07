@@ -144,6 +144,7 @@ def rj_crm__disparo_template_sf(
         whitelist_replace_contacts (bool, optional): Remove contacts before adding to whitelist. Defaults to False.
     """
 
+    # force deploy
     dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
     table_id = table_id or TemplateConstants.TABLE_ID.value
     dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value

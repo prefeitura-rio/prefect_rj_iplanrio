@@ -159,10 +159,8 @@ schedules:
     slug: daily-cvl-1746-survey-invitation-without-resolution
     flow_run_name: cvl-pesquisa1746
     parameters:
-      id_hsm: 291
       query_replacements: {"id_hsm_placeholder": 291}
       campaign_name: cvl-pesquisa1746-prod
-      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -367,10 +365,8 @@ schedules:
     slug: daily-cvl-pesquisa1746-prod
     flow_run_name: cvl-pesquisa1746
     parameters:
-      id_hsm: 192
       query_replacements: {"id_hsm_placeholder": 192}
       campaign_name: cvl-pesquisa1746-prod
-      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -573,10 +569,8 @@ schedules:
     slug: daily-pgm-divida-ativa-prod
     flow_run_name: pgm-divida-ativa
     parameters:
-      id_hsm: 239
       query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 300}
       campaign_name: pgm-divida-ativa-prod-v2
-      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -816,9 +810,7 @@ schedules:
     slug: daily-pgm-divida-ativa-lembrete-prod-v1
     flow_run_name: pgm-divida-ativa-lembrete
     parameters:
-      id_hsm: 227
       campaign_name: pgm-divida-ativa-lembrete-prod-v1
-      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -965,9 +957,7 @@ schedules:
     slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
     flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
     parameters:
-      id_hsm: 231
       campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
-      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -1115,7 +1105,6 @@ schedules:
     slug: daily-sms-puerpera-confirma-agendamento
     flow_run_name: sms-puerpera-confirma-agendamento
     parameters:
-        id_hsm: 573
         query_replacements: {"id_hsm_placeholder": 573}
         table_id: disparos_efetuados
         dump_mode: append
@@ -1125,7 +1114,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1290,7 +1278,6 @@ schedules:
     slug: daily-sms-puerperas-d0
     flow_run_name: sms-puerperas-d0
     parameters:
-        id_hsm: 610
         query_replacements: {"id_hsm_placeholder": 610}
         table_id: disparos_efetuados
         dump_mode: append
@@ -1300,7 +1287,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1454,7 +1440,6 @@ schedules:
     slug: daily-sms-puerperas-d1-d3-d5-d10
     flow_run_name: sms-puerperas-d1-d3-d5-d10
     parameters:
-        id_hsm: 588
         query_replacements:
             id_hsm_placeholder: 588
             id_hsm_anterior_placeholder: 610
@@ -1473,7 +1458,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1493,7 +1477,6 @@ schedules:
     slug: daily-sms-puerperas-d7
     flow_run_name: sms-puerperas-d7
     parameters:
-        id_hsm: 456
         query_replacements:
             id_hsm_placeholder: 456
             id_hsm_anterior_placeholder: 610
@@ -1508,7 +1491,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1528,7 +1510,6 @@ schedules:
     slug: daily-sms-puerperas-d13-d16-d19
     flow_run_name: sms-puerperas-d13-d16-d19
     parameters:
-        id_hsm: 562
         query_replacements:
             id_hsm_placeholder: 562
             id_hsm_anterior_placeholder: 610
@@ -1546,7 +1527,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1566,7 +1546,6 @@ schedules:
     slug: daily-sms-puerperas-d22
     flow_run_name: sms-puerperas-d22
     parameters:
-        id_hsm: 489
         query_replacements:
             id_hsm_placeholder: 489
             id_hsm_anterior_placeholder: 610
@@ -1581,7 +1560,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1601,7 +1579,6 @@ schedules:
     slug: daily-sms-puerperas-d25-d28
     flow_run_name: sms-puerperas-d25-d28
     parameters:
-        id_hsm: 564
         query_replacements:
             id_hsm_placeholder: 564
             id_hsm_anterior_placeholder: 610
@@ -1618,7 +1595,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1638,7 +1614,6 @@ schedules:
     slug: daily-sms-puerperas-d34
     flow_run_name: sms-puerperas-d34
     parameters:
-        id_hsm: 566
         query_replacements:
             id_hsm_placeholder: 566
             id_hsm_anterior_placeholder: 610
@@ -1653,7 +1628,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1673,7 +1647,6 @@ schedules:
     slug: daily-sms-puerperas-d40
     flow_run_name: sms-puerperas-d40
     parameters:
-        id_hsm: 589
         query_replacements:
             id_hsm_placeholder: 589
             id_hsm_anterior_placeholder: 610
@@ -1688,7 +1661,6 @@ schedules:
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
         sleep_minutes: 5
-        cost_center_id: 71
         flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /wetalkie
@@ -1710,9 +1682,7 @@ schedules:
     slug: change-whitelist
     flow_run_name: change-whitelist
     parameters:
-      id_hsm: 231
       campaign_name: change-whitelist
-      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -1747,9 +1717,7 @@ schedules:
     slug: test-salesforce
     flow_run_name: test-salesforce
     parameters:
-      id_hsm: null
       campaign_name: confirma_agendamento_cadunico_prod_v2
-      cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados_teste

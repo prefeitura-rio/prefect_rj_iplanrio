@@ -147,9 +147,7 @@ def send_dispatch_success_notification(
 def send_dispatch_result_notification(
     total_dispatches: int,
     dispatch_date: str,
-    id_hsm: int,
     campaign_name: str,
-    cost_center_id: int,
     total_batches: int,
     test_mode: bool = False,
 ):
@@ -162,60 +160,48 @@ def send_dispatch_result_notification(
     Args:
         total_dispatches: Quantidade total de disparos realizados
         dispatch_date: Data/hora do disparo (formato: YYYY-MM-DD HH:MM:SS)
-        id_hsm: ID do template HSM utilizado
-        campaign_name: Nome da campanha
-        cost_center_id: ID do centro de custo
+        campaign_name: Nome da campanha (filtra pela coluna nome_hsm)
         total_batches: Número total de lotes enviados
-        sample_destination: Exemplo de destinatário (opcional, não usado aqui)
         test_mode: Indica se é um disparo de teste (opcional)
     """
 
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
 
-    # Query para obter resultados do disparo
+    # Query sobre rj-crm-registry.brutos_salesforce.status_disparo
     results_query = f"""
-        WITH ranked_messages AS (
-            SELECT
-                targetExternalId,
-                templateId,
-                triggerId,
-                status,
-                datarelay_timestamp,
-                sendDate
-            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-            WHERE templateId = {id_hsm}
-                AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 minute)
+        WITH
+        source AS (
+            SELECT *
+            FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+            WHERE nome_hsm = '{campaign_name}'
+                AND envio_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 90 MINUTE)
         ),
-        total as (
-            select COUNT(DISTINCT targetExternalId) AS total_disparos
-            FROM ranked_messages
+        total AS (
+            SELECT COUNT(DISTINCT cpf) AS total_disparos
+            FROM source
         ),
         aggregated AS (
             SELECT
-                status,
+                status_disparo AS status,
                 CASE
-                WHEN status = "PROCESSING" THEN 1
-                WHEN status = "SENT" THEN 2
-                WHEN status = "DELIVERED" THEN 3
-                WHEN status = "READ" THEN 4
-                WHEN status = "FAILED" THEN 5
+                    WHEN status_disparo = "sent" THEN 2
+                    WHEN status_disparo = "delivered" THEN 3
+                    WHEN status_disparo = "read" THEN 4
+                    WHEN status_disparo = "failed" THEN 5
                 END AS status_ranking,
-                COUNT(DISTINCT targetExternalId) AS quantidade_cpfs,
+                COUNT(DISTINCT cpf) AS quantidade_cpfs,
                 COUNT(*) AS quantidade_disparos
-            FROM ranked_messages
-            GROUP BY status, status_ranking
-            )
-            SELECT
+            FROM source
+            GROUP BY status_disparo, status_ranking
+        )
+        SELECT
             status,
             quantidade_cpfs,
             quantidade_disparos,
-            ROUND(
-                quantidade_cpfs * 100.0 / total_disparos,
-                1
-            ) AS percentual
-            FROM aggregated
-            cross join total
-            ORDER BY status_ranking;
+            ROUND(quantidade_cpfs * 100.0 / total_disparos, 1) AS percentual
+        FROM aggregated
+        CROSS JOIN total
+        ORDER BY status_ranking
     """
 
     log("Querying BigQuery for dispatch results...")
@@ -232,8 +218,6 @@ def send_dispatch_result_notification(
     message = f"""{title}
 
 📋 **Campanha:** {campaign_name}
-🆔 **Template ID:** {id_hsm}
-💰 **Centro de Custo:** {cost_center_id}
 🕐 **Disparo realizado em:** {dispatch_date}
 📦 **Total enviado:** {total_dispatches} disparos em {total_batches} lotes
 
@@ -248,10 +232,10 @@ def send_dispatch_result_notification(
             disparos = int(row["quantidade_disparos"])
             percent = float(row["percentual"])
 
-            message += f"• **{status}**: {cpfs} CPFs ({disparos} disparos) - {percent:.1f}%\n"
+            message += f"• **{status}**: {cpfs} CPFs - {percent:.1f}%\n"
     else:
         message += "⚠️ Nenhum resultado encontrado ainda.\n"
-        message += "Os dados podem ainda não ter sido processados pelo webhook."
+        message += "Os dados podem ainda não ter sido processados."
 
     send_discord_notification(webhook_url, message)
 
