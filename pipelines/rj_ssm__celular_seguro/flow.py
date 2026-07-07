@@ -17,13 +17,13 @@ def rj_ssm__celular_seguro():
 
     result = os.system(
         f"""
-        curl --request POST "{url}"
+        curl --request POST {url}
         --header 'Content-Type: application/json'
-        --data-raw '{
+        --data-raw '{{
         "grant_type": "client_credentials",
-        "client_id": "{client_id}",
-        "client_secret": "{client_secret}"
-        }' -kv
+        "client_id": {client_id},
+        "client_secret": {client_secret}
+        }}' -kv
         """
     )
 
