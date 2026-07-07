@@ -1,0 +1,10 @@
+[project]
+name = "rj_ssm__celular_seguro"
+version = "0.1.0"
+description = "Pipeline celular_seguro da secretaria ssm"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
