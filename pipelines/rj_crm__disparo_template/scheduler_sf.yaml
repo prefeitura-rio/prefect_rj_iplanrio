@@ -127,7 +127,9 @@ schedules:
     slug: daily-sms-puerpera-confirma-agendamento
     flow_run_name: sms-puerpera-confirma-agendamento
     parameters:
-        query_replacements: {"id_hsm_placeholder": 573}
+        query_replacements:
+            nome_hsm_placeholder: _sms_puerpera_disp1_gestantev2
+            intervalo_filtro_disparados: 1
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: true
@@ -157,7 +159,9 @@ schedules:
     slug: daily-sms-puerperas-d0
     flow_run_name: sms-puerperas-d0
     parameters:
-        query_replacements: {"id_hsm_placeholder": 610}
+        query_replacements:
+            nome_hsm_placeholder: smspuerperasdisparo25
+            intervalo_filtro_disparados: 365
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: true
