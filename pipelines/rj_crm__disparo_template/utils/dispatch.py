@@ -422,7 +422,10 @@ def create_log_df(
             val = row.get(col)
             # Converte tipos pandas/numpy não serializáveis
             if hasattr(val, "item"):
-                val = val.item()
+                if hasattr(val, "size") and val.size == 1:
+                    val = val.item()
+                else:
+                    val = val.tolist() if hasattr(val, "tolist") else str(val)
             extra_data[col] = val
 
         records.append({
