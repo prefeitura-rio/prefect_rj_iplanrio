@@ -65,30 +65,24 @@ def send_discord_notification(webhook_url: str = None, message: str = 'No messag
 
 
 def send_dispatch_no_destinations_found(
-    id_hsm: int,
     campaign_name: str,
-    cost_center_id: int,
     test_mode: bool = False,
 ):
     """
     Envia notificação para Discord quando nenhum destinatário é encontrado na query.
 
     Args:
-        id_hsm: ID do template HSM utilizado
         campaign_name: Nome da campanha
-        cost_center_id: ID do centro de custo
         test_mode: Indica se é um disparo de teste (opcional)
     """
 
-     # Adicionar indicador [TESTE] no título se test_mode=True
+    # Adicionar indicador [TESTE] no título se test_mode=True
     title = "⚠️ **[TESTE] Disparo não realizado pois nenhum destinatário foi encontrado.**" if test_mode else "⚠️ **Disparo não realizado pois nenhum destinatário foi encontrado.**"
 
     # Formatar mensagem com contexto e resultados
     message = f"""{title}
 
 📋 **Campanha:** {campaign_name}
-🆔 **Template ID:** {id_hsm}
-💰 **Centro de Custo:** {cost_center_id}
 🕐 **Disparo realizado em:** {datetime.now(timezone("America/Sao_Paulo")).date()}
 
 """

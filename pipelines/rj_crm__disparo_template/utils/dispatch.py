@@ -770,7 +770,6 @@ def check_flow_status(
     flow_environment: str,
     billing_project_id: str,
     bucket_name: str,
-    id_hsm: Optional[int] = None,
     campaign_name: Optional[str] = None,
 ) -> Optional[bool]:
     """
@@ -779,25 +778,21 @@ def check_flow_status(
         flow_environment: Ambiente do fluxo ('staging' ou 'production')
         billing_project_id: ID do projeto GCP para billing
         bucket_name: Nome do bucket GCS para carregamento de credenciais
-        id_hsm: ID do template HSM
         campaign_name: Nome da campanha
     Returns:
         True se o fluxo estiver ativo e válido, None caso contrário."""
 
-    log(f"\nStarting flow status check for id_hsm={id_hsm}, campaign_name={campaign_name} in environment={flow_environment}.")
+    log(f"\nStarting flow status check for campaign_name={campaign_name} in environment={flow_environment}.")
 
     if flow_environment not in ["staging", "production"]:
         log(f"\n⚠️  Invalid flow_environment: {flow_environment}. Must be 'staging' or 'production'.")
         return None
 
-    if not id_hsm and not campaign_name:
-        log(f"\n⚠️  Either id_hsm or campaign_name must be provided.")
+    if not campaign_name:
+        log(f"\n⚠️  Campaign name must be provided.")
         return None
 
-    if campaign_name:
-        filter_condition = f"nome_campanha = '{campaign_name}'"
-    else:
-        filter_condition = f"id_hsm = '{id_hsm}'"
+    filter_condition = f"nome_campanha = '{campaign_name}'"
 
     query = f"""
         SELECT ativo, data_limite_disparo, nome_campanha
@@ -812,7 +807,7 @@ def check_flow_status(
     )
     log(f"DEBUG: Flow status query result:\n{dfr} \nwith query {query}")
     if dfr.empty:
-        log(f"\n⚠️  No configuration found for id_hsm={id_hsm} in environment={flow_environment}.")
+        log(f"\n⚠️  No configuration found for campaign_name={campaign_name} in environment={flow_environment}.")
         return None
 
     row = dfr.iloc[0]
@@ -838,11 +833,10 @@ def check_flow_status(
     expiration_date = row.get("data_limite_disparo") if not pd.isnull(row.get("data_limite_disparo")) else current_date
 
     if expiration_date < current_date:
-        log(f"\n⚠️  Flow for id_hsm={id_hsm} in environment={flow_environment} has expired on {expiration_date}.")
+        log(f"\n⚠️  Flow for campaign_name={campaign_name} in environment={flow_environment} has expired on {expiration_date}.")
         message = f"""
     Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
-    🆔 **Template ID:** {id_hsm}
     💻 **Ambiente:** {flow_environment}
     📆 **Data limite do disparo:** {expiration_date}
 
@@ -851,7 +845,7 @@ def check_flow_status(
         send_discord_notification(webhook_url, message)
         return None
 
-    log(f"\n✅  Active flow found for id_hsm={id_hsm} in environment={flow_environment}.")
+    log(f"\n✅  Active flow found for campaign_name={campaign_name} in environment={flow_environment}.")
     return True
 
 
@@ -1015,7 +1009,7 @@ def remove_failed_phones(
 
 @task
 def get_retry_destinations(
-    id_hsm: int,
+    campaign_name: str,
     original_destinations: List[Dict],
     billing_project_id: str,
     attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
@@ -1040,7 +1034,7 @@ def get_retry_destinations(
     failed_ids = []
     if attempt_number > 0:
         # Só roda quando não for preencher os nulos gerados pela task remove_failed_phones 
-        failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, id_hsm=id_hsm)
+        failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, campaign_name=campaign_name)
 
         if not failed_ids or len(failed_ids) == 0:
             log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
