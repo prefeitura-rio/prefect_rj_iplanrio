@@ -125,7 +125,8 @@ WITH segmentacao_original AS (
     from final
     where celular_disparo is not null
 
-
+DELETE from `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`
+where nome = 'MARIA SALESFORCE'
 
 INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`
 (
