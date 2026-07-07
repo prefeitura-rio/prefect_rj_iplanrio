@@ -3,7 +3,7 @@
 # pylint: disable='line-too-long'
 
 """
-Flow to dispatch templated messages via Wetalkie API
+Flow to dispatch templated messages via Salesforce
 """
 import os
 import time
