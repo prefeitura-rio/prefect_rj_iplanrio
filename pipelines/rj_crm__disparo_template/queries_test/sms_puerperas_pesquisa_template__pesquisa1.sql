@@ -138,3 +138,105 @@ SELECT
     ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
 from final
 where celular_disparo is not null
+
+DELETE from `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
+where nome = 'MARIA SALESFORCE'
+
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
+(
+    cpf,
+    nome,
+    data_alta_internacao,
+    cnes_maternidade_alta,
+    nome_maternidade_alta,
+    data_parto,
+    id_desfecho_gestacao,
+    desfecho_gestacao,
+    telefones_gestante
+)
+VALUES
+(
+    '12345678901',
+    'MARIA SALESFORCE',
+    -- pesquisa 1 dispara em D+1, D+3, D+5 ou D+10
+    DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
+    '1234567',
+    'MATERNIDADE MARIA AMELIA',
+    CURRENT_DATE('America/Sao_Paulo'),
+    1,
+    'RN Nascido Vivo',
+    [STRUCT(
+        '5521989190512' AS telefone_original,
+        'TESTE' AS origem,
+        '1' AS prioridade,
+        '5521989190512' AS telefone_valido_whatsapp,
+        CAST(NULL AS STRING) AS motivo_invalidacao_telefone
+    )]
+);
+
+-- Simula que o CPF já recebeu a primeira mensagem (D0, smspuerperasdisparo25),
+-- pré-requisito do CTE filtra_recebeu_primeira_hsm para esta pesquisa disparar.
+DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+WHERE cpf = '12345678901'
+    AND nome_hsm = 'smspuerperasdisparo25'
+
+INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
+(
+    id_jornada,
+    nome_jornada,
+    chave_atividade,
+    nome_atividade,
+    id_ativo,
+    nome_hsm,
+    id_hsm,
+    id_waba,
+    categoria_hsm,
+    canal,
+    texto_hsm,
+    rodape_hsm,
+    status_ativo,
+    ativo_criacao_datahora,
+    ativo_modificacao_datahora,
+    contato_telefone,
+    cpf,
+    envio_datahora,
+    entrega_datahora,
+    leitura_datahora,
+    falha_datahora,
+    descricao_falha,
+    indicador_falha,
+    indicador_quarentena,
+    status_disparo,
+    id_status_disparo,
+    data_particao
+)
+VALUES
+(
+    GENERATE_UUID(),
+    'SMS_PUERPERAS_D0_EXPLICA_PESQUISA',
+    'WHATSAPPACTIVITY-1',
+    'puerpera_d0_explica_pesquisa',
+    100000,
+    'smspuerperasdisparo25',
+    '0000000000000000',
+    '1444750391021606',
+    'UTILITY',
+    'WhatsApp',
+    'Mensagem de teste - primeira HSM (D0)',
+    'Parar de receber mensagem? Digite PARAR',
+    'Complete',
+    CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
+    CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
+    '5521989190512',
+    '12345678901',
+    DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
+    DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
+    NULL,
+    NULL,
+    NULL,
+    FALSE,
+    FALSE,
+    'delivered',
+    3,
+    DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY)
+);

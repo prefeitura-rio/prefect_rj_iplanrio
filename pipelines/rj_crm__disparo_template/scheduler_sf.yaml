@@ -3,7 +3,7 @@ schedules:
   - interval: 86400 
     anchor_date: "2021-01-01T19:00:00"
     timezone: America/Sao_Paulo
-    active: false
+    active: true
     slug: daily-cvl-1746-survey-invitation-without-resolution
     flow_run_name: cvl-pesquisa1746
     parameters:
@@ -12,7 +12,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       whitelist_percentage: 0
@@ -180,7 +180,7 @@ schedules:
   # Disparo SMS Puérperas D1, D3, D5 e D10 - Pesquisa 1
   - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
-    active: false
+    active: True
     slug: daily-sms-puerperas-d1-d3-d5-d10
     flow_run_name: sms-puerperas-d1-d3-d5-d10
     parameters:
@@ -200,41 +200,6 @@ schedules:
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo4v3
         data_extension_filename: whatsapp_sms_puerperas_pesquisa1
-        de_columns: ["nome"]
-        max_dispatch_retries: 0
-        sleep_minutes: 5
-        flow_environment: production
-        whitelist_percentage: 100
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
-        filter_duplicated_cpfs: true
-        filter_duplicated_phones: false
-        filter_dispatched_phones_or_cpfs: null
-        filter_failed_phones: false
-        force_add_on_whitelist_group: true
-        whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
-
-  # Disparo SMS Puérperas D7 - Pesquisa 2
-  # Desativado: campaign_name/Data Extension duplicados com o D22 (smspuerperadisparo6) - ver planilha
-  - cron: "0 10 * * *"
-    timezone: America/Sao_Paulo
-    active: false
-    slug: daily-sms-puerperas-d7
-    flow_run_name: sms-puerperas-d7
-    parameters:
-        query_replacements:
-            nome_hsm_placeholder: smspuerperadisparo6
-            nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            pesquisa_id: "Pesquisa 2"
-            datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)"
-            intervalo_filtro_disparados: 300
-        table_id: disparos_efetuados
-        dump_mode: append
-        test_mode: false
-        dataset_id: brutos_salesforce
-        campaign_name: smspuerperadisparo6
-        data_extension_filename: whatsapp_sms_puerperas_pesquisa2
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
@@ -287,24 +252,25 @@ schedules:
         whitelist_replace_contacts: true
         query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
-  # Disparo SMS Puérperas D22 - Pesquisa 4
+  # Disparo SMS Puérperas D7 e D22 - Pesquisa 4
   - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
-    active: false
-    slug: daily-sms-puerperas-d22
-    flow_run_name: sms-puerperas-d22
+    active: true
+    slug: daily-sms-puerperas-d7-d22
+    flow_run_name: sms-puerperas-d7-d22
     parameters:
         query_replacements:
             nome_hsm_placeholder: smspuerperadisparo6
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
             pesquisa_id: "Pesquisa 4"
-            datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)"
+            datas_internacao: |
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY),
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)
             intervalo_filtro_disparados: 300
         table_id: disparos_efetuados
         dump_mode: append
-        test_mode: false
+        test_mode: true
         dataset_id: brutos_salesforce
-        # campaign_name igual ao do D7 (id_hsm 456), que foi desativado por isso - ver acima
         campaign_name: smspuerperadisparo6
         data_extension_filename: whatsapp_sms_puerperas_pesquisa4
         de_columns: []  # coluna H: "telefone;SubscriberKey;LOCALE - não tem variável na hsm"
@@ -325,7 +291,7 @@ schedules:
   # Disparo SMS Puérperas D25 e D28 - Pesquisa 5
   - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
-    active: false
+    active: true
     slug: daily-sms-puerperas-d25-d28
     flow_run_name: sms-puerperas-d25-d28
     parameters:
@@ -339,7 +305,7 @@ schedules:
             intervalo_filtro_disparados: 1
         table_id: disparos_efetuados
         dump_mode: append
-        test_mode: false
+        test_mode: true
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo12
         data_extension_filename: whatsapp_sms_puerperas_pesquisa5
