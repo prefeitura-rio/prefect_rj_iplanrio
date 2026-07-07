@@ -57,7 +57,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           sleep_minutes: 5
           whitelist_percentage: 0
           infisical_secret_path: "/crm_disparo_template"
@@ -872,112 +872,6 @@ deployments:
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d7
-        flow_run_name: sms-puerperas-d7
-        parameters:
-          flow_environment: staging
-          query_replacements:
-            nome_hsm_placeholder: smspuerperadisparo6
-            nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            pesquisa_id: "Pesquisa 2"
-            datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY)"
-            intervalo_filtro_disparados: 300
-          table_id: disparos_efetuados
-          dump_mode: append
-          test_mode: false
-          dataset_id: brutos_salesforce
-          campaign_name: smspuerperadisparo6
-          data_extension_filename: whatsapp_sms_puerperas_pesquisa2
-          de_columns: ["nome"]
-          max_dispatch_retries: 0
-          sleep_minutes: 5
-          whitelist_percentage: 100
-          infisical_secret_path: /crm_disparo_template
-          whitelist_environment: production
-          filter_duplicated_cpfs: true
-          filter_duplicated_phones: false
-          filter_dispatched_phones_or_cpfs:
-          filter_failed_phones: false
-          force_add_on_whitelist_group: true
-          whitelist_replace_contacts: true
-          query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
-            \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`\n\
-            \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
-            \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
-            CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n\
-            ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
-            NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
-            NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
-            NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
-            AS telefone\ngroup by cpf, nome\n),\ndados_rmi as (\n-- os dados do rmi
-            serão usados apenas caso a puérpera não tenha nenhum telefone atribuido\n\
-            \        SELECT\n            cpf,\n            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_PHONE`(CONCAT(ifnull(telefone.principal.ddi,
-            '55'), telefone.principal.ddd, telefone.principal.valor)) AS celular_disparo_rmi,\n\
-            \        FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi\n\
-            \        WHERE menor_idade is False\n        and obito.indicador is False\n\
-            \        and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')\n\
-            ),\nenriquece_rmi as (\n    select\n        telefones.*,\n        dados_rmi.celular_disparo_rmi\n\
-            \    from telefones\n    left join dados_rmi using(cpf)\n),\n-- Substitui
-            a leitura de rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*\n\
-            -- (só tinha histórico da API antiga da Wetalkie) por\n-- rj-crm-registry.brutos_salesforce.status_disparo
-            (alimentada pelos disparos via SFTP/Salesforce).\n-- Chave de busca agora
-            é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).\n\
-            status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
-            passo necessário já que o telefone principal não vem do RMI. Caso contrário,
-            seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_falha AS falhou\n\
-            \    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n    QUALIFY
-            ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n        ORDER
-            BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS (\n    SELECT\n\
-            \        distinct\n        s.* EXCEPT(celular_disparo_1, celular_disparo_2,
-            celular_disparo_3, celular_disparo_rmi),\n\n        IF(f1.falhou, NULL,
-            s.celular_disparo_1) AS celular_disparo_1,\n        IF(f2.falhou, NULL,
-            s.celular_disparo_2) AS celular_disparo_2,\n        IF(f3.falhou, NULL,
-            s.celular_disparo_3) AS celular_disparo_3,\n        IF(f4.falhou, NULL,
-            s.celular_disparo_rmi) AS celular_disparo_rmi,\n\n        COALESCE(\n\
-            \        IF(f1.falhou, NULL, s.celular_disparo_1),\n        IF(f2.falhou,
-            NULL, s.celular_disparo_2),\n        IF(f3.falhou, NULL, s.celular_disparo_3),\n\
-            \        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n        ) AS celular_disparo\n\
-            \n    FROM enriquece_rmi s\n    LEFT JOIN status_final_telefone f1\n \
-            \       ON f1.flatTarget = s.celular_disparo_1\n\n    LEFT JOIN status_final_telefone
-            f2\n        ON f2.flatTarget = s.celular_disparo_2\n\n    LEFT JOIN status_final_telefone
-            f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
-            f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
-            as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
-            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
-            = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
-            >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
-            \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            51 DAY)\n        where sd.cpf is not null\n),\nfiltra_disparados as (\n\
-            \    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    select filtra_recebeu_primeira_hsm.*\n    FROM
-            filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
-            sd\n            on sd.cpf = filtra_recebeu_primeira_hsm.cpf\n        \
-            \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
-            >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
-            DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
-            = FALSE\n        where sd.cpf is null\n),\nfinal as (\n    select filtra_disparados.*\n\
-            \    from filtra_disparados\n)\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n-- (retentativas) são controle
-            interno; o de_columns de cada schedule decide quais\n-- colunas (ex.:
-            nome) realmente vão pra Data Extension.\nSELECT\n    celular_disparo AS
-            telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
-            STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    ARRAY(SELECT x FROM
-            UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL
-            AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
-            is not null\n"
-      - cron: "0 10 * * *"
-        timezone: America/Sao_Paulo
-        active: false
         slug: daily-sms-puerperas-d13-d16-d19
         flow_run_name: sms-puerperas-d13-d16-d19
         parameters:
@@ -1087,21 +981,22 @@ deployments:
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d22
-        flow_run_name: sms-puerperas-d22
+        slug: daily-sms-puerperas-d7-d22
+        flow_run_name: sms-puerperas-d7-d22
         parameters:
           flow_environment: staging
           query_replacements:
             nome_hsm_placeholder: smspuerperadisparo6
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
             pesquisa_id: "Pesquisa 4"
-            datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)"
+            datas_internacao: |
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY),
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)
             intervalo_filtro_disparados: 300
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           dataset_id: brutos_salesforce
-        # campaign_name igual ao do D7 (id_hsm 456), que foi desativado por isso - ver acima
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
           de_columns: [] # coluna H: "telefone;SubscriberKey;LOCALE - não tem variável na hsm"
@@ -1208,7 +1103,7 @@ deployments:
             intervalo_filtro_disparados: 1
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo12
           data_extension_filename: whatsapp_sms_puerperas_pesquisa5
