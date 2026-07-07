@@ -153,14 +153,14 @@ schedules:
   # Disparo SMS Puérperas D0 - Explicação do processo
   - cron: "0 14 * * *"
     timezone: America/Sao_Paulo
-    active: false
+    active: true
     slug: daily-sms-puerperas-d0
     flow_run_name: sms-puerperas-d0
     parameters:
         query_replacements: {"id_hsm_placeholder": 610}
         table_id: disparos_efetuados
         dump_mode: append
-        test_mode: false
+        test_mode: true
         chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo25

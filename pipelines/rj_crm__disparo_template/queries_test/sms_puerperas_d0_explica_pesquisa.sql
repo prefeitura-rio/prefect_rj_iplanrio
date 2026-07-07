@@ -116,3 +116,37 @@ WITH segmentacao_original AS (
         ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
     from final
     where celular_disparo is not null
+
+DELETE from `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
+where nome = 'MARIA SALESFORCE'
+
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
+(
+    cpf,
+    nome,
+    data_alta_internacao,
+    cnes_maternidade_alta,
+    nome_maternidade_alta,
+    data_parto,
+    id_desfecho_gestacao,
+    desfecho_gestacao,
+    telefones_gestante
+)
+VALUES
+(
+    '12345678901',
+    'MARIA SALESFORCE',
+    DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
+    '1234567',
+    'MATERNIDADE MARIA AMELIA',
+    CURRENT_DATE('America/Sao_Paulo'),
+    1,
+    'RN Nascido Vivo',
+    [STRUCT(
+        '5521989190512' AS telefone_original,
+        'TESTE' AS origem,
+        '1' AS prioridade,
+        '5521989190512' AS telefone_valido_whatsapp,
+        CAST(NULL AS STRING) AS motivo_invalidacao_telefone
+    )]
+);
