@@ -7,7 +7,7 @@ Funções centralizadas de validação para pipeline de template
 Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
@@ -240,6 +240,63 @@ def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
 
     log(f"validate_sf_dataframe: DataFrame validado com sucesso. {len(df)} linhas, colunas={list(df.columns)}")
     return df
+
+
+def validate_campaign_name(
+    campaign_name: str,
+    billing_project_id: str,
+    bucket_name: str,
+) -> Optional[str]:
+    """
+    Valida se campaign_name existe na tabela
+    `rj-crm-registry.brutos_salesforce.jornada` na coluna `hsm.nome_hsm`.
+
+    Args:
+        campaign_name: Nome da campanha a ser validado.
+        billing_project_id: Projeto GCP usado para faturamento da query.
+        bucket_name: Nome do bucket GCS para carregar credenciais.
+
+    Returns:
+        campaign_name se encontrado na tabela, ou None se não encontrado.
+    """
+    from time import sleep  # pylint: disable=C0415
+
+    from basedosdados import Base  # pylint: disable=E0611, E0401, C0415
+    from google.cloud import bigquery  # pylint: disable=E0611, E0401, C0415
+
+    query = f"""
+        SELECT COUNT(*) AS total
+        FROM `rj-crm-registry.brutos_salesforce.jornada`
+        WHERE hsm.nome_hsm = '{campaign_name}'
+    """
+
+    log(f"Validando campaign_name='{campaign_name}' em rj-crm-registry.brutos_salesforce.jornada ...")
+
+    bq_client = bigquery.Client(
+        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
+        project=billing_project_id,
+    )
+    job = bq_client.query(query)
+    while not job.done():
+        sleep(1)
+
+    results = list(job.result())
+    total = results[0]["total"] if results else 0
+
+    if total == 0:
+        log(
+            f"ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm "
+            "da tabela rj-crm-registry.brutos_salesforce.jornada. "
+            "Verifique o nome da campanha e tente novamente."
+        )
+        print(
+            f"[validate_campaign_name_in_bigquery] campaign_name='{campaign_name}' não existe "
+            "em rj-crm-registry.brutos_salesforce.jornada (hsm.nome_hsm). Encerrando o flow."
+        )
+        return None
+
+    log(f"campaign_name='{campaign_name}' validado com sucesso ({total} registro(s) encontrado(s)).")
+    return campaign_name
 
 
 def validate_single_destination(destination_dict: Dict) -> Tuple[bool, DestinationInput, str]:

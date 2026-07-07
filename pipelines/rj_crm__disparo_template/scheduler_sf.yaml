@@ -7,12 +7,8 @@ schedules:
     slug: daily-cvl-1746-survey-invitation-without-resolution
     flow_run_name: cvl-pesquisa1746
     parameters:
-      id_hsm: 291
       query_replacements: {"id_hsm_placeholder": 291}
-      campaign_name: cvl_pesquisa_1746_sem_resolucao_prod_v1
-      data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_sem_solucao
-      de_columns: ["nome_sobrenome", "solicitacao", "canal"]
-      cost_center_id: 71
+      campaign_name: cvl-pesquisa1746-prod
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -35,12 +31,8 @@ schedules:
     slug: daily-cvl-pesquisa1746-prod
     flow_run_name: cvl-pesquisa1746
     parameters:
-      id_hsm: 192
       query_replacements: {"id_hsm_placeholder": 192}
-      campaign_name: cvl_pesquisa_1746_prod_v1
-      data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_com_solucao
-      de_columns: ["nome_sobrenome", "solicitacao", "canal"]
-      cost_center_id: 71
+      campaign_name: cvl-pesquisa1746-prod
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -63,12 +55,8 @@ schedules:
     slug: daily-pgm-divida-ativa-prod
     flow_run_name: pgm-divida-ativa
     parameters:
-      id_hsm: 239
       query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 300}
-      campaign_name: pgm_divida_ativa_prod_v2
-      data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
-      de_columns: ["nome_sobrenome"]
-      cost_center_id: 71
+      campaign_name: pgm-divida-ativa-prod-v2
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -92,11 +80,7 @@ schedules:
     slug: daily-pgm-divida-ativa-lembrete-prod-v1
     flow_run_name: pgm-divida-ativa-lembrete
     parameters:
-      id_hsm: 227
-      campaign_name: pgmdividaativalembreteprodv1
-      data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
-      de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia", "cod_pix", "cod_boleto"]
-      cost_center_id: 71
+      campaign_name: pgm-divida-ativa-lembrete-prod-v1
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -120,11 +104,7 @@ schedules:
     slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
     flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
     parameters:
-      id_hsm: 231
-      campaign_name: pgmdividaativaconfirmapgtoprodv1
-      data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
-      de_columns: ["nome_sobrenome"]
-      cost_center_id: 71
+      campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
@@ -147,8 +127,7 @@ schedules:
     slug: daily-sms-puerpera-confirma-agendamento
     flow_run_name: sms-puerpera-confirma-agendamento
     parameters:
-        id_hsm: 573
-        query_replacements: {"nome_hsm_placeholder": "_sms_puerpera_disp1_gestantev2", "intervalo_filtro_disparados": 1}
+        query_replacements: {"id_hsm_placeholder": 573}
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: true
@@ -159,8 +138,7 @@ schedules:
         de_columns: ["nome", "maternidade", "data", "hora"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -179,8 +157,7 @@ schedules:
     slug: daily-sms-puerperas-d0
     flow_run_name: sms-puerperas-d0
     parameters:
-        id_hsm: 610
-        query_replacements: {"nome_hsm_placeholder": "smspuerperasdisparo25", "intervalo_filtro_disparados": 300}
+        query_replacements: {"id_hsm_placeholder": 610}
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
@@ -191,8 +168,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -211,7 +187,6 @@ schedules:
     slug: daily-sms-puerperas-d1-d3-d5-d10
     flow_run_name: sms-puerperas-d1-d3-d5-d10
     parameters:
-        id_hsm: 588
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
@@ -232,8 +207,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -253,7 +227,6 @@ schedules:
     slug: daily-sms-puerperas-d7
     flow_run_name: sms-puerperas-d7
     parameters:
-        id_hsm: 456
         query_replacements:
             nome_hsm_placeholder: smspuerperadisparo6
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
@@ -270,8 +243,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -290,7 +262,6 @@ schedules:
     slug: daily-sms-puerperas-d13-d16-d19
     flow_run_name: sms-puerperas-d13-d16-d19
     parameters:
-        id_hsm: 562
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo9
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
@@ -310,8 +281,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -330,7 +300,6 @@ schedules:
     slug: daily-sms-puerperas-d22
     flow_run_name: sms-puerperas-d22
     parameters:
-        id_hsm: 489
         query_replacements:
             nome_hsm_placeholder: smspuerperadisparo6
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
@@ -348,8 +317,7 @@ schedules:
         de_columns: []  # coluna H: "telefone;SubscriberKey;LOCALE - não tem variável na hsm"
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -368,7 +336,6 @@ schedules:
     slug: daily-sms-puerperas-d25-d28
     flow_run_name: sms-puerperas-d25-d28
     parameters:
-        id_hsm: 564
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
@@ -387,8 +354,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -407,7 +373,6 @@ schedules:
     slug: daily-sms-puerperas-d34
     flow_run_name: sms-puerperas-d34
     parameters:
-        id_hsm: 566
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo14
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
@@ -424,8 +389,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -444,7 +408,6 @@ schedules:
     slug: daily-sms-puerperas-d40
     flow_run_name: sms-puerperas-d40
     parameters:
-        id_hsm: 589
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
@@ -461,8 +424,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        cost_center_id: 71
-        flow_environment: staging
+        flow_environment: production
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -483,17 +445,48 @@ schedules:
     slug: daily-smas-cartaopic-evento
     flow_run_name: smas-cartaopic-evento
     parameters:
-      id_hsm: 184
-      campaign_name: smascartaoprimeirainfanciaprodv27
-      data_extension_filename: whatsapp_smas_cartaopic_evento
-      de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
-      cost_center_id: 71
+      campaign_name: change-whitelist
       chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
+      flow_environment: production
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 100
+      infisical_secret_path: "/wetalkie"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: true
+      whitelist_replace_contacts: true
+      query: |
+        select
+            TO_JSON_STRING(
+                STRUCT(
+                    "5592984212629" as celular_disparo,
+                    CAST("0000000001" AS STRING) AS externalId
+                )
+            ) AS destination_data
+
+
+# Schedule para testar flow na salesforce
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: test-salesforce
+    flow_run_name: test-salesforce
+    parameters:
+      campaign_name: confirma_agendamento_cadunico_prod_v2
+      chunk_size: 1000
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
       filter_duplicated_phones: false
