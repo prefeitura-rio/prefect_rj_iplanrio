@@ -52,7 +52,6 @@ deployments:
         parameters:
           flow_environment: staging
           campaign_name: confirma_agendamento_cadunico_prod_v2
-          chunk_size: 1000
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados_teste
           dump_mode: append

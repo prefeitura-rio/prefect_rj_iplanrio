@@ -161,7 +161,6 @@ schedules:
     parameters:
       query_replacements: {"id_hsm_placeholder": 291}
       campaign_name: cvl-pesquisa1746-prod
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -367,7 +366,6 @@ schedules:
     parameters:
       query_replacements: {"id_hsm_placeholder": 192}
       campaign_name: cvl-pesquisa1746-prod
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -571,7 +569,6 @@ schedules:
     parameters:
       query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 300}
       campaign_name: pgm-divida-ativa-prod-v2
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -811,7 +808,6 @@ schedules:
     flow_run_name: pgm-divida-ativa-lembrete
     parameters:
       campaign_name: pgm-divida-ativa-lembrete-prod-v1
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -958,7 +954,6 @@ schedules:
     flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
     parameters:
       campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -1109,7 +1104,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1282,7 +1276,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1453,7 +1446,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1486,7 +1478,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1522,7 +1513,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1555,7 +1545,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1590,7 +1579,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1623,7 +1611,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1656,7 +1643,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1683,7 +1669,6 @@ schedules:
     flow_run_name: change-whitelist
     parameters:
       campaign_name: change-whitelist
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -1718,7 +1703,6 @@ schedules:
     flow_run_name: test-salesforce
     parameters:
       campaign_name: confirma_agendamento_cadunico_prod_v2
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados_teste
       dump_mode: append

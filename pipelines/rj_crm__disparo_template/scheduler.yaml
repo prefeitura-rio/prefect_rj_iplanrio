@@ -163,7 +163,6 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 291}
       campaign_name: cvl-pesquisa1746-prod
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -371,7 +370,6 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 192}
       campaign_name: cvl-pesquisa1746-prod
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -577,7 +575,6 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 300}
       campaign_name: pgm-divida-ativa-prod-v2
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -819,7 +816,6 @@ schedules:
       id_hsm: 227
       campaign_name: pgm-divida-ativa-lembrete-prod-v1
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -968,7 +964,6 @@ schedules:
       id_hsm: 231
       campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -1120,7 +1115,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1295,7 +1289,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1468,7 +1461,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1503,7 +1495,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1541,7 +1532,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1576,7 +1566,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1613,7 +1602,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1648,7 +1636,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1683,7 +1670,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1713,7 +1699,6 @@ schedules:
       id_hsm: 231
       campaign_name: change-whitelist
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -1750,7 +1735,6 @@ schedules:
       id_hsm: null
       campaign_name: confirma_agendamento_cadunico_prod_v2
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados_teste
       dump_mode: append
