@@ -9,7 +9,6 @@ schedules:
     parameters:
       query_replacements: {"id_hsm_placeholder": 291}
       campaign_name: cvl-pesquisa1746-prod
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -33,7 +32,6 @@ schedules:
     parameters:
       query_replacements: {"id_hsm_placeholder": 192}
       campaign_name: cvl-pesquisa1746-prod
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -57,7 +55,6 @@ schedules:
     parameters:
       query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 300}
       campaign_name: pgm-divida-ativa-prod-v2
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -81,7 +78,6 @@ schedules:
     flow_run_name: pgm-divida-ativa-lembrete
     parameters:
       campaign_name: pgm-divida-ativa-lembrete-prod-v1
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -105,7 +101,6 @@ schedules:
     flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
     parameters:
       campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -133,7 +128,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: true
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: _sms_puerpera_disp1_gestantev2
         data_extension_filename: whatsapp_sms_puerperas_confirma_agendamento
@@ -165,7 +159,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: true
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo25
         data_extension_filename: whatsapp_sms_puerperas_explica_pesquisa
@@ -204,7 +197,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo4v3
         data_extension_filename: whatsapp_sms_puerperas_pesquisa1
@@ -240,7 +232,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperadisparo6
         data_extension_filename: whatsapp_sms_puerperas_pesquisa2
@@ -278,7 +269,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo9
         data_extension_filename: whatsapp_sms_puerperas_pesquisa3
@@ -313,7 +303,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         # campaign_name igual ao do D7 (id_hsm 456), que foi desativado por isso - ver acima
         campaign_name: smspuerperadisparo6
@@ -351,7 +340,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo12
         data_extension_filename: whatsapp_sms_puerperas_pesquisa5
@@ -386,7 +374,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo14
         data_extension_filename: whatsapp_sms_puerperas_pesquisa6
@@ -421,7 +408,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo152
         data_extension_filename: whatsapp_sms_puerperas_pesquisa7
@@ -450,7 +436,6 @@ schedules:
     flow_run_name: smas-cartaopic-evento
     parameters:
       campaign_name: change-whitelist
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -485,7 +470,6 @@ schedules:
     flow_run_name: test-salesforce
     parameters:
       campaign_name: confirma_agendamento_cadunico_prod_v2
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados_teste
       dump_mode: append
@@ -514,7 +498,6 @@ schedules:
       data_extension_filename: whatsapp_smas_cartaopic_lembrete
       de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
