@@ -3,7 +3,7 @@
 # pylint: disable='line-too-long'
 
 """
-Flow to dispatch templated messages via Salesforce
+Flow to dispatch templated messages via Salesforce SFTP
 """
 import os
 import time
