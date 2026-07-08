@@ -22,7 +22,6 @@ from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # py
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.discord import (
     send_dispatch_no_destinations_found,
-    # send_retry_dispatch_result_notification,
     send_dispatch_success_notification,
     send_discord_notification,
 )
