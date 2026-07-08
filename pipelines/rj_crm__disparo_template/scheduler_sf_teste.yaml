@@ -26,9 +26,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_cadunico
-      query: |
-        SELECT * FROM rj-crm-registry-dev.teste.agendamento_cadunico_teste
-        WHERE nome_sobrenome LIKE "%patricia%"
+      query_file: confirma_agendamento_cadunico.sql
 
   # SF Teste - Dívida Ativa Cobrança
   - interval: 86400000
@@ -56,9 +54,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.pgm_divida_ativa_cobranca
-        WHERE nome_sobrenome LIKE "%patricia%"
+      query_file: pgm_divida_ativa_cobranca.sql
 
   # SF Teste - Dívida Ativa Lembrete
   - interval: 864000000
@@ -86,9 +82,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.pgm_divida_ativa_lembrete
-        WHERE nome_sobrenome LIKE "%patricia%"
+      query_file: pgm_divida_ativa_lembrete.sql
 
   # SF Teste - Dívida Ativa Agradecimento
   - interval: 864000000
@@ -116,9 +110,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.pgm_divida_ativa_agradecimento
-        WHERE nome_sobrenome LIKE "%patricia%"
+      query_file: pgm_divida_ativa_agradecimento.sql
 
   # SF Teste - Puérperas Explica Pesquisa (D0)
   - interval: 864000000
@@ -146,9 +138,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_explica_pesquisa
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_explica_pesquisa
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_explica_pesquisa.sql
 
   # SF Teste - Puérperas Confirma Agendamento (D0)
   - interval: 864000000
@@ -176,9 +166,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_confirma_agendamento
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_confirma_agendamento
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_confirma_agendamento.sql
 
   # SF Teste - Puérperas Pesquisa 1 (D1/D3/D5/D10)
   - interval: 864000000
@@ -206,9 +194,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_pesquisa1
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa1
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_pesquisa1.sql
 
   # SF Teste - Puérperas Pesquisa 2 (D7)
   - interval: 864000000
@@ -236,9 +222,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_pesquisa2
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa2
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_pesquisa2.sql
 
   # SF Teste - Puérperas Pesquisa 3 (D13/D16/D19)
   - interval: 864000000
@@ -266,9 +250,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_pesquisa3
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa3
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_pesquisa3.sql
 
   # SF Teste - Puérperas Pesquisa 4 (D22)
   - interval: 864000000
@@ -296,9 +278,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa4
-        WHERE SubscriberKey = "00000000001"
+      query_file: sms_puerperas_pesquisa4.sql
 
   # SF Teste - Puérperas Pesquisa 5 (D25/D28)
   - interval: 864000000
@@ -326,9 +306,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_pesquisa5
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa5
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_pesquisa5.sql
 
   # SF Teste - Puérperas Pesquisa 6 (D34)
   - interval: 864000000
@@ -356,9 +334,7 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_pesquisa6
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa6
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_pesquisa6.sql
 
   # SF Teste - Puérperas Pesquisa 7 (D40)
   - interval: 864000000
@@ -386,6 +362,4 @@ schedules:
       force_add_on_whitelist_group: false
       whitelist_replace_contacts: false
       data_extension_filename: whatsapp_sms_puerperas_pesquisa7
-      query: |
-        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa7
-        WHERE nome LIKE "%patricia%"
+      query_file: sms_puerperas_pesquisa7.sql

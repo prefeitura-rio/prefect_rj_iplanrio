@@ -154,7 +154,7 @@ def validate_dispatch_payload(
 
         error_msg = f"Payload inválido: {'; '.join(error_details)}"
         log(f"ERRO: {error_msg}")
-        raise ValidationError(error_msg)
+        raise
 
 
 def log_validation_summary(stats: ValidationStats, context: str = ""):

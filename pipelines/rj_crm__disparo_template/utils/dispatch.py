@@ -799,7 +799,7 @@ def check_flow_status(
 
     query = f"""
         SELECT ativo, data_limite_disparo, nome_campanha
-        FROM `rj-crm-registry.brutos_wetalkie_staging.disparos_ativos`
+        FROM `rj-crm-registry.brutos_salesforce.disparos_ativos`
         WHERE {filter_condition} AND ambiente = '{flow_environment}'
         LIMIT 1
     """
@@ -817,18 +817,19 @@ def check_flow_status(
 
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
     if not webhook_url:
-        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Notificações de erro no Discord desativadas.")
 
     if not row.get("ativo") or row.get("ativo") not in (1, "1"):
         log(f"\n⚠️  Flow is not active for {row.get('nome_campanha')} in environment={flow_environment}.")
-        message = f"""
+        if webhook_url:
+            message = f"""
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
     💻 **Ambiente:** {flow_environment}
 
     Desligue o scheduler no prefect ou mude o status para ativo para reativar o fluxo.
     """
-        send_discord_notification(webhook_url, message)
+            send_discord_notification(webhook_url, message)
         return None
 
     current_date = datetime.now(timezone("America/Sao_Paulo")).date()
@@ -837,7 +838,8 @@ def check_flow_status(
 
     if expiration_date < current_date:
         log(f"\n⚠️  Flow for campaign_name={campaign_name} in environment={flow_environment} has expired on {expiration_date}.")
-        message = f"""
+        if webhook_url:
+            message = f"""
     Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
     💻 **Ambiente:** {flow_environment}
@@ -845,7 +847,7 @@ def check_flow_status(
 
     Desligue o scheduler no prefect ou altere a data limite.
     """
-        send_discord_notification(webhook_url, message)
+            send_discord_notification(webhook_url, message)
         return None
 
     log(f"\n✅  Active flow found for campaign_name={campaign_name} in environment={flow_environment}.")
@@ -947,13 +949,14 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     """
     Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
     """
+    campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
     query = f"""
         -- Agora só teremos Salesforce como fonte
         SELECT DISTINCT cpf
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE indicador_quarentena = TRUE
         AND envio_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
-        AND LOWER(nome_hsm) = LOWER('{campaign_name}') if campaign_name else ''
+        {campaign_filter}
     """
     try:
         failed_df = download_data_from_bigquery(
@@ -1075,11 +1078,16 @@ def get_retry_destinations(
 def save_csv_for_sftp(
     df: pd.DataFrame,
     data_extension_filename: str,
+    de_columns: Optional[List[str]] = None,
     output_folder: str = "./data_sftp/",
 ) -> Tuple[str, str]:
     """
     Salva o DataFrame da query como CSV para envio ao Salesforce via SFTP.
-    A coluna 'others' é excluída por ser interna ao controle de retentativas.
+
+    Se `de_columns` for informado, o CSV é restrito a 'telefone' + 'SubscriberKey' +
+    `de_columns` (os campos que a Data Extension espera) — qualquer coluna de controle
+    interno do flow (ex.: 'others', 'externalId') é descartada, mesmo que a query as
+    retorne. Sem `de_columns`, mantém o comportamento legado de só descartar 'others'.
 
     Returns:
         Tuple[str, str]: (caminho do arquivo CSV salvo, data do disparo)
@@ -1089,8 +1097,13 @@ def save_csv_for_sftp(
     timestamp = now.strftime("%Y%m%d%H%M%S")  # TODO: alterar para salvar em segundos
     # timestamp = now.strftime("%Y%m%d%H%M")
 
-    csv_df = df.drop(columns=["others"], errors="ignore")
-    csv_df["LOCALE"] = "BR"
+    if de_columns is not None:
+        keep_columns = [col for col in ["telefone", "SubscriberKey", *de_columns] if col in df.columns]
+        csv_df = df[keep_columns].copy()
+    else:
+        csv_df = df.drop(columns=["others"], errors="ignore")
+    if "LOCALE" not in csv_df.columns:
+        csv_df["LOCALE"] = "BR"
 
     os.makedirs(output_folder, exist_ok=True)
     filename = f"{data_extension_filename}_{timestamp}.csv"
@@ -1156,14 +1169,16 @@ def send_to_sftp(
     #     log(f"CSV enviado com sucesso para SFTP: {remote_file}")
     # finally:
     #     transport.close()
-    def bypass_verify_key(self, host_key, sig):
-        # Inicializa a chave no estado do transport para evitar erros de NoneType
+    # O servidor SFTP da Salesforce negocia ssh-rsa (SHA-1), desabilitado por padrão
+    # em versões recentes do paramiko. Forçamos a inclusão via Transport para garantir
+    # compatibilidade sem depender de internals privados do paramiko em cada conexão.
+    def _bypass_verify_key(self, host_key, sig):
         self.host_key = RSAKey(data=host_key)
         return True
 
-    paramiko.Transport._verify_key = bypass_verify_key
-    paramiko.Transport._key_info['ssh-rsa'] = RSAKey
-    paramiko.Transport._preferred_keys = ('ssh-rsa', 'ecdsa-sha2-nistp256', 'ssh-ed25519')
+    paramiko.Transport._verify_key = _bypass_verify_key
+    paramiko.Transport._key_info["ssh-rsa"] = RSAKey
+    paramiko.Transport._preferred_keys = ("ssh-rsa", "ecdsa-sha2-nistp256", "ssh-ed25519")
 
     ssh = None
     try:
@@ -1211,7 +1226,8 @@ def send_to_sftp(
         sftp.close()
         
     except Exception as e:
-        log(f"Erro: {str(e)}")
+        log(f"Erro no envio SFTP: {str(e)}")
+        raise
     finally:
         if ssh:
             ssh.close()

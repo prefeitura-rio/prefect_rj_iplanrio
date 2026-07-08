@@ -3,11 +3,12 @@
 # pylint: disable='line-too-long'
 
 """
-Flow to dispatch templated messages via Wetalkie API
+Flow to dispatch templated messages via Salesforce SFTP
 """
 import os
 import time
 from math import ceil
+from pathlib import Path
 import pendulum
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
@@ -90,6 +91,7 @@ def rj_crm__disparo_template_sf(
     dump_mode: str | None = None,
     test_mode: bool | None = True,
     query: str | None = None,
+    query_file: str | None = None,
     query_processor_name: str | None = None,
     query_replacements: dict | None = None,
     filter_dispatched_phones_or_cpfs: str | None = "cpf",
@@ -101,6 +103,7 @@ def rj_crm__disparo_template_sf(
     max_dispatch_retries: int = 0,
     infisical_secret_path: str = "/crm_disparo_template",
     data_extension_filename: str | None = None,
+    de_columns: list[str] | None = None,
     whitelist_percentage: int = 0,
     whitelist_environment: str = "production",
     flow_environment: str = "staging",
@@ -127,6 +130,8 @@ def rj_crm__disparo_template_sf(
         dump_mode (str, optional): BigQuery dump mode (e.g., "append").
         test_mode (bool, optional): If True, runs in test mode. Defaults to True.
         query (str, optional): SQL query to retrieve destinations.
+        query_file (str, optional): Path (relative to this file) to a .sql file to use as the
+            query instead of passing the raw SQL in `query`. Takes precedence over `query`.
         query_processor_name (str, optional): Name of the query processor.
         query_replacements (dict, optional): Replacements for query placeholders.
         filter_dispatched_phones_or_cpfs (str, optional): None, "cpf" or "phone_number". Defaults to "cpf".
@@ -136,6 +141,10 @@ def rj_crm__disparo_template_sf(
         sleep_minutes (int, optional): Minutes to sleep before dispatch. Defaults to 5.
         max_dispatch_retries (int): Maximum retry attempts with alternative phones. Defaults to 0.
         infisical_secret_path (str, optional): Infisical path for SFTP credentials. Defaults to "/sftp".
+        de_columns (list[str], optional): Lista de campos (além de telefone/SubscriberKey) que a
+            Data Extension espera. Quando informada, o CSV enviado ao SFTP é restrito a essas
+            colunas — qualquer coluna de controle interno da query (ex.: 'others', 'externalId')
+            é descartada antes do envio.
         sftp_remote_path (str, optional): Remote directory on the SFTP server. Defaults to "/".
         whitelist_percentage (int, optional): Percentage of contacts to whitelist. Defaults to 0.
         whitelist_environment (str, optional): Whitelist environment. Defaults to "production".
@@ -149,7 +158,18 @@ def rj_crm__disparo_template_sf(
     table_id = table_id or TemplateConstants.TABLE_ID.value
     dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value
     campaign_name = campaign_name or TemplateConstants.CAMPAIGN_NAME.value
-    query = query or TemplateConstants.QUERY.value
+    if query_file:
+        _query_path = Path(__file__).parent / query_file
+        if test_mode:
+            _mock_path = Path(__file__).parent / "queries_test" / Path(query_file).name
+            if _mock_path.exists():
+                print(f"⚠️  test_mode=True: usando mock query {_mock_path.name} em vez de {query_file}")
+                _query_path = _mock_path
+            else:
+                print(f"⚠️  test_mode=True: mock query não encontrada em {_mock_path}, usando parâmetro query")
+        query = query or TemplateConstants.QUERY.value
+    else:
+        query = query or TemplateConstants.QUERY.value
     query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
     billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
 
@@ -199,9 +219,6 @@ def rj_crm__disparo_template_sf(
     if df is None or df.empty:
         send_dispatch_no_destinations_found(campaign_name, test_mode)
         return
-
-    if "LOCALE" not in df.columns:
-        df["LOCALE"] = "BR"
 
     # Valida colunas obrigatórias para o log SF: SubscriberKey e telefone.
     # Lança ValueError imediatamente se alguma estiver ausente ou com dados inválidos.
@@ -330,10 +347,11 @@ def rj_crm__disparo_template_sf(
         print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and campaign_name is correct!!")
         time.sleep(sleep_minutes * 60)
 
-        # Salva CSV (dropa 'others') e registra data do disparo
+        # Salva CSV (restrito a telefone/SubscriberKey/de_columns) e registra data do disparo
         csv_path, dispatch_date = save_csv_for_sftp(
             df=current_df,
             data_extension_filename=data_extension_filename or campaign_name,
+            de_columns=de_columns,
         )
 
         send_to_sftp(
@@ -344,8 +362,8 @@ def rj_crm__disparo_template_sf(
         print(f"CSV enviado para SFTP com {len(current_df)} destinatários na tentativa {i+1}.")
 
         if materialize_after_sftp:
-            print(f"⏳ Aguardando {materialization_sleep_minutes if not test_mode else 5} minutos antes de materializar o modelo dbt int_crm_status_disparo...")
-            time.sleep(materialization_sleep_minutes * 60) if not test_mode else time.sleep(5*60)
+            print(f"⏳ Aguardando {materialization_sleep_minutes if not test_mode else 10} minutos antes de materializar o modelo dbt int_crm_status_disparo...")
+            time.sleep(materialization_sleep_minutes * 60) if not test_mode else time.sleep(10*60)
             github_token = getenv_or_action("GITHUB_TOKEN")
             git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
             execute_dbt_task(
