@@ -473,9 +473,10 @@ deployments:
             telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
             STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
             ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    ARRAY(SELECT x FROM
-            UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL
-            AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
             is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -498,7 +499,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-          de_columns: ["nome", "numero_dias"]
+          de_columns: ["nome", "numero_dias"] # única pesquisa cuja hsm usa a variável numero_dias
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 100
@@ -581,9 +582,10 @@ deployments:
             telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
             STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
             ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    ARRAY(SELECT x FROM
-            UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL
-            AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
             is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -690,9 +692,10 @@ deployments:
             telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
             STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
             ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    ARRAY(SELECT x FROM
-            UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL
-            AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
             is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
@@ -796,9 +799,10 @@ deployments:
             telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
             STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
             ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    ARRAY(SELECT x FROM
-            UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL
-            AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
             is not null\n"
       - interval: 86400
         anchor_date: "2021-01-01T12:00:00"
