@@ -159,14 +159,14 @@ def rj_crm__disparo_template_sf(
     campaign_name = campaign_name or TemplateConstants.CAMPAIGN_NAME.value
     if query_file:
         _query_path = Path(__file__).parent / query_file
-        if test_mode:
+        if test_mode and "queries_test" not in str(query_file) and "queries_dev" not in str(query_file):
             _mock_path = Path(__file__).parent / "queries_test" / Path(query_file).name
             if _mock_path.exists():
                 print(f"⚠️  test_mode=True: usando mock query {_mock_path.name} em vez de {query_file}")
                 _query_path = _mock_path
             else:
                 print(f"⚠️  test_mode=True: mock query não encontrada em {_mock_path}, usando parâmetro query")
-        query = query or TemplateConstants.QUERY.value
+                query = query or TemplateConstants.QUERY.value
     else:
         query = query or TemplateConstants.QUERY.value
     query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
