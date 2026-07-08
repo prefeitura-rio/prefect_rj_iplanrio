@@ -135,6 +135,7 @@ SELECT
             nome
         )
     ) AS nome,
+    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,
     ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
 from final
 where celular_disparo is not null
@@ -156,7 +157,7 @@ INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_mater
 )
 VALUES
 (
-    '12345678901',
+    '123pesquisa1',
     'MARIA SALESFORCE',
     -- pesquisa 1 dispara em D+1, D+3, D+5 ou D+10
     DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
@@ -228,7 +229,7 @@ VALUES
     CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
     CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
     '5521989190512',
-    '12345678901',
+    '123pesquisa',
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     NULL,

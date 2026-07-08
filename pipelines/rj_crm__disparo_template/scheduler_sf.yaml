@@ -273,7 +273,7 @@ schedules:
         dataset_id: brutos_salesforce
         campaign_name: smspuerperadisparo6
         data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-        de_columns: []  # coluna H: "telefone;SubscriberKey;LOCALE - não tem variável na hsm"
+        de_columns: ["nome", "numero_dias"]  # única pesquisa cuja hsm usa a variável numero_dias
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: production

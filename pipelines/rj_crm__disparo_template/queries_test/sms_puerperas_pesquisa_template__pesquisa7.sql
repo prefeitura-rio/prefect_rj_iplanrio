@@ -131,6 +131,7 @@ SELECT
             nome
         )
     ) AS nome,
+    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,
     ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
 from final
 where celular_disparo is not null
