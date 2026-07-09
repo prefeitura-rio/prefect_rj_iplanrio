@@ -50,7 +50,7 @@ schedules:
     anchor_date: "2021-01-01T13:00:00"
     timezone: America/Sao_Paulo
     active: true
-    slug: daily-pgm-divida-ativa-prod
+    slug: pgm-divida-ativa-cobranca
     flow_run_name: pgm-divida-ativa-cobranca
     parameters:
       # nome_hsm_cobranca_placeholder é o próprio campaign_name deste schedule.
@@ -77,7 +77,7 @@ schedules:
     anchor_date: "2021-01-01T13:00:00"
     timezone: America/Sao_Paulo
     active: true
-    slug: daily-pgmdividaativalembreteprodv1
+    slug: pgm-divida-ativa-lembrete
     flow_run_name: pgm-divida-ativa-lembrete
     parameters:
       # nome_hsm_cobranca_placeholder é o campaign_name do schedule daily-pgm-divida-ativa-prod;
@@ -105,7 +105,7 @@ schedules:
     anchor_date: "2021-01-01T13:00:00"
     timezone: America/Sao_Paulo
     active: true
-    slug: daily-pgmdividaativaconfirmapgtoprodv1
+    slug: pgm-divida-ativa-agradecimento
     flow_run_name: pgm-divida-ativa-agradecimento
     parameters:
       # nome_hsm_cobranca_placeholder e nome_hsm_lembrete_placeholder são os campaign_name dos
