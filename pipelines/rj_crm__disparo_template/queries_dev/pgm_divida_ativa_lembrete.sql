@@ -30,7 +30,7 @@ with
             contribuinte.guias_pagamento,
             contribuinte.cdas_associadas,
             quantidade_cotas_devidas_vencidas
-        FROM `rj-iplanrio.divida_ativa.contribuinte` AS contribuinte
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte` AS contribuinte
         INNER JOIN disparos ON lpad(cpf_cnpj, 11, "0") = disparos.cpf
     ),
     divida_ativa as (
@@ -80,7 +80,7 @@ with
         select remove_duplicados.*,
         COALESCE(if(pf.nome_social = "", null, pf.nome_social), pf.nome) AS nome,
         from remove_duplicados
-        left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
+        left join `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica` pf using(cpf)
         where pf.telefone.principal.indicador_optout = false
         and pf.telefone.principal.indicador_quarentena = false
     )

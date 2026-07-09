@@ -20,7 +20,7 @@ SELECT
     END AS phone_priority,
     pf.telefone.principal.estrategia_envio,
     pf.telefone.principal.qualidade
-FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
+FROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica` pf
 WHERE pf.telefone.principal.qualidade = 'VALIDO'
     AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
     AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR", "EVITAR")
@@ -52,7 +52,7 @@ SELECT
     tipo_pessoa,
     saldo_devido_cdas,
     valor_cotas_devidas_vencidas
-FROM `rj-iplanrio.divida_ativa.contribuinte` p
+FROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte` p
 INNER JOIN filtra_disparados
     ON LPAD(CAST(p.cpf_cnpj AS STRING), 11, '0') = filtra_disparados.cpf
 WHERE p.tipo_pessoa.descricao_tipo_pessoa = 'Pessoa Física'
@@ -161,21 +161,24 @@ FROM randomizados
 SELECT * FROM grupos_escalonados;
 
 -- ===================== 2) INSERT: Insere dados da tabela de teste ab =====================
-INSERT INTO `rj-crm-registry.ab_test.divida_ativa`
-SELECT
-cpf,
-celular_disparo,
-nome,
-grupo_escalonado,
-ordem_sorteio,
-tamanho_alvo_grupo,
-soma_divida_total,
-n_cdas_ativas,
-esta_pagando,
-idade,
-CURRENT_TIMESTAMP(),
-cast(cpf as int) as cpf_particao
-FROM tmp_grupos;
+-- Comentado na versão dev: `rj-crm-registry.ab_test.divida_ativa` é tabela de PRODUÇÃO
+-- (bucketing real do teste A/B). Não gravar dados de teste lá. Descomente só se/quando
+-- existir um mirror dev dessa tabela.
+-- INSERT INTO `rj-crm-registry.ab_test.divida_ativa`
+-- SELECT
+-- cpf,
+-- celular_disparo,
+-- nome,
+-- grupo_escalonado,
+-- ordem_sorteio,
+-- tamanho_alvo_grupo,
+-- soma_divida_total,
+-- n_cdas_ativas,
+-- esta_pagando,
+-- idade,
+-- CURRENT_TIMESTAMP(),
+-- cast(cpf as int) as cpf_particao
+-- FROM tmp_grupos;
 
 -- ===================== 3) Estrutura dados para o disparo =====================
 -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por

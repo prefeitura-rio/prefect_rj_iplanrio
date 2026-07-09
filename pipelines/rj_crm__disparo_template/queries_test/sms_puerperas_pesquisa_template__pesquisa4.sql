@@ -154,7 +154,7 @@ INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_mater
 )
 VALUES
 (
-    '12345678901',
+    '12pesquisa4',
     'MARIA SALESFORCE',
     -- pesquisa 4 dispara em D+7 ou D+22
     DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 22 DAY),
@@ -175,7 +175,7 @@ VALUES
 -- Simula que o CPF já recebeu a primeira mensagem (D0, smspuerperasdisparo25),
 -- pré-requisito do CTE filtra_recebeu_primeira_hsm para esta pesquisa disparar.
 DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
-WHERE cpf = '12345678901'
+WHERE cpf = '12pesquisa4'
     AND nome_hsm = 'smspuerperasdisparo25'
 
 INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
@@ -226,7 +226,7 @@ VALUES
     CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
     CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
     '5521989190512',
-    '12345678901',
+    '12pesquisa4',
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     NULL,

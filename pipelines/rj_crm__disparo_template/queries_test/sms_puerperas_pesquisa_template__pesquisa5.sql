@@ -155,7 +155,7 @@ INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_mater
 )
 VALUES
 (
-    '123pesquisa1',
+    '12pesquisa5',
     'MARIA SALESFORCE',
     -- pesquisa 5 dispara em D+25 ou D+28
     DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 25 DAY),
@@ -227,7 +227,7 @@ VALUES
     CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
     CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 2 DAY) AS STRING),
     '5521989190512',
-    '12345678901',
+    '12pesquisa5',
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     NULL,

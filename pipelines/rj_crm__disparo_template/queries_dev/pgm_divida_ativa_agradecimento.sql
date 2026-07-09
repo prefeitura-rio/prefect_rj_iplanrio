@@ -41,7 +41,7 @@ filtra_contribuinte as (
     select
         disparos_filtro.*,
         contribuinte.guias_pagamento
-    FROM `rj-iplanrio.divida_ativa.contribuinte` AS contribuinte
+    FROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte` AS contribuinte
     INNER JOIN disparos_filtro ON lpad(cpf_cnpj, 11, "0") = disparos_filtro.cpf
 ),
 
@@ -63,7 +63,7 @@ divida_ativa as (
         ARRAY(
             SELECT c
             FROM UNNEST(guia_pagamento.cotas) c
-            WHERE 
+            WHERE
             c.cota_paga = TRUE
             AND c.data_pagamento >= date_sub(current_date("America/Sao_Paulo"), interval 5 day)
             AND c.observacoes != "Encaminhada para Protesto"
@@ -71,9 +71,9 @@ divida_ativa as (
     ) AS cotas
 
     -- criacao da guia de pagamento após o disparo
-    where 
+    where
     (
-        data_disparo_cobranca <= guia_pagamento.data_criacao_guia 
+        data_disparo_cobranca <= guia_pagamento.data_criacao_guia
         or guia_pagamento.data_criacao_guia is null
     ) -- deixar para não enviar para guias abertas antes do disparo dessa pessoa
 ),
@@ -90,7 +90,7 @@ remove_optout as (
     select remove_duplicados.*,
     coalesce(pf.nome_social, pf.nome) as nome,
     from remove_duplicados
-    left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
+    left join `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica` pf using(cpf)
     where pf.telefone.principal.indicador_optout = false
     and pf.telefone.principal.indicador_quarentena = false
 )
