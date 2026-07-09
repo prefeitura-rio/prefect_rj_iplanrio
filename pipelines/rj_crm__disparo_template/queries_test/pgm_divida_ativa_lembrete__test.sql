@@ -54,6 +54,45 @@ VALUES
     )
 );
 
+
+
+
+-- ===================== 1) INSERT: pessoa física de teste (RMI) =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
+(cpf, nome, nome_social, telefone)
+VALUES
+(
+    '13pgmlembr1',
+    'MARIA SALESFORCE LEMBRETE',
+    NULL,
+    STRUCT(
+        TRUE AS indicador,
+        STRUCT(
+            'TESTE' AS origem,
+            'TESTE' AS sistema,
+            '55' AS ddi,
+            '21' AS ddd,
+            '989190512' AS valor,
+            'VALIDO' AS qualidade,
+            CAST(NULL AS STRING) AS confianca,
+            'CELULAR' AS tipo,
+            'ENVIAR' AS estrategia_envio,
+            FALSE AS indicador_optin,
+            FALSE AS indicador_optout,
+            FALSE AS indicador_soft_optin,
+            FALSE AS indicador_quarentena,
+            CAST(NULL AS DATE) AS data_fim_quarentena,
+            CAST(NULL AS STRING) AS consentimento,
+            CAST(NULL AS STRING) AS razao_optout,
+            CAST(NULL AS DATETIME) AS datahora_optin,
+            CAST(NULL AS DATETIME) AS datahora_optout,
+            CAST(NULL AS DATETIME) AS datahora_ultima_leitura,
+            CAST(NULL AS DATETIME) AS datahora_ultima_resposta,
+            CURRENT_DATE('America/Sao_Paulo') AS data_atualizacao
+        ) AS principal,
+        CAST([] AS ARRAY<STRUCT<origem STRING, sistema STRING, ddi STRING, ddd STRING, valor STRING, qualidade STRING, confianca STRING, tipo STRING, estrategia_envio STRING, indicador_optin BOOL, indicador_optout BOOL, indicador_soft_optin BOOL, indicador_quarentena BOOL, data_fim_quarentena DATE, consentimento STRING, razao_optout STRING, datahora_optin DATETIME, datahora_optout DATETIME, datahora_ultima_leitura DATETIME, datahora_ultima_resposta DATETIME, data_atualizacao DATE>>) AS alternativo
+    )
+);
 -- ===================== 2) INSERT: contribuinte com guia/cota vencendo em D+2 =====================
 INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`
 (id_pessoa, cpf_cnpj, tipo_pessoa, nome, cdas_associadas, guias_pagamento)

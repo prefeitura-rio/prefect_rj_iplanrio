@@ -56,6 +56,8 @@ schedules:
       # nome_hsm_cobranca_placeholder é o próprio campaign_name deste schedule.
       query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "limit_placeholder": 300}
       campaign_name: pgm_divida_ativa_prod_v2
+      data_extension_filename: pgm_divida_ativa_prod_v2
+      de_columns: ["nome_sobrenome"]
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -82,6 +84,8 @@ schedules:
       # nome_hsm_lembrete_placeholder é o próprio campaign_name deste schedule.
       query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1"}
       campaign_name: pgmdividaativalembreteprodv1
+      data_extension_filename: pgmdividaativalembreteprodv1
+      de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia", "cod_pix", "cod_boleto"]
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -109,6 +113,8 @@ schedules:
       # nome_hsm_agradecimento_placeholder é o próprio campaign_name deste schedule.
       query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1"}
       campaign_name: pgmdividaativaconfirmapgtoprodv1
+      data_extension_filename: pgmdividaativaconfirmapgtoprodv1
+      de_columns: ["nome_sobrenome"]
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
