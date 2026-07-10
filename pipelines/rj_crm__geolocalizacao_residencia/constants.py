@@ -14,7 +14,7 @@ class GeolocalizacaoConstants(Enum):
     TABLE_ID = "enderecos_geolocalizados"
     BILLING_PROJECT_ID = "rj-crm-registry"
     BUCKET_NAME = "rj-sms"
-    BIGLAKE_TABLE = False
+    BIGLAKE_TABLE = True
 
     # File and data configuration
     FILE_FOLDER = "pipelines/data"
@@ -27,7 +27,7 @@ class GeolocalizacaoConstants(Enum):
     RETURN_ORIGINAL_COLS = True
 
     # Geocoding configuration
-    MAX_CONCURRENT_NOMINATIM = 100
+    MAX_CONCURRENT_NOMINATIM = 500
     SLEEP_TIME = 1.1
     USE_EXPONENTIAL_BACKOFF = True
 
@@ -53,7 +53,7 @@ WITH enderecos_rmi AS (
     LOWER(REGEXP_REPLACE(endereco.principal.logradouro, r'[^a-zA-Z0-9 ]', '')) AS logradouro_tratado,
     LOWER(REGEXP_REPLACE(endereco.principal.numero, r'[^a-zA-Z0-9 ]', '')) AS numero_porta,
     IFNULL(LOWER(REGEXP_REPLACE(endereco.principal.bairro, r'[^a-zA-Z0-9 ]', '')), "") AS bairro
-  FROM `rj-crm-registry.crm_dados_mestres.pessoa_fisica`
+  FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
   WHERE endereco.indicador IS TRUE
     AND (endereco.principal.municipio = "Rio de Janeiro" OR endereco.principal.municipio IS NULL)
     AND endereco.principal.logradouro IS NOT NULL
@@ -82,5 +82,5 @@ FROM enderecos_rmi
 LEFT JOIN enderecos_geolocalizados USING(logradouro_tratado, numero_porta, bairro)
 WHERE enderecos_geolocalizados.logradouro_tratado IS NULL
 ORDER BY RAND()
-LIMIT 500
+LIMIT 10000
     """

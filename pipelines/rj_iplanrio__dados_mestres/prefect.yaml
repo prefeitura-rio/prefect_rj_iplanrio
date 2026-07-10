@@ -127,3 +127,27 @@ deployments:
           url: 'https://pgeo3.rio.rj.gov.br/arcgis/rest/services/CadLog/Numero_de_porta/FeatureServer/0'
           crs: EPSG:31983
           table_id: numero_porta
+      - interval: 604800
+        anchor_date: '2025-07-15T01:30:00'
+        timezone: America/Sao_Paulo
+        slug: lote
+        parameters:
+          url: 'https://services5.arcgis.com/mgrvZxGU0bSJbVld/arcgis/rest/services/Quadras_Lotes_Edificacoes/FeatureServer/1/'
+          crs: EPSG:31983
+          table_id: lote
+      - interval: 604800
+        anchor_date: '2025-07-15T01:30:00'
+        timezone: America/Sao_Paulo
+        slug: aeis
+        parameters:
+          url: 'https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_AEIS/FeatureServer/1'
+          crs: EPSG:31983
+          table_id: aeis
+      - interval: 604800
+        anchor_date: '2025-07-15T01:30:00'
+        timezone: America/Sao_Paulo
+        slug: aeis_bairro_maravilha
+        parameters:
+          url: 'https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Urbanismo/LBB_AEIS/FeatureServer/0'
+          crs: EPSG:31983
+          table_id: aeis_bairro_maravilha

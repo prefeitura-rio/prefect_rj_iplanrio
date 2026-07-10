@@ -25,7 +25,7 @@ class CallCenterAttendancesConstants(Enum):
     ROOT_FOLDER = "./data_attendances_weekly/"
 
     # Configurações do BigQuery
-    BIGLAKE_TABLE = False
+    BIGLAKE_TABLE = True
 
     # Configurações da API Wetalkie
     INFISICAL_SECRET_PATH = "/wetalkie"
@@ -39,3 +39,6 @@ class CallCenterAttendancesConstants(Enum):
 
     # BigQuery configuration for duplicate check
     BILLING_PROJECT_ID = "rj-crm-registry"
+
+    # Date interval for data extraction
+    DATE_INTERVAL = 7  # days

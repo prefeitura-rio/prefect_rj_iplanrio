@@ -1,0 +1,55 @@
+---
+description: "Development workflow, commands, and troubleshooting for Prefect RJ IplanRio project"
+alwaysApply: true
+---
+
+# Workflow de Desenvolvimento
+
+## Comandos Úteis
+
+### Desenvolvimento
+```sh
+# Instalar dependências
+uv sync
+
+# Criar nova pipeline
+uvx cookiecutter templates --output-dir=pipelines
+
+# Executar pipeline localmente
+prefect flow run <flow-name>
+```
+
+### Deploy
+```sh
+# Deploy manual (se necessário)
+prefect deployment build <flow-file>:<flow-name> -n <deployment-name>
+prefect deployment apply <deployment-name>
+```
+
+## Criação de Novas Pipelines
+
+1. Use cookiecutter: `uvx cookiecutter templates --output-dir=pipelines`
+2. Siga as convenções de nomenclatura
+3. Configure `prefect.yaml` com work pool e secrets apropriados
+4. Teste localmente antes do deploy
+5. Use staging antes de produção
+
+## Troubleshooting
+
+### Problemas Comuns
+- **Erro de nomenclatura**: Verifique se segue padrão `rj_<secretaria>__<pipeline>`
+- **Secret não encontrado**: Confirme se `secretName` está correto no `prefect.yaml`
+- **Pool incorreto**: Verifique se está usando `datario-pool` apenas quando necessário
+- **Dependências**: Use `uv sync` para sincronizar workspace
+
+### Logs e Debug
+- Verifique logs do GitHub Actions para problemas de deploy
+- Use Prefect UI para monitorar execução de flows
+- Consulte documentação oficial do Prefect para detalhes específicos
+
+## Estrutura de Arquivos
+
+- Mantenha arquivos principais no diretório raiz da pipeline
+- Use subdiretórios `utils/` apenas quando necessário
+- Siga a estrutura de templates para novas pipelines
+- Não crie arquivos desnecessários
