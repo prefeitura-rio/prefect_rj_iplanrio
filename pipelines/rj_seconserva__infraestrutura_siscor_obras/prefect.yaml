@@ -1,0 +1,61 @@
+name: rj_seconserva__infraestrutura_siscor_obras
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_seconserva__infraestrutura_siscor_obras-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_seconserva__infraestrutura_siscor_obras/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # Deployment de staging para testes
+  - name: rj-seconserva--infraestrutura-siscor-obras--staging
+    tags: [staging]
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_seconserva__infraestrutura_siscor_obras/flow.py:rj_seconserva__infraestrutura_siscor_obras
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_seconserva__infraestrutura_siscor_obras -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  # Deployment de produção com schedules para todas as tabelas
+  - name: rj-seconserva--infraestrutura-siscor-obras--prod
+    tags: [prod]
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_seconserva__infraestrutura_siscor_obras/flow.py:rj_seconserva__infraestrutura_siscor_obras
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_seconserva__infraestrutura_siscor_obras -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+      - interval: 86400 # Executa diariamente (24h em segundos)
+        anchor_date: "2026-06-08T23:00:00" # UTC: 23:00hrs / BRT: 20:00hrs
+        timezone: America/Sao_Paulo
+        slug: processo-autorizacao-obra-daily
+        parameters:
+          table_id: processo_autorizacao_obra
