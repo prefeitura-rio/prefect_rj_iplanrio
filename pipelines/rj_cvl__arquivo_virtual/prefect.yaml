@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_cvl__arquivo_virtual/flow.py:rj_cvl__arquivo_virtual
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -38,7 +38,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cvl__arquivo_virtual/flow.py:rj_cvl__arquivo_virtual
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -47,7 +47,7 @@ deployments:
     schedules:
 
       - interval: 86400  # executa a cada 24h
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:30:00" # UTC: 23:30hrs / BRT: 20:30hrs
         timezone: America/Sao_Paulo
         slug: conjunto_arquivo
         parameters:
@@ -65,7 +65,7 @@ deployments:
             FROM `CONJUNTO_ARQUIVO`;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:35:00" # UTC: 23:35hrs / BRT: 20:35hrs
         timezone: America/Sao_Paulo
         slug: a1_identificacao
         parameters:
@@ -87,7 +87,7 @@ deployments:
             FROM A1_IDENTIFICACAO;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:40:00" # UTC: 23:40hrs / BRT: 20:40hrs
         timezone: America/Sao_Paulo
         slug: a2_contextualizacao
         parameters:
@@ -105,7 +105,7 @@ deployments:
             FROM A2_CONTEXTUALIZACAO;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:45:00" # UTC: 23:45hrs / BRT: 20:45hrs
         timezone: America/Sao_Paulo
         slug: a3_conteudo_estrutura
         parameters:
@@ -125,7 +125,7 @@ deployments:
             FROM A3_CONTEUDO_ESTRUTURA;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:35:00" # UTC: 23:35hrs / BRT: 20:35hrs
         timezone: America/Sao_Paulo
         slug: a4_condicoes_acesso
         parameters:
@@ -136,15 +136,15 @@ deployments:
 
           execute_query: |
             SELECT
-                ds_condicoesReproducao,
-                id_conjuntoArquivo,
-                obs_restricao,
-                id_restricao,
-                id_tipoRestricao
+              ds_condicoesReproducao,
+              id_conjuntoArquivo,
+              obs,
+              id_restricao,
+              id_tipoRestricao
             FROM A4_CONDICOES_ACESSO;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:40:00" # UTC: 23:40hrs / BRT: 20:40hrs
         timezone: America/Sao_Paulo
         slug: a5_fontes_relacionada
         parameters:
@@ -164,7 +164,7 @@ deployments:
             FROM A5_FONTES_RELACIONADA;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:45:00" # UTC: 23:45hrs / BRT: 20:45hrs
         timezone: America/Sao_Paulo
         slug: a6_notas
         parameters:
@@ -183,7 +183,7 @@ deployments:
 
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:50:00"
         timezone: America/Sao_Paulo
         slug: a7_controle
         parameters:
@@ -204,7 +204,7 @@ deployments:
             FROM A7_CONTROLE;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T23:55:00" # UTC: 23:55hrs / BRT: 20:55hrs
         timezone: America/Sao_Paulo
         slug: condic_idioma
         parameters:
@@ -220,7 +220,7 @@ deployments:
             FROM CONDIC_IDIOMA
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:00:00" # UTC: 00:00hrs / BRT: 21:00hrs
         timezone: America/Sao_Paulo
         slug: condic_inst
         parameters:
@@ -238,7 +238,7 @@ deployments:
             FROM CONDIC_INST;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:05:00" # UTC: 00:05hrs / BRT: 21:05hrs
         timezone: America/Sao_Paulo
         slug: context_produtor
         parameters:
@@ -258,7 +258,7 @@ deployments:
             FROM CONTEXT_PRODUTOR;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:10:00" # UTC: 00:10hrs / BRT: 21:10hrs
         timezone: America/Sao_Paulo
         slug: dimensao_suporte
         parameters:
@@ -283,7 +283,7 @@ deployments:
             FROM DIMENSAO_SUPORTE;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:15:00" # UTC: 00:15hrs / BRT: 21:15hrs
         timezone: America/Sao_Paulo
         slug: procedencia
         parameters:
@@ -304,7 +304,7 @@ deployments:
 
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:20:00" # UTC: 00:20hrs / BRT: 21:20hrs
         timezone: America/Sao_Paulo
         slug: capacidade_armazena
         parameters:
@@ -320,7 +320,7 @@ deployments:
             FROM CAPACIDADE_ARMAZENA;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:25:00" # UTC: 00:25hrs / BRT: 21:25hrs
         timezone: America/Sao_Paulo
         slug: especie
         parameters:
@@ -337,7 +337,7 @@ deployments:
             FROM ESPECIE;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:30:00" # UTC: 00:30hrs / BRT: 21:30hrs
         timezone: America/Sao_Paulo
         slug: estado_acervo
         parameters:
@@ -353,7 +353,7 @@ deployments:
             FROM ESTADO_ACERVO;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:35:00" # UTC: 00:35hrs / BRT: 21:35hrs
         timezone: America/Sao_Paulo
         slug: estagio_tratamento
         parameters:
@@ -369,7 +369,7 @@ deployments:
             FROM ESTAGIO_TRATAMENTO;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:40:00" # UTC: 00:40hrs / BRT: 21:40hrs
         timezone: America/Sao_Paulo
         slug: forma_entrada
         parameters:
@@ -385,7 +385,7 @@ deployments:
             FROM FORMA_ENTRADA;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:45:00"
         timezone: America/Sao_Paulo
         slug: formato
         parameters:
@@ -403,7 +403,7 @@ deployments:
 
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:50:00"
         timezone: America/Sao_Paulo
         slug: genero
         parameters:
@@ -420,7 +420,7 @@ deployments:
             FROM GENERO;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T00:55:00" # UTC: 00:55hrs / BRT: 21:55hrs
         timezone: America/Sao_Paulo
         slug: idioma
         parameters:
@@ -431,13 +431,28 @@ deployments:
 
           execute_query: |
             SELECT
-                id_conjuntoArquivo,
-                id_idioma,
-                nm_idioma
+              nm_idioma,
+              id_idioma
             FROM IDIOMA;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T01:00:00" # UTC: 01:00hrs / BRT: 22:00hrs
+        timezone: America/Sao_Paulo
+        slug: instrumento_pesquisa
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: instrumento_pesquisa
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+              id_instPesquisa,
+              ds_instrumento
+            FROM INSTRUMENTO_PESQUISA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T01:05:00" # UTC: 01:05hrs / BRT: 22:05hrs
         timezone: America/Sao_Paulo
         slug: modalidade
         parameters:
@@ -453,7 +468,23 @@ deployments:
             FROM MODALIDADE;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T01:10:00" # UTC: 01:10hrs / BRT: 22:10hrs
+        timezone: America/Sao_Paulo
+        slug: natureza_juridica
+        parameters:
+          biglake_table: true
+          batch_size: 50000
+          table_id: natureza_juridica
+          dump_mode: overwrite
+
+          execute_query: |
+            SELECT
+              ds_natureza,
+              id_NaturezaJuridica
+            FROM NATUREZA_JURIDICA;
+
+      - interval: 86400
+        anchor_date: "2022-01-01T01:15:00" # UTC 01:15hrs / BRT: 22:15hrs
         timezone: America/Sao_Paulo
         slug: nivel
         parameters:
@@ -470,7 +501,7 @@ deployments:
             FROM NIVEL;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T01:20:00" # UTC: 01:20hrs / BRT: 22:20hrs
         timezone: America/Sao_Paulo
         slug: restricao
         parameters:
@@ -486,7 +517,7 @@ deployments:
             FROM RESTRICAO;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T01:25:00" # UTC: 01:25hrs / BRT: 22:25hrs
         timezone: America/Sao_Paulo
         slug: tipo_escala
         parameters:
@@ -502,7 +533,7 @@ deployments:
             FROM TIPO_ESCALA;
 
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T01:30:00" # UTC: 01:30hrs / BRT: 22:30hrs
         timezone: America/Sao_Paulo
         slug: tipo_produtor
         parameters:
@@ -517,7 +548,7 @@ deployments:
                 ds_tipoProdutor
             FROM TIPO_PRODUTOR;
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T01:35:00" # UTC: 01:35hrs / BRT: 22:35hrs
         timezone: America/Sao_Paulo
         slug: tipo_restricao
         parameters:
@@ -531,7 +562,7 @@ deployments:
                 ds_restricao
             FROM TIPO_RESTRICAO;
       - interval: 86400
-        anchor_date: "2022-01-01T02:30:00"
+        anchor_date: "2022-01-01T01:40:00" # UTC: 01:40hrs / BRT: 22:40hrs
         timezone: America/Sao_Paulo
         slug: unidade_medida
         parameters:
