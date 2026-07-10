@@ -12,9 +12,10 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_smas__disparo_cadunico ./pipelines/rj_smas__disparo_cadunico/
 
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
 
-RUN uv sync --all-packages
+RUN uv sync --package rj_smas__disparo_cadunico

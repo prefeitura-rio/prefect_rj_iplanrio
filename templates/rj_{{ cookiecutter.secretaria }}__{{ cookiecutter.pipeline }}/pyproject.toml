@@ -2,3 +2,9 @@
 name = "rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}"
 version = "0.1.0"
 description = "Pipeline {{ cookiecutter.pipeline }} da secretaria {{ cookiecutter.secretaria }}"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
