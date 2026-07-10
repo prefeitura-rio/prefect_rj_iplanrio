@@ -573,16 +573,16 @@ deployments:
             do filtro)\n    INNER JOIN UNNEST(\n        ARRAY(\n            SELECT
             c\n            FROM UNNEST(guia_pagamento.cotas) c\n            WHERE\n\
             \            c.cota_paga = TRUE\n            AND c.data_pagamento >= date_sub(current_date(\"\
-            America/Sao_Paulo\"), interval 5 day)\n            AND c.observacoes !=
-            \"Encaminhada para Protesto\"\n        )\n    ) AS cotas\n\n    -- criacao
-            da guia de pagamento após o disparo\n    where\n    (\n        data_disparo_cobranca
-            <= guia_pagamento.data_criacao_guia\n        or guia_pagamento.data_criacao_guia
-            is null\n    ) -- deixar para não enviar para guias abertas antes do disparo
-            dessa pessoa\n),\n\nremove_duplicados as (\n    select\n    cpf,\n   \
-            \ celular_disparo,\n    row_number() over (partition by cpf order by data_pagamento
-            desc) as rn,\n    from divida_ativa\n),\n\nremove_optout as (\n    select
-            remove_duplicados.*,\n    coalesce(pf.nome_social, pf.nome) as nome,\n\
-            \    from remove_duplicados\n    left join `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
+            America/Sao_Paulo\"), interval 5 day)\n            AND COALESCE(c.observacoes,
+            \"\") != \"Encaminhada para Protesto\"\n        )\n    ) AS cotas\n\n\
+            \    -- criacao da guia de pagamento após o disparo\n    where\n    (\n\
+            \        data_disparo_cobranca <= guia_pagamento.data_criacao_guia\n \
+            \       or guia_pagamento.data_criacao_guia is null\n    ) -- deixar para
+            não enviar para guias abertas antes do disparo dessa pessoa\n),\n\nremove_duplicados
+            as (\n    select\n    cpf,\n    celular_disparo,\n    row_number() over
+            (partition by cpf order by data_pagamento desc) as rn,\n    from divida_ativa\n
+            ),\n\nremove_optout as (\n    select remove_duplicados.*,\n    coalesce(pf.nome_social,
+            pf.nome) as nome,\n    from remove_duplicados\n    left join `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
             pf using(cpf)\n    where pf.telefone.principal.indicador_optout = false\n\
             \    and pf.telefone.principal.indicador_quarentena = false\n)\n\n-- Tabela
             simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por\n
@@ -1441,6 +1441,67 @@ deployments:
             x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
             NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
             is not null\n"
+      - interval: 86400
+        anchor_date: "2021-01-01T13:00:00"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-cadunico-confirma-agendamento
+        flow_run_name: cadunico-confirma-agendamento
+        parameters:
+          flow_environment: staging
+          query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
+            "intervalo_filtro_disparados": 15}
+          campaign_name: confirma_agendamento_cadunico_prod_v2
+          data_extension_filename: whatsapp_cadunico_
+          de_columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          filter_dispatched_phones_or_cpfs:
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: true
+          whitelist_percentage: 0
+          infisical_secret_path: "/crm_disparo_template"
+          whitelist_environment: "production"
+          query: "WITH\nsegmentacao_original AS (\n    SELECT\n        LPAD(CAST(cpf
+            AS STRING), 11, '0') AS cpf,\n        `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(REGEXP_REPLACE(telefone,
+            r'[^\\d]', '')) AS celular_disparo,\n        INITCAP(\n            IF(\n\
+            \                ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,\n      \
+            \          CONCAT(\n                    SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],\n\
+            \                    ' ',\n                    SPLIT(nome_completo, '
+            ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]\n       \
+            \         ),\n                nome_completo\n            )\n        )
+            AS nome_sobrenome,\n        unidade_nome AS unidade_cras,\n        CONCAT(unidade_endereco,
+            ' - ', unidade_bairro) AS endereco,\n        -- data_hora vem como STRING
+            na tabela de origem, precisa de CAST explícito pra DATETIME\n        FORMAT_DATETIME('%d/%m/%Y',
+            CAST(data_hora AS DATETIME)) AS data,\n        FORMAT_DATETIME('%H:%M',
+            CAST(data_hora AS DATETIME)) AS hora\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`\n\
+            \    WHERE\n        DATE(CAST(data_hora AS DATETIME)) = DATE_ADD(CURRENT_DATE('America/Sao_Paulo'),
+            INTERVAL CAST({days_ahead_placeholder} AS int64) DAY)\n),\n\nfiltra_disparados
+            AS (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
+            nos últimos x dias\n    SELECT segmentacao_original.*\n    FROM segmentacao_original\n\
+            \    LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
+            \        ON sd.cpf = segmentacao_original.cpf\n        AND sd.nome_hsm
+            = '{nome_hsm_placeholder}'\n        AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
+            INTERVAL {intervalo_filtro_disparados} DAY)\n        AND sd.data_particao
+            >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
+            \        AND sd.indicador_falha = FALSE\n    WHERE sd.cpf IS NULL\n),\n
+            \nfiltra_celulares_sem_whats AS (\n    -- remove telefones em quarentena
+            ou com qualidade inválida\n    SELECT\n        DISTINCT s.*\n    FROM
+            filtra_disparados AS s\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
+            AS tel\n        ON s.celular_disparo = tel.telefone_numero_completo\n\
+            \    LEFT JOIN UNNEST(tel.consentimento) AS c\n    WHERE\n        (c.indicador_quarentena
+            = FALSE AND tel.telefone_qualidade != \"INVALIDO\")\n        OR tel.telefone_numero_completo
+            IS NULL\n)\n\n-- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle
+            interno (dedup por\n-- CPF) e é descartado do CSV pelo de_columns antes
+            do envio à Data Extension.\n-- telefone, SubscriberKey e LOCALE já são
+            tratados por padrão pelo flow (LOCALE é\n-- preenchido automaticamente
+            como 'BR' em save_csv_for_sftp).\nSELECT\n    celular_disparo AS telefone,\n\
+            \    cpf AS SubscriberKey,\n    cpf AS externalId,\n    nome_sobrenome,\n\
+            \    unidade_cras,\n    data,\n    hora,\n    endereco\nFROM filtra_celulares_sem_whats\n
+            WHERE celular_disparo IS NOT NULL\n"
       - interval: 86400
         anchor_date: "2021-01-01T12:00:00"
         timezone: America/Sao_Paulo
