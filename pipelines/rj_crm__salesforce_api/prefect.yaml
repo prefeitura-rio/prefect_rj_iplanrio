@@ -257,4 +257,3 @@ deployments:
           dataset_id: brutos_salesforce
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
-
