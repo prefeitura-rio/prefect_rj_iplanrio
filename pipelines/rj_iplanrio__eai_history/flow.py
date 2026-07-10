@@ -13,13 +13,13 @@ from prefect import flow
 
 from pipelines.rj_iplanrio__eai_history.tasks import (
     fetch_history_data,
-    get_last_checkpoint_id,
+    get_last_update,
 )
 
 
 @flow(log_prints=True)
 def rj_iplanrio__eai_history(  # noqa
-    last_checkpoint_id: Optional[str] = None,
+    last_update: Optional[str] = None,
     session_timeout_seconds: Optional[int] = 3600,
     use_whatsapp_format: bool = False,
     dataset_id: str = "brutos_eai_logs",
@@ -27,23 +27,27 @@ def rj_iplanrio__eai_history(  # noqa
     max_user_save_limit: int = 100,
     environment: str = "staging",
     dbt_select: str = "raw_eai_logs_history",
+    skip_bd_credentials: bool = False,
+    sql_limit: Optional[int] = None,
 ):
     rename_current_flow_run_task(new_name=environment)
-    inject_bd_credentials_task()
+    if not skip_bd_credentials:
+        inject_bd_credentials_task()
 
-    last_checkpoint_id_task = get_last_checkpoint_id(
+    last_update_task = get_last_update(
         dataset_id=dataset_id,
         table_id=table_id,
-        last_checkpoint_id=last_checkpoint_id,
+        last_update=last_update,
         environment=environment,
     )
 
     data_path = fetch_history_data(
-        last_checkpoint_id=last_checkpoint_id_task,
+        last_update=last_update_task,
         session_timeout_seconds=session_timeout_seconds,
         use_whatsapp_format=use_whatsapp_format,
         max_user_save_limit=max_user_save_limit,
         environment=environment,
+        sql_limit=sql_limit,
     )
 
     if data_path:
@@ -55,3 +59,7 @@ def rj_iplanrio__eai_history(  # noqa
             dump_mode="append",
         )
         execute_dbt_task(select=dbt_select, target="prod")
+
+
+if __name__ == "__main__":
+    rj_iplanrio__eai_history()

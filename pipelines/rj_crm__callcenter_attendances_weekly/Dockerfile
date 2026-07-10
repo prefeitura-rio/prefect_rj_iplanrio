@@ -16,4 +16,6 @@ COPY ./src ./src/
 
 COPY ./pipelines/rj_crm__callcenter_attendances_weekly ./pipelines/rj_crm__callcenter_attendances_weekly/
 
+COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
+
 RUN uv sync --package rj_crm__callcenter_attendances_weekly
