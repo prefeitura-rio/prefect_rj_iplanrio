@@ -12,21 +12,30 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.alerting import (
 )
 
 
-def test_extract_precipitation_alerts_filters_safe_values():
+def test_extract_precipitation_alerts_only_keeps_intense_values():
     df = pd.DataFrame(
         [
             {"data_periodo": date(2025, 1, 1), "periodo": "Manhã", "precipitacao": "Sem chuva"},
-            {"data_periodo": date(2025, 1, 1), "periodo": "Tarde", "precipitacao": "Pancadas de chuva"},
-            {"data_periodo": date(2025, 1, 2), "periodo": "Noite", "precipitacao": "Chuva fraca isolada"},
+            {"data_periodo": date(2025, 1, 1), "periodo": "Tarde", "precipitacao": "Chuva moderada a forte isolada"},
+            {"data_periodo": date(2025, 1, 1), "periodo": "Noite", "precipitacao": "Chuva fraca"},
+            {"data_periodo": date(2025, 1, 2), "periodo": "Manhã", "precipitacao": "Chuva moderada a forte"},
+            {"data_periodo": date(2025, 1, 2), "periodo": "Tarde", "precipitacao": "Chuva fraca a moderada"},
+            {"data_periodo": date(2025, 1, 3), "periodo": "Manhã", "precipitacao": "Pancadas de chuva"},
+            {"data_periodo": date(2025, 1, 3), "periodo": "Tarde", "precipitacao": "Pancadas de chuva isoladas"},
+            {"data_periodo": date(2025, 1, 3), "periodo": "Noite", "precipitacao": "Chuva fraca a moderada isolada"},
+            {"data_periodo": date(2025, 1, 4), "periodo": "Manhã", "precipitacao": "Chuvisco/Chuva Fraca isolada"},
         ]
     )
 
     alerts = extract_precipitation_alerts(df)
 
-    assert len(alerts) == 1
-    assert alerts[0].forecast_date == date(2025, 1, 1)
-    assert alerts[0].periodo == "Tarde"
-    assert alerts[0].precipitacao == "Pancadas de chuva"
+    assert len(alerts) == 4
+    assert {alert.precipitacao for alert in alerts} == {
+        "Chuva moderada a forte isolada",
+        "Chuva moderada a forte",
+        "Pancadas de chuva",
+        "Pancadas de chuva isoladas",
+    }
 
 
 def test_format_precipitation_alert_message_matches_expected_layout_with_synoptic():
@@ -62,10 +71,8 @@ def test_format_precipitation_alert_message_matches_expected_layout_with_synopti
         "As condições atmosféricas serão influenciadas por ventos úmidos do oceano. Assim, o céu estará com nebulosidade variada e há previsão de chuva.\n\n"
         "27/11/2025\n"
         "• Manhã: Pancadas de chuva isoladas\n"
-        "• Tarde: Pancadas de chuva\n"
-        "• Noite: Chuva fraca a moderada isolada\n\n"
+        "• Tarde: Pancadas de chuva\n\n"
         "28/11/2025\n"
-        "• Madrugada: Chuva fraca isolada\n"
         "• Manhã: Pancadas de chuva\n"
         "• Tarde: Pancadas de chuva"
     )
@@ -130,4 +137,3 @@ def test_insert_alert_log_rows_serializes_date_fields():
     assert inserted_rows[0]["alert_date"] == "2025-12-03"
     assert inserted_rows[0]["forecast_date"] == "2025-12-03"
     assert inserted_rows[0]["sent_at"].startswith("2025-12-03T12:00:00")
-

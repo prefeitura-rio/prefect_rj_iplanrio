@@ -19,7 +19,10 @@ from google.cloud import bigquery
 
 from iplanrio.pipelines_utils.logging import log
 
-SAFE_PRECIPITATION_VALUES = {"Sem chuva", "Chuva fraca isolada"}
+INTENSE_PRECIPITATION_KEYWORDS = (
+    "chuva moderada a forte",
+    "pancadas de chuva",
+)
 
 
 @dataclass(frozen=True)
@@ -29,6 +32,18 @@ class PrecipitationAlert:
     forecast_date: date
     periodo: str
     precipitacao: str
+
+
+def is_intense_precipitation(value: str | None) -> bool:
+    """
+    Retorna True somente para descrições que indiquem chuva moderada a forte.
+    """
+    if not value:
+        return False
+    normalized = value.strip().lower()
+    if not normalized:
+        return False
+    return any(keyword in normalized for keyword in INTENSE_PRECIPITATION_KEYWORDS)
 
 
 def extract_precipitation_alerts(dataframe: pd.DataFrame) -> list[PrecipitationAlert]:
@@ -41,7 +56,7 @@ def extract_precipitation_alerts(dataframe: pd.DataFrame) -> list[PrecipitationA
     alerts: list[PrecipitationAlert] = []
     for _, row in dataframe.iterrows():
         precipitation = (row.get("precipitacao") or "").strip()
-        if not precipitation or precipitation in SAFE_PRECIPITATION_VALUES:
+        if not is_intense_precipitation(precipitation):
             continue
 
         forecast_date = row.get("data_periodo")

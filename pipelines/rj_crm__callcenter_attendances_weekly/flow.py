@@ -29,6 +29,7 @@ def rj_crm__callcenter_attendances_weekly(
     materialize_after_dump: bool | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    transcribe_audio: bool = True,
     infisical_secret_path: str = "/wetalkie",
     date_interval: int = 7,
 ):
@@ -48,7 +49,6 @@ def rj_crm__callcenter_attendances_weekly(
         infisical_secret_path: Caminho dos secrets no Infisical (default: /wetalkie)
     """
 
-    # Usar valores dos constants como padrão para parâmetros
     dataset_id = dataset_id or CallCenterAttendancesConstants.DATASET_ID.value
     table_id = table_id or CallCenterAttendancesConstants.TABLE_ID.value
     dump_mode = dump_mode or CallCenterAttendancesConstants.DUMP_MODE.value
@@ -65,11 +65,15 @@ def rj_crm__callcenter_attendances_weekly(
     billing_project_id = CallCenterAttendancesConstants.BILLING_PROJECT_ID.value
     date_interval = date_interval or CallCenterAttendancesConstants.DATE_INTERVAL.value
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}_weekly")
+    rename_flow_run = rename_current_flow_run_task(
+        new_name=f"{table_id}_{dataset_id}_weekly"
+    )
 
     crd = inject_bd_credentials_task(environment="prod")  # noqa
 
-    date_range = calculate_date_range(start_date=start_date, end_date=end_date, interval=date_interval)
+    date_range = calculate_date_range(
+        start_date=start_date, end_date=end_date, interval=date_interval
+    )
 
     api = access_api(
         infisical_secret_path,
@@ -107,10 +111,19 @@ def rj_crm__callcenter_attendances_weekly(
         )
         return
 
-    processed_data = processar_json_e_transcrever_audios(dados_entrada=filtered_attendances)
+    if transcribe_audio:
+        processed_data = processar_json_e_transcrever_audios(
+            dados_entrada=filtered_attendances
+        )
+    else:
+        # processed_data = filtered_attendances.to_dict("records")
+        processed_data = filtered_attendances.copy()
+
     df = criar_dataframe_de_lista(processed_data)
 
-    print(f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}")
+    print(
+        f"Processed {len(df)} new attendances for period {date_range['start_date']} to {date_range['end_date']}"
+    )
 
     partitions_path = create_date_partitions(
         dataframe=df,
@@ -118,7 +131,7 @@ def rj_crm__callcenter_attendances_weekly(
         file_format=file_format,
         root_folder=root_folder,
     )
-
+    print("Force deploy")
     create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
@@ -126,11 +139,6 @@ def rj_crm__callcenter_attendances_weekly(
         dump_mode=dump_mode,
         biglake_table=biglake_table,
     )
-
     print(
         f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
     )
-
-    # if materialize_after_dump:
-    #    dbt_select = CallCenterAttendancesConstants.DBT_SELECT.value
-    #    execute_dbt_task(select=dbt_select, target="prod")
