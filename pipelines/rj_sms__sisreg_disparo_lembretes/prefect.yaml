@@ -46,7 +46,7 @@ deployments:
       dump_mode: append
       id_hsm: 18
       campaign_name: SISREG_AGENDAMENTOS
-      cost_center_id: "2"
+      cost_center_id: "71"
       chunk_size: 1000
       infisical_secret_path: /wetalkie
 #    schedules:
@@ -77,6 +77,6 @@ deployments:
       dump_mode: append
       id_hsm: 18
       campaign_name: SISREG_AGENDAMENTOS_STAGING
-      cost_center_id: "2"
+      cost_center_id: "71"
       chunk_size: 100
       infisical_secret_path: /wetalkie

@@ -121,8 +121,9 @@ def async_geocoding_dataframe(
 
     # Ensure string types for all columns, replacing None with empty string
     if not final_dataframe.empty:
+        final_dataframe = final_dataframe.astype("str")
+        final_dataframe = final_dataframe.replace({"nan": "", "None": "", "<NA>": ""})
         final_dataframe = final_dataframe.fillna("")
-        final_dataframe[final_dataframe.columns] = final_dataframe[final_dataframe.columns].astype("str")
         log(f"Final result preview: \n{final_dataframe.iloc[0]}")
 
     total_time = time() - start_time

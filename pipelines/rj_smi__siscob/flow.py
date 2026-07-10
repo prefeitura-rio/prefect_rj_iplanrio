@@ -40,7 +40,8 @@ def rj_smi__siscob(  # noqa
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
     max_concurrency: int = 1,
-    only_staging_dataset: bool = True,
+    only_staging_dataset: bool = False,
+    add_timestamp_column: bool = True,
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
@@ -80,4 +81,5 @@ def rj_smi__siscob(  # noqa
         charset=db_charset,
         max_concurrency=max_concurrency,
         only_staging_dataset=only_staging_dataset,
+        add_timestamp_column=add_timestamp_column,
     )

@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "prefect_rj_iplanrio",
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",
     "google-cloud-bigquery>=3.20.0",
@@ -27,3 +28,6 @@ dependencies = [
     "discord-py==2.5.2",
     "pydantic>=2.0.0",
 ]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
