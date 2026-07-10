@@ -6,7 +6,6 @@ Este repositório contém pipelines desenvolvidas com Prefect para automação d
 
 Se você deseja contribuir com o projeto, acesse nossa [guia de contribuição](https://iplan-rio.mintlify.app/data-lake/prefect/construindo-uma-pipeline).
 
-
 ## Estrutura do projeto
 
 ### Raiz do repositório
@@ -16,8 +15,12 @@ pipelines/
 ├── rj_sec__pipeline1/
 ├── rj_sec__pipeline2/
 └── ...
+src/
+└── prefect_rj_iplanrio/
+    └── __init__.py
 Dockerfile
 pyproject.toml
+uv.lock
 ```
 
 ### Pipeline
@@ -37,10 +40,18 @@ Este repositório utiliza um modelo monorepo para gerenciar múltiplas pipelines
 
 - **Dockerfile base**: o arquivo `Dockerfile` na raiz define a imagem base utilizada por todas as pipelines. Ele inclui as dependências essenciais para execução dos fluxos, como Python, Prefect, drivers de banco de dados e ferramentas auxiliares. Cada pipeline pode customizar sua própria imagem a partir desse Dockerfile base, garantindo consistência e facilidade de manutenção.
 
-- **`pyproject.toml` centralizado com uv workspaces**: o `pyproject.toml` na raiz do projeto gerencia as dependências Python de todas as pipelines utilizando [uv workspaces](https://github.com/astral-sh/uv).
+- **`pyproject.toml` centralizado com uv workspaces**: o `pyproject.toml` na raiz do projeto gerencia as dependências Python de todas as pipelines utilizando [uv workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/).
   - Cada subdiretório em `pipelines/` representa um módulo Python independente, mas todos são importados automaticamente como membros do workspace.
-  - As dependências e configurações definidas no `pyproject.toml` base são herdadas por todas as pipelines, facilitando a atualização e padronização do ambiente.
+  - As pipelines declaram `prefect_rj_iplanrio` como dependência com `{ workspace = true }`, herdando automaticamente as dependências base (`iplanrio`, `prefect`, `pandas`, etc.).
   - Novas pipelines adicionadas à pasta `pipelines/` são automaticamente reconhecidas e integradas ao workspace, sem necessidade de configuração manual adicional.
+
+- **Código compartilhado**: o diretório `src/prefect_rj_iplanrio/` contém código Python compartilhado entre as pipelines.
+  - Funções utilitárias, classes base, helpers e lógica comum podem ser adicionados neste pacote.
+  - Todas as pipelines que dependem de `prefect_rj_iplanrio` podem importar este código diretamente:
+    ```python
+    from prefect_rj_iplanrio import minha_funcao_compartilhada
+    ```
+  - Isso evita duplicação de código e facilita a manutenção de funcionalidades reutilizáveis.
 
 Esse modelo garante reprodutibilidade, isolamento e facilidade de evolução para todas as pipelines do repositório.
 
@@ -106,7 +117,7 @@ Você será solicitado a informar valores como `secretaria` e `pipeline`, que se
 Este repositório utiliza dois work pools principais para execução dos deployments Prefect:
 
 - **default-pool**: destinado à execução geral de pipelines, incluindo fluxos que não possuem requisitos especiais de rede ou infraestrutura. É o pool padrão para a maioria dos deployments.
-- **datario-pool**: utilizado para pipelines que acessam bancos de dados ou sistemas internos da IplanRio, especialmente aqueles que exigem conexão via VPN. Esse pool garante que os jobs sejam executados em ambientes com acesso seguro e autorizado aos recursos internos.
+- **k3s-pool**: utilizado para pipelines que acessam bancos de dados ou sistemas internos da IplanRio, especialmente aqueles que exigem conexão via VPN. Esse pool garante que os jobs sejam executados em ambientes com acesso seguro e autorizado aos recursos internos.
 
 Ao configurar um deployment no arquivo `prefect.yaml`, selecione o pool apropriado conforme a necessidade de acesso aos dados ou sistemas.
 
@@ -127,3 +138,63 @@ O repositório utiliza GitHub Actions para automatizar todo o ciclo de vida das 
 - **Build e publicação da imagem base**: o workflow `.github/workflows/build-and-push-root-dockerfile.yaml` é acionado em alterações no `Dockerfile` da raiz a cada push na branch `master`, além de poder ser executado manualmente. Ele realiza:
   - Build da imagem Docker definida no `Dockerfile` do repositório
   - Publicação da imagem no GitHub Container Registry (`ghcr.io/${{ github.repository }}:latest`)
+
+## Troubleshooting
+
+### Erro: `uv sync --package` falha com "package not found"
+
+**Causa**: O `pyproject.toml` da pipeline não declara `prefect_rj_iplanrio` como dependência com `workspace = true`.
+
+**Solução**: Adicione ao `pyproject.toml` da pipeline:
+
+```toml
+dependencies = [
+    "prefect_rj_iplanrio",
+    # ... outras dependências
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
+```
+
+### Erro: Docker build falha com "cx-oracle" ou "pkg_resources"
+
+**Causa**: O pacote `cx-oracle` não é compatível com Python 3.13+.
+
+**Solução**: O `pyproject.toml` raiz já contém um override para usar `oracledb` no lugar de `cx-oracle`. Certifique-se de que o `uv.lock` está atualizado:
+
+```sh
+uv lock
+```
+
+### Erro: Dependências base não instaladas no container
+
+**Causa**: O Dockerfile não está copiando o diretório `src/`.
+
+**Solução**: Verifique se o Dockerfile da pipeline contém:
+
+```dockerfile
+COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
+COPY ./pipelines/<nome-da-pipeline> ./pipelines/<nome-da-pipeline>/
+RUN uv sync --package <nome-da-pipeline>
+```
+
+### Erro: Lockfile desatualizado após adicionar nova pipeline
+
+**Causa**: O `uv.lock` precisa ser regenerado quando novas pipelines são adicionadas ao workspace.
+
+**Solução**: Execute na raiz do repositório:
+
+```sh
+uv lock
+```
+
+### Erro: Import de código compartilhado não funciona
+
+**Causa**: O pacote `prefect_rj_iplanrio` não está sendo instalado corretamente.
+
+**Solução**: Verifique se:
+1. O diretório `src/prefect_rj_iplanrio/` existe e contém `__init__.py`
+2. A pipeline declara `prefect_rj_iplanrio` como dependência com `workspace = true`
+3. O Dockerfile copia o diretório `src/`

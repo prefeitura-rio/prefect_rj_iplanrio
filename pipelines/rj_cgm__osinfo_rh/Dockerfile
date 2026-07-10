@@ -5,7 +5,8 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
+COPY ./src ./src/
 
 COPY ./pipelines/rj_cgm__osinfo_rh ./pipelines/rj_cgm__osinfo_rh/
 
-RUN uv sync --all-packages
+RUN uv sync --package rj_cgm__osinfo_rh

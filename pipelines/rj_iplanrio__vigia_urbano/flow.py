@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+# Register flow
 """
-This flow is used to dump the database to the BIGQUERY
+This flow is used to dump the database to the BIGQUERY.
 """
 
 from typing import Optional
 
+from iplanrio.pipelines_utils.dbt import execute_dbt_task
 from iplanrio.pipelines_templates.dump_db.tasks import (
     dump_upload_batch_task,
     format_partitioned_query_task,
@@ -42,11 +44,16 @@ def rj_iplanrio__vigia_urbano(
     max_concurrency: int = 1,
     only_staging_dataset: bool = False,
     add_timestamp_column: bool = True,
+    dbt_model_name: str | None = None,
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
-    secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
-    partition_columns_list = parse_comma_separated_string_to_list_task(text=partition_columns)
+    secrets = get_database_username_and_password_from_secret_task(
+        infisical_secret_path=infisical_secret_path
+    )
+    partition_columns_list = parse_comma_separated_string_to_list_task(
+        text=partition_columns
+    )
 
     formated_query = format_partitioned_query_task(
         query=execute_query,
@@ -83,3 +90,10 @@ def rj_iplanrio__vigia_urbano(
         only_staging_dataset=only_staging_dataset,
         add_timestamp_column=add_timestamp_column,
     )
+
+    if dbt_model_name is not None:
+        execute_dbt_task(
+            select=dbt_model_name,
+            target="prod",
+            git_repository_path="https://github.com/prefeitura-rio/queries-rj-iplanrio",
+        )
