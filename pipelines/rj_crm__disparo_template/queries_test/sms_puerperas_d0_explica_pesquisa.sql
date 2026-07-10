@@ -1,3 +1,51 @@
+-- Teste da query queries_dev/sms_puerperas_d0_explica_pesquisa.sql (mirror de queries/sms_puerperas_d0_explica_pesquisa.sql)
+-- Executa direto no BigQuery. Passo 1 limpa dados de teste anteriores; passo 2 insere uma
+-- alta de maternidade MARIA AMELIA de D-1, sem nenhum disparo anterior para esse CPF; passo 3
+-- é a query em si.
+
+-- ===================== 0) LIMPA DADOS DE TESTE ANTERIORES =====================
+DELETE from `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
+where nome = 'MARIA SALESFORCE';
+
+-- limpa histórico de disparo do telefone de teste em produção: sem isso, uma falha
+-- registrada em qualquer teste anterior (de qualquer campanha) faz status_final_telefone
+-- anular esse número pra sempre e a query nunca retorna linha pra ele
+DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+WHERE contato_telefone = '5521989190512';
+
+-- ===================== 1) INSERT: alta de maternidade (segmentação) =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
+(
+    cpf,
+    nome,
+    data_alta_internacao,
+    cnes_maternidade_alta,
+    nome_maternidade_alta,
+    data_parto,
+    id_desfecho_gestacao,
+    desfecho_gestacao,
+    telefones_gestante
+)
+VALUES
+(
+    '12345678901',
+    'MARIA SALESFORCE',
+    DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
+    '1234567',
+    'MATERNIDADE MARIA AMELIA',
+    CURRENT_DATE('America/Sao_Paulo'),
+    1,
+    'RN Nascido Vivo',
+    [STRUCT(
+        '5521989190512' AS telefone_original,
+        'TESTE' AS origem,
+        '1' AS prioridade,
+        '5521989190512' AS telefone_valido_whatsapp,
+        CAST(NULL AS STRING) AS motivo_invalidacao_telefone
+    )]
+);
+
+-- ===================== 2) QUERY (query original sms_puerperas_d0_explica_pesquisa) =====================
 WITH segmentacao_original AS (
     SELECT
         lpad(cast(cpf as string) , 11, '0') as cpf,
@@ -13,7 +61,7 @@ WITH segmentacao_original AS (
             and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
     ),
     telefones as (
-    select 
+    select
         lpad(cast(cpf as string) , 11, '0') as cpf,
         nome,
         MAX(data_alta_internacao) as data_alta_internacao,
@@ -56,7 +104,7 @@ WITH segmentacao_original AS (
 
     filtra_falhas AS (
     SELECT
-        distinct 
+        distinct
         s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
 
         IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
@@ -116,37 +164,3 @@ WITH segmentacao_original AS (
         ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
     from final
     where celular_disparo is not null
-
-DELETE from `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
-where nome = 'MARIA SALESFORCE'
-
-INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
-(
-    cpf,
-    nome,
-    data_alta_internacao,
-    cnes_maternidade_alta,
-    nome_maternidade_alta,
-    data_parto,
-    id_desfecho_gestacao,
-    desfecho_gestacao,
-    telefones_gestante
-)
-VALUES
-(
-    '12345678901',
-    'MARIA SALESFORCE',
-    DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
-    '1234567',
-    'MATERNIDADE MARIA AMELIA',
-    CURRENT_DATE('America/Sao_Paulo'),
-    1,
-    'RN Nascido Vivo',
-    [STRUCT(
-        '5521989190512' AS telefone_original,
-        'TESTE' AS origem,
-        '1' AS prioridade,
-        '5521989190512' AS telefone_valido_whatsapp,
-        CAST(NULL AS STRING) AS motivo_invalidacao_telefone
-    )]
-);

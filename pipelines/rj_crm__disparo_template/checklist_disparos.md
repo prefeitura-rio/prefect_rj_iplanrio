@@ -20,9 +20,9 @@ Sequência: cobrança → lembrete → agradecimento (cada uma depende do histó
 - Test: `queries_test/pgm_divida_ativa_cobranca__test.sql`
 - Tabelas prod: `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-iplanrio.divida_ativa.contribuinte`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`, `rj-crm-registry.brutos_salesforce.status_disparo`
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
+- [x] Query prod retornou dados
+- [ ] Disparo testado fim a fim (pendente Fernando)
+- [ ] Jornada testada fim a fim (pendente Fernando)
 
 ### Lembrete
 - campaign_name: `pgmdividaativalembreteprodv1`
@@ -31,9 +31,9 @@ Sequência: cobrança → lembrete → agradecimento (cada uma depende do histó
 - Test: `queries_test/pgm_divida_ativa_lembrete__test.sql`
 - Tabelas prod: `rj-iplanrio.divida_ativa.contribuinte`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`, `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
+- [ ] Query prod retornou dados (provavelmente por conta do novo nome das hsms)
+- [x] Disparo testado fim a fim
+- [x] Jornada testada fim a fim
 
 ### Agradecimento
 - campaign_name: `pgmdividaativaconfirmapgtoprodv1`
@@ -42,9 +42,9 @@ Sequência: cobrança → lembrete → agradecimento (cada uma depende do histó
 - Test: `queries_test/pgm_divida_ativa_agradecimento__test.sql`
 - Tabelas prod: `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-iplanrio.divida_ativa.contribuinte`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
 - Tabelas dev: `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`, `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
+- [ ] Query prod retornou dados (provavelmente por conta do novo nome das hsms)
+- [x] Disparo testado fim a fim
+- [x] Jornada testada fim a fim
 
 ---
 
@@ -59,9 +59,9 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Test: `queries_test/sms_puerpera_confirma_agendamento.sql`
 - Tabelas prod: `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
+- [] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
+- [x] Disparo testado fim a fim
+- [x] Jornada testada fim a fim
 
 ### D0 — Explica pesquisa
 - campaign_name: `smspuerperasdisparo25`
@@ -70,9 +70,9 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Test: `queries_test/sms_puerperas_d0_explica_pesquisa.sql`
 - Tabelas prod: `rj-sms.projeto_whatsapp.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
+- [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
+- [x] Disparo testado fim a fim
+- [x] Jornada testada fim a fim
 
 ### Pesquisa 1 — D1/D3/D5/D10
 - campaign_name: `smspuerperasdisparo4v3`
@@ -81,7 +81,7 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Test: `queries_test/sms_puerperas_pesquisa_template__pesquisa1.sql`
 - Tabelas prod: `rj-sms.projeto_whatsapp.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
-- [ ] Query prod retornou dados
+- [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
 - [ ] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
 
@@ -90,7 +90,7 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Queries: mesmas da Pesquisa 1 (prod/dev)
 - Test: `queries_test/sms_puerperas_pesquisa_template__pesquisa4.sql`
 - Tabelas prod/dev: idem Pesquisa 1
-- [ ] Query prod retornou dados
+- [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
 - [ ] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
 
@@ -99,34 +99,16 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Queries: mesmas da Pesquisa 1 (prod/dev)
 - Test: `queries_test/sms_puerperas_pesquisa_template__pesquisa5.sql`
 - Tabelas prod/dev: idem Pesquisa 1
-- [ ] Query prod retornou dados
+- [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
 - [ ] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
 
-### Pesquisa 3 — D13/D16/D19 (active: false)
-- campaign_name: `smspuerperasdisparo9`
-- Queries: mesmas da Pesquisa 1 (prod/dev)
-- Test: — (sem arquivo)
-- Tabelas prod/dev: idem Pesquisa 1
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
-
-### Pesquisa 6 — D34 (active: false)
-- campaign_name: `smspuerperasdisparo14`
-- Queries: mesmas da Pesquisa 1 (prod/dev)
-- Test: — (sem arquivo)
-- Tabelas prod/dev: idem Pesquisa 1
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
-
-### Pesquisa 7 — D40 (active: false)
+### Pesquisa 7 — D40 
 - campaign_name: `smspuerperasdisparo152`
 - Queries: mesmas da Pesquisa 1 (prod/dev)
 - Test: `queries_test/sms_puerperas_pesquisa_template__pesquisa7.sql`
 - Tabelas prod/dev: idem Pesquisa 1
-- [ ] Query prod retornou dados
+- [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
 - [ ] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
 
@@ -141,6 +123,6 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Test: `queries_test/cadunico_confirma_agendamento__test.sql`
 - Tabelas prod: `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`, `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-crm-registry.intermediario_rmi_telefones.int_telefone`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`, `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
+- [] Query prod retornou dados (vale conferir)
+- [x] Disparo testado fim a fim
+- [x] Jornada testada fim a fim

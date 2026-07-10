@@ -1,3 +1,47 @@
+-- Teste da query queries_dev/sms_puerpera_confirma_agendamento.sql (mirror de queries/sms_puerpera_confirma_agendamento.sql)
+-- Executa direto no BigQuery. Passo 1 limpa dados de teste anteriores; passo 2 insere um
+-- agendamento de visita à maternidade MARIA AMELIA marcado para D+1 (exigido pelo filtro de
+-- data da query); passo 3 é a query em si.
+
+-- ===================== 0) LIMPA DADOS DE TESTE ANTERIORES =====================
+DELETE from `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`
+where nome = 'MARIA SALESFORCE';
+
+-- ===================== 1) INSERT: agendamento de visita à maternidade (segmentação) =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`
+(
+    id_agendamento_gestante,
+    nome,
+    cpf,
+    cnes_maternidade_agendada,
+    nome_maternidade_agendada,
+    data_hora_criacao_agendamento,
+    data_hora_agendamento_visita_maternidade,
+    telefones_gestante,
+    nome_acompanhante,
+    telefone_acompanhante
+)
+VALUES
+(
+    'TESTE-001',
+    'MARIA SALESFORCE',
+    '12345678901',
+    '1234567',
+    'MATERNIDADE MARIA AMELIA',
+    DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
+    DATETIME(DATE_ADD(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY), TIME '21:00:00'),
+    [STRUCT(
+        '5521989190512' AS telefone_original,
+        'TESTE' AS origem,
+        '1' AS prioridade,
+        '5521989190512' AS telefone_valido_whatsapp,
+        CAST(NULL AS STRING) AS motivo_invalidacao_telefone
+    )],
+    CAST(NULL AS STRING),
+    CAST(NULL AS STRUCT<telefone_original STRING, telefone_valido_whatsapp STRING, motivo_invalidacao_telefone STRING>)
+);
+
+-- ===================== 2) QUERY (query original sms_puerpera_confirma_agendamento) =====================
 WITH segmentacao_original AS (
     SELECT
         lpad(cast(cpf as string) , 11, '0') as cpf,
@@ -35,7 +79,7 @@ WITH segmentacao_original AS (
             and obito.indicador is False
             and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')
             ),
-    enriquece_rmi as 
+    enriquece_rmi as
     (
     select
     segmentacao_original.*,
@@ -59,7 +103,7 @@ WITH segmentacao_original AS (
 
     filtra_falhas AS (
     SELECT
-        distinct 
+        distinct
         s.* EXCEPT(celular_disparo_1, celular_disparo_2, celular_disparo_3, celular_disparo_rmi),
 
         IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,
@@ -124,39 +168,3 @@ WITH segmentacao_original AS (
         ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
     from final
     where celular_disparo is not null
-
-DELETE from `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`
-where nome = 'MARIA SALESFORCE'
-
-INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`
-(
-    id_agendamento_gestante,
-    nome,
-    cpf,
-    cnes_maternidade_agendada,
-    nome_maternidade_agendada,
-    data_hora_criacao_agendamento,
-    data_hora_agendamento_visita_maternidade,
-    telefones_gestante,
-    nome_acompanhante,
-    telefone_acompanhante
-)
-VALUES
-(
-    'TESTE-001',
-    'MARIA SALESFORCE',
-    '12345678901',
-    '1234567',
-    'MATERNIDADE MARIA AMELIA',
-    DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
-    DATETIME(DATE_ADD(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY), TIME '21:00:00'),
-    [STRUCT(
-        '5521989190512' AS telefone_original,
-        'TESTE' AS origem,
-        '1' AS prioridade,
-        '5521989190512' AS telefone_valido_whatsapp,
-        CAST(NULL AS STRING) AS motivo_invalidacao_telefone
-    )],
-    CAST(NULL AS STRING),
-    CAST(NULL AS STRUCT<telefone_original STRING, telefone_valido_whatsapp STRING, motivo_invalidacao_telefone STRING>)
-);
