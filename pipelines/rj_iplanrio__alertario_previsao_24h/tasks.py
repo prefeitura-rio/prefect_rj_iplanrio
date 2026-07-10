@@ -4,6 +4,7 @@ Tasks para pipeline AlertaRio Previsão 24h
 """
 
 import hashlib
+import uuid
 from defusedxml import ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -77,7 +78,6 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
         for previsao in root.findall("previsao"):
             previsoes.append({
                 "ceu": previsao.get("ceu"),
-                "condicaoIcon": previsao.get("condicaoIcon"),
                 "datePeriodo": previsao.get("datePeriodo"),
                 "dirVento": previsao.get("dirVento"),
                 "periodo": previsao.get("periodo"),
@@ -100,13 +100,16 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
         temperaturas = []
         temperatura_elem = root.find("Temperatura")
         if temperatura_elem is not None:
-            data_temp = temperatura_elem.get("data")
+            # Extrair data da temperatura do atributo "data" do XML
+            data_temperatura_str = temperatura_elem.get("data")
+            data_temperatura = data_temperatura_str if data_temperatura_str else create_date.date().isoformat()
+
             for zona in temperatura_elem.findall("Zona"):
                 temperaturas.append({
                     "zona": zona.get("zona"),
                     "temp_maxima": float(zona.get("maxima")) if zona.get("maxima") else None,
                     "temp_minima": float(zona.get("minima")) if zona.get("minima") else None,
-                    "data": data_temp,
+                    "data_temperatura": data_temperatura,
                 })
 
         # Extrair tábua de marés
@@ -120,7 +123,11 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
                     "altura": float(tabua.get("altura")) if tabua.get("altura") else None,
                 })
 
+        # Gerar UUID único para esta execução
+        id_execucao = str(uuid.uuid4())
+
         parsed_data = {
+            "id_execucao": id_execucao,
             "create_date": create_date,
             "previsoes": previsoes,
             "quadro_sinotico": quadro_sinotico,
@@ -140,76 +147,38 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
 
 
 @task
-def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
+def create_dim_quadro_sinotico_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """
-    Cria DataFrame da tabela fato previsao_diaria com agregações
+    Cria DataFrame da dimensão dim_quadro_sinotico
+    Uma única linha por execução contendo o quadro sinótico
 
     Args:
         parsed_data: Dados estruturados do XML
 
     Returns:
-        DataFrame com dados da tabela previsao_diaria
+        DataFrame com dados da tabela dim_quadro_sinotico
     """
-    log("Criando DataFrame previsao_diaria")
+    log("Criando DataFrame dim_quadro_sinotico")
 
+    id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
-    previsoes = parsed_data["previsoes"]
-    temperaturas = parsed_data["temperaturas"]
     quadro_sinotico = parsed_data["quadro_sinotico"]
 
-    # Agrupar previsões por data para calcular agregações
-    previsoes_por_data = {}
-    for prev in previsoes:
-        data = prev["datePeriodo"]
-        if data not in previsoes_por_data:
-            previsoes_por_data[data] = []
-        previsoes_por_data[data].append(prev)
+    now = datetime.now()
+    data_execucao = now.date()
+    hora_execucao = now.time()
 
-    # Criar registros para cada data
-    registros = []
-    for data_referencia, previsoes_dia in previsoes_por_data.items():
-        # Gerar id_previsao único usando hash MD5
-        id_string = f"{create_date.isoformat()}_{data_referencia}"
-        id_previsao = hashlib.md5(id_string.encode()).hexdigest()
+    registro = {
+        "id_execucao": id_execucao,
+        "data_execucao": data_execucao,
+        "hora_execucao": hora_execucao,
+        "sinotico": quadro_sinotico,
+        "data_alertario": create_date,
+        "data_particao": data_execucao,
+    }
 
-        # Calcular temp_min_geral e temp_max_geral apenas com temperaturas do dia
-        temperaturas_do_dia = [
-            t for t in temperaturas if t.get("data") == data_referencia
-        ]
-        if not temperaturas_do_dia:
-            log(
-                f"Sem bloco de temperatura para data {data_referencia}; "
-                "omitindo linha na previsao_diaria."
-            )
-            continue
-        temps_minimas = [
-            t["temp_minima"]
-            for t in temperaturas_do_dia
-            if t.get("temp_minima") is not None
-        ]
-        temps_maximas = [
-            t["temp_maxima"]
-            for t in temperaturas_do_dia
-            if t.get("temp_maxima") is not None
-        ]
-
-        temp_min_geral = min(temps_minimas) if temps_minimas else None
-        temp_max_geral = max(temps_maximas) if temps_maximas else None
-
-        data_referencia_date = datetime.strptime(data_referencia, "%Y-%m-%d").date()
-
-        registros.append({
-            "id_previsao": id_previsao,
-            "create_date": create_date,
-            "data_referencia": data_referencia_date,
-            "sinotico": quadro_sinotico if data_referencia_date == create_date.date() else None,
-            "temp_min_geral": temp_min_geral,
-            "temp_max_geral": temp_max_geral,
-            "data_particao": create_date.date(),
-        })
-
-    df = pd.DataFrame(registros)
-    log(f"DataFrame previsao_diaria criado com {len(df)} registros")
+    df = pd.DataFrame([registro])
+    log(f"DataFrame dim_quadro_sinotico criado com {len(df)} registro")
 
     return df
 
@@ -218,6 +187,7 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
 def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """
     Cria DataFrame da dimensão dim_previsao_periodo
+    Cada linha = uma previsão do XML
 
     Args:
         parsed_data: Dados estruturados do XML
@@ -227,27 +197,29 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """
     log("Criando DataFrame dim_previsao_periodo")
 
+    id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
     previsoes = parsed_data["previsoes"]
 
+    now = datetime.now()
+    data_execucao = now.date()
+    hora_execucao = now.time()
+
     registros = []
     for prev in previsoes:
-        data_periodo = prev["datePeriodo"]
-
-        # Gerar id_previsao usando hash MD5 (mesmo da tabela fato)
-        id_string = f"{create_date.isoformat()}_{data_periodo}"
-        id_previsao = hashlib.md5(id_string.encode()).hexdigest()
-
         registros.append({
-            "id_previsao": id_previsao,
-            "data_periodo": datetime.strptime(data_periodo, "%Y-%m-%d").date(),
+            "id_execucao": id_execucao,
+            "data_execucao": data_execucao,
+            "hora_execucao": hora_execucao,
+            "data_periodo": datetime.strptime(prev["datePeriodo"], "%Y-%m-%d").date(),
             "periodo": prev["periodo"],
             "ceu": prev["ceu"],
             "precipitacao": prev["precipitacao"],
             "dir_vento": prev["dirVento"],
             "vel_vento": prev["velVento"],
             "temperatura": prev["temperatura"],
-            "data_particao": create_date.date(),
+            "data_alertario": create_date,
+            "data_particao": data_execucao,
         })
 
     df = pd.DataFrame(registros)
@@ -260,6 +232,7 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
 def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """
     Cria DataFrame da dimensão dim_temperatura_zona
+    Cada linha = uma zona do XML
 
     Args:
         parsed_data: Dados estruturados do XML
@@ -269,32 +242,26 @@ def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """
     log("Criando DataFrame dim_temperatura_zona")
 
+    id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
     temperaturas = parsed_data["temperaturas"]
 
+    now = datetime.now()
+    data_execucao = now.date()
+    hora_execucao = now.time()
+
     registros = []
     for temp in temperaturas:
-        # Para temperatura, usar a data de referência da própria temperatura (se disponível)
-        # ou usar a data de criação
-        data_ref = temp.get("data")
-        if data_ref:
-            try:
-                data_ref_parsed = datetime.strptime(data_ref, "%Y-%m-%d").date()
-            except ValueError:
-                data_ref_parsed = create_date.date()
-        else:
-            data_ref_parsed = create_date.date()
-
-        # Gerar id_previsao usando hash MD5
-        id_string = f"{create_date.isoformat()}_{data_ref_parsed.isoformat()}"
-        id_previsao = hashlib.md5(id_string.encode()).hexdigest()
-
         registros.append({
-            "id_previsao": id_previsao,
+            "id_execucao": id_execucao,
+            "data_execucao": data_execucao,
+            "hora_execucao": hora_execucao,
             "zona": temp["zona"],
             "temp_minima": temp["temp_minima"],
             "temp_maxima": temp["temp_maxima"],
-            "data_particao": create_date.date(),
+            "data_temperatura": temp["data_temperatura"],
+            "data_alertario": create_date,
+            "data_particao": data_execucao,
         })
 
     df = pd.DataFrame(registros)
@@ -307,6 +274,7 @@ def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
 def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """
     Cria DataFrame da dimensão dim_mares
+    Cada linha = uma tábua de maré do XML
 
     Args:
         parsed_data: Dados estruturados do XML
@@ -316,15 +284,16 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """
     log("Criando DataFrame dim_mares")
 
+    id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
     mares = parsed_data["mares"]
 
+    now = datetime.now()
+    data_execucao = now.date()
+    hora_execucao = now.time()
+
     registros = []
     for mare in mares:
-        # Gerar id_previsao baseado na data de criação
-        id_string = f"{create_date.isoformat()}"
-        id_previsao = hashlib.md5(id_string.encode()).hexdigest()
-
         # Parse do horário da maré
         horario_str = mare.get("horario")
         if horario_str:
@@ -346,11 +315,14 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
             data_hora = None
 
         registros.append({
-            "id_previsao": id_previsao,
+            "id_execucao": id_execucao,
+            "data_execucao": data_execucao,
+            "hora_execucao": hora_execucao,
             "data_hora": data_hora,
             "elevacao": mare["elevacao"],
             "altura": mare["altura"],
-            "data_particao": create_date.date(),
+            "data_alertario": create_date,
+            "data_particao": data_execucao,
         })
 
     df = pd.DataFrame(registros)

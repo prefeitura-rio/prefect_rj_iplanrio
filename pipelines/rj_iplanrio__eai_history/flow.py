@@ -11,7 +11,10 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_iplanrio__eai_history.tasks import fetch_history_data, get_last_update
+from pipelines.rj_iplanrio__eai_history.tasks import (
+    fetch_history_data,
+    get_last_update,
+)
 
 
 @flow(log_prints=True)
@@ -23,10 +26,13 @@ def rj_iplanrio__eai_history(  # noqa
     table_id: str = "history",
     max_user_save_limit: int = 100,
     environment: str = "staging",
-    dbt_select: str = "--select raw_eai_logs_history",
+    dbt_select: str = "raw_eai_logs_history",
+    skip_bd_credentials: bool = False,
+    sql_limit: Optional[int] = None,
 ):
     rename_current_flow_run_task(new_name=environment)
-    inject_bd_credentials_task()
+    if not skip_bd_credentials:
+        inject_bd_credentials_task()
 
     last_update_task = get_last_update(
         dataset_id=dataset_id,
@@ -41,12 +47,19 @@ def rj_iplanrio__eai_history(  # noqa
         use_whatsapp_format=use_whatsapp_format,
         max_user_save_limit=max_user_save_limit,
         environment=environment,
+        sql_limit=sql_limit,
     )
-    create_table_and_upload_to_gcs_task(
-        data_path=data_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        biglake_table=True,
-        dump_mode="append",
-    )
-    execute_dbt_task(select=dbt_select, target="prod")
+
+    if data_path:
+        create_table_and_upload_to_gcs_task(
+            data_path=data_path,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            biglake_table=True,
+            dump_mode="append",
+        )
+        execute_dbt_task(select=dbt_select, target="prod")
+
+
+if __name__ == "__main__":
+    rj_iplanrio__eai_history()

@@ -13,11 +13,13 @@ from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # p
 from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
+from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
 
 from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.dispatch import (
+from pipelines.rj_crm__disparo_template.utils.dispatch import (
     check_api_status,
+    check_flow_status,
     create_dispatch_dfr,
     create_dispatch_payload,
     dispatch,
@@ -27,18 +29,43 @@ from pipelines.rj_smas__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.tasks import (
+from pipelines.rj_crm__disparo_template.utils.tasks import (
     access_api,
     create_date_partitions,
     skip_flow_if_empty,
 )
 # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_template.utils.discord import (
+from pipelines.rj_crm__disparo_template.utils.discord import (
+    send_discord_notification,
+    send_dispatch_no_destinations_found,
     send_dispatch_result_notification,
     send_dispatch_success_notification,
 )
 
-@flow(log_prints=True)
+def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
+    """
+    Sends a Discord notification when a flow run fails.
+    """
+    webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+    if not webhook_url:
+        print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set on Infisical. Cannot send notification.")
+        return
+
+    campaign_name = flow_run.parameters.get("campaign_name", "N/A")
+    id_hsm = flow_run.parameters.get("id_hsm", "N/A")
+    cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
+
+    message = f"""
+    Prefect flow run failed!
+    📋 **Campanha:** {campaign_name}
+    🆔 **Template ID:** {id_hsm}
+    💰 **Centro de Custo:** {cost_center_id}
+    ⚠️ **Mensagem:** {state.message}
+    """
+    send_discord_notification(webhook_url, message)
+
+
+@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
 def rj_smas__disparo_cadunico(
     # Parâmetros opcionais para override manual na UI.
     id_hsm: int | None = None,
@@ -56,6 +83,7 @@ def rj_smas__disparo_cadunico(
     infisical_secret_path: str = "/wetalkie",
     whitelist_percentage: int = 30,
     whitelist_environment: str = "staging",
+    flow_environment: str = "staging",
 ):
     dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
     table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
@@ -91,6 +119,16 @@ def rj_smas__disparo_cadunico(
 
     api_status = check_api_status(api)
 
+    flow_status = check_flow_status(
+        flow_environment=flow_environment,
+        id_hsm=id_hsm,
+        billing_project_id=billing_project_id,
+        bucket_name=billing_project_id,
+    )
+    if flow_status is None:
+        print("Ending flow due to inactive status.")
+        return  # flow termina aqui, nada downstream é agendado
+
     query_replacements = {
         "id_hsm_placeholder": id_hsm,
         "days_ahead_placeholder": days_ahead,
@@ -112,6 +150,14 @@ def rj_smas__disparo_cadunico(
         data=destinations_result,
         message="No destinations found from query. Skipping flow execution.",
     )
+    if validated_destinations is None:
+        send_dispatch_no_destinations_found(
+            id_hsm,
+            campaign_name,
+            cost_center_id,
+            test_mode
+        )
+        return  # flow termina aqui, nada downstream é agendado
 
     unique_destinations = remove_duplicate_phones(validated_destinations)
 
@@ -172,6 +218,7 @@ def rj_smas__disparo_cadunico(
                 unique_destinations[0] if unique_destinations else None
             ),
             test_mode=test_mode,
+            whitelist_percentage=whitelist_percentage,
         )
 
         dfr = create_dispatch_dfr(
@@ -216,7 +263,7 @@ def rj_smas__disparo_cadunico(
         # Wait 15 minutes before querying results
         print("⚠️  Waiting 15 minutes before checking dispatch results...")
         time.sleep(15 * 60)
-
+        print("force deploy")
         # Send results notification with BigQuery data
         send_dispatch_result_notification(
             total_dispatches=len(unique_destinations),
@@ -227,5 +274,5 @@ def rj_smas__disparo_cadunico(
             total_batches=total_batches,
             test_mode=test_mode,
         )
-# force deploy####
-#forçando deploy
+
+        print("force deploy")

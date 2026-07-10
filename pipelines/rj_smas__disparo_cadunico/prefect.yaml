@@ -42,10 +42,10 @@ deployments:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       infisical_secret_path: /wetalkie
-      whitelist_percentage: 30
+      whitelist_percentage: 100
       whitelist_environment: "staging"
   - name: rj-smas--disparo-cadunico--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -65,11 +65,11 @@ deployments:
       cost_center_id: 71
       chunk_size: 1000
       dataset_id: brutos_wetalkie
-      table_id: disparos
+      table_id: disparos_efetuados
       dump_mode: append
       infisical_secret_path: /wetalkie
-      whitelist_percentage: 30
-      whitelist_environment: "staging"
+      whitelist_percentage: 100
+      whitelist_environment: "production"
     # schedules:
     #   - interval: 86400
     #     anchor_date: "2021-01-01T09:00:00"

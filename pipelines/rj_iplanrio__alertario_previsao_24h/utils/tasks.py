@@ -25,6 +25,13 @@ def create_date_partitions(
     """
 
     dataframe = dataframe.copy()
+
+    # Verificar se DataFrame está vazio
+    if dataframe.empty:
+        log(f"AVISO: DataFrame vazio. Nenhum arquivo será criado em {root_folder}")
+        os.makedirs(root_folder, exist_ok=True)
+        return root_folder
+
     partition_aux_column = "_data_particao_path"
 
     if partition_column is None:

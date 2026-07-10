@@ -33,7 +33,7 @@ class PicLembreteConstants(Enum):
     # Modo de teste - ativar por padrão para segurança
     PIC_TEST_MODE = True
 
-    # Query principal do PIC lembrete com saída em JSON (destination_data)
+    # Query principal do PIC com saída em JSON (destination_data)
     PIC_QUERY = r"""
         WITH config AS (
         select date('{event_date_placeholder}') AS target_date
@@ -43,7 +43,7 @@ class PicLembreteConstants(Enum):
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-          FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+          FROM `rj-iplanrio.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
         telefones_alternativos_rmi AS (
@@ -178,7 +178,7 @@ class PicLembreteConstants(Enum):
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-          FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+          FROM `rj-iplanrio.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
         telefones_alternativos_rmi AS (
