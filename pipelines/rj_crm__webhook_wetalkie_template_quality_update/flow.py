@@ -36,6 +36,9 @@ def rj_crm__webhook_wetalkie_template_quality_update(
             raw_prev_score = row.get("content_previous_quality_score", "UNKNOWN")
             raw_new_score = row.get("content_new_quality_score", "UNKNOWN")
 
+            if raw_new_score not in ["YELLOW", "RED"]:
+                continue
+
             content_previous_quality_score = quality_map.get(raw_prev_score, "❓ Desconhecido")
             content_new_quality_score = quality_map.get(raw_new_score, "❓ Desconhecido")
 

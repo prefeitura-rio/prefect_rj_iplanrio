@@ -2,3 +2,9 @@
 name = "rj_iplanrio__vigia_urbano"
 version = "0.1.0"
 description = "Pipeline vigia_urbano da secretaria iplanrio"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

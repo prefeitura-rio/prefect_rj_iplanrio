@@ -4,6 +4,8 @@ from iplanrio.pipelines_utils.dbt import execute_dbt_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from prefect.deployments import run_deployment
+# from pipelines.rj_smas__disparo_cadunico.flow import rj_smas__disparo_cadunico
 
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
     DatametricaConstants,
@@ -105,3 +107,31 @@ def rj_smas__api_datametrica_agendamentos(
     if materialize_after_dump:
         dbt_select = "raw_cadunico_agendamentos"
         execute_dbt_task(select=dbt_select, target="prod")
+    
+    print("\n\n******* Triggering cadunico dispatch flow... *******")
+
+    cadunico_params = {
+        "query": None,
+        "id_hsm": 101,
+        "table_id": "disparos_efetuados",
+        "dump_mode": "append",
+        "test_mode": None,
+        "chunk_size": 1000,
+        "dataset_id": "brutos_wetalkie",
+        "days_ahead": "2",
+        "campaign_name": "smas-cadunico-prod",
+        "sleep_minutes": 2,
+        "cost_center_id": 71,
+        "flow_environment": "production",
+        "query_processor_name": "skip_weekends",
+        "whitelist_percentage": 0,
+        "infisical_secret_path": "/wetalkie",
+        "whitelist_environment": "production",
+    }
+    run_deployment(
+        name="rj-smas--disparo-cadunico/rj-smas--disparo-cadunico--prod",
+        parameters=cadunico_params,
+        timeout=0,
+    )
+    # rj_smas__disparo_cadunico(**cadunico_params)
+    # run_deployment(name="rj-smas--disparo-cadunico--prod", timeout=0)
