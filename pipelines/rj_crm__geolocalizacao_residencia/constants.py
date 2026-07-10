@@ -27,7 +27,7 @@ class GeolocalizacaoConstants(Enum):
     RETURN_ORIGINAL_COLS = True
 
     # Geocoding configuration
-    MAX_CONCURRENT_NOMINATIM = 100
+    MAX_CONCURRENT_NOMINATIM = 500
     SLEEP_TIME = 1.1
     USE_EXPONENTIAL_BACKOFF = True
 
@@ -82,5 +82,5 @@ FROM enderecos_rmi
 LEFT JOIN enderecos_geolocalizados USING(logradouro_tratado, numero_porta, bairro)
 WHERE enderecos_geolocalizados.logradouro_tratado IS NULL
 ORDER BY RAND()
-LIMIT 500
+LIMIT 10000
     """

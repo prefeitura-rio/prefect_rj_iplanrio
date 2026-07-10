@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 # /// script
+# requires-python = ">=3.13"
 # dependencies = [
-#     "prefect-docker>=0.6.5",
-#     "prefect>=3.4.3",
-#     "pyyaml>=6.0.2",
-#     "rich>=14.1.0",
-#     "tenacity>=9.1.0",
-#     "uvloop>=0.21.0"
+#     "prefect-docker>=0.7.1",
+#     "prefect>=3.4.9",
+#     "pyyaml>=6.0.3",
+#     "rich>=14.3.2",
+#     "tenacity>=9.1.4",
+#     "uvloop>=0.22.1"
 # ]
 # ///
 
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from itertools import batched
 from os import environ
 from pathlib import Path
-from typing import Callable, TypedDict
+from typing import Callable, TypedDict, cast
 
 import uvloop
 from rich.console import Console
@@ -132,7 +132,7 @@ class PrefectYaml(TypedDict, total=False):
 async def get_deployments(prefect_yaml: Path) -> list[str]:
     """Extract deployment names from the given `prefect.yaml` file."""
     try:
-        content: PrefectYaml = safe_load(prefect_yaml.read_text()) or {}
+        content = cast(PrefectYaml, safe_load(prefect_yaml.read_text()) or {})
     except (OSError, IOError) as e:
         logging.error(f"Failed to read `{prefect_yaml}`: {e}")
         return []

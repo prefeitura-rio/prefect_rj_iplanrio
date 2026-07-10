@@ -3,6 +3,7 @@ name = "rj_smas__disparo_cadunico"
 version = "0.1.0"
 description = "Pipeline disparo cadunico da secretaria smas"
 dependencies = [
+    "prefect_rj_iplanrio",
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",
     "prefect==3.4.9",
@@ -23,3 +24,6 @@ dependencies = [
     "discord-py==2.5.2",
     "pydantic>=2.0.0",
 ]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
