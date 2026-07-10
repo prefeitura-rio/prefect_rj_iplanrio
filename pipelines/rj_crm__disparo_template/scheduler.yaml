@@ -7,8 +7,8 @@ x-templates:
             nome,
             data_alta_internacao,
             telefones_gestante
-            -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
-        from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+        FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
+        -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
         WHERE cpf is not null
             and cpf != '00000000000'
         AND CURRENT_DATE('America/Sao_Paulo') in
@@ -143,7 +143,7 @@ x-templates:
                     data_alta_internacao as CC_WT_DATA_ALTA,
                     date_diff(current_date("America/Sao_Paulo"), data_alta_internacao, day) as CC_WT_DIAS_DESDE_ALTA
                 ) AS vars,
-                ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others,
                 CAST(cpf AS STRING) AS externalId
                 )
             ) AS destination_data
@@ -246,6 +246,8 @@ schedules:
                 WHEN t1.id_subtipo = '100' THEN 'Desobstrução de ramais e ralos'
                 WHEN t1.id_subtipo = '1316' THEN 'Controle de roedores e caramujos africanos'
                 WHEN t1.id_subtipo = '1279' THEN 'Capina em logradouro'
+                WHEN t1.id_subtipo = '5899' THEN 'Informação sobre Fiscalização de comércio ambulante'
+                WHEN t1.id_subtipo = '3366' THEN 'Comércio Ambulante'
                 ELSE t1.subtipo
                 END AS subtipo_tratado,
 
@@ -277,13 +279,20 @@ schedules:
                 ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)
             WHERE 1=1
                 AND t1.data_inicio >= '2025-01-01 00:00:00.000' -- Considera somente chamados a partir de Jan/25
-                AND t1.id_subtipo IN (
-                '2966','1325','5799','78','100','1298','1319','1316','1274','1242',
-                '1287','5071','1279','2178','3139','114','5841','1101'
-                ) -- 18 serviços selecionados pela SUBTD
+                                AND (
+                    -- Aceitam qualquer categoria
+                    t1.id_subtipo IN ('5899', '3366') 
+                    OR 
+                    -- Exigem ser "Serviço"
+                    (
+                    t1.id_subtipo IN (
+                    '2966', '1325', '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071', '1279', '2178', '3139', '114', '5841', '1101'
+                    ) 
+                    AND t1.categoria IN ("Serviço")
+                    )
+                ) --Considera somente 20 serviços selecionados pela SUBTD
                 AND t1.data_fim IS NOT NULL -- Somente chamados fechados
                 AND t1.id_bairro IS NOT NULL -- Somente chamados com bairro classificado
-                AND t1.categoria IN ('Serviço') -- Desconsidera ouvidoria
                 AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
                 AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
                 AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
@@ -346,7 +355,7 @@ schedules:
                 CAST(cpf AS STRING) AS externalId
                 )
             ) AS destination_data
-            FROM dados_finais
+            FROM dados_finais;
 
   # Daily schedule para flow cvl-pesquisa1746-prod
   - interval: 86400
@@ -443,6 +452,8 @@ schedules:
                 WHEN t1.id_subtipo = '100' THEN 'Desobstrução de ramais e ralos'
                 WHEN t1.id_subtipo = '1316' THEN 'Controle de roedores e caramujos africanos'
                 WHEN t1.id_subtipo = '1279' THEN 'Capina em logradouro'
+                WHEN t1.id_subtipo = '5899' THEN 'Informação sobre Fiscalização de comércio ambulante'
+                WHEN t1.id_subtipo = '3366' THEN 'Comércio Ambulante'
                 ELSE t1.subtipo
                 END AS subtipo_tratado,
 
@@ -474,13 +485,19 @@ schedules:
                 ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)
             WHERE 1=1
                 AND t1.data_inicio >= '2025-01-01 00:00:00.000' -- Considera somente chamados a partir de Jan/25
-                AND t1.id_subtipo IN (
-                '2966','1325','5799','78','100','1298','1319','1316','1274','1242',
-                '1287','5071','1279','2178','3139','114','5841','1101'
-                ) -- 18 serviços selecionados pela SUBTD
+                AND (
+                    -- Aceitam qualquer categoria
+                    t1.id_subtipo IN ('5899', '3366') 
+                    OR 
+                    -- Exigem ser "Serviço"
+                    (
+                    t1.id_subtipo IN (
+                    '2966', '1325', '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071', '1279', '2178', '3139', '114', '5841', '1101' ) 
+                    AND t1.categoria IN ("Serviço")
+                    )
+                ) --Considera somente 20 serviços selecionados pela SUBTD
                 AND t1.data_fim IS NOT NULL -- Somente chamados fechados
                 AND t1.id_bairro IS NOT NULL -- Somente chamados com bairro classificado
-                AND t1.categoria IN ('Serviço') -- Desconsidera ouvidoria
                 AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
                 AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
                 AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
@@ -553,7 +570,7 @@ schedules:
     flow_run_name: pgm-divida-ativa
     parameters:
       id_hsm: 239
-      query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 200}
+      query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 300}
       campaign_name: pgm-divida-ativa-prod-v2
       cost_center_id: 71
       chunk_size: 1000
@@ -577,7 +594,7 @@ schedules:
         WITH celulares_validos AS (
         SELECT
             cpf,
-            COALESCE(nome_social, nome) AS nome_rmi,
+            COALESCE(if(nome_social = "", null, nome_social), nome) AS nome_rmi,
             pf.obito.indicador AS obito_indicador,
             nascimento.data AS dt_nasc,
             DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), nascimento.data, YEAR) AS idade,
@@ -587,18 +604,21 @@ schedules:
             CASE
             WHEN pf.telefone.principal.estrategia_envio = "ENVIAR" THEN 0
             WHEN pf.telefone.principal.estrategia_envio = "TESTAR" THEN 1
-            ELSE 2
+            WHEN pf.telefone.principal.estrategia_envio = "EVITAR" THEN 2
+            ELSE 3
             END AS phone_priority,
             pf.telefone.principal.estrategia_envio,
             pf.telefone.principal.qualidade
         FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
         WHERE pf.telefone.principal.qualidade = 'VALIDO'
             AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
+            AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR", "EVITAR")
             AND pf.telefone.principal.tipo = "CELULAR"
             AND pf.telefone.principal.valor IS NOT NULL
             AND pf.menor_idade IS FALSE
             AND pf.obito.indicador IS FALSE
             AND nascimento.data IS NOT NULL
+            AND EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) NOT IN (1, 7)
         ),
 
         filtra_disparados AS (
@@ -616,7 +636,7 @@ schedules:
         -- filtra PF e nome antes do unnest
         SELECT
             LPAD(CAST(p.cpf_cnpj AS STRING), 11, '0') AS cpf,
-            nome,
+            coalesce(nome_rmi, nome) as nome,
             cdas_associadas,
             tipo_pessoa,
             saldo_devido_cdas,
@@ -695,10 +715,10 @@ schedules:
         elegiveis_divida_ativa AS (
         SELECT *
         FROM per_cpf
-        WHERE soma_divida_total <= 3500
+        WHERE soma_divida_total <= 6000
             AND esta_pagando = FALSE
-            AND idade < 60
-            AND dt_ultima_cda >= DATE_SUB(CURRENT_DATE(), INTERVAL 12 MONTH)
+            AND idade <= 80
+            AND dt_ultima_cda >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 MONTH)
         ),
 
         -- ===================== 1.4) RANDOMIZAÇÃO DETERMINÍSTICA =====================
@@ -882,7 +902,7 @@ schedules:
             ),
             remove_optout as (
                 select remove_duplicados.*,
-                coalesce(pf.nome_social, pf.nome) as nome,
+                COALESCE(if(pf.nome_social = "", null, pf.nome_social), pf.nome) AS nome,
                 from remove_duplicados
                 left join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
                 where pf.telefone.principal.indicador_optout = false
@@ -1085,8 +1105,7 @@ schedules:
         where rn=1
 
   # Disparo SMS Puérperas Confirmação agendamento
-  - interval: 86400
-    anchor_date: "2021-01-01T15:00:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerpera-confirma-agendamento
@@ -1125,8 +1144,8 @@ schedules:
                     MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
                     MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_3
 
-                -- FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade`,
-                FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
+                FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade`,
+                -- FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,
                 UNNEST(telefones_gestante) AS telefone
 
                 WHERE cpf is not null
@@ -1253,7 +1272,7 @@ schedules:
                                 TIME(data_hora_agendamento_visita_maternidade) as HORA,
                                 time(data_hora_agendamento_visita_maternidade) as CC_WT_HORA
                             ) AS vars,
-                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others,
                             CAST(cpf AS STRING) AS externalId
                             )
                         ) AS destination_data
@@ -1261,8 +1280,7 @@ schedules:
                 where celular_disparo is not null
 
   # Disparo SMS Puérperas D0 - Explicação do processo
-  - interval: 3600
-    anchor_date: "2021-01-01T15:10:00"
+  - cron: "0 14 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d0
@@ -1296,12 +1314,12 @@ schedules:
                     nome,
                     data_alta_internacao,
                     telefones_gestante,
-                    -- FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
-                from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+                FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
+                -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
                 WHERE cpf is not null
                     and cpf != '00000000000'
                 AND DATE(data_alta_internacao) between
-                        DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY) and CURRENT_DATE('America/Sao_Paulo')
+                        DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 2 DAY) and CURRENT_DATE('America/Sao_Paulo')
                         and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
                 ),
                 telefones as (
@@ -1418,7 +1436,7 @@ schedules:
                                 ) AS CC_WT_NOME,
                                 cpf AS CC_WT_CPF_CIDADAO
                             ) AS vars,
-                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL) AS others,
+                            ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others,
                             CAST(cpf AS STRING) AS externalId
                             )
                         ) AS destination_data
@@ -1426,8 +1444,7 @@ schedules:
                 where celular_disparo is not null
 
   # Disparo SMS Puérperas D1, D3, D5 e D10 - Pesquisa 1
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d1-d3-d5-d10
@@ -1466,8 +1483,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D7 - Pesquisa 2
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d7
@@ -1502,8 +1518,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d13-d16-d19
@@ -1541,8 +1556,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D22 - Pesquisa 4
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d22
@@ -1577,8 +1591,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D25 e D28 - Pesquisa 5
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d25-d28
@@ -1615,8 +1628,7 @@ schedules:
         query: *puerperas_query_template
 
   # Disparo SMS Puérperas D34 - Pesquisa 6
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d34
@@ -1651,8 +1663,7 @@ schedules:
         query: *puerperas_query_template
 
  # Disparo SMS Puérperas D40 - Pesquisa 7
-  - interval: 86400
-    anchor_date: "2021-01-01T15:20:00"
+  - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-sms-puerperas-d40
@@ -1685,117 +1696,3 @@ schedules:
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
         query: *puerperas_query_template
-
-
-#   # Daily schedule para flow smf-iptu-2025-em-atraso-prod-v1
-#   - interval: 86400
-#     anchor_date: "2021-01-01T16:00:00"
-#     timezone: America/Sao_Paulo
-#     active: false
-#     slug: daily-smf-iptu-2025-em-atraso-prod-v1
-#     flow_run_name: smf-iptu-2025-em-atraso-prod-v1
-#     parameters:
-#       id_hsm: 234
-#       campaign_name: smf-iptu-2025-em-atraso-prod-v1
-#       cost_center_id: 71
-#       chunk_size: 1000
-#       dataset_id: brutos_wetalkie
-#       table_id: disparos_efetuados
-#       dump_mode: append
-#       test_mode: false
-#       sleep_minutes: 5
-#       whitelist_percentage: 0
-#       infisical_secret_path: "/wetalkie"
-#       whitelist_environment: "production"
-#       query: |
-#         with
-#             disparos_realizados as (
-#                 -- quem recebeu os disparos de whatsapp sem erros
-#                 select distinct targetexternalid as cpf,
-#                 flattarget as celular_disparo,
-#                 DATE(createdate) as data_disparo,
-#                 templateId as id_hsm,
-#                 failedDate
-#                 from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-#                 where templateid in (196, 234, 239)
-#             ),
-#             disparos as (
-#                 -- traz último disparo de cobrança e lembrete
-#                 select cpf, celular_disparo,
-#                 max(failedDate) as ultima_data_falha,
-#                 max(case when id_hsm in (196, 234, 239) then data_disparo else null end) as data_disparo_cobranca,
-#                 -- max(case when id_hsm = 227 then data_disparo else null end) as data_disparo_lembrete,
-#                 -- max(case when id_hsm = 231 then data_disparo else null end) as data_disparo_agradecimento,
-#                 from disparos_realizados
-#                 group by 1, 2
-#             ),
-#             disparos_filtro as (
-#               -- seleciona para remover quem teve falhas ou recebeu uma mensagem de cobrança recentemente
-#               select
-#                 *
-#               from disparos
-#               where
-#                 ultima_data_falha is not null
-#                or data_disparo_cobranca >= date_sub(current_date(), INTERVAL 30 day)
-#             ),
-#             contribuinte as (
-#                 select
-#                   *
-#                 FROM rj-crm-registry.ab_test.iptu_2025
-#                 where arm = "tratamento"
-#             ),
-#             contribuintes_sem_disparo as (
-#                 -- remove quem teve disparo de cobrança recentemente
-#                 SELECT
-#                 contribuinte.*,
-#                 from contribuinte
-#                 left join disparos_filtro using(cpf)
-#                 where disparos_filtro.cpf is null
-#             ),
-#             remove_optout as (
-#                 select c.* except(nome),
-#                 coalesce(c.nome, pf.nome) as nome,
-#                 from contribuintes_sem_disparo as c
-#                 inner join `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf using(cpf)
-#                 where pf.telefone.principal.indicador_optout = false
-#                 and pf.telefone.principal.indicador_quarentena = false
-#             ),
-#             dia_semana_tb as ( select
-#                 EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) as dia_semana
-#             )
-
-#             select
-#                 TO_JSON_STRING(
-#                             STRUCT(
-#                                 celular_disparo,
-#                                 STRUCT(
-#                                     INITCAP(
-#                                     IF(
-#                                         ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
-#                                         CONCAT(
-#                                             SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
-#                                             SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
-#                                         ),
-#                                         nome
-#                                     )
-#                                     )  AS NOME_SOBRENOME,
-#                                     INITCAP(
-#                                         IF(
-#                                             ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,
-#                                             CONCAT(
-#                                                 SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',
-#                                                 SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]
-#                                             ),
-#                                             nome
-#                                         )
-#                                     ) AS CC_WT_NOME_SOBRENOME,
-#                                     cpf AS CC_WT_CPF_CIDADAO
-#                                 ) AS vars,
-#                                 CAST(cpf AS STRING) AS externalId
-#                                 )
-#                             ) AS destination_data
-#             from remove_optout
-#             cross join dia_semana_tb
-#             where dia_semana not in (1, 7)
-#             order by trat_subgrupo
-#             limit 200

@@ -185,7 +185,7 @@ def create_dbt_report(
     bigquery_project: str,
     flow_info: dict,
     github_issue_repository: str,
-    send_discord_report: bool,
+    send_discord_report: bool = False,
 ) -> None:
     """
     Creates a report based on the results of running dbt commands.
@@ -432,7 +432,7 @@ def rj_iplanrio__run_dbt(
         bigquery_project=bigquery_project,
         flow_info=flow_info,
         github_issue_repository=github_repo,
-        send_discord_report=send_discord_report,
+        # send_discord_report=send_discord_report,
     )
 
     # Upload dbt artifacts to GCS if needed
