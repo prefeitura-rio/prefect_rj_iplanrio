@@ -1,8 +1,8 @@
 -- Teste da query queries_dev/pgm_divida_ativa_agradecimento.sql (mirror de queries/pgm_divida_ativa_agradecimento.sql)
 -- Placeholders já substituídos com os valores reais do schedule "daily-pgm-divida-ativa-confirma-pgto-prod-v1"
--- (scheduler_sf.yaml): nome_hsm_cobranca_placeholder -> 'pgm-divida-ativa-prod-v2',
--- nome_hsm_lembrete_placeholder -> 'pgm-divida-ativa-lembrete-prod-v1',
--- nome_hsm_agradecimento_placeholder -> 'pgm-divida-ativa-confirma-pgto-prod-v1'.
+-- (scheduler_sf.yaml): nome_hsm_cobranca_placeholder -> 'pgm_divida_ativa_prod_v2',
+-- nome_hsm_lembrete_placeholder -> 'pgmdividaativalembreteprodv1',
+-- nome_hsm_agradecimento_placeholder -> 'pgmdividaativaconfirmapgtoprodv1'.
 -- Executa direto no BigQuery. Passos 1 a 3 inserem um CPF de teste que já "recebeu a
 -- cobrança" e tem uma cota paga nos últimos 5 dias (exigido pelo filtro final da query),
 -- sem nenhum agradecimento anterior, caindo assim em todos os filtros; passo 4 é a query em si.
@@ -17,9 +17,9 @@ WHERE cpf_cnpj = '12pgmagrad1';
 DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
 WHERE cpf = '12pgmagrad1'
     AND nome_hsm IN (
-        'pgm-divida-ativa-prod-v2',
-        'pgm-divida-ativa-lembrete-prod-v1',
-        'pgm-divida-ativa-confirma-pgto-prod-v1'
+        'pgm_divida_ativa_prod_v2',
+        'pgmdividaativalembreteprodv1',
+        'pgmdividaativaconfirmapgtoprodv1'
     );
 
 -- ===================== 1) INSERT: pessoa física de teste (RMI) =====================
@@ -95,8 +95,8 @@ VALUES
             CAST(0.00 AS NUMERIC) AS valor_grerj,
             CAST(0.00 AS NUMERIC) AS valor_juros_principal,
             CAST(0.00 AS NUMERIC) AS valor_juros_honorarios,
-            -- filtro exige observacoes != "Encaminhada para Protesto"
-            CAST(NULL AS STRING) AS observacoes,
+            -- filtro exige observacoes != "Encaminhada para Protesto" (NULL != string -> NULL, filtra a linha; usar '' evita isso)
+            '' AS observacoes,
             CAST(1000.00 AS NUMERIC) AS valor_principal_pago,
             CAST(0.00 AS NUMERIC) AS valor_juros_pago,
             CAST(0.00 AS NUMERIC) AS valor_honorarios_pago,
@@ -115,7 +115,6 @@ INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
 (
     id_jornada, nome_jornada, chave_atividade, nome_atividade, id_ativo,
     nome_hsm, id_hsm, id_waba, categoria_hsm, canal, texto_hsm, rodape_hsm,
-    status_ativo, ativo_criacao_datahora, ativo_modificacao_datahora,
     contato_telefone, cpf, envio_datahora, entrega_datahora, leitura_datahora,
     falha_datahora, descricao_falha, indicador_falha, indicador_quarentena,
     status_disparo, id_status_disparo, data_particao
@@ -127,16 +126,13 @@ VALUES
     'WHATSAPPACTIVITY-1',
     'pgm_divida_ativa_cobranca',
     100000,
-    'pgm-divida-ativa-prod-v2',
+    'pgm_divida_ativa_prod_v2',
     '0000000000000000',
     '1444750391021606',
     'UTILITY',
     'WhatsApp',
     'Mensagem de teste - cobrança',
     'Parar de receber mensagem? Digite PARAR',
-    'Complete',
-    CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY) AS STRING),
-    CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY) AS STRING),
     '5521989190512',
     '12pgmagrad1',
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY),
@@ -162,9 +158,9 @@ disparos_divida_ativa as (
     falha_datahora as failedDate
     from `rj-crm-registry.brutos_salesforce.status_disparo`
     where nome_hsm in (
-        'pgm-divida-ativa-prod-v2',
-        'pgm-divida-ativa-lembrete-prod-v1',
-        'pgm-divida-ativa-confirma-pgto-prod-v1'
+        'pgm_divida_ativa_prod_v2',
+        'pgmdividaativalembreteprodv1',
+        'pgmdividaativaconfirmapgtoprodv1'
     )
 ),
 
@@ -172,9 +168,9 @@ disparos as (
     -- traz último disparo de cobrança, lembrete e agradecimento
     select cpf, celular_disparo,
     max(failedDate) as ultima_data_falha,
-    max(case when id_hsm = 'pgm-divida-ativa-prod-v2' then data_disparo else null end) as data_disparo_cobranca,
-    max(case when id_hsm = 'pgm-divida-ativa-lembrete-prod-v1' then data_disparo else null end) as data_disparo_lembrete,
-    max(case when id_hsm = 'pgm-divida-ativa-confirma-pgto-prod-v1' then data_disparo else null end) as data_disparo_agradecimento,
+    max(case when id_hsm = 'pgm_divida_ativa_prod_v2' then data_disparo else null end) as data_disparo_cobranca,
+    max(case when id_hsm = 'pgmdividaativalembreteprodv1' then data_disparo else null end) as data_disparo_lembrete,
+    max(case when id_hsm = 'pgmdividaativaconfirmapgtoprodv1' then data_disparo else null end) as data_disparo_agradecimento,
     from disparos_divida_ativa
     group by 1, 2
 ),
@@ -220,7 +216,7 @@ divida_ativa as (
             WHERE
             c.cota_paga = TRUE
             AND c.data_pagamento >= date_sub(current_date("America/Sao_Paulo"), interval 5 day)
-            AND c.observacoes != "Encaminhada para Protesto"
+            AND COALESCE(c.observacoes, "") != "Encaminhada para Protesto"
         )
     ) AS cotas
 

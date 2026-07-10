@@ -1,7 +1,7 @@
 -- Teste da query queries_dev/pgm_divida_ativa_lembrete.sql (mirror de queries/pgm_divida_ativa_lembrete.sql)
 -- Placeholders já substituídos com os valores reais do schedule "daily-pgm-divida-ativa-lembrete-prod-v1"
--- (scheduler_sf.yaml): nome_hsm_cobranca_placeholder -> 'pgm-divida-ativa-prod-v2',
--- nome_hsm_lembrete_placeholder -> 'pgm-divida-ativa-lembrete-prod-v1'.
+-- (scheduler_sf.yaml): nome_hsm_cobranca_placeholder -> 'pgm_divida_ativa_prod_v2',
+-- nome_hsm_lembrete_placeholder -> 'pgmdividaativalembreteprodv1'.
 -- Executa direto no BigQuery. Passos 1 a 3 inserem um CPF de teste que já "recebeu a
 -- cobrança" e tem uma guia com cota vencendo em D+2 (exigido pelo filtro final da query),
 -- caindo assim em todos os filtros; passo 4 é a query em si.
@@ -15,7 +15,7 @@ WHERE cpf_cnpj = '12pgmlembr1';
 
 DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
 WHERE cpf = '12pgmlembr1'
-    AND nome_hsm IN ('pgm-divida-ativa-prod-v2', 'pgm-divida-ativa-lembrete-prod-v1');
+    AND nome_hsm IN ('pgm_divida_ativa_prod_v2', 'pgmdividaativalembreteprodv1');
 
 -- ===================== 1) INSERT: pessoa física de teste (RMI) =====================
 INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
@@ -144,7 +144,6 @@ INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
 (
     id_jornada, nome_jornada, chave_atividade, nome_atividade, id_ativo,
     nome_hsm, id_hsm, id_waba, categoria_hsm, canal, texto_hsm, rodape_hsm,
-    status_ativo, ativo_criacao_datahora, ativo_modificacao_datahora,
     contato_telefone, cpf, envio_datahora, entrega_datahora, leitura_datahora,
     falha_datahora, descricao_falha, indicador_falha, indicador_quarentena,
     status_disparo, id_status_disparo, data_particao
@@ -156,16 +155,13 @@ VALUES
     'WHATSAPPACTIVITY-1',
     'pgm_divida_ativa_cobranca',
     100000,
-    'pgm-divida-ativa-prod-v2',
+    'pgm_divida_ativa_prod_v2',
     '0000000000000000',
     '1444750391021606',
     'UTILITY',
     'WhatsApp',
     'Mensagem de teste - cobrança',
     'Parar de receber mensagem? Digite PARAR',
-    'Complete',
-    CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 10 DAY) AS STRING),
-    CAST(DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 10 DAY) AS STRING),
     '5521989190512',
     '12pgmlembr1',
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 10 DAY),
@@ -194,16 +190,16 @@ with
         nome_hsm as id_hsm
         from `rj-crm-registry.brutos_salesforce.status_disparo`
         where nome_hsm in (
-            'pgm-divida-ativa-prod-v2',
-            'pgm-divida-ativa-lembrete-prod-v1'
+            'pgm_divida_ativa_prod_v2',
+            'pgmdividaativalembreteprodv1'
         )
         and indicador_falha = FALSE
     ),
     disparos as (
         -- traz último disparo de cobrança e lembrete
         select cpf, celular_disparo,
-        max(case when id_hsm = 'pgm-divida-ativa-prod-v2' then data_disparo else null end) as data_disparo_cobranca,
-        max(case when id_hsm = 'pgm-divida-ativa-lembrete-prod-v1' then data_disparo else null end) as data_disparo_lembrete,
+        max(case when id_hsm = 'pgm_divida_ativa_prod_v2' then data_disparo else null end) as data_disparo_cobranca,
+        max(case when id_hsm = 'pgmdividaativalembreteprodv1' then data_disparo else null end) as data_disparo_lembrete,
         from disparos_divida_ativa
         group by 1, 2
     ),

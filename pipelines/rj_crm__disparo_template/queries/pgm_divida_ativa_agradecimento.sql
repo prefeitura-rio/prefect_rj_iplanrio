@@ -66,7 +66,7 @@ divida_ativa as (
             WHERE 
             c.cota_paga = TRUE
             AND c.data_pagamento >= date_sub(current_date("America/Sao_Paulo"), interval 5 day)
-            AND c.observacoes != "Encaminhada para Protesto"
+            AND COALESCE(c.observacoes, "") != "Encaminhada para Protesto"
         )
     ) AS cotas
 

@@ -1,6 +1,6 @@
 -- Teste da query queries_dev/pgm_divida_ativa_cobranca.sql (mirror de queries/pgm_divida_ativa_cobranca.sql)
 -- Placeholders já substituídos com os valores reais do schedule "daily-pgm-divida-ativa-prod"
--- (scheduler_sf.yaml): nome_hsm_cobranca_placeholder -> 'pgm-divida-ativa-prod-v2',
+-- (scheduler_sf.yaml): nome_hsm_cobranca_placeholder -> 'pgm_divida_ativa_prod_v2',
 -- limit_placeholder -> 300.
 -- Executa direto no BigQuery. Passos 1 e 2 (abaixo) inserem um CPF de teste que cai em
 -- todos os filtros da query; passo 3 é a query em si, adaptada dos datasets dev__dev_fantasma__.
@@ -15,7 +15,7 @@ WHERE cpf_cnpj = '12pgmcobra1';
 -- garante que o cpf de teste não aparece como já disparado (filtra_disparados exige sd.cpf IS NULL)
 DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
 WHERE cpf = '12pgmcobra1'
-    AND nome_hsm = 'pgm-divida-ativa-prod-v2';
+    AND nome_hsm = 'pgm_divida_ativa_prod_v2';
 
 -- ===================== 1) INSERT: pessoa física de teste (RMI) =====================
 INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
@@ -147,7 +147,7 @@ SELECT celulares_validos.*
 FROM celulares_validos
 LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
     ON sd.cpf = celulares_validos.cpf
-    AND sd.nome_hsm = 'pgm-divida-ativa-prod-v2'
+    AND sd.nome_hsm = 'pgm_divida_ativa_prod_v2'
     AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 150 DAY)
     AND sd.data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 151 DAY)
 WHERE sd.cpf IS NULL
