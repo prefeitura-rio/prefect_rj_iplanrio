@@ -1,0 +1,4 @@
+[project]
+name = "rj_smtr__teste"
+version = "0.1.0"
+description = "Pipeline teste da secretaria smtr"
