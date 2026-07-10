@@ -201,9 +201,7 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
     job = bq_client.query(query)
     while not job.done():
         sleep(1)
-    log("Getting result from query")
     results = job.result()
-    log("Converting result to pandas dataframe")
     dfr = results.to_dataframe()
     log("End download data from bigquery")
     return dfr

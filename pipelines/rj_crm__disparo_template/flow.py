@@ -224,9 +224,14 @@ def rj_crm__disparo_template_sf(
         send_dispatch_no_destinations_found(campaign_name, test_mode)
         return
 
+    print(f"[DEBUG] Colunas antes do rename: {list(df.columns)}")
+
     # Padroniza a coluna de CPF para 'cpf' caso as queries antigas ainda retornem 'SubscriberKey'
     if "SubscriberKey" in df.columns and "cpf" not in df.columns:
         df = df.rename(columns={"SubscriberKey": "cpf"})
+        print("RENAME APLICADO: SubscriberKey → cpf") 
+
+    print(f"[DEBUG] Colunas antes da validação: {list(df.columns)}")
 
     # Valida colunas obrigatórias para o log SF: cpf e telefone.
     # Lança ValueError imediatamente se alguma estiver ausente ou com dados inválidos.
@@ -248,6 +253,7 @@ def rj_crm__disparo_template_sf(
 
     # Remove telefones cujo último disparo falhou e estão em quarentena
     if filter_failed_phones:
+        print("Filtrando telefones em quarentena")
         failed_phones = get_failed_phones(billing_project_id=billing_project_id)
         if failed_phones:
             if max_dispatch_retries > 0:
@@ -389,7 +395,7 @@ def rj_crm__disparo_template_sf(
             )
 
         print(f"\nStarting SF dispatch for campaign_name={campaign_name}, attempt={i}")
-        print(f"Sample data:\n{current_df.head(2).to_dict('records')}")
+        print(f"Sample data:\n{current_df.head(5).to_dict('records')}")
         print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and campaign_name is correct!!")
         time.sleep(sleep_minutes * 60)
 
