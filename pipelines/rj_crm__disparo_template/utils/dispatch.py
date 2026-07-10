@@ -474,7 +474,7 @@ def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days:
     bem-sucedido ou em processamento hoje.
     """
     query = f"""
-        SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_hsm, data_particao
+        SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_hsm as nome_campanha, data_particao
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
           AND status_disparo IN ("processing", "sent", "delivered")
