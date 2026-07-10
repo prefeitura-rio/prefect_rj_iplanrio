@@ -26,6 +26,7 @@ pull:
 deployments:
   # Deployment de staging para testes
   - name: rj-seconserva--infraestrutura-siscor-obras--staging
+    tags: [staging]
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_seconserva__infraestrutura_siscor_obras/flow.py:rj_seconserva__infraestrutura_siscor_obras
     work_pool:
@@ -39,6 +40,7 @@ deployments:
 
   # Deployment de produção com schedules para todas as tabelas
   - name: rj-seconserva--infraestrutura-siscor-obras--prod
+    tags: [prod]
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_seconserva__infraestrutura_siscor_obras/flow.py:rj_seconserva__infraestrutura_siscor_obras
     work_pool:
@@ -51,8 +53,8 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-      - interval: "86400" # Executa diariamente (24h em segundos)
-        anchor_date: "2022-12-19T01:00:00" # Data de início em UTC-3 (America/Sao_Paulo)
+      - interval: 86400 # Executa diariamente (24h em segundos)
+        anchor_date: "2026-06-08T23:00:00" # UTC: 23:00hrs / BRT: 20:00hrs
         timezone: America/Sao_Paulo
         slug: processo-autorizacao-obra-daily
         parameters:

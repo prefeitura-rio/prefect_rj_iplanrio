@@ -51,7 +51,7 @@ deployments:
     schedules:
       # Schedule diário para dump de órgãos do SICI
       - interval: 86400  # Executa a cada 24 horas (1 dia)
-        anchor_date: "2024-07-17T18:00:00"  # Data de início do schedule (convertido de 2024-07-17 18h America/Sao_Paulo)
+        anchor_date: "2024-07-17T18:00:00" # UTC: 18:00hrs / BRT: 15:00hrs
         timezone: America/Sao_Paulo
         slug: sici-orgaos-daily
         parameters:
