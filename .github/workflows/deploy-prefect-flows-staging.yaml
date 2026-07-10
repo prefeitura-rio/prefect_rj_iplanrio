@@ -38,13 +38,39 @@ jobs:
   deploy-prefect-staging-flows:
     name: Deploy Prefect staging flows
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
+      - name: Check for open PR targeting master
+        id: check_pr
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_count=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "${{ github.ref_name }}" \
+            --base master \
+            --state open \
+            --json number \
+            --jq 'length')
+
+          if [ "$pr_count" -gt 0 ]; then
+            echo "has_open_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_open_pr=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No open PR from '${{ github.ref_name }}' targeting 'master' was found. Skipping staging deploy."
+          fi
+
       - name: Checkout repository
+        if: github.event_name != 'push' || steps.check_pr.outputs.has_open_pr == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Deploy Prefect flows
+        if: github.event_name != 'push' || steps.check_pr.outputs.has_open_pr == 'true'
         uses: ./.github/actions/deploy-prefect-flows
         with:
           environment: staging
