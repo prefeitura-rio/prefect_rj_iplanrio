@@ -2,3 +2,9 @@
 name = "rj_cvl__osinfo"
 version = "0.1.0"
 description = "Pipeline osinfo da secretaria cvl"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
