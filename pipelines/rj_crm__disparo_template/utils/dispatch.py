@@ -479,7 +479,7 @@ def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days:
         WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
           AND status_disparo IN ("processing", "sent", "delivered")
     """
-    log(f"Buscando disparos já realizados hoje para evitar duplicidade:\n{query}")
+    log(f"Buscando disparos já realizados hoje e na campanha para evitar duplicidade:\n{query}")
     try:
         df = download_data_from_bigquery(
             query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
@@ -507,7 +507,7 @@ def filter_duplicated(
     if filter_indicator and column in df.columns:
         n_before = len(df)
         df = df.drop_duplicates(subset=[column])
-        log(f"Removed {n_before - len(df)} duplicate {label}. Remaining: {len(df)}")
+        log(f"Removed {n_before - len(df)} duplicated {label}. Remaining: {len(df)}")
     return df
 
 
@@ -1225,17 +1225,17 @@ def send_to_sftp(
         log("Conexão estabelecida com sucesso ao SFTP!")
         
         # Listagem do diretório inicial para debug
-        try:
-            log(f"Diretório atual (pwd): {sftp.getcwd()}")
-            log(f"Diretório de destino: {sftp_remote_path}")
-            log(f"Conteúdo do diretório inicial: {sftp.listdir('.')}")
-        except Exception as e:
-            log(f"Não foi possível listar o diretório inicial: {e}")
+        # try:
+            # log(f"Diretório atual (pwd): {sftp.getcwd()}")
+            # log(f"Diretório de destino: {sftp_remote_path}")
+            # log(f"Conteúdo do diretório inicial: {sftp.listdir('.')}")
+        # except Exception as e:
+        #     log(f"Não foi possível listar o diretório inicial: {e}")
         
         if sftp_remote_path and sftp_remote_path != '/':
             try:
                 sftp.chdir(sftp_remote_path)
-                log(f"Alterado para o diretório: {sftp_remote_path}")
+                # log(f"Alterado para o diretório: {sftp_remote_path}")
             except IOError:
                 log(f"Diretório {sftp_remote_path} não encontrado. Tentando criar...")
 

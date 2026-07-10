@@ -326,6 +326,7 @@ def rj_crm__disparo_template_sf(
         # vez dentro da janela configurada (ex: 7 dias). Ele é um limite de segurança rígido
         # e roda sempre usando "SubscriberKey" (CPF) como chave identificadora no current_df.
         # --------------------------------------------------------------------------------------
+        qnt_pessoas = current_df.shape[0]
         if not already_dispatched_df.empty:
             print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name}) sobre o CPF/SubscriberKey...")
             df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
@@ -335,6 +336,7 @@ def rj_crm__disparo_template_sf(
                 already_dispatched_df=df_same_campaign,
                 current_filter="cpf",
             )
+            print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam essa campanha nos último(s) {dispatch_interval_days} dia(s).")
 
         # --------------------------------------------------------------------------------------
         # PASSO 2: FILTRO DIÁRIO CRUZADO DE CANAL (CPF ou Telefone)
@@ -348,11 +350,11 @@ def rj_crm__disparo_template_sf(
         if current_filter and not already_dispatched_df.empty:
             # Se o filtro ativo no envio for "cpf", nós mapeamos para "SubscriberKey" para comparar
             # com a coluna de controle (que no get_already_dispatched_data retorna como "cpf").
-            print(f"🔍 [Passo 2] Aplicando filtro diário cruzado sobre a coluna '{current_filter}'...")
+            print(f"🔍 Aplicando filtro diário de quem já recebeu alguma campanha hoje '{current_filter}'...")
             
             hoje = pd.Timestamp.now('America/Sao_Paulo').date()
             datas_disparadas = pd.to_datetime(already_dispatched_df["data_particao"]).dt.date
-            
+            qnt_pessoas = current_df.shape[0]
             # Selecionamos apenas as linhas de disparos que ocorreram no dia de hoje
             df_dispatched_today = already_dispatched_df[datas_disparadas == hoje]
             
@@ -361,6 +363,7 @@ def rj_crm__disparo_template_sf(
                 already_dispatched_df=df_dispatched_today,
                 current_filter=current_filter,
             )
+            print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam alguma campanha hoje.")
 
         # Dedup por telefone (retries podem introduzir duplicatas)
         current_df = filter_duplicated(
