@@ -106,6 +106,7 @@ def rj_crm__disparo_template_sf(
     force_add_on_whitelist_group: bool = False,
     whitelist_replace_contacts: bool = False,
     materialize_after_sftp: bool = True,
+    debug: bool = True,
 ):
     """
     Orchestrates the dispatch of templated messages via Salesforce SFTP.
@@ -234,6 +235,7 @@ def rj_crm__disparo_template_sf(
     validate_sf_dataframe(df, campaign_name)
 
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
+    print(f"[DEBUG] Sample data:\n{df.head(10).to_dict('records')}")
 
     # Dedup por CPF — base para o loop de retentativas
     df = filter_duplicated(
@@ -242,7 +244,7 @@ def rj_crm__disparo_template_sf(
         filter_indicator=filter_duplicated_cpfs,
         label="CPFs",
     )
-
+    print(f"[DEBUG] Após filtrar cpfd duplicados:\n{df.head(10).to_dict('records')}") if debug else None
     if df.empty:
         print("No destinations found after filtering duplicate CPFs. Exiting flow execution.")
         return
@@ -257,6 +259,7 @@ def rj_crm__disparo_template_sf(
                 df.loc[df["telefone"].isin(failed_phones), "telefone"] = None
             else:
                 df = df[~df["telefone"].isin(failed_phones)]
+            print(f"[DEBUG] Após filtrar quarentena:\n{df.head(10).to_dict('records')}") if debug else None
 
         if df.empty:
             send_dispatch_no_destinations_found(campaign_name, test_mode)
@@ -330,13 +333,15 @@ def rj_crm__disparo_template_sf(
         if not already_dispatched_df.empty:
             print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name}) sobre o CPF/SubscriberKey...")
             df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
-            
+            print(f"[DEBUG] MEsma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
+
             current_df = filter_already_dispatched_phones_or_cpfs(
                 df=current_df,
                 already_dispatched_df=df_same_campaign,
                 current_filter="cpf",
             )
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam essa campanha nos último(s) {dispatch_interval_days} dia(s).")
+            print(f"[DEBUG] Após remoção de mesma campanha:\n{current_df.head(10).to_dict('records')}") if debug else None
 
         # --------------------------------------------------------------------------------------
         # PASSO 2: FILTRO DIÁRIO CRUZADO DE CANAL (CPF ou Telefone)
@@ -364,6 +369,7 @@ def rj_crm__disparo_template_sf(
                 current_filter=current_filter,
             )
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam alguma campanha hoje.")
+            print(f"[DEBUG] Já tiveram disparo hoje:\n{df_dispatched_today.to_dict('records')}") if debug else None
 
         # Dedup por telefone (retries podem introduzir duplicatas)
         current_df = filter_duplicated(
