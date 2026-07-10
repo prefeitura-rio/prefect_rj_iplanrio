@@ -65,7 +65,7 @@ deployments:
         slug: get-content-builder-journey
         flow_run_name: get-content-builder-journey
         parameters:
-          route: "/interaction/v1/interactions?extras=activities"
+          route: "/interaction/v1/interactions?mostRecentVersionOnly=false&extras=all"
           http_method: get
           page_size: 200
           table_id: content_builder_journey
@@ -166,7 +166,7 @@ deployments:
         slug: get-content-builder-journey
         flow_run_name: get-content-builder-journey
         parameters:
-          route: "/interaction/v1/interactions?extras=all"
+          route: "/interaction/v1/interactions?mostRecentVersionOnly=false&extras=all"
           http_method: get
           page_size: 200
           table_id: content_builder_journey
@@ -257,4 +257,3 @@ deployments:
           dataset_id: brutos_salesforce
           dump_mode: overwrite
           infisical_secret_path: /api-sfmc
-
