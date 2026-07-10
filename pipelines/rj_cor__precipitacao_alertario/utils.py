@@ -120,9 +120,8 @@ def to_partitions(
         # Construir caminho do diretório de partição
         partition_path = savepath
         for col, val in zip(partition_columns, partition_values_list):
-            # Remove sufixo '_particao' do nome da coluna para o diretório
-            dir_name = col.replace("_particao", "")
-            partition_path = partition_path / f"{dir_name}={val}"
+            val = val.lstrip("0")
+            partition_path = partition_path / f"{col}={val}"
 
         # Criar diretório se não existir
         partition_path.mkdir(parents=True, exist_ok=True)
@@ -143,5 +142,4 @@ def to_partitions(
             group_data_clean.to_csv(filepath, index=False)
         else:
             raise ValueError(f"Tipo de dados não suportado: {data_type}")
-
         print(f"   Partição salva: {filepath}")
