@@ -39,3 +39,6 @@ class CallCenterAttendancesConstants(Enum):
 
     # BigQuery configuration for duplicate check
     BILLING_PROJECT_ID = "rj-crm-registry"
+
+    # Date interval for data extraction
+    DATE_INTERVAL = 7  # days

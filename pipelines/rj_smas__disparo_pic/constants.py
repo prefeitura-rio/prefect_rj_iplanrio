@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa:E501
+# pylint: disable='line-too-long'
 """Constantes específicas para pipeline PIC lembrete SMAS."""
 
 from enum import Enum
@@ -14,7 +16,7 @@ class PicLembreteConstants(Enum):
     PIC_CAMPAIGN_NAME = "smas-cartaopic-disparoevento"
 
     # Cost Center ID
-    PIC_COST_CENTER_ID = 38
+    PIC_COST_CENTER_ID = 71
 
     # Billing Project ID
     PIC_BILLING_PROJECT_ID = "rj-smas"
@@ -31,7 +33,7 @@ class PicLembreteConstants(Enum):
     # Modo de teste - ativar por padrão para segurança
     PIC_TEST_MODE = True
 
-    # Query principal do PIC lembrete com saída em JSON (destination_data)
+    # Query principal do PIC com saída em JSON (destination_data)
     PIC_QUERY = r"""
         WITH config AS (
         select date('{event_date_placeholder}') AS target_date
@@ -41,7 +43,7 @@ class PicLembreteConstants(Enum):
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-          FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+          FROM `rj-iplanrio.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
         telefones_alternativos_rmi AS (
@@ -92,7 +94,7 @@ class PicLembreteConstants(Enum):
           select joined_status_cpi.*
           from joined_status_cpi
           left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-            on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = {id_hsm_placeholder}
+            on fl.flattarget = joined_status_cpi.celular_disparo and fl.templateId = cast({id_hsm_placeholder} as int64)
           where fl.flattarget is null
         ),
         filtra_celulares_sem_whats as (
@@ -101,7 +103,8 @@ class PicLembreteConstants(Enum):
           LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
             ON f.celular_disparo = tel.telefone_numero_completo
           LEFT JOIN UNNEST(tel.consentimento) AS c
-          WHERE c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO"
+          WHERE (c.indicador_quarentena = FALSE and tel.telefone_qualidade != "INVALIDO")
+            or tel.telefone_numero_completo is null
         ),
         formatted AS (
           SELECT
@@ -131,10 +134,14 @@ class PicLembreteConstants(Enum):
               celular_disparo AS celular_disparo,
               STRUCT(
                 nome_sobrenome AS NOME_SOBRENOME,
-                cpf AS CC_WT_CPF_CIDADAO,
                 endereco_evento AS ENDERECO,
                 data_formatada AS DATA,
-                horario_evento AS HORARIO
+                horario_evento AS HORARIO,
+                cpf AS CC_WT_CPF_CIDADAO,
+                nome_sobrenome AS CC_WT_NOME_SOBRENOME,
+                endereco_evento AS CC_WT_ENDERECO,
+                data_formatada AS CC_WT_DATA,
+                horario_evento AS CC_WT_HORARIO
               ) AS vars,
               cpf AS externalId
             )
@@ -171,7 +178,7 @@ class PicLembreteConstants(Enum):
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-          FROM `rj-crm-registry.brutos_data_metrica_staging.agendamentos_cadunico`
+          FROM `rj-iplanrio.brutos_data_metrica_staging.agendamentos_cadunico`
           WHERE cpf IS NOT NULL
         ),
         telefones_alternativos_rmi AS (
