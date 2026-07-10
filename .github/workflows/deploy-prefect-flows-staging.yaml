@@ -13,18 +13,64 @@ on:
         required: false
         type: boolean
         default: false
+      debug:
+        description: "Enable debug logging"
+        required: false
+        type: boolean
+        default: false
+      batch_size:
+        description: "Number of concurrent deployments"
+        required: false
+        type: number
+        default: 3
+      cleanup_docker:
+        description: "Clean up Docker images between batches"
+        required: false
+        type: boolean
+        default: true
+      max_retries:
+        description: "Maximum number of retries for failed deployments"
+        required: false
+        type: number
+        default: 2
 
 jobs:
   deploy-prefect-staging-flows:
     name: Deploy Prefect staging flows
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
+      - name: Check for open PR targeting master
+        id: check_pr
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pr_count=$(gh pr list \
+            --repo "${{ github.repository }}" \
+            --head "${{ github.ref_name }}" \
+            --base master \
+            --state open \
+            --json number \
+            --jq 'length')
+
+          if [ "$pr_count" -gt 0 ]; then
+            echo "has_open_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_open_pr=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No open PR from '${{ github.ref_name }}' targeting 'master' was found. Skipping staging deploy."
+          fi
+
       - name: Checkout repository
+        if: github.event_name != 'push' || steps.check_pr.outputs.has_open_pr == 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Deploy Prefect flows
+        if: github.event_name != 'push' || steps.check_pr.outputs.has_open_pr == 'true'
         uses: ./.github/actions/deploy-prefect-flows
         with:
           environment: staging
@@ -34,5 +80,8 @@ jobs:
           ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
           gh_token: ${{ secrets.GH_TOKEN }}
-          log_level: ${{ vars.LOG_LEVEL }}
           force_deploy: ${{ github.event.inputs.force_deploy == 'true' && '1' || '0' }}
+          debug: ${{ github.event.inputs.debug }}
+          batch_size: ${{ github.event.inputs.batch_size || '3' }}
+          cleanup_docker: ${{ github.event.inputs.cleanup_docker || 'true' }}
+          max_retries: ${{ github.event.inputs.max_retries || '2' }}

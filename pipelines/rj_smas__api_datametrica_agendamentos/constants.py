@@ -25,4 +25,4 @@ class DatametricaConstants(Enum):
     ROOT_FOLDER = "./data_agendamentos/"
 
     # Configurações do BigQuery
-    BIGLAKE_TABLE = True
+    BIGLAKE_TABLE = False

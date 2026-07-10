@@ -1,22 +1,11 @@
 # -*- coding: utf-8 -*-
-"""
-Flow migrado do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos.
-
-⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no iplanrio:
-- handler_initialize_sentry: SEM EQUIVALENTE
-- task_run_dbt_model_task: SEM EQUIVALENTE (precisa ser implementado se necessário)
-- LocalDaskExecutor: Removido no Prefect 3.0
-- KubernetesRun: Removido no Prefect 3.0 (configurado no YAML)
-- GCS storage: Removido no Prefect 3.0 (configurado no YAML)
-- Parameter: Substituído por parâmetros de função
-- case (conditional execution): Substituído por if/else padrão
-"""
-
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.dbt import execute_dbt_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from prefect.deployments import run_deployment
+# from pipelines.rj_smas__disparo_cadunico.flow import rj_smas__disparo_cadunico
 
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
     DatametricaConstants,
@@ -36,7 +25,6 @@ from pipelines.rj_smas__api_datametrica_agendamentos.utils.tasks import (
 
 @flow(log_prints=True)
 def rj_smas__api_datametrica_agendamentos(
-    # Parâmetros opcionais para override manual na UI
     dataset_id: str | None = None,
     table_id: str | None = None,
     dump_mode: str | None = None,
@@ -108,7 +96,6 @@ def rj_smas__api_datametrica_agendamentos(
         root_folder=root_folder,
     )
 
-    # Upload para GCS e BigQuery
     create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
@@ -120,3 +107,31 @@ def rj_smas__api_datametrica_agendamentos(
     if materialize_after_dump:
         dbt_select = "raw_cadunico_agendamentos"
         execute_dbt_task(select=dbt_select, target="prod")
+    
+    print("\n\n******* Triggering cadunico dispatch flow... *******")
+
+    cadunico_params = {
+        "query": None,
+        "id_hsm": 101,
+        "table_id": "disparos_efetuados",
+        "dump_mode": "append",
+        "test_mode": None,
+        "chunk_size": 1000,
+        "dataset_id": "brutos_wetalkie",
+        "days_ahead": "2",
+        "campaign_name": "smas-cadunico-prod",
+        "sleep_minutes": 2,
+        "cost_center_id": 71,
+        "flow_environment": "production",
+        "query_processor_name": "skip_weekends",
+        "whitelist_percentage": 0,
+        "infisical_secret_path": "/wetalkie",
+        "whitelist_environment": "production",
+    }
+    run_deployment(
+        name="rj-smas--disparo-cadunico/rj-smas--disparo-cadunico--prod",
+        parameters=cadunico_params,
+        timeout=0,
+    )
+    # rj_smas__disparo_cadunico(**cadunico_params)
+    # run_deployment(name="rj-smas--disparo-cadunico--prod", timeout=0)
