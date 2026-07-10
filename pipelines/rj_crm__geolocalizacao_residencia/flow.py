@@ -111,6 +111,8 @@ def rj_crm__geolocalizacao_residencia(
 
     # Check if we have addresses to process
     empty_addresses = check_df_emptiness(dataframe=dataframe)
+    if empty_addresses:
+        print("Address dataframe empty")
 
     if not empty_addresses:
         # Choose geocoding strategy
@@ -167,3 +169,5 @@ def rj_crm__geolocalizacao_residencia(
             print(f"No geocoded results from strategy '{provider_strategy}' - skipping upload")
     else:
         print("No addresses found to geocode - skipping flow execution.")
+
+# force deploy

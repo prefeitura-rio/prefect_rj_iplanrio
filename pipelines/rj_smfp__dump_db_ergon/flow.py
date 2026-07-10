@@ -1,6 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY..
+Flow para ingestão de dados do ERGON (Sistema de Recursos Humanos) no BigQuery.
+
+Este flow realiza o dump de múltiplas tabelas do banco Oracle do ERGON
+para o dataset brutos_ergon no BigQuery.
+
+Tabelas ingeridas:
+- Dados Cadastrais: funcionario, dependente, cargo, setor, setor_h, vinculo
+- Eventos e Movimentações: funcionario_evento, vantagens, frequencia, licenca_afastamento
+- Dados Financeiros: IPL_PT_FICHAS, FICHAS_FINANCEIRAS, VW_DLK_ERG_FITA_BANCO
+- Outras: TOTAL_CONTA
 """
 
 from typing import Optional

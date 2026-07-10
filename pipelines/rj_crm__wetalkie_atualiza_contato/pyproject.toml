@@ -3,6 +3,7 @@ name = "rj_crm__wetalkie_atualiza_contato"
 version = "0.1.0"
 description = "Pipeline CRM Wetalkie para atualização de dados de contatos faltantes"
 dependencies = [
+    "prefect_rj_iplanrio",
     "dbt-bigquery>=1.6.1",
     "google-cloud-storage==2.10.0",
     "prefect==3.4.9",
@@ -16,3 +17,5 @@ dependencies = [
     "gitpython==3.1.44",
     "pytz>=2025.2",
 ]
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

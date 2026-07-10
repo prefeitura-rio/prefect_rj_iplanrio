@@ -28,7 +28,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smi__siscob/flow.py:rj_smi__siscob
     work_pool:
-      name: datario-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -37,7 +37,7 @@ deployments:
         image_pull_policy: Always
     schedules:
       - interval: 86400
-        anchor_date: '2025-07-15T01:00:00'
+        anchor_date: '2025-07-15T21:05:00'
         timezone: America/Sao_Paulo
         slug: obra
         parameters:
@@ -48,7 +48,7 @@ deployments:
             DT_TERMINO_PREVISTO, DT_TERMINO_ATUAL, NR_CONTRATO, AA_EXERCICIO, SITUACAO, VL_ORCADO_C_BDI, VL_CONTRATADO, VL_VIGENTE,
             PC_MEDIDO, PRAZO_INICIAL FROM dbo.fuSEGOVI_Dados_da_Obra()
       - interval: 86400
-        anchor_date: '2025-07-15T01:10:00'
+        anchor_date: '2025-07-15T21:10:00'
         timezone: America/Sao_Paulo
         slug: medicao
         parameters:
@@ -57,7 +57,7 @@ deployments:
           execute_query: SELECT DISTINCT CD_OBRA, NR_MEDICAO, CD_ETAPA, TP_MEDICAO_D, DT_INI_MEDICAO, DT_FIM_MEDICAO, VL_FINAL FROM
             dbo.fuSEGOVI_Medicoes()
       - interval: 86400
-        anchor_date: '2025-07-15T01:20:00'
+        anchor_date: '2025-07-15T21:15:00'
         timezone: America/Sao_Paulo
         slug: termo_aditivo
         parameters:
@@ -65,7 +65,7 @@ deployments:
           dump_mode: overwrite
           execute_query: SELECT DISTINCT CD_OBRA, NR_DO_TERMO, TP_ACERTO, DT_DO, DT_AUTORIZACAO, VL_ACERTO FROM dbo.fuSEGOVI_Termos_Aditivos()
       - interval: 86400
-        anchor_date: '2025-07-15T01:30:00'
+        anchor_date: '2025-07-15T21:20:00'
         timezone: America/Sao_Paulo
         slug: cronograma_financeiro
         parameters:
@@ -73,7 +73,7 @@ deployments:
           dump_mode: overwrite
           execute_query: SELECT DISTINCT CD_OBRA, ETAPA, DT_INICIO_ETAPA, DT_FIM_ETAPA, PC_PERCENTUAL, VL_ESTIMADO FROM dbo.fuSEGOVI_Cronograma_Financeiro()
       - interval: 86400
-        anchor_date: '2025-07-15T01:40:00'
+        anchor_date: '2025-07-15T21:25:00'
         timezone: America/Sao_Paulo
         slug: cronograma_alteracao
         parameters:
@@ -82,7 +82,7 @@ deployments:
           execute_query: "SELECT DISTINCT CD_OBRA, NR_PROCESSO, TP_ALTERACAO, DT_PUBL_DO, CD_ETAPA, NR_PRAZO, DT_VALIDADE, REPLACE(REPLACE(DS_OBSERVACAO,\
             \ CHAR(13), ''), CHAR(10), '') AS DS_OBSERVACAO FROM dbo.fuSEGOVI_Altera\xE7\xE3o_de_Cronograma()"
       - interval: 86400
-        anchor_date: '2025-07-15T01:50:00'
+        anchor_date: '2025-07-15T21:30:00'
         timezone: America/Sao_Paulo
         slug: obras_suspensas
         parameters:
@@ -93,7 +93,7 @@ deployments:
             ''), CHAR(10), '') AS DS_PREVISAO, REPLACE(REPLACE(DS_JUSTIFICATIVA, CHAR(13), ''), CHAR(10), '') AS DS_JUSTIFICATIVA,
             NM_RESPONSAVEL FROM dbo.fuSEGOVI_Obras_Suspensas()
       - interval: 86400
-        anchor_date: '2025-07-15T02:00:00'
+        anchor_date: '2025-07-15T21:35:00'
         timezone: America/Sao_Paulo
         slug: itens_medicao
         parameters:
@@ -104,7 +104,7 @@ deployments:
             REPLACE(REPLACE(DS_ITEM_SERVICO, CHAR(13), ''), CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, VL_ITEM_SERVICO,
             QT_MEDIDA, QT_ACUMULADA, VL_MEDIDO FROM dbo.fuSEGOVI_Itens_Medicao()
       - interval: 86400
-        anchor_date: '2025-07-15T02:10:00'
+        anchor_date: '2025-07-15T21:40:00'
         timezone: America/Sao_Paulo
         slug: orcamento_licitado
         parameters:
@@ -114,7 +114,7 @@ deployments:
             NM_SISTEMA, NM_SUB_SISTEMA, NM_PLANILHA, NR_ITEM, CD_CHAVE_EXTERNA, REPLACE(REPLACE(DS_ITEM_SERVICO, CHAR(13), ''),
             CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, QT_CONTRATADO, VL_UNITARIO, VL_TOTAL FROM dbo.fuSEGOVI_Orcamento_Licitado()
       - interval: 86400
-        anchor_date: '2025-07-15T02:20:00'
+        anchor_date: '2025-07-15T21:45:00'
         timezone: America/Sao_Paulo
         slug: itens_medidos_finalizados
         parameters:
@@ -124,7 +124,7 @@ deployments:
             CHAR(13), ''), CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, QT_CONTRATADA, VL_UNITARIO_LICITACAO, QT_ACUMULADA,
             VL_ACUMULADO_MEDIDO, DT_FIM_OBRA FROM dbo.fuSEGOVI_Itens_Medidos_Finalizados()
       - interval: 86400
-        anchor_date: '2025-07-15T02:30:00'
+        anchor_date: '2025-07-15T21:50:00'
         timezone: America/Sao_Paulo
         slug: localizacao_obra
         parameters:
@@ -132,7 +132,7 @@ deployments:
           dump_mode: overwrite
           execute_query: SELECT DISTINCT CD_OBRA, ENDERECO, NM_BAIRRO, NM_RA, NM_AP FROM dbo.fuSEGOVI_Localizacoes_obra()
       - interval: 86400
-        anchor_date: '2025-07-15T02:40:00'
+        anchor_date: '2025-07-15T21:55:00'
         timezone: America/Sao_Paulo
         slug: programa_fonte
         parameters:
@@ -141,7 +141,7 @@ deployments:
           execute_query: SELECT DISTINCT CD_OBRA, CD_PRG_TRAB, PROGRAMA_TRABALHO, CD_FONTE_RECURSO, FONTE_RECURSO, CD_NATUREZA_DSP,
             NATUREZA_DESPESA FROM dbo.fuSEGOVI_Programa_Fonte()
       - interval: 86400
-        anchor_date: '2025-07-15T02:50:00'
+        anchor_date: '2025-07-15T22:00:00'
         timezone: America/Sao_Paulo
         slug: fiscal
         parameters:

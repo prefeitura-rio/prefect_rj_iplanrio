@@ -156,7 +156,7 @@ def rj_iplanrio__sisbicho_images(
             total_processed += len(batch_output)
 
             log(
-                f"Lote gravado no BigQuery. Total acumulado: {total_processed} registros"
+                f"Lote gravado no BigQuery. Total acumulado: {total_processed} registros."
             )
 
     if total_processed == 0:
