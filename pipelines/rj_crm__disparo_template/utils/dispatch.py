@@ -471,13 +471,15 @@ def check_api_status(api: object) -> bool:
 def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days: int) -> pd.DataFrame:
     """
     Busca no BigQuery a lista de CPFs ou telefones que já tiveram um disparo
-    bem-sucedido ou em processamento hoje.
+    bem-sucedido ou em processamento hoje. Filtramos pela data de envio ou entrega
+    porque a coluna status_disparo guarda apenas o status final, e se uma pessoa leu a mensagem
+    uma semana depois ela deveria poder receber outro disparo hoje.
     """
     query = f"""
         SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_hsm as nome_campanha, data_particao
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-          AND status_disparo IN ("processing", "sent", "delivered")
+          AND (envio_datahora is not null OR entrega_datahora is not null)
     """
     log(f"Buscando disparos já realizados hoje e na campanha para evitar duplicidade:\n{query}")
     try:
