@@ -170,7 +170,7 @@ def skip_flow_if_empty(
     'if validated_destinations is None:
         return  # flow termina aqui, nada downstream é agendado'
     """
-    if len(data) == 0:
+    if data is None or len(data) == 0:
         log(message)
         return None
     return data
