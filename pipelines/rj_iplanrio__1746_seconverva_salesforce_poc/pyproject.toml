@@ -1,0 +1,14 @@
+[project]
+name = "rj_iplanrio__1746_seconverva_salesforce_poc"
+version = "0.1.0"
+description = "Pipeline exploratoria e segura para testes no banco 1746"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "pymssql",
+    "gspread",
+    "google-auth",
+    "pyproj",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

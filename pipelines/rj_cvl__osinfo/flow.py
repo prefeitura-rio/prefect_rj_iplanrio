@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the CVL server to the BIGQUERY.
+This flow is used to dump the database from the CVL server to the BIGQUERY...
 """
 
 from typing import Optional
@@ -24,7 +24,7 @@ def rj_cvl__osinfo(  # noqa
     db_type: str = "mysql",
     db_charset: Optional[str] = "utf8",
     execute_query: str = "execute_query",
-    dataset_id: str = "adm_contrato_gestao",
+    dataset_id: str = "brutos_osinfo",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-osinfo",
     dump_mode: str = "overwrite",
@@ -34,13 +34,13 @@ def rj_cvl__osinfo(  # noqa
     break_query_frequency: Optional[str] = None,
     break_query_start: Optional[str] = None,
     break_query_end: Optional[str] = None,
-    retry_dump_upload_attempts: int = 2,
+    retry_dump_upload_attempts: int = 1,
     batch_size: int = 50000,
     batch_data_type: str = "csv",
     biglake_table: bool = True,
     log_number_of_batches: int = 100,
     max_concurrency: int = 1,
-    only_staging_dataset: bool = True,
+    only_staging_dataset: bool = False,
     add_timestamp_column: bool = True,
 ):
     rename_current_flow_run_task(new_name=table_id)

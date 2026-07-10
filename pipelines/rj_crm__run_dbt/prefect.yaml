@@ -64,7 +64,7 @@ deployments:
             dev: "rj-crm-registry-dev_dbt"
       # Schedule 2: Daily build with daily and freshness tags
       - interval: 86400
-        anchor_date: "2023-01-01T09:15:00"
+        anchor_date: "2023-01-01T10:15:00"
         timezone: America/Sao_Paulo
         slug: dbt_daily_build
         parameters:
