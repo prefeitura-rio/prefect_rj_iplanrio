@@ -2,3 +2,9 @@
 name = "rj_pgm__divida_ativa"
 version = "0.1.0"
 description = "Pipeline divida_ativa da secretaria pgm"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

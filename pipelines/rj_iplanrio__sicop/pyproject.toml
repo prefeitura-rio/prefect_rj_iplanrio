@@ -2,3 +2,9 @@
 name = "rj_iplanrio__sicop"
 version = "0.1.0"
 description = "Pipeline sicop da secretaria iplanrio"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
