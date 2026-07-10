@@ -297,6 +297,7 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         if response.status_code != 201:
             log(f"Falha no disparo do lote {i}: {response.text}")
             response.raise_for_status()
+            raise Exception(f"Dispatch failed: {response.text}")
 
         log(f"Disparo do lote {i} realizado com sucesso!")
 
@@ -467,16 +468,16 @@ def check_api_status(api: object) -> bool:
 
 
 @task
-def get_already_dispatched_data(billing_project_id: str) -> pd.DataFrame:
+def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days: int) -> pd.DataFrame:
     """
     Busca no BigQuery a lista de CPFs ou telefones que já tiveram um disparo
     bem-sucedido ou em processamento hoje.
     """
-    query = """
-        SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo, status
-        FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-        WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo")
-          AND status IN ("PROCESSING", "SENT", "DELIVERED", "READ")
+    query = f"""
+        SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_campanha, data_particao
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
+          AND status_disparo IN ("processing", "sent", "delivered")
     """
     log(f"Buscando disparos já realizados hoje para evitar duplicidade:\n{query}")
     try:
@@ -486,53 +487,69 @@ def get_already_dispatched_data(billing_project_id: str) -> pd.DataFrame:
         return df
     except Exception as err:
         log(f"Erro ao buscar disparos realizados: {err}. Retornando DataFrame vazio.", level="warning")
-        return pd.DataFrame(columns=["externalId", "celular_disparo", "status"])
+        return pd.DataFrame(columns=["cpf", "telefone", "status", "nome_campanha", "data_particao"])
+
+
+@task
+def filter_duplicated(
+    df: pd.DataFrame,
+    column: str,
+    filter_indicator: bool,
+    label: str,
+) -> pd.DataFrame:
+    """
+    Remove duplicate entries from a DataFrame based on a specified column.
+    Only executes if filter_indicator is True.
+    """
+    if df is None or df.empty:
+        return df
+
+    if filter_indicator and column in df.columns:
+        n_before = len(df)
+        df = df.drop_duplicates(subset=[column])
+        log(f"Removed {n_before - len(df)} duplicate {label}. Remaining: {len(df)}")
+    return df
 
 
 @task
 def filter_already_dispatched_phones_or_cpfs(
-    destinations: List[Dict], 
-    already_dispatched_df: pd.DataFrame, 
-    field: str = "cpf"
-) -> List[Dict]:
+    df: pd.DataFrame,
+    already_dispatched_df: pd.DataFrame,
+    current_filter: str = 'cpf'
+) -> pd.DataFrame:
     """
-    Filters out CPFs that have already been dispatched today.
-
-    Args:
-        destinations (List[Dict]): A list of destination dictionaries.
-        already_dispatched_df (pd.DataFrame): A DataFrame containing already dispatched destinations.
-        field (str): The field in the destination dict that contains the phone number.
-            Field must be "cpf" or "phone_number"
-
-    Returns:
-        List[Dict]: A list of destination dictionaries that have not yet been dispatched.
+    Filters out rows from the DataFrame where the identifier (cpf or phone) 
+    has already been dispatched today.
     """
-    if not destinations or already_dispatched_df.empty:
-        return destinations
+    if df is None or df.empty or already_dispatched_df.empty:
+        return df
 
-    if field not in ["cpf", "phone_number"]:
-        log(f"\n⚠️  Invalid field '{field}' for filtering dispatched phones. Must be 'cpf' or 'phone_number'")
-        return destinations
-
-    already_dispatched_df.rename(columns={"celular_disparo": "to"}, inplace=True)
-
-    destinations_field = "externalId" if field == "cpf" else "to"
-    already_dispatched_field = "externalId" if field == "cpf" else "to"
-
-    if already_dispatched_field not in already_dispatched_df.columns:
-        log(f"Coluna {already_dispatched_field} não encontrada nos dados de controle. Ignorando filtro.", level="warning")
-        return destinations
-
-    dispatched_set = set(already_dispatched_df[already_dispatched_field].tolist())
+    # Mapeamos o filtro informado para as colunas corretas de cada DataFrame: (col_envio, col_controle)
+    # - col_envio: nome da coluna no DataFrame de envio (df), que para CPF é 'cpf'.
+    # - col_controle: nome da coluna no DataFrame de controle (already_dispatched_df), que para CPF também é 'cpf'.
+    mapping = {
+        "cpf": ("cpf", "cpf"),
+        "SubscriberKey": ("cpf", "cpf"),
+        "telefone": ("telefone", "telefone"),
+        None: ("cpf", "cpf")
+    }
     
-    filtered_destinations = [
-        dest for dest in destinations if dest.get(destinations_field) not in dispatched_set
-    ]
+    col_envio, col_controle = mapping.get(current_filter, ("cpf", "cpf"))
+
+    if col_envio not in df.columns:
+        log(f"Coluna {col_envio} não encontrada no DataFrame de envio. Ignorando filtro.", level="warning")
+        return df
+
+    if col_controle not in already_dispatched_df.columns:
+        log(f"Coluna {col_controle} não encontrada no controle de já disparados. Ignorando filtro.", level="warning")
+        return df
+
+    n_before = len(df)
+    dispatched_set = set(already_dispatched_df[col_controle].dropna())
+    df = df[~df[col_envio].isin(dispatched_set)]
+    log(f"Removed {n_before - len(df)} already dispatched {col_envio}. Remaining: {len(df)}")
     
-    removed_count = len(destinations) - len(filtered_destinations)
-    log(f"Filtro '{field}' aplicado: {removed_count} registros removidos por já terem disparos realizados hoje.")
-    
-    return filtered_destinations
+    return df
 
 
 def normalize_keys(d: Dict) -> Dict:
@@ -589,7 +606,10 @@ def get_destinations(
     else:
         if isinstance(destinations, str):
             destinations = json.loads(destinations)
+        elif isinstance(destinations, list):
+            log("destinations recebido como lista diretamente.")
         else:
+            log(f"Tipo inesperado para destinations: {type(destinations)}. Retornando lista vazia.", level="warning")
             return []
 
     if destinations:
@@ -936,6 +956,9 @@ def get_failed_phones(billing_project_id: str, campaign_name: str = None) -> set
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
+        if failed_df.empty:
+            log("Nenhuma falha de telefone detectada nas últimas horas.")
+            return set()
         print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_phones = set(str(x) for x in failed_df['telefone'].tolist())
         return failed_phones
@@ -947,7 +970,7 @@ def get_failed_phones(billing_project_id: str, campaign_name: str = None) -> set
 @task
 def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     """
-    Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
+    Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 4 horas,
     """
     campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
     query = f"""
@@ -964,6 +987,9 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
+        if failed_df.empty:
+            log("Nenhuma falha de CPF detectada nas últimas 4 horas.")
+            return set()
         print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_cpfs = set(str(x) for x in failed_df['cpf'].tolist())
         print(f"DEBUG failed_cpfs {failed_cpfs}")
@@ -972,7 +998,7 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
         return set()
 
     if not failed_cpfs:
-        log(f"Nenhuma falha detectada para nas últimas 2 horas.")
+        log("Nenhuma falha de CPF detectada nas últimas 4 horas.")
         return set()
     
     return failed_cpfs

@@ -187,7 +187,7 @@ def log_validation_summary(stats: ValidationStats, context: str = ""):
 def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
     """
     Valida que o DataFrame retornado pela query possui as colunas obrigatórias
-    para o flow SF: SubscriberKey e telefone.
+    para o flow SF: cpf e telefone.
 
     Deve ser chamada logo após a checagem de df vazio no flow, antes de qualquer
     processamento. Se alguma coluna obrigatória estiver ausente, lança ValueError
@@ -201,16 +201,16 @@ def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
         O próprio DataFrame sem modificações
 
     Raises:
-        ValueError: Se SubscriberKey, telefone ou campaign_name estiverem ausentes/inválidos
+        ValueError: Se cpf, telefone ou campaign_name estiverem ausentes/inválidos
     """
-    required_columns = ["SubscriberKey", "telefone"]
+    required_columns = ["cpf", "telefone"]
     missing = [col for col in required_columns if col not in df.columns]
 
     if missing:
         raise ValueError(
             f"O DataFrame não possui as colunas obrigatórias para o log SF: {missing}. "
             f"Colunas presentes: {list(df.columns)}. "
-            "Verifique se a query retorna 'SubscriberKey' e 'telefone'."
+            "Verifique se a query retorna 'cpf' e 'telefone'."
         )
 
     if not campaign_name or not str(campaign_name).strip():
@@ -227,7 +227,7 @@ def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
             SfDispatchRow(
                 dispatch_date="2000-01-01",  # placeholder para validação estrutural
                 campaign_name=str(campaign_name),
-                SubscriberKey=str(row.get("SubscriberKey", "")),
+                cpf=str(row.get("cpf", "")),
                 telefone=str(row.get("telefone", "")),
             )
         except ValidationError as e:

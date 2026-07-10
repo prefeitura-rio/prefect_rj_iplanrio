@@ -150,7 +150,7 @@ class SfDispatchRow(BaseModel):
     Campos obrigatórios:
     - dispatch_date: Data e hora do disparo
     - campaign_name: Nome da campanha
-    - SubscriberKey: Chave do assinante no Salesforce (case-sensitive)
+    - cpf: CPF do cidadão (coluna interna do flow; renomeada para SubscriberKey apenas na escrita)
     - telefone: Número de telefone disparado
 
     A coluna `data` (JSON com demais campos) é construída pelo create_log_df,
@@ -159,7 +159,7 @@ class SfDispatchRow(BaseModel):
 
     dispatch_date: str = Field(..., description="Data e hora do disparo")
     campaign_name: str = Field(..., min_length=1, description="Nome da campanha")
-    SubscriberKey: str = Field(..., min_length=1, description="Chave do assinante no Salesforce")
+    cpf: str = Field(..., min_length=1, description="CPF do cidadão")
     telefone: str = Field(..., min_length=1, description="Número de telefone disparado")
 
     @validator("campaign_name")
@@ -168,12 +168,12 @@ class SfDispatchRow(BaseModel):
             raise ValueError("campaign_name não pode ser vazio ou apenas espaços")
         return v.strip()
 
-    @validator("SubscriberKey")
-    def validate_subscriber_key(cls, v):
+    @validator("cpf")
+    def validate_cpf(cls, v):
         if not isinstance(v, str):
-            raise ValueError("SubscriberKey deve ser uma string")
+            raise ValueError("cpf deve ser uma string")
         if not v.strip():
-            raise ValueError("SubscriberKey não pode ser vazio ou apenas espaços")
+            raise ValueError("cpf não pode ser vazio ou apenas espaços")
         return v.strip()
 
     @validator("telefone")

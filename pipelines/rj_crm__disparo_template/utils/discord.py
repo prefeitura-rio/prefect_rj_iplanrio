@@ -150,6 +150,7 @@ def send_dispatch_result_notification(
     campaign_name: str,
     total_batches: int,
     test_mode: bool = False,
+    billing_project_id: str = "rj-crm-registry",
 ):
     """
     Envia notificação com resultados do disparo após consulta no BigQuery.
@@ -208,7 +209,7 @@ def send_dispatch_result_notification(
 
     # Executar query no BigQuery
     results_df = download_data_from_bigquery(
-        query=results_query, billing_project_id="rj-crm-registry", bucket_name="rj-crm-registry"
+        query=results_query, billing_project_id=billing_project_id, bucket_name=billing_project_id
     )
 
     # Adicionar indicador [TESTE] no título se test_mode=True
@@ -248,6 +249,7 @@ def send_retry_dispatch_result_notification(
     cost_center_id: int,
     total_batches: int,
     test_mode: bool = False,
+    billing_project_id: str = "rj-crm-registry",
 ):
     """
     Envia notificação com resultados finais considerando retentativas.
@@ -297,7 +299,7 @@ def send_retry_dispatch_result_notification(
 
     log("Querying BigQuery for final retry results...")
     results_df = download_data_from_bigquery(
-        query=results_query, billing_project_id="rj-crm-registry", bucket_name="rj-crm-registry"
+        query=results_query, billing_project_id=billing_project_id, bucket_name=billing_project_id
     )
 
     title = "🔄 **[TESTE] Resultados Finais (Pós-Retentativa)**" if test_mode else "🔄 **Resultados Finais (Pós-Retentativa)**"

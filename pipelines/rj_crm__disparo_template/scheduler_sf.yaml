@@ -358,7 +358,7 @@ schedules:
 
 
 # Schedule para testar flow na salesforce
-  - interval: 864000000
+  - interval: 86400
     anchor_date: "2021-01-01T13:00:00"
     timezone: America/Sao_Paulo
     active: false
@@ -411,7 +411,7 @@ schedules:
       query_file: queries_test/smas_cartaopic_lembrete.sql
 
 # Schedule para testar flow na salesforce
-  # - interval: 864000000
+  # - interval: 86400
   #   anchor_date: "2021-01-01T13:00:00"
   #   timezone: America/Sao_Paulo
   #   active: false
