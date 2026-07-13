@@ -461,7 +461,7 @@ schedules:
     slug: daily-smas-cartaopic-evento
     flow_run_name: smas-cartaopic-evento
     parameters:
-      query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27", "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 184}
+      query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
       campaign_name: smascartaoprimeirainfanciaprodv27
       data_extension_filename: whatsapp_smas_cartaopic_evento
       de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
@@ -492,7 +492,7 @@ schedules:
     slug: daily-smas-cartaopic-lembrete
     flow_run_name: smas-cartaopic-lembrete
     parameters:
-      query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4", "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 185}
+      query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4", "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
       campaign_name: smascartaoprimeirainfancialembreteprodv4
       data_extension_filename: whatsapp_smas_cartaopic_lembrete
       de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
