@@ -7,9 +7,6 @@ schedules:
     slug: daily-cvl-1746-survey-invitation-without-resolution
     flow_run_name: cvl-pesquisa1746
     parameters:
-      # nome_hsm_placeholder é o próprio campaign_name deste schedule (chave usada pra
-      # checar duplicidade em status_disparo); id_hsm_placeholder é o templateId
-      # numérico legado, usado no fallback via wetalkie.
       query_replacements: {"id_hsm_placeholder": 291, "nome_hsm_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
       campaign_name: cvl_pesquisa_1746_sem_resolucao_prod_v1
       data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_sem_solucao
