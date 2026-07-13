@@ -67,7 +67,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -93,7 +93,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -119,7 +119,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -217,7 +217,7 @@ schedules:
             intervalo_filtro_disparados: 1
         table_id: disparos_efetuados
         dump_mode: append
-        test_mode: false
+        test_mode: true
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo4v3
         data_extension_filename: whatsapp_sms_puerperas_pesquisa1
@@ -258,7 +258,7 @@ schedules:
   #           intervalo_filtro_disparados: 1
   #       table_id: disparos_efetuados
   #       dump_mode: append
-  #       test_mode: false
+  #       test_mode: true
   #       dataset_id: brutos_salesforce
   #       campaign_name: smspuerperasdisparo9
   #       data_extension_filename: whatsapp_sms_puerperas_pesquisa3
@@ -372,7 +372,7 @@ schedules:
   #           intervalo_filtro_disparados: 300
   #       table_id: disparos_efetuados
   #       dump_mode: append
-  #       test_mode: false
+  #       test_mode: true
   #       dataset_id: brutos_salesforce
   #       campaign_name: smspuerperasdisparo14
   #       data_extension_filename: whatsapp_sms_puerperas_pesquisa6
@@ -407,7 +407,7 @@ schedules:
             intervalo_filtro_disparados: 300
         table_id: disparos_efetuados
         dump_mode: append
-        test_mode: false
+        test_mode: true
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo152
         data_extension_filename: whatsapp_sms_puerperas_pesquisa7
@@ -441,7 +441,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -468,7 +468,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -499,7 +499,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
