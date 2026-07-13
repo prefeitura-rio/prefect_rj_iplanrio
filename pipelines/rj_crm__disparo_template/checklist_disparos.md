@@ -1,6 +1,6 @@
 # Checklist de Disparos — rj_crm__disparo_template
 
-Jornadas ativas em desenvolvimento: Dívida Ativa, Puérperas e CadÚnico. (CVL 1746 e Cartão Primeira Infância ficam de fora por enquanto.)
+Jornadas ativas em desenvolvimento: Dívida Ativa, Puérperas, CadÚnico, CVL 1746 e Cartão Primeira Infância (PIC).
 
 Para cada etapa, marcar:
 - [ ] **Query prod retornou dados** — rodada manualmente contra as tabelas de produção
@@ -136,3 +136,61 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - [] Query prod retornou dados (vale conferir)
 - [ ] Disparo testado fim a fim
 - [x] Jornada testada fim a fim
+
+---
+
+## 4. CVL 1746 (Central de Atendimento)
+
+Pesquisa de satisfação pós-atendimento de chamados 1746, dois ramos dependendo do desfecho (fechado com solução / sem resolução).
+
+### Pesquisa — Fechado com solução
+- campaign_name: `cvl_pesquisa_1746_prod_v1`
+- Prod: `queries/cvl_pesquisa_1746_com_solucao.sql`
+- Dev: `queries_dev/cvl_pesquisa_1746_com_solucao.sql`
+- Test: `queries_test/cvl_pesquisa_1746_com_solucao__test.sql`
+- Tabelas prod/dev (mesmas tabelas fonte, sem fantasma dev): `rj-segovi.adm_central_atendimento_1746.chamado`, `chamado_cpf`, `pessoa`, `origem_ocorrencia`, `rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`, `rj-crm-registry.brutos_salesforce.status_disparo`
+- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 192, via `id_hsm_placeholder` no scheduler_sf.yaml)
+- Schedule `daily-cvl-pesquisa1746-prod` está `active: false` no scheduler_sf.yaml
+- [ ] Query prod retornou dados
+- [ ] Disparo testado fim a fim
+- [ ] Jornada testada fim a fim
+
+### Pesquisa — Sem resolução
+- campaign_name: `cvl_pesquisa_1746_sem_resolucao_prod_v1`
+- Prod: `queries/cvl_pesquisa_1746_sem_resolucao.sql`
+- Dev: `queries_dev/cvl_pesquisa_1746_sem_resolucao.sql`
+- Test: `queries_test/cvl_pesquisa_1746_sem_resolucao__test.sql`
+- Tabelas prod/dev: idem Pesquisa — Fechado com solução
+- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 291, via `id_hsm_placeholder` no scheduler_sf.yaml)
+- Schedule `daily-cvl-1746-survey-invitation-without-resolution` está `active: true` mas com `test_mode: true`
+- [ ] Query prod retornou dados
+- [ ] Disparo testado fim a fim
+- [ ] Jornada testada fim a fim
+
+---
+
+## 5. SMAS Cartão Primeira Infância (PIC)
+
+Aviso de evento de entrega do cartão + lembrete, ambos condicionados a aprovação manual na planilha de bairros de entrega (gate `target_date` na query — sem aprovação do dia, a query nem toca nas tabelas pesadas).
+
+### Aviso de evento
+- campaign_name: `smascartaoprimeirainfanciaprodv27`
+- Prod: `queries/smas_cartaopic_evento.sql`
+- Dev: `queries_dev/smas_cartaopic_evento.sql`
+- Test: `queries_test/smas_cartaopic_evento__test.sql`
+- Tabelas: `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`, `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status`, `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-crm-registry.intermediario_rmi_telefones.int_telefone`
+- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 184, via `id_hsm_legado_placeholder` no scheduler_sf.yaml)
+- [ ] Query prod retornou dados
+- [ ] Disparo testado fim a fim
+- [ ] Jornada testada fim a fim
+
+### Lembrete
+- campaign_name: `smascartaoprimeirainfancialembreteprodv4`
+- Prod: `queries/smas_cartaopic_lembrete.sql`
+- Dev: `queries_dev/smas_cartaopic_lembrete.sql`
+- Test: `queries_test/smas_cartaopic_lembrete__test.sql`
+- Tabelas: idem Aviso de evento
+- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 185, via `id_hsm_legado_placeholder` no scheduler_sf.yaml)
+- [ ] Query prod retornou dados
+- [ ] Disparo testado fim a fim
+- [ ] Jornada testada fim a fim

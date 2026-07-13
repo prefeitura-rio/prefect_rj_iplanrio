@@ -31,13 +31,10 @@ schedules:
   - interval: 86400
     anchor_date: "2021-01-01T19:00:00"
     timezone: America/Sao_Paulo
-    active: false
+    active: true
     slug: daily-cvl-pesquisa1746-prod
     flow_run_name: cvl-pesquisa1746
     parameters:
-      # nome_hsm_placeholder é o próprio campaign_name deste schedule (chave usada pra
-      # checar duplicidade em status_disparo); id_hsm_placeholder é o templateId
-      # numérico legado, usado no fallback via wetalkie.
       query_replacements: {"id_hsm_placeholder": 192, "nome_hsm_placeholder": "cvl_pesquisa_1746_prod_v1"}
       campaign_name: cvl_pesquisa_1746_prod_v1
       data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_com_solucao
@@ -45,7 +42,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: false
+      test_mode: true
       sleep_minutes: 5
       flow_environment: staging
       whitelist_percentage: 0
@@ -63,10 +60,6 @@ schedules:
     slug: daily-pgm-divida-ativa-prod
     flow_run_name: pgm-divida-ativa
     parameters:
-      # nome_hsm_cobranca_placeholder é o próprio campaign_name deste schedule.
-      # id_hsm_legado_cobranca_placeholder: IDs numéricos legados da Wetalkie (pré-migração
-      # pra status_disparo), usados como fallback de "já disparado" enquanto a
-      # status_disparo não tem histórico completo.
       query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "limit_placeholder": 300, "id_hsm_legado_cobranca_placeholder": "196, 239"}
       campaign_name: pgm_divida_ativa_prod_v2
       data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
@@ -93,11 +86,6 @@ schedules:
     slug: daily-pgm-divida-ativa-lembrete-prod-v1
     flow_run_name: pgm-divida-ativa-lembrete
     parameters:
-      # nome_hsm_cobranca_placeholder é o campaign_name do schedule daily-pgm-divida-ativa-prod;
-      # nome_hsm_lembrete_placeholder é o próprio campaign_name deste schedule.
-      # id_hsm_legado_*_placeholder: IDs numéricos legados da Wetalkie (pré-migração pra
-      # status_disparo), usados como fallback de "já disparado" enquanto a status_disparo
-      # não tem histórico completo.
       query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227"}
       campaign_name: pgmdividaativalembreteprodv1
       data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
@@ -124,12 +112,6 @@ schedules:
     slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
     flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
     parameters:
-      # nome_hsm_cobranca_placeholder e nome_hsm_lembrete_placeholder são os campaign_name dos
-      # schedules daily-pgm-divida-ativa-prod e daily-pgmdividaativalembreteprodv1;
-      # nome_hsm_agradecimento_placeholder é o próprio campaign_name deste schedule.
-      # id_hsm_legado_*_placeholder: IDs numéricos legados da Wetalkie (pré-migração pra
-      # status_disparo), usados como fallback de "já disparado" enquanto a status_disparo
-      # não tem histórico completo.
       query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227", "id_hsm_legado_agradecimento_placeholder": "231"}
       campaign_name: pgmdividaativaconfirmapgtoprodv1
       data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
@@ -158,9 +140,6 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: _sms_puerpera_disp1_gestantev2
             intervalo_filtro_disparados: 1
-            # ID numérico legado da Wetalkie (pré-migração pra status_disparo), usado
-            # como fallback de "já disparado" enquanto a status_disparo não tem
-            # histórico completo.
             id_hsm_legado_placeholder: 573
         table_id: disparos_efetuados
         dump_mode: append
@@ -171,7 +150,7 @@ schedules:
         de_columns: ["nome", "maternidade", "data", "hora"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        flow_environment: production
+        flow_environment: staging
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -193,9 +172,6 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo25
             intervalo_filtro_disparados: 365
-            # ID numérico legado da Wetalkie (pré-migração pra status_disparo), usado
-            # como fallback de "já disparado" enquanto a status_disparo não tem
-            # histórico completo.
             id_hsm_legado_placeholder: 610
         table_id: disparos_efetuados
         dump_mode: append
@@ -206,7 +182,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        flow_environment: production
+        flow_environment: staging
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -248,7 +224,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        flow_environment: production
+        flow_environment: staging
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -261,45 +237,45 @@ schedules:
         query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
-  - cron: "0 10 * * *"
-    timezone: America/Sao_Paulo
-    active: false
-    slug: daily-sms-puerperas-d13-d16-d19
-    flow_run_name: sms-puerperas-d13-d16-d19
-    parameters:
-        query_replacements:
-            nome_hsm_placeholder: smspuerperasdisparo9
-            nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            id_hsm_legado_placeholder: 562
-            id_hsm_anterior_legado_placeholder: 610
-            pesquisa_id: "Pesquisa 3"
-            datas_internacao: |
-                DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
-                DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
-                DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
-            intervalo_filtro_disparados: 1
-        table_id: disparos_efetuados
-        dump_mode: append
-        test_mode: false
-        dataset_id: brutos_salesforce
-        campaign_name: smspuerperasdisparo9
-        data_extension_filename: whatsapp_sms_puerperas_pesquisa3
-        de_columns: ["nome"]
-        max_dispatch_retries: 0
-        sleep_minutes: 5
-        flow_environment: production
-        whitelist_percentage: 100
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
-        filter_duplicated_cpfs: true
-        filter_duplicated_phones: false
-        filter_dispatched_phones_or_cpfs: null
-        filter_failed_phones: false
-        force_add_on_whitelist_group: true
-        whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+  # - cron: "0 10 * * *"
+  #   timezone: America/Sao_Paulo
+  #   active: false
+  #   slug: daily-sms-puerperas-d13-d16-d19
+  #   flow_run_name: sms-puerperas-d13-d16-d19
+  #   parameters:
+  #       query_replacements:
+  #           nome_hsm_placeholder: smspuerperasdisparo9
+  #           nome_hsm_anterior_placeholder: smspuerperasdisparo25
+  #           # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+  #           # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+  #           id_hsm_legado_placeholder: 562
+  #           id_hsm_anterior_legado_placeholder: 610
+  #           pesquisa_id: "Pesquisa 3"
+  #           datas_internacao: |
+  #               DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
+  #               DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
+  #               DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
+  #           intervalo_filtro_disparados: 1
+  #       table_id: disparos_efetuados
+  #       dump_mode: append
+  #       test_mode: false
+  #       dataset_id: brutos_salesforce
+  #       campaign_name: smspuerperasdisparo9
+  #       data_extension_filename: whatsapp_sms_puerperas_pesquisa3
+  #       de_columns: ["nome"]
+  #       max_dispatch_retries: 0
+  #       sleep_minutes: 5
+  #       flow_environment: staging
+  #       whitelist_percentage: 100
+  #       infisical_secret_path: /crm_disparo_template
+  #       whitelist_environment: production
+  #       filter_duplicated_cpfs: true
+  #       filter_duplicated_phones: false
+  #       filter_dispatched_phones_or_cpfs: null
+  #       filter_failed_phones: false
+  #       force_add_on_whitelist_group: true
+  #       whitelist_replace_contacts: true
+  #       query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D7 e D22 - Pesquisa 4
   - cron: "0 10 * * *"
@@ -311,9 +287,6 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperadisparo6
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            # Essa campanha unifica os antigos D7/Pesquisa2 (456) e D22/Pesquisa4 (489).
             id_hsm_legado_placeholder: "456, 489"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 4"
@@ -330,7 +303,7 @@ schedules:
         de_columns: ["nome", "numero_dias"]  # única pesquisa cuja hsm usa a variável numero_dias
         max_dispatch_retries: 0
         sleep_minutes: 5
-        flow_environment: production
+        flow_environment: staging
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -352,8 +325,6 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
             id_hsm_legado_placeholder: 564
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
@@ -370,7 +341,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        flow_environment: production
+        flow_environment: staging
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -383,56 +354,53 @@ schedules:
         query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D34 - Pesquisa 6
-  - cron: "0 10 * * *"
-    timezone: America/Sao_Paulo
-    active: false
-    slug: daily-sms-puerperas-d34
-    flow_run_name: sms-puerperas-d34
-    parameters:
-        query_replacements:
-            nome_hsm_placeholder: smspuerperasdisparo14
-            nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            id_hsm_legado_placeholder: 566
-            id_hsm_anterior_legado_placeholder: 610
-            pesquisa_id: "Pesquisa 6"
-            datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
-            intervalo_filtro_disparados: 300
-        table_id: disparos_efetuados
-        dump_mode: append
-        test_mode: false
-        dataset_id: brutos_salesforce
-        campaign_name: smspuerperasdisparo14
-        data_extension_filename: whatsapp_sms_puerperas_pesquisa6
-        de_columns: ["nome"]
-        max_dispatch_retries: 0
-        sleep_minutes: 5
-        flow_environment: production
-        whitelist_percentage: 100
-        infisical_secret_path: /crm_disparo_template
-        whitelist_environment: production
-        filter_duplicated_cpfs: true
-        filter_duplicated_phones: false
-        filter_dispatched_phones_or_cpfs: null
-        filter_failed_phones: false
-        force_add_on_whitelist_group: true
-        whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+  # - cron: "0 10 * * *"
+  #   timezone: America/Sao_Paulo
+  #   active: false
+  #   slug: daily-sms-puerperas-d34
+  #   flow_run_name: sms-puerperas-d34
+  #   parameters:
+  #       query_replacements:
+  #           nome_hsm_placeholder: smspuerperasdisparo14
+  #           nome_hsm_anterior_placeholder: smspuerperasdisparo25
+  #           # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+  #           # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+  #           id_hsm_legado_placeholder: 566
+  #           id_hsm_anterior_legado_placeholder: 610
+  #           pesquisa_id: "Pesquisa 6"
+  #           datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
+  #           intervalo_filtro_disparados: 300
+  #       table_id: disparos_efetuados
+  #       dump_mode: append
+  #       test_mode: false
+  #       dataset_id: brutos_salesforce
+  #       campaign_name: smspuerperasdisparo14
+  #       data_extension_filename: whatsapp_sms_puerperas_pesquisa6
+  #       de_columns: ["nome"]
+  #       max_dispatch_retries: 0
+  #       sleep_minutes: 5
+  #       flow_environment: staging
+  #       whitelist_percentage: 100
+  #       infisical_secret_path: /crm_disparo_template
+  #       whitelist_environment: production
+  #       filter_duplicated_cpfs: true
+  #       filter_duplicated_phones: false
+  #       filter_dispatched_phones_or_cpfs: null
+  #       filter_failed_phones: false
+  #       force_add_on_whitelist_group: true
+  #       whitelist_replace_contacts: true
+  #       query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
  # Disparo SMS Puérperas D40 - Pesquisa 7
   - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
-    active: false
+    active: true
     slug: daily-sms-puerperas-d40
     flow_run_name: sms-puerperas-d40
     parameters:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            id_hsm_legado_placeholder: 589
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
@@ -446,7 +414,7 @@ schedules:
         de_columns: ["nome"]
         max_dispatch_retries: 0
         sleep_minutes: 5
-        flow_environment: production
+        flow_environment: staging
         whitelist_percentage: 100
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
@@ -466,8 +434,6 @@ schedules:
     slug: daily-cadunico-confirma-agendamento
     flow_run_name: cadunico-confirma-agendamento
     parameters:
-      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie/telefone_disparado
-      # (pré-migração pra status_disparo), usado como fallback de "já disparado".
       query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 15, "id_hsm_legado_placeholder": 101}
       campaign_name: confirma_agendamento_cadunico_prod_v2
       data_extension_filename: whatsapp_cadunico_
@@ -491,12 +457,10 @@ schedules:
   - interval: 86400
     anchor_date: "2021-01-01T12:00:00"
     timezone: America/Sao_Paulo
-    active: false
+    active: true
     slug: daily-smas-cartaopic-evento
     flow_run_name: smas-cartaopic-evento
     parameters:
-      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie (pré-migração pra
-      # status_disparo), usado como fallback de "já disparado".
       query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27", "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 184}
       campaign_name: smascartaoprimeirainfanciaprodv27
       data_extension_filename: whatsapp_smas_cartaopic_evento
@@ -506,7 +470,7 @@ schedules:
       dump_mode: append
       test_mode: false
       sleep_minutes: 5
-      flow_environment: production
+      flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
@@ -519,29 +483,6 @@ schedules:
       query_file: queries_dev/smas_cartaopic_evento.sql
 
 
-# Schedule para testar flow na salesforce
-  - interval: 864000000
-    anchor_date: "2021-01-01T13:00:00"
-    timezone: America/Sao_Paulo
-    active: false
-    slug: test-salesforce
-    flow_run_name: test-salesforce
-    parameters:
-      campaign_name: confirma_agendamento_cadunico_prod_v2
-      dataset_id: brutos_salesforce
-      table_id: disparos_efetuados_teste
-      dump_mode: append
-      test_mode: true
-      sleep_minutes: 1
-      flow_environment: staging
-      filter_dispatched_phones_or_cpfs: null
-      filter_duplicated_phones: false
-      filter_duplicated_cpfs: false
-      whitelist_percentage: 0
-      infisical_secret_path: "/crm_disparo_template"
-      whitelist_environment: "production"
-      query_file: queries_dev/smas_cartaopic_evento.sql
-
   # Disparo SMAS Cartão Primeira Infância - Lembrete
   # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
   - interval: 86400
@@ -551,11 +492,6 @@ schedules:
     slug: daily-smas-cartaopic-lembrete
     flow_run_name: smas-cartaopic-lembrete
     parameters:
-      # nome_hsm_placeholder é o próprio campaign_name deste schedule.
-      # intervalo_filtro_disparados: chute de 30 dias pra evitar reenviar o lembrete do
-      # mesmo evento - CONFIRMAR antes de ativar (sem referência no checklist_disparos.md).
-      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie (pré-migração pra
-      # status_disparo), usado como fallback de "já disparado".
       query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4", "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 185}
       campaign_name: smascartaoprimeirainfancialembreteprodv4
       data_extension_filename: whatsapp_smas_cartaopic_lembrete
@@ -573,35 +509,3 @@ schedules:
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
       query_file: queries_dev/smas_cartaopic_lembrete.sql
-
-# Schedule para testar flow na salesforce
-  # - interval: 864000000
-  #   anchor_date: "2021-01-01T13:00:00"
-  #   timezone: America/Sao_Paulo
-  #   active: false
-  #   slug: test-salesforce
-  #   flow_run_name: test-salesforce
-  #   parameters:
-  #     id_hsm: null
-  #     campaign_name: confirma_agendamento_cadunico_prod_v2
-  #     cost_center_id: 71
-  #     chunk_size: 1000
-  #     dataset_id: brutos_salesforce
-  #     table_id: disparos_efetuados_teste
-  #     dump_mode: append
-  #     test_mode: true
-  #     sleep_minutes: 1
-  #     flow_environment: staging
-  #     filter_dispatched_phones_or_cpfs: null
-  #     filter_duplicated_phones: false
-  #     filter_duplicated_cpfs: false
-  #     whitelist_percentage: 0
-  #     infisical_secret_path: "/crm_disparo_template"
-  #     whitelist_environment: "production"
-  #     filter_failed_phones: false
-  #     force_add_on_whitelist_group: false
-  #     whitelist_replace_contacts: false
-  #     data_extension_filename: whatsapp_cadunico
-  #     query: |
-  #       select
-  #           * from rj-crm-registry-dev.teste.agendamento_cadunico_teste
