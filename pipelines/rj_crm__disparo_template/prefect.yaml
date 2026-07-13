@@ -1765,3 +1765,455 @@ deployments:
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
           query: *puerperas_query_template
+
+
+ # Disparo SMTR Cobrança de Multas
+      - cron: "0 15 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: daily-smtr-multas-de-transito-v1
+        flow_run_name: smtr-multas-de-transito-v1
+        parameters:
+          flow_environment: production
+          id_hsm: 918
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          chunk_size: 1000
+          dataset_id: brutos_wetalkie
+          campaign_name: smtr-multas-de-transito-v1
+          max_dispatch_retries: 0
+          sleep_minutes: 5
+          cost_center_id: 71
+          whitelist_percentage: 0
+          infisical_secret_path: /wetalkie
+          whitelist_environment: production
+          filter_duplicated_cpfs: true
+          filter_duplicated_phones: false
+          filter_dispatched_phones_or_cpfs:
+          filter_failed_phones: true
+          force_add_on_whitelist_group: false
+          whitelist_replace_contacts: false
+          query:  |
+            -- ============================================================
+            -- Randomização - Multas vencidas / não pagas
+            -- Tratamento: 1.200 CPFs
+            -- Controle: 1.200 CPFs
+            -- Seed: 17041993
+            -- Inclui todas as categorias de estrategia_envio:
+            -- ENVIAR, TESTAR, EVITAR, NÃO ENVIAR etc.
+            -- ============================================================
+
+            DECLARE n_tratamento INT64 DEFAULT 1200;
+            DECLARE n_controle   INT64 DEFAULT 1200;
+            DECLARE seed STRING DEFAULT '17041993';
+
+            -- ============================================================
+            -- 1) RMI: dados demográficos e telefone
+            --    Sem filtrar estrategia_envio, para manter ENVIAR/TESTAR/EVITAR/NÃO ENVIAR
+            -- ============================================================
+            CREATE TEMP TABLE rmi AS
+            WITH rmi_base AS (
+            SELECT
+                LPAD(REGEXP_REPLACE(CAST(pf.cpf AS STRING), r'\D', ''), 11, '0') AS cpf,
+
+                COALESCE(pf.nome_social, pf.nome) AS nome_completo,
+
+                `rj-crm-registry.udf.FORMAT_NAME`(
+                COALESCE(pf.nome_social, pf.nome),
+                TRUE
+                ) AS primeiro_nome,
+
+                pf.sexo,
+
+                DATE(pf.nascimento.data) AS data_nascimento,
+
+                DATE_DIFF(
+                CURRENT_DATE("America/Sao_Paulo"),
+                DATE(pf.nascimento.data),
+                YEAR
+                ) AS idade,
+
+                CASE
+                WHEN DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE(pf.nascimento.data), YEAR) BETWEEN 18 AND 29 THEN '18-29'
+                WHEN DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE(pf.nascimento.data), YEAR) BETWEEN 30 AND 39 THEN '30-39'
+                WHEN DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE(pf.nascimento.data), YEAR) BETWEEN 40 AND 49 THEN '40-49'
+                WHEN DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE(pf.nascimento.data), YEAR) BETWEEN 50 AND 59 THEN '50-59'
+                WHEN DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE(pf.nascimento.data), YEAR) BETWEEN 60 AND 69 THEN '60-69'
+                WHEN DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE(pf.nascimento.data), YEAR) >= 70 THEN '70+'
+                ELSE 'Idade não informada'
+                END AS faixa_idade,
+
+                pf.endereco.principal.bairro AS bairro,
+
+                TRIM(
+                REGEXP_REPLACE(
+                    NORMALIZE_AND_CASEFOLD(pf.endereco.principal.bairro, NFKD),
+                    r'[\p{M}\W_]+',
+                    ' '
+                )
+                ) AS bairro_norm,
+
+                pf.telefone.principal.qualidade AS qualidade_tel,
+                pf.telefone.principal.estrategia_envio AS estrategia_envio,
+                pf.telefone.principal.tipo AS tipo_tel,
+                pf.telefone.indicador AS telefone_indicador,
+
+                pf.telefone.principal.indicador_optout AS indicador_optout,
+                pf.telefone.principal.indicador_quarentena AS indicador_quarentena,
+
+                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+                CONCAT(
+                    IFNULL(pf.telefone.principal.ddi, "55"),
+                    IFNULL(pf.telefone.principal.ddd, "21"),
+                    pf.telefone.principal.valor
+                )
+                ) AS celular_disparo,
+
+                pf.menor_idade,
+                pf.obito.indicador AS obito_indicador
+
+            FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
+            WHERE pf.cpf IS NOT NULL
+            )
+
+            SELECT *
+            FROM rmi_base
+            QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY cpf
+            ORDER BY
+                CASE WHEN obito_indicador IS FALSE THEN 0 ELSE 1 END,
+                CASE WHEN menor_idade IS FALSE THEN 0 ELSE 1 END,
+                CASE
+                WHEN estrategia_envio = 'ENVIAR' THEN 0
+                WHEN estrategia_envio = 'TESTAR' THEN 1
+                WHEN estrategia_envio = 'EVITAR' THEN 2
+                WHEN estrategia_envio = 'NÃO ENVIAR' THEN 3
+                ELSE 9
+                END,
+                CASE WHEN qualidade_tel = 'VALIDO' THEN 0 ELSE 1 END,
+                cpf
+            ) = 1;
+
+            -- ============================================================
+            -- 2) Multas vencidas / não pagas
+            -- ============================================================
+            CREATE TEMP TABLE multas_detalhadas AS
+            WITH autuacao_vencida_raw AS (
+            SELECT
+                REGEXP_REPLACE(
+                CAST(COALESCE(documento_proprietario, documento_possuidor_veiculo) AS STRING),
+                r'\D',
+                ''
+                ) AS cpf_raw,
+
+                descricao_veiculo,
+                placa_veiculo,
+                CAST(id_auto_infracao AS STRING) AS id_auto_infracao,
+                SAFE_CAST(valor_infracao AS NUMERIC) AS valor_infracao,
+
+                data AS data_autuacao,
+                data_limite_recurso,
+                status_infracao,
+                descricao_situacao_autuacao
+
+            FROM `rj-smtr.transito.autuacao`
+            WHERE data BETWEEN DATE '2025-01-01' AND CURRENT_DATE("America/Sao_Paulo")
+                AND status_infracao = "NP Gerada"
+                AND descricao_situacao_autuacao IN ('Ativo', 'Desvinculado')
+                AND data_pagamento IS NULL
+                AND COALESCE(valor_pago, 0) = 0
+                AND processo_defesa_autuacao IS NULL
+                AND recurso_penalidade_multa IS NULL
+                AND data_limite_recurso < CURRENT_DATE("America/Sao_Paulo")
+            ),
+
+            autuacao_vencida AS (
+            SELECT
+                LPAD(cpf_raw, 11, '0') AS cpf,
+                descricao_veiculo,
+                placa_veiculo,
+                id_auto_infracao,
+                valor_infracao,
+                data_autuacao,
+                data_limite_recurso,
+                status_infracao,
+                descricao_situacao_autuacao
+            FROM autuacao_vencida_raw
+            WHERE LENGTH(cpf_raw) = 11
+                AND cpf_raw != '00000000000'
+                AND valor_infracao IS NOT NULL
+
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY cpf_raw, id_auto_infracao
+                ORDER BY data_autuacao DESC
+            ) = 1
+            )
+
+            SELECT
+            a.*,
+            r.nome_completo,
+            r.primeiro_nome,
+            r.sexo,
+            r.data_nascimento,
+            r.idade,
+            r.faixa_idade,
+            r.bairro,
+            r.bairro_norm,
+            r.qualidade_tel,
+            r.estrategia_envio,
+            r.tipo_tel,
+            r.telefone_indicador,
+            r.indicador_optout,
+            r.indicador_quarentena,
+            r.celular_disparo,
+            r.menor_idade,
+            r.obito_indicador
+            FROM autuacao_vencida a
+            LEFT JOIN rmi r
+            ON a.cpf = r.cpf;
+
+            -- ============================================================
+            -- 3) Agregado por CPF
+            -- ============================================================
+            CREATE TEMP TABLE multas_por_cpf AS
+            SELECT
+            cpf,
+
+            ANY_VALUE(nome_completo) AS nome_completo,
+            ANY_VALUE(primeiro_nome) AS primeiro_nome,
+            ANY_VALUE(sexo) AS sexo,
+            ANY_VALUE(data_nascimento) AS data_nascimento,
+            ANY_VALUE(idade) AS idade,
+            ANY_VALUE(faixa_idade) AS faixa_idade,
+            ANY_VALUE(bairro) AS bairro,
+            ANY_VALUE(bairro_norm) AS bairro_norm,
+
+            ANY_VALUE(qualidade_tel) AS qualidade_tel,
+            ANY_VALUE(estrategia_envio) AS estrategia_envio,
+            ANY_VALUE(tipo_tel) AS tipo_tel,
+            ANY_VALUE(telefone_indicador) AS telefone_indicador,
+            ANY_VALUE(indicador_optout) AS indicador_optout,
+            ANY_VALUE(indicador_quarentena) AS indicador_quarentena,
+            ANY_VALUE(celular_disparo) AS celular_disparo,
+            ANY_VALUE(menor_idade) AS menor_idade,
+            ANY_VALUE(obito_indicador) AS obito_indicador,
+
+            COUNT(DISTINCT id_auto_infracao) AS n_infracoes_total,
+            SUM(valor_infracao) AS valor_total_infracoes,
+            AVG(valor_infracao) AS valor_medio_infracao,
+
+            COUNT(DISTINCT placa_veiculo) AS n_veiculos_com_infracao,
+
+            STRING_AGG(
+                DISTINCT id_auto_infracao,
+                ', '
+                ORDER BY id_auto_infracao
+            ) AS todos_id_auto_infracao,
+
+            MIN(data_autuacao) AS primeira_data_autuacao,
+            MAX(data_autuacao) AS ultima_data_autuacao
+
+            FROM multas_detalhadas
+            GROUP BY cpf;
+
+            -- ============================================================
+            -- 4) Veículo principal:
+            --    veículo com maior número de infrações não pagas por CPF
+            -- ============================================================
+            CREATE TEMP TABLE veiculo_principal AS
+            WITH veiculo_cpf AS (
+            SELECT
+                cpf,
+                COALESCE(placa_veiculo, 'SEM_PLACA') AS placa_veiculo,
+                COALESCE(descricao_veiculo, 'SEM_DESCRICAO') AS descricao_veiculo,
+
+                COUNT(DISTINCT id_auto_infracao) AS n_infracoes_veiculo,
+                SUM(valor_infracao) AS valor_total_veiculo,
+
+                STRING_AGG(
+                DISTINCT id_auto_infracao,
+                ', '
+                ORDER BY id_auto_infracao
+                ) AS ids_auto_infracao_veiculo
+
+            FROM multas_detalhadas
+            GROUP BY
+                cpf,
+                placa_veiculo,
+                descricao_veiculo
+            )
+
+            SELECT
+            cpf,
+
+            -- nomes finais pedidos, sem "_principal"
+            descricao_veiculo,
+            placa_veiculo,
+            ids_auto_infracao_veiculo AS id_autuacao,
+
+            -- mantidos para filtro e balanceamento
+            n_infracoes_veiculo AS n_infracoes_veiculo_principal,
+            valor_total_veiculo AS valor_total_veiculo_principal
+
+            FROM veiculo_cpf
+            QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY cpf
+            ORDER BY
+                n_infracoes_veiculo DESC,
+                valor_total_veiculo DESC,
+                placa_veiculo,
+                descricao_veiculo
+            ) = 1;
+
+            -- ============================================================
+            -- 5) Universo para randomização
+            --    Remove CPFs sem nome, sem celular e veículos principais com 6+ infrações
+            -- ============================================================
+            CREATE TEMP TABLE universo_randomizacao AS
+            SELECT
+            m.*,
+
+            -- nome final pedido
+            m.nome_completo AS nome_proprietario,
+
+            -- veículo principal, com os nomes finais pedidos
+            v.descricao_veiculo,
+            v.placa_veiculo,
+            v.id_autuacao,
+
+            -- métricas do veículo principal, mantidas para filtro e balanceamento
+            v.n_infracoes_veiculo_principal,
+            v.valor_total_veiculo_principal
+
+            FROM multas_por_cpf m
+            INNER JOIN veiculo_principal v
+            USING (cpf)
+            WHERE NULLIF(TRIM(m.nome_completo), '') IS NOT NULL
+            AND NULLIF(TRIM(m.primeiro_nome), '') IS NOT NULL
+            AND m.celular_disparo IS NOT NULL
+            AND v.n_infracoes_veiculo_principal < 6;
+                
+            -- ============================================================
+            -- 6) Sorteio aleatório reprodutível
+            -- ============================================================
+            CREATE TEMP TABLE randomizados AS
+            SELECT
+            u.*,
+
+            ROW_NUMBER() OVER (
+                ORDER BY
+                ABS(
+                    FARM_FINGERPRINT(
+                    CONCAT(CAST(u.cpf AS STRING), '|seed:', seed)
+                    )
+                ),
+                u.cpf
+            ) AS ordem_sorteio
+
+            FROM universo_randomizacao u;
+
+            -- ============================================================
+            -- 7) Amostra final: 1.200 tratamento + 1.200 controle
+            -- ============================================================
+            CREATE TEMP TABLE amostra_final AS
+            SELECT
+            *,
+            CASE
+                WHEN ordem_sorteio <= n_tratamento THEN 'tratamento'
+                WHEN ordem_sorteio <= n_tratamento + n_controle THEN 'controle'
+                ELSE NULL
+            END AS grupo
+            FROM randomizados
+            WHERE ordem_sorteio <= n_tratamento + n_controle;
+
+            -- ============================================================
+            -- RESULTADO 1: Base randomizada em JSON
+            -- ============================================================
+
+            SELECT celular_disparo, cpf,
+            TO_JSON_STRING(
+                STRUCT(
+                celular_disparo AS celular_disparo,
+
+                CAST(cpf AS STRING) AS externalID,
+
+                STRUCT(
+                    -- grupo / randomização
+                    grupo AS grupo,
+                    grupo AS CC_WT_GRUPO,
+
+                    CAST(ordem_sorteio AS STRING) AS ordem_sorteio,
+                    CAST(ordem_sorteio AS STRING) AS CC_WT_ORDEM_SORTEIO,
+
+                    -- CPF / proprietário
+                    CAST(cpf AS STRING) AS cpf,
+                    CAST(cpf AS STRING) AS CC_WT_CPF,
+
+                    `rj-crm-registry.udf.FORMAT_NAME`(nome_proprietario, FALSE) AS nome_proprietario,
+                    `rj-crm-registry.udf.FORMAT_NAME`(nome_proprietario, FALSE) AS CC_WT_NOME_PROPRIETARIO,
+
+                    `rj-crm-registry.udf.FORMAT_NAME`(nome_proprietario, TRUE) AS primeiro_nome,
+                    `rj-crm-registry.udf.FORMAT_NAME`(nome_proprietario, TRUE) AS CC_WT_NOME,
+
+                    -- veículo principal
+                    descricao_veiculo AS descricao_veiculo,
+                    descricao_veiculo AS CC_WT_DESCRICAO_VEICULO,
+
+                    placa_veiculo AS placa_veiculo,
+                    placa_veiculo AS CC_WT_PLACA_VEICULO,
+
+                    id_autuacao AS id_autuacao,
+                    id_autuacao AS CC_WT_ID_AUTUACAO,
+
+                    -- métricas de infrações
+                    CAST(n_infracoes_total AS STRING) AS n_infracoes_total,
+                    CAST(n_infracoes_total AS STRING) AS CC_WT_N_INFRACOES_TOTAL,
+
+                    CAST(valor_total_infracoes AS STRING) AS valor_total_infracoes,
+                    CAST(valor_total_infracoes AS STRING) AS CC_WT_VALOR_TOTAL_INFRACOES,
+
+                    CAST(valor_medio_infracao AS STRING) AS valor_medio_infracao,
+                    CAST(valor_medio_infracao AS STRING) AS CC_WT_VALOR_MEDIO_INFRACAO,
+
+                    CAST(n_veiculos_com_infracao AS STRING) AS n_veiculos_com_infracao,
+                    CAST(n_veiculos_com_infracao AS STRING) AS CC_WT_N_VEICULOS_COM_INFRACAO,
+
+                    CAST(n_infracoes_veiculo_principal AS STRING) AS n_infracoes_veiculo_principal,
+                    CAST(n_infracoes_veiculo_principal AS STRING) AS CC_WT_N_INFRACOES_VEICULO_PRINCIPAL,
+
+                    CAST(valor_total_veiculo_principal AS STRING) AS valor_total_veiculo_principal,
+                    CAST(valor_total_veiculo_principal AS STRING) AS CC_WT_VALOR_TOTAL_VEICULO_PRINCIPAL,
+
+                    -- datas
+                    FORMAT_DATE('%d/%m/%Y', primeira_data_autuacao) AS primeira_data_autuacao,
+                    FORMAT_DATE('%d/%m/%Y', primeira_data_autuacao) AS CC_WT_PRIMEIRA_DATA_AUTUACAO,
+
+                    FORMAT_DATE('%d/%m/%Y', ultima_data_autuacao) AS ultima_data_autuacao,
+                    FORMAT_DATE('%d/%m/%Y', ultima_data_autuacao) AS CC_WT_ULTIMA_DATA_AUTUACAO,
+
+                    -- demografia / telefone
+                    sexo AS sexo,
+                    sexo AS CC_WT_SEXO,
+
+                    CAST(idade AS STRING) AS idade,
+                    CAST(idade AS STRING) AS CC_WT_IDADE,
+
+                    faixa_idade AS faixa_idade,
+                    faixa_idade AS CC_WT_FAIXA_IDADE,
+
+                    bairro AS bairro,
+                    bairro AS CC_WT_BAIRRO,
+
+                    qualidade_tel AS qualidade_tel,
+                    qualidade_tel AS CC_WT_QUALIDADE_TEL,
+
+                    estrategia_envio AS estrategia_envio,
+                    estrategia_envio AS CC_WT_ESTRATEGIA_ENVIO
+                ) AS vars
+                )
+            ) AS destination_data
+            FROM amostra_final
+
+            WHERE cpf is not null and celular_disparo is not null
+            ORDER BY ordem_sorteio
