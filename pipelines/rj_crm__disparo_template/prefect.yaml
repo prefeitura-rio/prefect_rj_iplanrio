@@ -2131,7 +2131,7 @@ deployments:
             -- RESULTADO 1: Base randomizada em JSON
             -- ============================================================
 
-            SELECT celular_disparo, cpf,
+            SELECT
             TO_JSON_STRING(
                 STRUCT(
                 celular_disparo AS celular_disparo,
