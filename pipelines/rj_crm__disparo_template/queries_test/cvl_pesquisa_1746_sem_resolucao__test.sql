@@ -1,3 +1,99 @@
+-- Teste da query queries_dev/cvl_pesquisa_1746_sem_resolucao.sql (mirror de queries/cvl_pesquisa_1746_sem_resolucao.sql)
+-- Placeholders já substituídos com os valores do schedule "daily-cvl-1746-survey-invitation-without-resolution"
+-- (scheduler_sf.yaml): id_hsm_placeholder -> 291, nome_hsm_placeholder -> 'cvl_pesquisa_1746_sem_resolucao_prod_v1'.
+-- Executa direto no BigQuery. Passos 1 a 5 inserem um chamado 1746 de teste (sem
+-- resolução) que cai em todos os filtros da query; passo 6 é a query em si, adaptada dos
+-- datasets dev__dev_fantasma__. Sem insert na wetalkie (fluxo_atendimento_*) de propósito:
+-- o LEFT JOIN legado fica inerte, só exercitamos o caminho novo (status_disparo).
+
+-- ===================== 0) LIMPA DADOS DE TESTE ANTERIORES =====================
+DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado`
+WHERE id_chamado = 'TESTE1746SEMRES01';
+
+DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf`
+WHERE id_chamado = 'TESTE1746SEMRES01';
+
+DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa`
+WHERE id_pessoa = 999991747;
+
+DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia`
+WHERE id_origem_ocorrencia = '11';
+
+DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`
+WHERE id_bairro = 'TESTE1746BAIRROSR';
+
+-- garante que o cpf de teste não aparece como já disparado hoje (dados_finais exige sd.cpf IS NULL)
+DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+WHERE cpf = '12cvlsres01'
+    AND nome_hsm = 'cvl_pesquisa_1746_sem_resolucao_prod_v1';
+
+-- ===================== 1) INSERT: chamado de teste (sem resolução) =====================
+-- data_fim é calculado com a mesma regra de dia da semana da query (final de semana joga
+-- pra daqui a 1 ano; segunda pega sexta/sábado/domingo; demais dias pega o dia anterior),
+-- assim o teste passa independente de em que dia da semana ele for executado.
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado`
+(id_chamado, id_origem_ocorrencia, data_inicio, data_fim, id_bairro, categoria, id_tipo, tipo, id_subtipo, subtipo, status)
+SELECT
+    'TESTE1746SEMRES01',
+    '11',
+    DATETIME '2025-06-01 09:00:00',
+    CAST(
+        CASE
+            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7, 1) THEN DATE_ADD(CURRENT_DATE(), INTERVAL 1 YEAR)
+            ELSE DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+        END AS DATETIME
+    ),
+    'TESTE1746BAIRROSR',
+    'Serviço',
+    '1',
+    'Fiscalização',
+    '2966',
+    'Fiscalização de estacionamento irregular de veículo',
+    'Não constatado';
+
+-- ===================== 2) INSERT: vínculo chamado x cpf =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf`
+(id_chamado, cpf, id_pessoa, numero_protocolo, ic_motivo)
+VALUES
+(
+    'TESTE1746SEMRES01',
+    '12cvlsres01',
+    '999991747',
+    '20260713000002',
+    'E'
+);
+
+-- ===================== 3) INSERT: pessoa de teste =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa`
+(id_pessoa, cpf, nome, telefone_1)
+VALUES
+(
+    999991747,
+    '12cvlsres01',
+    'JOAO SALESFORCE CVL SEMRESOL',
+    '5521987654302'
+);
+
+-- ===================== 4) INSERT: origem de ocorrência de teste =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia`
+(id_origem_ocorrencia, no_origem_ocorrencia)
+VALUES
+(
+    '11',
+    'Aplicativo 1746'
+);
+
+-- ===================== 5) INSERT: bairro/subprefeitura de teste =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`
+(bairro, id_bairro, no_subprefeitura)
+VALUES
+(
+    'TESTE SALESFORCE 1746 SEM RESOLUCAO',
+    'TESTE1746BAIRROSR',
+    'Zona Teste'
+);
+
+-- ===================== 6) QUERY (queries_dev/cvl_pesquisa_1746_sem_resolucao.sql com placeholders substituídos) =====================
 WITH tabela_global AS (
     SELECT
         DISTINCT
@@ -93,25 +189,26 @@ WITH tabela_global AS (
         t1.tipo_situacao,
         t1.tempo_prazo
 
-    FROM rj-segovi.adm_central_atendimento_1746.chamado t1
-    LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura t2
+    FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado` t1
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura` t2
         ON t1.id_bairro = t2.id_bairro
-    LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf t3
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf` t3
         ON t1.id_chamado = t3.id_chamado
-    LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa t4
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa` t4
         ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)
-    LEFT JOIN rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia` t5
         ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)
     WHERE 1=1
         AND t1.data_inicio >= '2025-01-01 00:00:00.000' -- Considera somente chamados a partir de Jan/25
-        AND (
+                        AND (
             -- Aceitam qualquer categoria
-            t1.id_subtipo IN ('5899', '3366') 
-            OR 
+            t1.id_subtipo IN ('5899', '3366')
+            OR
             -- Exigem ser "Serviço"
             (
             t1.id_subtipo IN (
-            '2966', '1325', '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071', '1279', '2178', '3139', '114', '5841', '1101' ) 
+            '2966', '1325', '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071', '1279', '2178', '3139', '114', '5841', '1101'
+            )
             AND t1.categoria IN ("Serviço")
             )
         ) --Considera somente 20 serviços selecionados pela SUBTD
@@ -120,7 +217,8 @@ WITH tabela_global AS (
         AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
         AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
         AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
-        AND t1.status IN ('Fechado com providências', 'Fechado com solução') --desconsidera chamados onde a equipe de campo não conseguiu atender
+        AND t1.status IN ('Sem possibilidade de atendimento', 'Fechado com informação', 'Não constatado') --Considera somente chamados onde a equipe de campo não conseguiu atender
+
     ),
 
     dados_finais AS (
@@ -137,13 +235,13 @@ WITH tabela_global AS (
         ta.status
     FROM tabela_global ta
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-            on fl.flattarget = ta.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
+            on fl.flattarget = ta.telefone and fl.templateId = cast(291 as int64)
             and date(fl.createDate) = CURRENT_DATE("America/Sao_Paulo") and fl.status="PROCESSING"
-    -- verifica também se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) hoje,
+    -- verifica também se esse cpf já recebeu essa mesma mensagem (cvl_pesquisa_1746_sem_resolucao_prod_v1) hoje,
     -- via status_disparo (alimentada pelos disparos via SFTP/Salesforce)
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
             on sd.cpf = ta.cpf
-            and sd.nome_hsm = '{nome_hsm_placeholder}'
+            and sd.nome_hsm = 'cvl_pesquisa_1746_sem_resolucao_prod_v1'
             and DATE(sd.envio_datahora) = CURRENT_DATE("America/Sao_Paulo")
             and sd.data_particao = CURRENT_DATE("America/Sao_Paulo")
             and sd.indicador_falha = FALSE

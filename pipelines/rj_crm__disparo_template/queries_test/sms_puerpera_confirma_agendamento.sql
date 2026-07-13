@@ -133,7 +133,10 @@ WITH segmentacao_original AS (
     ),
 
     filtra_disparados as (
-    -- verifica se esse cpf já recebeu essa mesma mensagem (_sms_puerpera_disp1_gestantev2) nos últimos x dias
+    -- verifica se esse cpf já recebeu essa mesma mensagem (_sms_puerpera_disp1_gestantev2) nos últimos x dias,
+    -- tanto via status_disparo quanto via wetalkie (histórico legado pré-migração;
+    -- templateId 573 = HSM de confirmação de agendamento da puérpera). Sem seed na
+    -- wetalkie aqui de propósito: o LEFT JOIN não encontra nada e fica inerte.
         select filtra_falhas.*
         FROM filtra_falhas
         left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
@@ -142,7 +145,12 @@ WITH segmentacao_original AS (
                 and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY)
                 and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
                 and sd.indicador_falha = FALSE
-            where sd.cpf is null
+        left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+                on fl.targetexternalid = filtra_falhas.cpf
+                and fl.templateId = 573
+                and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
+                and fl.status in ('PROCESSING', 'SENT')
+            where sd.cpf is null and fl.flattarget is null
     ),
     final as (
         select

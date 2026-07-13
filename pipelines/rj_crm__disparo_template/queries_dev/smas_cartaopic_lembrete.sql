@@ -5,7 +5,7 @@
 -- tabelas pesadas — o flow encerra sozinho em "no destinations found", sem check em Python.
 DECLARE target_date DATE DEFAULT (
     SELECT DATE(DATA_ENTREGA)
-    FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+    FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
     WHERE
         LOWER(TRIM(APROVACAO_DISPARO_LEMBRETE)) = 'aprovado'
         AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE('America/Sao_Paulo')
@@ -30,7 +30,7 @@ ELSE
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-        FROM `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`
         WHERE cpf IS NOT NULL
     ),
 
@@ -38,7 +38,7 @@ ELSE
         SELECT
             cpf,
             telefone
-        FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica` AS rmi
         WHERE menor_idade IS FALSE AND obito.indicador IS FALSE
     ),
 
@@ -82,7 +82,7 @@ ELSE
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
             ) AS celular_disparo
-        FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.cartao_primeira_infancia_carioca_status` AS t1
         LEFT JOIN agendamentos_unicos AS a
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
         LEFT JOIN telefone_principal_rmi AS rmi
@@ -117,7 +117,7 @@ ELSE
         -- remove telefones em quarentena ou com qualidade inválida
         SELECT DISTINCT f.*
         FROM filtra_disparados AS f
-        LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+        LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone` AS tel
             ON f.celular_disparo = tel.telefone_numero_completo
         LEFT JOIN UNNEST(tel.consentimento) AS c
         WHERE

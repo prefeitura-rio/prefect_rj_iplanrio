@@ -1,10 +1,11 @@
 with
-    -- Substitui a leitura de rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*
-    -- (só tinha histórico da API antiga da Wetalkie) por
-    -- rj-crm-registry.brutos_salesforce.status_disparo (alimentada pelos disparos via SFTP/Salesforce).
-    -- Chave de busca agora é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).
+    -- Combina o histórico novo (status_disparo, alimentado via SFTP/Salesforce) com o
+    -- legado da Wetalkie (fluxo_atendimento_*, por templateId numérico), enquanto a
+    -- status_disparo não acumula todo o histórico pré-migração. O templateId legado é
+    -- normalizado pro mesmo rótulo (nome_hsm) usado pelos placeholders atuais, então a
+    -- agregação abaixo não precisa saber de qual fonte cada disparo veio.
     disparos_divida_ativa as (
-        -- quem recebeu os disparos de whatsapp sem erros
+        -- quem recebeu os disparos de whatsapp sem erros (via Salesforce/SFTP)
         select distinct cpf,
         contato_telefone as celular_disparo,
         DATE(envio_datahora) as data_disparo,
@@ -15,6 +16,20 @@ with
             '{nome_hsm_lembrete_placeholder}'
         )
         and indicador_falha = FALSE
+
+        UNION ALL
+
+        -- Legado: histórico via Wetalkie antes da migração (196/239 = cobrança, 227 = lembrete)
+        select distinct targetexternalid as cpf,
+        flattarget as celular_disparo,
+        DATE(createdate) as data_disparo,
+        CASE
+            WHEN templateId IN ({id_hsm_legado_cobranca_placeholder}) THEN '{nome_hsm_cobranca_placeholder}'
+            WHEN templateId IN ({id_hsm_legado_lembrete_placeholder}) THEN '{nome_hsm_lembrete_placeholder}'
+        END as id_hsm
+        from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+        where templateid in ({id_hsm_legado_cobranca_placeholder}, {id_hsm_legado_lembrete_placeholder})
+        and faileddate is null
     ),
     disparos as (
         -- traz último disparo de cobrança e lembrete

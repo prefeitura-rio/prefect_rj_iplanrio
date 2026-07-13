@@ -7,8 +7,13 @@ schedules:
     slug: daily-cvl-1746-survey-invitation-without-resolution
     flow_run_name: cvl-pesquisa1746
     parameters:
-      query_replacements: {"id_hsm_placeholder": 291}
-      campaign_name: cvl-pesquisa1746-prod
+      # nome_hsm_placeholder é o próprio campaign_name deste schedule (chave usada pra
+      # checar duplicidade em status_disparo); id_hsm_placeholder é o templateId
+      # numérico legado, usado no fallback via wetalkie.
+      query_replacements: {"id_hsm_placeholder": 291, "nome_hsm_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
+      campaign_name: cvl_pesquisa_1746_sem_resolucao_prod_v1
+      data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_sem_solucao
+      de_columns: ["nome_sobrenome", "solicitacao", "canal"]
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -20,7 +25,7 @@ schedules:
       whitelist_environment: "production"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
-      query_file: queries/cvl_pesquisa_1746_sem_resolucao.sql
+      query_file: queries_dev/cvl_pesquisa_1746_sem_resolucao.sql
 
   # Daily schedule para flow cvl-pesquisa1746-prod
   - interval: 86400
@@ -30,8 +35,13 @@ schedules:
     slug: daily-cvl-pesquisa1746-prod
     flow_run_name: cvl-pesquisa1746
     parameters:
-      query_replacements: {"id_hsm_placeholder": 192}
-      campaign_name: cvl-pesquisa1746-prod
+      # nome_hsm_placeholder é o próprio campaign_name deste schedule (chave usada pra
+      # checar duplicidade em status_disparo); id_hsm_placeholder é o templateId
+      # numérico legado, usado no fallback via wetalkie.
+      query_replacements: {"id_hsm_placeholder": 192, "nome_hsm_placeholder": "cvl_pesquisa_1746_prod_v1"}
+      campaign_name: cvl_pesquisa_1746_prod_v1
+      data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_com_solucao
+      de_columns: ["nome_sobrenome", "solicitacao", "canal"]
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -43,7 +53,7 @@ schedules:
       whitelist_environment: "production"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
-      query_file: queries/cvl_pesquisa_1746_com_solucao.sql
+      query_file: queries_dev/cvl_pesquisa_1746_com_solucao.sql
 
   # Daily schedule para flow pgm-divida-ativa-prod
   - interval: 86400
@@ -54,7 +64,10 @@ schedules:
     flow_run_name: pgm-divida-ativa
     parameters:
       # nome_hsm_cobranca_placeholder é o próprio campaign_name deste schedule.
-      query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "limit_placeholder": 300}
+      # id_hsm_legado_cobranca_placeholder: IDs numéricos legados da Wetalkie (pré-migração
+      # pra status_disparo), usados como fallback de "já disparado" enquanto a
+      # status_disparo não tem histórico completo.
+      query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "limit_placeholder": 300, "id_hsm_legado_cobranca_placeholder": "196, 239"}
       campaign_name: pgm_divida_ativa_prod_v2
       data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
       de_columns: ["nome_sobrenome"]
@@ -82,7 +95,10 @@ schedules:
     parameters:
       # nome_hsm_cobranca_placeholder é o campaign_name do schedule daily-pgm-divida-ativa-prod;
       # nome_hsm_lembrete_placeholder é o próprio campaign_name deste schedule.
-      query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1"}
+      # id_hsm_legado_*_placeholder: IDs numéricos legados da Wetalkie (pré-migração pra
+      # status_disparo), usados como fallback de "já disparado" enquanto a status_disparo
+      # não tem histórico completo.
+      query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227"}
       campaign_name: pgmdividaativalembreteprodv1
       data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
       de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia", "cod_pix", "cod_boleto"]
@@ -111,7 +127,10 @@ schedules:
       # nome_hsm_cobranca_placeholder e nome_hsm_lembrete_placeholder são os campaign_name dos
       # schedules daily-pgm-divida-ativa-prod e daily-pgmdividaativalembreteprodv1;
       # nome_hsm_agradecimento_placeholder é o próprio campaign_name deste schedule.
-      query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1"}
+      # id_hsm_legado_*_placeholder: IDs numéricos legados da Wetalkie (pré-migração pra
+      # status_disparo), usados como fallback de "já disparado" enquanto a status_disparo
+      # não tem histórico completo.
+      query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2", "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1", "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227", "id_hsm_legado_agradecimento_placeholder": "231"}
       campaign_name: pgmdividaativaconfirmapgtoprodv1
       data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
       de_columns: ["nome_sobrenome"]
@@ -139,6 +158,10 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: _sms_puerpera_disp1_gestantev2
             intervalo_filtro_disparados: 1
+            # ID numérico legado da Wetalkie (pré-migração pra status_disparo), usado
+            # como fallback de "já disparado" enquanto a status_disparo não tem
+            # histórico completo.
+            id_hsm_legado_placeholder: 573
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: true
@@ -170,6 +193,10 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo25
             intervalo_filtro_disparados: 365
+            # ID numérico legado da Wetalkie (pré-migração pra status_disparo), usado
+            # como fallback de "já disparado" enquanto a status_disparo não tem
+            # histórico completo.
+            id_hsm_legado_placeholder: 610
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: true
@@ -201,6 +228,10 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 588
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 1 DAY),
@@ -239,6 +270,10 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo9
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 562
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 3"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
@@ -276,6 +311,11 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperadisparo6
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            # Essa campanha unifica os antigos D7/Pesquisa2 (456) e D22/Pesquisa4 (489).
+            id_hsm_legado_placeholder: "456, 489"
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 4"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY),
@@ -312,6 +352,10 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 564
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
@@ -348,6 +392,10 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo14
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 566
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 6"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
             intervalo_filtro_disparados: 300
@@ -382,6 +430,10 @@ schedules:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 589
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 300
@@ -414,7 +466,9 @@ schedules:
     slug: daily-cadunico-confirma-agendamento
     flow_run_name: cadunico-confirma-agendamento
     parameters:
-      query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 15}
+      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie/telefone_disparado
+      # (pré-migração pra status_disparo), usado como fallback de "já disparado".
+      query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 15, "id_hsm_legado_placeholder": 101}
       campaign_name: confirma_agendamento_cadunico_prod_v2
       data_extension_filename: whatsapp_cadunico_
       de_columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
@@ -433,7 +487,7 @@ schedules:
       query_file: queries_dev/cadunico_confirma_agendamento.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMAS Cartão Primeira Infância - Aviso (evento)
-  # TODO: query ainda não migrada pro formato tabela simples - ver pipelines/rj_smas__disparo_pic/scheduler.yaml (legado)
+  # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
   - interval: 86400
     anchor_date: "2021-01-01T12:00:00"
     timezone: America/Sao_Paulo
@@ -441,7 +495,12 @@ schedules:
     slug: daily-smas-cartaopic-evento
     flow_run_name: smas-cartaopic-evento
     parameters:
-      campaign_name: change-whitelist
+      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie (pré-migração pra
+      # status_disparo), usado como fallback de "já disparado".
+      query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27", "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 184}
+      campaign_name: smascartaoprimeirainfanciaprodv27
+      data_extension_filename: whatsapp_smas_cartaopic_evento
+      de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -452,19 +511,12 @@ schedules:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
       whitelist_percentage: 100
-      infisical_secret_path: "/wetalkie"
+      infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
       filter_failed_phones: false
       force_add_on_whitelist_group: true
       whitelist_replace_contacts: true
-      query: |
-        select
-            TO_JSON_STRING(
-                STRUCT(
-                    "5592984212629" as celular_disparo,
-                    CAST("0000000001" AS STRING) AS externalId
-                )
-            ) AS destination_data
+      query_file: queries_dev/smas_cartaopic_evento.sql
 
 
 # Schedule para testar flow na salesforce
@@ -488,10 +540,10 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries/smas_cartaopic_evento.sql
+      query_file: queries_dev/smas_cartaopic_evento.sql
 
   # Disparo SMAS Cartão Primeira Infância - Lembrete
-  # TODO: query ainda não migrada pro formato tabela simples - ver pipelines/rj_smas__disparo_pic/scheduler.yaml (legado)
+  # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
   - interval: 86400
     anchor_date: "2021-01-01T12:00:00"
     timezone: America/Sao_Paulo
@@ -499,11 +551,15 @@ schedules:
     slug: daily-smas-cartaopic-lembrete
     flow_run_name: smas-cartaopic-lembrete
     parameters:
-      id_hsm: 185
+      # nome_hsm_placeholder é o próprio campaign_name deste schedule.
+      # intervalo_filtro_disparados: chute de 30 dias pra evitar reenviar o lembrete do
+      # mesmo evento - CONFIRMAR antes de ativar (sem referência no checklist_disparos.md).
+      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie (pré-migração pra
+      # status_disparo), usado como fallback de "já disparado".
+      query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4", "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 185}
       campaign_name: smascartaoprimeirainfancialembreteprodv4
       data_extension_filename: whatsapp_smas_cartaopic_lembrete
       de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
-      cost_center_id: 71
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -516,7 +572,7 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries/smas_cartaopic_lembrete.sql
+      query_file: queries_dev/smas_cartaopic_lembrete.sql
 
 # Schedule para testar flow na salesforce
   # - interval: 864000000

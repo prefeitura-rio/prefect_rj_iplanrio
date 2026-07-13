@@ -91,7 +91,9 @@ filtra_falhas AS (
         ON f4.flatTarget = s.celular_disparo_rmi
 ),
 filtra_recebeu_primeira_hsm as (
-    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder) nos últimos 50 dias
+    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder) nos últimos 50 dias,
+    -- tanto via status_disparo quanto via wetalkie (histórico legado pré-migração;
+    -- id_hsm_anterior_legado_placeholder = templateId da HSM D0)
     select distinct filtra_falhas.*
     FROM filtra_falhas
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
@@ -99,10 +101,17 @@ filtra_recebeu_primeira_hsm as (
             and sd.nome_hsm = '{nome_hsm_anterior_placeholder}'
             and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)
             and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 51 DAY)
-        where sd.cpf is not null
+    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+            on fl.targetexternalid = filtra_falhas.cpf
+            and fl.templateId = {id_hsm_anterior_legado_placeholder}
+            and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 50 DAY)
+            and fl.status in ('PROCESSING', 'SENT')
+        where sd.cpf is not null or fl.flattarget is not null
 ),
 filtra_disparados as (
-    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias
+    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias,
+    -- tanto via status_disparo quanto via wetalkie (histórico legado pré-migração;
+    -- id_hsm_legado_placeholder = templateId(s) legado(s) dessa pesquisa)
     select filtra_recebeu_primeira_hsm.*
     FROM filtra_recebeu_primeira_hsm
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
@@ -111,7 +120,12 @@ filtra_disparados as (
             and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
             and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
             and sd.indicador_falha = FALSE
-        where sd.cpf is null
+    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf
+            and fl.templateId IN ({id_hsm_legado_placeholder})
+            and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados} DAY)
+            and fl.status in ('PROCESSING', 'SENT')
+        where sd.cpf is null and fl.flattarget is null
 ),
 final as (
     select filtra_disparados.*

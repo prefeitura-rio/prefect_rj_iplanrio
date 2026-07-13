@@ -50,9 +50,14 @@ deployments:
         slug: daily-cvl-1746-survey-invitation-without-resolution
         flow_run_name: cvl-pesquisa1746
         parameters:
+      # nome_hsm_placeholder é o próprio campaign_name deste schedule (chave usada pra
+      # checar duplicidade em status_disparo); id_hsm_placeholder é o templateId
+      # numérico legado, usado no fallback via wetalkie.
           flow_environment: staging
-          query_replacements: {"id_hsm_placeholder": 291}
-          campaign_name: cvl-pesquisa1746-prod
+          query_replacements: {"id_hsm_placeholder": 291, "nome_hsm_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
+          campaign_name: cvl_pesquisa_1746_sem_resolucao_prod_v1
+          data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_sem_solucao
+          de_columns: ["nome_sobrenome", "solicitacao", "canal"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -117,21 +122,23 @@ deployments:
             \    t2.bairro,\n        t2.no_subprefeitura AS subprefeitura,\n     \
             \   t1.id_logradouro,\n        t1.numero_logradouro,\n\n        -- Status
             e tempo de atendimento\n        t1.status,\n        t1.situacao,\n   \
-            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    FROM rj-segovi.adm_central_atendimento_1746.chamado
-            t1\n    LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura
-            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf
-            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa
+            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    -- TODO: aponta
+            pra fantasma dev (sem acesso ao rj-segovi/rj-iplanrio) - trocar de\n \
+            \   -- volta pra queries/ antes de ir pra producao\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado`
+            t1\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`
+            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf`
+            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa`
             t4\n        ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)\n    LEFT JOIN
-            rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5\n        ON
-            t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)\n  \
-            \  WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
+            `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia`
+            t5\n        ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia
+            AS STRING)\n    WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
             -- Considera somente chamados a partir de Jan/25\n                   \
             \     AND (\n            -- Aceitam qualquer categoria\n            t1.id_subtipo
-            IN ('5899', '3366') \n            OR \n            -- Exigem ser \"Serviço\"\
+            IN ('5899', '3366')\n            OR\n            -- Exigem ser \"Serviço\"\
             \n            (\n            t1.id_subtipo IN (\n            '2966', '1325',
             '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071',
-            '1279', '2178', '3139', '114', '5841', '1101'\n            ) \n      \
-            \      AND t1.categoria IN (\"Serviço\")\n            )\n        ) --Considera
+            '1279', '2178', '3139', '114', '5841', '1101'\n            )\n       \
+            \     AND t1.categoria IN (\"Serviço\")\n            )\n        ) --Considera
             somente 20 serviços selecionados pela SUBTD\n        AND t1.data_fim IS
             NOT NULL -- Somente chamados fechados\n        AND t1.id_bairro IS NOT
             NULL -- Somente chamados com bairro classificado\n        AND t1.id_origem_ocorrencia
@@ -148,12 +155,19 @@ deployments:
             \   left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            on fl.flattarget = ta.telefone and fl.templateId = cast({id_hsm_placeholder}
             as int64)\n            and date(fl.createDate) = CURRENT_DATE(\"America/Sao_Paulo\"\
-            ) and fl.status=\"PROCESSING\"\n    WHERE fl.flattarget is null\n    \
-            \    AND (\n        CASE\n            -- Se for sábado ou domingo, joga
-            para uma data no futuro (retorna vazio)\n            WHEN EXTRACT(DAYOFWEEK
-            FROM CURRENT_DATE()) IN (7, 1)\n            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(),
-            INTERVAL 1 YEAR)\n            -- Se for segunda-feira, pega chamados fechados
-            na sexta, sábado e domingo\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
+            ) and fl.status=\"PROCESSING\"\n    -- verifica também se esse cpf já
+            recebeu essa mesma mensagem (nome_hsm_placeholder) hoje,\n    -- via status_disparo
+            (alimentada pelos disparos via SFTP/Salesforce)\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = ta.cpf\n            and sd.nome_hsm = '{nome_hsm_placeholder}'\n\
+            \            and DATE(sd.envio_datahora) = CURRENT_DATE(\"America/Sao_Paulo\"\
+            )\n            and sd.data_particao = CURRENT_DATE(\"America/Sao_Paulo\"\
+            )\n            and sd.indicador_falha = FALSE\n    WHERE fl.flattarget
+            is null\n        AND sd.cpf is null\n        AND (\n        CASE\n   \
+            \         -- Se for sábado ou domingo, joga para uma data no futuro (retorna
+            vazio)\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7,
+            1)\n            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL
+            1 YEAR)\n            -- Se for segunda-feira, pega chamados fechados na
+            sexta, sábado e domingo\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
             = 2\n            THEN DATE(data_fim) IN (\n                DATE_SUB(CURRENT_DATE(),
             INTERVAL 3 DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 2
             DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n    \
@@ -173,9 +187,14 @@ deployments:
         slug: daily-cvl-pesquisa1746-prod
         flow_run_name: cvl-pesquisa1746
         parameters:
+      # nome_hsm_placeholder é o próprio campaign_name deste schedule (chave usada pra
+      # checar duplicidade em status_disparo); id_hsm_placeholder é o templateId
+      # numérico legado, usado no fallback via wetalkie.
           flow_environment: staging
-          query_replacements: {"id_hsm_placeholder": 192}
-          campaign_name: cvl-pesquisa1746-prod
+          query_replacements: {"id_hsm_placeholder": 192, "nome_hsm_placeholder": "cvl_pesquisa_1746_prod_v1"}
+          campaign_name: cvl_pesquisa_1746_prod_v1
+          data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_com_solucao
+          de_columns: ["nome_sobrenome", "solicitacao", "canal"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -240,20 +259,22 @@ deployments:
             \    t2.bairro,\n        t2.no_subprefeitura AS subprefeitura,\n     \
             \   t1.id_logradouro,\n        t1.numero_logradouro,\n\n        -- Status
             e tempo de atendimento\n        t1.status,\n        t1.situacao,\n   \
-            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    FROM rj-segovi.adm_central_atendimento_1746.chamado
-            t1\n    LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura
-            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf
-            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa
+            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    -- TODO: aponta
+            pra fantasma dev (sem acesso ao rj-segovi/rj-iplanrio) - trocar de\n \
+            \   -- volta pra queries/ antes de ir pra producao\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado`
+            t1\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`
+            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf`
+            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa`
             t4\n        ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)\n    LEFT JOIN
-            rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5\n        ON
-            t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)\n  \
-            \  WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
+            `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia`
+            t5\n        ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia
+            AS STRING)\n    WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
             -- Considera somente chamados a partir de Jan/25\n        AND (\n    \
             \        -- Aceitam qualquer categoria\n            t1.id_subtipo IN ('5899',
-            '3366') \n            OR \n            -- Exigem ser \"Serviço\"\n   \
-            \         (\n            t1.id_subtipo IN (\n            '2966', '1325',
+            '3366')\n            OR\n            -- Exigem ser \"Serviço\"\n     \
+            \       (\n            t1.id_subtipo IN (\n            '2966', '1325',
             '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071',
-            '1279', '2178', '3139', '114', '5841', '1101' ) \n            AND t1.categoria
+            '1279', '2178', '3139', '114', '5841', '1101' )\n            AND t1.categoria
             IN (\"Serviço\")\n            )\n        ) --Considera somente 20 serviços
             selecionados pela SUBTD\n        AND t1.data_fim IS NOT NULL -- Somente
             chamados fechados\n        AND t1.id_bairro IS NOT NULL -- Somente chamados
@@ -270,12 +291,19 @@ deployments:
             \   left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            on fl.flattarget = ta.telefone and fl.templateId = cast({id_hsm_placeholder}
             as int64)\n            and date(fl.createDate) = CURRENT_DATE(\"America/Sao_Paulo\"\
-            ) and fl.status=\"PROCESSING\"\n    WHERE fl.flattarget is null\n    \
-            \    AND (\n        CASE\n            -- Se for sábado ou domingo, joga
-            para uma data no futuro (retorna vazio)\n            WHEN EXTRACT(DAYOFWEEK
-            FROM CURRENT_DATE()) IN (7, 1)\n            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(),
-            INTERVAL 1 YEAR)\n            -- Se for segunda-feira, pega chamados fechados
-            na sexta, sábado e domingo\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
+            ) and fl.status=\"PROCESSING\"\n    -- verifica também se esse cpf já
+            recebeu essa mesma mensagem (nome_hsm_placeholder) hoje,\n    -- via status_disparo
+            (alimentada pelos disparos via SFTP/Salesforce)\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = ta.cpf\n            and sd.nome_hsm = '{nome_hsm_placeholder}'\n\
+            \            and DATE(sd.envio_datahora) = CURRENT_DATE(\"America/Sao_Paulo\"\
+            )\n            and sd.data_particao = CURRENT_DATE(\"America/Sao_Paulo\"\
+            )\n            and sd.indicador_falha = FALSE\n    WHERE fl.flattarget
+            is null\n        AND sd.cpf is null\n        AND (\n        CASE\n   \
+            \         -- Se for sábado ou domingo, joga para uma data no futuro (retorna
+            vazio)\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7,
+            1)\n            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL
+            1 YEAR)\n            -- Se for segunda-feira, pega chamados fechados na
+            sexta, sábado e domingo\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
             = 2\n            THEN DATE(data_fim) IN (\n                DATE_SUB(CURRENT_DATE(),
             INTERVAL 3 DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 2
             DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n    \
@@ -296,9 +324,13 @@ deployments:
         flow_run_name: pgm-divida-ativa
         parameters:
       # nome_hsm_cobranca_placeholder é o próprio campaign_name deste schedule.
+      # id_hsm_legado_cobranca_placeholder: IDs numéricos legados da Wetalkie (pré-migração
+      # pra status_disparo), usados como fallback de "já disparado" enquanto a
+      # status_disparo não tem histórico completo.
           flow_environment: staging
           query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "limit_placeholder": 300}
+            "limit_placeholder": 300, "id_hsm_legado_cobranca_placeholder": "196,
+              239"}
           campaign_name: pgm_divida_ativa_prod_v2
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
           de_columns: ["nome_sobrenome"]
@@ -333,16 +365,22 @@ deployments:
             pf.menor_idade IS FALSE\n    AND pf.obito.indicador IS FALSE\n    AND
             nascimento.data IS NOT NULL\n    AND EXTRACT(DAYOFWEEK FROM current_date(\"\
             America/Sao_Paulo\")) NOT IN (1, 7)\n),\nfiltra_disparados AS (\n-- verifica
-            se esse cpf já recebeu essa mesma mensagem nos últimos x dias\nSELECT
-            celulares_validos.*\nFROM celulares_validos\nLEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo`
-            sd\n    ON sd.cpf = celulares_validos.cpf\n    AND sd.nome_hsm = '{nome_hsm_cobranca_placeholder}'\n\
+            se esse cpf já recebeu essa mesma mensagem nos últimos x dias, tanto via\n
+            -- status_disparo quanto via wetalkie (histórico legado pré-migração;
+            templateId\n-- 196/239 = HSMs de cobrança da dívida ativa usadas antes
+            da migração)\nSELECT celulares_validos.*\nFROM celulares_validos\nLEFT
+            JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd\n    ON sd.cpf
+            = celulares_validos.cpf\n    AND sd.nome_hsm = '{nome_hsm_cobranca_placeholder}'\n\
             \    AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME(\"America/Sao_Paulo\"\
             ), INTERVAL 150 DAY)\n    AND sd.data_particao >= DATE_SUB(CURRENT_DATE(\"\
-            America/Sao_Paulo\"), INTERVAL 151 DAY)\nWHERE sd.cpf IS NULL\n),\n\n
-            contribuintes AS (\n-- filtra PF e nome antes do unnest\nSELECT\n    LPAD(CAST(p.cpf_cnpj
-            AS STRING), 11, '0') AS cpf,\n    coalesce(nome_rmi, nome) as nome,\n\
-            \    cdas_associadas,\n    tipo_pessoa,\n    saldo_devido_cdas,\n    valor_cotas_devidas_vencidas\n
-            FROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`
+            America/Sao_Paulo\"), INTERVAL 151 DAY)\nLEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n    ON fl.targetexternalid = celulares_validos.cpf\n    AND fl.templateId
+            IN ({id_hsm_legado_cobranca_placeholder})\n    AND fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(),
+            INTERVAL 150 DAY)\nWHERE sd.cpf IS NULL AND fl.targetexternalid IS NULL\n
+            ),\n\ncontribuintes AS (\n-- filtra PF e nome antes do unnest\nSELECT\n\
+            \    LPAD(CAST(p.cpf_cnpj AS STRING), 11, '0') AS cpf,\n    coalesce(nome_rmi,
+            nome) as nome,\n    cdas_associadas,\n    tipo_pessoa,\n    saldo_devido_cdas,\n\
+            \    valor_cotas_devidas_vencidas\nFROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`
             p\nINNER JOIN filtra_disparados\n    ON LPAD(CAST(p.cpf_cnpj AS STRING),
             11, '0') = filtra_disparados.cpf\nWHERE p.tipo_pessoa.descricao_tipo_pessoa
             = 'Pessoa Física'\n    AND p.saldo_devido_cdas > 0\n    AND NOT STARTS_WITH(nome,
@@ -411,9 +449,13 @@ deployments:
         parameters:
       # nome_hsm_cobranca_placeholder é o campaign_name do schedule daily-pgm-divida-ativa-prod;
       # nome_hsm_lembrete_placeholder é o próprio campaign_name deste schedule.
+      # id_hsm_legado_*_placeholder: IDs numéricos legados da Wetalkie (pré-migração pra
+      # status_disparo), usados como fallback de "já disparado" enquanto a status_disparo
+      # não tem histórico completo.
           flow_environment: staging
           query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1"}
+            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "id_hsm_legado_cobranca_placeholder": "196,
+              239", "id_hsm_legado_lembrete_placeholder": "227"}
           campaign_name: pgmdividaativalembreteprodv1
           data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
           de_columns: ["nome_sobrenome", "data_vencimento", "numero_guia", "valor_guia",
@@ -429,18 +471,29 @@ deployments:
           whitelist_percentage: 0
           infisical_secret_path: "/crm_disparo_template"
           whitelist_environment: "production"
-          query: "with\n    -- Substitui a leitura de rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*\n\
-            \    -- (só tinha histórico da API antiga da Wetalkie) por\n    -- rj-crm-registry.brutos_salesforce.status_disparo
-            (alimentada pelos disparos via SFTP/Salesforce).\n    -- Chave de busca
-            agora é nome_hsm (STRING, == campaign_name), não mais templateId (INT64
-            da Wetalkie).\n    disparos_divida_ativa as (\n        -- quem recebeu
-            os disparos de whatsapp sem erros\n        select distinct cpf,\n    \
-            \    contato_telefone as celular_disparo,\n        DATE(envio_datahora)
+          query: "with\n    -- Combina o histórico novo (status_disparo, alimentado
+            via SFTP/Salesforce) com o\n    -- legado da Wetalkie (fluxo_atendimento_*,
+            por templateId numérico), enquanto a\n    -- status_disparo não acumula
+            todo o histórico pré-migração. O templateId legado é\n    -- normalizado
+            pro mesmo rótulo (nome_hsm) usado pelos placeholders atuais, então a\n\
+            \    -- agregação abaixo não precisa saber de qual fonte cada disparo
+            veio.\n    disparos_divida_ativa as (\n        -- quem recebeu os disparos
+            de whatsapp sem erros (via Salesforce/SFTP)\n        select distinct cpf,\n\
+            \        contato_telefone as celular_disparo,\n        DATE(envio_datahora)
             as data_disparo,\n        nome_hsm as id_hsm\n        from `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \        where nome_hsm in (\n            '{nome_hsm_cobranca_placeholder}',\n\
             \            '{nome_hsm_lembrete_placeholder}'\n        )\n        and
-            indicador_falha = FALSE\n    ),\n    disparos as (\n        -- traz último
-            disparo de cobrança e lembrete\n        select cpf, celular_disparo,\n\
+            indicador_falha = FALSE\n\n        UNION ALL\n\n        -- Legado: histórico
+            via Wetalkie antes da migração (196/239 = cobrança, 227 = lembrete)\n\
+            \        select distinct targetexternalid as cpf,\n        flattarget
+            as celular_disparo,\n        DATE(createdate) as data_disparo,\n     \
+            \   CASE\n            WHEN templateId IN ({id_hsm_legado_cobranca_placeholder})
+            THEN '{nome_hsm_cobranca_placeholder}'\n            WHEN templateId IN
+            ({id_hsm_legado_lembrete_placeholder}) THEN '{nome_hsm_lembrete_placeholder}'\n\
+            \        END as id_hsm\n        from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`\n\
+            \        where templateid in ({id_hsm_legado_cobranca_placeholder}, {id_hsm_legado_lembrete_placeholder})\n\
+            \        and faileddate is null\n    ),\n    disparos as (\n        --
+            traz último disparo de cobrança e lembrete\n        select cpf, celular_disparo,\n\
             \        max(case when id_hsm = '{nome_hsm_cobranca_placeholder}' then
             data_disparo else null end) as data_disparo_cobranca,\n        max(case
             when id_hsm = '{nome_hsm_lembrete_placeholder}' then data_disparo else
@@ -524,9 +577,14 @@ deployments:
       # nome_hsm_cobranca_placeholder e nome_hsm_lembrete_placeholder são os campaign_name dos
       # schedules daily-pgm-divida-ativa-prod e daily-pgmdividaativalembreteprodv1;
       # nome_hsm_agradecimento_placeholder é o próprio campaign_name deste schedule.
+      # id_hsm_legado_*_placeholder: IDs numéricos legados da Wetalkie (pré-migração pra
+      # status_disparo), usados como fallback de "já disparado" enquanto a status_disparo
+      # não tem histórico completo.
           flow_environment: staging
           query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1"}
+            "nome_hsm_lembrete_placeholder": "pgmdividaativalembreteprodv1", "nome_hsm_agradecimento_placeholder": "pgmdividaativaconfirmapgtoprodv1",
+            "id_hsm_legado_cobranca_placeholder": "196, 239", "id_hsm_legado_lembrete_placeholder": "227",
+            "id_hsm_legado_agradecimento_placeholder": "231"}
           campaign_name: pgmdividaativaconfirmapgtoprodv1
           data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
           de_columns: ["nome_sobrenome"]
@@ -541,28 +599,45 @@ deployments:
           whitelist_percentage: 0
           infisical_secret_path: "/crm_disparo_template"
           whitelist_environment: "production"
-          query: "WITH\ndisparos_divida_ativa as (\n    -- quem recebeu os disparos
-            de whatsapp sem erros\n    select distinct cpf,\n    contato_telefone
-            as celular_disparo,\n    DATE(envio_datahora) as data_disparo,\n    nome_hsm
-            as id_hsm,\n    falha_datahora as failedDate\n    from `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+          query: "WITH\n-- Combina o histórico novo (status_disparo, alimentado via
+            SFTP/Salesforce) com o\n-- legado da Wetalkie (fluxo_atendimento_*, por
+            templateId numérico), enquanto a\n-- status_disparo não acumula todo o
+            histórico pré-migração. O templateId legado é\n-- normalizado pro mesmo
+            rótulo (nome_hsm) usado pelos placeholders atuais, então a\n-- agregação
+            abaixo não precisa saber de qual fonte cada disparo veio.\ndisparos_divida_ativa
+            as (\n    -- quem recebeu os disparos de whatsapp sem erros (via Salesforce/SFTP)\n\
+            \    select distinct cpf,\n    contato_telefone as celular_disparo,\n\
+            \    DATE(envio_datahora) as data_disparo,\n    nome_hsm as id_hsm,\n\
+            \    falha_datahora as failedDate\n    from `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \    where nome_hsm in (\n        '{nome_hsm_cobranca_placeholder}',\n\
             \        '{nome_hsm_lembrete_placeholder}',\n        '{nome_hsm_agradecimento_placeholder}'\n\
-            \    )\n),\n\ndisparos as (\n    -- traz último disparo de cobrança, lembrete
-            e agradecimento\n    select cpf, celular_disparo,\n    max(failedDate)
-            as ultima_data_falha,\n    max(case when id_hsm = '{nome_hsm_cobranca_placeholder}'
-            then data_disparo else null end) as data_disparo_cobranca,\n    max(case
-            when id_hsm = '{nome_hsm_lembrete_placeholder}' then data_disparo else
-            null end) as data_disparo_lembrete,\n    max(case when id_hsm = '{nome_hsm_agradecimento_placeholder}'
-            then data_disparo else null end) as data_disparo_agradecimento,\n    from
-            disparos_divida_ativa\n    group by 1, 2\n),\n\ndisparos_filtro as (\n
-            select\n*\nfrom disparos\nwhere\n    -- filtro falhas aqui pq se falhou
-            na segunda/última hsm ele vai continuar enviando o agradecimento e pagando
-            para falhar\n    ultima_data_falha is null\n-- filtra se a pessoa já recebeu
-            o agradecimento há pouco tempo já que ela pode ter mais de uma cota por
-            mês\nand  (data_disparo_agradecimento is null or data_disparo_agradecimento
-            <= date_sub(current_date(), INTERVAL 180 day)) --mudar !!\n\n),\n\nfiltra_contribuinte
-            as (\n    select\n        disparos_filtro.*,\n        contribuinte.guias_pagamento\n\
-            \    FROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`
+            \    )\n\n    UNION ALL\n\n    -- Legado: histórico via Wetalkie antes
+            da migração\n    -- (196/239 = cobrança, 227 = lembrete, 231 = agradecimento)\n\
+            \    select distinct targetexternalid as cpf,\n    flattarget as celular_disparo,\n\
+            \    DATE(createdate) as data_disparo,\n    CASE\n        WHEN templateId
+            IN ({id_hsm_legado_cobranca_placeholder}) THEN '{nome_hsm_cobranca_placeholder}'\n\
+            \        WHEN templateId IN ({id_hsm_legado_lembrete_placeholder}) THEN
+            '{nome_hsm_lembrete_placeholder}'\n        WHEN templateId IN ({id_hsm_legado_agradecimento_placeholder})
+            THEN '{nome_hsm_agradecimento_placeholder}'\n    END as id_hsm,\n    failedDate\n\
+            \    from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`\n\
+            \    where templateid in ({id_hsm_legado_cobranca_placeholder}, {id_hsm_legado_lembrete_placeholder},
+            {id_hsm_legado_agradecimento_placeholder})\n),\n\ndisparos as (\n    --
+            traz último disparo de cobrança, lembrete e agradecimento\n    select
+            cpf, celular_disparo,\n    max(failedDate) as ultima_data_falha,\n   \
+            \ max(case when id_hsm = '{nome_hsm_cobranca_placeholder}' then data_disparo
+            else null end) as data_disparo_cobranca,\n    max(case when id_hsm = '{nome_hsm_lembrete_placeholder}'
+            then data_disparo else null end) as data_disparo_lembrete,\n    max(case
+            when id_hsm = '{nome_hsm_agradecimento_placeholder}' then data_disparo
+            else null end) as data_disparo_agradecimento,\n    from disparos_divida_ativa\n\
+            \    group by 1, 2\n),\n\ndisparos_filtro as (\nselect\n*\nfrom disparos\n\
+            where\n    -- filtro falhas aqui pq se falhou na segunda/última hsm ele
+            vai continuar enviando o agradecimento e pagando para falhar\n    ultima_data_falha
+            is null\n-- filtra se a pessoa já recebeu o agradecimento há pouco tempo
+            já que ela pode ter mais de uma cota por mês\nand  (data_disparo_agradecimento
+            is null or data_disparo_agradecimento <= date_sub(current_date(), INTERVAL
+            180 day)) --mudar !!\n\n),\n\nfiltra_contribuinte as (\n    select\n \
+            \       disparos_filtro.*,\n        contribuinte.guias_pagamento\n   \
+            \ FROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`
             AS contribuinte\n    INNER JOIN disparos_filtro ON lpad(cpf_cnpj, 11,
             \"0\") = disparos_filtro.cpf\n),\n\ndivida_ativa as (\n    select\n  \
             \  filtra_contribuinte.* except(guias_pagamento),\n    guia_pagamento.data_criacao_guia,\n\
@@ -604,6 +679,10 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: _sms_puerpera_disp1_gestantev2
             intervalo_filtro_disparados: 1
+            # ID numérico legado da Wetalkie (pré-migração pra status_disparo), usado
+            # como fallback de "já disparado" enquanto a status_disparo não tem
+            # histórico completo.
+            id_hsm_legado_placeholder: 573
           table_id: disparos_efetuados
           dump_mode: append
           test_mode: true
@@ -671,15 +750,23 @@ deployments:
             \n    LEFT JOIN status_final_telefone f3\n        ON f3.flatTarget = s.celular_disparo_3\n\
             \n    LEFT JOIN status_final_telefone f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n\
             \    ),\n\n    filtra_disparados as (\n    -- verifica se esse cpf já
-            recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias\n\
-            \        select filtra_falhas.*\n        FROM filtra_falhas\n        left
-            join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n         \
-            \       on sd.cpf = filtra_falhas.cpf\n                and sd.nome_hsm
-            = '{nome_hsm_placeholder}'\n                and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
-            INTERVAL {intervalo_filtro_disparados} DAY)\n                and sd.data_particao
-            >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
-            \                and sd.indicador_falha = FALSE\n            where sd.cpf
-            is null\n    ),\n    final as (\n        select\n        filtra_disparados.*,\n\
+            recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias,\n\
+            \    -- tanto via status_disparo quanto via wetalkie (histórico legado
+            pré-migração;\n    -- templateId 573 = HSM de confirmação de agendamento
+            da puérpera)\n        select filtra_falhas.*\n        FROM filtra_falhas\n\
+            \        left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n                on sd.cpf = filtra_falhas.cpf\n                and
+            sd.nome_hsm = '{nome_hsm_placeholder}'\n                and sd.envio_datahora
+            >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
+            DAY)\n                and sd.data_particao >= DATE_SUB(CURRENT_DATE(),
+            INTERVAL {intervalo_filtro_disparados} DAY)\n                and sd.indicador_falha
+            = FALSE\n        left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n                on fl.targetexternalid = filtra_falhas.cpf\n     \
+            \           and fl.templateId = {id_hsm_legado_placeholder}\n        \
+            \        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n                and fl.status in ('PROCESSING',
+            'SENT')\n            where sd.cpf is null and fl.flattarget is null\n\
+            \    ),\n    final as (\n        select\n        filtra_disparados.*,\n\
             \        from filtra_disparados\n    )\n    -- Tabela simples (sem TO_JSON_STRING).
             'externalId' (dedup por CPF) e 'others'\n    -- (retentativas) são controle
             interno, descartados do CSV pelo de_columns.\n    SELECT\n        celular_disparo
@@ -702,6 +789,10 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo25
             intervalo_filtro_disparados: 365
+            # ID numérico legado da Wetalkie (pré-migração pra status_disparo), usado
+            # como fallback de "já disparado" enquanto a status_disparo não tem
+            # histórico completo.
+            id_hsm_legado_placeholder: 610
           table_id: disparos_efetuados
           dump_mode: append
           test_mode: true
@@ -768,26 +859,34 @@ deployments:
             \n    LEFT JOIN status_final_telefone f3\n        ON f3.flatTarget = s.celular_disparo_3\n\
             \n    LEFT JOIN status_final_telefone f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n\
             \    ),\n\n    filtra_disparados as (\n    -- verifica se esse cpf já
-            recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias\n\
-            \        select filtra_falhas.*\n        FROM filtra_falhas\n        left
+            recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias,\n\
+            \    -- tanto via status_disparo quanto via wetalkie (histórico legado
+            pré-migração;\n    -- templateId 610 = HSM D0 explica pesquisa)\n    \
+            \    select filtra_falhas.*\n        FROM filtra_falhas\n        left
             join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n         \
             \       on sd.cpf = filtra_falhas.cpf\n                and sd.nome_hsm
             = '{nome_hsm_placeholder}'\n                and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {intervalo_filtro_disparados} DAY) -- pessoa só recebe essa mensagem
             cerca de uma vez por ano podendo pegar mais de uma gravidez\n        \
             \        and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados}
-            DAY)\n                and sd.indicador_falha = FALSE\n            where
-            sd.cpf is null\n    ),\n    final as (\n        select filtra_disparados.*
-            from filtra_disparados\n    )\n    -- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n    -- (retentativas) são controle
-            interno, descartados do CSV pelo de_columns.\n    SELECT\n        celular_disparo
-            AS telefone,\n        CAST(cpf AS STRING) AS SubscriberKey,\n        CAST(cpf
-            AS STRING) AS externalId,\n        INITCAP(\n            IF(\n       \
-            \         ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n                CONCAT(SPLIT(nome,
-            ' ')[SAFE_OFFSET(0)], ' '),\n                nome\n            )\n   \
-            \     ) AS nome,\n        ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\n    from final\n    where celular_disparo is not null\n"
+            DAY)\n                and sd.indicador_falha = FALSE\n        left join
+            `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl\n   \
+            \             on fl.targetexternalid = filtra_falhas.cpf\n           \
+            \     and fl.templateId = {id_hsm_legado_placeholder}\n              \
+            \  and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados}
+            DAY)\n                and fl.status in ('PROCESSING', 'SENT')\n      \
+            \      where sd.cpf is null and fl.flattarget is null\n    ),\n    final
+            as (\n        select filtra_disparados.* from filtra_disparados\n    )\n\
+            \    -- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
+            e 'others'\n    -- (retentativas) são controle interno, descartados do
+            CSV pelo de_columns.\n    SELECT\n        celular_disparo AS telefone,\n\
+            \        CAST(cpf AS STRING) AS SubscriberKey,\n        CAST(cpf AS STRING)
+            AS externalId,\n        INITCAP(\n            IF(\n                ARRAY_LENGTH(SPLIT(nome,
+            ' ')) > 1,\n                CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], '
+            '),\n                nome\n            )\n        ) AS nome,\n       \
+            \ ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS
+            x WHERE x IS NOT NULL AND x != celular_disparo) AS others\n    from final\n\
+            \    where celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -798,6 +897,10 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 588
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
             datas_internacao: |
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 1 DAY),
@@ -871,34 +974,48 @@ deployments:
             f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
             f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
             as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
-            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
+            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
+            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            51 DAY)\n        where sd.cpf is not null\n),\nfiltra_disparados as (\n\
-            \    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    select filtra_recebeu_primeira_hsm.*\n    FROM
-            filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            51 DAY)\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_falhas.cpf\n         \
+            \   and fl.templateId = {id_hsm_anterior_legado_placeholder}\n       \
+            \     and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            50 DAY)\n            and fl.status in ('PROCESSING', 'SENT')\n       \
+            \ where sd.cpf is not null or fl.flattarget is not null\n),\nfiltra_disparados
+            as (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
+            nos últimos x dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_legado_placeholder = templateId(s)
+            legado(s) dessa pesquisa)\n    select filtra_recebeu_primeira_hsm.*\n\
+            \    FROM filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
             sd\n            on sd.cpf = filtra_recebeu_primeira_hsm.cpf\n        \
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
             {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
-            = FALSE\n        where sd.cpf is null\n),\nfinal as (\n    select filtra_disparados.*\n\
-            \    from filtra_disparados\n)\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n-- (retentativas) são controle
-            interno; o de_columns de cada schedule decide quais\n-- colunas (ex.:
-            nome) realmente vão pra Data Extension.\nSELECT\n    celular_disparo AS
-            telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
-            STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
-            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
-            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
-            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
-            is not null\n"
+            = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
+            \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
+            \        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n            and fl.status in ('PROCESSING',
+            'SENT')\n        where sd.cpf is null and fl.flattarget is null\n),\n
+            final as (\n    select filtra_disparados.*\n    from filtra_disparados\n
+            )\n-- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
+            e 'others'\n-- (retentativas) são controle interno; o de_columns de cada
+            schedule decide quais\n-- colunas (ex.: nome) realmente vão pra Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
+            ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
+            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
+            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -909,6 +1026,10 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo9
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 562
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 3"
             datas_internacao: |
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
@@ -981,34 +1102,48 @@ deployments:
             f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
             f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
             as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
-            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
+            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
+            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            51 DAY)\n        where sd.cpf is not null\n),\nfiltra_disparados as (\n\
-            \    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    select filtra_recebeu_primeira_hsm.*\n    FROM
-            filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            51 DAY)\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_falhas.cpf\n         \
+            \   and fl.templateId = {id_hsm_anterior_legado_placeholder}\n       \
+            \     and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            50 DAY)\n            and fl.status in ('PROCESSING', 'SENT')\n       \
+            \ where sd.cpf is not null or fl.flattarget is not null\n),\nfiltra_disparados
+            as (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
+            nos últimos x dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_legado_placeholder = templateId(s)
+            legado(s) dessa pesquisa)\n    select filtra_recebeu_primeira_hsm.*\n\
+            \    FROM filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
             sd\n            on sd.cpf = filtra_recebeu_primeira_hsm.cpf\n        \
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
             {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
-            = FALSE\n        where sd.cpf is null\n),\nfinal as (\n    select filtra_disparados.*\n\
-            \    from filtra_disparados\n)\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n-- (retentativas) são controle
-            interno; o de_columns de cada schedule decide quais\n-- colunas (ex.:
-            nome) realmente vão pra Data Extension.\nSELECT\n    celular_disparo AS
-            telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
-            STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
-            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
-            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
-            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
-            is not null\n"
+            = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
+            \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
+            \        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n            and fl.status in ('PROCESSING',
+            'SENT')\n        where sd.cpf is null and fl.flattarget is null\n),\n
+            final as (\n    select filtra_disparados.*\n    from filtra_disparados\n
+            )\n-- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
+            e 'others'\n-- (retentativas) são controle interno; o de_columns de cada
+            schedule decide quais\n-- colunas (ex.: nome) realmente vão pra Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
+            ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
+            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
+            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -1019,6 +1154,11 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperadisparo6
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            # Essa campanha unifica os antigos D7/Pesquisa2 (456) e D22/Pesquisa4 (489).
+            id_hsm_legado_placeholder: "456, 489"
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 4"
             datas_internacao: |
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY),
@@ -1090,34 +1230,48 @@ deployments:
             f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
             f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
             as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
-            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
+            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
+            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            51 DAY)\n        where sd.cpf is not null\n),\nfiltra_disparados as (\n\
-            \    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    select filtra_recebeu_primeira_hsm.*\n    FROM
-            filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            51 DAY)\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_falhas.cpf\n         \
+            \   and fl.templateId = {id_hsm_anterior_legado_placeholder}\n       \
+            \     and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            50 DAY)\n            and fl.status in ('PROCESSING', 'SENT')\n       \
+            \ where sd.cpf is not null or fl.flattarget is not null\n),\nfiltra_disparados
+            as (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
+            nos últimos x dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_legado_placeholder = templateId(s)
+            legado(s) dessa pesquisa)\n    select filtra_recebeu_primeira_hsm.*\n\
+            \    FROM filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
             sd\n            on sd.cpf = filtra_recebeu_primeira_hsm.cpf\n        \
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
             {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
-            = FALSE\n        where sd.cpf is null\n),\nfinal as (\n    select filtra_disparados.*\n\
-            \    from filtra_disparados\n)\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n-- (retentativas) são controle
-            interno; o de_columns de cada schedule decide quais\n-- colunas (ex.:
-            nome) realmente vão pra Data Extension.\nSELECT\n    celular_disparo AS
-            telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
-            STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
-            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
-            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
-            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
-            is not null\n"
+            = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
+            \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
+            \        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n            and fl.status in ('PROCESSING',
+            'SENT')\n        where sd.cpf is null and fl.flattarget is null\n),\n
+            final as (\n    select filtra_disparados.*\n    from filtra_disparados\n
+            )\n-- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
+            e 'others'\n-- (retentativas) são controle interno; o de_columns de cada
+            schedule decide quais\n-- colunas (ex.: nome) realmente vão pra Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
+            ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
+            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
+            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -1128,6 +1282,10 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 564
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
             datas_internacao: |
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
@@ -1199,34 +1357,48 @@ deployments:
             f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
             f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
             as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
-            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
+            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
+            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            51 DAY)\n        where sd.cpf is not null\n),\nfiltra_disparados as (\n\
-            \    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    select filtra_recebeu_primeira_hsm.*\n    FROM
-            filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            51 DAY)\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_falhas.cpf\n         \
+            \   and fl.templateId = {id_hsm_anterior_legado_placeholder}\n       \
+            \     and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            50 DAY)\n            and fl.status in ('PROCESSING', 'SENT')\n       \
+            \ where sd.cpf is not null or fl.flattarget is not null\n),\nfiltra_disparados
+            as (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
+            nos últimos x dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_legado_placeholder = templateId(s)
+            legado(s) dessa pesquisa)\n    select filtra_recebeu_primeira_hsm.*\n\
+            \    FROM filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
             sd\n            on sd.cpf = filtra_recebeu_primeira_hsm.cpf\n        \
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
             {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
-            = FALSE\n        where sd.cpf is null\n),\nfinal as (\n    select filtra_disparados.*\n\
-            \    from filtra_disparados\n)\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n-- (retentativas) são controle
-            interno; o de_columns de cada schedule decide quais\n-- colunas (ex.:
-            nome) realmente vão pra Data Extension.\nSELECT\n    celular_disparo AS
-            telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
-            STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
-            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
-            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
-            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
-            is not null\n"
+            = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
+            \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
+            \        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n            and fl.status in ('PROCESSING',
+            'SENT')\n        where sd.cpf is null and fl.flattarget is null\n),\n
+            final as (\n    select filtra_disparados.*\n    from filtra_disparados\n
+            )\n-- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
+            e 'others'\n-- (retentativas) são controle interno; o de_columns de cada
+            schedule decide quais\n-- colunas (ex.: nome) realmente vão pra Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
+            ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
+            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
+            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -1237,6 +1409,10 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo14
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 566
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 6"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)"
             intervalo_filtro_disparados: 300
@@ -1306,34 +1482,48 @@ deployments:
             f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
             f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
             as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
-            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
+            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
+            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            51 DAY)\n        where sd.cpf is not null\n),\nfiltra_disparados as (\n\
-            \    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    select filtra_recebeu_primeira_hsm.*\n    FROM
-            filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            51 DAY)\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_falhas.cpf\n         \
+            \   and fl.templateId = {id_hsm_anterior_legado_placeholder}\n       \
+            \     and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            50 DAY)\n            and fl.status in ('PROCESSING', 'SENT')\n       \
+            \ where sd.cpf is not null or fl.flattarget is not null\n),\nfiltra_disparados
+            as (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
+            nos últimos x dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_legado_placeholder = templateId(s)
+            legado(s) dessa pesquisa)\n    select filtra_recebeu_primeira_hsm.*\n\
+            \    FROM filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
             sd\n            on sd.cpf = filtra_recebeu_primeira_hsm.cpf\n        \
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
             {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
-            = FALSE\n        where sd.cpf is null\n),\nfinal as (\n    select filtra_disparados.*\n\
-            \    from filtra_disparados\n)\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n-- (retentativas) são controle
-            interno; o de_columns de cada schedule decide quais\n-- colunas (ex.:
-            nome) realmente vão pra Data Extension.\nSELECT\n    celular_disparo AS
-            telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
-            STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
-            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
-            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
-            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
-            is not null\n"
+            = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
+            \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
+            \        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n            and fl.status in ('PROCESSING',
+            'SENT')\n        where sd.cpf is null and fl.flattarget is null\n),\n
+            final as (\n    select filtra_disparados.*\n    from filtra_disparados\n
+            )\n-- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
+            e 'others'\n-- (retentativas) são controle interno; o de_columns de cada
+            schedule decide quais\n-- colunas (ex.: nome) realmente vão pra Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
+            ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
+            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
+            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -1344,6 +1534,10 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
+            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
+            id_hsm_legado_placeholder: 589
+            id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 300
@@ -1413,34 +1607,48 @@ deployments:
             f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
             f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
             as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
-            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
+            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
+            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            51 DAY)\n        where sd.cpf is not null\n),\nfiltra_disparados as (\n\
-            \    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    select filtra_recebeu_primeira_hsm.*\n    FROM
-            filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
+            51 DAY)\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_falhas.cpf\n         \
+            \   and fl.templateId = {id_hsm_anterior_legado_placeholder}\n       \
+            \     and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            50 DAY)\n            and fl.status in ('PROCESSING', 'SENT')\n       \
+            \ where sd.cpf is not null or fl.flattarget is not null\n),\nfiltra_disparados
+            as (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
+            nos últimos x dias,\n    -- tanto via status_disparo quanto via wetalkie
+            (histórico legado pré-migração;\n    -- id_hsm_legado_placeholder = templateId(s)
+            legado(s) dessa pesquisa)\n    select filtra_recebeu_primeira_hsm.*\n\
+            \    FROM filtra_recebeu_primeira_hsm\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
             sd\n            on sd.cpf = filtra_recebeu_primeira_hsm.cpf\n        \
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
             {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
-            = FALSE\n        where sd.cpf is null\n),\nfinal as (\n    select filtra_disparados.*\n\
-            \    from filtra_disparados\n)\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' (dedup por CPF) e 'others'\n-- (retentativas) são controle
-            interno; o de_columns de cada schedule decide quais\n-- colunas (ex.:
-            nome) realmente vão pra Data Extension.\nSELECT\n    celular_disparo AS
-            telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf AS
-            STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' '),\n\
-            \            nome\n        )\n    ) AS nome,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
-            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
-            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
-            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
-            is not null\n"
+            = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
+            \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
+            \        and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n            and fl.status in ('PROCESSING',
+            'SENT')\n        where sd.cpf is null and fl.flattarget is null\n),\n
+            final as (\n    select filtra_disparados.*\n    from filtra_disparados\n
+            )\n-- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
+            e 'others'\n-- (retentativas) são controle interno; o de_columns de cada
+            schedule decide quais\n-- colunas (ex.: nome) realmente vão pra Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
+            ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
+            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
+            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\nfrom final\nwhere celular_disparo is not null\n"
       - interval: 86400
         anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo
@@ -1448,9 +1656,11 @@ deployments:
         slug: daily-cadunico-confirma-agendamento
         flow_run_name: cadunico-confirma-agendamento
         parameters:
+      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie/telefone_disparado
+      # (pré-migração pra status_disparo), usado como fallback de "já disparado".
           flow_environment: staging
           query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
-            "intervalo_filtro_disparados": 15}
+            "intervalo_filtro_disparados": 15, "id_hsm_legado_placeholder": 101}
           campaign_name: confirma_agendamento_cadunico_prod_v2
           data_extension_filename: whatsapp_cadunico_
           de_columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
@@ -1481,14 +1691,20 @@ deployments:
             \    WHERE\n        DATE(CAST(data_hora AS DATETIME)) = DATE_ADD(CURRENT_DATE('America/Sao_Paulo'),
             INTERVAL CAST({days_ahead_placeholder} AS int64) DAY)\n),\n\nfiltra_disparados
             AS (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
-            nos últimos x dias\n    SELECT segmentacao_original.*\n    FROM segmentacao_original\n\
-            \    LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
-            \        ON sd.cpf = segmentacao_original.cpf\n        AND sd.nome_hsm
+            nos últimos x dias,\n    -- tanto via status_disparo quanto via telefone_disparado
+            (tabela legada pré-migração,\n    -- por telefone; id_hsm 101 = HSM de
+            confirmação de agendamento do CadÚnico)\n    SELECT segmentacao_original.*\n\
+            \    FROM segmentacao_original\n    LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n        ON sd.cpf = segmentacao_original.cpf\n        AND sd.nome_hsm
             = '{nome_hsm_placeholder}'\n        AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {intervalo_filtro_disparados} DAY)\n        AND sd.data_particao
             >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
-            \        AND sd.indicador_falha = FALSE\n    WHERE sd.cpf IS NULL\n),\n
-            \nfiltra_celulares_sem_whats AS (\n    -- remove telefones em quarentena
+            \        AND sd.indicador_falha = FALSE\n    LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado`
+            td\n        ON td.contato_telefone = segmentacao_original.celular_disparo\n\
+            \        AND td.id_hsm = CAST({id_hsm_legado_placeholder} AS STRING)\n\
+            \        AND td.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados}
+            DAY)\n    WHERE sd.cpf IS NULL AND td.contato_telefone IS NULL\n),\n\n
+            filtra_celulares_sem_whats AS (\n    -- remove telefones em quarentena
             ou com qualidade inválida\n    SELECT\n        DISTINCT s.*\n    FROM
             filtra_disparados AS s\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
             AS tel\n        ON s.celular_disparo = tel.telefone_numero_completo\n\
@@ -1509,8 +1725,14 @@ deployments:
         slug: daily-smas-cartaopic-evento
         flow_run_name: smas-cartaopic-evento
         parameters:
+      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie (pré-migração pra
+      # status_disparo), usado como fallback de "já disparado".
           flow_environment: staging
-          campaign_name: change-whitelist
+          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27",
+            "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 184}
+          campaign_name: smascartaoprimeirainfanciaprodv27
+          data_extension_filename: whatsapp_smas_cartaopic_evento
+          de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -1520,22 +1742,107 @@ deployments:
           filter_duplicated_phones: false
           filter_duplicated_cpfs: false
           whitelist_percentage: 100
-          infisical_secret_path: "/wetalkie"
+          infisical_secret_path: "/crm_disparo_template"
           whitelist_environment: "production"
           filter_failed_phones: false
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
-          query: |
-            select
-                TO_JSON_STRING(
-                    STRUCT(
-                        "5592984212629" as celular_disparo,
-                        CAST("0000000001" AS STRING) AS externalId
-                    )
-                ) AS destination_data
-
-
-# Schedule para testar flow na salesforce
+          query: "-- Gate de aprovação: só roda o ramo ELSE (que escaneia agendamentos_cadunico,\n
+            -- pessoa_fisica e cartao_primeira_infancia_carioca_status) se alguém
+            marcou o disparo\n-- de hoje como aprovado na planilha de bairros de entrega.
+            Se ninguém aprovou (ou\n-- aprovou pra outro dia), target_date vem NULL,
+            cai no IF e a query nem toca nas\n-- tabelas pesadas — o flow encerra
+            sozinho em \"no destinations found\", sem check em Python.\nDECLARE target_date
+            DATE DEFAULT (\n    SELECT DATE(DATA_ENTREGA)\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`\n\
+            \    WHERE\n        LOWER(TRIM(APROVACAO_DISPARO_AVISO)) = 'aprovado'\n\
+            \        AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE('America/Sao_Paulo')\n\
+            \        AND TIPO_ENTREGA != 'CRAS'\n    LIMIT 1\n);\n\nIF target_date
+            IS NULL THEN\n    SELECT\n        CAST(NULL AS STRING) AS telefone,\n\
+            \        CAST(NULL AS STRING) AS SubscriberKey,\n        CAST(NULL AS
+            STRING) AS externalId,\n        CAST(NULL AS STRING) AS nome_sobrenome,\n\
+            \        CAST(NULL AS STRING) AS endereco,\n        CAST(NULL AS STRING)
+            AS data,\n        CAST(NULL AS STRING) AS horario\n    LIMIT 0;\nELSE\n\
+            \    WITH\n    agendamentos_unicos AS (\n        SELECT\n            LPAD(cpf,
+            11, '0') AS cpf,\n            telefone,\n            ROW_NUMBER() OVER
+            (PARTITION BY cpf ORDER BY data_hora DESC) AS rn\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`\n\
+            \        WHERE cpf IS NOT NULL\n    ),\n\n    dados_rmi AS (\n       \
+            \ SELECT\n            cpf,\n            telefone\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
+            AS rmi\n        WHERE menor_idade IS FALSE AND obito.indicador IS FALSE\n\
+            \    ),\n\n    telefone_principal_rmi AS (\n        SELECT\n         \
+            \   cpf,\n            CONCAT(IFNULL(telefone.principal.ddi, \"55\"), telefone.principal.ddd,
+            telefone.principal.valor) AS telefone_principal\n        FROM dados_rmi
+            AS rmi\n        WHERE telefone.principal.estrategia_envio IN (\"ENVIAR\"\
+            , \"TESTAR\")\n    ),\n\n    telefones_alternativos_rmi AS (\n       \
+            \ SELECT\n            cpf,\n            CONCAT(IFNULL(tel_alt.ddi, \"\
+            55\"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,\n        \
+            \    ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn\n\
+            \        FROM dados_rmi AS rmi, UNNEST(rmi.telefone.alternativo) AS tel_alt\n\
+            \        WHERE tel_alt.valor IS NOT NULL\n    ),\n\n    joined_status_cpi
+            AS (\n        SELECT\n            TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,\n\
+            \            LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS
+            cpf,\n            SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA
+            AS STRING))) AS data_evento_date,\n            TRIM(\n               \
+            \ CONCAT(\n                    t1.LOCAL_ENTREGA_PREVISTO,\n          \
+            \          IF(\n                        t1.ENDERECO_ENTREGA_PREVISTO IS
+            NOT NULL AND t1.ENDERECO_ENTREGA_PREVISTO != '',\n                   \
+            \     CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),\n             \
+            \           ''\n                    )\n                )\n           \
+            \ ) AS endereco_evento,\n            t1.HORA_ENTREGA_PREVISTA AS horario_evento,\n\
+            \            COALESCE(\n                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)\n\
+            \            ) AS celular_disparo\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.cartao_primeira_infancia_carioca_status`
+            AS t1\n        LEFT JOIN agendamentos_unicos AS a\n            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL
+            AS STRING), 11, '0') = a.cpf AND a.rn = 1\n        LEFT JOIN telefone_principal_rmi
+            AS rmi\n            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11,
+            '0') = rmi.cpf\n        LEFT JOIN telefones_alternativos_rmi AS tel_alt\n\
+            \            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0')
+            = tel_alt.cpf AND tel_alt.rn = 1\n        WHERE\n            SAFE.PARSE_DATE('%Y-%m-%d',
+            TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = target_date\n      \
+            \      AND STATUS != 'não retirado'\n            AND TIPO_ENTREGA_PREVISTA
+            != 'CRAS'\n    ),\n\n    filtra_disparados AS (\n        -- verifica se
+            esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos
+            x dias,\n        -- tanto via status_disparo quanto via wetalkie (histórico
+            legado pré-migração;\n        -- templateId 184 = HSM de evento do PIC)\n\
+            \        SELECT joined_status_cpi.*\n        FROM joined_status_cpi\n\
+            \        LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            ON sd.cpf = joined_status_cpi.cpf\n            AND sd.nome_hsm
+            = '{nome_hsm_placeholder}'\n            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
+            INTERVAL {intervalo_filtro_disparados} DAY)\n            AND sd.data_particao
+            >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
+            \            AND sd.indicador_falha = FALSE\n        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            ON fl.flattarget = joined_status_cpi.celular_disparo\n\
+            \            AND fl.templateId = {id_hsm_legado_placeholder}\n       \
+            \ WHERE sd.cpf IS NULL AND fl.flattarget IS NULL\n    ),\n\n    filtra_celulares_sem_whats
+            AS (\n        -- remove telefones em quarentena ou com qualidade inválida\n\
+            \        SELECT DISTINCT f.*\n        FROM filtra_disparados AS f\n  \
+            \      LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
+            AS tel\n            ON f.celular_disparo = tel.telefone_numero_completo\n\
+            \        LEFT JOIN UNNEST(tel.consentimento) AS c\n        WHERE\n   \
+            \         (c.indicador_quarentena = FALSE AND tel.telefone_qualidade !=
+            \"INVALIDO\")\n            OR tel.telefone_numero_completo IS NULL\n \
+            \   ),\n\n    formatted AS (\n        SELECT\n            celular_disparo,\n\
+            \            INITCAP(\n                IF(\n                    ARRAY_LENGTH(SPLIT(nome_completo,
+            ' ')) > 1,\n                    CONCAT(\n                        SPLIT(nome_completo,
+            ' ')[SAFE_OFFSET(0)],\n                        ' ',\n                \
+            \        SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo,
+            ' ')) - 1)]\n                    ),\n                    nome_completo\n\
+            \                )\n            ) AS nome_sobrenome,\n            cpf,\n\
+            \            endereco_evento,\n            FORMAT_DATE('%d/%m/%Y', data_evento_date)
+            AS data_formatada,\n            horario_evento\n        FROM filtra_celulares_sem_whats\n\
+            \        WHERE celular_disparo IS NOT NULL AND data_evento_date IS NOT
+            NULL\n    )\n\n    -- Tabela simples (sem TO_JSON_STRING). 'externalId'
+            é controle interno (dedup por\n    -- CPF) e é descartado do CSV pelo
+            de_columns antes do envio à Data Extension.\n    -- telefone, SubscriberKey
+            e LOCALE já são tratados por padrão pelo flow (LOCALE é\n    -- preenchido
+            automaticamente como 'BR' em save_csv_for_sftp).\n    SELECT\n       \
+            \ celular_disparo AS telefone,\n        cpf AS SubscriberKey,\n      \
+            \  cpf AS externalId,\n        nome_sobrenome,\n        endereco_evento
+            AS endereco,\n        data_formatada AS data,\n        horario_evento
+            AS horario\n    FROM formatted\n    WHERE celular_disparo IS NOT NULL;\n
+            END IF;\n"
       - interval: 864000000
         anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo
@@ -1556,7 +1863,102 @@ deployments:
           whitelist_percentage: 0
           infisical_secret_path: "/crm_disparo_template"
           whitelist_environment: "production"
-          query: ''
+          query: "-- Gate de aprovação: só roda o ramo ELSE (que escaneia agendamentos_cadunico,\n
+            -- pessoa_fisica e cartao_primeira_infancia_carioca_status) se alguém
+            marcou o disparo\n-- de hoje como aprovado na planilha de bairros de entrega.
+            Se ninguém aprovou (ou\n-- aprovou pra outro dia), target_date vem NULL,
+            cai no IF e a query nem toca nas\n-- tabelas pesadas — o flow encerra
+            sozinho em \"no destinations found\", sem check em Python.\nDECLARE target_date
+            DATE DEFAULT (\n    SELECT DATE(DATA_ENTREGA)\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`\n\
+            \    WHERE\n        LOWER(TRIM(APROVACAO_DISPARO_AVISO)) = 'aprovado'\n\
+            \        AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE('America/Sao_Paulo')\n\
+            \        AND TIPO_ENTREGA != 'CRAS'\n    LIMIT 1\n);\n\nIF target_date
+            IS NULL THEN\n    SELECT\n        CAST(NULL AS STRING) AS telefone,\n\
+            \        CAST(NULL AS STRING) AS SubscriberKey,\n        CAST(NULL AS
+            STRING) AS externalId,\n        CAST(NULL AS STRING) AS nome_sobrenome,\n\
+            \        CAST(NULL AS STRING) AS endereco,\n        CAST(NULL AS STRING)
+            AS data,\n        CAST(NULL AS STRING) AS horario\n    LIMIT 0;\nELSE\n\
+            \    WITH\n    agendamentos_unicos AS (\n        SELECT\n            LPAD(cpf,
+            11, '0') AS cpf,\n            telefone,\n            ROW_NUMBER() OVER
+            (PARTITION BY cpf ORDER BY data_hora DESC) AS rn\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`\n\
+            \        WHERE cpf IS NOT NULL\n    ),\n\n    dados_rmi AS (\n       \
+            \ SELECT\n            cpf,\n            telefone\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
+            AS rmi\n        WHERE menor_idade IS FALSE AND obito.indicador IS FALSE\n\
+            \    ),\n\n    telefone_principal_rmi AS (\n        SELECT\n         \
+            \   cpf,\n            CONCAT(IFNULL(telefone.principal.ddi, \"55\"), telefone.principal.ddd,
+            telefone.principal.valor) AS telefone_principal\n        FROM dados_rmi
+            AS rmi\n        WHERE telefone.principal.estrategia_envio IN (\"ENVIAR\"\
+            , \"TESTAR\")\n    ),\n\n    telefones_alternativos_rmi AS (\n       \
+            \ SELECT\n            cpf,\n            CONCAT(IFNULL(tel_alt.ddi, \"\
+            55\"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,\n        \
+            \    ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn\n\
+            \        FROM dados_rmi AS rmi, UNNEST(rmi.telefone.alternativo) AS tel_alt\n\
+            \        WHERE tel_alt.valor IS NOT NULL\n    ),\n\n    joined_status_cpi
+            AS (\n        SELECT\n            TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,\n\
+            \            LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS
+            cpf,\n            SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA
+            AS STRING))) AS data_evento_date,\n            TRIM(\n               \
+            \ CONCAT(\n                    t1.LOCAL_ENTREGA_PREVISTO,\n          \
+            \          IF(\n                        t1.ENDERECO_ENTREGA_PREVISTO IS
+            NOT NULL AND t1.ENDERECO_ENTREGA_PREVISTO != '',\n                   \
+            \     CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),\n             \
+            \           ''\n                    )\n                )\n           \
+            \ ) AS endereco_evento,\n            t1.HORA_ENTREGA_PREVISTA AS horario_evento,\n\
+            \            COALESCE(\n                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)\n\
+            \            ) AS celular_disparo\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.cartao_primeira_infancia_carioca_status`
+            AS t1\n        LEFT JOIN agendamentos_unicos AS a\n            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL
+            AS STRING), 11, '0') = a.cpf AND a.rn = 1\n        LEFT JOIN telefone_principal_rmi
+            AS rmi\n            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11,
+            '0') = rmi.cpf\n        LEFT JOIN telefones_alternativos_rmi AS tel_alt\n\
+            \            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0')
+            = tel_alt.cpf AND tel_alt.rn = 1\n        WHERE\n            SAFE.PARSE_DATE('%Y-%m-%d',
+            TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = target_date\n      \
+            \      AND STATUS != 'não retirado'\n            AND TIPO_ENTREGA_PREVISTA
+            != 'CRAS'\n    ),\n\n    filtra_disparados AS (\n        -- verifica se
+            esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos
+            x dias,\n        -- tanto via status_disparo quanto via wetalkie (histórico
+            legado pré-migração;\n        -- templateId 184 = HSM de evento do PIC)\n\
+            \        SELECT joined_status_cpi.*\n        FROM joined_status_cpi\n\
+            \        LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            ON sd.cpf = joined_status_cpi.cpf\n            AND sd.nome_hsm
+            = '{nome_hsm_placeholder}'\n            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
+            INTERVAL {intervalo_filtro_disparados} DAY)\n            AND sd.data_particao
+            >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
+            \            AND sd.indicador_falha = FALSE\n        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            ON fl.flattarget = joined_status_cpi.celular_disparo\n\
+            \            AND fl.templateId = {id_hsm_legado_placeholder}\n       \
+            \ WHERE sd.cpf IS NULL AND fl.flattarget IS NULL\n    ),\n\n    filtra_celulares_sem_whats
+            AS (\n        -- remove telefones em quarentena ou com qualidade inválida\n\
+            \        SELECT DISTINCT f.*\n        FROM filtra_disparados AS f\n  \
+            \      LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
+            AS tel\n            ON f.celular_disparo = tel.telefone_numero_completo\n\
+            \        LEFT JOIN UNNEST(tel.consentimento) AS c\n        WHERE\n   \
+            \         (c.indicador_quarentena = FALSE AND tel.telefone_qualidade !=
+            \"INVALIDO\")\n            OR tel.telefone_numero_completo IS NULL\n \
+            \   ),\n\n    formatted AS (\n        SELECT\n            celular_disparo,\n\
+            \            INITCAP(\n                IF(\n                    ARRAY_LENGTH(SPLIT(nome_completo,
+            ' ')) > 1,\n                    CONCAT(\n                        SPLIT(nome_completo,
+            ' ')[SAFE_OFFSET(0)],\n                        ' ',\n                \
+            \        SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo,
+            ' ')) - 1)]\n                    ),\n                    nome_completo\n\
+            \                )\n            ) AS nome_sobrenome,\n            cpf,\n\
+            \            endereco_evento,\n            FORMAT_DATE('%d/%m/%Y', data_evento_date)
+            AS data_formatada,\n            horario_evento\n        FROM filtra_celulares_sem_whats\n\
+            \        WHERE celular_disparo IS NOT NULL AND data_evento_date IS NOT
+            NULL\n    )\n\n    -- Tabela simples (sem TO_JSON_STRING). 'externalId'
+            é controle interno (dedup por\n    -- CPF) e é descartado do CSV pelo
+            de_columns antes do envio à Data Extension.\n    -- telefone, SubscriberKey
+            e LOCALE já são tratados por padrão pelo flow (LOCALE é\n    -- preenchido
+            automaticamente como 'BR' em save_csv_for_sftp).\n    SELECT\n       \
+            \ celular_disparo AS telefone,\n        cpf AS SubscriberKey,\n      \
+            \  cpf AS externalId,\n        nome_sobrenome,\n        endereco_evento
+            AS endereco,\n        data_formatada AS data,\n        horario_evento
+            AS horario\n    FROM formatted\n    WHERE celular_disparo IS NOT NULL;\n
+            END IF;\n"
       - interval: 86400
         anchor_date: "2021-01-01T12:00:00"
         timezone: America/Sao_Paulo
@@ -1564,12 +1966,17 @@ deployments:
         slug: daily-smas-cartaopic-lembrete
         flow_run_name: smas-cartaopic-lembrete
         parameters:
+      # nome_hsm_placeholder é o próprio campaign_name deste schedule.
+      # intervalo_filtro_disparados: chute de 30 dias pra evitar reenviar o lembrete do
+      # mesmo evento - CONFIRMAR antes de ativar (sem referência no checklist_disparos.md).
+      # id_hsm_legado_placeholder: ID numérico legado da Wetalkie (pré-migração pra
+      # status_disparo), usado como fallback de "já disparado".
           flow_environment: staging
-          id_hsm: 185
+          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4",
+            "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 185}
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
-          cost_center_id: 71
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -1581,7 +1988,102 @@ deployments:
           whitelist_percentage: 0
           infisical_secret_path: "/crm_disparo_template"
           whitelist_environment: "production"
-          query: ''
+          query: "-- Gate de aprovação: só roda o ramo ELSE (que escaneia agendamentos_cadunico,\n
+            -- pessoa_fisica e cartao_primeira_infancia_carioca_status) se alguém
+            marcou o disparo\n-- de hoje como aprovado na planilha de bairros de entrega.
+            Se ninguém aprovou (ou\n-- aprovou pra outro dia), target_date vem NULL,
+            cai no IF e a query nem toca nas\n-- tabelas pesadas — o flow encerra
+            sozinho em \"no destinations found\", sem check em Python.\nDECLARE target_date
+            DATE DEFAULT (\n    SELECT DATE(DATA_ENTREGA)\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`\n\
+            \    WHERE\n        LOWER(TRIM(APROVACAO_DISPARO_LEMBRETE)) = 'aprovado'\n\
+            \        AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE('America/Sao_Paulo')\n\
+            \        AND TIPO_ENTREGA != 'CRAS'\n    LIMIT 1\n);\n\nIF target_date
+            IS NULL THEN\n    SELECT\n        CAST(NULL AS STRING) AS telefone,\n\
+            \        CAST(NULL AS STRING) AS SubscriberKey,\n        CAST(NULL AS
+            STRING) AS externalId,\n        CAST(NULL AS STRING) AS nome_sobrenome,\n\
+            \        CAST(NULL AS STRING) AS endereco,\n        CAST(NULL AS STRING)
+            AS data,\n        CAST(NULL AS STRING) AS horario\n    LIMIT 0;\nELSE\n\
+            \    WITH\n    agendamentos_unicos AS (\n        SELECT\n            LPAD(cpf,
+            11, '0') AS cpf,\n            telefone,\n            ROW_NUMBER() OVER
+            (PARTITION BY cpf ORDER BY data_hora DESC) AS rn\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`\n\
+            \        WHERE cpf IS NOT NULL\n    ),\n\n    dados_rmi AS (\n       \
+            \ SELECT\n            cpf,\n            telefone\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
+            AS rmi\n        WHERE menor_idade IS FALSE AND obito.indicador IS FALSE\n\
+            \    ),\n\n    telefone_principal_rmi AS (\n        SELECT\n         \
+            \   cpf,\n            CONCAT(IFNULL(telefone.principal.ddi, \"55\"), telefone.principal.ddd,
+            telefone.principal.valor) AS telefone_principal\n        FROM dados_rmi
+            AS rmi\n        WHERE telefone.principal.estrategia_envio IN (\"ENVIAR\"\
+            , \"TESTAR\")\n    ),\n\n    telefones_alternativos_rmi AS (\n       \
+            \ SELECT\n            cpf,\n            CONCAT(IFNULL(tel_alt.ddi, \"\
+            55\"), tel_alt.ddd, tel_alt.valor) AS telefone_alternativo,\n        \
+            \    ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY tel_alt.origem) AS rn\n\
+            \        FROM dados_rmi AS rmi, UNNEST(rmi.telefone.alternativo) AS tel_alt\n\
+            \        WHERE tel_alt.valor IS NOT NULL\n    ),\n\n    joined_status_cpi
+            AS (\n        SELECT\n            TRIM(t1.NOME_RESPONSAVEL) AS nome_completo,\n\
+            \            LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') AS
+            cpf,\n            SAFE.PARSE_DATE('%Y-%m-%d', TRIM(CAST(t1.DATA_ENTREGA_PREVISTA
+            AS STRING))) AS data_evento_date,\n            TRIM(\n               \
+            \ CONCAT(\n                    t1.LOCAL_ENTREGA_PREVISTO,\n          \
+            \          IF(\n                        t1.ENDERECO_ENTREGA_PREVISTO IS
+            NOT NULL AND t1.ENDERECO_ENTREGA_PREVISTO != '',\n                   \
+            \     CONCAT(' (', t1.ENDERECO_ENTREGA_PREVISTO, ')'),\n             \
+            \           ''\n                    )\n                )\n           \
+            \ ) AS endereco_evento,\n            t1.HORA_ENTREGA_PREVISTA AS horario_evento,\n\
+            \            COALESCE(\n                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_1_FAM),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(t1.NUM_TEL_CONTATO_2_FAM),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(a.telefone),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),\n\
+            \                `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)\n\
+            \            ) AS celular_disparo\n        FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.cartao_primeira_infancia_carioca_status`
+            AS t1\n        LEFT JOIN agendamentos_unicos AS a\n            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL
+            AS STRING), 11, '0') = a.cpf AND a.rn = 1\n        LEFT JOIN telefone_principal_rmi
+            AS rmi\n            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11,
+            '0') = rmi.cpf\n        LEFT JOIN telefones_alternativos_rmi AS tel_alt\n\
+            \            ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0')
+            = tel_alt.cpf AND tel_alt.rn = 1\n        WHERE\n            SAFE.PARSE_DATE('%Y-%m-%d',
+            TRIM(CAST(t1.DATA_ENTREGA_PREVISTA AS STRING))) = target_date\n      \
+            \      AND STATUS != 'não retirado'\n            AND TIPO_ENTREGA_PREVISTA
+            != 'CRAS'\n    ),\n\n    filtra_disparados AS (\n        -- verifica se
+            esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos
+            x dias,\n        -- tanto via status_disparo quanto via wetalkie (histórico
+            legado pré-migração;\n        -- templateId 185 = HSM de lembrete do PIC)\n\
+            \        SELECT joined_status_cpi.*\n        FROM joined_status_cpi\n\
+            \        LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo`
+            sd\n            ON sd.cpf = joined_status_cpi.cpf\n            AND sd.nome_hsm
+            = '{nome_hsm_placeholder}'\n            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
+            INTERVAL {intervalo_filtro_disparados} DAY)\n            AND sd.data_particao
+            >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
+            \            AND sd.indicador_falha = FALSE\n        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            fl\n            ON fl.flattarget = joined_status_cpi.celular_disparo\n\
+            \            AND fl.templateId = {id_hsm_legado_placeholder}\n       \
+            \ WHERE sd.cpf IS NULL AND fl.flattarget IS NULL\n    ),\n\n    filtra_celulares_sem_whats
+            AS (\n        -- remove telefones em quarentena ou com qualidade inválida\n\
+            \        SELECT DISTINCT f.*\n        FROM filtra_disparados AS f\n  \
+            \      LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
+            AS tel\n            ON f.celular_disparo = tel.telefone_numero_completo\n\
+            \        LEFT JOIN UNNEST(tel.consentimento) AS c\n        WHERE\n   \
+            \         (c.indicador_quarentena = FALSE AND tel.telefone_qualidade !=
+            \"INVALIDO\")\n            OR tel.telefone_numero_completo IS NULL\n \
+            \   ),\n\n    formatted AS (\n        SELECT\n            celular_disparo,\n\
+            \            INITCAP(\n                IF(\n                    ARRAY_LENGTH(SPLIT(nome_completo,
+            ' ')) > 1,\n                    CONCAT(\n                        SPLIT(nome_completo,
+            ' ')[SAFE_OFFSET(0)],\n                        ' ',\n                \
+            \        SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo,
+            ' ')) - 1)]\n                    ),\n                    nome_completo\n\
+            \                )\n            ) AS nome_sobrenome,\n            cpf,\n\
+            \            endereco_evento,\n            FORMAT_DATE('%d/%m/%Y', data_evento_date)
+            AS data_formatada,\n            horario_evento\n        FROM filtra_celulares_sem_whats\n\
+            \        WHERE celular_disparo IS NOT NULL AND data_evento_date IS NOT
+            NULL\n    )\n\n    -- Tabela simples (sem TO_JSON_STRING). 'externalId'
+            é controle interno (dedup por\n    -- CPF) e é descartado do CSV pelo
+            de_columns antes do envio à Data Extension.\n    -- telefone, SubscriberKey
+            e LOCALE já são tratados por padrão pelo flow (LOCALE é\n    -- preenchido
+            automaticamente como 'BR' em save_csv_for_sftp).\n    SELECT\n       \
+            \ celular_disparo AS telefone,\n        cpf AS SubscriberKey,\n      \
+            \  cpf AS externalId,\n        nome_sobrenome,\n        endereco_evento
+            AS endereco,\n        data_formatada AS data,\n        horario_evento
+            AS horario\n    FROM formatted\n    WHERE celular_disparo IS NOT NULL;\n
+            END IF;\n"
   - name: rj-crm--disparo-template-sf--prod
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf

@@ -1,14 +1,63 @@
--- Gate de aprovação: só roda o ramo ELSE (que escaneia agendamentos_cadunico,
--- pessoa_fisica e cartao_primeira_infancia_carioca_status) se alguém marcou o disparo
--- de hoje como aprovado na planilha de bairros de entrega. Se ninguém aprovou (ou
--- aprovou pra outro dia), target_date vem NULL, cai no IF e a query nem toca nas
--- tabelas pesadas — o flow encerra sozinho em "no destinations found", sem check em Python.
-DECLARE target_date DATE DEFAULT (
+-- Teste da query queries_dev/smas_cartaopic_evento.sql (mirror de queries/smas_cartaopic_evento.sql)
+-- Placeholders já substituídos com os valores do schedule "daily-smas-cartaopic-evento"
+-- (scheduler_sf.yaml): nome_hsm_placeholder -> 'smascartaoprimeirainfanciaprodv27',
+-- intervalo_filtro_disparados -> 30.
+-- Executa direto no BigQuery. Passo 1 aprova o disparo de aviso de hoje pra uma data de
+-- entrega em D+3 (satisfaz o gate DECLARE target_date da query); passo 2 insere um
+-- cidadão com entrega prevista pra essa mesma data, telefone válido e status/tipo que
+-- passam nos filtros finais; passo 3 é a query em si (com o DECLARE/IF/ELSE embutido).
+
+-- DECLARE precisa ser a primeira instrução do script (regra do BigQuery scripting),
+-- então vem antes dos DELETE/INSERT de setup; o valor real só é atribuído no passo 3,
+-- via SET, depois que os dados de teste já existem nas tabelas.
+DECLARE target_date DATE;
+
+-- ===================== 0) LIMPA DADOS DE TESTE ANTERIORES =====================
+DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+WHERE BAIRRO = 'TESTE SALESFORCE PIC EVENTO';
+
+DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.cartao_primeira_infancia_carioca_status`
+WHERE NUM_CPF_RESPONSAVEL = '12picevent1';
+
+DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+WHERE cpf = '12picevent1'
+    AND nome_hsm = 'smascartaoprimeirainfanciaprodv27';
+
+-- ===================== 1) INSERT: aprovação do disparo de aviso (gate) =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+(BAIRRO, TIPO_ENTREGA, DATA_ENTREGA, APROVACAO_DISPARO_AVISO, DATA_DISPARO_AVISO)
+VALUES
+(
+    'TESTE SALESFORCE PIC EVENTO',
+    'Correios',
+    DATE_ADD(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 3 DAY),
+    'aprovado',
+    CURRENT_DATE('America/Sao_Paulo')
+);
+
+-- ===================== 2) INSERT: cidadão com entrega prevista pra D+3 =====================
+INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__pic.cartao_primeira_infancia_carioca_status`
+(NUM_CPF_RESPONSAVEL, NOME_RESPONSAVEL, DATA_ENTREGA_PREVISTA, LOCAL_ENTREGA_PREVISTO, ENDERECO_ENTREGA_PREVISTO, HORA_ENTREGA_PREVISTA, NUM_TEL_CONTATO_1_FAM, STATUS, TIPO_ENTREGA_PREVISTA)
+VALUES
+(
+    '12picevent1',
+    'MARIA SALESFORCE PIC EVENTO',
+    DATE_ADD(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 3 DAY),
+    'Posto de Entrega Central',
+    'Rua Teste, 123',
+    '14:00',
+    '5521989190512',
+    'aguardando retirada',
+    'Correios'
+);
+
+-- ===================== 3) QUERY (queries_dev/smas_cartaopic_evento.sql com placeholders substituídos) =====================
+SET target_date = (
     SELECT DATE(DATA_ENTREGA)
-    FROM `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
+    FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`
     WHERE
-        LOWER(TRIM(APROVACAO_DISPARO_LEMBRETE)) = 'aprovado'
-        AND DATE(DATA_DISPARO_LEMBRETE) = CURRENT_DATE('America/Sao_Paulo')
+        LOWER(TRIM(APROVACAO_DISPARO_AVISO)) = 'aprovado'
+        AND DATE(DATA_DISPARO_AVISO) = CURRENT_DATE('America/Sao_Paulo')
         AND TIPO_ENTREGA != 'CRAS'
     LIMIT 1
 );
@@ -30,7 +79,7 @@ ELSE
             LPAD(cpf, 11, '0') AS cpf,
             telefone,
             ROW_NUMBER() OVER (PARTITION BY cpf ORDER BY data_hora DESC) AS rn
-        FROM `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`
         WHERE cpf IS NOT NULL
     ),
 
@@ -38,7 +87,7 @@ ELSE
         SELECT
             cpf,
             telefone
-        FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` AS rmi
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica` AS rmi
         WHERE menor_idade IS FALSE AND obito.indicador IS FALSE
     ),
 
@@ -82,7 +131,7 @@ ELSE
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(rmi.telefone_principal),
                 `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(tel_alt.telefone_alternativo)
             ) AS celular_disparo
-        FROM `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status` AS t1
+        FROM `rj-crm-registry-dev.dev__dev_fantasma__pic.cartao_primeira_infancia_carioca_status` AS t1
         LEFT JOIN agendamentos_unicos AS a
             ON LPAD(CAST(t1.NUM_CPF_RESPONSAVEL AS STRING), 11, '0') = a.cpf AND a.rn = 1
         LEFT JOIN telefone_principal_rmi AS rmi
@@ -96,20 +145,21 @@ ELSE
     ),
 
     filtra_disparados AS (
-        -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias,
+        -- verifica se esse cpf já recebeu essa mesma mensagem (smascartaoprimeirainfanciaprodv27) nos últimos 30 dias,
         -- tanto via status_disparo quanto via wetalkie (histórico legado pré-migração;
-        -- templateId 185 = HSM de lembrete do PIC)
+        -- templateId 184 = HSM de evento do PIC). Sem seed na wetalkie aqui de propósito:
+        -- o LEFT JOIN não encontra nada e fica inerte, só exercitamos o caminho da status_disparo.
         SELECT joined_status_cpi.*
         FROM joined_status_cpi
         LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
             ON sd.cpf = joined_status_cpi.cpf
-            AND sd.nome_hsm = '{nome_hsm_placeholder}'
-            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
-            AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
+            AND sd.nome_hsm = 'smascartaoprimeirainfanciaprodv27'
+            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 30 DAY)
+            AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
             AND sd.indicador_falha = FALSE
         LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             ON fl.flattarget = joined_status_cpi.celular_disparo
-            AND fl.templateId = {id_hsm_legado_placeholder}
+            AND fl.templateId = 184
         WHERE sd.cpf IS NULL AND fl.flattarget IS NULL
     ),
 
@@ -117,7 +167,7 @@ ELSE
         -- remove telefones em quarentena ou com qualidade inválida
         SELECT DISTINCT f.*
         FROM filtra_disparados AS f
-        LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+        LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone` AS tel
             ON f.celular_disparo = tel.telefone_numero_completo
         LEFT JOIN UNNEST(tel.consentimento) AS c
         WHERE

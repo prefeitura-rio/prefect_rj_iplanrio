@@ -142,7 +142,10 @@ WHERE pf.telefone.principal.qualidade = 'VALIDO'
     AND EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) NOT IN (1, 7)
 ),
 filtra_disparados AS (
--- verifica se esse cpf já recebeu essa mesma mensagem nos últimos x dias
+-- verifica se esse cpf já recebeu essa mesma mensagem nos últimos x dias, tanto via
+-- status_disparo quanto via wetalkie (histórico legado pré-migração; templateId
+-- 196/239 = HSMs de cobrança da dívida ativa usadas antes da migração). Sem seed na
+-- wetalkie aqui de propósito: o LEFT JOIN não encontra nada e fica inerte.
 SELECT celulares_validos.*
 FROM celulares_validos
 LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
@@ -150,7 +153,11 @@ LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
     AND sd.nome_hsm = 'pgm_divida_ativa_prod_v2'
     AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 150 DAY)
     AND sd.data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 151 DAY)
-WHERE sd.cpf IS NULL
+LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
+    ON fl.targetexternalid = celulares_validos.cpf
+    AND fl.templateId IN (196, 239)
+    AND fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 150 DAY)
+WHERE sd.cpf IS NULL AND fl.targetexternalid IS NULL
 ),
 
 contribuintes AS (

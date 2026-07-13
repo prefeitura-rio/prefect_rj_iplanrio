@@ -25,7 +25,9 @@ segmentacao_original AS (
 ),
 
 filtra_disparados AS (
-    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias
+    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias,
+    -- tanto via status_disparo quanto via telefone_disparado (tabela legada pré-migração,
+    -- por telefone; id_hsm 101 = HSM de confirmação de agendamento do CadÚnico)
     SELECT segmentacao_original.*
     FROM segmentacao_original
     LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
@@ -34,7 +36,11 @@ filtra_disparados AS (
         AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
         AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
         AND sd.indicador_falha = FALSE
-    WHERE sd.cpf IS NULL
+    LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado` td
+        ON td.contato_telefone = segmentacao_original.celular_disparo
+        AND td.id_hsm = CAST({id_hsm_legado_placeholder} AS STRING)
+        AND td.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
+    WHERE sd.cpf IS NULL AND td.contato_telefone IS NULL
 ),
 
 filtra_celulares_sem_whats AS (

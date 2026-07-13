@@ -149,8 +149,14 @@ VALUES
 
 -- ===================== 4) QUERY (queries_dev/pgm_divida_ativa_agradecimento.sql com placeholders substituídos) =====================
 WITH
+-- Combina o histórico novo (status_disparo, alimentado via SFTP/Salesforce) com o
+-- legado da Wetalkie (fluxo_atendimento_*, por templateId numérico), enquanto a
+-- status_disparo não acumula todo o histórico pré-migração. O templateId legado é
+-- normalizado pro mesmo rótulo (nome_hsm) usado pelos placeholders atuais, então a
+-- agregação abaixo não precisa saber de qual fonte cada disparo veio. Sem seed na
+-- wetalkie aqui de propósito: o UNION ALL não traz linha nenhuma e fica inerte.
 disparos_divida_ativa as (
-    -- quem recebeu os disparos de whatsapp sem erros
+    -- quem recebeu os disparos de whatsapp sem erros (via Salesforce/SFTP)
     select distinct cpf,
     contato_telefone as celular_disparo,
     DATE(envio_datahora) as data_disparo,
@@ -162,6 +168,22 @@ disparos_divida_ativa as (
         'pgmdividaativalembreteprodv1',
         'pgmdividaativaconfirmapgtoprodv1'
     )
+
+    UNION ALL
+
+    -- Legado: histórico via Wetalkie antes da migração
+    -- (196/239 = cobrança, 227 = lembrete, 231 = agradecimento)
+    select distinct targetexternalid as cpf,
+    flattarget as celular_disparo,
+    DATE(createdate) as data_disparo,
+    CASE
+        WHEN templateId IN (196, 239) THEN 'pgm_divida_ativa_prod_v2'
+        WHEN templateId = 227 THEN 'pgmdividaativalembreteprodv1'
+        WHEN templateId = 231 THEN 'pgmdividaativaconfirmapgtoprodv1'
+    END as id_hsm,
+    failedDate
+    from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+    where templateid in (196, 227, 231, 239)
 ),
 
 disparos as (

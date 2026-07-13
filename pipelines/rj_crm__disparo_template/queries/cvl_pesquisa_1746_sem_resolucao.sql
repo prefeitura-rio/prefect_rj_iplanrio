@@ -141,7 +141,16 @@ WITH tabela_global AS (
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             on fl.flattarget = ta.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
             and date(fl.createDate) = CURRENT_DATE("America/Sao_Paulo") and fl.status="PROCESSING"
+    -- verifica também se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) hoje,
+    -- via status_disparo (alimentada pelos disparos via SFTP/Salesforce)
+    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
+            on sd.cpf = ta.cpf
+            and sd.nome_hsm = '{nome_hsm_placeholder}'
+            and DATE(sd.envio_datahora) = CURRENT_DATE("America/Sao_Paulo")
+            and sd.data_particao = CURRENT_DATE("America/Sao_Paulo")
+            and sd.indicador_falha = FALSE
     WHERE fl.flattarget is null
+        AND sd.cpf is null
         AND (
         CASE
             -- Se for sábado ou domingo, joga para uma data no futuro (retorna vazio)

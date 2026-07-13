@@ -93,25 +93,27 @@ WITH tabela_global AS (
         t1.tipo_situacao,
         t1.tempo_prazo
 
-    FROM rj-segovi.adm_central_atendimento_1746.chamado t1
-    LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura t2
+    -- TODO: aponta pra fantasma dev (sem acesso ao rj-segovi/rj-iplanrio) - trocar de
+    -- volta pra queries/ antes de ir pra producao
+    FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado` t1
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura` t2
         ON t1.id_bairro = t2.id_bairro
-    LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf t3
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf` t3
         ON t1.id_chamado = t3.id_chamado
-    LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa t4
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa` t4
         ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)
-    LEFT JOIN rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5
+    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia` t5
         ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)
     WHERE 1=1
         AND t1.data_inicio >= '2025-01-01 00:00:00.000' -- Considera somente chamados a partir de Jan/25
         AND (
             -- Aceitam qualquer categoria
-            t1.id_subtipo IN ('5899', '3366') 
-            OR 
+            t1.id_subtipo IN ('5899', '3366')
+            OR
             -- Exigem ser "Serviço"
             (
             t1.id_subtipo IN (
-            '2966', '1325', '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071', '1279', '2178', '3139', '114', '5841', '1101' ) 
+            '2966', '1325', '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071', '1279', '2178', '3139', '114', '5841', '1101' )
             AND t1.categoria IN ("Serviço")
             )
         ) --Considera somente 20 serviços selecionados pela SUBTD
