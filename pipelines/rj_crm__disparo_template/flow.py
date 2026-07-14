@@ -37,6 +37,7 @@ from pipelines.rj_crm__disparo_template.utils.dispatch import (
     get_failed_cpfs,
     get_failed_phones,
     get_retry_destinations,
+    monitor_dispatch_status,
     remove_contacts_from_whitelist,
     remove_duplicate_cpfs,
     remove_duplicate_phones,
@@ -109,6 +110,9 @@ def rj_crm__disparo_template_sf(
     force_add_on_whitelist_group: bool = False,
     whitelist_replace_contacts: bool = False,
     materialize_after_sftp: bool = True,
+    monitor_after_sftp: bool = True,
+    monitor_check_interval_minutes: int = 5,
+    monitor_max_wait_minutes: int = 40,
 ):
     """
     Orchestrates the dispatch of templated messages via Salesforce SFTP.
@@ -150,6 +154,13 @@ def rj_crm__disparo_template_sf(
         flow_environment (str, optional): Flow environment ("staging" or "production"). Defaults to "staging".
         force_add_on_whitelist_group (bool, optional): Force add to whitelist group. Defaults to False.
         whitelist_replace_contacts (bool, optional): Remove contacts before adding to whitelist. Defaults to False.
+        materialize_after_sftp (bool, optional): Faz uma única materialização de int_crm_status_disparo
+            após materialization_sleep_minutes, sem monitoramento/alerta. Ignorado se monitor_after_sftp=True.
+        monitor_after_sftp (bool, optional): Após materialization_sleep_minutes, materializa
+            int_crm_status_disparo e checa sucesso do disparo a cada monitor_check_interval_minutes,
+            até monitor_max_wait_minutes. Alerta no Discord se nenhum sucesso for encontrado nesse prazo.
+        monitor_check_interval_minutes (int, optional): Intervalo entre checagens do monitoramento. Defaults to 5.
+        monitor_max_wait_minutes (int, optional): Tempo máximo de monitoramento antes de alertar. Defaults to 40.
     """
 
     # force deploy
@@ -352,7 +363,21 @@ def rj_crm__disparo_template_sf(
 
         print(f"CSV enviado para SFTP com {len(current_df)} destinatários na tentativa {i+1}.")
 
-        if materialize_after_sftp:
+        if monitor_after_sftp:
+            github_token = getenv_or_action("GITHUB_TOKEN")
+            git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+
+            monitor_dispatch_status(
+                campaign_name=campaign_name,
+                billing_project_id=billing_project_id,
+                dispatch_date=dispatch_date,
+                git_repository_path=git_repository_path,
+                initial_wait_minutes=materialization_sleep_minutes if not test_mode else 2,
+                check_interval_minutes=monitor_check_interval_minutes if not test_mode else 2,
+                max_wait_minutes=monitor_max_wait_minutes if not test_mode else 8,
+            )
+
+        elif materialize_after_sftp:
             print(f"⏳ Aguardando {materialization_sleep_minutes if not test_mode else 5} minutos antes de materializar o modelo dbt int_crm_status_disparo...")
             time.sleep(materialization_sleep_minutes * 60) if not test_mode else time.sleep(5*60)
             github_token = getenv_or_action("GITHUB_TOKEN")

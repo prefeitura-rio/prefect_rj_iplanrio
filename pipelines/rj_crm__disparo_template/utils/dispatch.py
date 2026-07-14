@@ -9,6 +9,7 @@ Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 import json
 import os
 import random
+import time
 from datetime import datetime
 from math import ceil
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -16,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import pandas as pd
 import paramiko
 from paramiko.rsakey import RSAKey
+from iplanrio.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
@@ -971,6 +973,101 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     
     return failed_cpfs
     
+
+@task
+def check_campaign_success(
+    billing_project_id: str,
+    campaign_name: str,
+    dispatch_date: str,
+) -> bool:
+    """
+    Verifica se já existe pelo menos um disparo com sucesso confirmado (entrega_datahora
+    preenchida, sem falha/quarentena) para a campanha desde o horário do disparo (dispatch_date).
+
+    Usada pelo monitoramento pós-SFTP para decidir se deve alertar no Discord por falta
+    de confirmação de entrega.
+    """
+    query = f"""
+        SELECT COUNT(*) AS total_sucesso
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
+          AND envio_datahora >= '{dispatch_date}'
+          AND indicador_falha = FALSE
+          AND indicador_quarentena = FALSE
+          AND entrega_datahora IS NOT NULL
+    """
+    try:
+        df = download_data_from_bigquery(
+            query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
+        )
+        total = int(df.iloc[0]["total_sucesso"]) if not df.empty else 0
+        log(f"check_campaign_success: {total} disparo(s) com sucesso confirmado para '{campaign_name}' desde {dispatch_date}.")
+        return total > 0
+    except Exception as e:
+        log(f"Erro ao verificar sucesso do disparo: {e}", level="warning")
+        return False
+
+
+@task
+def monitor_dispatch_status(
+    campaign_name: str,
+    billing_project_id: str,
+    dispatch_date: str,
+    git_repository_path: str,
+    initial_wait_minutes: int,
+    check_interval_minutes: int,
+    max_wait_minutes: int,
+) -> bool:
+    """
+    Aguarda initial_wait_minutes, depois materializa int_crm_status_disparo e checa se há
+    sucesso confirmado para a campanha a cada check_interval_minutes, até max_wait_minutes.
+    Sai assim que encontrar sucesso. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
+    sucesso for confirmado dentro do prazo.
+
+    Returns:
+        bool: True se algum sucesso foi confirmado, False caso contrário.
+    """
+    print(f"⏳ Aguardando {initial_wait_minutes} minutos antes da primeira materialização/checagem de sucesso...")
+    time.sleep(initial_wait_minutes * 60)
+
+    elapsed_minutes = initial_wait_minutes
+    campaign_found = False
+
+    while True:
+        execute_dbt_task(
+            select="+int_crm_status_disparo",
+            target="prod",
+            git_repository_path=git_repository_path,
+        )
+
+        campaign_found = check_campaign_success(
+            billing_project_id=billing_project_id,
+            campaign_name=campaign_name,
+            dispatch_date=dispatch_date,
+        )
+        print(f"🔍 Checagem em {elapsed_minutes} min: {'✅ sucesso encontrado' if campaign_found else '⚠️  nenhum sucesso ainda'}.")
+
+        if campaign_found or elapsed_minutes >= max_wait_minutes:
+            break
+
+        print(f"⏳ Aguardando mais {check_interval_minutes} minutos antes da próxima checagem ({elapsed_minutes}/{max_wait_minutes} min)...")
+        time.sleep(check_interval_minutes * 60)
+        elapsed_minutes += check_interval_minutes
+
+    if not campaign_found:
+        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+        message = f"""
+🚨 **Nenhum webhook de sucesso recebido!**
+📋 **Campanha:** {campaign_name}
+⏱️ **Prazo monitorado:** {max_wait_minutes} minutos após o envio via SFTP.
+"""
+        if webhook_url:
+            send_discord_notification(webhook_url, message)
+        else:
+            log("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send alert.", level="warning")
+
+    return campaign_found
+
 
 @task
 def remove_failed_phones(
