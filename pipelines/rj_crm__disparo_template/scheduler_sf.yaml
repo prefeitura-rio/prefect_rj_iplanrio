@@ -191,26 +191,30 @@ schedules:
         whitelist_replace_contacts: true
         query_file: queries_dev/sms_puerperas_d0_explica_pesquisa.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
-  # Disparo SMS Puérperas D1, D3, D5 e D10 - Pesquisa 1
+  # Disparo SMS Puérperas D1, D3, D5, D10, D13, D16 e D19 - Pesquisa 1 (unifica a antiga Pesquisa 3)
   - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: True
-    slug: daily-sms-puerperas-d1-d3-d5-d10
-    flow_run_name: sms-puerperas-d1-d3-d5-d10
+    slug: daily-sms-puerperas-d1-d3-d5-d10-d13-d16-d19
+    flow_run_name: sms-puerperas-d1-d3-d5-d10-d13-d16-d19
     parameters:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
             # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
             # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            id_hsm_legado_placeholder: 588
+            # 588 = antiga Pesquisa 1 (D1/3/5/10), 562 = antiga Pesquisa 3 (D13/16/19), unificadas aqui.
+            id_hsm_legado_placeholder: "588, 562"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 1 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 3 DAY),
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
-                DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY),
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
             intervalo_filtro_disparados: 1
         table_id: disparos_efetuados
         dump_mode: append
@@ -234,6 +238,8 @@ schedules:
         query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
+  # Desativada: D13/D16/D19 foram incorporados na Pesquisa 1 acima (mesmo HSM smspuerperasdisparo4v3,
+  # legado 562 somado ao id_hsm_legado_placeholder da Pesquisa 1).
   # - cron: "0 10 * * *"
   #   timezone: America/Sao_Paulo
   #   active: false
@@ -312,22 +318,24 @@ schedules:
         whitelist_replace_contacts: true
         query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
-  # Disparo SMS Puérperas D25 e D28 - Pesquisa 5
+  # Disparo SMS Puérperas D25, D28 e D34 - Pesquisa 5 (unifica a antiga Pesquisa 6)
   - cron: "0 10 * * *"
     timezone: America/Sao_Paulo
     active: true
-    slug: daily-sms-puerperas-d25-d28
-    flow_run_name: sms-puerperas-d25-d28
+    slug: daily-sms-puerperas-d25-d28-d34
+    flow_run_name: sms-puerperas-d25-d28-d34
     parameters:
         query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            id_hsm_legado_placeholder: 564
+            # 564 = antiga Pesquisa 5 (D25/28), 566 = antiga Pesquisa 6 (D34), unificadas aqui.
+            id_hsm_legado_placeholder: "564, 566"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
             datas_internacao: |
                 DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
-                DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY),
+                DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)
             intervalo_filtro_disparados: 1
         table_id: disparos_efetuados
         dump_mode: append
@@ -351,6 +359,8 @@ schedules:
         query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D34 - Pesquisa 6
+  # Desativada: D34 foi incorporado na Pesquisa 5 acima (mesmo HSM smspuerperasdisparo12,
+  # legado 566 somado ao id_hsm_legado_placeholder da Pesquisa 5).
   # - cron: "0 10 * * *"
   #   timezone: America/Sao_Paulo
   #   active: false

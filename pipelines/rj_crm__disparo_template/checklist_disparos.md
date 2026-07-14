@@ -79,14 +79,15 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - [x] Disparo testado fim a fim
 - [x] Jornada testada fim a fim (não tem o lance do input com integração do eai)
 
-### Pesquisa 1 — D1/D3/D5/D10
+### Pesquisa 1 — D1/D3/D5/D10/D13/D16/D19
+- Unifica a antiga Pesquisa 3 (D13/D16/D19); schedule `daily-sms-puerperas-d13-d16-d19` foi desativado no scheduler_sf.yaml
 - campaign_name: `smspuerperasdisparo4v3`
 - Prod: `queries/sms_puerperas_pesquisa_template.sql`
 - Dev: `queries_dev/sms_puerperas_pesquisa_template.sql` 
 - Test: `queries_test/sms_puerperas_pesquisa_template__pesquisa1.sql`
 - Tabelas prod: `rj-sms.projeto_whatsapp.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
-- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (anterior/D0 = 610; desta pesquisa = 588, via `id_hsm_anterior_legado_placeholder`/`id_hsm_legado_placeholder` no scheduler_sf.yaml)
+- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (anterior/D0 = 610; desta pesquisa = 588 e 562, via `id_hsm_anterior_legado_placeholder`/`id_hsm_legado_placeholder` no scheduler_sf.yaml)
 - [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
 - [ ] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
@@ -101,12 +102,13 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - [ ] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
 
-### Pesquisa 5 — D25/D28
+### Pesquisa 5 — D25/D28/D34
+- Unifica a antiga Pesquisa 6 (D34); schedule `daily-sms-puerperas-d34` foi desativado no scheduler_sf.yaml
 - campaign_name: `smspuerperasdisparo12`
 - Queries: mesmas da Pesquisa 1 (prod/dev)
 - Test: `queries_test/sms_puerperas_pesquisa_template__pesquisa5.sql`
 - Tabelas prod/dev: idem Pesquisa 1
-- Fallback legado: idem Pesquisa 1, mas desta pesquisa = 564
+- Fallback legado: idem Pesquisa 1, mas desta pesquisa = 564 e 566
 - [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
 - [ ] Disparo testado fim a fim (pendente Maiko)
 - [ ] Jornada testada fim a fim (pendente Maiko)

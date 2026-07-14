@@ -866,8 +866,8 @@ deployments:
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d1-d3-d5-d10
-        flow_run_name: sms-puerperas-d1-d3-d5-d10
+        slug: daily-sms-puerperas-d1-d3-d5-d10-d13-d16-d19
+        flow_run_name: sms-puerperas-d1-d3-d5-d10-d13-d16-d19
         parameters:
           flow_environment: staging
           query_replacements:
@@ -875,14 +875,18 @@ deployments:
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
             # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
             # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            id_hsm_legado_placeholder: 588
+            # 588 = antiga Pesquisa 1 (D1/3/5/10), 562 = antiga Pesquisa 3 (D13/16/19), unificadas aqui.
+            id_hsm_legado_placeholder: "588, 562"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
             datas_internacao: |
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 1 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 3 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
-              DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY),
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
             intervalo_filtro_disparados: 1
           table_id: disparos_efetuados
           dump_mode: append
@@ -1122,19 +1126,21 @@ deployments:
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: daily-sms-puerperas-d25-d28
-        flow_run_name: sms-puerperas-d25-d28
+        slug: daily-sms-puerperas-d25-d28-d34
+        flow_run_name: sms-puerperas-d25-d28-d34
         parameters:
           flow_environment: staging
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            id_hsm_legado_placeholder: 564
+            # 564 = antiga Pesquisa 5 (D25/28), 566 = antiga Pesquisa 6 (D34), unificadas aqui.
+            id_hsm_legado_placeholder: "564, 566"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
             datas_internacao: |
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 25 DAY),
-              DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY)
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 28 DAY),
+              DATE_ADD(DATE(data_alta_internacao), INTERVAL 34 DAY)
             intervalo_filtro_disparados: 1
           table_id: disparos_efetuados
           dump_mode: append

@@ -1,7 +1,8 @@
 -- Pesquisa 1
 -- Executa direto no BigQuery. Passos 1 e 2 inserem uma alta de maternidade que cai na
--- janela D+1/D+3/D+5/D+10 e simulam que o CPF já recebeu a primeira HSM (D0,
--- smspuerperasdisparo25), pré-requisito do CTE filtra_recebeu_primeira_hsm; passo 3 é a query em si.
+-- janela D+1/D+3/D+5/D+10/D+13/D+16/D+19 (Pesquisa 1 unificou a antiga Pesquisa 3, D+13/16/19)
+-- e simulam que o CPF já recebeu a primeira HSM (D0, smspuerperasdisparo25), pré-requisito do
+-- CTE filtra_recebeu_primeira_hsm; passo 3 é a query em si.
 
 -- ===================== 0) LIMPA DADOS DE TESTE ANTERIORES =====================
 DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`
@@ -116,7 +117,10 @@ WITH segmentacao_original AS (
         DATE_ADD(DATE(data_alta_internacao), INTERVAL 1 DAY),
 DATE_ADD(DATE(data_alta_internacao), INTERVAL 3 DAY),
 DATE_ADD(DATE(data_alta_internacao), INTERVAL 5 DAY),
-DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY)
+DATE_ADD(DATE(data_alta_internacao), INTERVAL 10 DAY),
+DATE_ADD(DATE(data_alta_internacao), INTERVAL 13 DAY),
+DATE_ADD(DATE(data_alta_internacao), INTERVAL 16 DAY),
+DATE_ADD(DATE(data_alta_internacao), INTERVAL 19 DAY)
 
         )
         and nome_maternidade_alta like '%MARIA AMELIA%'
@@ -218,7 +222,7 @@ filtra_recebeu_primeira_hsm as (
 filtra_disparados as (
     -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) nos últimos x dias,
     -- tanto via status_disparo quanto via wetalkie (histórico legado pré-migração;
-    -- templateId 588 = HSM da Pesquisa 1)
+    -- templateId 588 = antiga Pesquisa 1, 562 = antiga Pesquisa 3, unificadas na Pesquisa 1)
     select filtra_recebeu_primeira_hsm.*
     FROM filtra_recebeu_primeira_hsm
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
@@ -229,7 +233,7 @@ filtra_disparados as (
             and sd.indicador_quarentena = FALSE
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf
-            and fl.templateId IN (588)
+            and fl.templateId IN (588, 562)
             and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 DAY)
             and fl.status in ('PROCESSING', 'SENT')
         where sd.cpf is null and fl.flattarget is null
