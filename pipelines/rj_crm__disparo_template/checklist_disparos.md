@@ -34,7 +34,7 @@ Sequência: cobrança → lembrete → agradecimento (cada uma depende do histó
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`, `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 196/239 = cobrança, 227 = lembrete, via `id_hsm_legado_cobranca_placeholder`/`id_hsm_legado_lembrete_placeholder` no scheduler_sf.yaml)
 - [ ] Query prod retornou dados (provavelmente por conta do novo nome das hsms)
-- [ ] Disparo testado fim a fim
+- [x] Disparo testado fim a fim
 - [x] Jornada testada fim a fim
 
 ### Agradecimento
@@ -64,7 +64,7 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 573, via `id_hsm_legado_placeholder` no scheduler_sf.yaml)
 - [] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
-- [ ] Disparo testado fim a fim
+- [x] Disparo testado fim a fim
 - [x] Jornada testada fim a fim
 
 ### D0 — Explica pesquisa
@@ -134,7 +134,7 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`, `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.crm_whatsapp.telefone_disparado` (id_hsm 101, por telefone)
 - [] Query prod retornou dados (vale conferir)
-- [ ] Disparo testado fim a fim
+- [x] Disparo testado fim a fim
 - [x] Jornada testada fim a fim
 
 ---
@@ -180,8 +180,8 @@ Aviso de evento de entrega do cartão + lembrete, ambos condicionados a aprovaç
 - Test: `queries_test/smas_cartaopic_evento__test.sql`
 - Tabelas: `rj-smas-dev.pic.raw_cartao_primeira_infancia_carioca_bairros_entrega`, `rj-smas-dev.pic.cartao_primeira_infancia_carioca_status`, `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-crm-registry.intermediario_rmi_telefones.int_telefone`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 184, via `id_hsm_legado_placeholder` no scheduler_sf.yaml)
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
+- [ ] Query prod retornou dados (sem aprovação)
+- [x] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
 
 ### Lembrete
@@ -191,6 +191,6 @@ Aviso de evento de entrega do cartão + lembrete, ambos condicionados a aprovaç
 - Test: `queries_test/smas_cartaopic_lembrete__test.sql`
 - Tabelas: idem Aviso de evento
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 185, via `id_hsm_legado_placeholder` no scheduler_sf.yaml)
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
+- [ ] Query prod retornou dados (sem aprovação)
+- [x] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim

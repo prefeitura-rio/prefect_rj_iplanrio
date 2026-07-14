@@ -195,7 +195,7 @@ with
             'pgm_divida_ativa_prod_v2',
             'pgmdividaativalembreteprodv1'
         )
-        and indicador_falha = FALSE
+        and indicador_quarentena = FALSE
 
         UNION ALL
 

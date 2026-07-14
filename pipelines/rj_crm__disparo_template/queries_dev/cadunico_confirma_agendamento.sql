@@ -35,7 +35,7 @@ filtra_disparados AS (
         AND sd.nome_hsm = '{nome_hsm_placeholder}'
         AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
         AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
-        AND sd.indicador_falha = FALSE
+        AND sd.indicador_quarentena = FALSE
     LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado` td
         ON td.contato_telefone = segmentacao_original.celular_disparo
         AND td.id_hsm = CAST({id_hsm_legado_placeholder} AS STRING)

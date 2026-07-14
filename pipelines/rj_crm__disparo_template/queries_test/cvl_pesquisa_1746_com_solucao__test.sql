@@ -242,7 +242,7 @@ WITH tabela_global AS (
             and sd.nome_hsm = 'cvl_pesquisa_1746_prod_v1'
             and DATE(sd.envio_datahora) = CURRENT_DATE("America/Sao_Paulo")
             and sd.data_particao = CURRENT_DATE("America/Sao_Paulo")
-            and sd.indicador_falha = FALSE
+            and sd.indicador_quarentena = FALSE
     WHERE fl.flattarget is null
         AND sd.cpf is null
         AND (

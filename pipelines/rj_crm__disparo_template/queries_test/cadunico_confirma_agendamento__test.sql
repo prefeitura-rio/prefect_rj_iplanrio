@@ -8,11 +8,17 @@
 
 -- ===================== 0) LIMPA DADOS DE TESTE ANTERIORES =====================
 DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`
-WHERE cpf = '12cadunico01';
+WHERE cpf = '12cadunico0';
 
 DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
-WHERE cpf = '12cadunico01'
+WHERE cpf = '12cadunico0'
     AND nome_hsm = 'confirma_agendamento_cadunico_prod_v2';
+
+-- telefone_disparado não tem cpf, só contato_telefone (o mesmo número usado no passo 1);
+-- sem esse delete, um disparo real anterior para esse telefone (id_hsm 101) derruba o teste.
+DELETE FROM `rj-crm-registry.crm_whatsapp.telefone_disparado`
+WHERE contato_telefone = '5521989190512'
+    AND id_hsm = '101';
 
 -- ===================== 1) INSERT: agendamento CadÚnico de teste =====================
 -- data_hora é STRING na tabela de origem (formato canônico DATETIME 'YYYY-MM-DD HH:MM:SS')
@@ -27,7 +33,7 @@ VALUES
     'CRAS Centro',
     'Rua das Flores 123',
     'Centro',
-    '12cadunico01'
+    '12cadunico0'
 );
 
 -- ===================== 2) QUERY (queries_dev/cadunico_confirma_agendamento.sql com placeholders substituídos) =====================
@@ -59,8 +65,9 @@ segmentacao_original AS (
 filtra_disparados AS (
     -- verifica se esse cpf já recebeu essa mesma mensagem (confirma_agendamento_cadunico_prod_v2) nos últimos x dias,
     -- tanto via status_disparo quanto via telefone_disparado (tabela legada pré-migração,
-    -- por telefone; id_hsm 101). Sem seed na telefone_disparado aqui de propósito: o
-    -- LEFT JOIN não encontra nada e fica inerte, só exercitamos o caminho da status_disparo.
+    -- por telefone; id_hsm 101). O passo 0 limpa esse telefone na telefone_disparado para
+    -- que disparos reais anteriores não derrubem o teste; o LEFT JOIN fica inerte por isso,
+    -- não por falta de dados na tabela.
     SELECT segmentacao_original.*
     FROM segmentacao_original
     LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
@@ -68,7 +75,7 @@ filtra_disparados AS (
         AND sd.nome_hsm = 'confirma_agendamento_cadunico_prod_v2'
         AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY)
         AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 15 DAY)
-        AND sd.indicador_falha = FALSE
+        AND sd.indicador_quarentena = FALSE
     LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado` td
         ON td.contato_telefone = segmentacao_original.celular_disparo
         AND td.id_hsm = CAST(101 AS STRING)

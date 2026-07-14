@@ -156,7 +156,7 @@ ELSE
             AND sd.nome_hsm = 'smascartaoprimeirainfanciaprodv27'
             AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 30 DAY)
             AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
-            AND sd.indicador_falha = FALSE
+            AND sd.indicador_quarentena = FALSE
         LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             ON fl.flattarget = joined_status_cpi.celular_disparo
             AND fl.templateId = 184

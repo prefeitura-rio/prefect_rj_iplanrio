@@ -15,7 +15,7 @@ with
             '{nome_hsm_cobranca_placeholder}',
             '{nome_hsm_lembrete_placeholder}'
         )
-        and indicador_falha = FALSE
+        and indicador_quarentena = FALSE
 
         UNION ALL
 

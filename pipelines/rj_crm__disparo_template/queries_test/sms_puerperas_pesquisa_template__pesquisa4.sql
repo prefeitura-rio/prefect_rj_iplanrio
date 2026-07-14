@@ -156,7 +156,7 @@ status_final_telefone AS (
     -- qualquer falha conta (não só o código 131026 de "número sem WhatsApp")
     SELECT
         contato_telefone AS flatTarget,
-        indicador_falha AS falhou
+        indicador_quarentena AS falhou
     FROM `rj-crm-registry.brutos_salesforce.status_disparo`
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY contato_telefone
@@ -224,7 +224,7 @@ filtra_disparados as (
             and sd.nome_hsm = 'smspuerperadisparo6'
             and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 300 DAY)
             and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 300 DAY)
-            and sd.indicador_falha = FALSE
+            and sd.indicador_quarentena = FALSE
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf
             and fl.templateId IN (456, 489)
