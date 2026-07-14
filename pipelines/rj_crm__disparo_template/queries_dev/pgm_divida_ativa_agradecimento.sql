@@ -30,7 +30,9 @@ disparos_divida_ativa as (
         WHEN templateId IN ({id_hsm_legado_lembrete_placeholder}) THEN '{nome_hsm_lembrete_placeholder}'
         WHEN templateId IN ({id_hsm_legado_agradecimento_placeholder}) THEN '{nome_hsm_agradecimento_placeholder}'
     END as id_hsm,
-    failedDate
+    -- failedDate vem como TIMESTAMP na wetalkie; falha_datahora é DATETIME na status_disparo,
+    -- precisa converter pro mesmo tipo pra não quebrar o UNION ALL (erro: incompatible types DATETIME, TIMESTAMP)
+    DATETIME(failedDate, 'America/Sao_Paulo') as failedDate
     from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
     where templateid in ({id_hsm_legado_cobranca_placeholder}, {id_hsm_legado_lembrete_placeholder}, {id_hsm_legado_agradecimento_placeholder})
 ),

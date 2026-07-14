@@ -181,7 +181,9 @@ disparos_divida_ativa as (
         WHEN templateId = 227 THEN 'pgmdividaativalembreteprodv1'
         WHEN templateId = 231 THEN 'pgmdividaativaconfirmapgtoprodv1'
     END as id_hsm,
-    failedDate
+    -- failedDate vem como TIMESTAMP na wetalkie; falha_datahora é DATETIME na status_disparo,
+    -- precisa converter pro mesmo tipo pra não quebrar o UNION ALL (erro: incompatible types DATETIME, TIMESTAMP)
+    DATETIME(failedDate, 'America/Sao_Paulo') as failedDate
     from `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
     where templateid in (196, 227, 231, 239)
 ),
