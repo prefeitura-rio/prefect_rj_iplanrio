@@ -50,9 +50,6 @@ deployments:
         slug: daily-cvl-1746-survey-invitation-without-resolution
         flow_run_name: cvl-pesquisa1746
         parameters:
-      # nome_hsm_placeholder é o próprio campaign_name deste schedule (chave usada pra
-      # checar duplicidade em status_disparo); id_hsm_placeholder é o templateId
-      # numérico legado, usado no fallback via wetalkie.
           flow_environment: staging
           query_replacements: {"id_hsm_placeholder": 291, "nome_hsm_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
           campaign_name: cvl_pesquisa_1746_sem_resolucao_prod_v1
@@ -161,7 +158,7 @@ deployments:
             sd\n            on sd.cpf = ta.cpf\n            and sd.nome_hsm = '{nome_hsm_placeholder}'\n\
             \            and DATE(sd.envio_datahora) = CURRENT_DATE(\"America/Sao_Paulo\"\
             )\n            and sd.data_particao = CURRENT_DATE(\"America/Sao_Paulo\"\
-            )\n            and sd.indicador_falha = FALSE\n    WHERE fl.flattarget
+            )\n            and sd.indicador_quarentena = FALSE\n    WHERE fl.flattarget
             is null\n        AND sd.cpf is null\n        AND (\n        CASE\n   \
             \         -- Se for sábado ou domingo, joga para uma data no futuro (retorna
             vazio)\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7,
@@ -294,7 +291,7 @@ deployments:
             sd\n            on sd.cpf = ta.cpf\n            and sd.nome_hsm = '{nome_hsm_placeholder}'\n\
             \            and DATE(sd.envio_datahora) = CURRENT_DATE(\"America/Sao_Paulo\"\
             )\n            and sd.data_particao = CURRENT_DATE(\"America/Sao_Paulo\"\
-            )\n            and sd.indicador_falha = FALSE\n    WHERE fl.flattarget
+            )\n            and sd.indicador_quarentena = FALSE\n    WHERE fl.flattarget
             is null\n        AND sd.cpf is null\n        AND (\n        CASE\n   \
             \         -- Se for sábado ou domingo, joga para uma data no futuro (retorna
             vazio)\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7,
@@ -330,7 +327,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           sleep_minutes: 5
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: false
@@ -451,7 +448,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           sleep_minutes: 5
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: false
@@ -471,8 +468,8 @@ deployments:
             as data_disparo,\n        nome_hsm as id_hsm\n        from `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \        where nome_hsm in (\n            '{nome_hsm_cobranca_placeholder}',\n\
             \            '{nome_hsm_lembrete_placeholder}'\n        )\n        and
-            indicador_falha = FALSE\n\n        UNION ALL\n\n        -- Legado: histórico
-            via Wetalkie antes da migração (196/239 = cobrança, 227 = lembrete)\n\
+            indicador_quarentena = FALSE\n\n        UNION ALL\n\n        -- Legado:
+            histórico via Wetalkie antes da migração (196/239 = cobrança, 227 = lembrete)\n\
             \        select distinct targetexternalid as cpf,\n        flattarget
             as celular_disparo,\n        DATE(createdate) as data_disparo,\n     \
             \   CASE\n            WHEN templateId IN ({id_hsm_legado_cobranca_placeholder})
@@ -573,7 +570,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           sleep_minutes: 5
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: true
@@ -710,7 +707,7 @@ deployments:
             falha, passo necessário já que o telefone principal não vem do RMI. Caso
             contrário, seria só necessário filtrar pela estratégia de envio\n    --
             qualquer falha conta (não só o código 131026 de \"número sem WhatsApp\"\
-            )\n    SELECT\n        contato_telefone AS flatTarget,\n        indicador_falha
+            )\n    SELECT\n        contato_telefone AS flatTarget,\n        indicador_quarentena
             AS falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
             \        ORDER BY envio_datahora DESC\n    ) = 1\n    ),\n\n    filtra_falhas
@@ -738,7 +735,7 @@ deployments:
             sd.nome_hsm = '{nome_hsm_placeholder}'\n                and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n                and sd.data_particao >= DATE_SUB(CURRENT_DATE(),
-            INTERVAL {intervalo_filtro_disparados} DAY)\n                and sd.indicador_falha
+            INTERVAL {intervalo_filtro_disparados} DAY)\n                and sd.indicador_quarentena
             = FALSE\n        left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n                on fl.targetexternalid = filtra_falhas.cpf\n     \
             \           and fl.templateId = {id_hsm_legado_placeholder}\n        \
@@ -816,7 +813,7 @@ deployments:
             falha, passo necessário já que o telefone principal não vem do RMI. Caso
             contrário, seria só necessário filtrar pela estratégia de envio\n    --
             qualquer falha conta (não só o código 131026 de \"número sem WhatsApp\"\
-            )\n    SELECT\n        contato_telefone AS flatTarget,\n        indicador_falha
+            )\n    SELECT\n        contato_telefone AS flatTarget,\n        indicador_quarentena
             AS falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
             \        ORDER BY envio_datahora DESC\n    ) = 1\n    ),\n\n    filtra_falhas
@@ -845,17 +842,17 @@ deployments:
             INTERVAL {intervalo_filtro_disparados} DAY) -- pessoa só recebe essa mensagem
             cerca de uma vez por ano podendo pegar mais de uma gravidez\n        \
             \        and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados}
-            DAY)\n                and sd.indicador_falha = FALSE\n        left join
-            `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl\n   \
-            \             on fl.targetexternalid = filtra_falhas.cpf\n           \
-            \     and fl.templateId = {id_hsm_legado_placeholder}\n              \
-            \  and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {intervalo_filtro_disparados}
-            DAY)\n                and fl.status in ('PROCESSING', 'SENT')\n      \
-            \      where sd.cpf is null and fl.flattarget is null\n    ),\n    final
-            as (\n        select filtra_disparados.* from filtra_disparados\n    )\n\
-            \    -- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup por CPF)
-            e 'others'\n    -- (retentativas) são controle interno, descartados do
-            CSV pelo de_columns.\n    SELECT\n        celular_disparo AS telefone,\n\
+            DAY)\n                and sd.indicador_quarentena = FALSE\n        left
+            join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl\n\
+            \                on fl.targetexternalid = filtra_falhas.cpf\n        \
+            \        and fl.templateId = {id_hsm_legado_placeholder}\n           \
+            \     and fl.createDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL
+            {intervalo_filtro_disparados} DAY)\n                and fl.status in ('PROCESSING',
+            'SENT')\n            where sd.cpf is null and fl.flattarget is null\n\
+            \    ),\n    final as (\n        select filtra_disparados.* from filtra_disparados\n\
+            \    )\n    -- Tabela simples (sem TO_JSON_STRING). 'externalId' (dedup
+            por CPF) e 'others'\n    -- (retentativas) são controle interno, descartados
+            do CSV pelo de_columns.\n    SELECT\n        celular_disparo AS telefone,\n\
             \        CAST(cpf AS STRING) AS SubscriberKey,\n        CAST(cpf AS STRING)
             AS externalId,\n        INITCAP(\n            IF(\n                ARRAY_LENGTH(SPLIT(nome,
             ' ')) > 1,\n                CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], '
@@ -886,7 +883,7 @@ deployments:
             intervalo_filtro_disparados: 1
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo4v3
           data_extension_filename: whatsapp_sms_puerperas_pesquisa1
@@ -931,30 +928,31 @@ deployments:
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
             seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_falha AS falhou\n\
-            \    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n    QUALIFY
-            ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n        ORDER
-            BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS (\n    SELECT\n\
-            \        distinct\n        s.* EXCEPT(celular_disparo_1, celular_disparo_2,
-            celular_disparo_3, celular_disparo_rmi),\n\n        IF(f1.falhou, NULL,
-            s.celular_disparo_1) AS celular_disparo_1,\n        IF(f2.falhou, NULL,
-            s.celular_disparo_2) AS celular_disparo_2,\n        IF(f3.falhou, NULL,
-            s.celular_disparo_3) AS celular_disparo_3,\n        IF(f4.falhou, NULL,
-            s.celular_disparo_rmi) AS celular_disparo_rmi,\n\n        COALESCE(\n\
-            \        IF(f1.falhou, NULL, s.celular_disparo_1),\n        IF(f2.falhou,
-            NULL, s.celular_disparo_2),\n        IF(f3.falhou, NULL, s.celular_disparo_3),\n\
-            \        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n        ) AS celular_disparo\n\
-            \n    FROM enriquece_rmi s\n    LEFT JOIN status_final_telefone f1\n \
-            \       ON f1.flatTarget = s.celular_disparo_1\n\n    LEFT JOIN status_final_telefone
-            f2\n        ON f2.flatTarget = s.celular_disparo_2\n\n    LEFT JOIN status_final_telefone
-            f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
-            f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
-            as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
-            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
-            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
-            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
-            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
+            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
+            \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
+            (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
+            celular_disparo_2, celular_disparo_3, celular_disparo_rmi),\n\n      \
+            \  IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,\n  \
+            \      IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,\n\
+            \        IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,\n\
+            \        IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,\n\
+            \n        COALESCE(\n        IF(f1.falhou, NULL, s.celular_disparo_1),\n\
+            \        IF(f2.falhou, NULL, s.celular_disparo_2),\n        IF(f3.falhou,
+            NULL, s.celular_disparo_3),\n        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n\
+            \        ) AS celular_disparo\n\n    FROM enriquece_rmi s\n    LEFT JOIN
+            status_final_telefone f1\n        ON f1.flatTarget = s.celular_disparo_1\n\
+            \n    LEFT JOIN status_final_telefone f2\n        ON f2.flatTarget = s.celular_disparo_2\n\
+            \n    LEFT JOIN status_final_telefone f3\n        ON f3.flatTarget = s.celular_disparo_3\n\
+            \n    LEFT JOIN status_final_telefone f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n
+            ),\nfiltra_recebeu_primeira_hsm as (\n    -- verifica se esse cpf recebeu
+            a primeira mensagem (D0, nome_hsm_anterior_placeholder) nos últimos 50
+            dias,\n    -- tanto via status_disparo quanto via wetalkie (histórico
+            legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder = templateId
+            da HSM D0)\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
+            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
+            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
@@ -973,7 +971,7 @@ deployments:
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
+            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_quarentena
             = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
             \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
@@ -1056,30 +1054,31 @@ deployments:
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
             seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_falha AS falhou\n\
-            \    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n    QUALIFY
-            ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n        ORDER
-            BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS (\n    SELECT\n\
-            \        distinct\n        s.* EXCEPT(celular_disparo_1, celular_disparo_2,
-            celular_disparo_3, celular_disparo_rmi),\n\n        IF(f1.falhou, NULL,
-            s.celular_disparo_1) AS celular_disparo_1,\n        IF(f2.falhou, NULL,
-            s.celular_disparo_2) AS celular_disparo_2,\n        IF(f3.falhou, NULL,
-            s.celular_disparo_3) AS celular_disparo_3,\n        IF(f4.falhou, NULL,
-            s.celular_disparo_rmi) AS celular_disparo_rmi,\n\n        COALESCE(\n\
-            \        IF(f1.falhou, NULL, s.celular_disparo_1),\n        IF(f2.falhou,
-            NULL, s.celular_disparo_2),\n        IF(f3.falhou, NULL, s.celular_disparo_3),\n\
-            \        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n        ) AS celular_disparo\n\
-            \n    FROM enriquece_rmi s\n    LEFT JOIN status_final_telefone f1\n \
-            \       ON f1.flatTarget = s.celular_disparo_1\n\n    LEFT JOIN status_final_telefone
-            f2\n        ON f2.flatTarget = s.celular_disparo_2\n\n    LEFT JOIN status_final_telefone
-            f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
-            f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
-            as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
-            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
-            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
-            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
-            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
+            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
+            \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
+            (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
+            celular_disparo_2, celular_disparo_3, celular_disparo_rmi),\n\n      \
+            \  IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,\n  \
+            \      IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,\n\
+            \        IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,\n\
+            \        IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,\n\
+            \n        COALESCE(\n        IF(f1.falhou, NULL, s.celular_disparo_1),\n\
+            \        IF(f2.falhou, NULL, s.celular_disparo_2),\n        IF(f3.falhou,
+            NULL, s.celular_disparo_3),\n        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n\
+            \        ) AS celular_disparo\n\n    FROM enriquece_rmi s\n    LEFT JOIN
+            status_final_telefone f1\n        ON f1.flatTarget = s.celular_disparo_1\n\
+            \n    LEFT JOIN status_final_telefone f2\n        ON f2.flatTarget = s.celular_disparo_2\n\
+            \n    LEFT JOIN status_final_telefone f3\n        ON f3.flatTarget = s.celular_disparo_3\n\
+            \n    LEFT JOIN status_final_telefone f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n
+            ),\nfiltra_recebeu_primeira_hsm as (\n    -- verifica se esse cpf recebeu
+            a primeira mensagem (D0, nome_hsm_anterior_placeholder) nos últimos 50
+            dias,\n    -- tanto via status_disparo quanto via wetalkie (histórico
+            legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder = templateId
+            da HSM D0)\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
+            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
+            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
@@ -1098,7 +1097,7 @@ deployments:
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
+            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_quarentena
             = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
             \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
@@ -1181,30 +1180,31 @@ deployments:
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
             seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_falha AS falhou\n\
-            \    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n    QUALIFY
-            ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n        ORDER
-            BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS (\n    SELECT\n\
-            \        distinct\n        s.* EXCEPT(celular_disparo_1, celular_disparo_2,
-            celular_disparo_3, celular_disparo_rmi),\n\n        IF(f1.falhou, NULL,
-            s.celular_disparo_1) AS celular_disparo_1,\n        IF(f2.falhou, NULL,
-            s.celular_disparo_2) AS celular_disparo_2,\n        IF(f3.falhou, NULL,
-            s.celular_disparo_3) AS celular_disparo_3,\n        IF(f4.falhou, NULL,
-            s.celular_disparo_rmi) AS celular_disparo_rmi,\n\n        COALESCE(\n\
-            \        IF(f1.falhou, NULL, s.celular_disparo_1),\n        IF(f2.falhou,
-            NULL, s.celular_disparo_2),\n        IF(f3.falhou, NULL, s.celular_disparo_3),\n\
-            \        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n        ) AS celular_disparo\n\
-            \n    FROM enriquece_rmi s\n    LEFT JOIN status_final_telefone f1\n \
-            \       ON f1.flatTarget = s.celular_disparo_1\n\n    LEFT JOIN status_final_telefone
-            f2\n        ON f2.flatTarget = s.celular_disparo_2\n\n    LEFT JOIN status_final_telefone
-            f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
-            f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
-            as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
-            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
-            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
-            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
-            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
+            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
+            \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
+            (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
+            celular_disparo_2, celular_disparo_3, celular_disparo_rmi),\n\n      \
+            \  IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,\n  \
+            \      IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,\n\
+            \        IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,\n\
+            \        IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,\n\
+            \n        COALESCE(\n        IF(f1.falhou, NULL, s.celular_disparo_1),\n\
+            \        IF(f2.falhou, NULL, s.celular_disparo_2),\n        IF(f3.falhou,
+            NULL, s.celular_disparo_3),\n        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n\
+            \        ) AS celular_disparo\n\n    FROM enriquece_rmi s\n    LEFT JOIN
+            status_final_telefone f1\n        ON f1.flatTarget = s.celular_disparo_1\n\
+            \n    LEFT JOIN status_final_telefone f2\n        ON f2.flatTarget = s.celular_disparo_2\n\
+            \n    LEFT JOIN status_final_telefone f3\n        ON f3.flatTarget = s.celular_disparo_3\n\
+            \n    LEFT JOIN status_final_telefone f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n
+            ),\nfiltra_recebeu_primeira_hsm as (\n    -- verifica se esse cpf recebeu
+            a primeira mensagem (D0, nome_hsm_anterior_placeholder) nos últimos 50
+            dias,\n    -- tanto via status_disparo quanto via wetalkie (histórico
+            legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder = templateId
+            da HSM D0)\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
+            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
+            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
@@ -1223,7 +1223,7 @@ deployments:
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
+            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_quarentena
             = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
             \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
@@ -1258,7 +1258,7 @@ deployments:
             intervalo_filtro_disparados: 300
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo152
           data_extension_filename: whatsapp_sms_puerperas_pesquisa7
@@ -1303,30 +1303,31 @@ deployments:
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
             seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_falha AS falhou\n\
-            \    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n    QUALIFY
-            ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n        ORDER
-            BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS (\n    SELECT\n\
-            \        distinct\n        s.* EXCEPT(celular_disparo_1, celular_disparo_2,
-            celular_disparo_3, celular_disparo_rmi),\n\n        IF(f1.falhou, NULL,
-            s.celular_disparo_1) AS celular_disparo_1,\n        IF(f2.falhou, NULL,
-            s.celular_disparo_2) AS celular_disparo_2,\n        IF(f3.falhou, NULL,
-            s.celular_disparo_3) AS celular_disparo_3,\n        IF(f4.falhou, NULL,
-            s.celular_disparo_rmi) AS celular_disparo_rmi,\n\n        COALESCE(\n\
-            \        IF(f1.falhou, NULL, s.celular_disparo_1),\n        IF(f2.falhou,
-            NULL, s.celular_disparo_2),\n        IF(f3.falhou, NULL, s.celular_disparo_3),\n\
-            \        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n        ) AS celular_disparo\n\
-            \n    FROM enriquece_rmi s\n    LEFT JOIN status_final_telefone f1\n \
-            \       ON f1.flatTarget = s.celular_disparo_1\n\n    LEFT JOIN status_final_telefone
-            f2\n        ON f2.flatTarget = s.celular_disparo_2\n\n    LEFT JOIN status_final_telefone
-            f3\n        ON f3.flatTarget = s.celular_disparo_3\n\n    LEFT JOIN status_final_telefone
-            f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n),\nfiltra_recebeu_primeira_hsm
-            as (\n    -- verifica se esse cpf recebeu a primeira mensagem (D0, nome_hsm_anterior_placeholder)
-            nos últimos 50 dias,\n    -- tanto via status_disparo quanto via wetalkie
-            (histórico legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder
-            = templateId da HSM D0)\n    select distinct filtra_falhas.*\n    FROM
-            filtra_falhas\n    left join `rj-crm-registry.brutos_salesforce.status_disparo`
-            sd\n            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
+            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
+            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
+            \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
+            (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
+            celular_disparo_2, celular_disparo_3, celular_disparo_rmi),\n\n      \
+            \  IF(f1.falhou, NULL, s.celular_disparo_1) AS celular_disparo_1,\n  \
+            \      IF(f2.falhou, NULL, s.celular_disparo_2) AS celular_disparo_2,\n\
+            \        IF(f3.falhou, NULL, s.celular_disparo_3) AS celular_disparo_3,\n\
+            \        IF(f4.falhou, NULL, s.celular_disparo_rmi) AS celular_disparo_rmi,\n\
+            \n        COALESCE(\n        IF(f1.falhou, NULL, s.celular_disparo_1),\n\
+            \        IF(f2.falhou, NULL, s.celular_disparo_2),\n        IF(f3.falhou,
+            NULL, s.celular_disparo_3),\n        IF(f4.falhou, NULL, s.celular_disparo_rmi)\n\
+            \        ) AS celular_disparo\n\n    FROM enriquece_rmi s\n    LEFT JOIN
+            status_final_telefone f1\n        ON f1.flatTarget = s.celular_disparo_1\n\
+            \n    LEFT JOIN status_final_telefone f2\n        ON f2.flatTarget = s.celular_disparo_2\n\
+            \n    LEFT JOIN status_final_telefone f3\n        ON f3.flatTarget = s.celular_disparo_3\n\
+            \n    LEFT JOIN status_final_telefone f4\n        ON f4.flatTarget = s.celular_disparo_rmi\n
+            ),\nfiltra_recebeu_primeira_hsm as (\n    -- verifica se esse cpf recebeu
+            a primeira mensagem (D0, nome_hsm_anterior_placeholder) nos últimos 50
+            dias,\n    -- tanto via status_disparo quanto via wetalkie (histórico
+            legado pré-migração;\n    -- id_hsm_anterior_legado_placeholder = templateId
+            da HSM D0)\n    select distinct filtra_falhas.*\n    FROM filtra_falhas\n\
+            \    left join `rj-crm-registry.brutos_salesforce.status_disparo` sd\n\
+            \            on sd.cpf = filtra_falhas.cpf\n            and sd.nome_hsm
             = '{nome_hsm_anterior_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)\n\
             \            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
@@ -1345,7 +1346,7 @@ deployments:
             \    and sd.nome_hsm = '{nome_hsm_placeholder}'\n            and sd.envio_datahora
             >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados}
             DAY)\n            and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL
-            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_falha
+            {intervalo_filtro_disparados} DAY)\n            and sd.indicador_quarentena
             = FALSE\n    left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            on fl.targetexternalid = filtra_recebeu_primeira_hsm.cpf\n\
             \            and fl.templateId IN ({id_hsm_legado_placeholder})\n    \
@@ -1380,7 +1381,7 @@ deployments:
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           sleep_minutes: 5
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: false
@@ -1412,7 +1413,7 @@ deployments:
             = '{nome_hsm_placeholder}'\n        AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {intervalo_filtro_disparados} DAY)\n        AND sd.data_particao
             >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
-            \        AND sd.indicador_falha = FALSE\n    LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado`
+            \        AND sd.indicador_quarentena = FALSE\n    LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado`
             td\n        ON td.contato_telefone = segmentacao_original.celular_disparo\n\
             \        AND td.id_hsm = CAST({id_hsm_legado_placeholder} AS STRING)\n\
             \        AND td.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados}
@@ -1440,14 +1441,14 @@ deployments:
         parameters:
           flow_environment: staging
           query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27",
-            "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 184}
+            "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
           campaign_name: smascartaoprimeirainfanciaprodv27
           data_extension_filename: whatsapp_smas_cartaopic_evento
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           sleep_minutes: 5
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: false
@@ -1523,7 +1524,7 @@ deployments:
             = '{nome_hsm_placeholder}'\n            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {intervalo_filtro_disparados} DAY)\n            AND sd.data_particao
             >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
-            \            AND sd.indicador_falha = FALSE\n        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            \            AND sd.indicador_quarentena = FALSE\n        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            ON fl.flattarget = joined_status_cpi.celular_disparo\n\
             \            AND fl.templateId = {id_hsm_legado_placeholder}\n       \
             \ WHERE sd.cpf IS NULL AND fl.flattarget IS NULL\n    ),\n\n    filtra_celulares_sem_whats
@@ -1563,14 +1564,14 @@ deployments:
         parameters:
           flow_environment: staging
           query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfancialembreteprodv4",
-            "intervalo_filtro_disparados": 30, "id_hsm_legado_placeholder": 185}
+            "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: false
+          test_mode: true
           sleep_minutes: 5
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: false
@@ -1643,7 +1644,7 @@ deployments:
             = '{nome_hsm_placeholder}'\n            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'),
             INTERVAL {intervalo_filtro_disparados} DAY)\n            AND sd.data_particao
             >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)\n\
-            \            AND sd.indicador_falha = FALSE\n        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            \            AND sd.indicador_quarentena = FALSE\n        LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
             fl\n            ON fl.flattarget = joined_status_cpi.celular_disparo\n\
             \            AND fl.templateId = {id_hsm_legado_placeholder}\n       \
             \ WHERE sd.cpf IS NULL AND fl.flattarget IS NULL\n    ),\n\n    filtra_celulares_sem_whats
