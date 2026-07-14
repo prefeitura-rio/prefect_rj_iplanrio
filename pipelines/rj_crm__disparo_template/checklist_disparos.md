@@ -76,7 +76,7 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 610, via `id_hsm_legado_placeholder` no scheduler_sf.yaml)
 - [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
-- [ ] Disparo testado fim a fim
+- [x] Disparo testado fim a fim
 - [x] Jornada testada fim a fim (não tem o lance do input com integração do eai)
 
 ### Pesquisa 1 — D1/D3/D5/D10

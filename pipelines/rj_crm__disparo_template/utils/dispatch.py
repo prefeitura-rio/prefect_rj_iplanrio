@@ -952,6 +952,7 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE indicador_quarentena = TRUE
         AND envio_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
+        AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
         AND LOWER(nome_hsm) = LOWER('{campaign_name}') if campaign_name else ''
     """
     try:
@@ -992,6 +993,7 @@ def check_campaign_success(
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
           AND envio_datahora >= '{dispatch_date}'
+          AND data_particao >= DATE('{dispatch_date}')
           AND indicador_falha = FALSE
           AND indicador_quarentena = FALSE
           AND entrega_datahora IS NOT NULL
