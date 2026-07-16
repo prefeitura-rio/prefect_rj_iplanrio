@@ -1,0 +1,208 @@
+# Salesforce CRM Bulk API 2.0 — Dados do Agentforce
+#
+# Objetos disponíveis (dependem da licença e configuração da org):
+#   BotSession         : sessões de conversa com o agente (início, fim, canal, status)
+#   BotMessage         : mensagens individuais trocadas na sessão
+#   ConversationEntry  : entradas detalhadas da conversa (mais granular que BotMessage)
+#   MessagingSession   : sessões de mensageria (WhatsApp, SMS, Facebook, etc.)
+#   AgentWork          : trabalho roteado pelo Omni-Channel ao agente
+#   Case               : casos criados ou resolvidos pelo agente
+#
+# Credenciais necessárias no Infisical (path: /salesforce_crm):
+#   SF_CRM_CLIENT_ID      : Client ID da Connected App no Salesforce CRM
+#   SF_CRM_CLIENT_SECRET  : Client Secret da Connected App
+#   SF_CRM_USERNAME       : Username do usuário de integração
+#   SF_CRM_PASSWORD       : Senha + Security Token concatenados (ex: SenhaXXXTOKENYYY)
+#   SF_CRM_LOGIN_URL      : https://login.salesforce.com (sandbox: https://test.salesforce.com)
+#
+# Para obter o Security Token: Salesforce → Setup → My Personal Information → Reset My Security Token
+
+name: rj_crm__salesforce_agentforce_api
+prefect-version: 3.4.3
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__salesforce_agentforce_api-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__salesforce_agentforce_api/Dockerfile
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: '{{ build-image.image_name }}'
+      tag: '{{ build-image.tag }}'
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+deployments:
+
+  # -----------------------------------------------------------------------
+  # Deployment de staging
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-agentforce-api--staging
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:rj_crm__salesforce_agentforce_api
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      infisical_secret_path: /salesforce_crm
+    schedules:
+
+      # BotSession — sessões de conversa com o agente (1x por dia, dia anterior)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: bulk-bot-session
+        flow_run_name: bulk-bot-session
+        parameters:
+          soql: "SELECT Id, StartTime, EndTime, BotType, Status, OwnerId, CreatedDate FROM BotSession WHERE StartTime = YESTERDAY"
+          table_id: bot_session
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # BotMessage — mensagens individuais de cada sessão (1x por dia, dia anterior)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: bulk-bot-message
+        flow_run_name: bulk-bot-message
+        parameters:
+          soql: "SELECT Id, BotSessionId, Type, Text, CreatedDate FROM BotMessage WHERE CreatedDate = YESTERDAY"
+          table_id: bot_message
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # MessagingSession — sessões de mensageria (WhatsApp, SMS, etc.)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: bulk-messaging-session
+        flow_run_name: bulk-messaging-session
+        parameters:
+          soql: "SELECT Id, Status, StartTime, EndTime, MessagingChannel, Origin, CreatedDate FROM MessagingSession WHERE CreatedDate = YESTERDAY"
+          table_id: messaging_session
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # ConversationEntry — entradas detalhadas da conversa (mais granular)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: bulk-conversation-entry
+        flow_run_name: bulk-conversation-entry
+        parameters:
+          soql: "SELECT Id, ConversationId, ActorType, Message, CreatedDate FROM ConversationEntry WHERE CreatedDate = YESTERDAY"
+          table_id: conversation_entry
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # AgentWork — trabalho roteado pelo Omni-Channel ao agente
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: bulk-agent-work
+        flow_run_name: bulk-agent-work
+        parameters:
+          soql: "SELECT Id, AgentId, Status, WorkItemId, CreatedDate, ClosedDateTime FROM AgentWork WHERE CreatedDate = YESTERDAY"
+          table_id: agent_work
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+
+  # -----------------------------------------------------------------------
+  # Deployment de producao
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-agentforce-api--prod
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:rj_crm__salesforce_agentforce_api
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    parameters:
+      infisical_secret_path: /salesforce_crm
+    schedules:
+
+      # BotSession — sessões de conversa com o agente (1x por dia, dia anterior)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: bulk-bot-session
+        flow_run_name: bulk-bot-session
+        parameters:
+          soql: "SELECT Id, StartTime, EndTime, BotType, Status, OwnerId, CreatedDate FROM BotSession WHERE StartTime = YESTERDAY"
+          table_id: bot_session
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # BotMessage — mensagens individuais de cada sessão (1x por dia, dia anterior)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: bulk-bot-message
+        flow_run_name: bulk-bot-message
+        parameters:
+          soql: "SELECT Id, BotSessionId, Type, Text, CreatedDate FROM BotMessage WHERE CreatedDate = YESTERDAY"
+          table_id: bot_message
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # MessagingSession — sessões de mensageria (WhatsApp, SMS, etc.)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: bulk-messaging-session
+        flow_run_name: bulk-messaging-session
+        parameters:
+          soql: "SELECT Id, Status, StartTime, EndTime, MessagingChannel, Origin, CreatedDate FROM MessagingSession WHERE CreatedDate = YESTERDAY"
+          table_id: messaging_session
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # ConversationEntry — entradas detalhadas da conversa (mais granular)
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: bulk-conversation-entry
+        flow_run_name: bulk-conversation-entry
+        parameters:
+          soql: "SELECT Id, ConversationId, ActorType, Message, CreatedDate FROM ConversationEntry WHERE CreatedDate = YESTERDAY"
+          table_id: conversation_entry
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm
+
+      # AgentWork — trabalho roteado pelo Omni-Channel ao agente
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: bulk-agent-work
+        flow_run_name: bulk-agent-work
+        parameters:
+          soql: "SELECT Id, AgentId, Status, WorkItemId, CreatedDate, ClosedDateTime FROM AgentWork WHERE CreatedDate = YESTERDAY"
+          table_id: agent_work
+          dataset_id: brutos_salesforce_crm
+          dump_mode: append
+          infisical_secret_path: /salesforce_crm

@@ -1,0 +1,18 @@
+[project]
+name = "rj_crm__salesforce_agentforce_api"
+version = "0.1.0"
+description = "Pipeline de ingestão de dados do Salesforce CRM Agentforce via Bulk API 2.0"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-storage==2.10.0",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
+    "python-dotenv==1.0.1",
+    "pendulum==3.0.0",
+    "requests>=2.31.0",
+    "pandas>=2.0.0",
+    "pydantic>=2.0.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
