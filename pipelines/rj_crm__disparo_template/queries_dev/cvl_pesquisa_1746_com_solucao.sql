@@ -129,7 +129,7 @@ WITH tabela_global AS (
     SELECT
         numero_protocolo,
         canal_tratado,
-        cpf,
+        ta.cpf,
         nome_tratado AS nome,
         telefone,
         data_inicio,

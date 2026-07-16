@@ -46,7 +46,7 @@ Sequência: cobrança → lembrete → agradecimento (cada uma depende do histó
 - Tabelas dev: `rj-crm-registry.brutos_salesforce.status_disparo`, `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`, `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 196/239 = cobrança, 227 = lembrete, 231 = agradecimento, via `id_hsm_legado_cobranca_placeholder`/`id_hsm_legado_lembrete_placeholder`/`id_hsm_legado_agradecimento_placeholder` no scheduler_sf.yaml)
 - [ ] Query prod retornou dados (provavelmente por conta do novo nome das hsms)
-- [ ] Disparo testado fim a fim
+- [x] Disparo testado fim a fim
 - [x] Jornada testada fim a fim
 
 ---
@@ -89,7 +89,7 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`, `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (anterior/D0 = 610; desta pesquisa = 588 e 562, via `id_hsm_anterior_legado_placeholder`/`id_hsm_legado_placeholder` no scheduler_sf.yaml)
 - [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
-- [ ] Disparo testado fim a fim
+- [x] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
 
 ### Pesquisa 4 — D7/D22

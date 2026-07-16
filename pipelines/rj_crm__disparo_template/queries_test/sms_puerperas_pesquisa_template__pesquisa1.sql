@@ -9,7 +9,7 @@ DELETE FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_mater
 WHERE nome = 'MARIA SALESFORCE';
 
 DELETE FROM `rj-crm-registry.brutos_salesforce.status_disparo`
-WHERE cpf = '123pesquisa1'
+WHERE cpf = '12pesquisa1'
     AND nome_hsm = 'smspuerperasdisparo25';
 
 -- ===================== 1) INSERT: alta de maternidade (segmentação) =====================
@@ -27,7 +27,7 @@ INSERT INTO `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_mater
 )
 VALUES
 (
-    '123pesquisa1',
+    '12pesquisa1',
     'MARIA SALESFORCE',
     -- pesquisa 1 dispara em D+1, D+3, D+5 ou D+10
     DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY),
@@ -88,7 +88,7 @@ VALUES
     'Mensagem de teste - primeira HSM (D0)',
     'Parar de receber mensagem? Digite PARAR',
     '5521989190512',
-    '123pesquisa1',
+    '12pesquisa1',
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY),
     NULL,
