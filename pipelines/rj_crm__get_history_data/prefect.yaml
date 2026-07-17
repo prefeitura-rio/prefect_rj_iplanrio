@@ -39,6 +39,9 @@ deployments:
   - name: rj-crm--get-history-data--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__get_history_data/flow.py:rj_crm__get_history_data
+    concurrency_limit:
+      limit: 1
+      collision_strategy: CANCEL_NEW
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -48,6 +51,6 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     schedules:
-      - cron: "0 6 * * *"
+      - cron: "0 * * * *"
         timezone: America/Sao_Paulo
-        slug: get_history_data_daily
+        slug: get_history_data_hourly
