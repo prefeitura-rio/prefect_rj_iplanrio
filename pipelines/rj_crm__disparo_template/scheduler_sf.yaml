@@ -10,7 +10,8 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 291, "nome_hsm_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
       campaign_name: cvl_pesquisa_1746_sem_resolucao_prod_v1
       data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_sem_solucao
-      de_columns: ["nome_sobrenome", "solicitacao", "canal"]
+      de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO"]
+      csv_separator: ","
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
@@ -35,7 +36,8 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 192, "nome_hsm_placeholder": "cvl_pesquisa_1746_prod_v1"}
       campaign_name: cvl_pesquisa_1746_prod_v1
       data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_com_solucao
-      de_columns: ["nome_sobrenome", "solicitacao", "canal"]
+      de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO"]
+      csv_separator: ","
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append

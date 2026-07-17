@@ -21,9 +21,9 @@ Sequência: cobrança → lembrete → agradecimento (cada uma depende do histó
 - Tabelas prod: `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`, `rj-iplanrio.divida_ativa.contribuinte`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Tabelas dev: `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`, `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`, `rj-crm-registry.brutos_salesforce.status_disparo`
 - Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 196/239, via `id_hsm_legado_cobranca_placeholder` no scheduler_sf.yaml)
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim (pendente Fernando)
-- [ ] Jornada testada fim a fim (pendente Fernando)
+- [x] Query prod retornou dados
+- [x] Disparo testado fim a fim 
+- [ ] Jornada testada fim a fim 
 
 ### Lembrete
 - campaign_name: `pgmdividaativalembreteprodv1`
@@ -110,7 +110,7 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 - Tabelas prod/dev: idem Pesquisa 1
 - Fallback legado: idem Pesquisa 1, mas desta pesquisa = 564 e 566
 - [ ] Query prod retornou dados (não consigo validar sem permissão para leitura da rj-sms)
-- [ ] Disparo testado fim a fim (pendente Maiko)
+- [x] Disparo testado fim a fim (pendente Maiko)
 - [ ] Jornada testada fim a fim (pendente Maiko)
 
 ### Pesquisa 7 — D40 

@@ -104,6 +104,7 @@ def rj_crm__disparo_template_sf(
     infisical_secret_path: str = "/crm_disparo_template",
     data_extension_filename: str | None = None,
     de_columns: list[str] | None = None,
+    csv_separator: str = ";",
     whitelist_percentage: int = 0,
     whitelist_environment: str = "production",
     flow_environment: str = "staging",
@@ -148,6 +149,7 @@ def rj_crm__disparo_template_sf(
             Data Extension espera. Quando informada, o CSV enviado ao SFTP é restrito a essas
             colunas — qualquer coluna de controle interno da query (ex.: 'others', 'externalId')
             é descartada antes do envio.
+        csv_separator (str, optional): Delimitador do CSV enviado ao SFTP. Defaults to ";".
         sftp_remote_path (str, optional): Remote directory on the SFTP server. Defaults to "/".
         whitelist_percentage (int, optional): Percentage of contacts to whitelist. Defaults to 0.
         whitelist_environment (str, optional): Whitelist environment. Defaults to "production".
@@ -354,6 +356,7 @@ def rj_crm__disparo_template_sf(
             df=current_df,
             data_extension_filename=data_extension_filename or campaign_name,
             de_columns=de_columns,
+            csv_separator=csv_separator,
         )
 
         send_to_sftp(

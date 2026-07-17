@@ -54,7 +54,9 @@ deployments:
           query_replacements: {"id_hsm_placeholder": 291, "nome_hsm_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
           campaign_name: cvl_pesquisa_1746_sem_resolucao_prod_v1
           data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_sem_solucao
-          de_columns: ["nome_sobrenome", "solicitacao", "canal"]
+          de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal",
+            "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO"]
+          csv_separator: ","
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -175,8 +177,10 @@ deployments:
             interno (dedup por\n    -- CPF) e é descartado do CSV pelo de_columns
             antes do envio à Data Extension.\n    SELECT\n        telefone,\n    \
             \    CAST(cpf AS STRING) AS SubscriberKey,\n        CAST(cpf AS STRING)
-            AS externalId,\n        nome AS nome_sobrenome,\n        subtipo_tratado
-            AS solicitacao,\n        canal_tratado AS canal\n    FROM dados_finais;\n"
+            AS externalId,\n        CAST(cpf AS STRING) AS cpfCnpj,\n        nome
+            AS cc_wt_nome_sobrenome,\n        subtipo_tratado AS cc_wt_solicitacao,\n\
+            \        canal_tratado AS cc_wt_canal,\n        'SEM_RESOLUCAO' AS STATUS_DEMANDA\n\
+            \    FROM dados_finais;\n"
       - interval: 86400
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
@@ -188,7 +192,9 @@ deployments:
           query_replacements: {"id_hsm_placeholder": 192, "nome_hsm_placeholder": "cvl_pesquisa_1746_prod_v1"}
           campaign_name: cvl_pesquisa_1746_prod_v1
           data_extension_filename: whatsapp_cvl_pesquisa_1746_fechado_com_solucao
-          de_columns: ["nome_sobrenome", "solicitacao", "canal"]
+          de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal",
+            "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO"]
+          csv_separator: ","
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -308,8 +314,10 @@ deployments:
             interno (dedup por\n    -- CPF) e é descartado do CSV pelo de_columns
             antes do envio à Data Extension.\n    SELECT\n        telefone,\n    \
             \    CAST(cpf AS STRING) AS SubscriberKey,\n        CAST(cpf AS STRING)
-            AS externalId,\n        nome AS nome_sobrenome,\n        subtipo_tratado
-            AS solicitacao,\n        canal_tratado AS canal\n    FROM dados_finais;\n"
+            AS externalId,\n        CAST(cpf AS STRING) AS cpfCnpj,\n        nome
+            AS cc_wt_nome_sobrenome,\n        subtipo_tratado AS cc_wt_solicitacao,\n\
+            \        canal_tratado AS cc_wt_canal,\n        'ATENDIDA' AS STATUS_DEMANDA\n\
+            \    FROM dados_finais;\n"
       - interval: 86400
         anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo

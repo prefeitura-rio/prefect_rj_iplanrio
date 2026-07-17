@@ -176,7 +176,9 @@ WITH tabela_global AS (
         telefone,
         CAST(cpf AS STRING) AS SubscriberKey,
         CAST(cpf AS STRING) AS externalId,
-        nome AS nome_sobrenome,
-        subtipo_tratado AS solicitacao,
-        canal_tratado AS canal
+        CAST(cpf AS STRING) AS cpfCnpj,
+        nome AS cc_wt_nome_sobrenome,
+        subtipo_tratado AS cc_wt_solicitacao,
+        canal_tratado AS cc_wt_canal,
+        'SEM_RESOLUCAO' AS STATUS_DEMANDA
     FROM dados_finais;

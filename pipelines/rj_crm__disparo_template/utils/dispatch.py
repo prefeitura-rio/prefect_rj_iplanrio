@@ -1173,6 +1173,7 @@ def save_csv_for_sftp(
     data_extension_filename: str,
     de_columns: Optional[List[str]] = None,
     output_folder: str = "./data_sftp/",
+    csv_separator: str = ";",
 ) -> Tuple[str, str]:
     """
     Salva o DataFrame da query como CSV para envio ao Salesforce via SFTP.
@@ -1182,6 +1183,9 @@ def save_csv_for_sftp(
     interno do flow (ex.: 'others', 'externalId') é descartada, mesmo que a query as
     retorne. Sem `de_columns`, mantém o comportamento legado de só descartar 'others'.
 
+    `csv_separator` define o delimitador do CSV (padrão ';'); algumas Data Extensions
+    esperam outro separador — configurável por campanha via `csv_separator` no scheduler.
+
     Returns:
         Tuple[str, str]: (caminho do arquivo CSV salvo, data do disparo)
     """
@@ -1189,6 +1193,7 @@ def save_csv_for_sftp(
     dispatch_date = now.strftime("%Y-%m-%d %H:%M:%S")
     timestamp = now.strftime("%Y%m%d%H%M%S")  # TODO: alterar para salvar em segundos
     # timestamp = now.strftime("%Y%m%d%H%M")
+    filename = f"{data_extension_filename}_{timestamp}.csv"
 
     if de_columns is not None:
         keep_columns = [col for col in ["telefone", "SubscriberKey", *de_columns] if col in df.columns]
@@ -1196,11 +1201,13 @@ def save_csv_for_sftp(
     else:
         csv_df = df.drop(columns=["others"], errors="ignore")
     csv_df["LOCALE"] = "BR"
+    # Só entra no CSV quando a campanha pede via de_columns (hoje: só as jornadas 1746)
+    if de_columns is not None and "NOME_ARQUIVO" in de_columns:
+        csv_df["NOME_ARQUIVO"] = filename
 
     os.makedirs(output_folder, exist_ok=True)
-    filename = f"{data_extension_filename}_{timestamp}.csv"
     csv_path = os.path.join(output_folder, filename)
-    csv_df.to_csv(csv_path, index=False, sep=";")
+    csv_df.to_csv(csv_path, index=False, sep=csv_separator)
 
     log(f"CSV criado em {csv_path} com {len(csv_df)} registros")
     return csv_path, dispatch_date
