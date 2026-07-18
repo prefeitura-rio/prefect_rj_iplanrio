@@ -18,7 +18,14 @@ Credenciais necessárias no Infisical (path: /salesforce_marketing_cloud):
 """
 
 import os
+import warnings
 from typing import Literal
+
+warnings.filterwarnings(
+    "ignore",
+    message=".*'default' attribute.*no effect.*",
+    category=UserWarning,
+)
 
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task

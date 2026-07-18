@@ -16,3 +16,8 @@ dependencies = [
 
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::UserWarning:pydantic",
+]
