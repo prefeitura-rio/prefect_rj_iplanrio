@@ -121,23 +121,21 @@ deployments:
             \    t2.bairro,\n        t2.no_subprefeitura AS subprefeitura,\n     \
             \   t1.id_logradouro,\n        t1.numero_logradouro,\n\n        -- Status
             e tempo de atendimento\n        t1.status,\n        t1.situacao,\n   \
-            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    -- TODO: aponta
-            pra fantasma dev (sem acesso ao rj-segovi/rj-iplanrio) - trocar de\n \
-            \   -- volta pra queries/ antes de ir pra producao\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado`
-            t1\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`
-            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf`
-            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa`
+            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    FROM rj-segovi.adm_central_atendimento_1746.chamado
+            t1\n    LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura
+            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf
+            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa
             t4\n        ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)\n    LEFT JOIN
-            `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia`
-            t5\n        ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia
-            AS STRING)\n    WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
+            rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5\n        ON
+            t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)\n  \
+            \  WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
             -- Considera somente chamados a partir de Jan/25\n                   \
             \     AND (\n            -- Aceitam qualquer categoria\n            t1.id_subtipo
-            IN ('5899', '3366')\n            OR\n            -- Exigem ser \"Serviço\"\
+            IN ('5899', '3366') \n            OR \n            -- Exigem ser \"Serviço\"\
             \n            (\n            t1.id_subtipo IN (\n            '2966', '1325',
             '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071',
-            '1279', '2178', '3139', '114', '5841', '1101'\n            )\n       \
-            \     AND t1.categoria IN (\"Serviço\")\n            )\n        ) --Considera
+            '1279', '2178', '3139', '114', '5841', '1101'\n            ) \n      \
+            \      AND t1.categoria IN (\"Serviço\")\n            )\n        ) --Considera
             somente 20 serviços selecionados pela SUBTD\n        AND t1.data_fim IS
             NOT NULL -- Somente chamados fechados\n        AND t1.id_bairro IS NOT
             NULL -- Somente chamados com bairro classificado\n        AND t1.id_origem_ocorrencia
@@ -161,26 +159,27 @@ deployments:
             \            and DATE(sd.envio_datahora) = CURRENT_DATE(\"America/Sao_Paulo\"\
             )\n            and sd.data_particao = CURRENT_DATE(\"America/Sao_Paulo\"\
             )\n            and sd.indicador_quarentena = FALSE\n    WHERE fl.flattarget
-            is null\n        AND sd.cpf is null\n        AND (\n        CASE\n   \
-            \         -- Se for sábado ou domingo, joga para uma data no futuro (retorna
-            vazio)\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7,
-            1)\n            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL
-            1 YEAR)\n            -- Se for segunda-feira, pega chamados fechados na
-            sexta, sábado e domingo\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
-            = 2\n            THEN DATE(data_fim) IN (\n                DATE_SUB(CURRENT_DATE(),
-            INTERVAL 3 DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 2
-            DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n    \
-            \        )\n            -- Nos demais dias, pega chamados fechados no
-            dia anterior\n            ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(),
-            INTERVAL 1 DAY)\n        END\n        )\n        AND telefone IS NOT NULL\n\
-            \    )\n\n    -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle
-            interno (dedup por\n    -- CPF) e é descartado do CSV pelo de_columns
-            antes do envio à Data Extension.\n    SELECT\n        telefone,\n    \
-            \    CAST(cpf AS STRING) AS SubscriberKey,\n        CAST(cpf AS STRING)
-            AS externalId,\n        CAST(cpf AS STRING) AS cpfCnpj,\n        nome
-            AS cc_wt_nome_sobrenome,\n        subtipo_tratado AS cc_wt_solicitacao,\n\
-            \        canal_tratado AS cc_wt_canal,\n        'SEM_RESOLUCAO' AS STATUS_DEMANDA\n\
-            \    FROM dados_finais;\n"
+            is null\n        AND sd.cpf is null\n        AND (\n        -- CASE\n\
+            \        --     -- Se for sábado ou domingo, joga para uma data no futuro
+            (retorna vazio)\n        --     WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
+            IN (7, 1)\n        --     THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(),
+            INTERVAL 1 YEAR)\n        --     -- Se for segunda-feira, pega chamados
+            fechados na sexta, sábado e domingo\n        --     WHEN EXTRACT(DAYOFWEEK
+            FROM CURRENT_DATE()) = 2\n        --     THEN DATE(data_fim) IN (\n  \
+            \      --         DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY),\n        --\
+            \         DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY),\n        --      \
+            \   DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n        --     )\n     \
+            \   --     -- Nos demais dias, pega chamados fechados no dia anterior\n\
+            \        --     ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL
+            1 DAY)\n        -- END\n        -- )\n        AND DATE(data_fim) = DATE_SUB(CURRENT_DATE(),
+            INTERVAL 1 DAY)\n        AND telefone IS NOT NULL\n    )\n\n    -- Tabela
+            simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por\n\
+            \    -- CPF) e é descartado do CSV pelo de_columns antes do envio à Data
+            Extension.\n    SELECT\n        telefone,\n        CAST(cpf AS STRING)
+            AS SubscriberKey,\n        CAST(cpf AS STRING) AS externalId,\n      \
+            \  CAST(cpf AS STRING) AS cpfCnpj,\n        nome AS cc_wt_nome_sobrenome,\n\
+            \        subtipo_tratado AS cc_wt_solicitacao,\n        canal_tratado
+            AS cc_wt_canal,\n        'SEM_RESOLUCAO' AS STATUS_DEMANDA\n    FROM dados_finais;\n"
       - interval: 86400
         anchor_date: "2021-01-01T19:00:00"
         timezone: America/Sao_Paulo
@@ -259,22 +258,20 @@ deployments:
             \    t2.bairro,\n        t2.no_subprefeitura AS subprefeitura,\n     \
             \   t1.id_logradouro,\n        t1.numero_logradouro,\n\n        -- Status
             e tempo de atendimento\n        t1.status,\n        t1.situacao,\n   \
-            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    -- TODO: aponta
-            pra fantasma dev (sem acesso ao rj-segovi/rj-iplanrio) - trocar de\n \
-            \   -- volta pra queries/ antes de ir pra producao\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado`
-            t1\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`
-            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf`
-            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa`
+            \     t1.tipo_situacao,\n        t1.tempo_prazo\n\n    FROM rj-segovi.adm_central_atendimento_1746.chamado
+            t1\n    LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura
+            t2\n        ON t1.id_bairro = t2.id_bairro\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf
+            t3\n        ON t1.id_chamado = t3.id_chamado\n    LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa
             t4\n        ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)\n    LEFT JOIN
-            `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia`
-            t5\n        ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia
-            AS STRING)\n    WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
+            rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5\n        ON
+            t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)\n  \
+            \  WHERE 1=1\n        AND t1.data_inicio >= '2025-01-01 00:00:00.000'
             -- Considera somente chamados a partir de Jan/25\n        AND (\n    \
             \        -- Aceitam qualquer categoria\n            t1.id_subtipo IN ('5899',
-            '3366')\n            OR\n            -- Exigem ser \"Serviço\"\n     \
-            \       (\n            t1.id_subtipo IN (\n            '2966', '1325',
+            '3366') \n            OR \n            -- Exigem ser \"Serviço\"\n   \
+            \         (\n            t1.id_subtipo IN (\n            '2966', '1325',
             '5799', '78', '100', '1298', '1319', '1316', '1274', '1242', '1287', '5071',
-            '1279', '2178', '3139', '114', '5841', '1101' )\n            AND t1.categoria
+            '1279', '2178', '3139', '114', '5841', '1101' ) \n            AND t1.categoria
             IN (\"Serviço\")\n            )\n        ) --Considera somente 20 serviços
             selecionados pela SUBTD\n        AND t1.data_fim IS NOT NULL -- Somente
             chamados fechados\n        AND t1.id_bairro IS NOT NULL -- Somente chamados
@@ -298,26 +295,27 @@ deployments:
             \            and DATE(sd.envio_datahora) = CURRENT_DATE(\"America/Sao_Paulo\"\
             )\n            and sd.data_particao = CURRENT_DATE(\"America/Sao_Paulo\"\
             )\n            and sd.indicador_quarentena = FALSE\n    WHERE fl.flattarget
-            is null\n        AND sd.cpf is null\n        AND (\n        CASE\n   \
-            \         -- Se for sábado ou domingo, joga para uma data no futuro (retorna
-            vazio)\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7,
-            1)\n            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL
-            1 YEAR)\n            -- Se for segunda-feira, pega chamados fechados na
-            sexta, sábado e domingo\n            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
-            = 2\n            THEN DATE(data_fim) IN (\n                DATE_SUB(CURRENT_DATE(),
-            INTERVAL 3 DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 2
-            DAY),\n                DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n    \
-            \        )\n            -- Nos demais dias, pega chamados fechados no
-            dia anterior\n            ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(),
-            INTERVAL 1 DAY)\n        END\n        )\n        AND telefone IS NOT NULL\n\
-            \    )\n\n    -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle
-            interno (dedup por\n    -- CPF) e é descartado do CSV pelo de_columns
-            antes do envio à Data Extension.\n    SELECT\n        telefone,\n    \
-            \    CAST(cpf AS STRING) AS SubscriberKey,\n        CAST(cpf AS STRING)
-            AS externalId,\n        CAST(cpf AS STRING) AS cpfCnpj,\n        nome
-            AS cc_wt_nome_sobrenome,\n        subtipo_tratado AS cc_wt_solicitacao,\n\
-            \        canal_tratado AS cc_wt_canal,\n        'ATENDIDA' AS STATUS_DEMANDA\n\
-            \    FROM dados_finais;\n"
+            is null\n        AND sd.cpf is null\n        AND (\n        -- CASE\n\
+            \        --     -- Se for sábado ou domingo, joga para uma data no futuro
+            (retorna vazio)\n        --     WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE())
+            IN (7, 1)\n        --     THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(),
+            INTERVAL 1 YEAR)\n        --     -- Se for segunda-feira, pega chamados
+            fechados na sexta, sábado e domingo\n        --     WHEN EXTRACT(DAYOFWEEK
+            FROM CURRENT_DATE()) = 2\n        --     THEN DATE(data_fim) IN (\n  \
+            \      --         DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY),\n        --\
+            \         DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY),\n        --      \
+            \   DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)\n        --     )\n     \
+            \   --     -- Nos demais dias, pega chamados fechados no dia anterior\n\
+            \        --     ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL
+            1 DAY)\n        -- END\n        -- )\n        AND DATE(data_fim) = DATE_SUB(CURRENT_DATE(),
+            INTERVAL 1 DAY)\n        AND telefone IS NOT NULL\n    )\n\n    -- Tabela
+            simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por\n\
+            \    -- CPF) e é descartado do CSV pelo de_columns antes do envio à Data
+            Extension.\n    SELECT\n        telefone,\n        CAST(cpf AS STRING)
+            AS SubscriberKey,\n        CAST(cpf AS STRING) AS externalId,\n      \
+            \  CAST(cpf AS STRING) AS cpfCnpj,\n        nome AS cc_wt_nome_sobrenome,\n\
+            \        subtipo_tratado AS cc_wt_solicitacao,\n        canal_tratado
+            AS cc_wt_canal,\n        'ATENDIDA' AS STATUS_DEMANDA\n    FROM dados_finais;\n"
       - interval: 86400
         anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo
@@ -695,7 +693,7 @@ deployments:
             NULL)) AS celular_disparo_1,\n        MAX(IF(telefone.prioridade = '2',
             telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,\n    \
             \    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
-            NULL)) AS celular_disparo_3\n\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.siscegonha_agendamento_maternidade`,\n\
+            NULL)) AS celular_disparo_3\n\n    FROM `rj-sms.projeto_whatsapp.siscegonha_agendamento_maternidade`,\n\
             \    -- FROM `rj-crm-registry-dev.brutos_sms.siscegonha_agendamento_maternidade_teste`,\n\
             \    UNNEST(telefones_gestante) AS telefone\n\n    WHERE cpf is not null\n\
             \        and cpf != '00000000000'\n        AND time(data_hora_agendamento_visita_maternidade)
@@ -797,7 +795,7 @@ deployments:
           whitelist_replace_contacts: true
           query: "WITH segmentacao_original AS (\n    SELECT\n        lpad(cast(cpf
             as string) , 11, '0') as cpf,\n        nome,\n        data_alta_internacao,\n\
-            \        telefones_gestante,\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`\n\
+            \        telefones_gestante,\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             DATE(data_alta_internacao) between\n            DATE_SUB(CURRENT_DATE('America/Sao_Paulo'),
@@ -916,7 +914,7 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`\n\
+            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
@@ -942,9 +940,10 @@ deployments:
             é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).\n
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
-            seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
-            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            seria só necessário filtrar pela estratégia de envio\n    -- qualquer
+            falha conta (não só o código 131026 de \"número sem WhatsApp\")\n    SELECT\n\
+            \        contato_telefone AS flatTarget,\n        indicador_quarentena
+            AS falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
             \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
             (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
@@ -1042,7 +1041,7 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`\n\
+            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
@@ -1068,9 +1067,10 @@ deployments:
             é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).\n
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
-            seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
-            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            seria só necessário filtrar pela estratégia de envio\n    -- qualquer
+            falha conta (não só o código 131026 de \"número sem WhatsApp\")\n    SELECT\n\
+            \        contato_telefone AS flatTarget,\n        indicador_quarentena
+            AS falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
             \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
             (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
@@ -1170,7 +1170,7 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`\n\
+            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
@@ -1196,9 +1196,10 @@ deployments:
             é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).\n
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
-            seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
-            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            seria só necessário filtrar pela estratégia de envio\n    -- qualquer
+            falha conta (não só o código 131026 de \"número sem WhatsApp\")\n    SELECT\n\
+            \        contato_telefone AS flatTarget,\n        indicador_quarentena
+            AS falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
             \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
             (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
@@ -1293,7 +1294,7 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_sms.sisare_alta_maternidade`\n\
+            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
@@ -1319,9 +1320,10 @@ deployments:
             é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).\n
             status_final_telefone AS (\n    -- verifica se telefones já tiveram falha,
             passo necessário já que o telefone principal não vem do RMI. Caso contrário,
-            seria só necessário filtrar pela estratégia de envio\n    SELECT\n   \
-            \     contato_telefone AS flatTarget,\n        indicador_quarentena AS
-            falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
+            seria só necessário filtrar pela estratégia de envio\n    -- qualquer
+            falha conta (não só o código 131026 de \"número sem WhatsApp\")\n    SELECT\n\
+            \        contato_telefone AS flatTarget,\n        indicador_quarentena
+            AS falhou\n    FROM `rj-crm-registry.brutos_salesforce.status_disparo`\n\
             \    QUALIFY ROW_NUMBER() OVER (\n        PARTITION BY contato_telefone\n\
             \        ORDER BY envio_datahora DESC\n    ) = 1\n),\nfiltra_falhas AS
             (\n    SELECT\n        distinct\n        s.* EXCEPT(celular_disparo_1,
