@@ -1,3 +1,6 @@
+-- Query unificada: pesquisa de satisfação CVL 1746 (fechado com solução + sem resolução).
+-- Cada chamado só cai em um dos dois desfechos, e status_demanda_tratado carrega qual foi
+-- pra escolher, por linha, o par id_hsm/nome_hsm certo nos LEFT JOINs de dedup abaixo.
 WITH tabela_global AS (
     SELECT
         DISTINCT
@@ -91,18 +94,22 @@ WITH tabela_global AS (
         t1.status,
         t1.situacao,
         t1.tipo_situacao,
-        t1.tempo_prazo
+        t1.tempo_prazo,
 
-    -- TODO: aponta pra fantasma dev (sem acesso ao rj-segovi/rj-iplanrio) - trocar de
-    -- volta pra queries/ antes de ir pra producao
-    FROM `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado` t1
-    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__brutos_extracoes_google_sheets.relacao_bairro_subprefeitura` t2
+        -- Desfecho tratado: define qual dos dois disparos (HSM) esse chamado deve receber
+        CASE
+        WHEN t1.status IN ('Fechado com providências', 'Fechado com solução') THEN 'ATENDIDA'
+        WHEN t1.status IN ('Sem possibilidade de atendimento', 'Fechado com informação', 'Não constatado') THEN 'SEM_RESOLUCAO'
+        END AS status_demanda_tratado
+
+    FROM rj-segovi.adm_central_atendimento_1746.chamado t1
+    LEFT JOIN rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura t2
         ON t1.id_bairro = t2.id_bairro
-    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.chamado_cpf` t3
+    LEFT JOIN rj-segovi.adm_central_atendimento_1746.chamado_cpf t3
         ON t1.id_chamado = t3.id_chamado
-    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.pessoa` t4
+    LEFT JOIN rj-segovi.adm_central_atendimento_1746.pessoa t4
         ON t3.id_pessoa = CAST(t4.id_pessoa AS STRING)
-    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__adm_central_atendimento_1746.origem_ocorrencia` t5
+    LEFT JOIN rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5
         ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)
     WHERE 1=1
         AND t1.data_inicio >= '2025-01-01 00:00:00.000' -- Considera somente chamados a partir de Jan/25
@@ -122,7 +129,10 @@ WITH tabela_global AS (
         AND t1.id_origem_ocorrencia NOT IN ('23','25','27') -- Exclui Táxi.Rio, Facebook e Conservação
         AND COALESCE(t4.telefone_1, t4.telefone_2, t4.telefone_3) IS NOT NULL -- Exclui sem telefone
         AND t3.ic_motivo IN ('E','O') -- Apenas ocorrências e equivalências
-        AND t1.status IN ('Fechado com providências', 'Fechado com solução') --desconsidera chamados onde a equipe de campo não conseguiu atender
+        AND t1.status IN (
+            'Fechado com providências', 'Fechado com solução', -- ATENDIDA
+            'Sem possibilidade de atendimento', 'Fechado com informação', 'Não constatado' -- SEM_RESOLUCAO
+        )
     ),
 
     dados_finais AS (
@@ -136,37 +146,31 @@ WITH tabela_global AS (
         data_fim,
         subtipo_tratado,
         id_subtipo,
-        ta.status
+        ta.status,
+        ta.status_demanda_tratado
     FROM tabela_global ta
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
-            on fl.flattarget = ta.telefone and fl.templateId = cast({id_hsm_placeholder} as int64)
+            on fl.flattarget = ta.telefone
+            and fl.templateId = CAST(
+                CASE ta.status_demanda_tratado
+                    WHEN 'ATENDIDA' THEN {id_hsm_com_solucao_placeholder}
+                    WHEN 'SEM_RESOLUCAO' THEN {id_hsm_sem_resolucao_placeholder}
+                END AS int64)
             and date(fl.createDate) = CURRENT_DATE("America/Sao_Paulo") and fl.status="PROCESSING"
-    -- verifica também se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder) hoje,
-    -- via status_disparo (alimentada pelos disparos via SFTP/Salesforce)
+    -- verifica também se esse cpf já recebeu essa mesma mensagem (nome_hsm correspondente ao
+    -- desfecho) hoje, via status_disparo (alimentada pelos disparos via SFTP/Salesforce)
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
             on sd.cpf = ta.cpf
-            and sd.nome_hsm = '{nome_hsm_placeholder}'
+            and sd.nome_hsm = CASE ta.status_demanda_tratado
+                    WHEN 'ATENDIDA' THEN '{nome_hsm_com_solucao_placeholder}'
+                    WHEN 'SEM_RESOLUCAO' THEN '{nome_hsm_sem_resolucao_placeholder}'
+                END
             and DATE(sd.envio_datahora) = CURRENT_DATE("America/Sao_Paulo")
             and sd.data_particao = CURRENT_DATE("America/Sao_Paulo")
             and sd.indicador_quarentena = FALSE
     WHERE fl.flattarget is null
         AND sd.cpf is null
-        AND (
-        CASE
-            -- Se for sábado ou domingo, joga para uma data no futuro (retorna vazio)
-            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7, 1)
-            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL 1 YEAR)
-            -- Se for segunda-feira, pega chamados fechados na sexta, sábado e domingo
-            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) = 2
-            THEN DATE(data_fim) IN (
-                DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY),
-                DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY),
-                DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
-            )
-            -- Nos demais dias, pega chamados fechados no dia anterior
-            ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
-        END
-        )
+        AND DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
         AND telefone IS NOT NULL
     )
 
@@ -180,5 +184,5 @@ WITH tabela_global AS (
         nome AS cc_wt_nome_sobrenome,
         subtipo_tratado AS cc_wt_solicitacao,
         canal_tratado AS cc_wt_canal,
-        'ATENDIDA' AS STATUS_DEMANDA
+        status_demanda_tratado AS STATUS_DEMANDA
     FROM dados_finais;

@@ -143,28 +143,20 @@ Confirmação de agendamento antes do parto + cadeia de pesquisas em diferentes 
 
 ## 4. CVL 1746 (Central de Atendimento)
 
-Pesquisa de satisfação pós-atendimento de chamados 1746, dois ramos dependendo do desfecho (fechado com solução / sem resolução).
+Pesquisa de satisfação pós-atendimento de chamados 1746. Query unificada: um único CSV/Data
+Extension com a coluna `STATUS_DEMANDA` (`ATENDIDA` / `SEM_RESOLUCAO`) distinguindo os dois
+desfechos; a Journey no Salesforce decide, por linha, qual HSM enviar (192 para `ATENDIDA`,
+291 para `SEM_RESOLUCAO`). Antes eram duas queries/schedules separados
+(`cvl_pesquisa_1746_com_solucao.sql` e `cvl_pesquisa_1746_sem_resolucao.sql`); a query dedupa
+cada linha contra o par id_hsm/nome_hsm correspondente ao seu próprio desfecho.
 
-### Pesquisa — Fechado com solução
-- campaign_name: `cvl_pesquisa_1746_prod_v1`
-- Prod: `queries/cvl_pesquisa_1746_com_solucao.sql`
-- Dev: `queries_dev/cvl_pesquisa_1746_com_solucao.sql`
-- Test: `queries_test/cvl_pesquisa_1746_com_solucao__test.sql`
+- campaign_name: `cvl_pesquisa_1746_unificado_v1`
+- Prod: `queries/cvl_pesquisa_1746.sql`
+- Dev: `queries_dev/cvl_pesquisa_1746.sql`
+- Test: `queries_test/cvl_pesquisa_1746__test.sql`
 - Tabelas prod/dev (mesmas tabelas fonte, sem fantasma dev): `rj-segovi.adm_central_atendimento_1746.chamado`, `chamado_cpf`, `pessoa`, `origem_ocorrencia`, `rj-iplanrio.brutos_extracoes_google_sheets.relacao_bairro_subprefeitura`, `rj-crm-registry.brutos_salesforce.status_disparo`
-- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 192, via `id_hsm_placeholder` no scheduler_sf.yaml)
-- Schedule `daily-cvl-pesquisa1746-prod` está `active: false` no scheduler_sf.yaml
-- [ ] Query prod retornou dados
-- [ ] Disparo testado fim a fim
-- [ ] Jornada testada fim a fim
-
-### Pesquisa — Sem resolução
-- campaign_name: `cvl_pesquisa_1746_sem_resolucao_prod_v1`
-- Prod: `queries/cvl_pesquisa_1746_sem_resolucao.sql`
-- Dev: `queries_dev/cvl_pesquisa_1746_sem_resolucao.sql`
-- Test: `queries_test/cvl_pesquisa_1746_sem_resolucao__test.sql`
-- Tabelas prod/dev: idem Pesquisa — Fechado com solução
-- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 291, via `id_hsm_placeholder` no scheduler_sf.yaml)
-- Schedule `daily-cvl-1746-survey-invitation-without-resolution` está `active: true` mas com `test_mode: true`
+- Fallback legado (transição, checado em prod/dev/test): `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` (templateId 192 = ATENDIDA, 291 = SEM_RESOLUCAO, via `id_hsm_com_solucao_placeholder`/`id_hsm_sem_resolucao_placeholder` no scheduler_sf.yaml)
+- Schedule: `daily-cvl-pesquisa1746-unificado` no scheduler_sf.yaml
 - [ ] Query prod retornou dados
 - [ ] Disparo testado fim a fim
 - [ ] Jornada testada fim a fim
