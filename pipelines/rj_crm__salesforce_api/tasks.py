@@ -65,7 +65,7 @@ def _get_access_token(client_id: str, client_secret: str, auth_url: str) -> str:
         "client_id": client_id,
         "client_secret": client_secret,
     }
-    response = requests.post(token_url, json=payload, timeout=30)
+    response = requests.post(token_url, json=payload, timeout=60)
     response.raise_for_status()
     token_data = response.json()
     print(f"[SFMC] Token obtido com sucesso. Expira em {token_data.get('expires_in', 'N/A')}s.")
@@ -104,7 +104,7 @@ def _fetch_all_pages_get(
         params = {**query_params, "$page": page, "$pageSize": page_size}
         print(f"[SFMC][GET] Buscando página {page} (pageSize={page_size})...")
 
-        response = requests.get(url, headers=headers, params=params, timeout=60)
+        response = requests.get(url, headers=headers, params=params, timeout=300)
         response.raise_for_status()
         data = response.json()
 
@@ -161,7 +161,7 @@ def _fetch_all_pages_post(
         print(f"[SFMC][POST] Buscando página {page} (pageSize={page_size})...")
 
         print(f"[SFMC][POST] Body enviado: {json.dumps(page_body, indent=2)}")
-        response = requests.post(url, headers=headers, json=page_body, timeout=60)
+        response = requests.post(url, headers=headers, json=page_body, timeout=300)
         response.raise_for_status()
         data = response.json()
 
