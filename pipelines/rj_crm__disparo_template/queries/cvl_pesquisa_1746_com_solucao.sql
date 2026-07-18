@@ -149,7 +149,7 @@ WITH tabela_global AS (
             and sd.indicador_quarentena = FALSE
     WHERE fl.flattarget is null
         AND sd.cpf is null
-        AND (
+        -- AND (
         -- CASE
         --     -- Se for sábado ou domingo, joga para uma data no futuro (retorna vazio)
         --     WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7, 1)
