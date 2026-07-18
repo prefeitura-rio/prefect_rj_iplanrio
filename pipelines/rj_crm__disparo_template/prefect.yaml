@@ -1020,7 +1020,7 @@ deployments:
             datas_internacao: |
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 7 DAY),
               DATE_ADD(DATE(data_alta_internacao), INTERVAL 22 DAY)
-            intervalo_filtro_disparados: 300
+            intervalo_filtro_disparados: 1
           table_id: disparos_efetuados
           dump_mode: append
           test_mode: false
@@ -1273,7 +1273,7 @@ deployments:
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
-            intervalo_filtro_disparados: 300
+            intervalo_filtro_disparados: 1
           table_id: disparos_efetuados
           dump_mode: append
           test_mode: false
