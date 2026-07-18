@@ -184,5 +184,6 @@ WITH tabela_global AS (
         nome AS cc_wt_nome_sobrenome,
         subtipo_tratado AS cc_wt_solicitacao,
         canal_tratado AS cc_wt_canal,
+        CAST(numero_protocolo AS STRING) AS protocolo,
         status_demanda_tratado AS STATUS_DEMANDA
     FROM dados_finais;

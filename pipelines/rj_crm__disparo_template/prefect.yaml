@@ -56,7 +56,7 @@ deployments:
           campaign_name: cvl_pesquisa_1746_unificado_v1
           data_extension_filename: whatsapp_cvl_pesquisa_1746
           de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal",
-            "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO"]
+            "protocolo", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO"]
           csv_separator: ","
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
@@ -184,7 +184,8 @@ deployments:
             \      CAST(cpf AS STRING) AS externalId,\n        CAST(cpf AS STRING)
             AS cpfCnpj,\n        nome AS cc_wt_nome_sobrenome,\n        subtipo_tratado
             AS cc_wt_solicitacao,\n        canal_tratado AS cc_wt_canal,\n       \
-            \ status_demanda_tratado AS STATUS_DEMANDA\n    FROM dados_finais;\n"
+            \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
+            AS STATUS_DEMANDA\n    FROM dados_finais;\n"
       - interval: 86400
         anchor_date: "2021-01-01T13:00:00"
         timezone: America/Sao_Paulo
