@@ -150,21 +150,22 @@ WITH tabela_global AS (
     WHERE fl.flattarget is null
         AND sd.cpf is null
         AND (
-        CASE
-            -- Se for sábado ou domingo, joga para uma data no futuro (retorna vazio)
-            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7, 1)
-            THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL 1 YEAR)
-            -- Se for segunda-feira, pega chamados fechados na sexta, sábado e domingo
-            WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) = 2
-            THEN DATE(data_fim) IN (
-                DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY),
-                DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY),
-                DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
-            )
-            -- Nos demais dias, pega chamados fechados no dia anterior
-            ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
-        END
-        )
+        -- CASE
+        --     -- Se for sábado ou domingo, joga para uma data no futuro (retorna vazio)
+        --     WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) IN (7, 1)
+        --     THEN DATE(data_fim) = DATE_ADD(CURRENT_DATE(), INTERVAL 1 YEAR)
+        --     -- Se for segunda-feira, pega chamados fechados na sexta, sábado e domingo
+        --     WHEN EXTRACT(DAYOFWEEK FROM CURRENT_DATE()) = 2
+        --     THEN DATE(data_fim) IN (
+        --         DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY),
+        --         DATE_SUB(CURRENT_DATE(), INTERVAL 2 DAY),
+        --         DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+        --     )
+        --     -- Nos demais dias, pega chamados fechados no dia anterior
+        --     ELSE DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+        -- END
+        -- )
+        AND DATE(data_fim) = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
         AND telefone IS NOT NULL
     )
 

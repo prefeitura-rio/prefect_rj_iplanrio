@@ -71,7 +71,7 @@ VALUES
     999991747,
     '12cvlsres01',
     'JOAO SALESFORCE CVL SEMRESOL',
-    '5521987654302'
+    '5521989190512'
 );
 
 -- ===================== 4) INSERT: origem de ocorrência de teste =====================

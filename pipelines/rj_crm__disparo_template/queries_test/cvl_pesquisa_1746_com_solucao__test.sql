@@ -71,7 +71,7 @@ VALUES
     999991746,
     '12cvlcsol01',
     'MARIA SALESFORCE CVL SOLUCAO',
-    '5521987654301'
+    '5521989190512'
 );
 
 -- ===================== 4) INSERT: origem de ocorrência de teste =====================

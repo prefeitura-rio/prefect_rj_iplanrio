@@ -23,7 +23,7 @@ schedules:
       whitelist_environment: "production"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
-      query_file: queries_dev/cvl_pesquisa_1746_sem_resolucao.sql
+      query_file: queries/cvl_pesquisa_1746_sem_resolucao.sql
 
   # Daily schedule para flow cvl-pesquisa1746-prod
   - interval: 86400
@@ -49,7 +49,7 @@ schedules:
       whitelist_environment: "production"
       filter_duplicated_phones: true
       filter_duplicated_cpfs: true
-      query_file: queries_dev/cvl_pesquisa_1746_com_solucao.sql
+      query_file: queries/cvl_pesquisa_1746_com_solucao.sql
 
   # Daily schedule para flow pgm-divida-ativa-prod
   - interval: 86400
@@ -159,7 +159,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerpera_confirma_agendamento.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerpera_confirma_agendamento.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D0 - Explicação do processo
   - cron: "0 14 * * *"
@@ -191,7 +191,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_d0_explica_pesquisa.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_d0_explica_pesquisa.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D1, D3, D5, D10, D13, D16 e D19 - Pesquisa 1 (unifica a antiga Pesquisa 3)
   - cron: "0 10 * * *"
@@ -237,7 +237,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
   # Desativada: D13/D16/D19 foram incorporados na Pesquisa 1 acima (mesmo HSM smspuerperasdisparo4v3,
@@ -318,7 +318,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D25, D28 e D34 - Pesquisa 5 (unifica a antiga Pesquisa 6)
   - cron: "0 10 * * *"
@@ -358,7 +358,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMS Puérperas D34 - Pesquisa 6
   # Desativada: D34 foi incorporado na Pesquisa 5 acima (mesmo HSM smspuerperasdisparo12,
@@ -433,7 +433,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries_dev/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo Confirmação de Agendamento CadÚnico (SMAS)
   - interval: 86400
