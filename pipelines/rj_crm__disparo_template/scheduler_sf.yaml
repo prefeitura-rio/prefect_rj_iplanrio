@@ -415,7 +415,7 @@ schedules:
   - interval: 86400
     anchor_date: "2021-01-01T13:00:00"
     timezone: America/Sao_Paulo
-    active: true
+    active: false
     slug: daily-cadunico-confirma-agendamento
     flow_run_name: cadunico-confirma-agendamento
     parameters:
