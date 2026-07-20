@@ -2,8 +2,7 @@ schedules:
   # Daily schedule para flow cvl-pesquisa1746 (unifica com solução + sem resolução num único
   # CSV/Data Extension; STATUS_DEMANDA distingue as duas linhas e a Journey no Salesforce
   # decide qual HSM enviar por linha)
-  - interval: 86400
-    anchor_date: "2021-01-01T19:00:00"
+  - cron: "0 11 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-cvl-pesquisa1746-unificado
@@ -28,8 +27,7 @@ schedules:
       query_file: queries/cvl_pesquisa_1746.sql
 
   # Daily schedule para flow pgm-divida-ativa-prod
-  - interval: 86400
-    anchor_date: "2021-01-01T13:00:00"
+  - cron: "0 13 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-pgm-divida-ativa-prod
@@ -42,7 +40,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: true
+      test_mode: false
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -51,11 +49,10 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries_dev/pgm_divida_ativa_cobranca.sql
+      query_file: queries/pgm_divida_ativa_cobranca.sql
 
   # Daily schedule para flow pgmdividaativalembreteprodv1
-  - interval: 86400
-    anchor_date: "2021-01-01T13:00:00"
+  - cron: "0 13 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-pgm-divida-ativa-lembrete-prod-v1
@@ -68,7 +65,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: true
+      test_mode: false
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -77,11 +74,10 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries_dev/pgm_divida_ativa_lembrete.sql
+      query_file: queries/pgm_divida_ativa_lembrete.sql
 
   # Daily schedule para flow pgmdividaativaconfirmapgtoprodv1
-  - interval: 86400
-    anchor_date: "2021-01-01T13:00:00"
+  - cron: "0 13 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
@@ -94,7 +90,7 @@ schedules:
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: true
+      test_mode: false
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -103,7 +99,7 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries_dev/pgm_divida_ativa_agradecimento.sql
+      query_file: queries/pgm_divida_ativa_agradecimento.sql
 
   # Disparo SMS Puérperas Confirmação agendamento
   - cron: "0 10 * * *"
@@ -135,7 +131,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries/sms_puerpera_confirma_agendamento.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerpera_confirma_agendamento.sql
 
   # Disparo SMS Puérperas D0 - Explicação do processo
   - cron: "0 14 * * *"
@@ -167,7 +163,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries/sms_puerperas_d0_explica_pesquisa.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_d0_explica_pesquisa.sql
 
   # Disparo SMS Puérperas D1, D3, D5, D10, D13, D16 e D19 - Pesquisa 1 (unifica a antiga Pesquisa 3)
   - cron: "0 10 * * *"
@@ -213,7 +209,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql
 
   # Disparo SMS Puérperas D13, D16 e D19 - Pesquisa 3
   # Desativada: D13/D16/D19 foram incorporados na Pesquisa 1 acima (mesmo HSM smspuerperasdisparo4v3,
@@ -294,7 +290,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql
 
   # Disparo SMS Puérperas D25, D28 e D34 - Pesquisa 5 (unifica a antiga Pesquisa 6)
   - cron: "0 10 * * *"
@@ -334,7 +330,7 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql
 
   # Disparo SMS Puérperas D34 - Pesquisa 6
   # Desativada: D34 foi incorporado na Pesquisa 5 acima (mesmo HSM smspuerperasdisparo12,
@@ -409,11 +405,10 @@ schedules:
         filter_failed_phones: false
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
-        query_file: queries/sms_puerperas_pesquisa_template.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-sms) - trocar de volta pra queries/ antes de ir pra producao
+        query_file: queries/sms_puerperas_pesquisa_template.sql
 
   # Disparo Confirmação de Agendamento CadÚnico (SMAS)
-  - interval: 86400
-    anchor_date: "2021-01-01T13:00:00"
+  - cron: "0 13 * * *"
     timezone: America/Sao_Paulo
     active: false
     slug: daily-cadunico-confirma-agendamento
@@ -435,12 +430,11 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries/cadunico_confirma_agendamento.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
+      query_file: queries/cadunico_confirma_agendamento.sql
 
   # Disparo SMAS Cartão Primeira Infância - Aviso (evento)
   # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
-  - interval: 86400
-    anchor_date: "2021-01-01T12:00:00"
+  - cron: "0 12 * * *"
     timezone: America/Sao_Paulo
     active: true
     slug: daily-smas-cartaopic-evento
@@ -470,8 +464,7 @@ schedules:
 
   # Disparo SMAS Cartão Primeira Infância - Lembrete
   # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
-  - interval: 86400
-    anchor_date: "2021-01-01T12:00:00"
+  - cron: "0 12 * * *"
     timezone: America/Sao_Paulo
     active: false
     slug: daily-smas-cartaopic-lembrete
