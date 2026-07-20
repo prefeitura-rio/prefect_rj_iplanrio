@@ -419,14 +419,14 @@ schedules:
     slug: daily-cadunico-confirma-agendamento
     flow_run_name: cadunico-confirma-agendamento
     parameters:
-      query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 15, "id_hsm_legado_placeholder": 101}
+      query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2", "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101}
       campaign_name: confirma_agendamento_cadunico_prod_v2
       data_extension_filename: whatsapp_cadunico_
       de_columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
       dataset_id: brutos_salesforce
       table_id: disparos_efetuados
       dump_mode: append
-      test_mode: true
+      test_mode: false
       sleep_minutes: 5
       flow_environment: staging
       filter_dispatched_phones_or_cpfs: null
@@ -435,7 +435,7 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries_dev/cadunico_confirma_agendamento.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
+      query_file: queries/cadunico_confirma_agendamento.sql  # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
 
   # Disparo SMAS Cartão Primeira Infância - Aviso (evento)
   # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao

@@ -1263,14 +1263,14 @@ deployments:
         parameters:
           flow_environment: staging
           query_replacements: {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
-            "intervalo_filtro_disparados": 15, "id_hsm_legado_placeholder": 101}
+            "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101}
           campaign_name: confirma_agendamento_cadunico_prod_v2
           data_extension_filename: whatsapp_cadunico_
           de_columns: ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
-          test_mode: true
+          test_mode: false
           sleep_minutes: 5
           filter_dispatched_phones_or_cpfs:
           filter_duplicated_phones: false
@@ -1290,7 +1290,7 @@ deployments:
             ' - ', unidade_bairro) AS endereco,\n        -- data_hora vem como STRING
             na tabela de origem, precisa de CAST explícito pra DATETIME\n        FORMAT_DATETIME('%d/%m/%Y',
             CAST(data_hora AS DATETIME)) AS data,\n        FORMAT_DATETIME('%H:%M',
-            CAST(data_hora AS DATETIME)) AS hora\n    FROM `rj-crm-registry-dev.dev__dev_fantasma__brutos_data_metrica_staging.cadunico_agendamentos`\n\
+            CAST(data_hora AS DATETIME)) AS hora\n    FROM `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`\n\
             \    WHERE\n        DATE(CAST(data_hora AS DATETIME)) = DATE_ADD(CURRENT_DATE('America/Sao_Paulo'),
             INTERVAL CAST({days_ahead_placeholder} AS int64) DAY)\n),\n\nfiltra_disparados
             AS (\n    -- verifica se esse cpf já recebeu essa mesma mensagem (nome_hsm_placeholder)
@@ -1309,7 +1309,7 @@ deployments:
             DAY)\n    WHERE sd.cpf IS NULL AND td.contato_telefone IS NULL\n),\n\n
             filtra_celulares_sem_whats AS (\n    -- remove telefones em quarentena
             ou com qualidade inválida\n    SELECT\n        DISTINCT s.*\n    FROM
-            filtra_disparados AS s\n    LEFT JOIN `rj-crm-registry-dev.dev__dev_fantasma__intermediario_rmi_telefones.int_telefone`
+            filtra_disparados AS s\n    LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone`
             AS tel\n        ON s.celular_disparo = tel.telefone_numero_completo\n\
             \    LEFT JOIN UNNEST(tel.consentimento) AS c\n    WHERE\n        (c.indicador_quarentena
             = FALSE AND tel.telefone_qualidade != \"INVALIDO\")\n        OR tel.telefone_numero_completo
