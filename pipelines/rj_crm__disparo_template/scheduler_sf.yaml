@@ -9,7 +9,7 @@ schedules:
     flow_run_name: cvl-pesquisa1746
     parameters:
       query_replacements: {"id_hsm_com_solucao_placeholder": 192, "nome_hsm_com_solucao_placeholder": "cvl_pesquisa_1746_prod_v1", "id_hsm_sem_resolucao_placeholder": 291, "nome_hsm_sem_resolucao_placeholder": "cvl_pesquisa_1746_sem_resolucao_prod_v1"}
-      campaign_name: cvl_pesquisa_1746_unificado_v1
+      campaign_name: cvl_pesquisa_1746_prod_v1
       data_extension_filename: whatsapp_cvl_pesquisa_1746
       de_columns: ["cc_wt_nome_sobrenome", "cc_wt_solicitacao", "cc_wt_canal", "protocolo", "STATUS_DEMANDA", "cpfCnpj", "NOME_ARQUIVO"]
       csv_separator: ","
