@@ -424,7 +424,12 @@ def create_log_df(
             val = row.get(col)
             # Converte tipos pandas/numpy não serializáveis
             if hasattr(val, "item"):
-                val = val.item()
+                try:
+                    val = val.item()
+                except ValueError:
+                    # val tem mais de um elemento (ex.: coluna array/repeated do BigQuery,
+                    # ou coluna duplicada no df) — não dá pra reduzir a escalar
+                    val = val.tolist() if hasattr(val, "tolist") else list(val)
             extra_data[col] = val
 
         records.append({
