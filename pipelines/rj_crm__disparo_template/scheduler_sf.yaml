@@ -122,7 +122,7 @@ schedules:
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
-        whitelist_percentage: 100
+        whitelist_percentage: 0
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
         filter_duplicated_cpfs: true
@@ -154,7 +154,7 @@ schedules:
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
-        whitelist_percentage: 100
+        whitelist_percentage: 0
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
         filter_duplicated_cpfs: true
@@ -200,7 +200,7 @@ schedules:
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
-        whitelist_percentage: 100
+        whitelist_percentage: 0
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
         filter_duplicated_cpfs: true
@@ -281,7 +281,7 @@ schedules:
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
-        whitelist_percentage: 100
+        whitelist_percentage: 0
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
         filter_duplicated_cpfs: true
@@ -321,7 +321,7 @@ schedules:
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
-        whitelist_percentage: 100
+        whitelist_percentage: 0
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
         filter_duplicated_cpfs: true
@@ -396,7 +396,7 @@ schedules:
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
-        whitelist_percentage: 100
+        whitelist_percentage: 0
         infisical_secret_path: /crm_disparo_template
         whitelist_environment: production
         filter_duplicated_cpfs: true
@@ -453,7 +453,7 @@ schedules:
       filter_dispatched_phones_or_cpfs: null
       filter_duplicated_phones: false
       filter_duplicated_cpfs: false
-      whitelist_percentage: 100
+      whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
       filter_failed_phones: false
