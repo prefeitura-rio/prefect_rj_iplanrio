@@ -25,7 +25,7 @@ def rj_ssm__celular_seguro():
         "client_secret": client_secret
     }
     headers = {
-        'Content-Type: application/json'
+        "Content-Type": "application/json"
     }
     cert = (
         cert_crt,
