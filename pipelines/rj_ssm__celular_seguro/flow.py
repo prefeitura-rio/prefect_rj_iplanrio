@@ -12,11 +12,11 @@ def rj_ssm__celular_seguro():
     cert_crt = getenv_or_action("API_SINESP__CERT_CRT")
 
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".crt") as crt_file:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".crt", delete=False) as crt_file:
         crt_file.write(cert_crt)
         crt_path = crt_file.name
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".key") as key_file:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".key", delete=False) as key_file:
         key_file.write(cert_key)
         key_path = key_file.name
 
