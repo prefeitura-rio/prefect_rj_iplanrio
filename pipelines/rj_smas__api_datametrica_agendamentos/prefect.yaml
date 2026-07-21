@@ -60,6 +60,10 @@ deployments:
       materialize_after_dump: true
       date: null  # null usa o próximo dia automaticamente
       infisical_secret_path: /api-datametrica
-    #schedules:
-    #  - cron: "0 10 * * *"  # Diariamente às 10:00
+    schedules:
+    #  - cron: "0 8 * * *"  # Diariamente às 10:00
     #    timezone: America/Sao_Paulo
+      - interval: 86400
+        anchor_date: "2021-01-01T05:00:00"
+        timezone: America/Sao_Paulo
+        active: true
