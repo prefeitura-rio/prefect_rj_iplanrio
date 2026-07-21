@@ -1,7 +1,7 @@
 import requests
 from prefect import flow
 from iplanrio.pipelines_utils.env import getenv_or_action
-
+import tempfile
 
 @flow(log_prints=True)
 def rj_ssm__celular_seguro():
@@ -10,6 +10,15 @@ def rj_ssm__celular_seguro():
     client_secret = getenv_or_action("API_SINESP__CLIENT_SECRET")
     cert_key = getenv_or_action("API_SINESP__CERT_KEY")
     cert_crt = getenv_or_action("API_SINESP__CERT_CRT")
+
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".crt") as crt_file:
+        crt_file.write(cert_crt)
+        crt_path = crt_file.name
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".key") as key_file:
+        key_file.write(cert_key)
+        key_path = key_file.name
 
     payload = {
         "grant_type": "client_credentials",
@@ -21,11 +30,12 @@ def rj_ssm__celular_seguro():
         "Content-Type": "application/json"
     }
 
+
     response = requests.post(
         url,
         json=payload,
         headers=headers,
-        cert=(cert_crt, cert_key),
+        cert=(crt_path, key_path),
         verify=False,
         timeout=30,
     )
