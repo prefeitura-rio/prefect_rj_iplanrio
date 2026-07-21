@@ -14,7 +14,7 @@ def rj_ssm__celular_seguro():
     # api_key = getenv_or_action("API_SINESP__CLIENT_ID")
     client_id = getenv_or_action("API_SINESP__CLIENT_ID")
     client_secret = getenv_or_action("API_SINESP__CLIENT_SECRET")
-    headers = getenv_or_action("API_SINESP__HEADERS")
+    # headers = getenv_or_action("API_SINESP__HEADERS")
     cert_key = getenv_or_action("API_SINESP__CERT_KEY")
     cert_crt = getenv_or_action("API_SINESP__CERT_CRT")
 
@@ -25,7 +25,7 @@ def rj_ssm__celular_seguro():
         "client_secret": client_secret
     }
     headers = {
-        headers
+        'Content-Type: application/json'
     }
     cert = (
         cert_crt,
