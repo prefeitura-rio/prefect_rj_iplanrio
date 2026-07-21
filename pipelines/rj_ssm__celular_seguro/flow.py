@@ -14,11 +14,9 @@ def rj_ssm__celular_seguro():
     # api_key = getenv_or_action("API_SINESP__CLIENT_ID")
     client_id = getenv_or_action("API_SINESP__CLIENT_ID")
     client_secret = getenv_or_action("API_SINESP__CLIENT_SECRET")
-
-    print("Testando diretamente pelo CURL")
-    result = os.system(f"curl -v --connect-timeout 5 {url}")
-    print("Result:", result)
-
+    headers = getenv_or_action("API_SINESP__HEADERS")
+    cert_key = getenv_or_action("API_SINESP__CERT_KEY")
+    cert_crt = getenv_or_action("API_SINESP__CERT_CRT")
 
     print("Testando diretamente pelo requests")
     payload = {
@@ -26,8 +24,23 @@ def rj_ssm__celular_seguro():
         "client_id": client_id,
         "client_secret": client_secret
     }
+    headers = {
+        headers
+    }
+    cert = (
+        cert_crt,
+        cert_key
+    )
 
-    response = requests.post(url, json=payload, verify=False, timeout=30)
+    response = requests.post(url,
+                            json=payload,
+                            verify=False,
+                            cert=cert,
+                            headers=headers
+                            )
 
     print("Status:", response.status_code)
     print("Resultado:", response.json())
+
+
+    requests.post()
