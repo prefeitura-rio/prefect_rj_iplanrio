@@ -3,7 +3,7 @@
 Flow unificado para dump de collections do MongoDB do TaxiRio - Prefect 3.0.
 
 Este flow processa qualquer tabela do TaxiRio baseado no parâmetro table_id,
-consolidando a lógica que antes estava distribuída em múltiplos flows
+consolidando a lógica que antes estava distribuída em múltiplos flows..
 """
 
 import importlib

@@ -94,14 +94,16 @@ TABLE_CONFIGS = {
     ),
     "rankingraces": TableConfig(
         table_id="rankingraces",
-        dump_mode="overwrite",
-        partition_cols=[],
+        dump_mode="append",
+        frequency="D",
+        partition_cols=["ano_particao", "mes_particao", "dia_particao"],
         use_period=True,
     ),
     "metricsdriverunoccupieds": TableConfig(
         table_id="metricsdriverunoccupieds",
         dump_mode="overwrite",
-        partition_cols=[],
+        partition_cols=["ano_particao", "mes_particao", "dia_particao"],
         use_period=True,
+        frequency="D",
     ),
 }
