@@ -126,6 +126,7 @@ def create_date_partitions(
         for date in dates
     ]
 
+    file_folder = ""
     for _date, _dataframe in dataframes:
         partition_folder = os.path.join(
             root_folder,
