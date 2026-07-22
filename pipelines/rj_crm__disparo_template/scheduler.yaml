@@ -152,7 +152,7 @@ x-templates:
 
 schedules:
   # Daily schedule para flow cvl-1746-survey-invitation-without-resolution-prod-v1
-  - interval: 86400
+  - interval: 86400 
     anchor_date: "2021-01-01T19:00:00"
     timezone: America/Sao_Paulo
     active: true
@@ -163,7 +163,6 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 291}
       campaign_name: cvl-pesquisa1746-prod
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -172,6 +171,8 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
+      filter_duplicated_phones: true
+      filter_duplicated_cpfs: true
       query: |
         WITH tabela_global AS (
             SELECT
@@ -369,7 +370,6 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 192}
       campaign_name: cvl-pesquisa1746-prod
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -378,6 +378,8 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/wetalkie"
       whitelist_environment: "production"
+      filter_duplicated_phones: true
+      filter_duplicated_cpfs: true
       query: |
         WITH tabela_global AS (
             SELECT
@@ -573,7 +575,6 @@ schedules:
       query_replacements: {"id_hsm_placeholder": 239, "limit_placeholder": 300}
       campaign_name: pgm-divida-ativa-prod-v2
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -815,7 +816,6 @@ schedules:
       id_hsm: 227
       campaign_name: pgm-divida-ativa-lembrete-prod-v1
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -964,7 +964,6 @@ schedules:
       id_hsm: 231
       campaign_name: pgm-divida-ativa-confirma-pgto-prod-v1
       cost_center_id: 71
-      chunk_size: 1000
       dataset_id: brutos_wetalkie
       table_id: disparos_efetuados
       dump_mode: append
@@ -1116,7 +1115,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1291,7 +1289,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1464,7 +1461,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1499,7 +1495,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1537,7 +1532,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1572,7 +1566,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1609,7 +1602,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1644,7 +1636,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1679,7 +1670,6 @@ schedules:
         table_id: disparos_efetuados
         dump_mode: append
         test_mode: false
-        chunk_size: 1000
         dataset_id: brutos_wetalkie
         campaign_name: sms-puerperas
         max_dispatch_retries: 3
@@ -1696,3 +1686,71 @@ schedules:
         force_add_on_whitelist_group: true
         whitelist_replace_contacts: true
         query: *puerperas_query_template
+
+
+# Schedule para alterar celular na whitelist
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: change-whitelist
+    flow_run_name: change-whitelist
+    parameters:
+      id_hsm: 231
+      campaign_name: change-whitelist
+      cost_center_id: 71
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados
+      dump_mode: append
+      test_mode: false
+      sleep_minutes: 5
+      flow_environment: production
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 100
+      infisical_secret_path: "/wetalkie"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: true
+      whitelist_replace_contacts: true
+      query: |
+        select
+            TO_JSON_STRING(
+                STRUCT(
+                    "5592984212629" as celular_disparo,
+                    CAST("0000000001" AS STRING) AS externalId
+                )
+            ) AS destination_data
+
+
+# Schedule para testar flow na salesforce
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: test-salesforce
+    flow_run_name: test-salesforce
+    parameters:
+      id_hsm: null
+      campaign_name: confirma_agendamento_cadunico_prod_v2
+      cost_center_id: 71
+      dataset_id: brutos_wetalkie
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_cadunico
+      query: |
+        select
+            * from rj-crm-registry-dev.teste.agendamento_cadunico_teste

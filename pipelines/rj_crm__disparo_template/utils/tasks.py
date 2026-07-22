@@ -126,6 +126,7 @@ def create_date_partitions(
         for date in dates
     ]
 
+    file_folder = ""
     for _date, _dataframe in dataframes:
         partition_folder = os.path.join(
             root_folder,
@@ -200,9 +201,7 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
     job = bq_client.query(query)
     while not job.done():
         sleep(1)
-    log("Getting result from query")
     results = job.result()
-    log("Converting result to pandas dataframe")
     dfr = results.to_dataframe()
     log("End download data from bigquery")
     return dfr
