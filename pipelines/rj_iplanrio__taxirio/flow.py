@@ -34,7 +34,7 @@ def rj_iplanrio__taxirio(
     frequency: Optional[str] = None,
 ):
     """
-    Flow unificado para dump de collections do MongoDB do TaxiRio para BigQuery.
+    Flow unificado para dump de collections do MongoDB do TaxiRio para BigQuery
 
     Este flow processa qualquer tabela do TaxiRio, automaticamente determinando
     o modo de processamento (dump completo ou por período) baseado na configuração
