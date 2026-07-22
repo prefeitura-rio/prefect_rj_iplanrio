@@ -32,6 +32,9 @@ def rj_iplanrio__taxirio(
     dataset_id: str = Constants.DATASET_ID.value,
     dump_mode: Optional[str] = None,
     frequency: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+
 ):
     """
     Flow unificado para dump de collections do MongoDB do TaxiRio para BigQuery
@@ -96,10 +99,12 @@ def rj_iplanrio__taxirio(
         # Tabelas que precisam ser processadas por período (races, passengers)
         generate_pipeline = mongodb_module.generate_pipeline
 
-        start_date, end_date = get_dates_for_dump_mode(
-            dump_mode=dump_mode,
-            collection=collection,
-        )
+        if start_date is None and end_date is None:
+
+            start_date, end_date = get_dates_for_dump_mode(
+                dump_mode=dump_mode,
+                collection=collection,
+            )
 
         data_path = dump_collection_from_mongodb_per_period(
             collection=collection,
