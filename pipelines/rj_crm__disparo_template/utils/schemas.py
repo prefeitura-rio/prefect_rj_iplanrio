@@ -143,6 +143,48 @@ class DispatchRecord(BaseModel):
     vars: Optional[Dict[str, Any]] = Field(default=None, description="Variáveis utilizadas no template")
 
 
+class SfDispatchRow(BaseModel):
+    """
+    Schema para validação das colunas obrigatórias de uma linha de log do flow SF.
+
+    Campos obrigatórios:
+    - dispatch_date: Data e hora do disparo
+    - campaign_name: Nome da campanha
+    - SubscriberKey: Chave do assinante no Salesforce (case-sensitive)
+    - telefone: Número de telefone disparado
+
+    A coluna `data` (JSON com demais campos) é construída pelo create_log_df,
+    não faz parte deste schema de validação de entrada.
+    """
+
+    dispatch_date: str = Field(..., description="Data e hora do disparo")
+    campaign_name: str = Field(..., min_length=1, description="Nome da campanha")
+    SubscriberKey: str = Field(..., min_length=1, description="Chave do assinante no Salesforce")
+    telefone: str = Field(..., min_length=1, description="Número de telefone disparado")
+
+    @validator("campaign_name")
+    def validate_campaign_name(cls, v):
+        if not v.strip():
+            raise ValueError("campaign_name não pode ser vazio ou apenas espaços")
+        return v.strip()
+
+    @validator("SubscriberKey")
+    def validate_subscriber_key(cls, v):
+        if not isinstance(v, str):
+            raise ValueError("SubscriberKey deve ser uma string")
+        if not v.strip():
+            raise ValueError("SubscriberKey não pode ser vazio ou apenas espaços")
+        return v.strip()
+
+    @validator("telefone")
+    def validate_telefone(cls, v):
+        if not isinstance(v, str):
+            raise ValueError("telefone deve ser uma string")
+        if not v.strip():
+            raise ValueError("telefone não pode ser vazio ou apenas espaços")
+        return v.strip()
+
+
 class ValidationStats(BaseModel):
     """
     Schema para estatísticas de validação
