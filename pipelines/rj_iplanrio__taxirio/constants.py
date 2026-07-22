@@ -96,12 +96,12 @@ TABLE_CONFIGS = {
         table_id="rankingraces",
         dump_mode="overwrite",
         partition_cols=[],
-        use_period=False,
+        use_period=True,
     ),
     "metricsdriverunoccupieds": TableConfig(
         table_id="metricsdriverunoccupieds",
         dump_mode="overwrite",
         partition_cols=[],
-        use_period=False,
+        use_period=True,
     ),
 }
