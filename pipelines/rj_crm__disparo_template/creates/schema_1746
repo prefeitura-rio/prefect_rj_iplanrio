@@ -1,0 +1,969 @@
+[{
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "1",
+  "column_name": "id_chamado",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "2",
+  "column_name": "id_origem_ocorrencia",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "3",
+  "column_name": "data_inicio",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "4",
+  "column_name": "data_fim",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "5",
+  "column_name": "id_bairro",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "6",
+  "column_name": "id_territorialidade",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "7",
+  "column_name": "id_logradouro",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "8",
+  "column_name": "numero_logradouro",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "9",
+  "column_name": "id_unidade_organizacional",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "10",
+  "column_name": "nome_unidade_organizacional",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "11",
+  "column_name": "id_unidade_organizacional_mae",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "12",
+  "column_name": "unidade_organizacional_ouvidoria",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "13",
+  "column_name": "categoria",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "14",
+  "column_name": "id_tipo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "15",
+  "column_name": "tipo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "16",
+  "column_name": "id_subtipo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "17",
+  "column_name": "subtipo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "18",
+  "column_name": "status",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "19",
+  "column_name": "longitude",
+  "data_type": "FLOAT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "20",
+  "column_name": "latitude",
+  "data_type": "FLOAT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "21",
+  "column_name": "data_alvo_finalizacao",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "22",
+  "column_name": "data_alvo_diagnostico",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "23",
+  "column_name": "data_real_diagnostico",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "24",
+  "column_name": "tempo_prazo",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "25",
+  "column_name": "prazo_unidade",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "26",
+  "column_name": "prazo_tipo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "27",
+  "column_name": "dentro_prazo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "28",
+  "column_name": "situacao",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "29",
+  "column_name": "tipo_situacao",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "30",
+  "column_name": "justificativa_status",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "31",
+  "column_name": "reclamacoes",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "32",
+  "column_name": "descricao",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "33",
+  "column_name": "extracted_at",
+  "data_type": "TIMESTAMP",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "34",
+  "column_name": "updated_at",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado",
+  "ordinal_position": "35",
+  "column_name": "data_particao",
+  "data_type": "DATE",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "1",
+  "column_name": "id_chamado",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "2",
+  "column_name": "cpf",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "3",
+  "column_name": "id_pessoa",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "4",
+  "column_name": "id_protocolo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "5",
+  "column_name": "id_protocolo_chamado",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "6",
+  "column_name": "numero_protocolo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "7",
+  "column_name": "ic_motivo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "8",
+  "column_name": "extracted_at",
+  "data_type": "TIMESTAMP",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "chamado_cpf",
+  "ordinal_position": "9",
+  "column_name": "data_particao",
+  "data_type": "DATE",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "origem_ocorrencia",
+  "ordinal_position": "1",
+  "column_name": "id_origem_ocorrencia",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "origem_ocorrencia",
+  "ordinal_position": "2",
+  "column_name": "no_origem_ocorrencia",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "origem_ocorrencia",
+  "ordinal_position": "3",
+  "column_name": "id_origem_ocorrencia_categoria_fk",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "origem_ocorrencia",
+  "ordinal_position": "4",
+  "column_name": "fl_ativo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "origem_ocorrencia",
+  "ordinal_position": "5",
+  "column_name": "extracted_at",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "1",
+  "column_name": "id_pessoa",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "2",
+  "column_name": "cpf",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "3",
+  "column_name": "nome",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "4",
+  "column_name": "documento_identidade",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "5",
+  "column_name": "numero_matricula",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "6",
+  "column_name": "nome_mae",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "7",
+  "column_name": "data_nascimento",
+  "data_type": "DATE",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "8",
+  "column_name": "sexo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "9",
+  "column_name": "atividade_profissional",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "10",
+  "column_name": "id_cargo",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "11",
+  "column_name": "id_idioma",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "12",
+  "column_name": "id_pais_ddi",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "13",
+  "column_name": "id_tratamento",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "14",
+  "column_name": "id_escolaridade",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "15",
+  "column_name": "id_tipo_endereco",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "16",
+  "column_name": "id_bairro_logradouro",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "17",
+  "column_name": "id_unidade_organizacional",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "18",
+  "column_name": "email",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "19",
+  "column_name": "telefone_1",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "20",
+  "column_name": "telefone_2",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "21",
+  "column_name": "telefone_3",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "22",
+  "column_name": "endereco",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "23",
+  "column_name": "endereco_numero",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "24",
+  "column_name": "endereco_cep",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "25",
+  "column_name": "endereco_complemento",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "26",
+  "column_name": "endereco_referencia",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "27",
+  "column_name": "coordenada_x",
+  "data_type": "FLOAT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "28",
+  "column_name": "coordenada_y",
+  "data_type": "FLOAT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "29",
+  "column_name": "flag_ativo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "30",
+  "column_name": "flag_auditor",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "31",
+  "column_name": "flag_sms",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "32",
+  "column_name": "flag_email",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "33",
+  "column_name": "flag_recebe_sms",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "34",
+  "column_name": "flag_recebe_email",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "35",
+  "column_name": "flag_reintegracao_sms",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "36",
+  "column_name": "flag_reintegracao_email",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "37",
+  "column_name": "flag_nao_reside_no_municipio",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "38",
+  "column_name": "flag_recebe_notificacao_generica",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "39",
+  "column_name": "flag_recebe_notificacao_alerta_rio",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "40",
+  "column_name": "flag_recebe_notificacao_andamento_chamado",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "41",
+  "column_name": "data_insercao",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "42",
+  "column_name": "data_atualizacao",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-segovi",
+  "table_schema": "adm_central_atendimento_1746",
+  "table_name": "pessoa",
+  "ordinal_position": "43",
+  "column_name": "extracted_at",
+  "data_type": "TIMESTAMP",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-iplanrio",
+  "table_schema": "brutos_extracoes_google_sheets",
+  "table_name": "relacao_bairro_subprefeitura",
+  "ordinal_position": "1",
+  "column_name": "bairro",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-iplanrio",
+  "table_schema": "brutos_extracoes_google_sheets",
+  "table_name": "relacao_bairro_subprefeitura",
+  "ordinal_position": "2",
+  "column_name": "id_bairro",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-iplanrio",
+  "table_schema": "brutos_extracoes_google_sheets",
+  "table_name": "relacao_bairro_subprefeitura",
+  "ordinal_position": "3",
+  "column_name": "no_subprefeitura",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "1",
+  "column_name": "id_jornada",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "2",
+  "column_name": "nome_jornada",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "3",
+  "column_name": "id_definicao",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "4",
+  "column_name": "id_atividade",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "5",
+  "column_name": "chave_atividade",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "6",
+  "column_name": "nome_atividade",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "7",
+  "column_name": "id_ativo",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "8",
+  "column_name": "nome_hsm",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "9",
+  "column_name": "contato_telefone",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "10",
+  "column_name": "cpf",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "11",
+  "column_name": "envio_datahora",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "12",
+  "column_name": "entrega_datahora",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "13",
+  "column_name": "leitura_datahora",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "14",
+  "column_name": "falha_datahora",
+  "data_type": "DATETIME",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "15",
+  "column_name": "descricao_falha",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "16",
+  "column_name": "indicador_falha",
+  "data_type": "BOOL",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "17",
+  "column_name": "indicador_quarentena",
+  "data_type": "BOOL",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "18",
+  "column_name": "status_disparo",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "19",
+  "column_name": "id_status_disparo",
+  "data_type": "INT64",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "20",
+  "column_name": "id_hsm",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "21",
+  "column_name": "id_waba",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "22",
+  "column_name": "categoria_hsm",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "23",
+  "column_name": "canal",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "24",
+  "column_name": "texto_hsm",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "25",
+  "column_name": "rodape_hsm",
+  "data_type": "STRING",
+  "is_nullable": "YES"
+}, {
+  "table_catalog": "rj-crm-registry",
+  "table_schema": "brutos_salesforce",
+  "table_name": "status_disparo",
+  "ordinal_position": "26",
+  "column_name": "data_particao",
+  "data_type": "DATE",
+  "is_nullable": "YES"
+}]
