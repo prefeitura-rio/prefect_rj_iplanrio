@@ -13,7 +13,7 @@ from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
-
+from datetime import datetime
 from pipelines.rj_iplanrio__taxirio.constants import TABLE_CONFIGS, Constants
 from pipelines.rj_iplanrio__taxirio.tasks import (
     acess_api_infisical,
@@ -105,6 +105,13 @@ def rj_iplanrio__taxirio(
                 dump_mode=dump_mode,
                 collection=collection,
             )
+
+        else:
+            if start_date is not None:
+                start_date = datetime.strptime(start_date, "%Y-%m-%d")
+
+            if end_date is not None:
+                end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
         data_path = dump_collection_from_mongodb_per_period(
             collection=collection,
