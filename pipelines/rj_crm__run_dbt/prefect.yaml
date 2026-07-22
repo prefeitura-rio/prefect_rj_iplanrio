@@ -101,7 +101,7 @@ deployments:
         slug: dbt_quarter_hourly_build
         parameters:
           command: "build"
-          select: "+tag:quarter_hourly"
+          select: "tag:quarter_hourly"
           send_discord_report: true
           github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
           bigquery_project: "rj-crm-registry"
