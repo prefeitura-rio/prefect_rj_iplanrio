@@ -67,5 +67,5 @@ deployments:
         anchor_date: "2021-01-01T05:00:00"
         timezone: America/Sao_Paulo
         active: true
-        slug: daily-atualizacao-api-datametrica-agendamentos-cadunico
-        flow_run_name: atualizacao-api-datametrica-agendamentos-cadunico
+        slug: daily-atualizacao-api-datametrica-agend-cadunico
+        flow_run_name: atualizacao-api-datametrica-agend-cadunico
