@@ -1053,7 +1053,7 @@ deployments:
             \        and telefone.principal.estrategia_envio in ('ENVIAR', 'TESTAR')\n
             ),\nenriquece_rmi as (\n    select\n        telefones.*,\n        dados_rmi.celular_disparo_rmi\n\
             \    from telefones\n    left join dados_rmi using(cpf)\n),\n-- Substitui
-            a leitura de rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*\n
+            a leitura de rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*\n\
             -- (só tinha histórico da API antiga da Wetalkie) por\n-- rj-crm-registry.brutos_salesforce.status_disparo
             (alimentada pelos disparos via SFTP/Salesforce).\n-- Chave de busca agora
             é nome_hsm (STRING, == campaign_name), não mais templateId (INT64 da Wetalkie).\n
