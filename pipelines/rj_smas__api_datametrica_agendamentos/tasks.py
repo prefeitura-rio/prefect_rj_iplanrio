@@ -226,3 +226,4 @@ def convert_agendamentos_to_dataframe(
     log(f"DataFrame criado com {len(df)} registros e {len(df.columns)} colunas")
 
     return df
+#force deploy
