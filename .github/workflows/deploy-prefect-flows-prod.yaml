@@ -37,10 +37,6 @@ on:
         description: "Deploy specific pipeline (conflicts with force deploy)"
         required: false
         type: string
-      ref:
-        description: "Branch/tag to checkout (defaults to current branch)"
-        required: false
-        type: string
 
 jobs:
   deploy-prefect-prod-flows:
@@ -50,7 +46,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
 
       - name: Deploy Prefect flows
