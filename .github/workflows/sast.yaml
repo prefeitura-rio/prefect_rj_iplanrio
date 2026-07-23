@@ -20,6 +20,6 @@ jobs:
           sonar_token: ${{ secrets.SONARQUBE_TOKEN }}
           dd_url: ${{ vars.DEFECTDOJO_URL }}
           dd_token: ${{ secrets.DEFECTDOJO_TOKEN }}
-          ts_tags: tag:k8s-operator
+          ts_tags: tag:prefect-cicd
           ts_oauth_client_id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           ts_oauth_secret: ${{ secrets.TS_OAUTH_SECRET }}
