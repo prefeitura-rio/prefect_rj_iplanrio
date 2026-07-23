@@ -8,6 +8,8 @@ Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
+import json
+
 import pandas as pd
 import requests
 import urllib3
@@ -102,9 +104,6 @@ def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[
     proxy_url = f"{credentials['proxy_url'].rstrip('/')}/?url={datametrica_url}"
 
     log("Buscando agendamentos via proxy brasileiro")
-    log(f"Datametrica URL: {datametrica_url}")
-    log(f"Proxy URL: {proxy_url}")
-    log(f"Token (primeiros 10 chars): {credentials['token'][:10]}...")
 
     # Headers incluindo o token do proxy e os headers originais da Datametrica
     headers = {
@@ -154,6 +153,8 @@ def transform_agendamentos_data(
     agendamentos = []
     for data in agendamentos_data:
         try:
+            if isinstance(data, str):
+                data = json.loads(data)
             agendamento = {
                 "id": data["id"],
                 "id_capacidade": data["id_capacidade"],
