@@ -23,8 +23,7 @@ deployments:
 
   - name: rj-crm--disparo-template-sf--staging
     version: '{{ build-image.tag }}'
-    entrypoint: 
-      pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
+    entrypoint: pipelines/rj_crm__disparo_template/flow.py:rj_crm__disparo_template_sf
     work_pool:
       name: default-pool
       work_queue_name: default
