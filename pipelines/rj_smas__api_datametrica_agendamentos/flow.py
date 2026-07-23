@@ -4,8 +4,6 @@ from iplanrio.pipelines_utils.dbt import execute_dbt_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
-from prefect.deployments import run_deployment
-# from pipelines.rj_smas__disparo_cadunico.flow import rj_smas__disparo_cadunico
 
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
     DatametricaConstants,
@@ -88,6 +86,11 @@ def rj_smas__api_datametrica_agendamentos(
     # Converter para DataFrame
     df = convert_agendamentos_to_dataframe(processed_data)
 
+    # Encerrar o flow sem erro se não houver agendamentos para a data
+    if df.empty:
+        print(f"Nenhum agendamento encontrado para a data {target_date}. Encerrando sem upload.")
+        return
+
     # Criar partições por data
     partitions_path = create_date_partitions(
         dataframe=df,
@@ -107,33 +110,3 @@ def rj_smas__api_datametrica_agendamentos(
     if materialize_after_dump:
         dbt_select = "raw_cadunico_agendamentos"
         execute_dbt_task(select=dbt_select, target="prod")
-    
-    print("\n\n******* Triggering cadunico dispatch flow... *******")
-
-    cadunico_params = {
-        "campaign_name": "confirma_agendamento_cadunico_prod_v2",
-        "data_extension_filename": "whatsapp_cadunico",
-        "de_columns": ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"],
-        "dataset_id": "brutos_salesforce",
-        "table_id": "disparos_efetuados",
-        "dump_mode": "append",
-        "test_mode": False,
-        "chunk_size": 1000,
-        "sleep_minutes": 1,
-        "flow_environment": "production",
-        # "query_processor_name": "skip_weekends",
-        # "days_ahead": "2",
-        "filter_dispatched_phones_or_cpfs": None,
-        "filter_duplicated_phones": False,
-        "filter_duplicated_cpfs": True,
-        "whitelist_percentage": 0,
-        "infisical_secret_path": "/crm_disparo_template",
-        "whitelist_environment": "production",
-        "query_file": "queries/confirma_agendamento_cadunico.sql",
-    }
-    # run_deployment(
-    #     name="rj-crm--disparo-template-sf/rj-crm--disparo-template-sf--prod",
-    #     parameters=cadunico_params,
-    #     timeout=0,
-    # )
-    # force deploy deploy
