@@ -207,5 +207,4 @@ def acess_api_infisical(infisical_db_connection: str = "DB_CONNECTION_STRING"):
     """
     utils.log("Acessando API do Infisical para obter credenciais do MongoDB")
     connection_string = getenv_or_action(infisical_db_connection)
-    utils.log(f"Conexão obtida do Infisical: {connection_string}")
     return connection_string

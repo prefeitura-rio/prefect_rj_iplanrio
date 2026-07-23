@@ -50,64 +50,44 @@ deployments:
 
     schedules:
     # ========================================
-    # Tabelas com schedule MENSAL (every_month)
+    # Tabelas com schedule SEMANAL (every_week)
     # ========================================
 
     # Cities - Dump mensal da collection cities
-    - interval: 2592000  # 30 dias em segundos
-      anchor_date: "2024-09-01T00:00:00"
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:00:00"
       timezone: America/Sao_Paulo
-      slug: cities-monthly
+      slug: cities-weekly
       parameters:
         table_id: cities
 
     # Drivers - Dump mensal da collection drivers
-    - interval: 2592000  # 30 dias em segundos
-      anchor_date: "2024-09-01T00:00:00"
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:10:00"
       timezone: America/Sao_Paulo
-      slug: drivers-monthly
+      slug: drivers-weekly
       parameters:
         table_id: drivers
 
     # Discounts - Dump mensal da collection discounts
-    - interval: 2592000  # 30 dias em segundos
-      anchor_date: "2024-09-01T00:00:00"
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:20:00"
       timezone: America/Sao_Paulo
-      slug: discounts-monthly
+      slug: discounts-weekly
       parameters:
         table_id: discounts
 
     # Payment Methods - Dump mensal da collection paymentmethods
-    - interval: 2592000  # 30 dias em segundos
-      anchor_date: "2024-09-01T00:00:00"
+    - interval: 604800  # 7 dias em segundos
+      anchor_date: "2024-09-01T07:30:00"
       timezone: America/Sao_Paulo
-      slug: paymentmethods-monthly
+      slug: paymentmethods-weekly
       parameters:
         table_id: paymentmethods
 
-    # Ranking Races - Dump mensal da collection rankingraces
-    - interval: 2592000  # 30 dias em segundos
-      anchor_date: "2024-09-01T00:00:00"
-      timezone: America/Sao_Paulo
-      slug: rankingraces-monthly
-      parameters:
-        table_id: rankingraces
-
-    # Metrics Driver Unoccupieds - Dump mensal da collection metricsdriverunoccupieds
-    - interval: 2592000  # 30 dias em segundos
-      anchor_date: "2024-09-01T00:00:00"
-      timezone: America/Sao_Paulo
-      slug: metricsdriverunoccupieds-monthly
-      parameters:
-        table_id: metricsdriverunoccupieds
-
-    # ========================================
-    # Tabelas com schedule SEMANAL (every_week)
-    # ========================================
-
     # Users - Dump semanal da collection users
     - interval: 604800  # 7 dias em segundos
-      anchor_date: "2024-09-02T00:00:00"
+      anchor_date: "2024-09-02T07:40:00"
       timezone: America/Sao_Paulo
       slug: users-weekly
       parameters:
@@ -119,7 +99,7 @@ deployments:
 
     # Races - Dump incremental diário da collection races
     - interval: 86400  # 1 dia em segundos
-      anchor_date: "2025-04-28T01:00:00"
+      anchor_date: "2025-04-28T07:50:00"
       timezone: America/Sao_Paulo
       slug: races-daily
       parameters:
@@ -129,10 +109,30 @@ deployments:
 
     # Passengers - Dump incremental diário da collection passengers
     - interval: 86400  # 1 dia em segundos
-      anchor_date: "2025-04-28T01:00:00"
+      anchor_date: "2025-04-28T08:00:00"
       timezone: America/Sao_Paulo
       slug: passengers-daily
       parameters:
         table_id: passengers
+        dump_mode: append
+        frequency: D
+
+    # Ranking Races - Dump mensal da collection rankingraces
+    - interval: 86400  # Executa a cada 24 horas (1 dia)
+      anchor_date: "2024-09-01T08:05:00"
+      timezone: America/Sao_Paulo
+      slug: rankingraces-daily
+      parameters:
+        table_id: rankingraces
+        dump_mode: append
+        frequency: D
+
+    # Metrics Driver Unoccupieds - Dump mensal da collection metricsdriverunoccupieds
+    - interval: 86400  # Executa a cada 24 horas (1 dia)
+      anchor_date: "2024-09-01T08:10:00"
+      timezone: America/Sao_Paulo
+      slug: metricsdriverunoccupieds-daily
+      parameters:
+        table_id: metricsdriverunoccupieds
         dump_mode: append
         frequency: D

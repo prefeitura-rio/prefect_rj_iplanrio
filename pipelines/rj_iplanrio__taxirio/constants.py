@@ -101,7 +101,7 @@ TABLE_CONFIGS = {
     ),
     "metricsdriverunoccupieds": TableConfig(
         table_id="metricsdriverunoccupieds",
-        dump_mode="overwrite",
+        dump_mode="append",
         partition_cols=["ano_particao", "mes_particao", "dia_particao"],
         use_period=True,
         frequency="D",
