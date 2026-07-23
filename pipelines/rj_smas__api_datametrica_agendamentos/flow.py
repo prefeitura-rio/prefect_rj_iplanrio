@@ -5,7 +5,6 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 from prefect.deployments import run_deployment
-# from pipelines.rj_smas__disparo_cadunico.flow import rj_smas__disparo_cadunico
 
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
     DatametricaConstants,
@@ -87,6 +86,11 @@ def rj_smas__api_datametrica_agendamentos(
 
     # Converter para DataFrame
     df = convert_agendamentos_to_dataframe(processed_data)
+
+    # Encerrar o flow sem erro se não houver agendamentos para a data
+    if df.empty:
+        print(f"Nenhum agendamento encontrado para a data {target_date}. Encerrando sem upload.")
+        return
 
     # Criar partições por data
     partitions_path = create_date_partitions(

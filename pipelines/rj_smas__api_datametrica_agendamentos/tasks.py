@@ -6,7 +6,7 @@ Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 # pylint: disable=invalid-name
 # flake8: noqa: E501
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import json
 
@@ -85,23 +85,19 @@ def get_datametrica_credentials(
 
 
 @task
-def fetch_agendamentos_from_api(credentials: Dict[str, str], date: Optional[str] = None) -> List[Dict[str, Any]]:
+def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[Dict[str, Any]]:
     """
     Busca os agendamentos da API da Datametrica usando proxy brasileiro.
 
     Args:
         credentials: Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
-        date: Data no formato YYYY-MM-DD. Se None, usa lógica padrão (dia seguinte - DEPRECATED, usar calculate_target_date).
+        date: Data no formato YYYY-MM-DD. Sempre obrigatória — use calculate_target_date() para obter a data correta.
 
     Returns:
         Lista de dicionários com os dados dos agendamentos
     """
     # Build Datametrica URL
     base_url = credentials["url"].rstrip("/")
-    if date is None:
-        from datetime import datetime, timedelta
-
-        date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     datametrica_url = f"{base_url}/{date}"
 
     # Build proxy URL
@@ -227,4 +223,4 @@ def convert_agendamentos_to_dataframe(
     log(f"DataFrame criado com {len(df)} registros e {len(df.columns)} colunas")
 
     return df
-#force deploy
+

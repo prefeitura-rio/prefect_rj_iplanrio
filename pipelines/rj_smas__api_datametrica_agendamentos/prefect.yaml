@@ -37,7 +37,7 @@ deployments:
         image_pull_policy: Always
     parameters:
       dataset_id: brutos_data_metrica
-      table_id: agendamentos_cadunico
+      table_id: cadunico_agendamentos
       dump_mode: append
       materialize_after_dump: true
       date: null
@@ -58,7 +58,7 @@ deployments:
       table_id: cadunico_agendamentos
       dump_mode: append
       materialize_after_dump: true
-      date: null  # null usa o próximo dia automaticamente
+      date: null  # null usa regra de negócio: 2 dias à frente (4 dias em quinta/sexta)
       infisical_secret_path: /api-datametrica
     schedules:
     #  - cron: "0 8 * * *"  # Diariamente às 10:00
