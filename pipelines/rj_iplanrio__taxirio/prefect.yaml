@@ -63,7 +63,7 @@ deployments:
 
     # Drivers - Dump mensal da collection drivers
     - interval: 604800  # 7 dias em segundos
-      anchor_date: "2024-09-01T07:10:00"
+      anchor_date: "2024-09-01T07:05:00"
       timezone: America/Sao_Paulo
       slug: drivers-weekly
       parameters:
@@ -71,7 +71,7 @@ deployments:
 
     # Discounts - Dump mensal da collection discounts
     - interval: 604800  # 7 dias em segundos
-      anchor_date: "2024-09-01T07:20:00"
+      anchor_date: "2024-09-01T07:10:00"
       timezone: America/Sao_Paulo
       slug: discounts-weekly
       parameters:
@@ -79,7 +79,7 @@ deployments:
 
     # Payment Methods - Dump mensal da collection paymentmethods
     - interval: 604800  # 7 dias em segundos
-      anchor_date: "2024-09-01T07:30:00"
+      anchor_date: "2024-09-01T07:15:00"
       timezone: America/Sao_Paulo
       slug: paymentmethods-weekly
       parameters:
@@ -87,7 +87,7 @@ deployments:
 
     # Users - Dump semanal da collection users
     - interval: 604800  # 7 dias em segundos
-      anchor_date: "2024-09-02T07:40:00"
+      anchor_date: "2024-09-02T07:20:00"
       timezone: America/Sao_Paulo
       slug: users-weekly
       parameters:
@@ -99,7 +99,7 @@ deployments:
 
     # Races - Dump incremental diário da collection races
     - interval: 86400  # 1 dia em segundos
-      anchor_date: "2025-04-28T07:50:00"
+      anchor_date: "2025-04-28T07:25:00"
       timezone: America/Sao_Paulo
       slug: races-daily
       parameters:
@@ -109,7 +109,7 @@ deployments:
 
     # Passengers - Dump incremental diário da collection passengers
     - interval: 86400  # 1 dia em segundos
-      anchor_date: "2025-04-28T08:00:00"
+      anchor_date: "2025-04-28T07:30:00"
       timezone: America/Sao_Paulo
       slug: passengers-daily
       parameters:
@@ -119,7 +119,7 @@ deployments:
 
     # Ranking Races - Dump mensal da collection rankingraces
     - interval: 86400  # Executa a cada 24 horas (1 dia)
-      anchor_date: "2024-09-01T08:05:00"
+      anchor_date: "2024-09-01T07:40:00"
       timezone: America/Sao_Paulo
       slug: rankingraces-daily
       parameters:
@@ -129,7 +129,7 @@ deployments:
 
     # Metrics Driver Unoccupieds - Dump mensal da collection metricsdriverunoccupieds
     - interval: 86400  # Executa a cada 24 horas (1 dia)
-      anchor_date: "2024-09-01T08:10:00"
+      anchor_date: "2024-09-01T07:45:00"
       timezone: America/Sao_Paulo
       slug: metricsdriverunoccupieds-daily
       parameters:
