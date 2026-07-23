@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from iplanrio.pipelines_utils.dbt import execute_dbt_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
@@ -76,7 +79,9 @@ def rj_smas__api_datametrica_agendamentos(
     credentials = get_datametrica_credentials(infisical_secret_path=infisical_secret_path)
 
     # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
+    today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
     target_date = date if date is not None else calculate_target_date()
+    days_ahead = (datetime.strptime(target_date, "%Y-%m-%d").date() - today_sp).days
 
     # Buscar dados da API
     raw_data = fetch_agendamentos_from_api(credentials=credentials, date=target_date)
@@ -116,7 +121,7 @@ def rj_smas__api_datametrica_agendamentos(
 
     cadunico_params = {
         "campaign_name": "confirma_agendamento_cadunico_prod_v2",
-        "query_replacements": {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
+        "query_replacements": {"days_ahead_placeholder": days_ahead, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
             "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101},
         "data_extension_filename": "whatsapp_cadunico_",
         "de_columns": ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"],
