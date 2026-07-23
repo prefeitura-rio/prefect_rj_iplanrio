@@ -7,6 +7,15 @@ on:
     paths:
       - Dockerfile
   workflow_dispatch:
+    inputs:
+      pipeline:
+        description: "Deploy specific pipeline (leave empty to rebuild all)"
+        required: false
+        type: string
+      ref:
+        description: "Branch/tag to checkout (defaults to current branch)"
+        required: false
+        type: string
 
 jobs:
   build-and-push-root-image:
@@ -15,6 +24,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
 
       - name: Build and push root image
         uses: ./.github/actions/build-and-push-root-image
@@ -30,13 +41,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
         with:
           environment: staging
-          force_deploy: "1"
+          force_deploy: ${{ github.event.inputs.pipeline == '' && '1' || '0' }}
+          pipeline: ${{ github.event.inputs.pipeline }}
           pipelines_path: ./pipelines
           prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
           ts_tags: tag:prefect-cicd
@@ -53,13 +66,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
 
       - name: Deploy Prefect flows
         uses: ./.github/actions/deploy-prefect-flows
         with:
           environment: prod
-          force_deploy: "1"
+          force_deploy: ${{ github.event.inputs.pipeline == '' && '1' || '0' }}
+          pipeline: ${{ github.event.inputs.pipeline }}
           pipelines_path: ./pipelines
           prefect_api_url: https://prefect.squirrel-regulus.ts.net/api
           ts_tags: tag:prefect-cicd
