@@ -17,6 +17,12 @@ class AgentforceConstants(Enum):
     # Dataset padrão no BigQuery (separado do SFMC para não misturar fontes)
     DATASET_ID = "brutos_salesforce_crm"
 
+    # Projeto GCP de destino
+    BQ_PROJECT_ID = "rj-escritorio-dev"
+
+    # Dataset de controle (watermarks/checkpoints)
+    CONTROL_DATASET = "agentforce_control"
+
     # Modo de ingestão padrão
     DUMP_MODE = "append"
 

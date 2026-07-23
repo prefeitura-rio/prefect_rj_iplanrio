@@ -1,9 +1,10 @@
 [project]
 name = "rj_crm__salesforce_agentforce_api"
-version = "0.1.0"
-description = "Pipeline de ingestão de dados do Salesforce CRM Agentforce via Bulk API 2.0"
+version = "0.2.0"
+description = "Pipeline Agentforce → BigQuery via Bulk API 2.0 e Data Cloud Query API"
 dependencies = [
     "prefect_rj_iplanrio",
+    "google-cloud-bigquery>=3.11.0",
     "google-cloud-storage==2.10.0",
     "prefect==3.4.9",
     "prefect-docker>=0.6.5",
@@ -12,6 +13,11 @@ dependencies = [
     "requests>=2.31.0",
     "pandas>=2.0.0",
     "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    # Conector oficial Salesforce Data Cloud (DB-API 2.0)
+    # Instale com: pip install "salesforce-datacloud-connector[pandas]"
+    # Documentação: https://pypi.org/project/salesforce-datacloud-connector/
+    "salesforce-datacloud-connector[pandas]>=1.0.0",
 ]
 
 [tool.uv.sources]

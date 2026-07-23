@@ -27,6 +27,7 @@ members = [
     "rj-crm-get-history-data",
     "rj-crm-relatorio-cvl",
     "rj-crm-run-dbt",
+    "rj-crm-salesforce-agentforce-api",
     "rj-crm-salesforce-api",
     "rj-crm-webhook-wetalkie-channel-quality-update",
     "rj-crm-webhook-wetalkie-template-category-update",
@@ -3169,6 +3170,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pyjwt"
+version = "2.13.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
+]
+
+[[package]]
 name = "pymssql"
 version = "2.3.13"
 source = { registry = "https://pypi.org/simple" }
@@ -4017,6 +4027,41 @@ requires-dist = [
     { name = "pip", specifier = ">=25.1.1" },
     { name = "prefect-dbt", specifier = ">=0.7.5" },
     { name = "prefect-rj-iplanrio", editable = "." },
+]
+
+[[package]]
+name = "rj-crm-salesforce-agentforce-api"
+version = "0.2.0"
+source = { virtual = "pipelines/rj_crm__salesforce_agentforce_api" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "pandas" },
+    { name = "pendulum" },
+    { name = "prefect" },
+    { name = "prefect-docker" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "requests" },
+    { name = "salesforce-datacloud-connector", extra = ["pandas"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.11.0" },
+    { name = "google-cloud-storage", specifier = "==2.10.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
+    { name = "pendulum", specifier = "==3.0.0" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "python-dotenv", specifier = "==1.0.1" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.31.0" },
+    { name = "salesforce-datacloud-connector", extras = ["pandas"], specifier = ">=1.0.0" },
 ]
 
 [[package]]
@@ -5018,6 +5063,27 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/29/81/4dfc17eb6ebb1aac314a3eb863c1325b907863a1b8b1382cdffcb6ac0ed9/ruamel.yaml-0.18.6.tar.gz", hash = "sha256:8b27e6a217e786c6fbe5634d8f3f11bc63e0f80f6a5890f28863d9c45aac311b", size = 143362, upload-time = "2024-02-07T06:47:20.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/73/67/8ece580cc363331d9a53055130f86b096bf16e38156e33b1d3014fffda6b/ruamel.yaml-0.18.6-py3-none-any.whl", hash = "sha256:57b53ba33def16c4f3d807c0ccbc00f8a6081827e81ba2491691b76882d0c636", size = 117761, upload-time = "2024-02-07T06:47:14.898Z" },
+]
+
+[[package]]
+name = "salesforce-datacloud-connector"
+version = "2.0.0b1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "pyjwt" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4c/bb/0e0cb0347ac607707d5ca7111ce295ae81ed74a54040ef4f26707b4f3815/salesforce_datacloud_connector-2.0.0b1.tar.gz", hash = "sha256:6bb5bdeed9861fc5c32bf8a3d62b537e6bc581ab371c71162e3e4f152908bc4e", size = 173467, upload-time = "2026-06-02T22:16:11.901Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/bd/bc42dd75ecb38dcbdedab807bb72a8fee73938987e05994c9cc36f4daf13/salesforce_datacloud_connector-2.0.0b1-py3-none-any.whl", hash = "sha256:24f0b88a68074cb29b3e8f41df4360f42c901160dca0f16930b86182fccec603", size = 30065, upload-time = "2026-06-02T22:16:10.77Z" },
+]
+
+[package.optional-dependencies]
+pandas = [
+    { name = "pandas" },
+    { name = "pyarrow" },
 ]
 
 [[package]]

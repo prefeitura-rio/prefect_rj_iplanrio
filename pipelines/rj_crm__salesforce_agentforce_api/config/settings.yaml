@@ -1,0 +1,403 @@
+# Configuração das tabelas da pipeline Agentforce → BigQuery
+# Cada entrada define uma tabela source → target com parâmetros de extração.
+#
+# Campos:
+#   name          : identificador interno (snake_case)
+#   source        : 'data_cloud' ou 'bulk_api'
+#   dmo           : nome do DMO/DLO no Data Cloud (para source=data_cloud)
+#   query         : template de query (use {watermark} para substituição)
+#   target_table  : tabela destino no BigQuery
+#   write_mode    : 'append', 'replace' ou 'merge'
+#   primary_key   : campo de deduplicação (obrigatório para write_mode=merge)
+#   partition_by  : campo de particionamento
+#   watermark_col : campo usado como watermark para filtro incremental
+#   phase         : fase a que pertence (1, 2a, 2b, 3, 4)
+#   is_optional   : se true, falha vira warning (não aborta o flow)
+
+bq:
+  project_id: "rj-escritorio-dev"       # substituir pelo projeto real
+  dataset_id: "brutos_salesforce_crm"
+  control_dataset: "agentforce_control"
+  staging_dataset: "brutos_salesforce_crm"
+
+salesforce:
+  api_version: "v59.0"
+  poll_interval_seconds: 10
+  max_wait_seconds: 900
+
+schedule:
+  cron: "0 3 * * *"          # 03:00 UTC diário
+  timezone: "America/Sao_Paulo"
+
+tables:
+
+  # ---------------------------------------------------------------------------
+  # Fase 1 — STDM (Data Cloud DMOs)
+  # ---------------------------------------------------------------------------
+
+  - name: ai_agent_session
+    phase: 1
+    source: data_cloud
+    dmo: AiAgentSession__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__Name__c,
+        ssot__AgentType__c,
+        ssot__StartTime__c,
+        ssot__EndTime__c,
+        ssot__Status__c,
+        ssot__ChannelType__c,
+        ssot__OwnerId__c,
+        ssot__CreatedDate__c,
+        ssot__LastModifiedDate__c
+      FROM AiAgentSession__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: ai_agent_session
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: false
+
+  - name: ai_agent_interaction
+    phase: 1
+    source: data_cloud
+    dmo: AiAgentInteraction__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__SessionId__c,
+        ssot__InteractionType__c,
+        ssot__StartTime__c,
+        ssot__EndTime__c,
+        ssot__Status__c,
+        ssot__CreatedDate__c
+      FROM AiAgentInteraction__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: ai_agent_interaction
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: false
+
+  - name: ai_agent_interaction_step
+    phase: 1
+    source: data_cloud
+    dmo: AiAgentInteractionStep__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__InteractionId__c,
+        ssot__StepType__c,
+        ssot__StepName__c,
+        ssot__StartTime__c,
+        ssot__DurationMs__c,
+        ssot__Status__c,
+        ssot__CreatedDate__c
+      FROM AiAgentInteractionStep__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: ai_agent_interaction_step
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: false
+
+  - name: ai_agent_interaction_message
+    phase: 1
+    source: data_cloud
+    dmo: AiAgentInteractionMessage__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__InteractionId__c,
+        ssot__MessageType__c,
+        ssot__Content__c,
+        ssot__CreatedDate__c
+      FROM AiAgentInteractionMessage__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: ai_agent_interaction_message
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: false
+
+  - name: ai_agent_interaction_participant
+    phase: 1
+    source: data_cloud
+    dmo: AiAgentInteractionParticipant__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__InteractionId__c,
+        ssot__ParticipantType__c,
+        ssot__ParticipantId__c,
+        ssot__CreatedDate__c
+      FROM AiAgentInteractionParticipant__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: ai_agent_interaction_participant
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: false
+
+  # ---------------------------------------------------------------------------
+  # Fase 2a — Messaging (Bulk API — objetos padrão CRM)
+  # ---------------------------------------------------------------------------
+
+  - name: messaging_session
+    phase: "2a"
+    source: bulk_api
+    query: >
+      SELECT Id, Status, StartTime, EndTime, MessagingChannel,
+             Origin, CreatedDate, LastModifiedDate
+      FROM MessagingSession
+      WHERE LastModifiedDate >= {watermark}
+    target_table: messaging_session
+    write_mode: append
+    primary_key: Id
+    partition_by: data_particao
+    watermark_col: LastModifiedDate
+    is_optional: true
+
+  - name: conversation_entry
+    phase: "2a"
+    source: data_cloud
+    dmo: ConversationEntry__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__ConversationId__c,
+        ssot__ActorType__c,
+        ssot__EntryType__c,
+        ssot__Message__c,
+        ssot__EntryPayload__c,
+        ssot__CreatedDate__c
+      FROM ConversationEntry__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: conversation_entry
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: true
+
+  # ---------------------------------------------------------------------------
+  # Fase 2b — MCE (Data Cloud DMOs — opcional)
+  # ---------------------------------------------------------------------------
+
+  - name: mce_sent
+    phase: "2b"
+    source: data_cloud
+    dmo: MCE_Sent__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c,
+             ssot__EventDate__c, ssot__CreatedDate__c
+      FROM MCE_Sent__dlm
+      WHERE ssot__EventDate__c >= '{watermark}'
+    target_table: mce_sent
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__EventDate__c
+    is_optional: true
+
+  - name: mce_open
+    phase: "2b"
+    source: data_cloud
+    dmo: MCE_Open__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c,
+             ssot__EventDate__c, ssot__CreatedDate__c
+      FROM MCE_Open__dlm
+      WHERE ssot__EventDate__c >= '{watermark}'
+    target_table: mce_open
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__EventDate__c
+    is_optional: true
+
+  - name: mce_click
+    phase: "2b"
+    source: data_cloud
+    dmo: MCE_Click__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c,
+             ssot__LinkUrl__c, ssot__EventDate__c, ssot__CreatedDate__c
+      FROM MCE_Click__dlm
+      WHERE ssot__EventDate__c >= '{watermark}'
+    target_table: mce_click
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__EventDate__c
+    is_optional: true
+
+  - name: mce_bounce
+    phase: "2b"
+    source: data_cloud
+    dmo: MCE_Bounce__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c,
+             ssot__BounceCategory__c, ssot__EventDate__c, ssot__CreatedDate__c
+      FROM MCE_Bounce__dlm
+      WHERE ssot__EventDate__c >= '{watermark}'
+    target_table: mce_bounce
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__EventDate__c
+    is_optional: true
+
+  - name: mce_unsub
+    phase: "2b"
+    source: data_cloud
+    dmo: MCE_Unsub__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c,
+             ssot__EventDate__c, ssot__CreatedDate__c
+      FROM MCE_Unsub__dlm
+      WHERE ssot__EventDate__c >= '{watermark}'
+    target_table: mce_unsub
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__EventDate__c
+    is_optional: true
+
+  - name: mce_subscriber
+    phase: "2b"
+    source: data_cloud
+    dmo: MCE_Subscriber__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__SubscriberKey__c, ssot__EmailAddress__c,
+             ssot__Status__c, ssot__CreatedDate__c
+      FROM MCE_Subscriber__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: mce_subscriber
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: true
+
+  # ---------------------------------------------------------------------------
+  # Fase 3 — Platform Tracing (chunked — GRANDES VOLUMES)
+  # ---------------------------------------------------------------------------
+
+  - name: telemetry_trace_span
+    phase: 3
+    source: data_cloud_chunked
+    dmo: TelemetryTraceSpan__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__TraceId__c,
+        ssot__SpanId__c,
+        ssot__ParentSpanId__c,
+        ssot__SpanName__c,
+        ssot__SpanKind__c,
+        ssot__StartTimeNs__c,
+        ssot__EndTimeNs__c,
+        ssot__DurationNs__c,
+        ssot__Status__c,
+        ssot__ServiceName__c,
+        ssot__CreatedDate__c
+      FROM TelemetryTraceSpan__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: telemetry_trace_span
+    staging_table: telemetry_trace_span_staging
+    write_mode: merge
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    duration_ns_columns:
+      - duration_ns
+      - start_time_ns  # estes são convertidos para ms após normalização
+      - end_time_ns
+    chunk_size: 50000
+    is_optional: true
+    expurgo_days: 365
+
+  # ---------------------------------------------------------------------------
+  # Fase 4 — GenAI Audit (Data Cloud DMOs — opcional)
+  # ---------------------------------------------------------------------------
+
+  - name: genai_gateway_request
+    phase: 4
+    source: data_cloud
+    dmo: GenAIGatewayRequest__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__Model__c,
+        ssot__RequestTokens__c,
+        ssot__ResponseTokens__c,
+        ssot__LatencyMs__c,
+        ssot__Status__c,
+        ssot__CreatedDate__c
+      FROM GenAIGatewayRequest__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: genai_gateway_request
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: true
+
+  - name: genai_generation
+    phase: 4
+    source: data_cloud
+    dmo: GenAIGeneration__dlm
+    query: >
+      SELECT
+        ssot__Id__c,
+        ssot__RequestId__c,
+        ssot__GeneratedText__c,
+        ssot__FinishReason__c,
+        ssot__CreatedDate__c
+      FROM GenAIGeneration__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: genai_generation
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: true
+
+  - name: genai_quality
+    phase: 4
+    source: data_cloud
+    dmo: GenAIQuality__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__GenerationId__c, ssot__QualityScore__c,
+             ssot__QualityType__c, ssot__CreatedDate__c
+      FROM GenAIQuality__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: genai_quality
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: true
+
+  - name: genai_feedback
+    phase: 4
+    source: data_cloud
+    dmo: GenAIFeedback__dlm
+    query: >
+      SELECT ssot__Id__c, ssot__GenerationId__c, ssot__FeedbackType__c,
+             ssot__Rating__c, ssot__Comment__c, ssot__CreatedDate__c
+      FROM GenAIFeedback__dlm
+      WHERE ssot__CreatedDate__c >= '{watermark}'
+    target_table: genai_feedback
+    write_mode: append
+    primary_key: id
+    partition_by: data_particao
+    watermark_col: ssot__CreatedDate__c
+    is_optional: true
