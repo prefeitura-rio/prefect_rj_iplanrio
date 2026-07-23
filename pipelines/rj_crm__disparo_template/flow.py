@@ -403,37 +403,39 @@ def rj_crm__disparo_template_sf(
                 total_attempt_number=max_dispatch_retries + 1,
             )
 
-            # Log para BQ: schema fixo com coluna `data` em JSON para camada bronze
-            log_df = create_log_df(
-                df=current_df,
-                dispatch_date=dispatch_date,
-                campaign_name=campaign_name,
-            )
+            if not current_df.empty:
+                print(f"Sample dispatched destination: {current_df.iloc[:5].to_dict()}")
+                # Log para BQ: schema fixo com coluna `data` em JSON para camada bronze
+                log_df = create_log_df(
+                    df=current_df,
+                    dispatch_date=dispatch_date,
+                    campaign_name=campaign_name,
+                )
 
-            partitions_path = create_date_partitions(
-                dataframe=log_df,
-                partition_column="dispatch_date",
-                file_format="csv",
-                root_folder="./data_dispatch/",
-            )
+                partitions_path = create_date_partitions(
+                    dataframe=log_df,
+                    partition_column="dispatch_date",
+                    file_format="csv",
+                    root_folder="./data_dispatch/",
+                )
 
-            if not partitions_path:
-                raise ValueError("partitions_path is None - partition creation failed")
+                if not partitions_path:
+                    raise ValueError("partitions_path is None - partition creation failed")
 
-            if not os.path.exists(partitions_path):
-                raise ValueError(f"partitions_path does not exist: {partitions_path}")
+                if not os.path.exists(partitions_path):
+                    raise ValueError(f"partitions_path does not exist: {partitions_path}")
 
-            print(f"Generated partitions_path: {partitions_path}")
-            if os.path.exists(partitions_path):
-                files_in_path = []
-                for root, dirs, files in os.walk(partitions_path):  # pylint: disable=unused-variable
-                    files_in_path.extend([os.path.join(root, f) for f in files])
-                print(f"Files in partitions path: {files_in_path}")
+                print(f"Generated partitions_path: {partitions_path}")
+                if os.path.exists(partitions_path):
+                    files_in_path = []
+                    for root, dirs, files in os.walk(partitions_path):  # pylint: disable=unused-variable
+                        files_in_path.extend([os.path.join(root, f) for f in files])
+                    print(f"Files in partitions path: {files_in_path}")
 
-            create_table_and_upload_to_gcs_task(
-                data_path=partitions_path,
-                dataset_id=dataset_id,
-                table_id=table_id,
-                dump_mode=dump_mode,
-                biglake_table=False,
-            )
+                create_table_and_upload_to_gcs_task(
+                    data_path=partitions_path,
+                    dataset_id=dataset_id,
+                    table_id=table_id,
+                    dump_mode=dump_mode,
+                    biglake_table=False,
+                )
