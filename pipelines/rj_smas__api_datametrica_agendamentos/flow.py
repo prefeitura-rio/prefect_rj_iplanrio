@@ -112,13 +112,15 @@ def rj_smas__api_datametrica_agendamentos(
 
     cadunico_params = {
         "campaign_name": "confirma_agendamento_cadunico_prod_v2",
-        "data_extension_filename": "whatsapp_cadunico",
+        "query_replacements": {"days_ahead_placeholder": 2, "nome_hsm_placeholder": "confirma_agendamento_cadunico_prod_v2",
+            "intervalo_filtro_disparados": 1, "id_hsm_legado_placeholder": 101},
+        "data_extension_filename": "whatsapp_cadunico_",
         "de_columns": ["nome_sobrenome", "unidade_cras", "data", "hora", "endereco"],
         "dataset_id": "brutos_salesforce",
         "table_id": "disparos_efetuados",
         "dump_mode": "append",
         "test_mode": False,
-        "chunk_size": 1000,
+        # "chunk_size": 1000,
         "sleep_minutes": 1,
         "flow_environment": "production",
         # "query_processor_name": "skip_weekends",
@@ -129,11 +131,82 @@ def rj_smas__api_datametrica_agendamentos(
         "whitelist_percentage": 0,
         "infisical_secret_path": "/crm_disparo_template",
         "whitelist_environment": "production",
-        "query_file": "queries/confirma_agendamento_cadunico.sql",
+        "query": """WITH
+                    segmentacao_original AS (
+                        SELECT
+                            LPAD(CAST(cpf AS STRING), 11, '0') AS cpf,
+                            `rj-crm-registry.udf.VALIDATE_AND_FORMAT_CELLPHONE`(
+                                REGEXP_REPLACE(telefone, r'[^\d]', '')
+                            ) AS celular_disparo,
+                            INITCAP(
+                                IF(
+                                    ARRAY_LENGTH(SPLIT(nome_completo, ' ')) > 1,
+                                    CONCAT(
+                                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(0)],
+                                        ' ',
+                                        SPLIT(nome_completo, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome_completo, ' ')) - 1)]
+                                    ),
+                                    nome_completo
+                                )
+                            ) AS nome_sobrenome,
+                            unidade_nome AS unidade_cras,
+                            CONCAT(unidade_endereco, ' - ', unidade_bairro) AS endereco,
+                            FORMAT_DATETIME('%d/%m/%Y', CAST(data_hora AS DATETIME)) AS data,
+                            FORMAT_DATETIME('%H:%M', CAST(data_hora AS DATETIME)) AS hora
+                        FROM `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`
+                        WHERE
+                            DATE(CAST(data_hora AS DATETIME)) = DATE_ADD(
+                                CURRENT_DATE('America/Sao_Paulo'),
+                                INTERVAL CAST({days_ahead_placeholder} AS int64) DAY
+                            )
+                    ),
+
+                    filtra_disparados AS (
+                        -- verifica se esse cpf já recebeu essa mesma mensagem nos últimos x dias
+                        SELECT segmentacao_original.*
+                        FROM segmentacao_original
+                        LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
+                            ON sd.cpf = segmentacao_original.cpf
+                            AND sd.nome_hsm = '{nome_hsm_placeholder}'
+                            AND sd.envio_datahora >= DATETIME_SUB(
+                                CURRENT_DATETIME('America/Sao_Paulo'),
+                                INTERVAL {intervalo_filtro_disparados} DAY
+                            )
+                            AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
+                            AND sd.indicador_quarentena = FALSE
+                        LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado` td
+                            ON td.contato_telefone = segmentacao_original.celular_disparo
+                            AND td.id_hsm = CAST({id_hsm_legado_placeholder} AS STRING)
+                            AND td.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
+                        WHERE sd.cpf IS NULL AND td.contato_telefone IS NULL
+                    ),
+
+                    filtra_celulares_sem_whats AS (
+                        -- remove telefones em quarentena ou com qualidade inválida
+                        SELECT DISTINCT s.*
+                        FROM filtra_disparados AS s
+                        LEFT JOIN `rj-crm-registry.intermediario_rmi_telefones.int_telefone` AS tel
+                            ON s.celular_disparo = tel.telefone_numero_completo
+                        LEFT JOIN UNNEST(tel.consentimento) AS c
+                        WHERE
+                            (c.indicador_quarentena = FALSE AND tel.telefone_qualidade != 'INVALIDO')
+                            OR tel.telefone_numero_completo IS NULL
+                    )
+
+                    SELECT
+                        celular_disparo AS telefone,
+                        cpf AS SubscriberKey,
+                        cpf AS externalId,
+                        nome_sobrenome,
+                        unidade_cras,
+                        data,
+                        hora,
+                        endereco
+                    FROM filtra_celulares_sem_whats
+                    WHERE celular_disparo IS NOT NULL"""
     }
-    # run_deployment(
-    #     name="rj-crm--disparo-template-sf/rj-crm--disparo-template-sf--prod",
-    #     parameters=cadunico_params,
-    #     timeout=0,
-    # )
-    # force deploy deploy
+    run_deployment(
+        name="rj-crm--disparo-template-sf/rj-crm--disparo-template-sf--prod",
+        parameters=cadunico_params,
+        timeout=0,
+    )

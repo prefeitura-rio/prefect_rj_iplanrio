@@ -8,6 +8,8 @@ Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+import json
+
 import pandas as pd
 import requests
 import urllib3
@@ -158,6 +160,8 @@ def transform_agendamentos_data(
     agendamentos = []
     for data in agendamentos_data:
         try:
+            if isinstance(data, str):
+                data = json.loads(data)
             agendamento = {
                 "id": data["id"],
                 "id_capacidade": data["id_capacidade"],
