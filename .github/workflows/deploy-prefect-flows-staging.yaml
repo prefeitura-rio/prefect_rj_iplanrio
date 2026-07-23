@@ -37,10 +37,6 @@ on:
         description: "Deploy specific pipeline (conflicts with force deploy)"
         required: false
         type: string
-      ref:
-        description: "Branch or tag to checkout"
-        required: false
-        type: string
 
 jobs:
   deploy-prefect-staging-flows:
@@ -75,7 +71,6 @@ jobs:
         if: github.event_name != 'push' || steps.check_pr.outputs.has_open_pr == 'true'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.ref || github.ref }}
           fetch-depth: 0
 
       - name: Deploy Prefect flows
