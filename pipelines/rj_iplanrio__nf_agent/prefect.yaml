@@ -38,16 +38,17 @@ deployments:
         image_pull_policy: Always
     parameters:
       bq_input_table: "rj-nf-agent.dev_poc_cgm_osinfo.vw_despesas_recorte_teste"
-      bq_status_table: "rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento_staging"
+      bq_status_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.extracao_pagina_cache"
       pipeline_runs_table: "rj-nf-agent.dev_poc_cgm_osinfo.pipeline_runs"
-      batch_size: 20
-      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo"
+      batch_size: 500
+      output_mode: "json"
+      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/extracao_pagina"
       db_path: "/tmp/nf_pipeline_cache.db"
       gcs_bucket: "rj-nf-agent"
       workers: 200
       mode: "full"
-      requests_per_minute: 600
-      max_concurrent: 50
+      requests_per_minute: 1200
+      max_concurrent: 80
       max_retries: 3
 
   - name: rj-iplanrio--nf-agent--prod
@@ -63,14 +64,15 @@ deployments:
         image_pull_policy: Always
     parameters:
       bq_input_table: "rj-nf-agent.dev_poc_cgm_osinfo.vw_desepesas_recorte"
-      bq_status_table: "rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento"
+      bq_status_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.extracao_pagina_cache"
       pipeline_runs_table: "rj-nf-agent.dev_poc_cgm_osinfo.pipeline_runs"
-      batch_size: 1000
-      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo"
+      batch_size: 500
+      output_mode: "json"
+      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/extracao_pagina"
       db_path: "/tmp/nf_pipeline_cache.db"
       gcs_bucket: "rj-nf-agent"
       workers: 200
       mode: "full"
-      requests_per_minute: 600
-      max_concurrent: 50
+      requests_per_minute: 1200
+      max_concurrent: 80
       max_retries: 3
