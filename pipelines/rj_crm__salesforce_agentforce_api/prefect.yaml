@@ -47,81 +47,15 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:rj_crm__salesforce_agentforce_api
     work_pool:
-      name: default-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets-staging
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
       infisical_secret_path: /salesforce_crm
-    schedules:
-
-      # BotSession — sessões de conversa com o agente (1x por dia, dia anterior)
-      - cron: "0 6 * * *"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: bulk-bot-session
-        flow_run_name: bulk-bot-session
-        parameters:
-          soql: "SELECT Id, StartTime, EndTime, BotType, Status, OwnerId, CreatedDate FROM BotSession WHERE StartTime = YESTERDAY"
-          table_id: bot_session
-          dataset_id: brutos_salesforce_crm
-          dump_mode: append
-          infisical_secret_path: /salesforce_crm
-
-      # BotMessage — mensagens individuais de cada sessão (1x por dia, dia anterior)
-      - cron: "0 6 * * *"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: bulk-bot-message
-        flow_run_name: bulk-bot-message
-        parameters:
-          soql: "SELECT Id, BotSessionId, Type, Text, CreatedDate FROM BotMessage WHERE CreatedDate = YESTERDAY"
-          table_id: bot_message
-          dataset_id: brutos_salesforce_crm
-          dump_mode: append
-          infisical_secret_path: /salesforce_crm
-
-      # MessagingSession — sessões de mensageria (WhatsApp, SMS, etc.)
-      - cron: "0 6 * * *"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: bulk-messaging-session
-        flow_run_name: bulk-messaging-session
-        parameters:
-          soql: "SELECT Id, Status, StartTime, EndTime, MessagingChannel, Origin, CreatedDate FROM MessagingSession WHERE CreatedDate = YESTERDAY"
-          table_id: messaging_session
-          dataset_id: brutos_salesforce_crm
-          dump_mode: append
-          infisical_secret_path: /salesforce_crm
-
-      # ConversationEntry — entradas detalhadas da conversa (mais granular)
-      - cron: "0 6 * * *"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: bulk-conversation-entry
-        flow_run_name: bulk-conversation-entry
-        parameters:
-          soql: "SELECT Id, ConversationId, ActorType, Message, CreatedDate FROM ConversationEntry WHERE CreatedDate = YESTERDAY"
-          table_id: conversation_entry
-          dataset_id: brutos_salesforce_crm
-          dump_mode: append
-          infisical_secret_path: /salesforce_crm
-
-      # AgentWork — trabalho roteado pelo Omni-Channel ao agente
-      - cron: "0 6 * * *"
-        timezone: America/Sao_Paulo
-        active: false
-        slug: bulk-agent-work
-        flow_run_name: bulk-agent-work
-        parameters:
-          soql: "SELECT Id, AgentId, Status, WorkItemId, CreatedDate, ClosedDateTime FROM AgentWork WHERE CreatedDate = YESTERDAY"
-          table_id: agent_work
-          dataset_id: brutos_salesforce_crm
-          dump_mode: append
-          infisical_secret_path: /salesforce_crm
 
 
   # -----------------------------------------------------------------------
@@ -131,12 +65,12 @@ deployments:
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:rj_crm__salesforce_agentforce_api
     work_pool:
-      name: default-pool
+      name: k3s-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets
+        secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
       infisical_secret_path: /salesforce_crm

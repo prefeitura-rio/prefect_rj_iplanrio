@@ -120,6 +120,10 @@ def rj_crm__salesforce_agentforce_api(
     # 2. Montar DataFrame com colunas 'data' e 'data_particao'
     df = build_dataframe(records=records)
 
+    if df.empty:
+        print(f"[SF_CRM] Nenhum registro retornado para '{table_id}'. Encerrando sem upload.")
+        return
+
     # 3. Criar partições por data
     partitions_path = create_date_partitions(
         dataframe=df,
