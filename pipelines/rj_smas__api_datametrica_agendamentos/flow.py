@@ -81,6 +81,11 @@ def rj_smas__api_datametrica_agendamentos(
     # Calcular data target baseada na regra de negócio (a menos que date seja fornecido explicitamente)
     today_sp = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
     target_date = date if date is not None else calculate_target_date()
+
+    if target_date is None:
+        print("Hoje é sábado ou domingo. Encerrando flow sem processamento.")
+        return
+
     days_ahead = (datetime.strptime(target_date, "%Y-%m-%d").date() - today_sp).days
 
     # Buscar dados da API
@@ -105,18 +110,18 @@ def rj_smas__api_datametrica_agendamentos(
         root_folder=root_folder,
     )
 
-    create_table_and_upload_to_gcs_task(
+    upload_result = create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
     )
+    upload_result.result()
 
     if materialize_after_dump:
         dbt_select = "raw_cadunico_agendamentos"
         execute_dbt_task(select=dbt_select, target="prod")
-    
     print("\n\n******* Triggering cadunico dispatch flow... *******")
 
     cadunico_params = {
@@ -219,4 +224,3 @@ def rj_smas__api_datametrica_agendamentos(
         parameters=cadunico_params,
         timeout=0,
     )
-    # force deploy
