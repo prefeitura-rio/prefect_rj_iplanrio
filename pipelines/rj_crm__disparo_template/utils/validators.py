@@ -73,8 +73,9 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
             if isinstance(to_partial, str) and len(to_partial) > 8:
                 to_partial = to_partial[:8] + "****"
 
-            cpf = destination.get("cpf", "N/A")
-            log(f"Destinatário inválido - telefone: {to_partial}, cpf: {cpf}, erros: {error_msg}")
+            cpf_raw = destination.get("cpf", "N/A")
+            cpf_partial = cpf_raw[:4] + "****" if isinstance(cpf_raw, str) and len(cpf_raw) > 4 else cpf_raw
+            log(f"Destinatário inválido - telefone: {to_partial}, cpf: {cpf_partial}, erros: {error_msg}")
 
         except Exception as e:
             # Erro inesperado durante validação
@@ -287,9 +288,9 @@ def validate_campaign_name(
 
     if total == 0:
         message = f"""
-            ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm "
-            "da tabela rj-crm-registry.brutos_salesforce.jornada. "
-            "Verifique o nome da campanha e tente novamente. Encerrando o flow."
+            ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm
+            da tabela rj-crm-registry.brutos_salesforce.jornada.
+            Verifique o nome da campanha e tente novamente. Encerrando o flow.
         """
         log(message)
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
