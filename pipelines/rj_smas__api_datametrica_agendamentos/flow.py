@@ -173,6 +173,7 @@ def rj_smas__api_datametrica_agendamentos(
                                 CURRENT_DATE('America/Sao_Paulo'),
                                 INTERVAL CAST({days_ahead_placeholder} AS int64) DAY
                             )
+                            AND EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) NOT IN (1, 7)
                     ),
 
                     filtra_disparados AS (
