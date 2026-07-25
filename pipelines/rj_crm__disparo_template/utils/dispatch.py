@@ -619,7 +619,7 @@ def get_destinations(
 
     if destinations:
         print(f"Exemplo de destino antes da normalização: {destinations[0]}")
-        # Normaliza as chaves (ex: EXTERNALID -> externalId, celular_disparo -> to)
+        # Normaliza as chaves (ex: EXTERNALID -> cpf, celular_disparo -> telefone)
         destinations = [normalize_keys(d) for d in destinations]
         print(f"Exemplo de destino após a normalização: {destinations[0]}")
 
@@ -861,11 +861,15 @@ def check_flow_status(
     current_date = datetime.now(timezone("America/Sao_Paulo")).date()
 
     raw_expiration = row.get("data_limite_disparo")
-    # NULL/NaT means no expiration — the flow runs indefinitely
+    # NULL/NaT means no expiration — the flow runs indefinitely.
+    # Normalise to datetime.date so the comparison with current_date is always type-safe.
+    expiration_date = None
     try:
-        expiration_date = None if raw_expiration is None or pd.isnull(raw_expiration) else raw_expiration
+        if raw_expiration is not None and not pd.isnull(raw_expiration):
+            expiration_date = datetime.strptime(str(raw_expiration)[:10], "%Y-%m-%d").date()
     except (TypeError, ValueError):
-        expiration_date = raw_expiration
+        log(f"WARNING: data_limite_disparo value {raw_expiration!r} could not be parsed as a date. Treating as no expiration.")
+        expiration_date = None
 
     if expiration_date is not None and expiration_date < current_date:
         log(f"\n⚠️  Flow for campaign_name={campaign_name} in environment={flow_environment} has expired on {expiration_date}.")
@@ -1011,7 +1015,6 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     return failed_cpfs
     
 
-@task
 def check_campaign_success(
     billing_project_id: str,
     campaign_name: str,

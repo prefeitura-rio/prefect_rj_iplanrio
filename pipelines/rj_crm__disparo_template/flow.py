@@ -111,6 +111,7 @@ def rj_crm__disparo_template_sf(
     monitor_after_sftp: bool = True,
     monitor_check_interval_minutes: int = 5,
     monitor_max_wait_minutes: int = 40,
+    sftp_remote_path: str = "/Import/",
     debug: bool = True,
 ):
     """
@@ -161,6 +162,7 @@ def rj_crm__disparo_template_sf(
             até monitor_max_wait_minutes. Alerta no Discord se nenhum sucesso for encontrado nesse prazo.
         monitor_check_interval_minutes (int, optional): Intervalo entre checagens do monitoramento. Defaults to 5.
         monitor_max_wait_minutes (int, optional): Tempo máximo de monitoramento antes de alertar. Defaults to 40.
+        sftp_remote_path (str, optional): Diretório remoto no servidor SFTP onde o CSV será depositado. Defaults to "/Import/".
     """
 
     # force deploy
@@ -252,7 +254,7 @@ def rj_crm__disparo_template_sf(
     )
     print(f"[DEBUG] Após filtrar cpfs duplicados:\n{df.head(10).to_dict('records')}") if debug else None
     if df.empty:
-        print("No destinations found after filtering duplicate CPFs. Exiting flow execution.")
+        send_dispatch_no_destinations_found(campaign_name, test_mode)
         return
 
     # Remove telefones cujo último disparo falhou e estão em quarentena
@@ -421,6 +423,7 @@ def rj_crm__disparo_template_sf(
         send_to_sftp(
             csv_path=csv_path,
             infisical_secret_path=infisical_secret_path,
+            sftp_remote_path=sftp_remote_path,
         )
 
         print(f"CSV enviado para SFTP com {len(current_df)} destinatários na tentativa {i+1}.")
