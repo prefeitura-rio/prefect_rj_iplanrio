@@ -66,7 +66,7 @@ def add_contacts_to_whitelist(
     phone_numbers = []
     for dest_json in destinations:
         try:
-            phone = dest_json.get("to")
+            phone = dest_json.get("telefone")
             if phone:
                 phone_numbers.append(phone)
         except Exception as err:
@@ -174,7 +174,7 @@ def remove_contacts_from_whitelist(
     phone_numbers = []
     for dest in destinations:
         try:
-            phone = dest.get("to")
+            phone = dest.get("telefone")
             print(f"DEBUG: Processing destinations for removal, found phone: {phone} in destination: {dest}")
             if phone:
                 phone_numbers.append(phone)
@@ -243,10 +243,10 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
     if isinstance(destinations, pd.DataFrame):
         destinations = destinations.to_dict("records")
     
-    # TODO: quando filtramos os telefones com failed e temos retentativa, o dado chega aqui com 
-    # to: None e others: [prox_num1, prox_num2...], mas o schema exige que to seja string.
+    # TODO: quando filtramos os telefones com failed e temos retentativa, o dado chega aqui com
+    # telefone: None e others: [prox_num1, prox_num2...], mas o schema exige que telefone seja string.
     # Poderia aqui remover esses casos do payload
-    # Exemplo do dado aqui: [{'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Rodolpho ', 'CC_WT_NOME': 'Rodolpho ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Patricia ', 'CC_WT_NOME': 'Patricia ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': '5592984212629', 'externalId': '00000000055', 'vars': {'NOME': 'Patrick ', 'CC_WT_NOME': 'Patrick ', 'CC_WT_CPF_CIDADAO': '00000000055'}, 'others': ['5592984212629']}]
+    # Exemplo do dado aqui: [{'telefone': None, 'cpf': '00000000011', 'vars': {...}, 'others': ['5511984677798']}, ...]
     # como não tem failed ele não entra no retry loop
 
     # Validate destinations first
@@ -262,7 +262,7 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
 
     # Retorna o dicionário EXCLUINDO o campo 'others' de todos os destinatários na lista
     # Isso garante que a API não receba um campo que ela não conhece
-    return payload.dict(exclude={"destinations": {"__all__": {"others"}}})
+    return payload.model_dump(exclude={"destinations": {"__all__": {"others"}}})
 
 
 @task
@@ -333,8 +333,8 @@ def create_dispatch_dfr(
             "dispatch_date": dispatch_date,
             "campaignName": campaign_name,
             "costCenterId": cost_center_id,
-            "to": destination.to,
-            "externalId": destination.externalId,  # Now mandatory
+            "telefone": destination.telefone,
+            "cpf": destination.cpf,
             "vars": destination.vars,
         }
         data.append(row)
@@ -346,19 +346,19 @@ def create_dispatch_dfr(
             "dispatch_date",
             "campaignName",
             "costCenterId",
-            "to",
-            "externalId",
+            "telefone",
+            "cpf",
             "vars",
         ]
     ]
 
     log(f"DataFrame created with {len(dfr)} validated records")
-    log("All records have mandatory externalId field populated")
+    log("All records have mandatory cpf field populated")
 
-    # Validate that no externalId is None (should not happen with our validation)
-    null_external_ids = dfr["externalId"].isnull().sum()
-    if null_external_ids > 0:
-        log(f"WARNING: Found {null_external_ids} records with null externalId after validation")
+    # Validate that no cpf is None (should not happen with our validation)
+    null_cpfs = dfr["cpf"].isnull().sum()
+    if null_cpfs > 0:
+        log(f"WARNING: Found {null_cpfs} records with null cpf after validation")
 
     return dfr
 
@@ -410,7 +410,7 @@ def create_log_df(
             validated = SfDispatchRow(
                 dispatch_date=str(dispatch_date),
                 campaign_name=str(campaign_name),
-                SubscriberKey=str(row.get("SubscriberKey", "")),
+                cpf=str(row.get("SubscriberKey", "")),
                 telefone=str(row.get("telefone", "")),
             )
         except Exception as e:  # pylint: disable=broad-except
@@ -435,7 +435,7 @@ def create_log_df(
         records.append({
             "dispatch_date": validated.dispatch_date,
             "campaign_name": validated.campaign_name,
-            "SubscriberKey": validated.SubscriberKey,
+            "SubscriberKey": validated.cpf,
             "telefone": validated.telefone,
             "data": json.dumps(extra_data, ensure_ascii=False, default=str),
         })
@@ -471,18 +471,20 @@ def check_api_status(api: object) -> bool:
 
 
 @task
-def get_already_dispatched_data(billing_project_id: str) -> pd.DataFrame:
+def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days: int) -> pd.DataFrame:
     """
     Busca no BigQuery a lista de CPFs ou telefones que já tiveram um disparo
-    bem-sucedido ou em processamento hoje.
+    bem-sucedido ou em processamento hoje. Filtramos pela data de envio ou entrega
+    porque a coluna status_disparo guarda apenas o status final, e se uma pessoa leu a mensagem
+    uma semana depois ela deveria poder receber outro disparo hoje.
     """
-    query = """
-        SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo, status
-        FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-        WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo")
-          AND status IN ("PROCESSING", "SENT", "DELIVERED", "READ")
+    query = f"""
+        SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_hsm as nome_campanha, data_particao
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
+          AND (envio_datahora is not null OR entrega_datahora is not null)
     """
-    log(f"Buscando disparos já realizados hoje para evitar duplicidade:\n{query}")
+    log(f"Buscando disparos já realizados hoje e na campanha para evitar duplicidade:\n{query}")
     try:
         df = download_data_from_bigquery(
             query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
@@ -490,53 +492,69 @@ def get_already_dispatched_data(billing_project_id: str) -> pd.DataFrame:
         return df
     except Exception as err:
         log(f"Erro ao buscar disparos realizados: {err}. Retornando DataFrame vazio.", level="warning")
-        return pd.DataFrame(columns=["externalId", "celular_disparo", "status"])
+        return pd.DataFrame(columns=["cpf", "telefone", "status", "nome_campanha", "data_particao"])
+
+
+@task
+def filter_duplicated(
+    df: pd.DataFrame,
+    column: str,
+    filter_indicator: bool,
+    label: str,
+) -> pd.DataFrame:
+    """
+    Remove duplicate entries from a DataFrame based on a specified column.
+    Only executes if filter_indicator is True.
+    """
+    if df is None or df.empty:
+        return df
+
+    if filter_indicator and column in df.columns:
+        n_before = len(df)
+        df = df.drop_duplicates(subset=[column])
+        log(f"Removed {n_before - len(df)} duplicated {label}. Remaining: {len(df)}")
+    return df
 
 
 @task
 def filter_already_dispatched_phones_or_cpfs(
-    destinations: List[Dict], 
-    already_dispatched_df: pd.DataFrame, 
-    field: str = "cpf"
-) -> List[Dict]:
+    df: pd.DataFrame,
+    already_dispatched_df: pd.DataFrame,
+    current_filter: str = 'cpf'
+) -> pd.DataFrame:
     """
-    Filters out CPFs that have already been dispatched today.
-
-    Args:
-        destinations (List[Dict]): A list of destination dictionaries.
-        already_dispatched_df (pd.DataFrame): A DataFrame containing already dispatched destinations.
-        field (str): The field in the destination dict that contains the phone number.
-            Field must be "cpf" or "phone_number"
-
-    Returns:
-        List[Dict]: A list of destination dictionaries that have not yet been dispatched.
+    Filters out rows from the DataFrame where the identifier (cpf or phone) 
+    has already been dispatched today.
     """
-    if not destinations or already_dispatched_df.empty:
-        return destinations
+    if df is None or df.empty or already_dispatched_df.empty:
+        return df
 
-    if field not in ["cpf", "phone_number"]:
-        log(f"\n⚠️  Invalid field '{field}' for filtering dispatched phones. Must be 'cpf' or 'phone_number'")
-        return destinations
-
-    already_dispatched_df.rename(columns={"celular_disparo": "to"}, inplace=True)
-
-    destinations_field = "externalId" if field == "cpf" else "to"
-    already_dispatched_field = "externalId" if field == "cpf" else "to"
-
-    if already_dispatched_field not in already_dispatched_df.columns:
-        log(f"Coluna {already_dispatched_field} não encontrada nos dados de controle. Ignorando filtro.", level="warning")
-        return destinations
-
-    dispatched_set = set(already_dispatched_df[already_dispatched_field].tolist())
+    # Mapeamos o filtro informado para as colunas corretas de cada DataFrame: (col_envio, col_controle)
+    # - col_envio: nome da coluna no DataFrame de envio (df), que para CPF é 'cpf'.
+    # - col_controle: nome da coluna no DataFrame de controle (already_dispatched_df), que para CPF também é 'cpf'.
+    mapping = {
+        "cpf": ("cpf", "cpf"),
+        "SubscriberKey": ("cpf", "cpf"),
+        "telefone": ("telefone", "telefone"),
+        None: ("cpf", "cpf")
+    }
     
-    filtered_destinations = [
-        dest for dest in destinations if dest.get(destinations_field) not in dispatched_set
-    ]
+    col_envio, col_controle = mapping.get(current_filter, ("cpf", "cpf"))
+
+    if col_envio not in df.columns:
+        log(f"Coluna {col_envio} não encontrada no DataFrame de envio. Ignorando filtro.", level="warning")
+        return df
+
+    if col_controle not in already_dispatched_df.columns:
+        log(f"Coluna {col_controle} não encontrada no controle de já disparados. Ignorando filtro.", level="warning")
+        return df
+
+    n_before = len(df)
+    dispatched_set = set(already_dispatched_df[col_controle].dropna())
+    df = df[~df[col_envio].isin(dispatched_set)]
+    log(f"Removed {n_before - len(df)} already dispatched {col_envio}. Remaining: {len(df)}")
     
-    removed_count = len(destinations) - len(filtered_destinations)
-    log(f"Filtro '{field}' aplicado: {removed_count} registros removidos por já terem disparos realizados hoje.")
-    
-    return filtered_destinations
+    return df
 
 
 def normalize_keys(d: Dict) -> Dict:
@@ -545,10 +563,13 @@ def normalize_keys(d: Dict) -> Dict:
             return d
         
         mapping = {
-            "celular_disparo": "to",
-            "to": "to",
-            "externalid": "externalId",
-            "external_id": "externalId",
+            "celular_disparo": "telefone",
+            "to": "telefone",
+            "telefone": "telefone",
+            "externalid": "cpf",
+            "external_id": "cpf",
+            "externalId": "cpf",
+            "cpf": "cpf",
             "vars": "vars",
             "others": "others"
         }
@@ -604,7 +625,7 @@ def get_destinations(
 
         validated_destinations, validation_stats = validate_destinations(destinations)
         log_validation_summary(validation_stats, "get_destinations")
-        return [dest.dict() for dest in validated_destinations]
+        return [dest.model_dump() for dest in validated_destinations]
 
     return []
 
@@ -630,15 +651,15 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     duplicates_count = 0
 
     for destination in validated_destinations:
-        phone = destination.to  # Pydantic model attribute
-        external_id = destination.externalId
+        phone = destination.telefone  # Pydantic model attribute
+        cpf = destination.cpf
 
         if phone not in seen_phones:
             seen_phones.add(phone)
-            unique_destinations.append(destination.dict())  # Convert back to dict
+            unique_destinations.append(destination.model_dump())  # Convert back to dict
         else:
             duplicates_count += 1
-            log(f"Duplicate phone removed: {phone[:8]}**** (externalId: {external_id})")
+            log(f"Duplicate phone removed: {phone[:8]}**** (cpf: {cpf})")
 
     log(f"Removed {duplicates_count} duplicate phone numbers")
     log(f"Total unique destinations: {len(unique_destinations)}")
@@ -667,14 +688,14 @@ def remove_duplicate_cpfs(destinations: List[Dict]) -> List[Dict]:
     duplicates_count = 0
 
     for destination in validated_destinations:
-        cpf = destination.externalId  # Pydantic model attribute
+        cpf = destination.cpf  # Pydantic model attribute
 
         if cpf not in seen_cpfs:
             seen_cpfs.add(cpf)
-            unique_destinations.append(destination.dict())  # Convert back to dict
+            unique_destinations.append(destination.model_dump())  # Convert back to dict
         else:
             duplicates_count += 1
-            log(f"Duplicate CPF removed: {cpf[:4]}**** (phone: {destination.to})")
+            log(f"Duplicate CPF removed: {cpf[:4]}**** (phone: {destination.telefone})")
 
     log(f"Removed {duplicates_count} duplicate CPFs")
     log(f"Total unique destinations: {len(unique_destinations)}")
@@ -823,7 +844,9 @@ def check_flow_status(
     if not webhook_url:
         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
 
-    if not row.get("ativo") or row.get("ativo") not in (1, "1"):
+    ativo_raw = row.get("ativo")
+    is_ativo = str(ativo_raw).strip().lower() in ("1", "true", "yes", "sim", "ativo") if ativo_raw is not None else False
+    if not is_ativo:
         log(f"\n⚠️  Flow is not active for {row.get('nome_campanha')} in environment={flow_environment}.")
         message = f"""
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
@@ -837,9 +860,14 @@ def check_flow_status(
 
     current_date = datetime.now(timezone("America/Sao_Paulo")).date()
 
-    expiration_date = row.get("data_limite_disparo") if not pd.isnull(row.get("data_limite_disparo")) else current_date
+    raw_expiration = row.get("data_limite_disparo")
+    # NULL/NaT means no expiration — the flow runs indefinitely
+    try:
+        expiration_date = None if raw_expiration is None or pd.isnull(raw_expiration) else raw_expiration
+    except (TypeError, ValueError):
+        expiration_date = raw_expiration
 
-    if expiration_date < current_date:
+    if expiration_date is not None and expiration_date < current_date:
         log(f"\n⚠️  Flow for campaign_name={campaign_name} in environment={flow_environment} has expired on {expiration_date}.")
         message = f"""
     Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
@@ -938,7 +966,8 @@ def get_failed_phones(billing_project_id: str, campaign_name: str = None) -> set
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
-        print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        if not failed_df.empty:
+            print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_phones = set(str(x) for x in failed_df['telefone'].tolist())
         return failed_phones
     except Exception as e:
@@ -951,6 +980,7 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     """
     Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
     """
+    campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
     query = f"""
         -- Agora só teremos Salesforce como fonte
         SELECT DISTINCT cpf
@@ -958,7 +988,7 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
         WHERE indicador_quarentena = TRUE
         AND envio_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
         AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
-        AND LOWER(nome_hsm) = LOWER('{campaign_name}') if campaign_name else ''
+        {campaign_filter}
     """
     try:
         failed_df = download_data_from_bigquery(
@@ -966,7 +996,8 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
-        print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        if not failed_df.empty:
+            print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
         failed_cpfs = set(str(x) for x in failed_df['cpf'].tolist())
         print(f"DEBUG failed_cpfs {failed_cpfs}")
     except Exception as e:
@@ -1091,17 +1122,17 @@ def remove_failed_phones(
     print(f"We have on DL {len(failed_phones)} destinations with previously failed phones.")
     new_destinations = []
     for dest in original_destinations:
-        # Busca to ignorando o "case"
-        to_number = get_value_from_case_insensitive_key(dest, 'to')
+        # Busca telefone ignorando o "case"
+        to_number = get_value_from_case_insensitive_key(dest, 'telefone')
 
         # if to_number is not None and str(to_number) not in failed_phones and max_dispatch_retries==0:
         #     new_destinations.append(dest)
         if (to_number is None or str(to_number) in failed_phones) and max_dispatch_retries==0:
             pass  # Se o telefone principal falhou e não há retentativas, removemos o destino completamente
         elif str(to_number) in failed_phones and max_dispatch_retries>0:
-            # Atualiza o campo 'to' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
+            # Atualiza o campo 'telefone' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
             new_dest = dest.copy()
-            new_dest['to'] = None
+            new_dest['telefone'] = None
             print(f"DEBUG: {to_number} falhou no último disparo e foi alterado para None = {new_dest}")
             new_destinations.append(new_dest)
         else:
@@ -1124,8 +1155,8 @@ def get_retry_destinations(
 
     Exemplo de como deve estar o schema da query:
     {
-       "celular_disparo": "5521999999999",
-       "externalId": "12345678901",
+       "telefone": "5521999999999",
+       "cpf": "12345678901",
        "vars": {
          "nome_usuario": "João Silva"
        },
@@ -1147,10 +1178,10 @@ def get_retry_destinations(
 
     retry_destinations = []
     for dest in original_destinations:
-        # Busca externalId e others ignorando o "case"
-        ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
+        # Busca cpf e others ignorando o "case"
+        ext_id = get_value_from_case_insensitive_key(dest, 'cpf')
         others = get_value_from_case_insensitive_key(dest, 'others') or []
-        to_number = get_value_from_case_insensitive_key(dest, 'to')
+        to_number = get_value_from_case_insensitive_key(dest, 'telefone')
         log(f"DEBUG dest {dest}")
 
         # Condições de elegibilidade para retry: telefone faltando/inválido + retry attempt válido
@@ -1161,8 +1192,8 @@ def get_retry_destinations(
 
         if (is_ext_missing or is_failed_id or is_to_number_missing) and can_retry:
             new_dest = dest.copy()
-            # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
-            new_dest['to'] = others[attempt_number - 1]
+            # Atualiza o campo 'telefone' com o número da repescagem (tentativa 1 pega others[0])
+            new_dest['telefone'] = others[attempt_number - 1]
             log(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
         elif attempt_number == 0:
@@ -1185,7 +1216,7 @@ def save_csv_for_sftp(
 
     Se `de_columns` for informado, o CSV é restrito a 'telefone' + 'SubscriberKey' +
     `de_columns` (os campos que a Data Extension espera) — qualquer coluna de controle
-    interno do flow (ex.: 'others', 'externalId') é descartada, mesmo que a query as
+    interno do flow (ex.: 'others', 'cpf') é descartada, mesmo que a query as
     retorne. Sem `de_columns`, mantém o comportamento legado de só descartar 'others'.
 
     `csv_separator` define o delimitador do CSV (padrão ';'); algumas Data Extensions
@@ -1297,17 +1328,17 @@ def send_to_sftp(
         log("Conexão estabelecida com sucesso ao SFTP!")
         
         # Listagem do diretório inicial para debug
-        try:
-            log(f"Diretório atual (pwd): {sftp.getcwd()}")
-            log(f"Diretório de destino: {sftp_remote_path}")
-            log(f"Conteúdo do diretório inicial: {sftp.listdir('.')}")
-        except Exception as e:
-            log(f"Não foi possível listar o diretório inicial: {e}")
+        # try:
+        #     log(f"Diretório atual (pwd): {sftp.getcwd()}")
+        #     log(f"Diretório de destino: {sftp_remote_path}")
+        #     log(f"Conteúdo do diretório inicial: {sftp.listdir('.')}")
+        # except Exception as e:
+        #     log(f"Não foi possível listar o diretório inicial: {e}")
         
         if sftp_remote_path and sftp_remote_path != '/':
             try:
                 sftp.chdir(sftp_remote_path)
-                log(f"Alterado para o diretório: {sftp_remote_path}")
+                # log(f"Alterado para o diretório: {sftp_remote_path}")
             except IOError:
                 log(f"Diretório {sftp_remote_path} não encontrado. Tentando criar...")
 
@@ -1324,6 +1355,7 @@ def send_to_sftp(
         
     except Exception as e:
         log(f"Erro: {str(e)}")
+        raise
     finally:
         if ssh:
             ssh.close()

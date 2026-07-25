@@ -333,8 +333,8 @@ def _format_sample_destination(destination: dict) -> str:
 
     # Create a clean sample with only relevant fields
     sample = {
-        "to": destination.get("to", ""),
-        "externalId": destination.get("externalId", ""),
+        "telefone": destination.get("telefone", ""),
+        "cpf": destination.get("cpf", ""),
         "vars": destination.get("vars", {}),
     }
 
