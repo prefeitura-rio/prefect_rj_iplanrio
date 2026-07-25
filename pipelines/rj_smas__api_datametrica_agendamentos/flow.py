@@ -110,14 +110,13 @@ def rj_smas__api_datametrica_agendamentos(
         root_folder=root_folder,
     )
 
-    upload_result = create_table_and_upload_to_gcs_task(
+    create_table_and_upload_to_gcs_task(
         data_path=partitions_path,
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
         biglake_table=biglake_table,
     )
-    upload_result.result()
 
     if materialize_after_dump:
         dbt_select = "raw_cadunico_agendamentos"
