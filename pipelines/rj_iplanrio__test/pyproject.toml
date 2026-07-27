@@ -1,0 +1,10 @@
+[project]
+name = "rj_iplanrio__test"
+version = "0.1.0"
+description = "Pipeline test da secretaria iplanrio"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
