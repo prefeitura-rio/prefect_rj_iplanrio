@@ -24,6 +24,8 @@ def nf_processing_flow(
     max_concurrent: int = 50,
     max_retries: int = 3,
     session_id: str | None = None,
+    match_requires_pdf_name: bool = False,
+    max_pdfs: int | None = None,
 ) -> None:
     import sys
     import uuid
@@ -69,6 +71,8 @@ def nf_processing_flow(
         requests_per_minute=requests_per_minute,
         max_concurrent=max_concurrent,
         max_retries=max_retries,
+        match_requires_pdf_name=match_requires_pdf_name,
+        max_pdfs=max_pdfs,
     )
 
     finished_at = datetime.utcnow()
@@ -162,6 +166,10 @@ def nf_processing_flow(
     pending = reader.count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
+    if max_pdfs is not None and proc_after["pdfs"] >= max_pdfs:
+        print(f"[Flow] max_pdfs={max_pdfs} atingido ({proc_after['pdfs']} PDFs processados) — encerrando cadeia")
+        return
+
     batch_did_work = (pdfs_processed + pdfs_failed) > 0
     if pending > 0 and batch_did_work:
         from prefect.deployments import run_deployment  # noqa: PLC0415
@@ -183,6 +191,8 @@ def nf_processing_flow(
                 "max_concurrent": max_concurrent,
                 "max_retries": max_retries,
                 "session_id": session_id,
+                "match_requires_pdf_name": match_requires_pdf_name,
+                "max_pdfs": max_pdfs,
             },
             timeout=0,
         )
