@@ -26,6 +26,7 @@ def nf_processing_flow(
     session_id: str | None = None,
     match_requires_pdf_name: bool = False,
     max_pdfs: int | None = None,
+    force_reprocess: bool = False,
 ) -> None:
     import sys
     import uuid
@@ -73,6 +74,7 @@ def nf_processing_flow(
         max_retries=max_retries,
         match_requires_pdf_name=match_requires_pdf_name,
         max_pdfs=max_pdfs,
+        force_reprocess=force_reprocess,
     ) or {}
 
     finished_at = datetime.utcnow()
@@ -152,6 +154,8 @@ def nf_processing_flow(
                     "wall_sec_download_gcs":   timing_stats.get("wall_sec_download_gcs"),
                     "wall_sec_processamento":  timing_stats.get("wall_sec_processamento"),
                     "wall_sec_escrita":        timing_stats.get("wall_sec_escrita"),
+                    # Reprocess control
+                    "force_reprocess":          force_reprocess,
                 },
             )
 
