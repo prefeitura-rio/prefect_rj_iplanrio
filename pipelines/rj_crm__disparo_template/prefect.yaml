@@ -303,7 +303,7 @@ deployments:
             as int64);\n"
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-pgm-divida-ativa-lembrete-prod-v1
         flow_run_name: pgm-divida-ativa-lembrete
         parameters:
@@ -424,7 +424,7 @@ deployments:
             pagas\n"
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-pgm-divida-ativa-confirma-pgto-prod-v1
         flow_run_name: pgm-divida-ativa-confirma-pgto-prod-v1
         parameters:
@@ -522,7 +522,7 @@ deployments:
             from remove_optout\nwhere rn=1\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-sms-puerpera-confirma-agendamento
         flow_run_name: sms-puerpera-confirma-agendamento
         parameters:
@@ -629,7 +629,7 @@ deployments:
             final\n    where celular_disparo is not null\n"
       - cron: "0 14 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-sms-puerperas-d0
         flow_run_name: sms-puerperas-d0
         parameters:
@@ -734,7 +734,7 @@ deployments:
             \    where celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-sms-puerperas-d1-d3-d5-d10-d13-d16-d19
         flow_run_name: sms-puerperas-d1-d3-d5-d10-d13-d16-d19
         parameters:
@@ -869,7 +869,7 @@ deployments:
             AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-sms-puerperas-d7-d22
         flow_run_name: sms-puerperas-d7-d22
         parameters:
@@ -996,7 +996,7 @@ deployments:
             AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-sms-puerperas-d25-d28-d34
         flow_run_name: sms-puerperas-d25-d28-d34
         parameters:
@@ -1125,7 +1125,7 @@ deployments:
             AS others\nfrom final\nwhere celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-sms-puerperas-d40
         flow_run_name: sms-puerperas-d40
         parameters:
@@ -1722,9 +1722,9 @@ deployments:
             AS cc_wt_solicitacao,\n        canal_tratado AS cc_wt_canal,\n       \
             \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
             AS STATUS_DEMANDA\n    FROM dados_finais;\n"
-      - cron: "0 13 * * *"
+      - cron: "0 13 * * *"  
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-pgm-divida-ativa-prod
         flow_run_name: pgm-divida-ativa
         parameters:
