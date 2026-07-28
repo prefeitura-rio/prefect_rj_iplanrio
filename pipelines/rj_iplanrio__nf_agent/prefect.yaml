@@ -24,6 +24,7 @@ pull:
   - prefect.deployments.steps.set_working_directory:
       directory: /opt/prefect/prefect_rj_iplanrio
 
+# ── Deployments ────────────────────────────────────────────────────────────
 deployments:
   - name: rj-iplanrio--nf-agent--staging
     version: "{{ build-image.tag }}"
