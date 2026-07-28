@@ -146,7 +146,7 @@ def nf_processing_flow(
                     "workers": workers,
                     "requests_per_minute": requests_per_minute,
                     "max_concurrent": max_concurrent,
-                    # Per-CPU average per stage (sum of per-PDF time / PDF count)
+                    # Wall-clock average per PDF (proportional allocation for core stages)
                     "avg_sec_download_gcs":    timing_stats.get("avg_sec_download_gcs"),
                     "avg_sec_preprocess":      timing_stats.get("avg_sec_preprocess"),
                     "avg_sec_classificacao":   timing_stats.get("avg_sec_classificacao"),
