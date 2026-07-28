@@ -101,10 +101,10 @@ def nf_processing_flow(
     est_remaining_min = round(pending_pdfs * avg_sec_per_pdf / 60, 1) if avg_sec_per_pdf > 0 else None
     total_in_session = cumulative_pdfs + pdfs_processed + pdfs_failed
 
-        # Log real-time PDF-level progress via print() in process_database
-        print(
-            f"[Flow] ── Batch summary ──────────────────────\n"
-            f"[Flow]   Session:        {session_id}\n"
+    # Log real-time PDF-level progress via print() in process_database
+    print(
+        f"[Flow] ── Batch summary ──────────────────────\n"
+        f"[Flow]   Session:        {session_id}\n"
         f"[Flow]   Processed:      {pdfs_processed} PDFs / {docs_processed} docs\n"
         f"[Flow]   Failed:         {pdfs_failed} PDFs / {docs_failed} docs\n"
         f"[Flow]   Duration:       {duration_seconds / 60:.1f} min\n"
