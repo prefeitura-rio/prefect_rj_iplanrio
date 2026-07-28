@@ -143,7 +143,7 @@ def nf_processing_flow(
                     "workers": workers,
                     "requests_per_minute": requests_per_minute,
                     "max_concurrent": max_concurrent,
-                    # Per-stage timing averages (None = cache hit / not measured)
+                    # Per-CPU average per stage (sum of per-PDF time / PDF count)
                     "avg_sec_download_gcs":    timing_stats.get("avg_sec_download_gcs"),
                     "avg_sec_preprocess":      timing_stats.get("avg_sec_preprocess"),
                     "avg_sec_classificacao":   timing_stats.get("avg_sec_classificacao"),
@@ -152,7 +152,6 @@ def nf_processing_flow(
                     "avg_sec_escrita":         timing_stats.get("avg_sec_escrita"),
                     # Wall-clock (real elapsed time per stage)
                     "wall_sec_download_gcs":   timing_stats.get("wall_sec_download_gcs"),
-                    "wall_sec_processamento":  timing_stats.get("wall_sec_processamento"),
                     "wall_sec_escrita":        timing_stats.get("wall_sec_escrita"),
                     # Reprocess control
                     "force_reprocess":          force_reprocess,
