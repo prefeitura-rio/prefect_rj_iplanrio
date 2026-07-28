@@ -27,6 +27,7 @@ def nf_processing_flow(
     match_requires_pdf_name: bool = False,
     max_pdfs: int | None = None,
     force_reprocess: bool = False,
+    cumulative_pdfs: int = 0,
 ) -> None:
     import sys
     import uuid
@@ -95,9 +96,21 @@ def nf_processing_flow(
     pending_docs = pend_after["docs"] + erro_after["docs"]
     pending_pdfs = pend_after["pdfs"] + erro_after["pdfs"]
 
-    avg_sec_per_pdf  = round(duration_seconds / pdfs_processed,  2) if pdfs_processed  > 0 else 0.0
-    avg_sec_per_doc  = round(duration_seconds / docs_processed,  2) if docs_processed  > 0 else 0.0
-    est_remaining_min = round(pending_pdfs * avg_sec_per_pdf / 60, 1) if avg_sec_per_pdf > 0 else None
+    # avg_sec_per_pdf = soma das médias reais não-sobrepostas
+    # avg_sec_classificacao NÃO é incluída porque já está dentro de avg_sec_preprocess
+    _true_avg_sec_per_pdf = sum([
+        timing_stats.get("avg_sec_download_gcs") or 0,
+        timing_stats.get("avg_sec_preprocess") or 0,
+        timing_stats.get("avg_sec_extracao") or 0,
+        timing_stats.get("avg_sec_validacao_match") or 0,
+        timing_stats.get("avg_sec_escrita") or 0,
+    ])
+    avg_sec_per_pdf  = round(_true_avg_sec_per_pdf, 2) if pdfs_processed > 0 else 0.0
+    avg_sec_per_doc  = round(avg_sec_per_pdf * pdfs_processed / docs_processed, 2) if docs_processed > 0 else 0.0
+    # est_remaining_min usa throughput real (wall-clock) para estimativa de tempo restante
+    wall_sec_per_pdf = duration_seconds / pdfs_processed if pdfs_processed > 0 else 0.0
+    est_remaining_min = round(pending_pdfs * wall_sec_per_pdf / 60, 1) if wall_sec_per_pdf > 0 else None
+    total_in_session = cumulative_pdfs + pdfs_processed + pdfs_failed
 
     print(
         f"\n[Flow] ── Batch summary ──────────────────────\n"
@@ -109,6 +122,7 @@ def nf_processing_flow(
         f"[Flow]   Avg / doc:      {avg_sec_per_doc:.1f} sec\n"
         f"[Flow]   Pending:        {pending_pdfs} PDFs / {pending_docs} docs\n"
         + (f"[Flow]   Est. remaining: ~{est_remaining_min} min\n" if est_remaining_min else "")
+        + (f"[Flow]   Cumulative:     {total_in_session} PDFs this session\n" if cumulative_pdfs > 0 else "")
         + f"[Flow] ──────────────────────────────────────"
     )
 
@@ -180,9 +194,9 @@ def nf_processing_flow(
     pending = reader.count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
-    pdfs_in_this_run = pdfs_processed + pdfs_failed
-    if max_pdfs is not None and pdfs_in_this_run >= max_pdfs:
-        print(f"[Flow] max_pdfs={max_pdfs} atingido nesta run ({pdfs_in_this_run} PDFs) — encerrando cadeia")
+    total_in_session = cumulative_pdfs + pdfs_processed + pdfs_failed
+    if max_pdfs is not None and total_in_session >= max_pdfs:
+        print(f"[Flow] max_pdfs={max_pdfs} atingido na sessão ({total_in_session} PDFs) — encerrando cadeia")
         return
 
     batch_did_work = (pdfs_processed + pdfs_failed) > 0
@@ -208,6 +222,7 @@ def nf_processing_flow(
                 "session_id": session_id,
                 "match_requires_pdf_name": match_requires_pdf_name,
                 "max_pdfs": max_pdfs,
+                "cumulative_pdfs": cumulative_pdfs + pdfs_processed + pdfs_failed,
             },
             timeout=0,
         )

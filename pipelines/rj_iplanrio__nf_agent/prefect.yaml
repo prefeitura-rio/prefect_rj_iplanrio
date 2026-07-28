@@ -46,8 +46,8 @@ deployments:
       gcs_bucket: "rj-nf-agent"
       workers: 200
       mode: "full"
-      requests_per_minute: 1200
-      max_concurrent: 80
+      requests_per_minute: 600
+      max_concurrent: 50
       max_retries: 3
       force_reprocess: false
 
@@ -72,7 +72,7 @@ deployments:
       gcs_bucket: "rj-nf-agent"
       workers: 200
       mode: "full"
-      requests_per_minute: 1200
-      max_concurrent: 80
+      requests_per_minute: 600
+      max_concurrent: 50
       max_retries: 3
       force_reprocess: false
