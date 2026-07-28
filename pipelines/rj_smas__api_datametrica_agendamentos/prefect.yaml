@@ -61,11 +61,8 @@ deployments:
       date: null  # null usa regra de negócio: 2 dias à frente (4 dias em quinta/sexta)
       infisical_secret_path: /api-datametrica
     schedules:
-    #  - cron: "0 8 * * *"  # Diariamente às 10:00
-    #    timezone: America/Sao_Paulo
-      - interval: 86400
-        anchor_date: "2021-01-01T11:00:00"
-        timezone: America/Sao_Paulo
+      - cron: "0 12 * * 1-5"
+        timezone: UTC
         active: true
         slug: daily-atualizacao-api-datametrica-agend-cadunico
         flow_run_name: atualizacao-api-datametrica-agend-cadunico
