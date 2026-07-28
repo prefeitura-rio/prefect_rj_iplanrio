@@ -59,7 +59,7 @@ def nf_processing_flow(
 
     started_at = datetime.utcnow()
 
-    _impl.fn(
+    timing_stats = _impl.fn(
         bq_input_table=bq_input_table,
         bq_status_table=bq_status_table,
         batch_size=batch_size,
@@ -73,7 +73,7 @@ def nf_processing_flow(
         max_retries=max_retries,
         match_requires_pdf_name=match_requires_pdf_name,
         max_pdfs=max_pdfs,
-    )
+    ) or {}
 
     finished_at = datetime.utcnow()
     duration_seconds = (finished_at - started_at).total_seconds()
@@ -141,6 +141,13 @@ def nf_processing_flow(
                     "workers": workers,
                     "requests_per_minute": requests_per_minute,
                     "max_concurrent": max_concurrent,
+                    # Per-stage timing averages (None = cache hit / not measured)
+                    "avg_sec_download_gcs":    timing_stats.get("avg_sec_download_gcs"),
+                    "avg_sec_preprocess":      timing_stats.get("avg_sec_preprocess"),
+                    "avg_sec_classificacao":   timing_stats.get("avg_sec_classificacao"),
+                    "avg_sec_extracao":        timing_stats.get("avg_sec_extracao"),
+                    "avg_sec_validacao_match": timing_stats.get("avg_sec_validacao_match"),
+                    "avg_sec_escrita":         timing_stats.get("avg_sec_escrita"),
                 },
             )
 
