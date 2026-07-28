@@ -76,22 +76,25 @@ def nf_processing_flow(
     docs_processed = timing_stats.get("_n_docs_ok", 0) or 0
     docs_failed    = timing_stats.get("_n_docs_fail", 0) or 0
 
-    # ── Session-scoped pending ────────────────────────────────────────
+    # ── Session-scoped pending (only when max_pdfs defines a session limit) ──
     total_in_session = cumulative_pdfs + pdfs_processed + pdfs_failed
     if max_pdfs is not None:
         pending_in_session_pdfs = max(0, max_pdfs - total_in_session)
         pending_in_session_docs = pending_in_session_pdfs  # estimate (exact docs unknown)
     else:
-        # No session cap — fall back to BQ query
-        reader = BQInputReader()
-        _by_status = reader.count_by_status(bq_input_table, bq_status_table)
-        pending_in_session_pdfs = _by_status.get("pendente", {}).get("pdfs", 0)
-        pending_in_session_docs = _by_status.get("pendente", {}).get("docs", 0)
+        pending_in_session_pdfs = None
+        pending_in_session_docs = None
 
     avg_sec_per_pdf  = round(duration_seconds / pdfs_processed, 2) if pdfs_processed > 0 else 0.0
     avg_sec_per_doc  = round(duration_seconds / docs_processed, 2) if docs_processed > 0 else 0.0
-    est_remaining_min = round(pending_in_session_pdfs * avg_sec_per_pdf / 60, 1) if (avg_sec_per_pdf > 0 and pending_in_session_pdfs > 0) else None
+    est_remaining_min = round(pending_in_session_pdfs * avg_sec_per_pdf / 60, 1) if (avg_sec_per_pdf > 0 and pending_in_session_pdfs and pending_in_session_pdfs > 0) else None
 
+    _pending_line = ""
+    if pending_in_session_pdfs is not None:
+        _pending_line = (
+            f"[Flow]   Pending in session: {pending_in_session_pdfs} PDFs / {pending_in_session_docs} docs\n"
+            + (f"[Flow]   Est. remaining: ~{est_remaining_min} min\n" if est_remaining_min else "")
+        )
     print(
         f"[Flow] ── Batch summary ──────────────────────\n"
         f"[Flow]   Session:        {session_id}\n"
@@ -100,9 +103,8 @@ def nf_processing_flow(
         f"[Flow]   Duration:       {duration_seconds / 60:.1f} min\n"
         f"[Flow]   Avg / PDF:      {avg_sec_per_pdf:.1f} sec\n"
         f"[Flow]   Avg / doc:      {avg_sec_per_doc:.1f} sec\n"
-        f"[Flow]   Pending in session: {pending_in_session_pdfs} PDFs / {pending_in_session_docs} docs\n"
-        + (f"[Flow]   Est. remaining: ~{est_remaining_min} min\n" if est_remaining_min else "")
-        + (f"[Flow]   Cumulative:     {total_in_session} PDFs this session\n" if cumulative_pdfs > 0 else "")
+        + _pending_line
+        + f"[Flow]   Cumulative:     {total_in_session} / {max_pdfs if max_pdfs else '∞'} PDFs\n"
         + f"[Flow] ──────────────────────────────────────"
     )
 
@@ -129,8 +131,8 @@ def nf_processing_flow(
                     "docs_processed": docs_processed,
                     "pdfs_failed": pdfs_failed,
                     "docs_failed": docs_failed,
-                    "pending_pdfs": pending_in_session_pdfs,
-                    "pending_docs": pending_in_session_docs,
+                    "pending_pdfs": pending_in_session_pdfs or 0,
+                    "pending_docs": pending_in_session_docs or 0,
                     "avg_sec_per_pdf": avg_sec_per_pdf,
                     "avg_sec_per_doc": avg_sec_per_doc,
                     "batch_size": batch_size,
