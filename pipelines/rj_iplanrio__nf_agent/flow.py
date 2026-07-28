@@ -150,11 +150,11 @@ def nf_processing_flow(
                     "wall_sec_download_gcs":   timing_stats.get("wall_sec_download_gcs"),
                     "wall_sec_core":           timing_stats.get("wall_sec_core"),
                     "wall_sec_escrita":        timing_stats.get("wall_sec_escrita"),
-                    # Per-PDF CPU average (concrete, from individual timers)
-                    "avg_cpu_sec_preprocess":      timing_stats.get("avg_cpu_sec_preprocess"),
-                    "avg_cpu_sec_classificacao":   timing_stats.get("avg_cpu_sec_classificacao"),
-                    "avg_cpu_sec_extracao":        timing_stats.get("avg_cpu_sec_extracao"),
-                    "avg_cpu_sec_validacao_match": timing_stats.get("avg_cpu_sec_validacao_match"),
+                    # Per-PDF/Per-Page/Per-Doc CPU average (concrete, from individual timers)
+                    "avg_cpu_sec_preprocess_por_pdf":         timing_stats.get("avg_cpu_sec_preprocess_por_pdf"),
+                    "avg_cpu_sec_classificacao_por_pagina":   timing_stats.get("avg_cpu_sec_classificacao_por_pagina"),
+                    "avg_cpu_sec_extracao_por_declaracao":    timing_stats.get("avg_cpu_sec_extracao_por_declaracao"),
+                    "avg_cpu_sec_validacao_por_pdf":           timing_stats.get("avg_cpu_sec_validacao_por_pdf"),
                     # Reprocess control
                     "force_reprocess":          force_reprocess,
                 },
