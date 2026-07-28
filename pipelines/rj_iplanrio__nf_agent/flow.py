@@ -27,7 +27,7 @@ def nf_processing_flow(
     match_requires_pdf_name: bool = False,
     max_pdfs: int | None = None,
     force_reprocess: bool = False,
-    _session_pdfs_done: int = 0,
+    session_pdfs_done: int = 0,
 ) -> None:
     import sys
     import uuid
@@ -77,7 +77,7 @@ def nf_processing_flow(
     docs_failed    = timing_stats.get("_n_docs_fail", 0) or 0
 
     # ── Session-scoped pending (only when max_pdfs defines a session limit) ──
-    total_in_session = _session_pdfs_done + pdfs_processed + pdfs_failed
+    total_in_session = session_pdfs_done + pdfs_processed + pdfs_failed
     if max_pdfs is not None:
         pending_in_session_pdfs = max(0, max_pdfs - total_in_session)
         pending_in_session_docs = pending_in_session_pdfs  # estimate (exact docs unknown)
@@ -175,7 +175,7 @@ def nf_processing_flow(
     pending = BQInputReader().count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
-    total_in_session = _session_pdfs_done + pdfs_processed + pdfs_failed
+    total_in_session = session_pdfs_done + pdfs_processed + pdfs_failed
     if max_pdfs is not None and total_in_session >= max_pdfs:
         print(f"[Flow] max_pdfs={max_pdfs} atingido na sessão ({total_in_session} PDFs) — encerrando cadeia")
         return
@@ -203,7 +203,7 @@ def nf_processing_flow(
                 "session_id": session_id,
                 "match_requires_pdf_name": match_requires_pdf_name,
                 "max_pdfs": max_pdfs,
-                "_session_pdfs_done": _session_pdfs_done + pdfs_processed + pdfs_failed,
+                "session_pdfs_done": session_pdfs_done + pdfs_processed + pdfs_failed,
             },
             timeout=0,
         )
