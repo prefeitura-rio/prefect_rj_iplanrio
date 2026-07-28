@@ -148,6 +148,10 @@ def nf_processing_flow(
                     "avg_sec_extracao":        timing_stats.get("avg_sec_extracao"),
                     "avg_sec_validacao_match": timing_stats.get("avg_sec_validacao_match"),
                     "avg_sec_escrita":         timing_stats.get("avg_sec_escrita"),
+                    # Wall-clock (real elapsed time per stage)
+                    "wall_sec_download_gcs":   timing_stats.get("wall_sec_download_gcs"),
+                    "wall_sec_processamento":  timing_stats.get("wall_sec_processamento"),
+                    "wall_sec_escrita":        timing_stats.get("wall_sec_escrita"),
                 },
             )
 
