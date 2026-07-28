@@ -96,20 +96,9 @@ def nf_processing_flow(
     pending_docs = pend_after["docs"] + erro_after["docs"]
     pending_pdfs = pend_after["pdfs"] + erro_after["pdfs"]
 
-    # avg_sec_per_pdf = soma das médias reais não-sobrepostas
-    # avg_sec_classificacao NÃO é incluída porque já está dentro de avg_sec_preprocess
-    _true_avg_sec_per_pdf = sum([
-        timing_stats.get("avg_sec_download_gcs") or 0,
-        timing_stats.get("avg_sec_preprocess") or 0,
-        timing_stats.get("avg_sec_extracao") or 0,
-        timing_stats.get("avg_sec_validacao_match") or 0,
-        timing_stats.get("avg_sec_escrita") or 0,
-    ])
-    avg_sec_per_pdf  = round(_true_avg_sec_per_pdf, 2) if pdfs_processed > 0 else 0.0
-    avg_sec_per_doc  = round(avg_sec_per_pdf * pdfs_processed / docs_processed, 2) if docs_processed > 0 else 0.0
-    # est_remaining_min usa throughput real (wall-clock) para estimativa de tempo restante
-    wall_sec_per_pdf = duration_seconds / pdfs_processed if pdfs_processed > 0 else 0.0
-    est_remaining_min = round(pending_pdfs * wall_sec_per_pdf / 60, 1) if wall_sec_per_pdf > 0 else None
+    avg_sec_per_pdf  = round(duration_seconds / pdfs_processed,  2) if pdfs_processed  > 0 else 0.0
+    avg_sec_per_doc  = round(duration_seconds / docs_processed,  2) if docs_processed  > 0 else 0.0
+    est_remaining_min = round(pending_pdfs * avg_sec_per_pdf / 60, 1) if avg_sec_per_pdf > 0 else None
     total_in_session = cumulative_pdfs + pdfs_processed + pdfs_failed
 
     print(
