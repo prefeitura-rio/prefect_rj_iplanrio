@@ -1134,6 +1134,7 @@ deployments:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
             id_hsm_anterior_legado_placeholder: 610
+            id_hsm_legado_placeholder: 598
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 1
@@ -1721,9 +1722,9 @@ deployments:
             AS cc_wt_solicitacao,\n        canal_tratado AS cc_wt_canal,\n       \
             \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
             AS STATUS_DEMANDA\n    FROM dados_finais;\n"
-      - cron: "0 13 * * *"
+      - cron: "0 13 * * *"  
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-pgm-divida-ativa-prod
         flow_run_name: pgm-divida-ativa
         parameters:
@@ -2851,7 +2852,7 @@ deployments:
             WHERE celular_disparo IS NOT NULL\n"
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-smas-cartaopic-evento
         flow_run_name: smas-cartaopic-evento
         parameters:
