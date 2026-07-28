@@ -29,7 +29,7 @@ schedules:
   # Daily schedule para flow pgm-divida-ativa-prod
   - cron: "0 13 * * *"
     timezone: America/Sao_Paulo
-    active: true
+    active: false
     slug: daily-pgm-divida-ativa-prod
     flow_run_name: pgm-divida-ativa
     parameters:
@@ -436,7 +436,7 @@ schedules:
   # TODO: aponta pra fantasma dev (sem acesso ao rj-iplanrio) - trocar de volta pra queries/ antes de ir pra producao
   - cron: "0 12 * * *"
     timezone: America/Sao_Paulo
-    active: true
+    active: false
     slug: daily-smas-cartaopic-evento
     flow_run_name: smas-cartaopic-evento
     parameters:
