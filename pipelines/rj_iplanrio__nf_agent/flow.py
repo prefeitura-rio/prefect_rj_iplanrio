@@ -173,8 +173,9 @@ def nf_processing_flow(
     pending = reader.count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
-    if max_pdfs is not None and proc_after["pdfs"] >= max_pdfs:
-        print(f"[Flow] max_pdfs={max_pdfs} atingido ({proc_after['pdfs']} PDFs processados) — encerrando cadeia")
+    pdfs_in_this_run = pdfs_processed + pdfs_failed
+    if max_pdfs is not None and pdfs_in_this_run >= max_pdfs:
+        print(f"[Flow] max_pdfs={max_pdfs} atingido nesta run ({pdfs_in_this_run} PDFs) — encerrando cadeia")
         return
 
     batch_did_work = (pdfs_processed + pdfs_failed) > 0
