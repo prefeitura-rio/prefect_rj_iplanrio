@@ -2671,6 +2671,7 @@ deployments:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
             id_hsm_anterior_legado_placeholder: 610
+            id_hsm_legado_placeholder: 598
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 1
