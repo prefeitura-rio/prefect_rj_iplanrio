@@ -48,17 +48,6 @@ def nf_processing_flow(
     else:
         print(f"[Flow] Continuing session: {session_id}")
 
-    reader = BQInputReader()
-
-    # Snapshot status counts before the batch
-    counts_before = reader.count_by_status(bq_input_table, bq_status_table)
-    proc_before = counts_before.get("processado", {"docs": 0, "pdfs": 0})
-    erro_before = counts_before.get("erro", {"docs": 0, "pdfs": 0})
-    pend_before = counts_before.get("pendente", {"docs": 0, "pdfs": 0})
-    print(f"[Flow] Before: processado={proc_before['docs']} docs/{proc_before['pdfs']} PDFs, "
-          f"erro={erro_before['docs']} docs/{erro_before['pdfs']} PDFs, "
-          f"pendente={pend_before['docs']} docs/{pend_before['pdfs']} PDFs")
-
     started_at = datetime.utcnow()
 
     timing_stats = _impl.fn(
@@ -81,27 +70,28 @@ def nf_processing_flow(
     finished_at = datetime.utcnow()
     duration_seconds = (finished_at - started_at).total_seconds()
 
-    # Snapshot status counts after the batch
-    counts_after = reader.count_by_status(bq_input_table, bq_status_table)
-    proc_after = counts_after.get("processado", {"docs": 0, "pdfs": 0})
-    erro_after = counts_after.get("erro", {"docs": 0, "pdfs": 0})
-    pend_after = counts_after.get("pendente", {"docs": 0, "pdfs": 0})
+    # ── Actual batch counts from the pipeline (not BQ table diff) ──
+    pdfs_processed = timing_stats.get("_n_pdfs_ok", 0) or 0
+    pdfs_failed    = timing_stats.get("_n_pdfs_fail", 0) or 0
+    docs_processed = timing_stats.get("_n_docs_ok", 0) or 0
+    docs_failed    = timing_stats.get("_n_docs_fail", 0) or 0
 
-    docs_processed = max(0, proc_after["docs"] - proc_before["docs"])
-    pdfs_processed = max(0, proc_after["pdfs"] - proc_before["pdfs"])
-    docs_failed    = max(0, erro_after["docs"] - erro_before["docs"])
-    pdfs_failed    = max(0, erro_after["pdfs"] - erro_before["pdfs"])
-
-    # pending = still needs processing (pendente + erro)
-    pending_docs = pend_after["docs"] + erro_after["docs"]
-    pending_pdfs = pend_after["pdfs"] + erro_after["pdfs"]
-
-    avg_sec_per_pdf  = round(duration_seconds / pdfs_processed,  2) if pdfs_processed  > 0 else 0.0
-    avg_sec_per_doc  = round(duration_seconds / docs_processed,  2) if docs_processed  > 0 else 0.0
-    est_remaining_min = round(pending_pdfs * avg_sec_per_pdf / 60, 1) if avg_sec_per_pdf > 0 else None
+    # ── Session-scoped pending ────────────────────────────────────────
     total_in_session = cumulative_pdfs + pdfs_processed + pdfs_failed
+    if max_pdfs is not None:
+        pending_in_session_pdfs = max(0, max_pdfs - total_in_session)
+        pending_in_session_docs = pending_in_session_pdfs  # estimate (exact docs unknown)
+    else:
+        # No session cap — fall back to BQ query
+        reader = BQInputReader()
+        _by_status = reader.count_by_status(bq_input_table, bq_status_table)
+        pending_in_session_pdfs = _by_status.get("pendente", {}).get("pdfs", 0)
+        pending_in_session_docs = _by_status.get("pendente", {}).get("docs", 0)
 
-    # Log real-time PDF-level progress via print() in process_database
+    avg_sec_per_pdf  = round(duration_seconds / pdfs_processed, 2) if pdfs_processed > 0 else 0.0
+    avg_sec_per_doc  = round(duration_seconds / docs_processed, 2) if docs_processed > 0 else 0.0
+    est_remaining_min = round(pending_in_session_pdfs * avg_sec_per_pdf / 60, 1) if (avg_sec_per_pdf > 0 and pending_in_session_pdfs > 0) else None
+
     print(
         f"[Flow] ── Batch summary ──────────────────────\n"
         f"[Flow]   Session:        {session_id}\n"
@@ -110,7 +100,7 @@ def nf_processing_flow(
         f"[Flow]   Duration:       {duration_seconds / 60:.1f} min\n"
         f"[Flow]   Avg / PDF:      {avg_sec_per_pdf:.1f} sec\n"
         f"[Flow]   Avg / doc:      {avg_sec_per_doc:.1f} sec\n"
-        f"[Flow]   Pending:        {pending_pdfs} PDFs / {pending_docs} docs\n"
+        f"[Flow]   Pending in session: {pending_in_session_pdfs} PDFs / {pending_in_session_docs} docs\n"
         + (f"[Flow]   Est. remaining: ~{est_remaining_min} min\n" if est_remaining_min else "")
         + (f"[Flow]   Cumulative:     {total_in_session} PDFs this session\n" if cumulative_pdfs > 0 else "")
         + f"[Flow] ──────────────────────────────────────"
@@ -139,8 +129,8 @@ def nf_processing_flow(
                     "docs_processed": docs_processed,
                     "pdfs_failed": pdfs_failed,
                     "docs_failed": docs_failed,
-                    "pending_pdfs": pending_pdfs,
-                    "pending_docs": pending_docs,
+                    "pending_pdfs": pending_in_session_pdfs,
+                    "pending_docs": pending_in_session_docs,
                     "avg_sec_per_pdf": avg_sec_per_pdf,
                     "avg_sec_per_doc": avg_sec_per_doc,
                     "batch_size": batch_size,
@@ -180,7 +170,7 @@ def nf_processing_flow(
         print("[Flow] Flow run has no deployment — skipping self-trigger check")
         return
 
-    pending = reader.count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
+    pending = BQInputReader().count_pending(bq_input_table, bq_status_table, max_retries=max_retries)
     print(f"[Flow] {pending:,} documents still pending after this batch")
 
     total_in_session = cumulative_pdfs + pdfs_processed + pdfs_failed

@@ -1,5 +1,4 @@
 name: rj_iplanrio__nf_agent
-# image built from agent-nf-validator:88067ae (flush=True fix)
 prefect-version: 3.4.3
 
 build:
