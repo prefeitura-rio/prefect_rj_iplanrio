@@ -146,16 +146,15 @@ def nf_processing_flow(
                     "workers": workers,
                     "requests_per_minute": requests_per_minute,
                     "max_concurrent": max_concurrent,
-                    # Wall-clock average per PDF (proportional allocation for core stages)
-                    "avg_sec_download_gcs":    timing_stats.get("avg_sec_download_gcs"),
-                    "avg_sec_preprocess":      timing_stats.get("avg_sec_preprocess"),
-                    "avg_sec_classificacao":   timing_stats.get("avg_sec_classificacao"),
-                    "avg_sec_extracao":        timing_stats.get("avg_sec_extracao"),
-                    "avg_sec_validacao_match": timing_stats.get("avg_sec_validacao_match"),
-                    "avg_sec_escrita":         timing_stats.get("avg_sec_escrita"),
-                    # Wall-clock (real elapsed time per stage)
+                    # Wall-clock totals (real elapsed time per stage)
                     "wall_sec_download_gcs":   timing_stats.get("wall_sec_download_gcs"),
+                    "wall_sec_core":           timing_stats.get("wall_sec_core"),
                     "wall_sec_escrita":        timing_stats.get("wall_sec_escrita"),
+                    # Per-PDF CPU average (concrete, from individual timers)
+                    "avg_cpu_sec_preprocess":      timing_stats.get("avg_cpu_sec_preprocess"),
+                    "avg_cpu_sec_classificacao":   timing_stats.get("avg_cpu_sec_classificacao"),
+                    "avg_cpu_sec_extracao":        timing_stats.get("avg_cpu_sec_extracao"),
+                    "avg_cpu_sec_validacao_match": timing_stats.get("avg_cpu_sec_validacao_match"),
                     # Reprocess control
                     "force_reprocess":          force_reprocess,
                 },
