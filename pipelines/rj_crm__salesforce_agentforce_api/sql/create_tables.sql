@@ -1,284 +1,162 @@
 -- DDL das tabelas Agentforce no BigQuery
--- Dataset: brutos_salesforce_crm
+-- Dataset alvo  : rj-escritorio-dev.brutos_salesforce_crm
+-- Dataset controle: rj-escritorio-dev.agentforce_control
 -- Particionamento: por data_particao (DATE)
--- Clustering: por id (onde aplicável)
+-- Clustering    : por id (e chaves estrangeiras onde aplicável)
+--
+-- Colunas derivadas das queries reais do Data Cloud (2026-07-27).
+-- Nomes já normalizados pelo transform.py:
+--   ssot__FooBar__c  →  foo_bar
+--   FooBar__c        →  foo_bar   (sem prefixo)
 --
 -- Execute este script UMA vez antes de iniciar a pipeline.
--- As tabelas são criadas com IF NOT EXISTS para ser idempotente.
+-- Idempotente: todas as tabelas usam CREATE TABLE IF NOT EXISTS.
 
 -- ---------------------------------------------------------------------------
--- Fase 1 — STDM
+-- Pré-requisito: criar os datasets caso não existam
+-- ---------------------------------------------------------------------------
+-- CREATE SCHEMA IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm`
+--   OPTIONS (location = 'US');
+-- CREATE SCHEMA IF NOT EXISTS `rj-escritorio-dev.agentforce_control`
+--   OPTIONS (location = 'US');
+
+-- ---------------------------------------------------------------------------
+-- Fase 1 — STDM (Data Cloud DMOs: ssot__AiAgent*__dlm)
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.ai_agent_session`
+-- Sessões do Agentforce (uma por atendimento iniciado via WhatsApp/canal)
+CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_session`
 (
-    id                   STRING,
-    name                 STRING,
-    agent_type           STRING,
-    start_time           TIMESTAMP,
-    end_time             TIMESTAMP,
-    status               STRING,
-    channel_type         STRING,
-    owner_id             STRING,
-    created_date         TIMESTAMP,
-    last_modified_date   TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
+    id                              STRING,
+    related_messaging_session_id    STRING,
+    ai_agent_channel_type           STRING,
+    ai_agent_session_end_type       STRING,
+    session_owner_id                STRING,
+    session_owner_object            STRING,
+    individual_id                   STRING,
+    previous_session_id             STRING,
+    start_timestamp                 TIMESTAMP,
+    end_timestamp                   TIMESTAMP,
+    internal_organization_id        STRING,
+    data_source_id                  STRING,
+    data_source_object_id           STRING,
+    external_source_id              STRING,
+    variable_text                   STRING,
+    _loaded_at                      TIMESTAMP,
+    data_particao                   DATE
 )
 PARTITION BY data_particao
 CLUSTER BY id
 OPTIONS (
-    description = 'Sessoes do Agentforce — F1 STDM',
+    description = 'Sessoes do Agentforce — F1 STDM (AiAgentSession__dlm)',
     partition_expiration_days = 730
 );
 
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.ai_agent_interaction`
+-- Interações dentro de uma sessão (uma por turno de conversa/tópico)
+CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_interaction`
 (
-    id                   STRING,
-    session_id           STRING,
-    interaction_type     STRING,
-    start_time           TIMESTAMP,
-    end_time             TIMESTAMP,
-    status               STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
+    id                              STRING,
+    ai_agent_session_id             STRING,
+    ai_agent_interaction_type       STRING,
+    topic_api_name                  STRING,
+    session_owner_id                STRING,
+    session_owner_object            STRING,
+    individual_id                   STRING,
+    telemetry_trace_id              STRING,
+    telemetry_trace_span_id         STRING,
+    prev_interaction_id             STRING,
+    start_timestamp                 TIMESTAMP,
+    end_timestamp                   TIMESTAMP,
+    internal_organization_id        STRING,
+    data_source_id                  STRING,
+    data_source_object_id           STRING,
+    external_source_id              STRING,
+    attribute_text                  STRING,
+    _loaded_at                      TIMESTAMP,
+    data_particao                   DATE
 )
 PARTITION BY data_particao
-CLUSTER BY id, session_id
+CLUSTER BY id, ai_agent_session_id
 OPTIONS (
-    description = 'Interacoes do Agentforce — F1 STDM',
+    description = 'Interacoes do Agentforce — F1 STDM (AiAgentInteraction__dlm)',
     partition_expiration_days = 730
 );
 
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.ai_agent_interaction_step`
+-- Steps de cada interação (chamadas LLM, guardrails, ferramentas, etc.)
+CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_interaction_step`
 (
-    id                   STRING,
-    interaction_id       STRING,
-    step_type            STRING,
-    step_name            STRING,
-    start_time           TIMESTAMP,
-    duration_ms          FLOAT64,
-    status               STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
+    id                              STRING,
+    ai_agent_interaction_id         STRING,
+    ai_agent_interaction_step_type  STRING,
+    name                            STRING,
+    telemetry_trace_span_id         STRING,
+    gen_ai_gateway_request_id       STRING,
+    gen_ai_gateway_response_id      STRING,
+    generation_id                   STRING,
+    prev_step_id                    STRING,
+    start_timestamp                 TIMESTAMP,
+    end_timestamp                   TIMESTAMP,
+    internal_organization_id        STRING,
+    data_source_id                  STRING,
+    data_source_object_id           STRING,
+    external_source_id              STRING,
+    input_value_text                STRING,
+    output_value_text               STRING,
+    pre_step_variable_text          STRING,
+    post_step_variable_text         STRING,
+    attribute_text                  STRING,
+    error_message_text              STRING,
+    sub_type                        STRING,
+    _loaded_at                      TIMESTAMP,
+    data_particao                   DATE
 )
 PARTITION BY data_particao
-CLUSTER BY id, interaction_id
+CLUSTER BY id, ai_agent_interaction_id
 OPTIONS (
-    description = 'Steps das interacoes do Agentforce — F1 STDM',
+    description = 'Steps das interacoes do Agentforce — F1 STDM (AiAgentInteractionStep__dlm)',
     partition_expiration_days = 730
 );
 
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.ai_agent_interaction_message`
+-- Mensagens trocadas em cada interação (input do usuário e output do agente)
+CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_interaction_message`
 (
-    id                   STRING,
-    interaction_id       STRING,
-    message_type         STRING,
-    content              STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
+    id                                      STRING,
+    ai_agent_interaction_id                 STRING,
+    ai_agent_session_id                     STRING,
+    ai_agent_session_participant_id         STRING,
+    ai_agent_interaction_message_type       STRING,
+    ai_agent_interaction_msg_content_type   STRING,
+    session_owner_id                        STRING,
+    individual_id                           STRING,
+    parent_message_id                       STRING,
+    content_text                            STRING,
+    message_sent_timestamp                  TIMESTAMP,
+    message_start_timestamp                 TIMESTAMP,
+    message_end_timestamp                   TIMESTAMP,
+    internal_organization_id               STRING,
+    data_source_id                          STRING,
+    data_source_object_id                   STRING,
+    external_source_id                      STRING,
+    modality                                STRING,
+    _loaded_at                              TIMESTAMP,
+    data_particao                           DATE
 )
 PARTITION BY data_particao
-CLUSTER BY id, interaction_id
+CLUSTER BY id, ai_agent_interaction_id
 OPTIONS (
-    description = 'Mensagens das interacoes do Agentforce — F1 STDM',
-    partition_expiration_days = 730
-);
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.ai_agent_interaction_participant`
-(
-    id                   STRING,
-    interaction_id       STRING,
-    participant_type     STRING,
-    participant_id       STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-CLUSTER BY id, interaction_id
-OPTIONS (
-    description = 'Participantes das interacoes do Agentforce — F1 STDM',
-    partition_expiration_days = 730
-);
-
--- ---------------------------------------------------------------------------
--- Fase 2a — Messaging
--- ---------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.messaging_session`
-(
-    id                   STRING,
-    status               STRING,
-    start_time           TIMESTAMP,
-    end_time             TIMESTAMP,
-    messaging_channel    STRING,
-    origin               STRING,
-    created_date         TIMESTAMP,
-    last_modified_date   TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-CLUSTER BY id
-OPTIONS (
-    description = 'Sessoes de mensageria (WhatsApp, SMS, etc.) — F2a',
-    partition_expiration_days = 730
-);
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.conversation_entry`
-(
-    id                   STRING,
-    conversation_id      STRING,
-    actor_type           STRING,
-    entry_type           STRING,
-    message              STRING,
-    entry_payload        JSON,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-CLUSTER BY id, conversation_id
-OPTIONS (
-    description = 'Entradas detalhadas de conversa — F2a',
+    description = 'Mensagens das interacoes do Agentforce — F1 STDM (AiAgentInteractionMessage__dlm)',
     partition_expiration_days = 730
 );
 
 -- ---------------------------------------------------------------------------
--- Fase 3 — Platform Tracing
+-- Controle: watermarks de ingestão incremental
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.telemetry_trace_span`
+CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.agentforce_control.pipeline_checkpoints`
 (
-    id                   STRING,
-    trace_id             STRING,
-    span_id              STRING,
-    parent_span_id       STRING,
-    span_name            STRING,
-    span_kind            STRING,
-    start_time_ms        FLOAT64,
-    end_time_ms          FLOAT64,
-    duration_ms          FLOAT64,
-    status               STRING,
-    service_name         STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-CLUSTER BY trace_id, span_id
-OPTIONS (
-    description = 'Telemetria de tracing do Agentforce — F3',
-    partition_expiration_days = 365
-);
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.telemetry_trace_span_staging`
-(
-    id                   STRING,
-    trace_id             STRING,
-    span_id              STRING,
-    parent_span_id       STRING,
-    span_name            STRING,
-    span_kind            STRING,
-    start_time_ms        FLOAT64,
-    end_time_ms          FLOAT64,
-    duration_ms          FLOAT64,
-    status               STRING,
-    service_name         STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-OPTIONS (
-    description = 'Staging para carga chunked dos spans — limpa apos MERGE'
-);
-
--- ---------------------------------------------------------------------------
--- Fase 4 — GenAI Audit
--- ---------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.genai_gateway_request`
-(
-    id                   STRING,
-    model                STRING,
-    request_tokens       INT64,
-    response_tokens      INT64,
-    latency_ms           FLOAT64,
-    status               STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-CLUSTER BY id
-OPTIONS (
-    description = 'Requisicoes ao gateway GenAI — F4',
-    partition_expiration_days = 730
-);
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.genai_generation`
-(
-    id                   STRING,
-    request_id           STRING,
-    generated_text       STRING,
-    finish_reason        STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-CLUSTER BY id, request_id
-OPTIONS (
-    description = 'Geracoes do modelo GenAI — F4',
-    partition_expiration_days = 730
-);
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.genai_quality`
-(
-    id                   STRING,
-    generation_id        STRING,
-    quality_score        FLOAT64,
-    quality_type         STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-OPTIONS (
-    description = 'Metricas de qualidade do GenAI — F4',
-    partition_expiration_days = 730
-);
-
-CREATE TABLE IF NOT EXISTS `brutos_salesforce_crm.genai_feedback`
-(
-    id                   STRING,
-    generation_id        STRING,
-    feedback_type        STRING,
-    rating               INT64,
-    comment              STRING,
-    created_date         TIMESTAMP,
-    _loaded_at           TIMESTAMP,
-    data_particao        DATE
-)
-PARTITION BY data_particao
-OPTIONS (
-    description = 'Feedbacks sobre respostas do GenAI — F4',
-    partition_expiration_days = 730
-);
-
--- ---------------------------------------------------------------------------
--- Controle: watermarks
--- ---------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS `agentforce_control.pipeline_checkpoints`
-(
-    table_name           STRING NOT NULL,
-    watermark            TIMESTAMP NOT NULL,
-    updated_at           TIMESTAMP NOT NULL
+    table_name      STRING NOT NULL,
+    watermark       TIMESTAMP NOT NULL,
+    updated_at      TIMESTAMP NOT NULL
 )
 OPTIONS (
     description = 'Watermarks de ingestao incremental da pipeline Agentforce'
