@@ -49,7 +49,7 @@ deployments:
   # -----------------------------------------------------------------------
   - name: rj-crm--salesforce-agentforce-api--staging
     version: '{{ build-image.tag }}'
-    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flows/full_daily.py:agentforce_full_daily
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -68,7 +68,7 @@ deployments:
   # -----------------------------------------------------------------------
   - name: rj-crm--salesforce-agentforce-api--prod
     version: '{{ get-commit-hash.stdout }}'
-    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flows/full_daily.py:agentforce_full_daily
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
     work_pool:
       name: default-pool
       work_queue_name: default
