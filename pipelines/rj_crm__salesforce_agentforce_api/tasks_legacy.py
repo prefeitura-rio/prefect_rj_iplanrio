@@ -153,6 +153,11 @@ def _wait_for_job(
     headers = {"Authorization": f"Bearer {access_token}"}
     elapsed = 0
 
+    if poll_interval_seconds <= 0:
+        raise ValueError(
+            f"poll_interval_seconds deve ser positivo, recebido: {poll_interval_seconds}"
+        )
+
     while elapsed < max_wait_seconds:
         response = requests.get(url, headers=headers, timeout=30)
         response.raise_for_status()
@@ -220,9 +225,8 @@ def _download_job_results(
         records = list(reader)
         all_records.extend(records)
         print(f"[SF_CRM][BULK] Página {page}: {len(records)} registros. Total acumulado: {len(all_records)}")
-        print(f"[SF_CRM][BULK] Amostra (primeiros 2 registros da página {page}):")
-        for r in records[:2]:
-            print(json.dumps(r, ensure_ascii=False, indent=2))
+        if records:
+            print(f"[SF_CRM][BULK] Campos presentes: {list(records[0].keys())}")
 
         # Verificar se há próxima página
         locator = response.headers.get("Sforce-Locator")

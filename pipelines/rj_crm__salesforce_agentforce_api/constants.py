@@ -14,8 +14,14 @@ class AgentforceConstants(Enum):
     Constantes para o flow genérico de ingestão via Salesforce CRM Bulk API 2.0.
     """
 
-    # Dataset padrão no BigQuery (separado do SFMC para não misturar fontes)
-    DATASET_ID = "brutos_salesforce_crm"
+    # Dataset padrão no BigQuery
+    DATASET_ID = "brutos_salesforce"
+
+    # Projeto GCP de destino
+    BQ_PROJECT_ID = "rj-crm-registry"
+
+    # Dataset de controle (watermarks/checkpoints)
+    CONTROL_DATASET = "agentforce_control"
 
     # Modo de ingestão padrão
     DUMP_MODE = "append"

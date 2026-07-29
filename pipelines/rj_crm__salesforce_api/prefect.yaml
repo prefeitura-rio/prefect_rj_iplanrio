@@ -67,7 +67,7 @@ deployments:
         parameters:
           route: "/interaction/v1/interactions?mostRecentVersionOnly=false&extras=all"
           http_method: get
-          page_size: 200
+          page_size: 50
           table_id: content_builder_journey
           dataset_id: brutos_salesforce
           dump_mode: overwrite
@@ -168,7 +168,7 @@ deployments:
         parameters:
           route: "/interaction/v1/interactions?mostRecentVersionOnly=false&extras=all"
           http_method: get
-          page_size: 200
+          page_size: 50
           table_id: content_builder_journey
           dataset_id: brutos_salesforce
           dump_mode: overwrite

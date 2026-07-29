@@ -7,8 +7,9 @@ Funções centralizadas de validação para pipeline de template
 Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
+import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from pydantic import ValidationError
 
@@ -16,6 +17,7 @@ from pydantic import ValidationError
 from pipelines.rj_crm__disparo_template.utils.schemas import (
     DestinationInput,
     DispatchPayload,
+    SfDispatchRow,
     ValidationStats,
 )
 
@@ -178,6 +180,123 @@ def log_validation_summary(stats: ValidationStats, context: str = ""):
             log(f"{context_prefix}  ... e mais {len(stats.validation_errors) - 3} erros")
 
     log(f"{context_prefix}=== FIM DO RESUMO ===")
+
+
+def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
+    """
+    Valida que o DataFrame retornado pela query possui as colunas obrigatórias
+    para o flow SF: SubscriberKey e telefone.
+
+    Deve ser chamada logo após a checagem de df vazio no flow, antes de qualquer
+    processamento. Se alguma coluna obrigatória estiver ausente, lança ValueError
+    que interrompe o flow imediatamente.
+
+    Args:
+        df: DataFrame retornado pela query do BigQuery
+        campaign_name: Nome da campanha (validado como não-vazio)
+
+    Returns:
+        O próprio DataFrame sem modificações
+
+    Raises:
+        ValueError: Se SubscriberKey, telefone ou campaign_name estiverem ausentes/inválidos
+    """
+    required_columns = ["SubscriberKey", "telefone"]
+    missing = [col for col in required_columns if col not in df.columns]
+
+    if missing:
+        raise ValueError(
+            f"O DataFrame não possui as colunas obrigatórias para o log SF: {missing}. "
+            f"Colunas presentes: {list(df.columns)}. "
+            "Verifique se a query retorna 'SubscriberKey' e 'telefone'."
+        )
+
+    if not campaign_name or not str(campaign_name).strip():
+        raise ValueError("campaign_name não pode ser vazio ou nulo.")
+
+    # Valida uma amostra de linhas via SfDispatchRow para garantir que os dados são válidos
+    # (usa dispatch_date vazio apenas para checar as outras colunas — dispatch_date é gerado depois)
+    sample_size = min(5, len(df))
+    sample = df.head(sample_size)
+    validation_errors = []
+
+    for i, row in sample.iterrows():
+        try:
+            SfDispatchRow(
+                dispatch_date="2000-01-01",  # placeholder para validação estrutural
+                campaign_name=str(campaign_name),
+                SubscriberKey=str(row.get("SubscriberKey", "")),
+                telefone=str(row.get("telefone", "")),
+            )
+        except ValidationError as e:
+            for error in e.errors():
+                validation_errors.append(f"Linha {i}: {error.get('loc', ['?'])[0]} - {error.get('msg', '')}")
+
+    if validation_errors:
+        raise ValueError(
+            f"Dados inválidos nas colunas obrigatórias do DataFrame SF:\n"
+            + "\n".join(validation_errors)
+        )
+
+    log(f"validate_sf_dataframe: DataFrame validado com sucesso. {len(df)} linhas, colunas={list(df.columns)}")
+    return df
+
+
+def validate_campaign_name(
+    campaign_name: str,
+    billing_project_id: str,
+    bucket_name: str,
+) -> Optional[str]:
+    """
+    Valida se campaign_name existe na tabela
+    `rj-crm-registry.brutos_salesforce.jornada` na coluna `hsm.nome_hsm`.
+
+    Args:
+        campaign_name: Nome da campanha a ser validado.
+        billing_project_id: Projeto GCP usado para faturamento da query.
+        bucket_name: Nome do bucket GCS para carregar credenciais.
+
+    Returns:
+        campaign_name se encontrado na tabela, ou None se não encontrado.
+    """
+    from time import sleep  # pylint: disable=C0415
+
+    from basedosdados import Base  # pylint: disable=E0611, E0401, C0415
+    from google.cloud import bigquery  # pylint: disable=E0611, E0401, C0415
+
+    query = f"""
+        SELECT COUNT(*) AS total
+        FROM `rj-crm-registry.brutos_salesforce.jornada`
+        WHERE hsm.nome_hsm = '{campaign_name}'
+    """
+
+    log(f"Validando campaign_name='{campaign_name}' em rj-crm-registry.brutos_salesforce.jornada ...")
+
+    bq_client = bigquery.Client(
+        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
+        project=billing_project_id,
+    )
+    job = bq_client.query(query)
+    while not job.done():
+        sleep(1)
+
+    results = list(job.result())
+    total = results[0]["total"] if results else 0
+
+    if total == 0:
+        log(
+            f"ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm "
+            "da tabela rj-crm-registry.brutos_salesforce.jornada. "
+            "Verifique o nome da campanha e tente novamente."
+        )
+        print(
+            f"[validate_campaign_name_in_bigquery] campaign_name='{campaign_name}' não existe "
+            "em rj-crm-registry.brutos_salesforce.jornada (hsm.nome_hsm). Encerrando o flow."
+        )
+        return None
+
+    log(f"campaign_name='{campaign_name}' validado com sucesso ({total} registro(s) encontrado(s)).")
+    return campaign_name
 
 
 def validate_single_destination(destination_dict: Dict) -> Tuple[bool, DestinationInput, str]:
