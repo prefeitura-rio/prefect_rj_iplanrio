@@ -7,6 +7,7 @@ Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 # flake8: noqa: E501
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
 
 import json
 
@@ -32,7 +33,7 @@ def calculate_target_date() -> str | None:
     Returns:
         str: Data no formato YYYY-MM-DD, ou None se for sábado ou domingo
     """
-    today = datetime.now()
+    today = datetime.now(ZoneInfo("America/Sao_Paulo"))
     weekday = today.weekday()  # 0=Monday, 1=Tuesday, ..., 6=Sunday
 
     if weekday in [5, 6]:  # Saturday or Sunday

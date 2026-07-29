@@ -277,6 +277,14 @@ def rj_crm__disparo_template_sf(
     base_df = df.copy()
 
     # RETRY LOOP
+    # --------------------------------------------------------------------------------------
+    # no retry loop do rj_crm__disparo_template eu preciso que vc avalie se está correto considerando que:
+    #   - posso ter disparos sem retry em que eu quero que um mesmo CPF/telefone que já recebeu qualquer campanha hj seja filtrado do dataframe de disparo. Definido pelo campo filter_dispatched_phones_or_cpfs
+    #   - posso ter disparos com retry em que eu quero que um mesmo CPF/telefone que já recebeu qualquer campanha hj seja filtrado do dataframe de disparo. Definido pelo campo filter_dispatched_phones_or_cpfs
+    #   - posso ter disparos sem retry em que eu quero que um mesmo CPF/telefone que já recebeu essa mesma campanha nos últimos dispatch_interval_days seja filtrado do dataframe de disparo
+    #   - posso ter disparos com retry em que eu quero que um mesmo CPF/telefone que já recebeu essa mesma campanha nos últimos dispatch_interval_days seja filtrado do dataframe de disparo
+    #   - nos disparos de retry (i >0) um mesmo telefone que já recebeu essa campanha hj seja filtrado do dataframe de disparo
+    # --------------------------------------------------------------------------------------
     for i in range(0, max_dispatch_retries + 1):
 
         if i == 0:
@@ -317,65 +325,77 @@ def rj_crm__disparo_template_sf(
 
             print(f"🚀 Found {len(current_df)} destinations for retry attempt {i}.")
 
-        # Filtro de já disparados
-        # No retry por CPF (i>0) eu não posso mais filtrar por cpfs já disparados
-        # e desligo o filtro para o mesmo CPF tentar outro número de telefone
-        current_filter = filter_dispatched_phones_or_cpfs
-        if i > 0 and current_filter == "cpf":
-            current_filter = None
-
         # Buscamos o histórico de disparos realizados no intervalo de dias configurado
+        # Sempre usamos dispatch_interval_days para garantir que números secundários de retry
+        # também sejam validados contra todo o histórico do intervalo.
         already_dispatched_df = get_already_dispatched_data(
             billing_project_id=billing_project_id, 
             dispatch_interval_days=dispatch_interval_days
         )
 
         # --------------------------------------------------------------------------------------
-        # PASSO 1: FILTRO DE SEGURANÇA DA MESMA CAMPANHA (ALWAYS CPF/SUBSCRIBERKEY)
+        # PASSO 1: FILTRO DE SEGURANÇA DA MESMA CAMPANHA
         # --------------------------------------------------------------------------------------
-        # Esse filtro impede que o mesmo CPF (SubscriberKey) receba a MESMA campanha mais de uma
-        # vez dentro da janela configurada (ex: 7 dias). Ele é um limite de segurança rígido
-        # e roda sempre usando "SubscriberKey" (CPF) como chave identificadora no current_df.
+        # Esse filtro impede que o mesmo CPF receba a MESMA campanha mais de uma vez dentro da
+        # janela configurada (ex: 7 dias) no disparo inicial, ou que o mesmo telefone receba
+        # a campanha nas retentativas.
+        # No primeiro disparo (i == 0):
+        #   - Filtramos sempre por "cpf", garantindo que o CPF não receba a mesma campanha no intervalo.
+        # No retry (i > 0):
+        #   - Filtramos por "telefone" para garantir que o número de retry não recebeu a campanha antes,
+        #     permitindo que o mesmo CPF tente um telefone alternativo.
         # --------------------------------------------------------------------------------------
         qnt_pessoas = current_df.shape[0]
-        if not already_dispatched_df.empty:
-            print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name}) sobre o CPF/SubscriberKey...")
+        if not already_dispatched_df.empty:  # Vale para qq tentativa, mas no retry só avalia o tefone
+            print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name})...")
             df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
-            print(f"[DEBUG] MEsma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
+            print(f"[DEBUG] Mesma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
+
+            # Determina a coluna para o filtro da mesma campanha
+            same_campaign_filter = "cpf" if i == 0 else "telefone"
 
             current_df = filter_already_dispatched_phones_or_cpfs(
                 df=current_df,
                 already_dispatched_df=df_same_campaign,
-                current_filter="cpf",
+                current_filter=same_campaign_filter,
             )
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam essa campanha nos último(s) {dispatch_interval_days} dia(s).")
             print(f"[DEBUG] Após remoção de mesma campanha:\n{current_df.head(10).to_dict('records')}") if debug else None
 
         # --------------------------------------------------------------------------------------
-        # PASSO 2: FILTRO DIÁRIO CRUZADO DE CANAL (CPF ou Telefone)
+        # PASSO 2: FILTRO DIÁRIO CRUZADO DE CANAL (Qualquer Campanha Hoje)
         # --------------------------------------------------------------------------------------
-        # Esse filtro impede que o mesmo cidadão receba QUALQUER outra campanha no dia de hoje
-        # para evitar fadiga ou duplicidade de comunicação no mesmo canal.
-        # - Só roda se 'current_filter' não for None (ou seja, se o usuário ativou o filtro diário
-        #   e não estamos em uma retentativa de CPF i > 0).
-        # - Respeita a coluna ativa ('SubscriberKey' ou 'telefone') para a comparação.
+        # Esse filtro impede que o mesmo cidadão (CPF ou Telefone) receba QUALQUER outra campanha
+        # no dia de hoje para evitar fadiga de comunicação.
+        # Se filter_dispatched_phones_or_cpfs for:
+        #   - "None":
+        #       - No i == 0: não filtramos se o cpf/telefone recebeu algum disparo hj
+        #       - No i > 0:  não filtramos se o cpf/telefone recebeu algum disparo hj
+        #   - "cpf":
+        #       - No i == 0: Filtramos CPFs que receberam QUALQUER campanha hoje.
+        #       - No i > 0: não filtramos se o cpf/telefone recebeu algum disparo hj, o telefone pode já ter tido um disparo pra outra campanha
+        #   - "telefone":
+        #       - Filtramos telefones que receberam QUALQUER campanha hoje (tanto no i == 0 quanto no i > 0).
         # --------------------------------------------------------------------------------------
-        if current_filter and not already_dispatched_df.empty:
-            # Se o filtro ativo no envio for "cpf", nós mapeamos para "SubscriberKey" para comparar
-            # com a coluna de controle (que no get_already_dispatched_data retorna como "cpf").
-            print(f"🔍 Aplicando filtro diário de quem já recebeu alguma campanha hoje '{current_filter}'...")
+        filter_dispatched_phones_or_cpfs = None if i > 0 and filter_dispatched_phones_or_cpfs == "cpf" else filter_dispatched_phones_or_cpfs
+        if filter_dispatched_phones_or_cpfs and not already_dispatched_df.empty:
+            print(f"🔍 Aplicando filtro diário de quem já recebeu alguma campanha hoje '{filter_dispatched_phones_or_cpfs}'...")
             
             hoje = pd.Timestamp.now(tz='America/Sao_Paulo').date()
             datas_disparadas = pd.to_datetime(already_dispatched_df["data_particao"]).dt.date
-            qnt_pessoas = current_df.shape[0]
-            # Selecionamos apenas as linhas de disparos que ocorreram no dia de hoje
+            
+            # Filtra apenas os disparos de hoje
             df_dispatched_today = already_dispatched_df[datas_disparadas == hoje]
             
+            qnt_pessoas = current_df.shape[0]
+            
+            # Filtra CPF/telefone contra qualquer campanha enviada hoje
             current_df = filter_already_dispatched_phones_or_cpfs(
                 df=current_df,
                 already_dispatched_df=df_dispatched_today,
-                current_filter=current_filter,
+                current_filter=filter_dispatched_phones_or_cpfs,
             )
+            
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam alguma campanha hoje.")
             print(f"[DEBUG] Já tiveram disparo hoje:\n{df_dispatched_today.to_dict('records')}") if debug else None
 
