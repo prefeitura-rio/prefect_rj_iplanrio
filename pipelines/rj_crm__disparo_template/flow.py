@@ -336,11 +336,10 @@ def rj_crm__disparo_template_sf(
         # --------------------------------------------------------------------------------------
         # PASSO 1: FILTRO DE SEGURANÇA DA MESMA CAMPANHA
         # --------------------------------------------------------------------------------------
-        # Esse filtro impede que o mesmo CPF receba a MESMA campanha mais de uma vez dentro da
-        # janela configurada (ex: 7 dias) no disparo inicial, ou que o mesmo telefone receba
-        # a campanha nas retentativas.
+        # Esse filtro impede que o mesmo CPF (i==0) ou telefone (i>0) receba a MESMA campanha mais de uma
+        # vez dentro da janela configurada (ex: 7 dias).
         # No primeiro disparo (i == 0):
-        #   - Filtramos sempre por "cpf", garantindo que o CPF não receba a mesma campanha no intervalo.
+        #   - Se for "cpf" ou None (padrão), filtramos por "cpf".
         # No retry (i > 0):
         #   - Filtramos por "telefone" para garantir que o número de retry não recebeu a campanha antes,
         #     permitindo que o mesmo CPF tente um telefone alternativo.
