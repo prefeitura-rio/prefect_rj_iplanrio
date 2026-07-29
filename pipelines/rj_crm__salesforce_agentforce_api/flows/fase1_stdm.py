@@ -174,7 +174,7 @@ def fase1_stdm(
 
     try:
         # Auth — Data Cloud usa Client Credentials (sem username/password)
-        bulk_session = get_bulk_api_session()
+        # bulk_session = get_bulk_api_session()
         dc_session = get_data_cloud_session()
 
         bq_args = dict(

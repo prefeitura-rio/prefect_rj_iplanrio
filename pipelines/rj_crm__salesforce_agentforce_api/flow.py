@@ -139,12 +139,12 @@ def agentforce_full_daily(
     )
 
     # Auth
-    bulk_session = get_bulk_api_session()
+    # bulk_session = get_bulk_api_session()
     dc_session = get_data_cloud_session()
 
     # Pre-flight
     preflight = run_preflight_checks(
-        bulk_session=bulk_session,
+        # bulk_session=bulk_session,
         dc_session=dc_session,
         bq_project_id=project_id,
         bq_dataset_id=dataset_id,
@@ -183,7 +183,7 @@ def agentforce_full_daily(
                 source="bulk_api",
                 query_template=_F2A_QUERIES["messaging_session"],
                 target_table="messaging_session",
-                bulk_session=bulk_session,
+                # bulk_session=bulk_session,
                 **bq_base,
             )
             if preflight.get("dc_auth"):

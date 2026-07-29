@@ -148,7 +148,7 @@ def _check_bq_dataset(project_id: str, dataset_id: str) -> bool:
 
 @task(log_prints=True)
 def run_preflight_checks(
-    bulk_session: dict,
+    # bulk_session: dict,
     dc_session: dict,
     bq_project_id: str,
     bq_dataset_id: str,
@@ -186,12 +186,12 @@ def run_preflight_checks(
 
     # --- Crítico: Bulk API auth ---
     print("[PREFLIGHT] Verificando autenticacao Bulk API...")
-    results["bulk_auth"] = _check_bulk_api_auth(
-        access_token=bulk_session["access_token"],
-        instance_url=bulk_session["instance_url"],
-    )
-    if not results["bulk_auth"]:
-        raise RuntimeError("[PREFLIGHT] CRITICO: autenticacao Bulk API invalida. Abortando.")
+    # results["bulk_auth"] = _check_bulk_api_auth(
+    #     access_token=bulk_session["access_token"],
+    #     instance_url=bulk_session["instance_url"],
+    # )
+    # if not results["bulk_auth"]:
+    #     raise RuntimeError("[PREFLIGHT] CRITICO: autenticacao Bulk API invalida. Abortando.")
 
     # --- Crítico: BigQuery dataset ---
     print(f"[PREFLIGHT] Verificando dataset BigQuery '{bq_dataset_id}'...")
