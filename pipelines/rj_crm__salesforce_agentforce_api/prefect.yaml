@@ -59,7 +59,6 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
-      infisical_secret_path: /salesforce_crm
       dataset_id: brutos_salesforce_staging
       control_dataset: agentforce_control_staging
 
@@ -77,8 +76,6 @@ deployments:
         command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
-    parameters:
-      infisical_secret_path: /salesforce_crm
     schedules:
       - cron: "0 9 * * *"
         timezone: America/Sao_Paulo

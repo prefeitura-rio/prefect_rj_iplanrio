@@ -1,6 +1,6 @@
 -- DDL das tabelas Agentforce no BigQuery
--- Dataset alvo  : rj-escritorio-dev.brutos_salesforce_crm
--- Dataset controle: rj-escritorio-dev.agentforce_control
+-- Dataset alvo  : rj-crm-registry.brutos_salesforce
+-- Dataset controle: rj-crm-registry.agentforce_control
 -- Particionamento: por data_particao (DATE)
 -- Clustering    : por id (e chaves estrangeiras onde aplicável)
 --
@@ -15,9 +15,9 @@
 -- ---------------------------------------------------------------------------
 -- Pré-requisito: criar os datasets caso não existam
 -- ---------------------------------------------------------------------------
--- CREATE SCHEMA IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm`
+-- CREATE SCHEMA IF NOT EXISTS `rj-crm-registry.brutos_salesforce`
 --   OPTIONS (location = 'US');
--- CREATE SCHEMA IF NOT EXISTS `rj-escritorio-dev.agentforce_control`
+-- CREATE SCHEMA IF NOT EXISTS `rj-crm-registry.agentforce_control`
 --   OPTIONS (location = 'US');
 
 -- ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@
 -- ---------------------------------------------------------------------------
 
 -- Sessões do Agentforce (uma por atendimento iniciado via WhatsApp/canal)
-CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_session`
+CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce.ai_agent_session`
 (
     id                              STRING,
     related_messaging_session_id    STRING,
@@ -53,7 +53,7 @@ OPTIONS (
 );
 
 -- Interações dentro de uma sessão (uma por turno de conversa/tópico)
-CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_interaction`
+CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce.ai_agent_interaction`
 (
     id                              STRING,
     ai_agent_session_id             STRING,
@@ -83,7 +83,7 @@ OPTIONS (
 );
 
 -- Steps de cada interação (chamadas LLM, guardrails, ferramentas, etc.)
-CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_interaction_step`
+CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce.ai_agent_interaction_step`
 (
     id                              STRING,
     ai_agent_interaction_id         STRING,
@@ -118,7 +118,7 @@ OPTIONS (
 );
 
 -- Mensagens trocadas em cada interação (input do usuário e output do agente)
-CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.brutos_salesforce_crm.ai_agent_interaction_message`
+CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce.ai_agent_interaction_message`
 (
     id                                      STRING,
     ai_agent_interaction_id                 STRING,
@@ -152,7 +152,7 @@ OPTIONS (
 -- Controle: watermarks de ingestão incremental
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `rj-escritorio-dev.agentforce_control.pipeline_checkpoints`
+CREATE TABLE IF NOT EXISTS `rj-crm-registry.agentforce_control.pipeline_checkpoints`
 (
     table_name      STRING NOT NULL,
     watermark       TIMESTAMP NOT NULL,
