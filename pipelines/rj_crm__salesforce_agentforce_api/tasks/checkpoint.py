@@ -62,7 +62,6 @@ def read_watermark(
     project_id: str,
     control_dataset: str,
     lookback_days: int = _DEFAULT_LOOKBACK_DAYS,
-    overlap_minutes: int = 30,
 ) -> str:
     """
     Lê o watermark da última execução bem-sucedida para uma tabela.
@@ -72,7 +71,6 @@ def read_watermark(
         project_id      : ID do projeto GCP.
         control_dataset : Dataset de controle (ex: 'agentforce_control').
         lookback_days   : Se não houver watermark, usa NOW() - N dias. Padrão: 1.
-        overlap_minutes : Buffer de overlap para evitar registros na borda. Padrão: 30.
 
     Returns:
         Watermark como string ISO 8601 (ex: '2024-01-14T23:30:00Z').
@@ -92,13 +90,8 @@ def read_watermark(
 
     if result:
         watermark: datetime = result[0].watermark
-        # Aplicar overlap buffer
-        watermark_with_buffer = watermark - timedelta(minutes=overlap_minutes)
-        watermark_str = watermark_with_buffer.strftime("%Y-%m-%dT%H:%M:%SZ")
-        print(
-            f"[CHECKPOINT] '{table_name}': watermark={watermark.isoformat()}, "
-            f"com buffer={watermark_str}"
-        )
+        watermark_str = watermark.strftime("%Y-%m-%dT%H:%M:%SZ")
+        print(f"[CHECKPOINT] '{table_name}': watermark={watermark_str}")
     else:
         # Primeira execução — buscar últimos N dias
         fallback = datetime.now(tz=timezone.utc) - timedelta(days=lookback_days)

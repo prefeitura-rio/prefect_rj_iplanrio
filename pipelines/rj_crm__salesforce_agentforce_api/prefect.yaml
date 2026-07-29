@@ -61,6 +61,7 @@ deployments:
     parameters:
       dataset_id: brutos_salesforce_staging
       control_dataset: agentforce_control_staging
+      environment: staging
 
   # -----------------------------------------------------------------------
   # Deployment de producao

@@ -121,10 +121,10 @@ def transform_dataframe(
     # 4. Adicionar _loaded_at (timestamp de ingestão UTC)
     df["_loaded_at"] = datetime.now(tz=timezone.utc)
 
-    # 5. Adicionar data_particao
+    # 5. Adicionar data_particao como tipo date (não string) para particionamento DATE no BQ
     if partition_date is None:
         partition_date = date.today()
-    df["data_particao"] = str(partition_date)
+    df["data_particao"] = partition_date
 
     # 6. Remover strings vazias (Bulk API retorna "" para NULL)
     df = df.replace("", None)

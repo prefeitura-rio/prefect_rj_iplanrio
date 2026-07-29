@@ -90,6 +90,11 @@ def load_to_bigquery(
         ),
     )
 
+    # Garantir que data_particao seja dtype datetime.date para o BQ inferir DATE
+    if "data_particao" in df.columns:
+        df = df.copy()
+        df["data_particao"] = pd.to_datetime(df["data_particao"]).dt.date
+
     print(f"[BQ] Carregando {len(df)} linhas em '{full_id}' (modo: {write_mode})...")
     job = client.load_table_from_dataframe(df, full_id, job_config=job_config)
     job.result()  # aguarda conclusão

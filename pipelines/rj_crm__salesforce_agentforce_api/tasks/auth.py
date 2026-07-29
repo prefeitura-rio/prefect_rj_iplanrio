@@ -51,7 +51,7 @@ def _get_dc_credentials() -> dict[str, str]:
         "client_id": getenv_or_action("SF_DC_CLIENT_ID"),
         "client_secret": getenv_or_action("SF_DC_CLIENT_SECRET"),
         "instance_url": getenv_or_action("SF_DC_INSTANCE_URL").rstrip("/"),
-        "dataspace": getenv_or_action("SF_DC_DATASPACE", default="default"),
+        "dataspace": getenv_or_action("SF_DC_DATASPACE") or "default",
     }
 
 

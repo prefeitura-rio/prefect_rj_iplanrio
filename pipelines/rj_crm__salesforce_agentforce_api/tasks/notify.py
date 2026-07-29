@@ -97,7 +97,7 @@ def notify_phase_success(
     """
     webhook_url = os.getenv("SLACK_WEBHOOK_URL")
     if not webhook_url:
-        print(f"[NOTIFY] SLACK_WEBHOOK_URL nao configurada — notificacao pulada.")
+        print("[NOTIFY] SLACK_WEBHOOK_URL nao configurada — notificacao pulada.")
         return
 
     total_rows = sum(rows_by_table.values())
@@ -132,7 +132,7 @@ def notify_phase_failure(
     """
     webhook_url = os.getenv("SLACK_WEBHOOK_URL")
     if not webhook_url:
-        print(f"[NOTIFY] SLACK_WEBHOOK_URL nao configurada — notificacao pulada.")
+        print("[NOTIFY] SLACK_WEBHOOK_URL nao configurada — notificacao pulada.")
         return
 
     details = {"Tentativas": str(retry_count)}
@@ -161,7 +161,7 @@ def notify_pipeline_summary(
     """
     webhook_url = os.getenv("SLACK_WEBHOOK_URL")
     if not webhook_url:
-        print(f"[NOTIFY] SLACK_WEBHOOK_URL nao configurada — notificacao pulada.")
+        print("[NOTIFY] SLACK_WEBHOOK_URL nao configurada — notificacao pulada.")
         return
 
     grand_total = sum(

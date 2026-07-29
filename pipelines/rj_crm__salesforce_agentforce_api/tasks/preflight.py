@@ -205,11 +205,15 @@ def run_preflight_checks(
             "Crie o dataset antes de executar a pipeline."
         )
 
-    # --- Não-crítico: Data Cloud auth ---
+    # --- Crítico: Data Cloud auth (F1 depende de DC) ---
     print("[PREFLIGHT] Verificando autenticacao Data Cloud...")
     results["dc_auth"] = _check_dc_auth(dc_session)
     if not results["dc_auth"]:
-        print("[PREFLIGHT] WARN: token Data Cloud invalido — fases DC serao puladas.")
+        raise RuntimeError(
+            "[PREFLIGHT] CRITICO: autenticacao Data Cloud falhou — token invalido ou "
+            "credenciais ausentes (SF_DC_CLIENT_ID, SF_DC_CLIENT_SECRET, SF_DC_INSTANCE_URL). "
+            "A Fase 1 (STDM) nao pode executar sem acesso ao Data Cloud."
+        )
 
     # --- Crítico: DMOs de F1 ---
     if results["dc_auth"]:
@@ -251,10 +255,5 @@ def run_preflight_checks(
         results["dmos_genai"] = genai_ok
         if not genai_ok:
             print("[PREFLIGHT] WARN: DMOs GenAI ausentes — Fase 4 sera pulada.")
-    else:
-        results.update(
-            dmos_f1=False, dmos_mce=False, dmos_tracing=False, dmos_genai=False
-        )
-
     print(f"[PREFLIGHT] === Resultados: {results} ===")
     return results

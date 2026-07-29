@@ -52,6 +52,8 @@ members = [
     "rj-iplanrio-sici",
     "rj-iplanrio-sicop",
     "rj-iplanrio-sisbicho-images",
+    "rj-iplanrio-taxirio",
+    "rj-iplanrio-test",
     "rj-iplanrio-vigia-urbano",
     "rj-pgm-divida-ativa",
     "rj-pic-disparos-email",
@@ -3170,12 +3172,43 @@ wheels = [
 ]
 
 [[package]]
-name = "pyjwt"
-version = "2.13.0"
+name = "pymongo"
+version = "4.17.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", hash = "sha256:41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423", size = 107515, upload-time = "2026-05-21T19:54:36.618Z" }
+dependencies = [
+    { name = "dnspython" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/64/50be6fbac9c79fe2e4c17401a467da2d8764d82833d83cec325afe5cab32/pymongo-4.17.0.tar.gz", hash = "sha256:70ffa08ba641468cc068cf46c06b34f01a8ce3489f6411309fcb5ceabe6b2fc0", size = 2523370, upload-time = "2026-04-20T16:39:53.524Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", hash = "sha256:66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728", size = 31274, upload-time = "2026-05-21T19:54:35.362Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/6b/c1206879708b94e82fcd8b9653440ec271f79a3674d122192df383047f5a/pymongo-4.17.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:809ec74de3b9148ae43fa8df9faf53470f511c8d384f13b99d6f671f2a379f15", size = 985829, upload-time = "2026-04-20T16:38:21.031Z" },
+    { url = "https://files.pythonhosted.org/packages/cb/cf/bb044ed85160e5c40f568c7c4f4e8ea16f40764ff5d302e5befbe8f6f814/pymongo-4.17.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:a431b737816bf4cddd4fa0fcef04e424ad36b7692734a64150f872fb8f3208be", size = 985899, upload-time = "2026-04-20T16:38:23.409Z" },
+    { url = "https://files.pythonhosted.org/packages/74/0a/f6dfd5ea3901e5d6888da8de8ba728971a1d447debab681cfc56f90d1208/pymongo-4.17.0-cp313-cp313-manylinux1_i686.manylinux_2_28_i686.manylinux_2_5_i686.whl", hash = "sha256:e4fab10f8403169ce92f3cea921609d9ee81107306caae06c08f592d4b8ad2b5", size = 2028569, upload-time = "2026-04-20T16:38:25.343Z" },
+    { url = "https://files.pythonhosted.org/packages/4a/c5/081f59a1c02ae8c0dc73ae58e563838c44eec81aeafa7d0b93a637841c9b/pymongo-4.17.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:20323b0b1c1d33770ad1fc68d429c757734ce9ad3594421c3d6618f10572b1b9", size = 2072916, upload-time = "2026-04-20T16:38:27.291Z" },
+    { url = "https://files.pythonhosted.org/packages/31/42/6e41d434297ffe8b30d9c3717916591a4a7be9075a0dcc2fafdfaaaa62ed/pymongo-4.17.0-cp313-cp313-manylinux2014_ppc64le.manylinux_2_17_ppc64le.manylinux_2_28_ppc64le.whl", hash = "sha256:5a5de048e6da5c18e27cc2437e8c15b3b0cdc8385c15b41178b0caa3322a09c2", size = 2173234, upload-time = "2026-04-20T16:38:29.474Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/cf/1e4a7db352ef9485831c7268dfe8402f0117b32a9ad54b16e810699e3617/pymongo-4.17.0-cp313-cp313-manylinux2014_s390x.manylinux_2_17_s390x.manylinux_2_28_s390x.whl", hash = "sha256:dff3de1294fbbc1db0ba6b511f77b8e540601d092538a31312e99c8a91a78b1e", size = 2156784, upload-time = "2026-04-20T16:38:32.134Z" },
+    { url = "https://files.pythonhosted.org/packages/12/10/6195be29962a61ebb5f4bd9e4c7519890b172f7968a0a0d880398c6ddb02/pymongo-4.17.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:faf03e4c2aafd6de626dbd30ba246d369ae33f47f10629d1bbe40f72115027a6", size = 2074446, upload-time = "2026-04-20T16:38:34.004Z" },
+    { url = "https://files.pythonhosted.org/packages/37/48/33410b8819837ed370c738587306bdf060b59cef11823be212f4a07703c5/pymongo-4.17.0-cp313-cp313-win32.whl", hash = "sha256:c9786665926a09630c5d420c79762cfadbff35a9438bcbc4c81a9fb5ab9228b7", size = 948435, upload-time = "2026-04-20T16:38:35.922Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/77/c0ed522f798a286b99acaa7914ed8d9c80ab091f97f57c59ffed72906e5e/pymongo-4.17.0-cp313-cp313-win_amd64.whl", hash = "sha256:5960519b4d7168f1ecdd3ea10c81b2aedeb9423651aca953cfbc8e76705d3b38", size = 972847, upload-time = "2026-04-20T16:38:37.888Z" },
+    { url = "https://files.pythonhosted.org/packages/97/f0/c39480a2db385fde23861d0c8acda41cdaf1d43e46579db72c5c013a2e81/pymongo-4.17.0-cp313-cp313-win_arm64.whl", hash = "sha256:0ff6bd2f735ab5356541e3e57d5b7dbfbc3f2ee1ccb10b6b0f82d58af69d1d8e", size = 951575, upload-time = "2026-04-20T16:38:40.544Z" },
+]
+
+[[package]]
+name = "pymongoarrow"
+version = "1.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pyarrow" },
+    { name = "pymongo" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2e/b3/35237e60fc99e9fed0b7f37e49c171f8f03b44a01e6b77679708a705f426/pymongoarrow-1.14.0.tar.gz", hash = "sha256:f20fd2a62d5355670bfa4f36df7275a437e4c36c89b785e664852415917ec408", size = 69828, upload-time = "2026-05-28T22:16:44.425Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/ed/6109a88b7eb60921a23fb5d85f30a4ff09353fe4659982e7e119061b845f/pymongoarrow-1.14.0-cp313-cp313-macosx_12_0_arm64.whl", hash = "sha256:29a2fd471f698a4a811e10bfe6d15c9452186e1a1ac040f904e3151586614f71", size = 240297, upload-time = "2026-05-28T22:16:25.967Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/61/ef93bdc6d7081adcf624815b6f281c1b69b45994b89f39efa4a0585ba6cb/pymongoarrow-1.14.0-cp313-cp313-macosx_12_0_x86_64.whl", hash = "sha256:5c5fd22eb9b15af0cbfbd567d51df8201f5c3d1a51dc696ce4d7830b56a48884", size = 257230, upload-time = "2026-05-28T22:16:27.38Z" },
+    { url = "https://files.pythonhosted.org/packages/a6/b9/ec13fffd9b342c348c7f78d54d30a1ce17a24ed16df31db07273c68544f7/pymongoarrow-1.14.0-cp313-cp313-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d4cee21c565630c5f26717d79c16b6294395ea7a79e5777aef2c492e9ba6280f", size = 1470383, upload-time = "2026-05-28T22:16:28.618Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/04/64d5bcb2f80818db8e68ef25fd23a1c7f7c9f22b08715f8ed04c3f149ea1/pymongoarrow-1.14.0-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2895c646d94765ade1521283c576f3b9b9acd183d104347827449d921f7d8f95", size = 1486986, upload-time = "2026-05-28T22:16:30.026Z" },
+    { url = "https://files.pythonhosted.org/packages/5c/44/b7f033422fc03b4575225240b23974741069868d0ad5fd9f54c03c08c200/pymongoarrow-1.14.0-cp313-cp313-win_amd64.whl", hash = "sha256:2ed6619e90329d14bbb0e9b43a2b725b14928eae2954329dc9bb4f5517c3bcb9", size = 228385, upload-time = "2026-05-28T22:16:31.372Z" },
 ]
 
 [[package]]
@@ -4045,7 +4078,6 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "requests" },
-    { name = "salesforce-datacloud-connector", extra = ["pandas"] },
 ]
 
 [package.metadata]
@@ -4061,7 +4093,6 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "requests", specifier = ">=2.31.0" },
-    { name = "salesforce-datacloud-connector", extras = ["pandas"], specifier = ">=1.0.0" },
 ]
 
 [[package]]
@@ -4587,6 +4618,38 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rj-iplanrio-taxirio"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_iplanrio__taxirio" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+    { name = "pyarrow" },
+    { name = "pymongo" },
+    { name = "pymongoarrow" },
+    { name = "pytz" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "pyarrow", specifier = ">=10.0.0" },
+    { name = "pymongo", specifier = ">=4.0.0" },
+    { name = "pymongoarrow", specifier = ">=1.0.0" },
+    { name = "pytz", specifier = ">=2023.3" },
+]
+
+[[package]]
+name = "rj-iplanrio-test"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_iplanrio__test" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
 name = "rj-iplanrio-vigia-urbano"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__vigia_urbano" }
@@ -5063,27 +5126,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/29/81/4dfc17eb6ebb1aac314a3eb863c1325b907863a1b8b1382cdffcb6ac0ed9/ruamel.yaml-0.18.6.tar.gz", hash = "sha256:8b27e6a217e786c6fbe5634d8f3f11bc63e0f80f6a5890f28863d9c45aac311b", size = 143362, upload-time = "2024-02-07T06:47:20.283Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/73/67/8ece580cc363331d9a53055130f86b096bf16e38156e33b1d3014fffda6b/ruamel.yaml-0.18.6-py3-none-any.whl", hash = "sha256:57b53ba33def16c4f3d807c0ccbc00f8a6081827e81ba2491691b76882d0c636", size = 117761, upload-time = "2024-02-07T06:47:14.898Z" },
-]
-
-[[package]]
-name = "salesforce-datacloud-connector"
-version = "2.0.0b1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-    { name = "pyjwt" },
-    { name = "python-dateutil" },
-    { name = "requests" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/bb/0e0cb0347ac607707d5ca7111ce295ae81ed74a54040ef4f26707b4f3815/salesforce_datacloud_connector-2.0.0b1.tar.gz", hash = "sha256:6bb5bdeed9861fc5c32bf8a3d62b537e6bc581ab371c71162e3e4f152908bc4e", size = 173467, upload-time = "2026-06-02T22:16:11.901Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/bd/bc42dd75ecb38dcbdedab807bb72a8fee73938987e05994c9cc36f4daf13/salesforce_datacloud_connector-2.0.0b1-py3-none-any.whl", hash = "sha256:24f0b88a68074cb29b3e8f41df4360f42c901160dca0f16930b86182fccec603", size = 30065, upload-time = "2026-06-02T22:16:10.77Z" },
-]
-
-[package.optional-dependencies]
-pandas = [
-    { name = "pandas" },
-    { name = "pyarrow" },
 ]
 
 [[package]]

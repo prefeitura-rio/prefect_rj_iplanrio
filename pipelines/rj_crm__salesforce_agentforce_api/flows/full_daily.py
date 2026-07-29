@@ -101,6 +101,7 @@ def agentforce_full_daily(
     partition_date: date | None = None,
     skip_checkpoint: bool = False,
     run_phases: list[int] | None = None,
+    environment: str = "prod",
 ) -> dict[str, dict[str, int]]:
     """
     Orquestra as 4 fases da pipeline Agentforce → BigQuery.
@@ -113,6 +114,7 @@ def agentforce_full_daily(
         skip_checkpoint : Se True, não usa watermark (backfill).
         run_phases      : Lista de fases a executar. Padrão: [1, 2, 3, 4].
                           Use [1] para rodar apenas F1 em testes.
+        environment     : Ambiente de execução ('prod' ou 'staging').
 
     Returns:
         Dict por fase com {tabela: linhas_carregadas}.
@@ -123,7 +125,7 @@ def agentforce_full_daily(
     run_phases = run_phases or [1, 2, 3, 4]
 
     rename_current_flow_run_task(new_name="agentforce-full-daily")
-    inject_bd_credentials_task(environment="prod")
+    inject_bd_credentials_task(environment=environment)
 
     t_pipeline_start = time.time()
     phase_results: dict[str, dict[str, int]] = {}
@@ -161,6 +163,7 @@ def agentforce_full_daily(
                 control_dataset=control_dataset,
                 partition_date=partition_date,
                 skip_checkpoint=skip_checkpoint,
+                environment=environment,
             )
             phase_results["F1 - STDM"] = f1_rows
             print(f"[DAILY] F1 concluida em {time.time() - t0:.0f}s")
@@ -213,7 +216,7 @@ def agentforce_full_daily(
                         **bq_base,
                     )
                 phase_results["F2b - MCE"] = f2b_rows
-                print(f"[DAILY] F2b concluida.")
+                print("[DAILY] F2b concluida.")
             except Exception as exc:
                 print(f"[DAILY] WARN: F2b falhou — {exc}. Continuando...")
                 notify_phase_failure(phase_name="F2b — MCE", error_message=str(exc))

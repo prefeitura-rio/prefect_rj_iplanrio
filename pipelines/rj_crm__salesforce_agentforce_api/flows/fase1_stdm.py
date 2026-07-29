@@ -145,6 +145,7 @@ def fase1_stdm(
     control_dataset: str | None = None,
     partition_date: date | None = None,
     skip_checkpoint: bool = False,
+    environment: str = "prod",
 ) -> dict[str, int]:
     """
     Flow da Fase 1 — extrai as 5 DMOs STDM do Agentforce.
@@ -157,6 +158,7 @@ def fase1_stdm(
         control_dataset : Dataset de controle (watermarks). Padrão: constante.
         partition_date  : Data de partição. Padrão: hoje.
         skip_checkpoint : Se True, não usa watermark (útil para backfill).
+        environment     : Ambiente de execução ('prod' ou 'staging').
 
     Returns:
         Dict {tabela: linhas_carregadas}.
@@ -165,7 +167,7 @@ def fase1_stdm(
     dataset_id = dataset_id or AgentforceConstants.DATASET_ID.value
     control_dataset = control_dataset or AgentforceConstants.CONTROL_DATASET.value
 
-    inject_bd_credentials_task(environment="prod")
+    inject_bd_credentials_task(environment=environment)
 
     t_start = time.time()
     rows_by_table: dict[str, int] = {}

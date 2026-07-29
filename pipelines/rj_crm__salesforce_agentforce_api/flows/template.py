@@ -16,7 +16,7 @@ que chama sf_to_bq com os parâmetros da tabela desejada.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pandas as pd
 
@@ -211,7 +211,7 @@ def sf_to_bq(
             total_rows += rows
 
         # MERGE staging → target
-        merge_staging_to_target(
+        merged_rows = merge_staging_to_target(
             project_id=project_id,
             dataset_id=dataset_id,
             staging_table_id=staging_table,
@@ -219,6 +219,9 @@ def sf_to_bq(
             primary_key=primary_key,
             partition_field="data_particao",
         )
+        # Para validação, usar linhas afetadas pelo MERGE (deduplicadas),
+        # não o total bruto da staging que pode conter duplicatas.
+        total_rows = merged_rows
 
     else:
         raise ValueError(f"[TEMPLATE] source inválido: '{source}'. Use 'bulk_api', 'data_cloud' ou 'data_cloud_chunked'.")
@@ -234,7 +237,14 @@ def sf_to_bq(
 
     # --- 5. Escrever watermark ---
     if not skip_checkpoint and total_rows > 0:
-        new_watermark = f"{partition_date}T23:59:59Z"
+        # Usar o timestamp atual limitado ao fim da partição para não avançar
+        # o checkpoint para o futuro nem criar janelas perdidas entre execuções.
+        partition_end = datetime(
+            partition_date.year, partition_date.month, partition_date.day,
+            23, 59, 59, tzinfo=timezone.utc,
+        )
+        now_utc = datetime.now(tz=timezone.utc)
+        new_watermark = min(now_utc, partition_end).strftime("%Y-%m-%dT%H:%M:%SZ")
         write_watermark(
             table_name=target_table,
             watermark=new_watermark,
