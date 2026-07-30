@@ -1036,18 +1036,15 @@ def check_campaign_success(
         SELECT COUNT(*) AS total_sucesso
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
-          AND envio_datahora >= '{dispatch_date}'
+          AND (envio_datahora >= '{dispatch_date}' or falha_datahora >= '{dispatch_date}')
           AND data_particao >= DATE('{dispatch_date}')
-          AND indicador_falha = FALSE
-          AND indicador_quarentena = FALSE
-          AND entrega_datahora IS NOT NULL
     """
     try:
         df = download_data_from_bigquery(
             query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
         )
         total = int(df.iloc[0]["total_sucesso"]) if not df.empty else 0
-        log(f"check_campaign_success: {total} disparo(s) com sucesso confirmado para '{campaign_name}' desde {dispatch_date}.")
+        log(f"check_campaign_success: {total} disparo(s) com recebimento de webhook confirmado para '{campaign_name}' desde {dispatch_date}.")
         return total > 0
     except Exception as e:
         log(f"Erro ao verificar sucesso do disparo: {e}", level="warning")
