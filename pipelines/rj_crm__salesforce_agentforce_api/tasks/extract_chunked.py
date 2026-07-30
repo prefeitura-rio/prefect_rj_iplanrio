@@ -47,6 +47,9 @@ def _query_page(
         "Content-Type": "application/json",
     }
     resp = requests.post(url, headers=headers, json={"sql": paged_sql}, timeout=120)
+    if not resp.ok:
+        print(f"[CHUNKED] Erro {resp.status_code} na query. SQL enviado:\n{paged_sql}")
+        print(f"[CHUNKED] Resposta do Salesforce: {resp.text}")
     resp.raise_for_status()
     data = resp.json()
 

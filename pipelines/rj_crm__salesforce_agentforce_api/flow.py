@@ -38,6 +38,7 @@ from pipelines.rj_crm__salesforce_agentforce_api.tasks.notify import (
     notify_pipeline_summary,
     notify_phase_failure,
 )
+from pipelines.rj_crm__salesforce_agentforce_api.tasks.ensure_tables import ensure_bq_tables
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.preflight import run_preflight_checks
 
 
@@ -72,12 +73,23 @@ _F2B_MCE_QUERIES = {
 
 _F3_QUERY = """
     SELECT
-        ssot__Id__c, ssot__TraceId__c, ssot__SpanId__c, ssot__ParentSpanId__c,
-        ssot__SpanName__c, ssot__SpanKind__c, ssot__StartTimeNs__c,
-        ssot__EndTimeNs__c, ssot__DurationNs__c, ssot__Status__c,
-        ssot__ServiceName__c, ssot__CreatedDate__c
+        ssot__Id__c,
+        ssot__TelemetryTrace__c,
+        ssot__TelemetryParentSpanId__c,
+        ssot__OperationName__c,
+        ssot__SpanKind__c,
+        ssot__StartDateTime__c,
+        ssot__EndDateTime__c,
+        ssot__DurationNumber__c,
+        ssot__StatusCode__c,
+        ssot__ServiceName__c,
+        ssot__TelemetrySpanAttributeText__c,
+        ssot__DataSourceId__c,
+        ssot__DataSourceObjectId__c,
+        ssot__InternalOrganizationId__c,
+        KQ_Id__c
     FROM ssot__TelemetryTraceSpan__dlm
-    WHERE ssot__CreatedDate__c >= '{watermark}'
+    WHERE ssot__StartDateTime__c >= '{watermark}'
 """
 
 _F4_QUERIES = {
@@ -126,6 +138,8 @@ def agentforce_full_daily(
 
     rename_current_flow_run_task(new_name="agentforce-full-daily")
     inject_bd_credentials_task(environment=environment)
+
+    ensure_bq_tables(project_id=project_id, dataset_id=dataset_id)
 
     t_pipeline_start = time.time()
     phase_results: dict[str, dict[str, int]] = {}
@@ -237,7 +251,7 @@ def agentforce_full_daily(
                 staging_table="telemetry_trace_span_staging",
                 dc_session=dc_session,
                 is_data_cloud=True,
-                duration_ns_columns=["duration_ns", "start_time_ns", "end_time_ns"],
+                date_columns=["start_date_time", "end_date_time"],
                 write_mode="merge",
                 primary_key="id",
                 **bq_base,
