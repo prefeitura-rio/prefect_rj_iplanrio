@@ -50,19 +50,24 @@ def load_to_bigquery(
     table_id: str,
     write_mode: str = "append",
     partition_field: str = "data_particao",
+    clustering_fields: list[str] | None = None,
 ) -> int:
     """
     Carrega um DataFrame no BigQuery.
 
     Args:
-        df            : DataFrame a carregar (já transformado).
-        project_id    : ID do projeto GCP.
-        dataset_id    : Dataset de destino.
-        table_id      : Tabela de destino.
-        write_mode    : 'append', 'replace' ou 'truncate'.
-                        'replace' → WRITE_TRUNCATE na partição do dia.
-                        'append'  → WRITE_APPEND.
-        partition_field: Campo usado para particionamento. Padrão: 'data_particao'.
+        df               : DataFrame a carregar (já transformado).
+        project_id       : ID do projeto GCP.
+        dataset_id       : Dataset de destino.
+        table_id         : Tabela de destino.
+        write_mode       : 'append', 'replace' ou 'truncate'.
+                           'replace' → WRITE_TRUNCATE na partição do dia.
+                           'append'  → WRITE_APPEND.
+        partition_field  : Campo usado para particionamento. Padrão: 'data_particao'.
+        clustering_fields: Lista de campos de clustering. Deve corresponder ao
+                           clustering definido na tabela destino (ex: ['id']).
+                           Se None, nenhum clustering é especificado no job — use
+                           apenas para tabelas sem clustering definido.
 
     Returns:
         Número de linhas carregadas.
@@ -88,6 +93,7 @@ def load_to_bigquery(
             type_=bigquery.TimePartitioningType.DAY,
             field=partition_field,
         ),
+        clustering_fields=clustering_fields,
     )
 
     # Garantir que data_particao seja dtype datetime.date para o BQ inferir DATE

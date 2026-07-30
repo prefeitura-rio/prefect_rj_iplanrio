@@ -190,6 +190,16 @@ def fase1_stdm(
             skip_checkpoint=skip_checkpoint,
         )
 
+        # Clustering definido no DDL (sql/create_tables.sql).
+        # Deve ser informado no LoadJobConfig para evitar erro 400 do BigQuery
+        # "Incompatible table partitioning specification".
+        _CLUSTERING = {
+            "ai_agent_session": ["id"],
+            "ai_agent_interaction": ["id", "ai_agent_session_id"],
+            "ai_agent_interaction_step": ["id", "ai_agent_interaction_id"],
+            "ai_agent_interaction_message": ["id", "ai_agent_interaction_id"],
+        }
+
         # DAG: session → interaction → (steps | messages)
         # Sequencial para garantir integridade referencial
         # Nota: AiAgentInteractionParticipant__dlm não existe neste org.
@@ -197,12 +207,14 @@ def fase1_stdm(
         rows_by_table["ai_agent_session"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_session"],
             target_table="ai_agent_session",
+            clustering_fields=_CLUSTERING["ai_agent_session"],
             **bq_args,
         )
 
         rows_by_table["ai_agent_interaction"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_interaction"],
             target_table="ai_agent_interaction",
+            clustering_fields=_CLUSTERING["ai_agent_interaction"],
             **bq_args,
         )
 
@@ -212,12 +224,14 @@ def fase1_stdm(
         rows_by_table["ai_agent_interaction_step"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_interaction_step"],
             target_table="ai_agent_interaction_step",
+            clustering_fields=_CLUSTERING["ai_agent_interaction_step"],
             **bq_args,
         )
 
         rows_by_table["ai_agent_interaction_message"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_interaction_message"],
             target_table="ai_agent_interaction_message",
+            clustering_fields=_CLUSTERING["ai_agent_interaction_message"],
             **bq_args,
         )
 

@@ -62,31 +62,35 @@ def sf_to_bq(
     chunk_size: int = 50_000,
     api_version: str = "v59.0",
     skip_checkpoint: bool = False,
+    clustering_fields: list[str] | None = None,
 ) -> int:
     """
     Executa o ciclo completo extract → transform → load para uma tabela.
 
     Args:
-        source          : 'bulk_api', 'data_cloud' ou 'data_cloud_chunked'.
-        query_template  : Query com placeholder {watermark} para substituição.
-        target_table    : Tabela destino no BigQuery.
-        project_id      : ID do projeto GCP.
-        dataset_id      : Dataset de destino no BQ.
-        control_dataset : Dataset de controle (watermarks).
-        bulk_session    : dict com 'access_token' e 'instance_url' (para bulk_api).
-        dc_session      : dict com 'access_token', 'instance_url', 'dataspace'
-                          (retornado por get_data_cloud_session — para data_cloud).
-        dc_conn         : DEPRECATED. Ignorado. Use dc_session.
-        write_mode      : 'append', 'replace' ou 'merge'.
-        primary_key     : Campo de deduplicação (para merge).
-        partition_date  : Data de partição. Padrão: hoje.
-        is_data_cloud   : Se True, remove prefixo ssot__ dos campos.
-        date_columns    : Colunas para converter para datetime UTC (pós-normalização).
+        source            : 'bulk_api', 'data_cloud' ou 'data_cloud_chunked'.
+        query_template    : Query com placeholder {watermark} para substituição.
+        target_table      : Tabela destino no BigQuery.
+        project_id        : ID do projeto GCP.
+        dataset_id        : Dataset de destino no BQ.
+        control_dataset   : Dataset de controle (watermarks).
+        bulk_session      : dict com 'access_token' e 'instance_url' (para bulk_api).
+        dc_session        : dict com 'access_token', 'instance_url', 'dataspace'
+                            (retornado por get_data_cloud_session — para data_cloud).
+        dc_conn           : DEPRECATED. Ignorado. Use dc_session.
+        write_mode        : 'append', 'replace' ou 'merge'.
+        primary_key       : Campo de deduplicação (para merge).
+        partition_date    : Data de partição. Padrão: hoje.
+        is_data_cloud     : Se True, remove prefixo ssot__ dos campos.
+        date_columns      : Colunas para converter para datetime UTC (pós-normalização).
         duration_ns_columns: Colunas em ns para converter para ms.
-        staging_table   : Tabela staging (necessária para data_cloud_chunked + merge).
-        chunk_size      : Tamanho do chunk para extração paginada.
-        api_version     : Versão da Salesforce API.
-        skip_checkpoint : Se True, não lê/escreve watermark (útil para backfill).
+        staging_table     : Tabela staging (necessária para data_cloud_chunked + merge).
+        chunk_size        : Tamanho do chunk para extração paginada.
+        api_version       : Versão da Salesforce API.
+        skip_checkpoint   : Se True, não lê/escreve watermark (útil para backfill).
+        clustering_fields : Campos de clustering da tabela destino no BQ (ex: ['id']).
+                            Deve corresponder ao clustering definido na tabela — omitir
+                            em tabelas sem clustering causaria erro 400 do BigQuery.
 
     Returns:
         Total de linhas carregadas.
@@ -146,6 +150,7 @@ def sf_to_bq(
             table_id=target_table,
             write_mode=write_mode,
             partition_field="data_particao",
+            clustering_fields=clustering_fields,
         )
 
     elif source == "data_cloud":
@@ -175,6 +180,7 @@ def sf_to_bq(
             table_id=target_table,
             write_mode=write_mode,
             partition_field="data_particao",
+            clustering_fields=clustering_fields,
         )
 
     elif source == "data_cloud_chunked":
