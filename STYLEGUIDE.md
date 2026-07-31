@@ -467,8 +467,7 @@ Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arqu
 
 ### 7.2 Sintaxe de template
 
-Use `string.Template` da biblioteca padrão do Python. Os placeholders usam a sintaxe `$variable` ou `${variable}`. O caractere `$` não é um operador SQL no BigQuery, MSSQL ou MySQL, portanto, não há colisões.
-
+Use `string.Template` da biblioteca padrão do Python. Os placeholders usam a sintaxe `$variable` ou `${variable}`. O caractere `$` pode ter significado próprio em alguns dialetos. Para um `$` literal em `string.Template`, use `$$` e valide o SQL renderizado.
 ```sql
 -- queries/get_last_update.sql
 SELECT max(last_update) AS last_update
