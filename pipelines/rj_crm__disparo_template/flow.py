@@ -289,8 +289,17 @@ def rj_crm__disparo_template_sf(
 
         if i == 0:
             current_df = base_df.copy()
-            # No primeiro disparo, exclui linhas com telefone None (marcadas por filter_failed_phones)
+            # Para linhas com telefone None (marcadas por filter_failed_phones),
+            # tenta usar o primeiro número disponível em 'others' antes de descartar
+            if "others" in current_df.columns:
+                mask_none = current_df["telefone"].isna()
+                current_df.loc[mask_none, "telefone"] = current_df.loc[mask_none, "others"].apply(
+                    lambda x: x[0] if isinstance(x, list) and len(x) >= 1 else None
+                )
             current_df = current_df.dropna(subset=["telefone"])
+            if current_df.shape[0] == 0:
+                print("✅ No destinations available for dispatch attempt 0. Ending.")
+                break
         else:
             if "others" in base_df.columns and not base_df["others"].apply(
                 lambda x: isinstance(x, list) and len(x) >= i
@@ -396,7 +405,7 @@ def rj_crm__disparo_template_sf(
             )
             
             print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam alguma campanha hoje.")
-            print(f"[DEBUG] Já tiveram disparo hoje:\n{df_dispatched_today.to_dict('records')}") if debug else None
+            print(f"[DEBUG] Já tiveram disparo hoje:\n{df_dispatched_today.head().to_dict('records')}") if debug else None
 
         # Dedup por telefone (retries podem introduzir duplicatas)
         current_df = filter_duplicated(
