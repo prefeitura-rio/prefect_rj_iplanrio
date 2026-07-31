@@ -153,7 +153,7 @@ def fetch_stations_task(dataset_id: str, table_id: str) -> str:
 
 ### 4.3 `utils.py`
 
-**Contém:** funções Python puras que realizam o trabalho real — chamadas de API, transformação de dados, I/O de arquivos, construção de queries.
+**Contém:** funções Python sem dependência do Prefect que realizam o trabalho real — chamadas de API, transformação de dados, I/O de arquivos e construção de queries.
 
 **Papel:** o núcleo testável da pipeline. Por não terem imports do Prefect, essas funções podem ser chamadas diretamente no `pytest` sem subir um ambiente Prefect.
 
