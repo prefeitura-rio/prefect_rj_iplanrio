@@ -487,6 +487,8 @@ def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days:
             envio_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
               OR
             entrega_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
+              OR
+            falha_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
             )
     """
     log(f"Buscando disparos já realizados hoje e na campanha para evitar duplicidade:\n{query}")
