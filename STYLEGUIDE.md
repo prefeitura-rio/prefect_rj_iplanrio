@@ -4,7 +4,7 @@ lang: pt-br
 
 # Guia de Estilo
 
-Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra declara o que é, porque existe e apresenta um exemplo concreto extraído do código.
+Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra declara o que é, por que existe e apresenta um exemplo concreto extraído do código.
 
 ## Índice
 
@@ -332,6 +332,62 @@ Regras:
 - `:raises:` lista **todas** as exceções que a função pode lançar intencionalmente.
 - Uma função que só delega para outra (ex.: tasks finas) pode ter apenas a linha de resumo se não houver comportamento adicional a documentar.
 
+### 5.7 Parâmetros em excesso
+
+Funções em `utils.py` com mais de 5 parâmetros que formem um grupo coeso devem agrupar esses parâmetros em um `dataclass` ou `TypedDict`. A regra não se aplica a `@flow` e `@task`, cujos parâmetros precisam ser primitivos JSON-serializáveis para o Prefect.
+
+Prefira `dataclass(frozen=True)` para configs imutáveis com defaults. Use `TypedDict` quando o caller precisa construir o dict diretamente e passá-lo com `**`.
+
+```python
+# ❌ errado — mais de 5 parâmetros sem agrupamento
+def fetch_records(
+    project: str,
+    dataset_id: str,
+    table_id: str,
+    environment: str,
+    page_size: int = 500,
+    timeout: int = 30,
+) -> pd.DataFrame:
+    ...
+```
+
+```python
+# ✅ correto — dataclass para config imutável com defaults
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class FetchConfig:
+    project: str
+    dataset_id: str
+    table_id: str
+    environment: str
+    page_size: int = 500
+    timeout: int = 30
+
+
+def fetch_records(config: FetchConfig) -> pd.DataFrame:
+    ...
+```
+
+```python
+# ✅ TypedDict — quando o caller monta o dict e passa com **params
+from typing import TypedDict
+
+
+class FetchParams(TypedDict):
+    project: str
+    dataset_id: str
+    table_id: str
+    environment: str
+    page_size: int
+    timeout: int
+
+
+def fetch_records(**params: FetchParams) -> pd.DataFrame:
+    ...
+```
+
 ## 6. Padrões do Prefect 3.0
 
 ### 6.1 Declaração de flow
@@ -405,13 +461,13 @@ path = download_task(url=url, wait_for=[credentials])  # apenas se download_task
 
 ### 7.1 A regra
 
-Nenhuma string SQL em arquivos Python. Todo SQL vive em arquivos `.sql` dentro de `queries/`.
+Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arquivos `.sql` dentro de `queries/`.
 
-**Justificativa:** SQL embutido em strings Python é invisível para linters e editores de SQL, não pode ser testado isoladamente e é mais difícil de revisar em pull requests. f-strings tornam a query dinâmica de um modo que não pode ser analisado estaticamente. `str.format()` colide com a sintaxe do BigQuery — `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{` que `str.format()` trata como placeholder.
+**Justificativa:** SQL embutido em strings Python é invisível para linters e editores de SQL, não pode ser testado isoladamente e é mais difícil de revisar em pull requests. f-strings tornam a query dinâmica de um modo que não pode ser analisado estaticamente. `str.format()` colide com a sintaxe do BigQuery — `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{` que `str.format()` trata como placeholder. SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos de centenas de linhas de SQL escapado em YAML — ilegível para revisão em pull requests e invisível para qualquer linter de SQL.
 
 ### 7.2 Sintaxe de template
 
-Use `string.Template` da biblioteca padrão do Python. Os placeholders usam a sintaxe `$variable` ou `${variable}`. O caractere `$` não é um operador SQL no BigQuery, MSSQL ou MySQL, portanto não há colisões.
+Use `string.Template` da biblioteca padrão do Python. Os placeholders usam a sintaxe `$variable` ou `${variable}`. O caractere `$` não é um operador SQL no BigQuery, MSSQL ou MySQL, portanto, não há colisões.
 
 ```sql
 -- queries/get_last_update.sql
@@ -483,19 +539,61 @@ query = load_query(__file__, "cluster_alerts", structs=structs, radius_meters=50
 
 O arquivo `.sql` permanece legível como SQL puro.
 
-### 7.5 A exceção conhecida
+### 7.5 Parâmetros `query` em deployments
 
-SQL passado como `execute_query` nos schedules de deployment do `prefect.yaml` é um **parâmetro estático de deployment** — nunca é interpolado em código Python. Está isento desta regra.
+Flows que recebem SQL como parâmetro de deployment devem usar um parâmetro estruturado `query` com as chaves `name` e `replacements`. O `prefect.yaml` passa apenas o nome do arquivo `.sql` e os valores de substituição — nunca o conteúdo SQL.
+
+**Cadeia completa:**
 
 ```yaml
-# prefect.yaml — este SQL é um parâmetro de deployment, não código Python
-schedules:
-  - interval: 86400
-    parameters:
-      execute_query: |
-        SELECT column1, column2
-        FROM database.table_name
+# ✅ prefect.yaml — name é o arquivo .sql em queries/; replacements são os $placeholders
+parameters:
+  query:
+    name: get_eligible_contacts
+    replacements:
+      dataset_id: brutos_wetalkie
+      environment: production
 ```
+
+```sql
+-- ✅ queries/get_eligible_contacts.sql
+SELECT *
+FROM `rj-iplanrio.$dataset_id.contacts`
+WHERE environment = '$environment'
+```
+
+```python
+# ✅ flow.py — recebe query do Prefect e repassa para a task
+from prefect import flow
+
+from .tasks import QueryParam, fetch_data_task
+
+
+@flow(log_prints=True)
+def rj_secretaria__pipeline(query: QueryParam) -> None:
+    fetch_data_task(query=query)
+```
+
+```python
+# ✅ tasks.py
+from typing import TypedDict
+
+from prefect_rj_iplanrio.sql import load_query
+
+
+class QueryParam(TypedDict):
+    name: str
+    replacements: dict[str, object]
+
+
+def fetch_data_task(query: QueryParam) -> pd.DataFrame:
+    sql = load_query(__file__, query["name"], **query["replacements"])
+    ...
+```
+
+**Contrato:** as chaves de `replacements` devem corresponder exatamente aos placeholders `$variable` no arquivo `.sql`. `load_query` usa `string.Template.substitute()`, que levanta `KeyError` se um placeholder obrigatório estiver ausente — falha explícita e imediata.
+
+Cada variante de campanha que exija SQL diferente recebe um arquivo `.sql` próprio em `queries/`. O diretório `queries/` é a única fonte de verdade do SQL da pipeline.
 
 ### 7.6 O que nunca fazer
 
@@ -590,7 +688,7 @@ Staging não tem a chave `schedules:`. Prod tem agendamentos. Staging usa `secre
 
 ### 10.1 `description`
 
-Uma frase que diga a um leitor — que nunca viu a pipeline antes — o que ela faz e porque existe.
+Uma frase que diga a um leitor — que nunca viu a pipeline antes — o que ela faz e por que existe.
 
 ```toml
 # ✅ correto
@@ -613,7 +711,7 @@ Sempre `1.0.0`. O versionamento é tratado no nível do workspace via git tags e
 
 Uma função é promovida do `utils.py` de uma pipeline para `src/prefect_rj_iplanrio/` quando **ambas** as condições forem verdadeiras:
 
-1. Dois ou mais pipelines precisam dela.
+1. Duas ou mais pipelines precisam dela.
 2. Não contém lógica específica de nenhuma pipeline.
 
 Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. Copie uma vez; promova no segundo uso.
