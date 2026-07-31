@@ -351,6 +351,8 @@ def _format_sample_destination(destination: dict) -> str:
         **extra_fields,
     }
 
+    sample = {k: str(v) for k, v in sample.items()}
+
     return json.dumps(sample, indent=2, ensure_ascii=False)
 
 
