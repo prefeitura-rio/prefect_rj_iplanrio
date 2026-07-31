@@ -54,9 +54,25 @@ _F2A_QUERIES = {
         WHERE LastModifiedDate >= {watermark}
     """,
     "conversation_entry": """
-        SELECT ssot__Id__c, ssot__ConversationId__c, ssot__ActorType__c,
-               ssot__EntryType__c, ssot__Message__c, ssot__EntryPayload__c,
-               ssot__CreatedDate__c
+        SELECT
+            ssot__Id__c,
+            ssot__ConversationId__c,
+            ssot__ConversationEntryType__c,
+            ssot__ConversationEntryVisibilityType__c,
+            ssot__EngagementParticipantId__c,
+            ssot__PayloadText__c,
+            ssot__Language__c,
+            ssot__DurationSecondsCount__c,
+            ssot__VersionNumber__c,
+            ssot__ExternalRecordId__c,
+            ssot__ClientDateTime__c,
+            ssot__TranscriptedDateTime__c,
+            ssot__CreatedDate__c,
+            ssot__LastModifiedDate__c,
+            ssot__InternalOrganizationId__c,
+            ssot__DataSourceId__c,
+            ssot__DataSourceObjectId__c,
+            KQ_Id__c
         FROM ssot__ConversationEntry__dlm
         WHERE ssot__CreatedDate__c >= '{watermark}'
     """,
@@ -193,13 +209,10 @@ def agentforce_full_daily(
         t0 = time.time()
         f2a_rows: dict[str, int] = {}
         try:
-            f2a_rows["messaging_session"] = sf_to_bq(
-                source="bulk_api",
-                query_template=_F2A_QUERIES["messaging_session"],
-                target_table="messaging_session",
-                # bulk_session=bulk_session,
-                **bq_base,
-            )
+            # messaging_session: MessagingSession não existe no Data Cloud deste org.
+            # Mantemos a tabela no BQ mas pulamos a extração para não falhar a fase.
+            # f2a_rows["messaging_session"] = sf_to_bq(...)
+
             if preflight.get("dc_auth"):
                 f2a_rows["conversation_entry"] = sf_to_bq(
                     source="data_cloud",
@@ -207,6 +220,7 @@ def agentforce_full_daily(
                     target_table="conversation_entry",
                     dc_session=dc_session,
                     is_data_cloud=True,
+                    date_columns=["client_date_time", "transcripted_date_time", "created_date", "last_modified_date"],
                     **bq_base,
                 )
             phase_results["F2a - Messaging"] = f2a_rows
