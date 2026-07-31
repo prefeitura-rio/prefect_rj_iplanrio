@@ -43,8 +43,8 @@ O código neste repositório vive em um de três níveis. O nível determina ond
 
 ### 3.1 Arquivos obrigatórios
 
-Todo diretório de pipeline deve conter exatamente estes três arquivos:
-
+Todo diretório de pipeline deve conter estes três arquivos obrigatórios.
+Arquivos condicionais da Seção 3.2 podem ser adicionados quando necessários.
 ```
 pipelines/rj_secretaria__pipeline/
 ├── flow.py          ← a função @flow
