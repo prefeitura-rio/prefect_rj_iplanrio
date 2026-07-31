@@ -62,6 +62,12 @@ deployments:
       dataset_id: brutos_salesforce_staging
       control_dataset: agentforce_control_staging
       environment: staging
+    schedules:
+      - cron: "0 9 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: agentforce-full-daily
+        flow_run_name: agentforce-full-daily
 
   # -----------------------------------------------------------------------
   # Deployment de producao
@@ -77,9 +83,3 @@ deployments:
         command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
-    schedules:
-      - cron: "0 9 * * *"
-        timezone: America/Sao_Paulo
-        active: true
-        slug: agentforce-full-daily
-        flow_run_name: agentforce-full-daily

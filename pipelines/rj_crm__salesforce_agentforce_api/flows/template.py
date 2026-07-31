@@ -233,13 +233,16 @@ def sf_to_bq(
         raise ValueError(f"[TEMPLATE] source inválido: '{source}'. Use 'bulk_api', 'data_cloud' ou 'data_cloud_chunked'.")
 
     # --- 4. Validar ---
-    validate_row_count(
-        source_count=total_rows,
-        project_id=project_id,
-        dataset_id=dataset_id,
-        table_id=target_table,
-        partition_date=partition_str,
-    )
+    # Pulado em modo backfill (skip_checkpoint=True) pois a tabela pode ter dados
+    # de execuções anteriores na mesma partição, tornando a comparação inválida.
+    if not skip_checkpoint:
+        validate_row_count(
+            source_count=total_rows,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            table_id=target_table,
+            partition_date=partition_str,
+        )
 
     # --- 5. Escrever watermark ---
     if not skip_checkpoint and total_rows > 0:
