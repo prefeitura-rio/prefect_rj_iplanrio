@@ -7,6 +7,9 @@ Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 # flake8: noqa: E501
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
+
+import json
 
 import pandas as pd
 import requests
@@ -20,17 +23,22 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 
 @task
-def calculate_target_date() -> str:
+def calculate_target_date() -> str | None:
     """
     Calcula a data target baseada na regra de negócio:
+    - Sábado (5) ou Domingo (6): retorna None (flow deve ser encerrado)
     - Dias normais: 2 dias à frente
-    - Quinta-feira (4) e Sexta-feira (5): 4 dias à frente
+    - Quinta-feira (3) e Sexta-feira (4): 4 dias à frente
 
     Returns:
-        str: Data no formato YYYY-MM-DD
+        str: Data no formato YYYY-MM-DD, ou None se for sábado ou domingo
     """
-    today = datetime.now()
+    today = datetime.now(ZoneInfo("America/Sao_Paulo"))
     weekday = today.weekday()  # 0=Monday, 1=Tuesday, ..., 6=Sunday
+
+    if weekday in [5, 6]:  # Saturday or Sunday
+        log(f"(calculate_target_date) - Fim de semana detectado (weekday={weekday}) - encerrando flow")
+        return None
 
     # Quinta-feira (3) e Sexta-feira (4) em Python weekday (0-indexed, Monday=0)
     if weekday in [3, 4]:  # Thursday and Friday
@@ -102,9 +110,6 @@ def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[
     proxy_url = f"{credentials['proxy_url'].rstrip('/')}/?url={datametrica_url}"
 
     log("Buscando agendamentos via proxy brasileiro")
-    log(f"Datametrica URL: {datametrica_url}")
-    log(f"Proxy URL: {proxy_url}")
-    log(f"Token (primeiros 10 chars): {credentials['token'][:10]}...")
 
     # Headers incluindo o token do proxy e os headers originais da Datametrica
     headers = {
@@ -154,6 +159,8 @@ def transform_agendamentos_data(
     agendamentos = []
     for data in agendamentos_data:
         try:
+            if isinstance(data, str):
+                data = json.loads(data)
             agendamento = {
                 "id": data["id"],
                 "id_capacidade": data["id_capacidade"],

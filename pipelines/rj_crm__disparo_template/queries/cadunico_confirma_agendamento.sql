@@ -22,6 +22,7 @@ segmentacao_original AS (
     FROM `rj-iplanrio.brutos_data_metrica_staging.cadunico_agendamentos`
     WHERE
         DATE(CAST(data_hora AS DATETIME)) = DATE_ADD(CURRENT_DATE('America/Sao_Paulo'), INTERVAL CAST({days_ahead_placeholder} AS int64) DAY)
+        AND EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) NOT IN (1, 7)
 ),
 
 filtra_disparados AS (

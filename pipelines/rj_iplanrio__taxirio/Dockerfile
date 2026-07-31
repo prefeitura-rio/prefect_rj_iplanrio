@@ -7,7 +7,6 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
 
-COPY ./pipelines/rj_smas__api_datametrica_agendamentos ./pipelines/rj_smas__api_datametrica_agendamentos/
-COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
+COPY ./pipelines/rj_iplanrio__taxirio ./pipelines/rj_iplanrio__taxirio/
 
-RUN uv sync --package rj_smas__api_datametrica_agendamentos
+RUN uv sync --package rj_iplanrio__taxirio
