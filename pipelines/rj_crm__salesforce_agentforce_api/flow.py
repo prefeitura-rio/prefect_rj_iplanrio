@@ -82,11 +82,13 @@ _F2A_CRM_QUERIES = {
         "soql": "SELECT Id, Name, MessagingChannelId, MessageType, MessagingPlatformKey, Locale, IsoCountryCode, MessagingConsentStatus, IsFullyOptedIn, MessagingExternalUserKey, Language, CreatedDate, LastModifiedDate FROM MessagingEndUser WHERE LastModifiedDate >= {watermark} ORDER BY CreatedDate ASC",
         "date_columns": ["created_date", "last_modified_date"],
         "watermark_field": "LastModifiedDate",
+        "clustering_fields": ["id"],
     },
     "messaging_session": {
         "soql": "SELECT Id, Status, StartTime, EndTime, MessagingChannelId, MessagingEndUserId, Origin, CreatedDate, LastModifiedDate FROM MessagingSession WHERE LastModifiedDate >= {watermark} ORDER BY CreatedDate ASC",
         "date_columns": ["start_time", "end_time", "created_date", "last_modified_date"],
         "watermark_field": "LastModifiedDate",
+        "clustering_fields": ["id"],
     },
 }
 
@@ -217,6 +219,7 @@ def agentforce_full_daily(
                     target_table=table,
                     crm_session=dc_session,
                     date_columns=cfg["date_columns"],
+                    clustering_fields=cfg["clustering_fields"],
                     write_mode="replace",
                     **bq_base,
                 )
