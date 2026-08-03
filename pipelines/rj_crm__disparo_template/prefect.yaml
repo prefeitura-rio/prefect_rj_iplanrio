@@ -200,7 +200,13 @@ deployments:
               239"}
           campaign_name: pgm_divida_ativa_prod_v2
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
-          de_columns: ["nome_sobrenome"]
+          enrich_with_api_name: consulta_debitos
+          enrich_with_api_params:
+            api_url: "https://services.pref.rio/mcp/consulta_debitos"
+          de_columns: ["nome_sobrenome", "api_resposta_sucesso", "lista_cdas", "lista_guias",
+            "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte",
+            "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado",
+            "total_parcelado", "debitos_msg"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -1740,7 +1746,13 @@ deployments:
               239"}
           campaign_name: pgm_divida_ativa_prod_v2
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
-          de_columns: ["nome_sobrenome"]
+          enrich_with_api_name: consulta_debitos
+          enrich_with_api_params:
+            api_url: "https://services.pref.rio/mcp/consulta_debitos"
+          de_columns: ["nome_sobrenome", "api_resposta_sucesso", "lista_cdas", "lista_guias",
+            "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte",
+            "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado",
+            "total_parcelado", "debitos_msg"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append

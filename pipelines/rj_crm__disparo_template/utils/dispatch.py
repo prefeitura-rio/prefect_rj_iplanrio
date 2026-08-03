@@ -25,6 +25,7 @@ from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 from pytz import timezone
 
 from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.enrichers import DF_ENRICHERS, get_df_enricher  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
@@ -1170,6 +1171,35 @@ def get_retry_destinations(
 
     log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
     return retry_destinations
+
+
+@task
+def apply_df_enricher(
+    df: pd.DataFrame,
+    enricher_name: str,
+    enricher_params: Optional[dict] = None,
+) -> pd.DataFrame:
+    """
+    Aplica uma função de enriquecimento registrada em DF_ENRICHERS (utils/enrichers.py)
+    sobre o DataFrame retornado pela query, antes dos filtros/dedup/CSV.
+
+    Permite plugar novas fontes de enriquecimento (ex.: outras APIs externas)
+    apenas registrando uma nova função em DF_ENRICHERS, sem alterar o flow.
+
+    Args:
+        df: DataFrame retornado pela query de destinos.
+        enricher_name: Chave registrada em DF_ENRICHERS.
+        enricher_params: Parâmetros livres repassados pra função do enricher.
+
+    Returns:
+        DataFrame enriquecido (pode ter menos linhas que o original, se o
+        enricher filtrar registros sem dado correspondente).
+    """
+    enricher_fn = get_df_enricher(enricher_name)
+    if enricher_fn is None:
+        raise ValueError(f"Unknown df enricher: {enricher_name!r}. Registered: {list(DF_ENRICHERS)}")
+
+    return enricher_fn(df, enricher_params or {})
 
 
 @task
