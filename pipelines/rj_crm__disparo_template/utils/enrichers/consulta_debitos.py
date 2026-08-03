@@ -38,6 +38,18 @@ _RESPONSE_FIELDS = [
 ]
 
 
+def _is_sucesso(value: Any) -> bool:
+    """
+    Normaliza `api_resposta_sucesso` da resposta: aceita bool real ou string
+    ("true"/"false"), já que APIs externas às vezes serializam bool como texto.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    return False
+
+
 def consultar_debitos(cpf: str, api_url: str, timeout: int = 15, max_retries: int = 3) -> Optional[Dict[str, Any]]:
     """
     Consulta débitos de um CPF/CNPJ na API consulta_debitos, com retentativas
@@ -94,7 +106,7 @@ def enrich_with_debitos_api(df: pd.DataFrame, params: dict = {}) -> pd.DataFrame
     rows = []
     for cpf in cpfs:
         response = consultar_debitos(cpf=str(cpf), api_url=api_url)
-        if response is None or response.get("api_resposta_sucesso") is not True:
+        if response is None or not _is_sucesso(response.get("api_resposta_sucesso")):
             continue
 
         row = {cpf_column: cpf}
