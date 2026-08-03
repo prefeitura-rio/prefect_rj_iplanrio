@@ -52,7 +52,7 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries/pgm_divida_ativa_cobranca.sql
+      query_file: queries_dev/pgm_divida_ativa_cobranca.sql  # TODO: trocar de volta pra queries/ antes de ir pra producao
 
   # Daily schedule para flow pgmdividaativalembreteprodv1
   - cron: "0 13 * * *"
