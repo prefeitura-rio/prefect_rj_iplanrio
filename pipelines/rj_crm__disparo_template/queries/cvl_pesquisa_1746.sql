@@ -137,6 +137,7 @@ WITH tabela_global AS (
 
     dados_finais AS (
     SELECT
+        ta.id_chamado,
         numero_protocolo,
         canal_tratado,
         ta.cpf,
@@ -185,5 +186,7 @@ WITH tabela_global AS (
         subtipo_tratado AS cc_wt_solicitacao,
         canal_tratado AS cc_wt_canal,
         CAST(numero_protocolo AS STRING) AS protocolo,
-        status_demanda_tratado AS STATUS_DEMANDA
+        status_demanda_tratado AS STATUS_DEMANDA,
+        CAST(id_chamado AS STRING) AS cc_wt_id_chamado,
+        CAST(id_subtipo AS STRING) AS cc_wt_id_subtipo
     FROM dados_finais;
