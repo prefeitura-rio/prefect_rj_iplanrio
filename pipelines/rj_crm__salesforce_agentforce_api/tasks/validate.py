@@ -61,7 +61,7 @@ def validate_row_count(
         WHERE {partition_field} = '{partition_date}'
     """
 
-    print(f"[VALIDATE] Contando linhas em '{table_id}' para partição '{partition_date}'...")
+    print(f"[VALIDATE] '{table_id}': iniciando validação | write_mode='{write_mode}', partition='{partition_date}', source={source_count}")
     result = client.query(query).result()
     bq_count = next(iter(result)).cnt
 

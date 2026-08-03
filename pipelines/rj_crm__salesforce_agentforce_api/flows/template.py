@@ -270,6 +270,10 @@ def sf_to_bq(
     # Pulado em modo backfill (skip_checkpoint=True) pois a tabela pode ter dados
     # de execuções anteriores na mesma partição, tornando a comparação inválida.
     if not skip_checkpoint:
+        print(
+            f"[TEMPLATE][DIAG] chamando validate_row_count: "
+            f"table={target_table}, source={total_rows}, write_mode='{write_mode}'"
+        )
         validate_row_count(
             source_count=total_rows,
             project_id=project_id,
