@@ -232,6 +232,8 @@ def agentforce_full_daily(
                     dc_session=dc_session,
                     is_data_cloud=True,
                     date_columns=["client_date_time", "transcripted_date_time", "created_date", "last_modified_date"],
+                    clustering_fields=["id"],
+                    write_mode="replace",
                     **bq_base,
                 )
             phase_results["F2a - Messaging"] = f2a_rows
@@ -257,6 +259,7 @@ def agentforce_full_daily(
                 date_columns=["start_date_time", "end_date_time"],
                 write_mode="merge",
                 primary_key="id",
+                clustering_fields=["id"],
                 **bq_base,
             )
             phase_results["F3 - Tracing"] = {"telemetry_trace_span": rows}

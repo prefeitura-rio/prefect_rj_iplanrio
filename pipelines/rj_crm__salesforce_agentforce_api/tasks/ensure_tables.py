@@ -29,7 +29,7 @@ def _base_fields(extra: list[bigquery.SchemaField]) -> list[bigquery.SchemaField
 # Schemas por tabela
 # ---------------------------------------------------------------------------
 
-_SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
+SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
     # --- F1 — STDM ---
     "ai_agent_session": _base_fields([
         bigquery.SchemaField("id", _STRING),
@@ -199,7 +199,7 @@ _SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
 }
 
 # Tabelas com particionamento + clustering
-_PARTITIONED_TABLES: dict[str, list[str]] = {
+PARTITIONED_TABLES: dict[str, list[str]] = {
     "ai_agent_session": ["id"],
     "ai_agent_interaction": ["id", "ai_agent_session_id"],
     "ai_agent_interaction_step": ["id", "ai_agent_interaction_id"],
@@ -230,18 +230,18 @@ def ensure_bq_tables(project_id: str, dataset_id: str) -> None:
     client = bigquery.Client(project=project_id)
     dataset_ref = bigquery.DatasetReference(project_id, dataset_id)
 
-    print(f"[ENSURE_TABLES] Verificando {len(_SCHEMAS)} tabelas em '{project_id}.{dataset_id}'...")
+    print(f"[ENSURE_TABLES] Verificando {len(SCHEMAS)} tabelas em '{project_id}.{dataset_id}'...")
 
-    for table_id, schema in _SCHEMAS.items():
+    for table_id, schema in SCHEMAS.items():
         table_ref = dataset_ref.table(table_id)
         table = bigquery.Table(table_ref, schema=schema)
 
-        if table_id in _PARTITIONED_TABLES:
+        if table_id in PARTITIONED_TABLES:
             table.time_partitioning = bigquery.TimePartitioning(
                 type_=bigquery.TimePartitioningType.DAY,
                 field="data_particao",
             )
-            table.clustering_fields = _PARTITIONED_TABLES[table_id]
+            table.clustering_fields = PARTITIONED_TABLES[table_id]
 
         client.create_table(table, exists_ok=True)
         print(f"[ENSURE_TABLES]   {table_id}: OK")

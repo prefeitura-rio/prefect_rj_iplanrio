@@ -19,6 +19,11 @@ import pandas as pd
 from google.cloud import bigquery
 from prefect import task
 
+from pipelines.rj_crm__salesforce_agentforce_api.tasks.ensure_tables import (
+    PARTITIONED_TABLES,
+    SCHEMAS,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -61,7 +66,8 @@ def load_to_bigquery(
         dataset_id       : Dataset de destino.
         table_id         : Tabela de destino.
         write_mode       : 'append', 'replace' ou 'truncate'.
-                           'replace' → WRITE_TRUNCATE na partição do dia.
+                           'replace' → WRITE_TRUNCATE apenas na partição do dia
+                           (usa decorator $YYYYMMDD no table ID).
                            'append'  → WRITE_APPEND.
         partition_field  : Campo usado para particionamento. Padrão: 'data_particao'.
         clustering_fields: Lista de campos de clustering. Deve corresponder ao
@@ -76,30 +82,50 @@ def load_to_bigquery(
         print(f"[BQ] '{table_id}': DataFrame vazio — nada a carregar.")
         return 0
 
+    # Garantir que data_particao seja dtype datetime.date para o BQ inferir DATE
+    if "data_particao" in df.columns:
+        df = df.copy()
+        df["data_particao"] = pd.to_datetime(df["data_particao"]).dt.date
+
     client = _get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, table_id)
 
-    disposition_map = {
-        "append": bigquery.WriteDisposition.WRITE_APPEND,
-        "replace": bigquery.WriteDisposition.WRITE_TRUNCATE,
-        "truncate": bigquery.WriteDisposition.WRITE_TRUNCATE,
-    }
-    disposition = disposition_map.get(write_mode, bigquery.WriteDisposition.WRITE_APPEND)
+    # Para replace: apaga apenas a(s) partição(ões) afetada(s) antes de inserir, evitando
+    # WRITE_TRUNCATE que apagaria a tabela inteira. O decorator $YYYYMMDD NÃO
+    # funciona para tabelas particionadas por coluna (só por ingestão).
+    if write_mode in ("replace", "truncate") and partition_field in df.columns:
+        unique_dates = df[partition_field].dropna().unique()
+        if len(unique_dates) > 0:
+            dates_formatted = ", ".join(f"'{d}'" for d in unique_dates)
+            delete_sql = f"""
+                DELETE FROM `{full_id}`
+                WHERE {partition_field} IN ({dates_formatted})
+            """
+            print(f"[BQ] Apagando partição(ões) {dates_formatted} de '{table_id}' antes do replace...")
+            client.query(delete_sql).result()
+
+    # Schema explícito: evita autodetect inferir tipos errados (ex: None → FLOAT).
+    # Usa o schema centralizado em ensure_tables.py; cai em autodetect só se a
+    # tabela não estiver mapeada (não deve acontecer em operação normal).
+    schema = SCHEMAS.get(table_id)
+    if schema is None:
+        print(f"[BQ] WARN: schema não encontrado para '{table_id}' — usando autodetect.")
+
+    # Se clustering_fields não for informado explicitamente, obtém do mapeamento centralizado
+    if clustering_fields is None:
+        clustering_fields = PARTITIONED_TABLES.get(table_id)
 
     job_config = bigquery.LoadJobConfig(
-        write_disposition=disposition,
-        autodetect=True,
+        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
+        schema=schema,
+        autodetect=schema is None,
+        ignore_unknown_values=True,
         time_partitioning=bigquery.TimePartitioning(
             type_=bigquery.TimePartitioningType.DAY,
             field=partition_field,
         ),
         clustering_fields=clustering_fields,
     )
-
-    # Garantir que data_particao seja dtype datetime.date para o BQ inferir DATE
-    if "data_particao" in df.columns:
-        df = df.copy()
-        df["data_particao"] = pd.to_datetime(df["data_particao"]).dt.date
 
     print(f"[BQ] Carregando {len(df)} linhas em '{full_id}' (modo: {write_mode})...")
     job = client.load_table_from_dataframe(df, full_id, job_config=job_config)
@@ -146,9 +172,14 @@ def load_chunk_to_staging(
     client = _get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, staging_table_id)
 
+    schema = SCHEMAS.get(staging_table_id)
+    if schema is None:
+        print(f"[BQ][STAGING] WARN: schema não encontrado para '{staging_table_id}' — usando autodetect.")
+
     job_config = bigquery.LoadJobConfig(
         write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        autodetect=True,
+        schema=schema,
+        autodetect=schema is None,
     )
 
     print(f"[BQ][STAGING] Chunk {chunk_num}: {len(df_chunk)} linhas → '{staging_table_id}'...")
