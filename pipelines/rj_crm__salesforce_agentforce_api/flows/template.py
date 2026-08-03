@@ -276,6 +276,7 @@ def sf_to_bq(
             dataset_id=dataset_id,
             table_id=target_table,
             partition_date=partition_str,
+            write_mode=write_mode,
         )
 
     # --- 5. Escrever watermark ---

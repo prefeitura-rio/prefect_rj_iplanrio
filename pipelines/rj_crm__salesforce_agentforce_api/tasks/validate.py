@@ -23,9 +23,13 @@ def validate_row_count(
     partition_date: str,
     partition_field: str = "data_particao",
     tolerance_pct: float = 0.01,
+    write_mode: str = "append",
 ) -> bool:
     """
     Verifica se a contagem de linhas no BigQuery corresponde à contagem no source.
+
+    Para write_mode='replace': valida que BQ == source (dentro da tolerância).
+    Para write_mode='append' ou 'merge': valida que BQ >= source (acúmulo esperado).
 
     Args:
         source_count    : Total de registros extraídos do Salesforce.
@@ -35,12 +39,14 @@ def validate_row_count(
         partition_date  : Data da partição no formato 'YYYY-MM-DD'.
         partition_field : Campo de partição. Padrão: 'data_particao'.
         tolerance_pct   : Tolerância máxima de delta (0.01 = 1%). Padrão: 1%.
+                          Usado apenas para write_mode='replace'.
+        write_mode      : 'append', 'replace' ou 'merge'. Padrão: 'append'.
 
     Returns:
         True se validação passar.
 
     Raises:
-        RuntimeError: Se delta exceder tolerância.
+        RuntimeError: Se validação falhar.
     """
     if source_count == 0:
         print(f"[VALIDATE] '{table_id}': source vazio — validação pulada.")
@@ -59,19 +65,26 @@ def validate_row_count(
     result = client.query(query).result()
     bq_count = next(iter(result)).cnt
 
-    delta = abs(source_count - bq_count)
-    delta_pct = delta / source_count if source_count > 0 else 0.0
-
     print(
         f"[VALIDATE] '{table_id}': source={source_count}, BQ={bq_count}, "
-        f"delta={delta} ({delta_pct:.2%})"
+        f"write_mode={write_mode}"
     )
 
-    if delta_pct > tolerance_pct:
-        raise RuntimeError(
-            f"[VALIDATE] FAIL '{table_id}': delta {delta_pct:.2%} excede tolerância "
-            f"{tolerance_pct:.2%}. source={source_count}, BQ={bq_count}."
-        )
+    if write_mode == "replace":
+        delta = abs(source_count - bq_count)
+        delta_pct = delta / source_count if source_count > 0 else 0.0
+        if delta_pct > tolerance_pct:
+            raise RuntimeError(
+                f"[VALIDATE] FAIL '{table_id}': delta {delta_pct:.2%} excede tolerância "
+                f"{tolerance_pct:.2%}. source={source_count}, BQ={bq_count}."
+            )
+    else:
+        # append/merge: BQ deve ter pelo menos os registros do source
+        if bq_count < source_count:
+            raise RuntimeError(
+                f"[VALIDATE] FAIL '{table_id}': BQ ({bq_count}) < source ({source_count}). "
+                f"Registros podem não ter sido inseridos."
+            )
 
-    print(f"[VALIDATE] '{table_id}': OK — delta dentro da tolerância.")
+    print(f"[VALIDATE] '{table_id}': OK.")
     return True
