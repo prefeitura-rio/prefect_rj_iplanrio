@@ -31,7 +31,6 @@ from prefect import flow
 from pipelines.rj_crm__salesforce_agentforce_api.constants import AgentforceConstants
 from pipelines.rj_crm__salesforce_agentforce_api.flows.template import sf_to_bq
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.auth import (
-    get_bulk_api_session,
     get_data_cloud_session,
 )
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.notify import (
@@ -78,13 +77,17 @@ _F2A_QUERIES = {
     """,
 }
 
-_F2B_MCE_QUERIES = {
-    "mce_sent": "SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c, ssot__EventDate__c, ssot__CreatedDate__c FROM ssot__MCE_Sent__dlm WHERE ssot__EventDate__c >= '{watermark}'",
-    "mce_open": "SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c, ssot__EventDate__c, ssot__CreatedDate__c FROM ssot__MCE_Open__dlm WHERE ssot__EventDate__c >= '{watermark}'",
-    "mce_click": "SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c, ssot__LinkUrl__c, ssot__EventDate__c, ssot__CreatedDate__c FROM ssot__MCE_Click__dlm WHERE ssot__EventDate__c >= '{watermark}'",
-    "mce_bounce": "SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c, ssot__BounceCategory__c, ssot__EventDate__c, ssot__CreatedDate__c FROM ssot__MCE_Bounce__dlm WHERE ssot__EventDate__c >= '{watermark}'",
-    "mce_unsub": "SELECT ssot__Id__c, ssot__SubscriberId__c, ssot__JobId__c, ssot__EventDate__c, ssot__CreatedDate__c FROM ssot__MCE_Unsub__dlm WHERE ssot__EventDate__c >= '{watermark}'",
-    "mce_subscriber": "SELECT ssot__Id__c, ssot__SubscriberKey__c, ssot__EmailAddress__c, ssot__Status__c, ssot__CreatedDate__c FROM ssot__MCE_Subscriber__dlm WHERE ssot__CreatedDate__c >= '{watermark}'",
+_F2A_CRM_QUERIES = {
+    "messaging_end_user": {
+        "soql": "SELECT Id, Name, MessagingChannelId, MessageType, MessagingPlatformKey, Locale, IsoCountryCode, MessagingConsentStatus, IsFullyOptedIn, MessagingExternalUserKey, Language, CreatedDate, LastModifiedDate FROM MessagingEndUser WHERE LastModifiedDate >= {watermark} ORDER BY CreatedDate ASC",
+        "date_columns": ["created_date", "last_modified_date"],
+        "watermark_field": "LastModifiedDate",
+    },
+    "messaging_session": {
+        "soql": "SELECT Id, Status, StartTime, EndTime, MessagingChannelId, MessagingEndUserId, Origin, CreatedDate, LastModifiedDate FROM MessagingSession WHERE LastModifiedDate >= {watermark} ORDER BY CreatedDate ASC",
+        "date_columns": ["start_time", "end_time", "created_date", "last_modified_date"],
+        "watermark_field": "LastModifiedDate",
+    },
 }
 
 _F3_QUERY = """
@@ -108,12 +111,7 @@ _F3_QUERY = """
     WHERE ssot__StartDateTime__c >= '{watermark}'
 """
 
-_F4_QUERIES = {
-    "genai_gateway_request": "SELECT ssot__Id__c, ssot__Model__c, ssot__RequestTokens__c, ssot__ResponseTokens__c, ssot__LatencyMs__c, ssot__Status__c, ssot__CreatedDate__c FROM ssot__GenAIGatewayRequest__dlm WHERE ssot__CreatedDate__c >= '{watermark}'",
-    "genai_generation": "SELECT ssot__Id__c, ssot__RequestId__c, ssot__GeneratedText__c, ssot__FinishReason__c, ssot__CreatedDate__c FROM ssot__GenAIGeneration__dlm WHERE ssot__CreatedDate__c >= '{watermark}'",
-    "genai_quality": "SELECT ssot__Id__c, ssot__GenerationId__c, ssot__QualityScore__c, ssot__QualityType__c, ssot__CreatedDate__c FROM ssot__GenAIQuality__dlm WHERE ssot__CreatedDate__c >= '{watermark}'",
-    "genai_feedback": "SELECT ssot__Id__c, ssot__GenerationId__c, ssot__FeedbackType__c, ssot__Rating__c, ssot__Comment__c, ssot__CreatedDate__c FROM ssot__GenAIFeedback__dlm WHERE ssot__CreatedDate__c >= '{watermark}'",
-}
+
 
 
 # ---------------------------------------------------------------------------
@@ -203,15 +201,25 @@ def agentforce_full_daily(
             raise
 
     # -------------------------------------------------------------------------
-    # Fase 2a — Messaging (não-crítica)
+    # Fase 2a — Messaging CRM (não-crítica)
+    # messaging_end_user e messaging_session via CRM REST API
+    # conversation_entry via Data Cloud
     # -------------------------------------------------------------------------
     if 2 in run_phases:
         t0 = time.time()
         f2a_rows: dict[str, int] = {}
         try:
-            # messaging_session: MessagingSession não existe no Data Cloud deste org.
-            # Mantemos a tabela no BQ mas pulamos a extração para não falhar a fase.
-            # f2a_rows["messaging_session"] = sf_to_bq(...)
+            # CRM REST usa as mesmas credenciais do Data Cloud (client_credentials)
+            for table, cfg in _F2A_CRM_QUERIES.items():
+                f2a_rows[table] = sf_to_bq(
+                    source="crm_rest",
+                    query_template=cfg["soql"],
+                    target_table=table,
+                    crm_session=dc_session,
+                    date_columns=cfg["date_columns"],
+                    write_mode="replace",
+                    **bq_base,
+                )
 
             if preflight.get("dc_auth"):
                 f2a_rows["conversation_entry"] = sf_to_bq(
@@ -229,28 +237,6 @@ def agentforce_full_daily(
             print(f"[DAILY] WARN: F2a falhou — {exc}. Continuando...")
             notify_phase_failure(phase_name="F2a — Messaging", error_message=str(exc))
             phase_results["F2a - Messaging"] = f2a_rows
-
-        # Fase 2b — MCE (opcional)
-        if preflight.get("dmos_mce"):
-            f2b_rows: dict[str, int] = {}
-            try:
-                for table, query in _F2B_MCE_QUERIES.items():
-                    f2b_rows[table] = sf_to_bq(
-                        source="data_cloud",
-                        query_template=query,
-                        target_table=table,
-                        dc_session=dc_session,
-                        is_data_cloud=True,
-                        **bq_base,
-                    )
-                phase_results["F2b - MCE"] = f2b_rows
-                print("[DAILY] F2b concluida.")
-            except Exception as exc:
-                print(f"[DAILY] WARN: F2b falhou — {exc}. Continuando...")
-                notify_phase_failure(phase_name="F2b — MCE", error_message=str(exc))
-                phase_results["F2b - MCE"] = f2b_rows
-        else:
-            print("[DAILY] F2b (MCE) pulada — DMOs nao disponíveis.")
 
     # -------------------------------------------------------------------------
     # Fase 3 — Platform Tracing (opcional, chunked)
@@ -278,31 +264,6 @@ def agentforce_full_daily(
             phase_results["F3 - Tracing"] = {"telemetry_trace_span": 0}
     elif 3 in run_phases:
         print("[DAILY] F3 (Platform Tracing) pulada — DMO nao disponível.")
-
-    # -------------------------------------------------------------------------
-    # Fase 4 — GenAI Audit (opcional)
-    # -------------------------------------------------------------------------
-    if 4 in run_phases and preflight.get("dmos_genai"):
-        t0 = time.time()
-        f4_rows: dict[str, int] = {}
-        try:
-            for table, query in _F4_QUERIES.items():
-                f4_rows[table] = sf_to_bq(
-                    source="data_cloud",
-                    query_template=query,
-                    target_table=table,
-                    dc_session=dc_session,
-                    is_data_cloud=True,
-                    **bq_base,
-                )
-            phase_results["F4 - GenAI"] = f4_rows
-            print(f"[DAILY] F4 concluida em {time.time() - t0:.0f}s")
-        except Exception as exc:
-            print(f"[DAILY] WARN: F4 falhou — {exc}. Continuando...")
-            notify_phase_failure(phase_name="F4 — GenAI Audit", error_message=str(exc))
-            phase_results["F4 - GenAI"] = f4_rows
-    elif 4 in run_phases:
-        print("[DAILY] F4 (GenAI Audit) pulada — DMOs nao disponíveis.")
 
     # -------------------------------------------------------------------------
     # Notificação final

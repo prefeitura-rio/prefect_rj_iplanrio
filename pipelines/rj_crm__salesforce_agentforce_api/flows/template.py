@@ -30,6 +30,9 @@ from pipelines.rj_crm__salesforce_agentforce_api.tasks.extract_bulk_api import (
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.extract_chunked import (
     extract_chunked_from_data_cloud,
 )
+from pipelines.rj_crm__salesforce_agentforce_api.tasks.extract_crm import (
+    extract_from_crm_rest,
+)
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.extract_data_cloud import (
     extract_from_data_cloud,
 )
@@ -51,6 +54,7 @@ def sf_to_bq(
     control_dataset: str,
     bulk_session: dict | None = None,
     dc_session: dict | None = None,
+    crm_session: dict | None = None,
     dc_conn=None,  # DEPRECATED: use dc_session
     write_mode: str = "append",
     primary_key: str = "id",
@@ -229,8 +233,38 @@ def sf_to_bq(
         # não o total bruto da staging que pode conter duplicatas.
         total_rows = merged_rows
 
+    elif source == "crm_rest":
+        assert crm_session, "crm_session é obrigatório para source='crm_rest'"
+        df = extract_from_crm_rest(
+            crm_session=crm_session,
+            soql=query,
+            table_name=target_table,
+        )
+        if df.empty:
+            print(f"[TEMPLATE] '{target_table}': sem dados — pulando carga.")
+            return 0
+
+        df = transform_dataframe(
+            df=df,
+            table_name=target_table,
+            is_data_cloud=False,
+            date_columns=date_columns,
+            duration_ns_columns=duration_ns_columns,
+            partition_date=partition_date,
+        )
+
+        total_rows = load_to_bigquery(
+            df=df,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            table_id=target_table,
+            write_mode=write_mode,
+            partition_field="data_particao",
+            clustering_fields=clustering_fields,
+        )
+
     else:
-        raise ValueError(f"[TEMPLATE] source inválido: '{source}'. Use 'bulk_api', 'data_cloud' ou 'data_cloud_chunked'.")
+        raise ValueError(f"[TEMPLATE] source inválido: '{source}'. Use 'bulk_api', 'data_cloud', 'data_cloud_chunked' ou 'crm_rest'.")
 
     # --- 4. Validar ---
     # Pulado em modo backfill (skip_checkpoint=True) pois a tabela pode ter dados

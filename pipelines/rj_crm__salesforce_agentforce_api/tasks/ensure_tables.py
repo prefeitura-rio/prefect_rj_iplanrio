@@ -112,13 +112,29 @@ _SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("modality", _STRING),
     ]),
 
-    # --- F2a — Messaging ---
+    # --- F2a — Messaging CRM ---
+    "messaging_end_user": _base_fields([
+        bigquery.SchemaField("id", _STRING),
+        bigquery.SchemaField("name", _STRING),
+        bigquery.SchemaField("messaging_channel_id", _STRING),
+        bigquery.SchemaField("message_type", _STRING),
+        bigquery.SchemaField("messaging_platform_key", _STRING),
+        bigquery.SchemaField("locale", _STRING),
+        bigquery.SchemaField("iso_country_code", _STRING),
+        bigquery.SchemaField("messaging_consent_status", _STRING),
+        bigquery.SchemaField("is_fully_opted_in", _STRING),
+        bigquery.SchemaField("messaging_external_user_key", _STRING),
+        bigquery.SchemaField("language", _STRING),
+        bigquery.SchemaField("created_date", _TIMESTAMP),
+        bigquery.SchemaField("last_modified_date", _TIMESTAMP),
+    ]),
     "messaging_session": _base_fields([
         bigquery.SchemaField("id", _STRING),
         bigquery.SchemaField("status", _STRING),
         bigquery.SchemaField("start_time", _TIMESTAMP),
         bigquery.SchemaField("end_time", _TIMESTAMP),
-        bigquery.SchemaField("messaging_channel", _STRING),
+        bigquery.SchemaField("messaging_channel_id", _STRING),
+        bigquery.SchemaField("messaging_end_user_id", _STRING),
         bigquery.SchemaField("origin", _STRING),
         bigquery.SchemaField("created_date", _TIMESTAMP),
         bigquery.SchemaField("last_modified_date", _TIMESTAMP),
@@ -142,52 +158,6 @@ _SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("data_source_id", _STRING),
         bigquery.SchemaField("data_source_object_id", _STRING),
         bigquery.SchemaField("kq__id", _STRING),
-    ]),
-
-    # --- F2b — MCE ---
-    "mce_sent": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("subscriber_id", _STRING),
-        bigquery.SchemaField("job_id", _STRING),
-        bigquery.SchemaField("event_date", _TIMESTAMP),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "mce_open": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("subscriber_id", _STRING),
-        bigquery.SchemaField("job_id", _STRING),
-        bigquery.SchemaField("event_date", _TIMESTAMP),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "mce_click": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("subscriber_id", _STRING),
-        bigquery.SchemaField("job_id", _STRING),
-        bigquery.SchemaField("link_url", _STRING),
-        bigquery.SchemaField("event_date", _TIMESTAMP),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "mce_bounce": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("subscriber_id", _STRING),
-        bigquery.SchemaField("job_id", _STRING),
-        bigquery.SchemaField("bounce_category", _STRING),
-        bigquery.SchemaField("event_date", _TIMESTAMP),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "mce_unsub": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("subscriber_id", _STRING),
-        bigquery.SchemaField("job_id", _STRING),
-        bigquery.SchemaField("event_date", _TIMESTAMP),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "mce_subscriber": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("subscriber_key", _STRING),
-        bigquery.SchemaField("email_address", _STRING),
-        bigquery.SchemaField("status", _STRING),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
     ]),
 
     # --- F3 — Platform Tracing ---
@@ -226,38 +196,6 @@ _SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("kq_id", _STRING),
     ]),
 
-    # --- F4 — GenAI Audit ---
-    "genai_gateway_request": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("model", _STRING),
-        bigquery.SchemaField("request_tokens", _FLOAT64),
-        bigquery.SchemaField("response_tokens", _FLOAT64),
-        bigquery.SchemaField("latency_ms", _FLOAT64),
-        bigquery.SchemaField("status", _STRING),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "genai_generation": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("request_id", _STRING),
-        bigquery.SchemaField("generated_text", _STRING),
-        bigquery.SchemaField("finish_reason", _STRING),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "genai_quality": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("generation_id", _STRING),
-        bigquery.SchemaField("quality_score", _FLOAT64),
-        bigquery.SchemaField("quality_type", _STRING),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
-    "genai_feedback": _base_fields([
-        bigquery.SchemaField("id", _STRING),
-        bigquery.SchemaField("generation_id", _STRING),
-        bigquery.SchemaField("feedback_type", _STRING),
-        bigquery.SchemaField("rating", _FLOAT64),
-        bigquery.SchemaField("comment", _STRING),
-        bigquery.SchemaField("created_date", _TIMESTAMP),
-    ]),
 }
 
 # Tabelas com particionamento + clustering
@@ -266,19 +204,10 @@ _PARTITIONED_TABLES: dict[str, list[str]] = {
     "ai_agent_interaction": ["id", "ai_agent_session_id"],
     "ai_agent_interaction_step": ["id", "ai_agent_interaction_id"],
     "ai_agent_interaction_message": ["id", "ai_agent_interaction_id"],
+    "messaging_end_user": ["id"],
     "messaging_session": ["id"],
     "conversation_entry": ["id"],
-    "mce_sent": ["id"],
-    "mce_open": ["id"],
-    "mce_click": ["id"],
-    "mce_bounce": ["id"],
-    "mce_unsub": ["id"],
-    "mce_subscriber": ["id"],
     "telemetry_trace_span": ["id"],
-    "genai_gateway_request": ["id"],
-    "genai_generation": ["id"],
-    "genai_quality": ["id"],
-    "genai_feedback": ["id"],
     # telemetry_trace_span_staging: sem particionamento (staging table)
 }
 
