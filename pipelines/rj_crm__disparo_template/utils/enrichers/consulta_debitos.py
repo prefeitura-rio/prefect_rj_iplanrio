@@ -112,7 +112,11 @@ def enrich_with_debitos_api(df: pd.DataFrame, params: dict = {}) -> pd.DataFrame
         row = {cpf_column: cpf}
         for field in _RESPONSE_FIELDS:
             value = response.get(field)
-            row[field] = json.dumps(value, ensure_ascii=False) if field in _JSON_FIELDS else value
+            if field in _JSON_FIELDS and value is not None:
+                # SFMC substitui {{Event...}} cru no JSON do body da HTTP activity, sem
+                # escapar aspas; pré-escapamos aqui pra sobrar JSON valido depois da substituicao.
+                value = json.dumps(json.dumps(value, ensure_ascii=False), ensure_ascii=False)[1:-1]
+            row[field] = value
         rows.append(row)
 
     enrichment_df = pd.DataFrame(rows, columns=[cpf_column, *_RESPONSE_FIELDS])
