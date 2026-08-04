@@ -331,12 +331,27 @@ def _format_sample_destination(destination: dict) -> str:
         String formatada em JSON
     """
 
-    # Create a clean sample with only relevant fields
-    sample = {
-        "to": destination.get("to", ""),
-        "externalId": destination.get("externalId", ""),
-        "vars": destination.get("vars", {}),
+    # Mascarar CPF exibindo apenas os 3 primeiros dígitos
+    raw_cpf = destination.get("cpf", "") or ""
+    masked_cpf = raw_cpf[:3] + "*" * max(0, len(str(raw_cpf)) - 3)
+
+    # Campos excluídos do sample (exibidos com tratamento especial ou omitidos)
+    excluded_fields = {"telefone", "cpf"}
+
+    # Todos os demais campos do destination, sem telefone e cpf
+    extra_fields = {
+        k: v for k, v in destination.items()
+        if k not in excluded_fields
     }
+
+    # Create a clean sample: telefone, cpf mascarado e demais campos na raiz
+    sample = {
+        "telefone": destination.get("telefone", ""),
+        "cpf": masked_cpf,
+        **extra_fields,
+    }
+
+    sample = {k: str(v) for k, v in sample.items()}
 
     return json.dumps(sample, indent=2, ensure_ascii=False)
 
