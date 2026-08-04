@@ -188,7 +188,7 @@ deployments:
             \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
             AS STATUS_DEMANDA,\n        CAST(id_chamado AS STRING) AS cc_wt_id_chamado,\n\
             \        CAST(id_subtipo AS STRING) AS cc_wt_id_subtipo\n    FROM dados_finais;\n"
-      - cron: "0 13 * * *"
+      - cron: "30 9 * * *"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-pgm-divida-ativa-prod
@@ -230,7 +230,7 @@ deployments:
             pf.telefone.principal.estrategia_envio = \"ENVIAR\" THEN 0\n    WHEN pf.telefone.principal.estrategia_envio
             = \"TESTAR\" THEN 1\n    WHEN pf.telefone.principal.estrategia_envio =
             \"EVITAR\" THEN 2\n    ELSE 3\n    END AS phone_priority,\n    pf.telefone.principal.estrategia_envio,\n\
-            \    pf.telefone.principal.qualidade\nFROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
+            \    pf.telefone.principal.qualidade\nFROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
             pf\nWHERE pf.telefone.principal.qualidade = 'VALIDO'\n    AND pf.telefone.principal.estrategia_envio
             != \"NÃO ENVIAR\"\n    AND pf.telefone.principal.estrategia_envio in (\"\
             ENVIAR\", \"TESTAR\", \"EVITAR\")\n    AND pf.telefone.principal.tipo
@@ -253,7 +253,7 @@ deployments:
             ),\n\ncontribuintes AS (\n-- filtra PF e nome antes do unnest\nSELECT\n\
             \    LPAD(CAST(p.cpf_cnpj AS STRING), 11, '0') AS cpf,\n    coalesce(nome_rmi,
             nome) as nome,\n    cdas_associadas,\n    tipo_pessoa,\n    saldo_devido_cdas,\n\
-            \    valor_cotas_devidas_vencidas\nFROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`
+            \    valor_cotas_devidas_vencidas\nFROM `rj-iplanrio.divida_ativa.contribuinte`
             p\nINNER JOIN filtra_disparados\n    ON LPAD(CAST(p.cpf_cnpj AS STRING),
             11, '0') = filtra_disparados.cpf\nWHERE p.tipo_pessoa.descricao_tipo_pessoa
             = 'Pessoa Física'\n    AND p.saldo_devido_cdas > 0\n    AND NOT STARTS_WITH(nome,
@@ -295,22 +295,19 @@ deployments:
             - 150) / 100)\n        AS INT64\n    ) + 1\n    ) AS tamanho_alvo_grupo\n
             FROM randomizados\n)\n\nSELECT * FROM grupos_escalonados;\n\n-- =====================
             2) INSERT: Insere dados da tabela de teste ab =====================\n
-            -- Comentado na versão dev: `rj-crm-registry.ab_test.divida_ativa` é tabela
-            de PRODUÇÃO\n-- (bucketing real do teste A/B). Não gravar dados de teste
-            lá. Descomente só se/quando\n-- existir um mirror dev dessa tabela.\n
-            -- INSERT INTO `rj-crm-registry.ab_test.divida_ativa`\n-- SELECT\n-- cpf,\n
-            -- celular_disparo,\n-- nome,\n-- grupo_escalonado,\n-- ordem_sorteio,\n
-            -- tamanho_alvo_grupo,\n-- soma_divida_total,\n-- n_cdas_ativas,\n-- esta_pagando,\n
-            -- idade,\n-- CURRENT_TIMESTAMP(),\n-- cast(cpf as int) as cpf_particao\n
-            -- FROM tmp_grupos;\n\n-- ===================== 3) Estrutura dados para
-            o disparo =====================\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' é controle interno (dedup por\n-- CPF) e é descartado do
-            CSV pelo de_columns antes do envio à Data Extension.\nSELECT\n    celular_disparo
-            AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf
-            AS STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(\n                SPLIT(nome, ' ')[SAFE_OFFSET(0)],
-            ' ',\n                SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome,
-            ' ')) - 1)]\n            ),\n            nome\n        )\n    ) AS nome_sobrenome\n
+            INSERT INTO `rj-crm-registry.ab_test.divida_ativa`\nSELECT\ncpf,\ncelular_disparo,\n
+            nome,\ngrupo_escalonado,\nordem_sorteio,\ntamanho_alvo_grupo,\nsoma_divida_total,\n
+            n_cdas_ativas,\nesta_pagando,\nidade,\nCURRENT_TIMESTAMP(),\ncast(cpf
+            as int) as cpf_particao\nFROM tmp_grupos;\n\n-- =====================
+            3) Estrutura dados para o disparo =====================\n-- Tabela simples
+            (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por\n-- CPF)
+            e é descartado do CSV pelo de_columns antes do envio à Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(\n\
+            \                SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',\n            \
+            \    SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]\n\
+            \            ),\n            nome\n        )\n    ) AS nome_sobrenome\n
             FROM tmp_grupos\nORDER BY ordem_sorteio\nLIMIT cast({limit_placeholder}
             as int64);\n"
       - cron: "0 13 * * *"
@@ -1738,9 +1735,9 @@ deployments:
             \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
             AS STATUS_DEMANDA,\n        CAST(id_chamado AS STRING) AS cc_wt_id_chamado,\n\
             \        CAST(id_subtipo AS STRING) AS cc_wt_id_subtipo\n    FROM dados_finais;\n"
-      - cron: "0 13 * * *"
+      - cron: "30 9 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-pgm-divida-ativa-prod
         flow_run_name: pgm-divida-ativa
         parameters:
@@ -1780,7 +1777,7 @@ deployments:
             pf.telefone.principal.estrategia_envio = \"ENVIAR\" THEN 0\n    WHEN pf.telefone.principal.estrategia_envio
             = \"TESTAR\" THEN 1\n    WHEN pf.telefone.principal.estrategia_envio =
             \"EVITAR\" THEN 2\n    ELSE 3\n    END AS phone_priority,\n    pf.telefone.principal.estrategia_envio,\n\
-            \    pf.telefone.principal.qualidade\nFROM `rj-crm-registry-dev.dev__dev_fantasma__rmi_dados_mestres.pessoa_fisica`
+            \    pf.telefone.principal.qualidade\nFROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica`
             pf\nWHERE pf.telefone.principal.qualidade = 'VALIDO'\n    AND pf.telefone.principal.estrategia_envio
             != \"NÃO ENVIAR\"\n    AND pf.telefone.principal.estrategia_envio in (\"\
             ENVIAR\", \"TESTAR\", \"EVITAR\")\n    AND pf.telefone.principal.tipo
@@ -1803,7 +1800,7 @@ deployments:
             ),\n\ncontribuintes AS (\n-- filtra PF e nome antes do unnest\nSELECT\n\
             \    LPAD(CAST(p.cpf_cnpj AS STRING), 11, '0') AS cpf,\n    coalesce(nome_rmi,
             nome) as nome,\n    cdas_associadas,\n    tipo_pessoa,\n    saldo_devido_cdas,\n\
-            \    valor_cotas_devidas_vencidas\nFROM `rj-crm-registry-dev.dev__dev_fantasma__divida_ativa.contribuinte`
+            \    valor_cotas_devidas_vencidas\nFROM `rj-iplanrio.divida_ativa.contribuinte`
             p\nINNER JOIN filtra_disparados\n    ON LPAD(CAST(p.cpf_cnpj AS STRING),
             11, '0') = filtra_disparados.cpf\nWHERE p.tipo_pessoa.descricao_tipo_pessoa
             = 'Pessoa Física'\n    AND p.saldo_devido_cdas > 0\n    AND NOT STARTS_WITH(nome,
@@ -1845,22 +1842,19 @@ deployments:
             - 150) / 100)\n        AS INT64\n    ) + 1\n    ) AS tamanho_alvo_grupo\n
             FROM randomizados\n)\n\nSELECT * FROM grupos_escalonados;\n\n-- =====================
             2) INSERT: Insere dados da tabela de teste ab =====================\n
-            -- Comentado na versão dev: `rj-crm-registry.ab_test.divida_ativa` é tabela
-            de PRODUÇÃO\n-- (bucketing real do teste A/B). Não gravar dados de teste
-            lá. Descomente só se/quando\n-- existir um mirror dev dessa tabela.\n
-            -- INSERT INTO `rj-crm-registry.ab_test.divida_ativa`\n-- SELECT\n-- cpf,\n
-            -- celular_disparo,\n-- nome,\n-- grupo_escalonado,\n-- ordem_sorteio,\n
-            -- tamanho_alvo_grupo,\n-- soma_divida_total,\n-- n_cdas_ativas,\n-- esta_pagando,\n
-            -- idade,\n-- CURRENT_TIMESTAMP(),\n-- cast(cpf as int) as cpf_particao\n
-            -- FROM tmp_grupos;\n\n-- ===================== 3) Estrutura dados para
-            o disparo =====================\n-- Tabela simples (sem TO_JSON_STRING).
-            'externalId' é controle interno (dedup por\n-- CPF) e é descartado do
-            CSV pelo de_columns antes do envio à Data Extension.\nSELECT\n    celular_disparo
-            AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n    CAST(cpf
-            AS STRING) AS externalId,\n    INITCAP(\n        IF(\n            ARRAY_LENGTH(SPLIT(nome,
-            ' ')) > 1,\n            CONCAT(\n                SPLIT(nome, ' ')[SAFE_OFFSET(0)],
-            ' ',\n                SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome,
-            ' ')) - 1)]\n            ),\n            nome\n        )\n    ) AS nome_sobrenome\n
+            INSERT INTO `rj-crm-registry.ab_test.divida_ativa`\nSELECT\ncpf,\ncelular_disparo,\n
+            nome,\ngrupo_escalonado,\nordem_sorteio,\ntamanho_alvo_grupo,\nsoma_divida_total,\n
+            n_cdas_ativas,\nesta_pagando,\nidade,\nCURRENT_TIMESTAMP(),\ncast(cpf
+            as int) as cpf_particao\nFROM tmp_grupos;\n\n-- =====================
+            3) Estrutura dados para o disparo =====================\n-- Tabela simples
+            (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por\n-- CPF)
+            e é descartado do CSV pelo de_columns antes do envio à Data Extension.\n\
+            SELECT\n    celular_disparo AS telefone,\n    CAST(cpf AS STRING) AS SubscriberKey,\n\
+            \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
+            \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(\n\
+            \                SPLIT(nome, ' ')[SAFE_OFFSET(0)], ' ',\n            \
+            \    SPLIT(nome, ' ')[SAFE_OFFSET(ARRAY_LENGTH(SPLIT(nome, ' ')) - 1)]\n\
+            \            ),\n            nome\n        )\n    ) AS nome_sobrenome\n
             FROM tmp_grupos\nORDER BY ordem_sorteio\nLIMIT cast({limit_placeholder}
             as int64);\n"
       - cron: "0 13 * * *"

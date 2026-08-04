@@ -27,9 +27,9 @@ schedules:
       query_file: queries/cvl_pesquisa_1746.sql
 
   # Daily schedule para flow pgm-divida-ativa-prod
-  - cron: "0 13 * * *"
+  - cron: "30 9 * * *"
     timezone: America/Sao_Paulo
-    active: false
+    active: true
     slug: daily-pgm-divida-ativa-prod
     flow_run_name: pgm-divida-ativa
     parameters:
@@ -52,7 +52,7 @@ schedules:
       whitelist_percentage: 0
       infisical_secret_path: "/crm_disparo_template"
       whitelist_environment: "production"
-      query_file: queries_dev/pgm_divida_ativa_cobranca.sql  # TODO: trocar de volta pra queries/ antes de ir pra producao
+      query_file: queries/pgm_divida_ativa_cobranca.sql
 
   # Daily schedule para flow pgmdividaativalembreteprodv1
   - cron: "0 13 * * *"
