@@ -158,7 +158,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("internal_organization_id", _STRING),
         bigquery.SchemaField("data_source_id", _STRING),
         bigquery.SchemaField("data_source_object_id", _STRING),
-        bigquery.SchemaField("kq__id", _STRING),
+        bigquery.SchemaField("kq_id", _STRING),
     ]),
 
     # --- F3 — Platform Tracing ---
