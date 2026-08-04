@@ -7,12 +7,14 @@ Funções centralizadas de validação para pipeline de template
 Implementa validação robusta com logs detalhados e métricas de qualidade
 """
 
+import os
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from pydantic import ValidationError
 
+from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.schemas import (
     DestinationInput,
@@ -67,12 +69,13 @@ def validate_destinations(destinations: List[Dict]) -> Tuple[List[DestinationInp
             validation_errors.append(error_msg)
 
             # Log do destinatário inválido (sem dados sensíveis completos)
-            to_partial = destination.get("to", "N/A")
+            to_partial = destination.get("telefone", "N/A")
             if isinstance(to_partial, str) and len(to_partial) > 8:
                 to_partial = to_partial[:8] + "****"
 
-            external_id = destination.get("externalId", "N/A")
-            log(f"Destinatário inválido - to: {to_partial}, externalId: {external_id}, erros: {error_msg}")
+            cpf_raw = destination.get("cpf", "N/A")
+            cpf_partial = cpf_raw[:4] + "****" if isinstance(cpf_raw, str) and len(cpf_raw) > 4 else cpf_raw
+            log(f"Destinatário inválido - telefone: {to_partial}, cpf: {cpf_partial}, erros: {error_msg}")
 
         except Exception as e:
             # Erro inesperado durante validação
@@ -152,7 +155,7 @@ def validate_dispatch_payload(
 
         error_msg = f"Payload inválido: {'; '.join(error_details)}"
         log(f"ERRO: {error_msg}")
-        raise ValidationError(error_msg)
+        raise
 
 
 def log_validation_summary(stats: ValidationStats, context: str = ""):
@@ -185,7 +188,7 @@ def log_validation_summary(stats: ValidationStats, context: str = ""):
 def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
     """
     Valida que o DataFrame retornado pela query possui as colunas obrigatórias
-    para o flow SF: SubscriberKey e telefone.
+    para o flow SF: cpf e telefone.
 
     Deve ser chamada logo após a checagem de df vazio no flow, antes de qualquer
     processamento. Se alguma coluna obrigatória estiver ausente, lança ValueError
@@ -199,16 +202,16 @@ def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
         O próprio DataFrame sem modificações
 
     Raises:
-        ValueError: Se SubscriberKey, telefone ou campaign_name estiverem ausentes/inválidos
+        ValueError: Se cpf, telefone ou campaign_name estiverem ausentes/inválidos
     """
-    required_columns = ["SubscriberKey", "telefone"]
+    required_columns = ["cpf", "telefone"]
     missing = [col for col in required_columns if col not in df.columns]
 
     if missing:
         raise ValueError(
             f"O DataFrame não possui as colunas obrigatórias para o log SF: {missing}. "
             f"Colunas presentes: {list(df.columns)}. "
-            "Verifique se a query retorna 'SubscriberKey' e 'telefone'."
+            "Verifique se a query retorna 'cpf' e 'telefone'."
         )
 
     if not campaign_name or not str(campaign_name).strip():
@@ -225,7 +228,7 @@ def validate_sf_dataframe(df: pd.DataFrame, campaign_name: str) -> pd.DataFrame:
             SfDispatchRow(
                 dispatch_date="2000-01-01",  # placeholder para validação estrutural
                 campaign_name=str(campaign_name),
-                SubscriberKey=str(row.get("SubscriberKey", "")),
+                cpf=str(row.get("cpf", "")),
                 telefone=str(row.get("telefone", "")),
             )
         except ValidationError as e:
@@ -284,15 +287,17 @@ def validate_campaign_name(
     total = results[0]["total"] if results else 0
 
     if total == 0:
-        log(
-            f"ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm "
-            "da tabela rj-crm-registry.brutos_salesforce.jornada. "
-            "Verifique o nome da campanha e tente novamente."
-        )
-        print(
-            f"[validate_campaign_name_in_bigquery] campaign_name='{campaign_name}' não existe "
-            "em rj-crm-registry.brutos_salesforce.jornada (hsm.nome_hsm). Encerrando o flow."
-        )
+        message = f"""
+            ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm
+            da tabela rj-crm-registry.brutos_salesforce.jornada.
+            Verifique o nome da campanha e tente novamente. Encerrando o flow.
+        """
+        log(message)
+        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+        if not webhook_url:
+            print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
+        else:
+            send_discord_notification(webhook_url, message)
         return None
 
     log(f"campaign_name='{campaign_name}' validado com sucesso ({total} registro(s) encontrado(s)).")

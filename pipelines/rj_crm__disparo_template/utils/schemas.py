@@ -8,7 +8,7 @@ Define estruturas de dados padronizadas com validação rigorosa usando Pydantic
 
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class DestinationInput(BaseModel):
@@ -16,19 +16,20 @@ class DestinationInput(BaseModel):
     Schema para validação de dados de entrada (origem BigQuery)
 
     Campos obrigatórios:
-    - to: Número de telefone (formato validado em etapa anterior)
-    - externalId: Identificador externo único e não vazio
+    - telefone: Número de telefone (formato validado em etapa anterior)
+    - cpf: CPF do cidadão, identificador externo único e não vazio
 
     Campos opcionais:
     - vars: Dicionário flexível com variáveis para o template HSM
     """
 
-    to: str = Field(..., description="Número de telefone (formato validado em etapa anterior)")
-    externalId: str = Field(..., min_length=1, description="Identificador externo obrigatório")
+    telefone: str = Field(..., description="Número de telefone (formato validado em etapa anterior)")
+    cpf: str = Field(..., min_length=1, description="CPF do cidadão, identificador externo obrigatório")
     vars: Optional[Dict[str, Any]] = Field(default=None, description="Variáveis opcionais para template HSM")
     others: List[str] = Field(default_factory=list, description="Lista de telefones secundários para retentativas")
 
-    @validator("to")
+    @field_validator("telefone")
+    @classmethod
     def validate_phone(cls, v):
         """
         Valida que o telefone seja uma string não vazia
@@ -51,25 +52,26 @@ class DestinationInput(BaseModel):
 
         return v.strip()
 
-    @validator("externalId")
+    @field_validator("cpf")
+    @classmethod
     def validate_external_id(cls, v):
         """
-        Valida que externalId não seja vazio ou apenas espaços
+        Valida que cpf não seja vazio ou apenas espaços
 
         Args:
-            v: String do externalId a ser validada
+            v: String do cpf a ser validada
 
         Returns:
-            String do externalId validada
+            String do cpf validada
 
         Raises:
             ValueError: Se for vazio ou apenas espaços
         """
         if not isinstance(v, str):
-            raise ValueError("externalId deve ser uma string")
+            raise ValueError("cpf deve ser uma string")
 
         if not v.strip():
-            raise ValueError("externalId não pode ser vazio ou apenas espaços")
+            raise ValueError("cpf não pode ser vazio ou apenas espaços")
 
         return v.strip()
 
@@ -88,7 +90,8 @@ class DispatchPayload(BaseModel):
     costCenterId: int = Field(..., gt=0, description="ID do centro de custo (deve ser positivo)")
     destinations: List[DestinationInput] = Field(..., description="Lista de destinatários validados")
 
-    @validator("campaignName")
+    @field_validator("campaignName")
+    @classmethod
     def validate_campaign_name(cls, v):
         """
         Valida que o nome da campanha não seja apenas espaços
@@ -107,7 +110,8 @@ class DispatchPayload(BaseModel):
 
         return v.strip()
 
-    @validator("destinations")
+    @field_validator("destinations")
+    @classmethod
     def validate_destinations_not_empty(cls, v):
         """
         Valida que a lista de destinatários não esteja vazia
@@ -138,8 +142,8 @@ class DispatchRecord(BaseModel):
     dispatch_date: str = Field(..., description="Data e hora do disparo")
     campaignName: str = Field(..., description="Nome da campanha")
     costCenterId: int = Field(..., description="ID do centro de custo")
-    to: str = Field(..., description="Número de telefone do destinatário")
-    externalId: str = Field(..., description="Identificador externo do destinatário")
+    telefone: str = Field(..., description="Número de telefone do destinatário")
+    cpf: str = Field(..., description="CPF do cidadão")
     vars: Optional[Dict[str, Any]] = Field(default=None, description="Variáveis utilizadas no template")
 
 
@@ -150,7 +154,7 @@ class SfDispatchRow(BaseModel):
     Campos obrigatórios:
     - dispatch_date: Data e hora do disparo
     - campaign_name: Nome da campanha
-    - SubscriberKey: Chave do assinante no Salesforce (case-sensitive)
+    - cpf: CPF do cidadão (coluna interna do flow; renomeada para SubscriberKey apenas na escrita)
     - telefone: Número de telefone disparado
 
     A coluna `data` (JSON com demais campos) é construída pelo create_log_df,
@@ -159,24 +163,27 @@ class SfDispatchRow(BaseModel):
 
     dispatch_date: str = Field(..., description="Data e hora do disparo")
     campaign_name: str = Field(..., min_length=1, description="Nome da campanha")
-    SubscriberKey: str = Field(..., min_length=1, description="Chave do assinante no Salesforce")
+    cpf: str = Field(..., min_length=1, description="CPF do cidadão")
     telefone: str = Field(..., min_length=1, description="Número de telefone disparado")
 
-    @validator("campaign_name")
+    @field_validator("campaign_name")
+    @classmethod
     def validate_campaign_name(cls, v):
         if not v.strip():
             raise ValueError("campaign_name não pode ser vazio ou apenas espaços")
         return v.strip()
 
-    @validator("SubscriberKey")
-    def validate_subscriber_key(cls, v):
+    @field_validator("cpf")
+    @classmethod
+    def validate_cpf(cls, v):
         if not isinstance(v, str):
-            raise ValueError("SubscriberKey deve ser uma string")
+            raise ValueError("cpf deve ser uma string")
         if not v.strip():
-            raise ValueError("SubscriberKey não pode ser vazio ou apenas espaços")
+            raise ValueError("cpf não pode ser vazio ou apenas espaços")
         return v.strip()
 
-    @validator("telefone")
+    @field_validator("telefone")
+    @classmethod
     def validate_telefone(cls, v):
         if not isinstance(v, str):
             raise ValueError("telefone deve ser uma string")
