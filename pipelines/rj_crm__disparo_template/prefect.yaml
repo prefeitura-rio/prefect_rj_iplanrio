@@ -188,7 +188,7 @@ deployments:
             \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
             AS STATUS_DEMANDA,\n        CAST(id_chamado AS STRING) AS cc_wt_id_chamado,\n\
             \        CAST(id_subtipo AS STRING) AS cc_wt_id_subtipo\n    FROM dados_finais;\n"
-      - cron: "0 13 * * *"
+      - cron: "30 9 * * *"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-pgm-divida-ativa-prod
@@ -200,7 +200,13 @@ deployments:
               239"}
           campaign_name: pgm_divida_ativa_prod_v2
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
-          de_columns: ["nome_sobrenome"]
+          enrich_with_api_name: consulta_debitos
+          enrich_with_api_params:
+            api_url: "https://services.pref.rio/mcp/consulta_debitos"
+          de_columns: ["cpfCnpj", "nome_sobrenome", "api_resposta_sucesso", "lista_cdas",
+            "lista_guias", "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte",
+            "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado",
+            "total_parcelado", "debitos_msg", "itens_informados"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -1136,6 +1142,7 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            id_hsm_legado_placeholder: 589
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
@@ -1728,9 +1735,9 @@ deployments:
             \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
             AS STATUS_DEMANDA,\n        CAST(id_chamado AS STRING) AS cc_wt_id_chamado,\n\
             \        CAST(id_subtipo AS STRING) AS cc_wt_id_subtipo\n    FROM dados_finais;\n"
-      - cron: "0 13 * * *"
+      - cron: "30 9 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-pgm-divida-ativa-prod
         flow_run_name: pgm-divida-ativa
         parameters:
@@ -1740,7 +1747,13 @@ deployments:
               239"}
           campaign_name: pgm_divida_ativa_prod_v2
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
-          de_columns: ["nome_sobrenome"]
+          enrich_with_api_name: consulta_debitos
+          enrich_with_api_params:
+            api_url: "https://services.pref.rio/mcp/consulta_debitos"
+          de_columns: ["cpfCnpj", "nome_sobrenome", "api_resposta_sucesso", "lista_cdas",
+            "lista_guias", "dicionario_itens", "total_itens_pagamento", "mensagem_divida_contribuinte",
+            "guias_quantidade_total", "efs_cdas_quantidade_total", "total_nao_parcelado",
+            "total_parcelado", "debitos_msg", "itens_informados"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
           dump_mode: append
@@ -2676,6 +2689,7 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo152
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
+            id_hsm_legado_placeholder: 589
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
