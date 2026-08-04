@@ -15,6 +15,7 @@ _TIMESTAMP = bigquery.enums.SqlTypeNames.TIMESTAMP
 _STRING = bigquery.enums.SqlTypeNames.STRING
 _DATE = bigquery.enums.SqlTypeNames.DATE
 _FLOAT64 = bigquery.enums.SqlTypeNames.FLOAT64
+_BOOL = bigquery.enums.SqlTypeNames.BOOLEAN
 
 
 def _base_fields(extra: list[bigquery.SchemaField]) -> list[bigquery.SchemaField]:
@@ -122,7 +123,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("locale", _STRING),
         bigquery.SchemaField("iso_country_code", _STRING),
         bigquery.SchemaField("messaging_consent_status", _STRING),
-        bigquery.SchemaField("is_fully_opted_in", _STRING),
+        bigquery.SchemaField("is_fully_opted_in", _BOOL),
         bigquery.SchemaField("messaging_external_user_key", _STRING),
         bigquery.SchemaField("language", _STRING),
         bigquery.SchemaField("created_date", _TIMESTAMP),

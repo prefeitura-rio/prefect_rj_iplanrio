@@ -111,6 +111,18 @@ def load_to_bigquery(
     if schema is None:
         print(f"[BQ] WARN: schema não encontrado para '{table_id}' — usando autodetect.")
 
+    # Alinhar dtypes do pandas com os tipos esperados pelo schema do BigQuery
+    if schema is not None:
+        df = df.copy()
+        for field in schema:
+            col = field.name
+            if col in df.columns:
+                field_type_str = str(field.field_type).upper()
+                if "STRING" in field_type_str and pd.api.types.is_bool_dtype(df[col]):
+                    df[col] = df[col].astype(str).replace({"True": "true", "False": "false", "nan": None, "None": None})
+                elif ("BOOL" in field_type_str or "BOOLEAN" in field_type_str) and not pd.api.types.is_bool_dtype(df[col]):
+                    df[col] = df[col].astype(bool)
+
     # Se clustering_fields não for informado explicitamente, obtém do mapeamento centralizado
     if clustering_fields is None:
         clustering_fields = PARTITIONED_TABLES.get(table_id)
