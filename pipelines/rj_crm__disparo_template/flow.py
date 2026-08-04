@@ -27,6 +27,7 @@ from pipelines.rj_crm__disparo_template.utils.discord import (
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.dispatch import (
     add_contacts_to_whitelist,
+    apply_df_enricher,
     check_flow_status,
     create_log_df,
     filter_already_dispatched_phones_or_cpfs,
@@ -94,6 +95,8 @@ def rj_crm__disparo_template_sf(
     filter_duplicated_phones: bool = True,
     filter_duplicated_cpfs: bool = True,
     filter_failed_phones: bool = False,
+    enrich_with_api_name: str | None = None,
+    enrich_with_api_params: dict | None = None,
     dispatch_interval_days: int = 1,
     sleep_minutes: int | None = 5,
     materialization_sleep_minutes: int | None = 20,
@@ -141,6 +144,12 @@ def rj_crm__disparo_template_sf(
         filter_duplicated_phones (bool, optional): Remove duplicate phones. Defaults to True.
         filter_duplicated_cpfs (bool, optional): Remove duplicate CPFs. Defaults to True.
         filter_failed_phones (bool, optional): Remove phones that failed in last dispatch. Defaults to False.
+        enrich_with_api_name (str, optional): Nome de uma função registrada em
+            utils/enrichers.py (DF_ENRICHERS) usada pra enriquecer o DataFrame com
+            dados de uma API externa antes dos filtros/CSV. Ex.: "consulta_debitos".
+            Enrichers podem remover linhas sem dado correspondente na API.
+        enrich_with_api_params (dict, optional): Parâmetros livres repassados pra
+            função de enriquecimento selecionada (ex.: {"api_url": "..."}).
         sleep_minutes (int, optional): Minutes to sleep before dispatch. Defaults to 5.
         max_dispatch_retries (int): Maximum retry attempts with alternative phones. Defaults to 0.
         infisical_secret_path (str, optional): Infisical path for SFTP credentials. Defaults to "/sftp".
@@ -244,6 +253,19 @@ def rj_crm__disparo_template_sf(
 
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
     print(f"[DEBUG] Sample data:\n{df.head(10).to_dict('records')}")
+
+    # Enriquece com dados de API externa (ex.: consulta_debitos), se configurado.
+    # Roda antes do dedup/retry loop pra que as colunas novas propaguem pra
+    # todas as tentativas sem precisar chamar a API de novo.
+    if enrich_with_api_name:
+        df = apply_df_enricher(
+            df=df,
+            enricher_name=enrich_with_api_name,
+            enricher_params=enrich_with_api_params,
+        )
+        if df.empty:
+            send_dispatch_no_destinations_found(campaign_name, test_mode)
+            return
 
     # Dedup por CPF — base para o loop de retentativas
     df = filter_duplicated(
