@@ -165,16 +165,19 @@ def enrich_with_debitos_api(df: pd.DataFrame, params: dict = {}) -> pd.DataFrame
     não como JSON.
 
     Args:
-        df: DataFrame com uma coluna de CPF (default "SubscriberKey").
+        df: DataFrame com uma coluna de CPF (default "cpf" — nome interno padrão
+            usado pelo flow entre o download da query e o rename de volta pra
+            "SubscriberKey" logo antes do save_csv_for_sftp; é nesse trecho
+            interno que o enrichment roda).
         params: dict com chaves opcionais:
-            - cpf_column (default "SubscriberKey")
+            - cpf_column (default "cpf")
             - api_url (default DEFAULT_API_URL)
 
     Returns:
         DataFrame apenas com os CPFs que tiveram dívida confirmada, com as
         colunas acima anexadas.
     """
-    cpf_column = params.get("cpf_column", "SubscriberKey")
+    cpf_column = params.get("cpf_column", "cpf")
     api_url = params.get("api_url", DEFAULT_API_URL)
 
     cpfs = df[cpf_column].dropna().unique().tolist()
