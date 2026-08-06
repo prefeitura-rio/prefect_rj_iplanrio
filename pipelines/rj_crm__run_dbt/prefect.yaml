@@ -38,6 +38,14 @@ deployments:
   - name: rj-crm--run_dbt--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__run_dbt/flow.py:rj_crm__run_dbt
+    # Evita que duas schedules rodem em paralelo sobre os mesmos modelos.
+    # Ex.: dbt_12h_build e dbt_quarter_hourly_build compartilham o select
+    # "tag:quarter_hourly" e, quando coincidem, geram testes unique flaky
+    # (ex.: raw_superapp_mobile_originated_v2__id_mensagem__unique) por
+    # concorrência de escrita no mesmo modelo incremental.
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
     work_pool:
       name: default-pool
       work_queue_name: default
