@@ -123,7 +123,6 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("messaging_consent_status", _STRING),
         bigquery.SchemaField("is_fully_opted_in", _BOOL),
         bigquery.SchemaField("messaging_external_user_key", _STRING),
-        bigquery.SchemaField("language", _STRING),
         bigquery.SchemaField("created_date", _TIMESTAMP),
         bigquery.SchemaField("last_modified_date", _TIMESTAMP),
     ]),
