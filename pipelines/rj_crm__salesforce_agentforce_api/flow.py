@@ -79,7 +79,7 @@ _F2A_QUERIES = {
 
 _F2A_CRM_QUERIES = {
     "messaging_end_user": {
-        "soql": "SELECT Id, Name, MessagingChannelId, MessageType, MessagingPlatformKey, Locale, IsoCountryCode, MessagingConsentStatus, IsFullyOptedIn, MessagingExternalUserKey, Language, CreatedDate, LastModifiedDate FROM MessagingEndUser WHERE LastModifiedDate >= {watermark} ORDER BY CreatedDate ASC",
+        "soql": "SELECT Id, Name, MessagingChannelId, MessageType, MessagingPlatformKey, Locale, IsoCountryCode, MessagingConsentStatus, IsFullyOptedIn, MessagingExternalUserKey, CreatedDate, LastModifiedDate FROM MessagingEndUser WHERE LastModifiedDate >= {watermark} ORDER BY CreatedDate ASC",
         "date_columns": ["created_date", "last_modified_date"],
         "watermark_field": "LastModifiedDate",
         "clustering_fields": ["id"],
