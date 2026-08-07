@@ -98,8 +98,6 @@ _QUERIES = {
             ssot__DataSourceId__c,
             ssot__DataSourceObjectId__c,
             ssot__ExternalSourceId__c,
-            ssot__InputValueText__c,
-            ssot__OutputValueText__c,
             ssot__PreStepVariableText__c,
             ssot__PostStepVariableText__c,
             ssot__AttributeText__c,
@@ -131,6 +129,25 @@ _QUERIES = {
         FROM ssot__AiAgentInteractionMessage__dlm
         WHERE ssot__MessageSentTimestamp__c >= '{watermark}'
     """,
+    # TODO: ai_agent_interaction_step_detail — tabela separada para input/output_value_text
+    # Desativada por ora: input_value_text (prompt LLM, até 20k chars) causa truncamento
+    # silencioso no DC mesmo com chunks de 5min. Requer chunks de 1min (~36k chamadas/backfill).
+    # Descomentar quando decidir habilitar:
+    # "ai_agent_interaction_step_detail": """
+    #     SELECT
+    #         ssot__Id__c,
+    #         ssot__AiAgentInteractionId__c,
+    #         ssot__AiAgentInteractionStepType__c,
+    #         SubType__c,
+    #         ssot__Name__c,
+    #         ssot__InputValueText__c,
+    #         ssot__OutputValueText__c,
+    #         ssot__StartTimestamp__c
+    #     FROM ssot__AiAgentInteractionStep__dlm
+    #     WHERE ssot__StartTimestamp__c >= '{watermark}'
+    #       AND ssot__InputValueText__c IS NOT NULL
+    #       AND ssot__InputValueText__c != 'NOT_SET'
+    # """,
     # AiAgentInteractionParticipant__dlm não existe neste org (verificado 2026-07-23)
 }
 
@@ -198,6 +215,7 @@ def fase1_stdm(
             "ai_agent_interaction": ["id", "ai_agent_session_id"],
             "ai_agent_interaction_step": ["id", "ai_agent_interaction_id"],
             "ai_agent_interaction_message": ["id", "ai_agent_interaction_id"],
+            # "ai_agent_interaction_step_detail": ["id", "ai_agent_interaction_id"],  # TODO: ver query acima
         }
 
         # DAG: session → interaction → (steps | messages)
@@ -234,6 +252,14 @@ def fase1_stdm(
             clustering_fields=_CLUSTERING["ai_agent_interaction_message"],
             **bq_args,
         )
+
+        # TODO: habilitar quando decidir sobre ai_agent_interaction_step_detail
+        # rows_by_table["ai_agent_interaction_step_detail"] = sf_to_bq(
+        #     query_template=_QUERIES["ai_agent_interaction_step_detail"],
+        #     target_table="ai_agent_interaction_step_detail",
+        #     clustering_fields=_CLUSTERING["ai_agent_interaction_step_detail"],
+        #     **bq_args,
+        # )
 
         elapsed = time.time() - t_start
         notify_phase_success(
