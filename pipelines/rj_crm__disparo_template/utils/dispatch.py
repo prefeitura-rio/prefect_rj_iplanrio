@@ -6,6 +6,7 @@ Tasks migradas do template disparo do Prefect 1.4 para 3.0
 Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 """
 
+import asyncio
 import json
 import os
 import random
@@ -14,9 +15,8 @@ from datetime import datetime
 from math import ceil
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import asyncssh
 import pandas as pd
-import paramiko
-from paramiko.rsakey import RSAKey
 from iplanrio.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
@@ -1295,9 +1295,27 @@ def send_to_sftp(
     sftp_password: str = None,
     sftp_port: int = 22,
     sftp_remote_path: str = "/",
+    sftp_host_key: str = None,
 ) -> None:
     """
     Envia um arquivo CSV para o servidor SFTP do Salesforce.
+
+    A identidade do servidor é verificada por host key pinning: a conexão
+    é recusada (asyncssh.HostKeyNotVerifiable) se a chave apresentada não
+    bater byte a byte com `sftp_host_key`. Sem esse pinning, qualquer
+    servidor na rota de rede poderia se passar pelo SFTP da Salesforce sem
+    ser detectado — os CSVs enviados aqui carregam CPF e telefone de
+    cidadãos, então um MITM bem-sucedido seria um vazamento de dado pessoal
+    sob a LGPD.
+
+    Usamos asyncssh em vez de paramiko porque o servidor SFTP da Salesforce
+    (Globalscape EFT) só oferece o algoritmo de host key legado "ssh-rsa"
+    (SHA-1). O Paramiko 5.x removeu esse algoritmo da lista aceita por
+    padrão e não expõe uma forma pública de reabilitá-lo (só via monkey-patch
+    de atributos privados — o que essa função fazia antes, e que também
+    desligava a verificação de assinatura por completo). O asyncssh aceita
+    "ssh-rsa" via parâmetro documentado (server_host_key_algs) e continua
+    fazendo a verificação criptográfica real da assinatura do servidor.
 
     Args:
         csv_path: Caminho local do CSV a ser enviado
@@ -1307,92 +1325,64 @@ def send_to_sftp(
         sftp_password: Senha SFTP
         sftp_port: Porta do servidor SFTP (padrão: 22)
         sftp_remote_path: Diretório remoto onde o arquivo será depositado
+        sftp_host_key: Chave pública do servidor, no formato "ssh-rsa AAAA..."
+            (mesmo formato de uma linha de known_hosts). Precisa ser
+            confirmada com a Salesforce por um canal separado da própria
+            conexão SSH (suporte, documentação oficial) antes de ser
+            cadastrada — nunca aceitar só o que a primeira conexão apresentar.
     """
-
     if infisical_secret_path:
-        # prefix = infisical_secret_path.lstrip("/").replace("/", "_")
-        # prefix = infisical_secret_path.upper().replace("-", "_").replace("/", "")
         sftp_host = sftp_host or getenv_or_action("sf_sftp_host")
         sftp_user = sftp_user or getenv_or_action("sf_sftp_user")
         sftp_password = sftp_password or getenv_or_action("sf_sftp_password")
         sftp_port = int(getenv_or_action("sf_sftp_port", sftp_port))
         sftp_remote_path = getenv_or_action("sf_sftp_path", sftp_remote_path)
-
-    filename = os.path.basename(csv_path)
-    remote_file = f"{sftp_remote_path.rstrip('/')}/{filename}"
+        sftp_host_key = sftp_host_key or getenv_or_action("sf_sftp_host_key")
 
     SFTP_TIMEOUT_SECONDS = 30
     SFTP_KEEPALIVE_SECONDS = 15
 
-    log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
-    # transport = paramiko.Transport((sftp_host, int(sftp_port)))
-    # transport.set_keepalive(SFTP_KEEPALIVE_SECONDS)
-    # # transport.auth_timeout(SFTP_TIMEOUT_SECONDS)  # TODO: verificar qual timeout usar
-    # try:
-    #     transport.connect(username=sftp_user, password=sftp_password)
-    #     sftp_client = paramiko.SFTPClient.from_transport(transport)
-    #     sftp_client.put(csv_path, remote_file)
-    #     sftp_client.close()
-    #     log(f"CSV enviado com sucesso para SFTP: {remote_file}")
-    # finally:
-    #     transport.close()
-    def bypass_verify_key(self, host_key, sig):
-        # Inicializa a chave no estado do transport para evitar erros de NoneType
-        self.host_key = RSAKey(data=host_key)
-        return True
+    filename = os.path.basename(csv_path)
+    remote_dir = sftp_remote_path.rstrip("/") if sftp_remote_path else ""
+    remote_file = f"{remote_dir}/{filename}" if remote_dir else filename
 
-    paramiko.Transport._verify_key = bypass_verify_key
-    paramiko.Transport._key_info['ssh-rsa'] = RSAKey
-    paramiko.Transport._preferred_keys = ('ssh-rsa', 'ecdsa-sha2-nistp256', 'ssh-ed25519')
+    pinned_key = asyncssh.import_public_key(sftp_host_key)
 
-    ssh = None
-    try:
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        
-        log(f"Conectando ao SFTP {sftp_host}...")
-        
-        ssh.connect(
-            sftp_host, 
-            port=sftp_port, 
-            username=sftp_user, 
+    async def _upload() -> None:
+        log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
+        async with asyncssh.connect(
+            sftp_host,
+            port=sftp_port,
+            username=sftp_user,
             password=sftp_password,
-            look_for_keys=False,
-            allow_agent=False,
-        )
-        
-        sftp = ssh.open_sftp()
-        log("Conexão estabelecida com sucesso ao SFTP!")
-        
-        # Listagem do diretório inicial para debug
-        # try:
-        #     log(f"Diretório atual (pwd): {sftp.getcwd()}")
-        #     log(f"Diretório de destino: {sftp_remote_path}")
-        #     log(f"Conteúdo do diretório inicial: {sftp.listdir('.')}")
-        # except Exception as e:
-        #     log(f"Não foi possível listar o diretório inicial: {e}")
-        
-        if sftp_remote_path and sftp_remote_path != '/':
-            try:
-                sftp.chdir(sftp_remote_path)
-                # log(f"Alterado para o diretório: {sftp_remote_path}")
-            except IOError:
-                log(f"Diretório {sftp_remote_path} não encontrado. Tentando criar...")
+            server_host_key_algs=[pinned_key.get_algorithm()],
+            # known_hosts espera (host_keys, ca_keys, revoked_keys); só
+            # fixamos a chave de host, sem CA nem lista de revogação.
+            known_hosts=([pinned_key], [], []),
+            connect_timeout=SFTP_TIMEOUT_SECONDS,
+            keepalive_interval=SFTP_KEEPALIVE_SECONDS,
+        ) as conn:
+            log("Host key validada contra o fingerprint fixado. Conexão estabelecida com sucesso ao SFTP!")
 
-        for local_file in [csv_path]:
-            if os.path.exists(local_file):
-                # log(f"Arquivos .csv do diretório atual antes de enviar novo arquivo: {[f for f in sftp.listdir('.') if f.endswith('.csv')]}")
-                file_name = os.path.basename(local_file)
-                log(f"Enviando {file_name}...")
-                sftp.put(local_file, file_name)
-                log(f"Arquivo {file_name} enviado com sucesso.")
-            else:
-                log(f"Arquivo não encontrado: {local_file}")
-        sftp.close()
-        
+            if not os.path.exists(csv_path):
+                log(f"Arquivo não encontrado: {csv_path}")
+                return
+
+            async with conn.start_sftp_client() as sftp:
+                log(f"Enviando {filename}...")
+                await sftp.put(csv_path, remote_file)
+                log(f"Arquivo {filename} enviado com sucesso para {remote_file}.")
+
+    try:
+        asyncio.run(_upload())
+    except asyncssh.HostKeyNotVerifiable as e:
+        log(
+            f"Host key do servidor SFTP não confere com sftp_host_key — conexão recusada. "
+            f"Possível MITM ou chave do servidor desatualizada (nesse caso, confirme a nova "
+            f"chave com a Salesforce por um canal separado antes de atualizar o secret). "
+            f"Detalhe: {e}"
+        )
+        raise
     except Exception as e:
         log(f"Erro: {str(e)}")
         raise
-    finally:
-        if ssh:
-            ssh.close()
