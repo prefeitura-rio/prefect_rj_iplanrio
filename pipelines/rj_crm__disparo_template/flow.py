@@ -125,8 +125,13 @@ def rj_crm__disparo_template_sf(
     disk, and uploads it to the configured SFTP server.
     Dispatch results are also logged to BigQuery.
 
-    SFTP credentials (sf_sftp_host, sf_sftp_user, sf_sftp_password) must be available
-    as environment variables injected from Infisical at infisical_secret_path.
+    SFTP credentials (sf_sftp_host, sf_sftp_user, sf_sftp_password, sf_sftp_host_key)
+    must be available as environment variables injected from Infisical at
+    infisical_secret_path. sf_sftp_host_key is the server's public host key
+    (format "ssh-rsa AAAA...", same as a known_hosts line) used to pin the SFTP
+    server's identity and reject man-in-the-middle connections — it must be
+    confirmed with Salesforce through a channel separate from the SSH connection
+    itself before being stored.
 
     Args:
         campaign_name (str, optional): The name of the dispatch campaign.
