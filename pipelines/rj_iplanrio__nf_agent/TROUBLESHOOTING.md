@@ -100,6 +100,16 @@ ALTER TABLE `rj-nf-agent.dev_poc_cgm_osinfo.controle_processamento`
 **Fix:** commit e push das mudanças em `agent-nf-validator/run_poc/run_pipeline.py` para master; rebuild da imagem Docker via novo commit neste repo.
 **Status:** ✅ corrigido — `agent-nf-validator` atualizado em master (commit 7519f1e).
 
+### #17 — agent-nf-validator clonado direto no Docker build, sem pin nem auditoria
+
+**Problema:** o Dockerfile fazia `git clone` do `agent-nf-validator` (branch `master`) direto na imagem, sem passar por `uv.lock`. Isso significa: sem hash pinado, sem diff de dependência revisável em PR, e o build capturando "o que estiver no HEAD no momento", o que já causou o issue #13 (imagem buildada com `flow.py` novo mas `agent-nf-validator` desatualizado).
+**Fix:**
+- `agent-nf-validator` agora é uma dependência git normal, declarada em `[tool.uv.sources]` no `pyproject.toml` desta pipeline, pinada a um commit específico e resolvida/lockada via `uv.lock` — mesmo mecanismo de qualquer outra dependência do workspace.
+- `google-generativeai` foi movido para um extra opcional (`gemini`) no `pyproject.toml` do `agent-nf-validator`, para não forçar a resolução do conflito de `protobuf` (ver #4) em todo o workspace do `prefect_rj_iplanrio` — ele continua instalado isolado via `pip install --target` no Dockerfile, só que agora documentado como workaround pontual, não mais escondido atrás de um clone opaco.
+- `flow.py` não precisa mais do hack `sys.path.insert("/opt/agent-nf-validator/run_poc")`; os imports de `run_poc`/`core` funcionam normalmente porque o pacote é instalado de verdade pelo `uv sync`.
+**Pendente:** o commit `cc74a92` (extra `gemini`) só existe na branch local `chore/isolate-gemini-extra` do `agent-nf-validator` — precisa ser pushado (e o `rev` no `pyproject.toml` desta pipeline atualizado se for mergeado com outro hash) antes do próximo `uv lock`/deploy em CI, senão a resolução falha do mesmo jeito que falhava antes com `google-generativeai` como dependência obrigatória.
+**Status:** ✅ mecanismo implementado e validado localmente com `uv lock` / `uv sync --package rj_iplanrio__nf_agent` — falta push do commit em `agent-nf-validator` e rebuild da imagem.
+
 ### #12 — Forbidden: bigquery.tables.create negado em dev_poc_cgm_osinfo
 **Erro:** `403 Access Denied: Permission bigquery.tables.create denied on dataset rj-nf-agent:dev_poc_cgm_osinfo`
 **Causa raiz:** `upsert_status` criava uma tabela temp (`controle_..._tmp_YYYYMMDDHHMMSS`) no mesmo dataset para fazer MERGE. A SA não tem permissão de criar tabelas nesse dataset.
