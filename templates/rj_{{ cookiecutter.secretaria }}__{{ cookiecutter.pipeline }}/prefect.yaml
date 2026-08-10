@@ -25,6 +25,7 @@ pull:
 
 deployments:
   - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--staging
+    tags: [staging]
     version: "{% raw %}{{ build-image.tag }}{% endraw %}"
     entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
     work_pool:
@@ -36,6 +37,7 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
   - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--prod
+    tags: [prod]
     version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
     entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
     work_pool:
