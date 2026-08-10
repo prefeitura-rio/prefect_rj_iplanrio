@@ -3,6 +3,8 @@ name: SAST
 on:
   push:
 
+permissions: {}
+
 jobs:
   sast:
     runs-on: ubuntu-latest
