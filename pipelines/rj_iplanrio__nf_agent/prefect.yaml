@@ -42,7 +42,7 @@ deployments:
       bq_status_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.controle_processamento"
       pipeline_runs_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.pipeline_runs"
       batch_size: 500
-      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/extracao_pagina"
+      gcs_output_base_path: "staging/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina"
       db_path: "/tmp/nf_pipeline_cache.db"
       gcs_bucket: "rj-nf-agent"
       workers: 200
@@ -69,7 +69,7 @@ deployments:
       bq_status_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.controle_processamento"
       pipeline_runs_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.pipeline_runs"
       batch_size: 500
-      gcs_output_base_path: "staging/brutos_poc_osinfo_ia/extracao_pagina"
+      gcs_output_base_path: "staging/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina"
       db_path: "/tmp/nf_pipeline_cache.db"
       gcs_bucket: "rj-nf-agent"
       workers: 200
