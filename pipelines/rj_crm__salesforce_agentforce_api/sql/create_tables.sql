@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce.ai_agent_interacti
     attribute_text                  STRING,
     error_message_text              STRING,
     sub_type                        STRING,
+    output_value_text               STRING,
     _loaded_at                      TIMESTAMP,
     data_particao                   DATE
 )

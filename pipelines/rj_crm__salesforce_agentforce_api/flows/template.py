@@ -67,6 +67,7 @@ def sf_to_bq(
     api_version: str = "v59.0",
     skip_checkpoint: bool = False,
     clustering_fields: list[str] | None = None,
+    output_value_text_action_step_only: bool = False,
 ) -> int:
     """
     Executa o ciclo completo extract → transform → load para uma tabela.
@@ -145,6 +146,7 @@ def sf_to_bq(
             date_columns=date_columns,
             duration_ns_columns=duration_ns_columns,
             partition_date=partition_date,
+            output_value_text_action_step_only=output_value_text_action_step_only,
         )
 
         total_rows = load_to_bigquery(
@@ -175,6 +177,7 @@ def sf_to_bq(
             date_columns=date_columns,
             duration_ns_columns=duration_ns_columns,
             partition_date=partition_date,
+            output_value_text_action_step_only=output_value_text_action_step_only,
         )
 
         total_rows = load_to_bigquery(

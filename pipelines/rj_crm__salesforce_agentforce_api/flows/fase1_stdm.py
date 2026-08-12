@@ -102,7 +102,8 @@ _QUERIES = {
             ssot__PostStepVariableText__c,
             ssot__AttributeText__c,
             ssot__ErrorMessageText__c,
-            SubType__c
+            SubType__c,
+            ssot__OutputValueText__c
         FROM ssot__AiAgentInteractionStep__dlm
         WHERE ssot__StartTimestamp__c >= '{watermark}'
     """,
@@ -243,6 +244,7 @@ def fase1_stdm(
             query_template=_QUERIES["ai_agent_interaction_step"],
             target_table="ai_agent_interaction_step",
             clustering_fields=_CLUSTERING["ai_agent_interaction_step"],
+            output_value_text_action_step_only=True,
             **bq_args,
         )
 

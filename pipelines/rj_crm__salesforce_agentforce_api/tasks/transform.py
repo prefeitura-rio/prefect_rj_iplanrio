@@ -13,6 +13,7 @@ Operações:
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import date, datetime, timezone
 
@@ -63,6 +64,24 @@ def _convert_duration_ns_to_ms(df: pd.DataFrame, columns: list[str]) -> pd.DataF
     return df
 
 
+def _filter_output_value_text_action_step_only(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Zera output_value_text para registros que não são ACTION_STEP.
+    Serializa dicts para string nos que mantêm o valor.
+    """
+    if "output_value_text" not in df.columns or "ai_agent_interaction_step_type" not in df.columns:
+        return df
+    mask = df["ai_agent_interaction_step_type"] == "ACTION_STEP"
+    df = df.copy()
+    df.loc[~mask, "output_value_text"] = None
+    df["output_value_text"] = df["output_value_text"].apply(
+        lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, dict) else v
+    )
+    action_count = mask.sum()
+    print(f"[TRANSFORM] output_value_text: {action_count} ACTION_STEPs mantidos, {(~mask).sum()} zerados.")
+    return df
+
+
 def _parse_dates(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     """Converte colunas de data/datetime para datetime com timezone UTC."""
     for col in columns:
@@ -84,6 +103,7 @@ def transform_dataframe(
     date_columns: list[str] | None = None,
     duration_ns_columns: list[str] | None = None,
     partition_date: date | None = None,
+    output_value_text_action_step_only: bool = False,
 ) -> pd.DataFrame:
     """
     Aplica transformações padrão a um DataFrame antes do carregamento no BQ.
@@ -96,6 +116,9 @@ def transform_dataframe(
                           (após normalização de nomes, já em snake_case)
         duration_ns_columns: Colunas em nanosegundos para converter para ms.
         partition_date  : Data de partição. Padrão: hoje.
+        output_value_text_action_step_only: Se True, zera output_value_text para
+                          registros que não são ACTION_STEP.
+                          Usar apenas para ai_agent_interaction_step.
 
     Returns:
         DataFrame transformado, pronto para carga no BigQuery.
@@ -128,6 +151,10 @@ def transform_dataframe(
 
     # 6. Remover strings vazias (Bulk API retorna "" para NULL)
     df = df.replace("", None)
+
+    # 7. Zerar output_value_text para registros que não são ACTION_STEP
+    if output_value_text_action_step_only:
+        df = _filter_output_value_text_action_step_only(df)
 
     print(
         f"[TRANSFORM] '{table_name}': transformação concluída — "

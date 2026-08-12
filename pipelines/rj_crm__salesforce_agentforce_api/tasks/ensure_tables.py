@@ -89,6 +89,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("attribute_text", _STRING),
         bigquery.SchemaField("error_message_text", _STRING),
         bigquery.SchemaField("sub_type", _STRING),
+        bigquery.SchemaField("output_value_text", _STRING),
     ]),
     "ai_agent_interaction_message": _base_fields([
         bigquery.SchemaField("id", _STRING),
