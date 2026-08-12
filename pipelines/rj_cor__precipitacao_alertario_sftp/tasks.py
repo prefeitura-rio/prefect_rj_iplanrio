@@ -167,7 +167,6 @@ def get_bucket_files_with_datetime_filter_task(
             "Arquivos após filtro: %d de %d", len(filtered_files), len(xml_files)
         )
 
-        breakpoint()
         return filtered_files
 
     except Exception as e:
