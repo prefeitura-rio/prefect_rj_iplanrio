@@ -95,8 +95,8 @@ def extract_datetime_from_blob_name(blob_name: str) -> datetime | None:
 
 
 def get_bucket_files_with_datetime_filter_task(
-    bucket_name: str = "rj-iplanrio-filemage",
-    prefix: str = "nimbus/Chuvas_",
+    bucket_name: str = "",
+    prefix: str = "",
 ) -> list[str]:
     """Filtra arquivos do bucket com datetime maior que o do BigQuery.
 
@@ -372,8 +372,8 @@ def extract_datetime_from_blob_name(blob_name: str) -> datetime | None:
 
 @task(retries=3, retry_delay_seconds=10)
 def get_bucket_files_with_datetime_filter_task(
-    bucket_name: str = "rj-iplanrio-filemage",
-    prefix: str = "nimbus/Chuvas_",
+    bucket_name: str = "",
+    prefix: str = "",
     max_datetime_from_bq: datetime | None = None,
 ) -> list[str]:
     """Filtra arquivos do bucket com datetime maior que o do BigQuery.
