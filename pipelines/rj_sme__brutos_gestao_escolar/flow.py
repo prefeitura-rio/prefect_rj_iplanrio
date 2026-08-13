@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This flow is used to dump the database from the 1746 server to the BIGQUERY....
+This flow is used to dump the database from the 1746 server to the BIGQUERY...
 """
 
 from typing import Optional
@@ -42,6 +42,7 @@ def rj_sme__brutos_gestao_escolar(
     max_concurrency: int = 1,
     only_staging_dataset: bool = True,
     add_timestamp_column: bool = True,
+    offset: Optional[int] = 1,
 ):
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
@@ -59,6 +60,7 @@ def rj_sme__brutos_gestao_escolar(
         break_query_start=break_query_start,
         break_query_end=break_query_end,
         break_query_frequency=break_query_frequency,
+        offset=offset,
     )
 
     dump_upload_batch_task(

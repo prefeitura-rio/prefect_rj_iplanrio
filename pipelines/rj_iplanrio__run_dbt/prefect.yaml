@@ -55,7 +55,7 @@ deployments:
         slug: dbt_daily_freshness
         parameters:
           command: "source freshness"
-          send_discord_report: true
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"
@@ -70,7 +70,7 @@ deployments:
         parameters:
           command: "build"
           select: "tag:daily"
-          send_discord_report: true
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"
@@ -86,7 +86,7 @@ deployments:
         parameters:
           command: "build"
           select: "tag:weekly"
-          send_discord_report: true
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"
@@ -103,7 +103,23 @@ deployments:
         parameters:
           command: "build"
           select: "+tag:hourly"
-          send_discord_report: true
+          send_discord_report: false
+          github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
+          bigquery_project: "rj-iplanrio"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-iplanrio_dbt"
+            dev: "rj-iplanrio-dev_dbt"
+      # Hourly (3600 seconds = 1 hour)
+      # Schedule 5: freshness each 60 minutes
+      - interval: 3600
+        anchor_date: "2023-01-01T09:30:00"
+        timezone: America/Sao_Paulo
+        slug: dbt_hourly_freshness
+        parameters:
+          command: "source freshness"
+          select: "+tag:hourly"
+          send_discord_report: false
           github_repo: "https://github.com/prefeitura-rio/queries-rj-iplanrio.git"
           bigquery_project: "rj-iplanrio"
           target: "prod"

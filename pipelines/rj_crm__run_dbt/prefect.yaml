@@ -38,6 +38,14 @@ deployments:
   - name: rj-crm--run_dbt--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__run_dbt/flow.py:rj_crm__run_dbt
+    # Evita que duas schedules rodem em paralelo sobre os mesmos modelos.
+    # Ex.: dbt_12h_build e dbt_quarter_hourly_build compartilham o select
+    # "tag:quarter_hourly" e, quando coincidem, geram testes unique flaky
+    # (ex.: raw_superapp_mobile_originated_v2__id_mensagem__unique) por
+    # concorrência de escrita no mesmo modelo incremental.
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -93,15 +101,15 @@ deployments:
           gcs_buckets:
             prod: "rj-crm-registry_dbt"
             dev: "rj-crm-registry-dev_dbt"
-      # Quarterly hour (900 seconds = 15 minutes)
-      # Schedule 4: run each 15 minutes
-      - interval: 900
+      # Quarterly hour update last 7 days
+      # Schedule 4: run each 12 h
+      - interval: 43200
         anchor_date: "2024-03-17T09:15:00"
         timezone: America/Sao_Paulo
-        slug: dbt_quarter_hourly_build
+        slug: dbt_12h_build
         parameters:
           command: "build"
-          select: "+tag:quarter_hourly"
+          select: "tag:quarter_hourly"
           send_discord_report: true
           github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
           bigquery_project: "rj-crm-registry"
@@ -109,4 +117,19 @@ deployments:
           gcs_buckets:
             prod: "rj-crm-registry_dbt"
             dev: "rj-crm-registry-dev_dbt"
-
+      # Quarterly hour (900 seconds = 15 minutes) As execuções a cada 15 min passam a reescrever apenas os dois últimos dias e sem rodar os testes (passe quente)
+      # Schedule 5: run each 15 minutes updating only last 2 days
+      - interval: 900
+        anchor_date: "2024-03-17T09:15:00"
+        timezone: America/Sao_Paulo
+        slug: dbt_quarter_hourly_build
+        parameters:
+          command: "build"
+          select: "tag:quarter_hourly --vars '{passe: quente}'"
+          send_discord_report: true
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+          bigquery_project: "rj-crm-registry"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-crm-registry_dbt"
+            dev: "rj-crm-registry-dev_dbt"

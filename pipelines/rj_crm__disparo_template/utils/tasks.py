@@ -73,11 +73,12 @@ def safe_export_df_to_parquet(
     Returns:
         str: The path to the output Parquet file.
     """
-    # Create directory if it doesn't exist
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    # Create directory if it doesn't exist (dirname returns "" for bare filenames)
+    output_dir = os.path.dirname(output_path) or "."
+    os.makedirs(output_dir, exist_ok=True)
     # Generate a unique filename using uuid
     filename = f"{uuid.uuid4()}.csv"
-    csv_path = os.path.join(os.path.dirname(output_path), filename)
+    csv_path = os.path.join(output_dir, filename)
     dfr.to_csv(csv_path, index=False)
     parquet_path = csv_path.replace(".csv", ".parquet")
 
@@ -126,6 +127,7 @@ def create_date_partitions(
         for date in dates
     ]
 
+    file_folder = ""
     for _date, _dataframe in dataframes:
         partition_folder = os.path.join(
             root_folder,
@@ -143,7 +145,7 @@ def create_date_partitions(
         elif file_format == "parquet":
             safe_export_df_to_parquet(dfr=_dataframe, output_path=file_folder)
 
-    log(f"Files saved on root_folder{root_folder} as {file_folder}")
+    log(f"Files saved on root_folder={root_folder} as {file_folder}")
     return root_folder
 
 
@@ -200,9 +202,7 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
     job = bq_client.query(query)
     while not job.done():
         sleep(1)
-    log("Getting result from query")
     results = job.result()
-    log("Converting result to pandas dataframe")
     dfr = results.to_dataframe()
     log("End download data from bigquery")
     return dfr

@@ -1,3 +1,6 @@
+**/**/test*
+**/**/api.pdf
+/data/
 test.py
 prefect_rj_iplanrio.egg-info/
 # Cursor files
@@ -32,3 +35,12 @@ venv.bak/
 
 # Ruff stuff:
 .ruff_cache/
+
+# macOS
+.DS_Store
+
+# Per-pipeline Python version pins (managed at workspace root only)
+pipelines/**/.python-version
+
+# Egg-info dirs generated inside pipeline packages
+pipelines/**/*.egg-info/

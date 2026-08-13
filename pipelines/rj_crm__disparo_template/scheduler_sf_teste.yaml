@@ -1,0 +1,392 @@
+schedules:
+# Schedule para testar flow na salesforce
+  - interval: 86400000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-confirma_agendamento_cadunico
+    flow_run_name: sf-teste-confirma_agendamento_cadunico
+    parameters:
+      id_hsm: null
+      campaign_name: confirma_agendamento_cadunico_prod_v2
+      cost_center_id: 71
+      chunk_size: 1000
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_cadunico
+      query: |
+        SELECT * FROM rj-crm-registry-dev.teste.agendamento_cadunico_teste
+        WHERE nome_sobrenome LIKE "%patricia%"
+
+  # SF Teste - Dívida Ativa Cobrança
+  - interval: 86400000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-pgm-divida-ativa-cobranca
+    flow_run_name: sf-teste-pgm-divida-ativa-cobranca
+    parameters:
+      campaign_name: pgm_divida_ativa_prod_v2
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.pgm_divida_ativa_cobranca
+        WHERE nome_sobrenome LIKE "%patricia%"
+
+  # SF Teste - Dívida Ativa Lembrete
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-pgm-divida-ativa-lembrete
+    flow_run_name: sf-teste-pgm-divida-ativa-lembrete
+    parameters:
+      campaign_name: pgmdividaativalembreteprodv1
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_pgm_divida_ativa_lembrete
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.pgm_divida_ativa_lembrete
+        WHERE nome_sobrenome LIKE "%patricia%"
+
+  # SF Teste - Dívida Ativa Agradecimento
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-pgm-divida-ativa-agradecimento
+    flow_run_name: sf-teste-pgm-divida-ativa-agradecimento
+    parameters:
+      campaign_name: pgmdividaativaconfirmapgtoprodv1
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_pgm_divida_ativa_agradecimento
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.pgm_divida_ativa_agradecimento
+        WHERE nome_sobrenome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Explica Pesquisa (D0)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-explica-pesquisa
+    flow_run_name: sf-teste-sms-puerperas-explica-pesquisa
+    parameters:
+      campaign_name: smspuerperasdisparo25
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_explica_pesquisa
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_explica_pesquisa
+        WHERE nome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Confirma Agendamento (D0)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-confirma-agendamento
+    flow_run_name: sf-teste-sms-puerperas-confirma-agendamento
+    parameters:
+      campaign_name: _sms_puerpera_disp1_gestantev2
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_confirma_agendamento
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_confirma_agendamento
+        WHERE nome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Pesquisa 1 (D1/D3/D5/D10)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-pesquisa1
+    flow_run_name: sf-teste-sms-puerperas-pesquisa1
+    parameters:
+      campaign_name: smspuerperasdisparo4v3
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_pesquisa1
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa1
+        WHERE nome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Pesquisa 2 (D7)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-pesquisa2
+    flow_run_name: sf-teste-sms-puerperas-pesquisa2
+    parameters:
+      campaign_name: smspuerperadisparo6
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_pesquisa2
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa2
+        WHERE nome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Pesquisa 3 (D13/D16/D19)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-pesquisa3
+    flow_run_name: sf-teste-sms-puerperas-pesquisa3
+    parameters:
+      campaign_name: smspuerperasdisparo9
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_pesquisa3
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa3
+        WHERE nome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Pesquisa 4 (D22)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-pesquisa4
+    flow_run_name: sf-teste-sms-puerperas-pesquisa4
+    parameters:
+      campaign_name: smspuerperadisparo11
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_pesquisa4
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa4
+        WHERE SubscriberKey = "00000000001"
+
+  # SF Teste - Puérperas Pesquisa 5 (D25/D28)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-pesquisa5
+    flow_run_name: sf-teste-sms-puerperas-pesquisa5
+    parameters:
+      campaign_name: smspuerperasdisparo12
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_pesquisa5
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa5
+        WHERE nome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Pesquisa 6 (D34)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-pesquisa6
+    flow_run_name: sf-teste-sms-puerperas-pesquisa6
+    parameters:
+      campaign_name: smspuerperasdisparo14
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_pesquisa6
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa6
+        WHERE nome LIKE "%patricia%"
+
+  # SF Teste - Puérperas Pesquisa 7 (D40)
+  - interval: 864000000
+    anchor_date: "2021-01-01T13:00:00"
+    timezone: America/Sao_Paulo
+    active: false
+    slug: sf-teste-sms-puerperas-pesquisa7
+    flow_run_name: sf-teste-sms-puerperas-pesquisa7
+    parameters:
+      campaign_name: smspuerperasdisparo152
+      cost_center_id: 71
+      dataset_id: brutos_salesforce
+      table_id: disparos_efetuados_teste
+      dump_mode: append
+      test_mode: true
+      sleep_minutes: 1
+      flow_environment: staging
+      filter_dispatched_phones_or_cpfs: null
+      filter_duplicated_phones: false
+      filter_duplicated_cpfs: false
+      whitelist_percentage: 0
+      infisical_secret_path: "/crm_disparo_template"
+      whitelist_environment: "production"
+      filter_failed_phones: false
+      force_add_on_whitelist_group: false
+      whitelist_replace_contacts: false
+      data_extension_filename: whatsapp_sms_puerperas_pesquisa7
+      query: |
+        SELECT * FROM `rj-crm-registry-dev`.teste.sms_puerperas_pesquisa7
+        WHERE nome LIKE "%patricia%"

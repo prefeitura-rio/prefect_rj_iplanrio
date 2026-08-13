@@ -1,0 +1,79 @@
+name: rj_cetrio__transporte_rodoviario_radar_transito
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_cetrio__transporte_rodoviario_radar_transito-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_cetrio__transporte_rodoviario_radar_transito/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-cetrio--transporte_rodoviario_radar_transito--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_cetrio__transporte_rodoviario_radar_transito/flow.py:rj_cetrio__transporte_rodoviario_radar_transito
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cetrio__transporte_rodoviario_radar_transito -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+  # - name: rj-cetrio--transporte_rodoviario_radar_transito--prod
+  #   version: "{{ get-commit-hash.stdout }}"
+  #   entrypoint: pipelines/rj_cetrio__transporte_rodoviario_radar_transito/flow.py:rj_cetrio__transporte_rodoviario_radar_transito
+  #   work_pool:
+  #     name: k3s-pool
+  #     work_queue_name: default
+  #     job_variables:
+  #       image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+  #       command: uv run --package rj_cetrio__transporte_rodoviario_radar_transito -- prefect flow-run execute
+  #       secretName: prefect-jobs-secrets
+  #       image_pull_policy: Always
+
+  #   schedules:
+  #     - interval: 86400
+  #       anchor_date: "2023-03-01T20:00:00"
+  #       timezone: America/Sao_Paulo
+  #       slug: fluxo_veiculos
+  #       parameters:
+  #         table_id: fluxo_veiculos
+  #         dump_mode: overwrite
+  #         execute_query: |
+  #           SELECT f.CodCET AS cod_cet,
+  #               e.Logradouro,
+  #               e.BAIRRO,
+  #               e.NEQUIPEMP AS codigo_equipamento,
+  #               e.LOCEQUIP AS local_equipamento,
+  #               e.Latitude,
+  #               e.Longitude,
+  #               e.AP,
+  #               d.Data,
+  #               t.Horario24 AS periodo,
+  #               CONVERT(time(0), t.PeriodoInicio) AS hora_inicio,
+  #               CONVERT(time(0), t.PeriodoTermino) AS hora_termino,
+  #               f.TotalRegistros AS total_registro,
+  #               f.TotalPlacas AS total_placas
+  #           FROM DWOCR.dbo.Fact_OCRS AS f
+  #           INNER JOIN DWOCR.dbo.Dim_Equipamento AS e
+  #               ON f.CodCET = e.CodCET
+  #           INNER JOIN DWOCR.dbo.Dim_Tempo AS t
+  #               ON t.CodTempo = f.CodTempo
+  #           INNER JOIN DWOCR.dbo.Dim_Data AS d
+  #               ON d.Data = t.Data;

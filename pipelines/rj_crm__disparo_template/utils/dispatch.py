@@ -6,23 +6,30 @@ Tasks migradas do template disparo do Prefect 1.4 para 3.0
 Baseado em pipelines_rj_crm_registry/pipelines/templates/disparo/tasks.py
 """
 
+import asyncio
 import json
 import os
 import random
+import time
 from datetime import datetime
 from math import ceil
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+import asyncssh
 import pandas as pd
+from iplanrio.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
+from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 from pytz import timezone
 
 from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification  # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.enrichers import DF_ENRICHERS, get_df_enricher  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.processors import get_query_processor  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import download_data_from_bigquery  # pylint: disable=E0611, E0401
 # pylint: disable=E0611, E0401
+from pipelines.rj_crm__disparo_template.utils.schemas import SfDispatchRow  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.validators import (
     log_validation_summary,
     validate_destinations,
@@ -60,7 +67,7 @@ def add_contacts_to_whitelist(
     phone_numbers = []
     for dest_json in destinations:
         try:
-            phone = dest_json.get("to")
+            phone = dest_json.get("telefone")
             if phone:
                 phone_numbers.append(phone)
         except Exception as err:
@@ -168,7 +175,7 @@ def remove_contacts_from_whitelist(
     phone_numbers = []
     for dest in destinations:
         try:
-            phone = dest.get("to")
+            phone = dest.get("telefone")
             print(f"DEBUG: Processing destinations for removal, found phone: {phone} in destination: {dest}")
             if phone:
                 phone_numbers.append(phone)
@@ -237,10 +244,10 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
     if isinstance(destinations, pd.DataFrame):
         destinations = destinations.to_dict("records")
     
-    # TODO: quando filtramos os telefones com failed e temos retentativa, o dado chega aqui com 
-    # to: None e others: [prox_num1, prox_num2...], mas o schema exige que to seja string.
+    # TODO: quando filtramos os telefones com failed e temos retentativa, o dado chega aqui com
+    # telefone: None e others: [prox_num1, prox_num2...], mas o schema exige que telefone seja string.
     # Poderia aqui remover esses casos do payload
-    # Exemplo do dado aqui: [{'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Rodolpho ', 'CC_WT_NOME': 'Rodolpho ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': None, 'externalId': '00000000011', 'vars': {'NOME': 'Patricia ', 'CC_WT_NOME': 'Patricia ', 'CC_WT_CPF_CIDADAO': '00000000011'}, 'others': ['5511984677798']}, {'to': '5592984212629', 'externalId': '00000000055', 'vars': {'NOME': 'Patrick ', 'CC_WT_NOME': 'Patrick ', 'CC_WT_CPF_CIDADAO': '00000000055'}, 'others': ['5592984212629']}]
+    # Exemplo do dado aqui: [{'telefone': None, 'cpf': '00000000011', 'vars': {...}, 'others': ['5511984677798']}, ...]
     # como não tem failed ele não entra no retry loop
 
     # Validate destinations first
@@ -256,7 +263,7 @@ def create_dispatch_payload(campaign_name: str, cost_center_id: int, destination
 
     # Retorna o dicionário EXCLUINDO o campo 'others' de todos os destinatários na lista
     # Isso garante que a API não receba um campo que ela não conhece
-    return payload.dict(exclude={"destinations": {"__all__": {"others"}}})
+    return payload.model_dump(exclude={"destinations": {"__all__": {"others"}}})
 
 
 @task
@@ -293,7 +300,6 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int) -> st
         if response.status_code != 201:
             log(f"Falha no disparo do lote {i}: {response.text}")
             response.raise_for_status()
-            raise Exception(f"Dispatch failed: {response.text}")
 
         log(f"Disparo do lote {i} realizado com sucesso!")
 
@@ -328,8 +334,8 @@ def create_dispatch_dfr(
             "dispatch_date": dispatch_date,
             "campaignName": campaign_name,
             "costCenterId": cost_center_id,
-            "to": destination.to,
-            "externalId": destination.externalId,  # Now mandatory
+            "telefone": destination.telefone,
+            "cpf": destination.cpf,
             "vars": destination.vars,
         }
         data.append(row)
@@ -341,21 +347,112 @@ def create_dispatch_dfr(
             "dispatch_date",
             "campaignName",
             "costCenterId",
-            "to",
-            "externalId",
+            "telefone",
+            "cpf",
             "vars",
         ]
     ]
 
     log(f"DataFrame created with {len(dfr)} validated records")
-    log("All records have mandatory externalId field populated")
+    log("All records have mandatory cpf field populated")
 
-    # Validate that no externalId is None (should not happen with our validation)
-    null_external_ids = dfr["externalId"].isnull().sum()
-    if null_external_ids > 0:
-        log(f"WARNING: Found {null_external_ids} records with null externalId after validation")
+    # Validate that no cpf is None (should not happen with our validation)
+    null_cpfs = dfr["cpf"].isnull().sum()
+    if null_cpfs > 0:
+        log(f"WARNING: Found {null_cpfs} records with null cpf after validation")
 
     return dfr
+
+
+@task
+def create_log_df(
+    df: pd.DataFrame,
+    dispatch_date: str,
+    campaign_name: str,
+) -> pd.DataFrame:
+    """
+    Constrói o DataFrame de log para a camada bronze do BigQuery a partir do
+    DataFrame de disparo do flow SF.
+
+    Schema de saída fixo (independente da query):
+        dispatch_date  | campaign_name | SubscriberKey | telefone | data
+
+    - dispatch_date e campaign_name são metadados do disparo.
+    - SubscriberKey e telefone são as colunas de identificação obrigatórias.
+    - data: JSON string com todas as colunas restantes do DataFrame (excluindo
+      'others', 'dispatch_date', 'campaign_name', 'SubscriberKey', 'telefone').
+
+    Cada linha é validada via SfDispatchRow (Pydantic) antes de ser incluída.
+    Linhas inválidas são logadas e descartadas; se nenhuma linha for válida,
+    lança ValueError.
+
+    Args:
+        df: DataFrame de disparo (current_df), já filtrado e sem 'others'.
+        dispatch_date: String com a data/hora do disparo.
+        campaign_name: Nome da campanha.
+
+    Returns:
+        DataFrame com colunas: dispatch_date, campaign_name, SubscriberKey, telefone, data.
+
+    Raises:
+        ValueError: Se nenhuma linha for válida após validação.
+    """
+    # Colunas que viram campos fixos no schema de saída — não entram no JSON de `data`
+    fixed_columns = {"dispatch_date", "campaign_name", "SubscriberKey", "telefone"}
+
+    # Colunas do df que sobram para o JSON de `data`
+    extra_columns = [col for col in df.columns if col not in fixed_columns]
+
+    records = []
+    invalid_count = 0
+
+    for i, row in df.iterrows():
+        try:
+            validated = SfDispatchRow(
+                dispatch_date=str(dispatch_date),
+                campaign_name=str(campaign_name),
+                cpf=str(row.get("SubscriberKey", "")),
+                telefone=str(row.get("telefone", "")),
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            invalid_count += 1
+            log(f"create_log_df: linha {i} descartada por validação inválida: {e}")
+            continue
+
+        # Monta o JSON com os campos extras, convertendo tipos não-serializáveis para string
+        extra_data = {}
+        for col in extra_columns:
+            val = row.get(col)
+            # Converte tipos pandas/numpy não serializáveis
+            if hasattr(val, "item"):
+                try:
+                    val = val.item()
+                except ValueError:
+                    # val tem mais de um elemento (ex.: coluna array/repeated do BigQuery,
+                    # ou coluna duplicada no df) — não dá pra reduzir a escalar
+                    val = val.tolist() if hasattr(val, "tolist") else list(val)
+            extra_data[col] = val
+
+        records.append({
+            "dispatch_date": validated.dispatch_date,
+            "campaign_name": validated.campaign_name,
+            "SubscriberKey": validated.cpf,
+            "telefone": validated.telefone,
+            "data": json.dumps(extra_data, ensure_ascii=False, default=str),
+        })
+
+    if not records:
+        raise ValueError(
+            f"create_log_df: nenhuma linha válida após validação. "
+            f"{invalid_count} linhas descartadas."
+        )
+
+    if invalid_count > 0:
+        log(f"create_log_df: {invalid_count} linhas descartadas por validação inválida.")
+
+    log_df = pd.DataFrame(records, columns=["dispatch_date", "campaign_name", "SubscriberKey", "telefone", "data"])
+    log(f"create_log_df: DataFrame de log criado com {len(log_df)} registros.")
+    return log_df
 
 
 @task
@@ -375,18 +472,27 @@ def check_api_status(api: object) -> bool:
 
 
 @task
-def get_already_dispatched_data(billing_project_id: str) -> pd.DataFrame:
+def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days: int) -> pd.DataFrame:
     """
     Busca no BigQuery a lista de CPFs ou telefones que já tiveram um disparo
-    bem-sucedido ou em processamento hoje.
+    bem-sucedido ou em processamento nos últimos dispatch_interval_days dias. Filtramos pela data de envio ou entrega
+    porque a coluna status_disparo guarda apenas o status final, e se uma pessoa leu a mensagem
+    uma semana depois ela deveria poder receber outro disparo hoje.
+    Para verificar se a pessoa já recebeu um disparo hoje usar dispatch_interval_days=0
     """
-    query = """
-        SELECT DISTINCT targetExternalId as externalId, flatTarget as celular_disparo, status
-        FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-        WHERE DATE(createDate) = CURRENT_DATE("America/Sao_Paulo")
-          AND status IN ("PROCESSING", "SENT", "DELIVERED", "READ")
+    query = f"""
+        SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_hsm as nome_campanha, data_particao
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
+          AND (
+            envio_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
+              OR
+            entrega_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
+              OR
+            falha_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
+            )
     """
-    log(f"Buscando disparos já realizados hoje para evitar duplicidade:\n{query}")
+    log(f"Buscando disparos já realizados hoje e na campanha para evitar duplicidade:\n{query}")
     try:
         df = download_data_from_bigquery(
             query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
@@ -394,53 +500,69 @@ def get_already_dispatched_data(billing_project_id: str) -> pd.DataFrame:
         return df
     except Exception as err:
         log(f"Erro ao buscar disparos realizados: {err}. Retornando DataFrame vazio.", level="warning")
-        return pd.DataFrame(columns=["externalId", "celular_disparo", "status"])
+        return pd.DataFrame(columns=["cpf", "telefone", "status", "nome_campanha", "data_particao"])
+
+
+@task
+def filter_duplicated(
+    df: pd.DataFrame,
+    column: str,
+    filter_indicator: bool,
+    label: str,
+) -> pd.DataFrame:
+    """
+    Remove duplicate entries from a DataFrame based on a specified column.
+    Only executes if filter_indicator is True.
+    """
+    if df is None or df.empty:
+        return df
+
+    if filter_indicator and column in df.columns:
+        n_before = len(df)
+        df = df.drop_duplicates(subset=[column])
+        log(f"Removed {n_before - len(df)} duplicated {label}. Remaining: {len(df)}")
+    return df
 
 
 @task
 def filter_already_dispatched_phones_or_cpfs(
-    destinations: List[Dict], 
-    already_dispatched_df: pd.DataFrame, 
-    field: str = "cpf"
-) -> List[Dict]:
+    df: pd.DataFrame,
+    already_dispatched_df: pd.DataFrame,
+    current_filter: str = 'cpf'
+) -> pd.DataFrame:
     """
-    Filters out CPFs that have already been dispatched today.
-
-    Args:
-        destinations (List[Dict]): A list of destination dictionaries.
-        already_dispatched_df (pd.DataFrame): A DataFrame containing already dispatched destinations.
-        field (str): The field in the destination dict that contains the phone number.
-            Field must be "cpf" or "phone_number"
-
-    Returns:
-        List[Dict]: A list of destination dictionaries that have not yet been dispatched.
+    Filters out rows from the DataFrame where the identifier (cpf or phone) 
+    has already been dispatched today.
     """
-    if not destinations or already_dispatched_df.empty:
-        return destinations
+    if df is None or df.empty or already_dispatched_df.empty:
+        return df
 
-    if field not in ["cpf", "phone_number"]:
-        log(f"\n⚠️  Invalid field '{field}' for filtering dispatched phones. Must be 'cpf' or 'phone_number'")
-        return destinations
-
-    already_dispatched_df.rename(columns={"celular_disparo": "to"}, inplace=True)
-
-    destinations_field = "externalId" if field == "cpf" else "to"
-    already_dispatched_field = "externalId" if field == "cpf" else "to"
-
-    if already_dispatched_field not in already_dispatched_df.columns:
-        log(f"Coluna {already_dispatched_field} não encontrada nos dados de controle. Ignorando filtro.", level="warning")
-        return destinations
-
-    dispatched_set = set(already_dispatched_df[already_dispatched_field].tolist())
+    # Mapeamos o filtro informado para as colunas corretas de cada DataFrame: (col_envio, col_controle)
+    # - col_envio: nome da coluna no DataFrame de envio (df), que para CPF é 'cpf'.
+    # - col_controle: nome da coluna no DataFrame de controle (already_dispatched_df), que para CPF também é 'cpf'.
+    mapping = {
+        "cpf": ("cpf", "cpf"),
+        "SubscriberKey": ("cpf", "cpf"),
+        "telefone": ("telefone", "telefone"),
+        None: ("cpf", "cpf")
+    }
     
-    filtered_destinations = [
-        dest for dest in destinations if dest.get(destinations_field) not in dispatched_set
-    ]
+    col_envio, col_controle = mapping.get(current_filter, ("cpf", "cpf"))
+
+    if col_envio not in df.columns:
+        log(f"Coluna {col_envio} não encontrada no DataFrame de envio. Ignorando filtro.", level="warning")
+        return df
+
+    if col_controle not in already_dispatched_df.columns:
+        log(f"Coluna {col_controle} não encontrada no controle de já disparados. Ignorando filtro.", level="warning")
+        return df
+
+    n_before = len(df)
+    dispatched_set = set(already_dispatched_df[col_controle].dropna())
+    df = df[~df[col_envio].isin(dispatched_set)]
+    log(f"Removed {n_before - len(df)} already dispatched {col_envio}. Remaining: {len(df)}")
     
-    removed_count = len(destinations) - len(filtered_destinations)
-    log(f"Filtro '{field}' aplicado: {removed_count} registros removidos por já terem disparos realizados hoje.")
-    
-    return filtered_destinations
+    return df
 
 
 def normalize_keys(d: Dict) -> Dict:
@@ -449,10 +571,13 @@ def normalize_keys(d: Dict) -> Dict:
             return d
         
         mapping = {
-            "celular_disparo": "to",
-            "to": "to",
-            "externalid": "externalId",
-            "external_id": "externalId",
+            "celular_disparo": "telefone",
+            "to": "telefone",
+            "telefone": "telefone",
+            "externalid": "cpf",
+            "external_id": "cpf",
+            "externalId": "cpf",
+            "cpf": "cpf",
             "vars": "vars",
             "others": "others"
         }
@@ -502,13 +627,13 @@ def get_destinations(
 
     if destinations:
         print(f"Exemplo de destino antes da normalização: {destinations[0]}")
-        # Normaliza as chaves (ex: EXTERNALID -> externalId, celular_disparo -> to)
+        # Normaliza as chaves (ex: EXTERNALID -> cpf, celular_disparo -> telefone)
         destinations = [normalize_keys(d) for d in destinations]
         print(f"Exemplo de destino após a normalização: {destinations[0]}")
 
         validated_destinations, validation_stats = validate_destinations(destinations)
         log_validation_summary(validation_stats, "get_destinations")
-        return [dest.dict() for dest in validated_destinations]
+        return [dest.model_dump() for dest in validated_destinations]
 
     return []
 
@@ -534,15 +659,15 @@ def remove_duplicate_phones(destinations: List[Dict]) -> List[Dict]:
     duplicates_count = 0
 
     for destination in validated_destinations:
-        phone = destination.to  # Pydantic model attribute
-        external_id = destination.externalId
+        phone = destination.telefone  # Pydantic model attribute
+        cpf = destination.cpf
 
         if phone not in seen_phones:
             seen_phones.add(phone)
-            unique_destinations.append(destination.dict())  # Convert back to dict
+            unique_destinations.append(destination.model_dump())  # Convert back to dict
         else:
             duplicates_count += 1
-            log(f"Duplicate phone removed: {phone[:8]}**** (externalId: {external_id})")
+            log(f"Duplicate phone removed: {phone[:8]}**** (cpf: {cpf})")
 
     log(f"Removed {duplicates_count} duplicate phone numbers")
     log(f"Total unique destinations: {len(unique_destinations)}")
@@ -571,14 +696,14 @@ def remove_duplicate_cpfs(destinations: List[Dict]) -> List[Dict]:
     duplicates_count = 0
 
     for destination in validated_destinations:
-        cpf = destination.externalId  # Pydantic model attribute
+        cpf = destination.cpf  # Pydantic model attribute
 
         if cpf not in seen_cpfs:
             seen_cpfs.add(cpf)
-            unique_destinations.append(destination.dict())  # Convert back to dict
+            unique_destinations.append(destination.model_dump())  # Convert back to dict
         else:
             duplicates_count += 1
-            log(f"Duplicate CPF removed: {cpf[:4]}**** (phone: {destination.to})")
+            log(f"Duplicate CPF removed: {cpf[:4]}**** (phone: {destination.telefone})")
 
     log(f"Removed {duplicates_count} duplicate CPFs")
     log(f"Total unique destinations: {len(unique_destinations)}")
@@ -677,27 +802,38 @@ def format_query(raw_query: str, replacements: dict, query_processor_name: str =
 
 
 @task
-def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: str, bucket_name: str) -> Optional[bool]:
+def check_flow_status(
+    flow_environment: str,
+    billing_project_id: str,
+    bucket_name: str,
+    campaign_name: Optional[str] = None,
+) -> Optional[bool]:
     """
     Verifica se o fluxo está ativo e dentro do prazo de validade consultando o BigQuery.
     Args:
         flow_environment: Ambiente do fluxo ('staging' ou 'production')
-        id_hsm: ID do template HSM
         billing_project_id: ID do projeto GCP para billing
         bucket_name: Nome do bucket GCS para carregamento de credenciais
+        campaign_name: Nome da campanha
     Returns:
         True se o fluxo estiver ativo e válido, None caso contrário."""
 
-    log(f"\nStarting flow status check for id_hsm={id_hsm} in environment={flow_environment}.")
+    log(f"\nStarting flow status check for campaign_name={campaign_name} in environment={flow_environment}.")
 
     if flow_environment not in ["staging", "production"]:
         log(f"\n⚠️  Invalid flow_environment: {flow_environment}. Must be 'staging' or 'production'.")
         return None
 
+    if not campaign_name:
+        log(f"\n⚠️  Campaign name must be provided.")
+        return None
+
+    filter_condition = f"nome_campanha = '{campaign_name}'"
+
     query = f"""
         SELECT ativo, data_limite_disparo, nome_campanha
-        FROM `rj-crm-registry.brutos_wetalkie_staging.disparos_ativos`
-        WHERE id_hsm = '{id_hsm}' AND ambiente = '{flow_environment}'
+        FROM `rj-crm-registry.brutos_salesforce_staging.disparos_ativos`
+        WHERE {filter_condition} AND ambiente = '{flow_environment}'
         LIMIT 1
     """
     dfr = download_data_from_bigquery(
@@ -707,7 +843,7 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
     )
     log(f"DEBUG: Flow status query result:\n{dfr} \nwith query {query}")
     if dfr.empty:
-        log(f"\n⚠️  No configuration found for id_hsm={id_hsm} in environment={flow_environment}.")
+        log(f"\n⚠️  No configuration found for campaign_name={campaign_name} in environment={flow_environment}.")
         return None
 
     row = dfr.iloc[0]
@@ -716,12 +852,13 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
     if not webhook_url:
         print("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send notification.")
 
-    if not row.get("ativo") or row.get("ativo") not in (1, "1"):
-        log(f"\n⚠️  Flow is not active for id_hsm={id_hsm} in environment={flow_environment}.")
+    ativo_raw = row.get("ativo")
+    is_ativo = str(ativo_raw).strip().lower() in ("1", "true", "yes", "sim", "ativo") if ativo_raw is not None else False
+    if not is_ativo:
+        log(f"\n⚠️  Flow is not active for {row.get('nome_campanha')} in environment={flow_environment}.")
         message = f"""
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
-    🆔 **Template ID:** {id_hsm}
     💻 **Ambiente:** {flow_environment}
 
     Desligue o scheduler no prefect ou mude o status para ativo para reativar o fluxo.
@@ -731,14 +868,22 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
 
     current_date = datetime.now(timezone("America/Sao_Paulo")).date()
 
-    expiration_date = row.get("data_limite_disparo") if not pd.isnull(row.get("data_limite_disparo")) else current_date
+    raw_expiration = row.get("data_limite_disparo")
+    # NULL/NaT means no expiration — the flow runs indefinitely.
+    # Normalise to datetime.date so the comparison with current_date is always type-safe.
+    expiration_date = None
+    try:
+        if raw_expiration is not None and not pd.isnull(raw_expiration):
+            expiration_date = datetime.strptime(str(raw_expiration)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        log(f"WARNING: data_limite_disparo value {raw_expiration!r} could not be parsed as a date. Treating as no expiration.")
+        expiration_date = None
 
-    if expiration_date < current_date:
-        log(f"\n⚠️  Flow for id_hsm={id_hsm} in environment={flow_environment} has expired on {expiration_date}.")
+    if expiration_date is not None and expiration_date < current_date:
+        log(f"\n⚠️  Flow for campaign_name={campaign_name} in environment={flow_environment} has expired on {expiration_date}.")
         message = f"""
     Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
-    🆔 **Template ID:** {id_hsm}
     💻 **Ambiente:** {flow_environment}
     📆 **Data limite do disparo:** {expiration_date}
 
@@ -747,7 +892,7 @@ def check_flow_status(flow_environment: str, id_hsm: int, billing_project_id: st
         send_discord_notification(webhook_url, message)
         return None
 
-    log(f"\n✅  Active flow found for id_hsm={id_hsm} in environment={flow_environment}.")
+    log(f"\n✅  Active flow found for campaign_name={campaign_name} in environment={flow_environment}.")
     return True
 
 
@@ -762,14 +907,23 @@ def get_value_from_case_insensitive_key(d: Dict, target_key: str) -> Any:
         return None
 
 
-def get_failed_phones(billing_project_id: str) -> set:
+@task
+def get_failed_phones(billing_project_id: str, campaign_name: str = None) -> set:
     """
-    Busca telefones tiveram falha de não ter whatsapp ou bloqueio no último disparo,
+    Busca telefones que tiveram falha de não ter whatsapp ou bloqueio no último disparo,
     passo necessário já que o telefone principal não vem do RMI. Caso contrário, seria
     só necessário filtrar pela estratégia de envio.
+
+    Combina (UNION) duas fontes:
+    1. fluxo_atendimento (Wetalkie): falha 131026 no último disparo dos últimos 6 meses.
+    2. int_crm_status_disparo (Salesforce/dbt): indicador_falha nos últimos 6 meses.
+       Se campaign_name for informado, filtra também pelo nome da jornada nessa segunda query.
     """
     # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
+    campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
+
     query = f"""
+        -- Fonte 1: Wetalkie — falha 131026 no último disparo dos últimos 6 meses
         WITH status_por_disparo AS (
             SELECT
                 flatTarget,
@@ -777,13 +931,14 @@ def get_failed_phones(billing_project_id: str) -> set:
                 MAX(
                     CASE
                         WHEN status = "PROCESSING" THEN 1
-                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
+                        WHEN status = "FAILED" and (faultdescription like "%131026%" or faultdescription LIKE "%131048%") THEN 2
                         WHEN status = "SENT" THEN 3
                         WHEN status = "DELIVERED" THEN 4
                         WHEN status = "READ" THEN 5
                     END
                 ) AS id_status_disparo
             FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
+            WHERE DATE(createDate) >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 MONTH)
             GROUP BY flatTarget, createDate
         ),
 
@@ -795,13 +950,27 @@ def get_failed_phones(billing_project_id: str) -> set:
                     ORDER BY createDate DESC
                 ) AS rn
             FROM status_por_disparo
+        ),
+
+        wetalkie_failed AS (
+            SELECT flatTarget AS telefone
+            FROM ranked
+            WHERE rn = 1
+            AND id_status_disparo = 2
+            -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+        ),
+
+        -- Fonte 2: int_crm_status_disparo (Salesforce) — falha nos últimos 6 meses
+        sf_failed AS (
+            SELECT DISTINCT contato_telefone AS telefone
+            FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+            WHERE indicador_quarentena = TRUE
+            {campaign_filter}
         )
 
-        SELECT flatTarget
-        FROM ranked
-        WHERE rn = 1
-        AND id_status_disparo = 2
-        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+        SELECT telefone FROM wetalkie_failed
+        UNION DISTINCT
+        SELECT telefone FROM sf_failed
     """
     try:
         failed_df = download_data_from_bigquery(
@@ -809,54 +978,29 @@ def get_failed_phones(billing_project_id: str) -> set:
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
-        print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
-        failed_phones = set(str(x) for x in failed_df['flatTarget'].tolist())
-        return failed_phones    
+        if not failed_df.empty:
+            print(f"DEBUG: Primeiro ID com falha detectado: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        failed_phones = set(str(x) for x in failed_df['telefone'].tolist())
+        return failed_phones
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
         return set()
 
 
-def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
+@task
+def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
     """
     Busca CPFs tiveram falha de não ter whatsapp ou bloqueio no disparo das últimas 2 horas,
     """
-    # Em alguns raros casos, o webhook retorna "FAILED", mas depois a pessoa recebe a mensagem.
+    campaign_filter = f"AND LOWER(nome_hsm) = LOWER('{campaign_name}')" if campaign_name else ""
     query = f"""
-        WITH status_por_disparo AS (
-            SELECT
-                targetExternalId,
-                createDate,
-                MAX(
-                    CASE
-                        WHEN status = "PROCESSING" THEN 1
-                        WHEN status = "FAILED" and faultdescription like "%131026%" THEN 2
-                        WHEN status = "SENT" THEN 3
-                        WHEN status = "DELIVERED" THEN 4
-                        WHEN status = "READ" THEN 5
-                    END
-                ) AS id_status_disparo
-            FROM `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*`
-            WHERE templateId = {id_hsm}
-            AND sendDate >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 2 HOUR)
-            GROUP BY targetExternalId, createDate
-        ),
-
-        ranked AS (
-            SELECT
-                *,
-                ROW_NUMBER() OVER (
-                    PARTITION BY targetExternalId
-                    ORDER BY createDate DESC
-                ) AS rn
-            FROM status_por_disparo
-        )
-
-        SELECT targetExternalId
-        FROM ranked
-        WHERE rn = 1
-        AND id_status_disparo = 2
-        -- rn = 1 para pegar o último disparo e id_status_disparo = 2 para selecionar apenas os com falha
+        -- Agora só teremos Salesforce como fonte
+        SELECT DISTINCT cpf
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE indicador_quarentena = TRUE
+        AND envio_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
+        AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
+        {campaign_filter}
     """
     try:
         failed_df = download_data_from_bigquery(
@@ -864,8 +1008,9 @@ def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
             billing_project_id=billing_project_id,
             bucket_name=billing_project_id
         )
-        print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
-        failed_cpfs = set(str(x) for x in failed_df['targetExternalId'].tolist())
+        if not failed_df.empty:
+            print(f"DEBUG: Primeiro ID com falha detectado para retentativa: {failed_df.iloc[0]}... (total {failed_df.shape[0]})")
+        failed_cpfs = set(str(x) for x in failed_df['cpf'].tolist())
         print(f"DEBUG failed_cpfs {failed_cpfs}")
     except Exception as e:
         log(f"Erro ao buscar falhas para retentativa: {e}")
@@ -877,6 +1022,98 @@ def get_failed_cpfs(billing_project_id: str, id_hsm: int,) -> set:
     
     return failed_cpfs
     
+
+def check_campaign_success(
+    billing_project_id: str,
+    campaign_name: str,
+    dispatch_date: str,
+) -> bool:
+    """
+    Verifica se já existe pelo menos um disparo com sucesso confirmado (entrega_datahora
+    preenchida, sem falha/quarentena) para a campanha desde o horário do disparo (dispatch_date).
+
+    Usada pelo monitoramento pós-SFTP para decidir se deve alertar no Discord por falta
+    de confirmação de entrega.
+    """
+    query = f"""
+        SELECT COUNT(*) AS total_sucesso
+        FROM `rj-crm-registry.brutos_salesforce.status_disparo`
+        WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
+          AND (envio_datahora >= '{dispatch_date}' or falha_datahora >= '{dispatch_date}')
+          AND data_particao >= DATE('{dispatch_date}')
+    """
+    try:
+        df = download_data_from_bigquery(
+            query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
+        )
+        total = int(df.iloc[0]["total_sucesso"]) if not df.empty else 0
+        log(f"check_campaign_success: {total} disparo(s) com recebimento de webhook confirmado para '{campaign_name}' desde {dispatch_date}.")
+        return total > 0
+    except Exception as e:
+        log(f"Erro ao verificar sucesso do disparo: {e}", level="warning")
+        return False
+
+
+@task
+def monitor_dispatch_status(
+    campaign_name: str,
+    billing_project_id: str,
+    dispatch_date: str,
+    git_repository_path: str,
+    initial_wait_minutes: int,
+    check_interval_minutes: int,
+    max_wait_minutes: int,
+) -> bool:
+    """
+    Aguarda initial_wait_minutes, depois materializa int_crm_status_disparo e checa se há
+    sucesso confirmado para a campanha a cada check_interval_minutes, até max_wait_minutes.
+    Sai assim que encontrar sucesso. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
+    sucesso for confirmado dentro do prazo.
+
+    Returns:
+        bool: True se algum sucesso foi confirmado, False caso contrário.
+    """
+    print(f"⏳ Aguardando {initial_wait_minutes} minutos antes da primeira materialização/checagem de sucesso...")
+    time.sleep(initial_wait_minutes * 60)
+
+    elapsed_minutes = initial_wait_minutes
+    campaign_found = False
+
+    while True:
+        execute_dbt_task(
+            select="+int_crm_status_disparo",
+            target="prod",
+            git_repository_path=git_repository_path,
+        )
+
+        campaign_found = check_campaign_success(
+            billing_project_id=billing_project_id,
+            campaign_name=campaign_name,
+            dispatch_date=dispatch_date,
+        )
+        print(f"🔍 Checagem em {elapsed_minutes} min: {'✅ sucesso encontrado' if campaign_found else '⚠️  nenhum sucesso ainda'}.")
+
+        if campaign_found or elapsed_minutes >= max_wait_minutes:
+            break
+
+        print(f"⏳ Aguardando mais {check_interval_minutes} minutos antes da próxima checagem ({elapsed_minutes}/{max_wait_minutes} min)...")
+        time.sleep(check_interval_minutes * 60)
+        elapsed_minutes += check_interval_minutes
+
+    if not campaign_found:
+        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
+        message = f"""
+🚨 **Nenhum webhook de sucesso recebido!**
+📋 **Campanha:** {campaign_name}
+⏱️ **Prazo monitorado:** {max_wait_minutes} minutos após o envio via SFTP.
+"""
+        if webhook_url:
+            send_discord_notification(webhook_url, message)
+        else:
+            log("DISCORD_WEBHOOK_URL_ERRORS environment variable not set. Cannot send alert.", level="warning")
+
+    return campaign_found
+
 
 @task
 def remove_failed_phones(
@@ -893,17 +1130,17 @@ def remove_failed_phones(
     print(f"We have on DL {len(failed_phones)} destinations with previously failed phones.")
     new_destinations = []
     for dest in original_destinations:
-        # Busca to ignorando o "case"
-        to_number = get_value_from_case_insensitive_key(dest, 'to')
+        # Busca telefone ignorando o "case"
+        to_number = get_value_from_case_insensitive_key(dest, 'telefone')
 
         # if to_number is not None and str(to_number) not in failed_phones and max_dispatch_retries==0:
         #     new_destinations.append(dest)
         if (to_number is None or str(to_number) in failed_phones) and max_dispatch_retries==0:
             pass  # Se o telefone principal falhou e não há retentativas, removemos o destino completamente
         elif str(to_number) in failed_phones and max_dispatch_retries>0:
-            # Atualiza o campo 'to' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
+            # Atualiza o campo 'telefone' com None para os telefones que falharam, forçando a retentativa a usar o próximo número da lista 'others'
             new_dest = dest.copy()
-            new_dest['to'] = None
+            new_dest['telefone'] = None
             print(f"DEBUG: {to_number} falhou no último disparo e foi alterado para None = {new_dest}")
             new_destinations.append(new_dest)
         else:
@@ -915,7 +1152,7 @@ def remove_failed_phones(
 
 @task
 def get_retry_destinations(
-    id_hsm: int,
+    campaign_name: str,
     original_destinations: List[Dict],
     billing_project_id: str,
     attempt_number: int  # 1 para primeira retentativa, 2 para segunda...
@@ -926,8 +1163,8 @@ def get_retry_destinations(
 
     Exemplo de como deve estar o schema da query:
     {
-       "celular_disparo": "5521999999999",
-       "externalId": "12345678901",
+       "telefone": "5521999999999",
+       "cpf": "12345678901",
        "vars": {
          "nome_usuario": "João Silva"
        },
@@ -940,7 +1177,7 @@ def get_retry_destinations(
     failed_ids = []
     if attempt_number > 0:
         # Só roda quando não for preencher os nulos gerados pela task remove_failed_phones 
-        failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, id_hsm=id_hsm)
+        failed_ids = get_failed_cpfs(billing_project_id=billing_project_id, campaign_name=campaign_name)
 
         if not failed_ids or len(failed_ids) == 0:
             log(f"Nenhuma falha detectada para a tentativa {attempt_number}.")
@@ -949,20 +1186,203 @@ def get_retry_destinations(
 
     retry_destinations = []
     for dest in original_destinations:
-        # Busca externalId e others ignorando o "case"
-        ext_id = get_value_from_case_insensitive_key(dest, 'externalId')
+        # Busca cpf e others ignorando o "case"
+        ext_id = get_value_from_case_insensitive_key(dest, 'cpf')
         others = get_value_from_case_insensitive_key(dest, 'others') or []
-        to_number = get_value_from_case_insensitive_key(dest, 'to')
-        print(f"DEBUG dest {dest}")
+        to_number = get_value_from_case_insensitive_key(dest, 'telefone')
+        log(f"DEBUG dest {dest}")
 
-        if (ext_id is None or str(ext_id) in failed_ids or to_number is None) and len(others) >= attempt_number:
+        # Condições de elegibilidade para retry: telefone faltando/inválido + retry attempt válido
+        is_ext_missing = (ext_id is None)
+        is_failed_id = (str(ext_id) in failed_ids)
+        is_to_number_missing = (to_number is None)
+        can_retry = (attempt_number > 0 and len(others) >= attempt_number)
+
+        if (is_ext_missing or is_failed_id or is_to_number_missing) and can_retry:
             new_dest = dest.copy()
-            # Atualiza o campo 'to' com o número da repescagem (tentativa 1 pega others[0])
-            new_dest['to'] = others[attempt_number - 1]
-            print(f"DEBUG: new_dest alterado = {new_dest}")
+            # Atualiza o campo 'telefone' com o número da repescagem (tentativa 1 pega others[0])
+            new_dest['telefone'] = others[attempt_number - 1]
+            log(f"DEBUG: new_dest alterado = {new_dest}")
             retry_destinations.append(new_dest)
         elif attempt_number == 0:
             retry_destinations.append(dest)            
 
     log(f"Preparados {len(retry_destinations)} destinos para a retentativa {attempt_number}.")
     return retry_destinations
+
+
+@task
+def apply_df_enricher(
+    df: pd.DataFrame,
+    enricher_name: str,
+    enricher_params: Optional[dict] = None,
+) -> pd.DataFrame:
+    """
+    Aplica uma função de enriquecimento registrada em DF_ENRICHERS (utils/enrichers.py)
+    sobre o DataFrame retornado pela query, antes dos filtros/dedup/CSV.
+
+    Permite plugar novas fontes de enriquecimento (ex.: outras APIs externas)
+    apenas registrando uma nova função em DF_ENRICHERS, sem alterar o flow.
+
+    Args:
+        df: DataFrame retornado pela query de destinos.
+        enricher_name: Chave registrada em DF_ENRICHERS.
+        enricher_params: Parâmetros livres repassados pra função do enricher.
+
+    Returns:
+        DataFrame enriquecido (pode ter menos linhas que o original, se o
+        enricher filtrar registros sem dado correspondente).
+    """
+    enricher_fn = get_df_enricher(enricher_name)
+    if enricher_fn is None:
+        raise ValueError(f"Unknown df enricher: {enricher_name!r}. Registered: {list(DF_ENRICHERS)}")
+
+    return enricher_fn(df, enricher_params or {})
+
+
+@task
+def save_csv_for_sftp(
+    df: pd.DataFrame,
+    data_extension_filename: str,
+    de_columns: Optional[List[str]] = None,
+    output_folder: str = "./data_sftp/",
+    csv_separator: str = ";",
+) -> Tuple[str, str]:
+    """
+    Salva o DataFrame da query como CSV para envio ao Salesforce via SFTP.
+
+    Se `de_columns` for informado, o CSV é restrito a 'telefone' + 'SubscriberKey' +
+    `de_columns` (os campos que a Data Extension espera) — qualquer coluna de controle
+    interno do flow (ex.: 'others', 'cpf') é descartada, mesmo que a query as
+    retorne. Sem `de_columns`, mantém o comportamento legado de só descartar 'others'.
+
+    `csv_separator` define o delimitador do CSV (padrão ';'); algumas Data Extensions
+    esperam outro separador — configurável por campanha via `csv_separator` no scheduler.
+
+    Returns:
+        Tuple[str, str]: (caminho do arquivo CSV salvo, data do disparo)
+    """
+    now = datetime.now(timezone("America/Sao_Paulo"))
+    dispatch_date = now.strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = now.strftime("%Y%m%d%H%M%S")  # TODO: alterar para salvar em segundos
+    # timestamp = now.strftime("%Y%m%d%H%M")
+    filename = f"{data_extension_filename}_{timestamp}.csv"
+
+    if de_columns is not None:
+        keep_columns = [col for col in ["telefone", "SubscriberKey", *de_columns] if col in df.columns]
+        csv_df = df[keep_columns].copy()
+    else:
+        csv_df = df.drop(columns=["others"], errors="ignore")
+    csv_df["LOCALE"] = "BR"
+    # Só entra no CSV quando a campanha pede via de_columns (hoje: só as jornadas 1746)
+    if de_columns is not None and "NOME_ARQUIVO" in de_columns:
+        csv_df["NOME_ARQUIVO"] = filename
+
+    os.makedirs(output_folder, exist_ok=True)
+    csv_path = os.path.join(output_folder, filename)
+    csv_df.to_csv(csv_path, index=False, sep=csv_separator)
+
+    log(f"CSV criado em {csv_path} com {len(csv_df)} registros")
+    return csv_path, dispatch_date
+
+
+@task
+def send_to_sftp(
+    csv_path: str,
+    infisical_secret_path: str = None,
+    sftp_host: str = None,
+    sftp_user: str = None,
+    sftp_password: str = None,
+    sftp_port: int = 22,
+    sftp_remote_path: str = "/",
+    sftp_host_key: str = None,
+) -> None:
+    """
+    Envia um arquivo CSV para o servidor SFTP do Salesforce.
+
+    A identidade do servidor é verificada por host key pinning: a conexão
+    é recusada (asyncssh.HostKeyNotVerifiable) se a chave apresentada não
+    bater byte a byte com `sftp_host_key`. Sem esse pinning, qualquer
+    servidor na rota de rede poderia se passar pelo SFTP da Salesforce sem
+    ser detectado — os CSVs enviados aqui carregam CPF e telefone de
+    cidadãos, então um MITM bem-sucedido seria um vazamento de dado pessoal
+    sob a LGPD.
+
+    Usamos asyncssh em vez de paramiko porque o servidor SFTP da Salesforce
+    (Globalscape EFT) só oferece o algoritmo de host key legado "ssh-rsa"
+    (SHA-1). O Paramiko 5.x removeu esse algoritmo da lista aceita por
+    padrão e não expõe uma forma pública de reabilitá-lo (só via monkey-patch
+    de atributos privados — o que essa função fazia antes, e que também
+    desligava a verificação de assinatura por completo). O asyncssh aceita
+    "ssh-rsa" via parâmetro documentado (server_host_key_algs) e continua
+    fazendo a verificação criptográfica real da assinatura do servidor.
+
+    Args:
+        csv_path: Caminho local do CSV a ser enviado
+        infisical_secret_path: Caminho no Infisical para buscar as credenciais
+        sftp_host: Endereço do servidor SFTP
+        sftp_user: Usuário SFTP
+        sftp_password: Senha SFTP
+        sftp_port: Porta do servidor SFTP (padrão: 22)
+        sftp_remote_path: Diretório remoto onde o arquivo será depositado
+        sftp_host_key: Chave pública do servidor, no formato "ssh-rsa AAAA..."
+            (mesmo formato de uma linha de known_hosts). Precisa ser
+            confirmada com a Salesforce por um canal separado da própria
+            conexão SSH (suporte, documentação oficial) antes de ser
+            cadastrada — nunca aceitar só o que a primeira conexão apresentar.
+    """
+    if infisical_secret_path:
+        sftp_host = sftp_host or getenv_or_action("sf_sftp_host")
+        sftp_user = sftp_user or getenv_or_action("sf_sftp_user")
+        sftp_password = sftp_password or getenv_or_action("sf_sftp_password")
+        sftp_port = int(getenv_or_action("sf_sftp_port", sftp_port))
+        sftp_remote_path = getenv_or_action("sf_sftp_path", sftp_remote_path)
+        sftp_host_key = sftp_host_key or getenv_or_action("sf_sftp_host_key")
+
+    SFTP_TIMEOUT_SECONDS = 30
+    SFTP_KEEPALIVE_SECONDS = 15
+
+    filename = os.path.basename(csv_path)
+    remote_dir = sftp_remote_path.rstrip("/") if sftp_remote_path else ""
+    remote_file = f"{remote_dir}/{filename}" if remote_dir else filename
+
+    pinned_key = asyncssh.import_public_key(sftp_host_key)
+
+    async def _upload() -> None:
+        log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
+        async with asyncssh.connect(
+            sftp_host,
+            port=sftp_port,
+            username=sftp_user,
+            password=sftp_password,
+            server_host_key_algs=[pinned_key.get_algorithm()],
+            # known_hosts espera (host_keys, ca_keys, revoked_keys); só
+            # fixamos a chave de host, sem CA nem lista de revogação.
+            known_hosts=([pinned_key], [], []),
+            connect_timeout=SFTP_TIMEOUT_SECONDS,
+            keepalive_interval=SFTP_KEEPALIVE_SECONDS,
+        ) as conn:
+            log("Host key validada contra o fingerprint fixado. Conexão estabelecida com sucesso ao SFTP!")
+
+            if not os.path.exists(csv_path):
+                log(f"Arquivo não encontrado: {csv_path}")
+                return
+
+            async with conn.start_sftp_client() as sftp:
+                log(f"Enviando {filename}...")
+                await sftp.put(csv_path, remote_file)
+                log(f"Arquivo {filename} enviado com sucesso para {remote_file}.")
+
+    try:
+        asyncio.run(_upload())
+    except asyncssh.HostKeyNotVerifiable as e:
+        log(
+            f"Host key do servidor SFTP não confere com sftp_host_key — conexão recusada. "
+            f"Possível MITM ou chave do servidor desatualizada (nesse caso, confirme a nova "
+            f"chave com a Salesforce por um canal separado antes de atualizar o secret). "
+            f"Detalhe: {e}"
+        )
+        raise
+    except Exception as e:
+        log(f"Erro: {str(e)}")
+        raise

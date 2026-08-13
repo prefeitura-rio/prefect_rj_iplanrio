@@ -1,0 +1,14 @@
+[project]
+name = "rj_cor__precipitacao_alertario"
+version = "0.1.0"
+description = "Pipeline para coleta de dados de precipitação e meteorologia do AlertaRio - COR"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "pendulum>=3.0.0",
+    "beautifulsoup4>=4.12.0",
+    "bs4==0.0.2",
+    "lxml==6.1.1"
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
