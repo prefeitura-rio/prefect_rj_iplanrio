@@ -36,3 +36,12 @@ venv.bak/
 
 # Ruff stuff:
 .ruff_cache/
+
+# macOS
+.DS_Store
+
+# Per-pipeline Python version pins (managed at workspace root only)
+pipelines/**/.python-version
+
+# Egg-info dirs generated inside pipeline packages
+pipelines/**/*.egg-info/
