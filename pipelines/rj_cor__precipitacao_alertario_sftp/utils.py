@@ -1,12 +1,12 @@
 """Utilidades para processamento de dados de precipitação do AlertaRio via SFTP."""
 
-from defusedxml import ElementTree as ET
 from pathlib import Path
-from string import Template
-from typing import Any, Dict
+from typing import Any
 
+from defusedxml import ElementTree as ET
 import pandas as pd
 import pendulum
+
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -32,7 +32,7 @@ def parse_float(value: str | None) -> float | None:
 def parse_xml_to_records(
     xml_content: str,
     source_file: str,
-) -> tuple[list[Dict[str, Any]], list[Dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Parse XML AlertaRio em dois conjuntos de registros.
 
     Extrai dados de estações do XML estruturado AlertaRio, separando
@@ -47,7 +47,7 @@ def parse_xml_to_records(
     logger.info("Fazendo parsing do XML: %s", source_file)
 
     try:
-        root = ET.fromstring(xml_content)
+        root = ET.parse(xml_content)
     except ET.ParseError as e:
         logger.error("Erro ao fazer parse do XML: %s", e)
         raise
@@ -57,65 +57,45 @@ def parse_xml_to_records(
 
     for estacao in root.findall("estacao"):
         estacao_id = estacao.get("id")
-        estacao_nome = estacao.get("nome")
         estacao_type = estacao.get("type")
-
-        localizacao = estacao.find("localizacao")
-        bacia = localizacao.get("bacia") if localizacao is not None else None
-        latitude = localizacao.get("latitude") if localizacao is not None else None
-        longitude = localizacao.get("longitude") if localizacao is not None else None
-
-        if latitude is not None:
-            try:
-                latitude = float(latitude)
-            except (ValueError, TypeError):
-                latitude = None
-
-        if longitude is not None:
-            try:
-                longitude = float(longitude)
-            except (ValueError, TypeError):
-                longitude = None
 
         chuvas = estacao.find("chuvas")
         if chuvas is not None:
-            hora_medicao = chuvas.get("hora")
+            hora_medicao = chuvas.get("hora").replace("T", " ")
 
             record_pluv = {
-                "id": estacao_id,
-                "nome": estacao_nome,
-                "bacia": bacia,
-                "latitude": latitude,
-                "longitude": longitude,
-                "m05": parse_float(chuvas.get("m05")),
-                "m10": parse_float(chuvas.get("m10")),
-                "m15": parse_float(chuvas.get("m15")),
-                "h01": parse_float(chuvas.get("h01")),
-                "h04": parse_float(chuvas.get("h04")),
-                "h24": parse_float(chuvas.get("h24")),
-                "h96": parse_float(chuvas.get("h96")),
-                "mes": parse_float(chuvas.get("mes")),
-                "hora": hora_medicao,
+                "id_estacao": estacao_id,
+                "data_medicao": hora_medicao,
+                "acumulado_chuva_5min": parse_float(chuvas.get("m05")),
+                "acumulado_chuva_10min": parse_float(chuvas.get("m10")),
+                "acumulado_chuva_15min": parse_float(chuvas.get("m15")),
+                "acumulado_chuva_30min": parse_float(chuvas.get("m30")),
+                "acumulado_chuva_1hora": parse_float(chuvas.get("h01")),
+                "acumulado_chuva_2hora": parse_float(chuvas.get("h02")),
+                "acumulado_chuva_3hora": parse_float(chuvas.get("h03")),
+                "acumulado_chuva_4horas": parse_float(chuvas.get("h04")),
+                "acumulado_chuva_6horas": parse_float(chuvas.get("h06")),
+                "acumulado_chuva_12horas": parse_float(chuvas.get("h12")),
+                "acumulado_chuva_24horas": parse_float(chuvas.get("h24")),
+                "acumulado_chuva_96horas": parse_float(chuvas.get("h96")),
+                "acumulado_chuva_mes": parse_float(chuvas.get("mes")),
             }
             pluviometric_records.append(record_pluv)
 
         met = estacao.find("met")
         if met is not None and estacao_type == "met":
-            hora_medicao = chuvas.get("hora") if chuvas is not None else None
+            hora_medicao = met.get("hora").replace("T", " ") if met is not None else None
 
             record_met = {
-                "id": estacao_id,
-                "nome": estacao_nome,
-                "bacia": bacia,
-                "latitude": latitude,
-                "longitude": longitude,
+                "id_estacao": estacao_id,
                 "temperatura": parse_float(met.get("temperatura")),
-                "umidade": parse_float(met.get("umidade")),
-                "sensacao": parse_float(met.get("sensacao")),
-                "pressao": parse_float(met.get("pressao")),
-                "velvento": parse_float(met.get("velvento")),
-                "dirvento": parse_float(met.get("dirvento")),
-                "hora": hora_medicao,
+                "umidade_ar": parse_float(met.get("umidade")),
+                "sensacao_termica": parse_float(met.get("sensacao")),
+                "pressao_atmosferica": parse_float(met.get("pressao")),
+                "temperatura_orvalho": parse_float(met.get("pontoOrvalho")),
+                "velocidade_vento": parse_float(met.get("velvento")),
+                "direcao_vento": parse_float(met.get("dirvento")),
+                "data_medicao": hora_medicao,
             }
             meteorological_records.append(record_met)
 
@@ -143,30 +123,26 @@ def transform_pluviometric_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
 
     logger.info("Transformando dados pluviométricos: %d registros", len(dfr))
 
-    rename_cols = {
-        "id": "id_estacao",
-        "nome": "nome_estacao",
-        "bacia": "bacia",
-        "latitude": "latitude",
-        "longitude": "longitude",
-        "m05": "acumulado_chuva_5min",
-        "m10": "acumulado_chuva_10min",
-        "m15": "acumulado_chuva_15min",
-        "h01": "acumulado_chuva_1h",
-        "h04": "acumulado_chuva_4h",
-        "h24": "acumulado_chuva_24h",
-        "h96": "acumulado_chuva_96h",
-        "mes": "acumulado_chuva_mes",
-        "hora": "data_medicao",
-    }
-
-    dfr = dfr.rename(columns=rename_cols)
-
-    dfr["data_medicao"] = pd.to_datetime(dfr["data_medicao"], format="%Y-%m-%dT%H:%M:%S")
+    keep_cols = [
+        "id_estacao",
+        "data_medicao",
+        "acumulado_chuva_5min",
+        "acumulado_chuva_10min",
+        "acumulado_chuva_15min",
+        "acumulado_chuva_30min",
+        "acumulado_chuva_1hora",
+        "acumulado_chuva_2hora",
+        "acumulado_chuva_3hora",
+        "acumulado_chuva_4horas",
+        "acumulado_chuva_6horas",
+        "acumulado_chuva_12horas",
+        "acumulado_chuva_24horas",
+        "acumulado_chuva_96horas",
+        "acumulado_chuva_mes",
+    ]
 
     dfr = dfr.drop_duplicates(subset=["id_estacao", "data_medicao"], keep="first")
 
-    keep_cols = [col for col in rename_cols.values() if col in dfr.columns]
     dfr = dfr[keep_cols]
 
     logger.info("Dados pluviométricos transformados: %d registros", len(dfr))
@@ -189,28 +165,20 @@ def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
 
     logger.info("Transformando dados meteorológicos: %d registros", len(dfr))
 
-    rename_cols = {
-        "id": "id_estacao",
-        "nome": "nome_estacao",
-        "bacia": "bacia",
-        "latitude": "latitude",
-        "longitude": "longitude",
-        "temperatura": "temperatura",
-        "umidade": "umidade_ar",
-        "sensacao": "sensacao_termica",
-        "pressao": "pressao_atmosferica",
-        "velvento": "velocidade_vento",
-        "dirvento": "direcao_vento",
-        "hora": "data_medicao",
-    }
-
-    dfr = dfr.rename(columns=rename_cols)
-
-    dfr["data_medicao"] = pd.to_datetime(dfr["data_medicao"], format="%Y-%m-%dT%H:%M:%S")
+    keep_cols = [
+        "id_estacao",
+        "temperatura",
+        "umidade_ar",
+        "sensacao_termica",
+        "pressao_atmosferica",
+        "temperatura_orvalho",
+        "velocidade_vento",
+        "direcao_vento",
+        "data_medicao",
+    ]
 
     dfr = dfr.drop_duplicates(subset=["id_estacao", "data_medicao"], keep="first")
 
-    keep_cols = [col for col in rename_cols.values() if col in dfr.columns]
     dfr = dfr[keep_cols]
 
     logger.info("Dados meteorológicos transformados: %d registros", len(dfr))
@@ -259,19 +227,12 @@ def save_dataframe_to_parquet_partitions(
         partition_path.mkdir(parents=True, exist_ok=True)
 
         group_data_clean = group_data.drop(
-            columns=["ano_particao", "mes_particao", "data_particao", partition_column]
+            columns=["ano_particao", "mes_particao", "data_particao"]
         )
 
-        filename = f"data_{timestamp_suffix}.parquet"
+        filename = f"data_{timestamp_suffix}.csv"
         filepath = partition_path / filename
-
-        group_data_clean.to_parquet(
-            filepath,
-            engine="pyarrow",
-            compression="snappy",
-            index=False,
-        )
-
-        logger.info("Partição salva: %s", filepath)
+        logger.info("Salvando partição: %s com %d registros", filepath, len(group_data_clean))
+        group_data_clean.to_csv(filepath, index=False, sep=",")
 
     return base_path
