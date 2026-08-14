@@ -20,6 +20,7 @@ Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra d
 10. [`pyproject.toml`](#10-pyprojecttoml)
 11. [`src/prefect_rj_iplanrio/` — código compartilhado do workspace](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)
 12. [Higiene do repositório](#12-higiene-do-repositório)
+13. [Labels de pipeline](#13-labels-de-pipeline)
 
 ## 1. Filosofia
 
@@ -753,3 +754,58 @@ pipelines/**/*.egg-info/
 Veja a [Seção 3.3](#33-proibidos-nos-diretórios-de-pipeline) para a lista completa. A versão resumida: se um arquivo foi criado para depurar algo, corrigir uma migração ou guardar dados temporários durante o desenvolvimento, ele não pertence ao repositório.
 
 Na dúvida, pergunte: "Um novo membro do time lendo este arquivo entenderia por que ele existe e o que fazer com ele?" Se a resposta for não, apague-o.
+
+## 13. Labels de pipeline
+
+### 13.1 O que são labels
+
+Toda pipeline **nova** deve ter dois labels definidos no `prefect.yaml`:
+- **`code_owner`**: GitHub username do desenvolvedor responsável
+- **`severity`**: Criticidade (`"low"`, `"medium"`, `"high"`, `"critical"`)
+
+Esses labels são propagados a todos os logs estruturados e usados pelo sistema de observabilidade para atribuição de alertas e priorização de incidentes.
+
+**Nota:** Pipelines existentes sem labels continuam funcionando normalmente (backward compatibility). A validação só é aplicada quando os labels estão presentes.
+
+### 13.2 Como definir labels
+
+Labels são definidos **uma única vez** na seção `parameters:` de cada deployment:
+
+```yaml
+deployments:
+  - name: rj-secretaria--pipeline--prod
+    parameters:
+      code_owner: "seu_username"    # GitHub username
+      severity: "high"              # low, medium, high, critical
+      dataset_id: "brutos_data"     # ... outros parâmetros
+```
+
+### 13.3 Como usá-los no flow
+
+No `@flow`, receba como parâmetros padrão e injete no contexto com uma linha:
+
+```python
+from prefect import flow
+from prefect_rj_iplanrio.labels import set_labels, SeverityLevel
+
+@flow(log_prints=True)
+def rj_secretaria__pipeline(
+    code_owner: str = "unassigned",
+    severity: SeverityLevel = "medium",
+    dataset_id: str = "",
+) -> None:
+    """Pipeline para secretaria."""
+    set_labels(code_owner=code_owner, severity=severity)
+    # Resto da pipeline...
+```
+
+Pronto. Todos os logs herdam as labels automaticamente.
+
+### 13.4 Validação
+
+O CI valida em todo PR que modifica `prefect.yaml`. Quando labels estão presentes em um deployment:
+- `code_owner` não pode estar vazio
+- `severity` deve ser uma das 4 opções válidas
+- Se um label está presente, o outro também deve estar
+
+Deployments sem labels são ignorados (backward compatibility). Se um deployment violar essas regras, o workflow rejeita o PR.

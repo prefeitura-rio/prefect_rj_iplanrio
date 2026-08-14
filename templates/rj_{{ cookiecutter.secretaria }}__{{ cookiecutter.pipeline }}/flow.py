@@ -9,10 +9,13 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from prefect_rj_iplanrio.labels import set_labels, SeverityLevel
 
 
 @flow(log_prints=True)
 def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
+    code_owner: str = "unassigned",
+    severity: SeverityLevel = "medium",
     db_database: str = "database",
     db_host: str = "host",
     db_port: str = "port",
@@ -38,6 +41,7 @@ def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
     only_staging_dataset: bool = False,
     add_timestamp_column: bool = True,
 ) -> None:
+    set_labels(code_owner=code_owner, severity=severity)
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
     secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
