@@ -377,7 +377,7 @@ def nf_processing_flow(
         )
 
     # NOW safe to import POCProcessor (after rate limiter initialization)
-    from .processor import ExecutionMode, POCProcessor
+    from ..pipeline.processor import ExecutionMode, POCProcessor
 
     # Convert mode string to enum
     mode_enum = ExecutionMode(mode)
@@ -857,7 +857,7 @@ def main():
         return 1
 
     # NOW safe to import POCProcessor (after rate limiter initialization)
-    from .processor import ExecutionMode, POCProcessor
+    from ..pipeline.processor import ExecutionMode, POCProcessor
 
     # Convert mode string to enum (after loading from experiment config)
     mode = ExecutionMode(args.mode)

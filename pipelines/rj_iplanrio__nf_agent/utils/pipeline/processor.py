@@ -27,14 +27,14 @@ from ..core.classifiers.gemini_classifier import (
     classify_page_with_model,
     extract_page_as_bytes,
 )
-from ..core.compliance_validator import ComplianceValidator
-from ..core.compliance_validator.rules import UnmappedDocumentTypeRule
-from ..core.compliance_validator.utils import normalize_cnpj, normalize_number
-from ..core.extractor import NFExtractor
+from ..compliance import ComplianceValidator
+from ..compliance.rules import UnmappedDocumentTypeRule
+from ..compliance.utils import normalize_cnpj, normalize_number
+from ..extraction import NFExtractor
 
 # POC modules
-from .database import DatabaseManager
-from .gcs_downloader import GCSDownloader
+from ..run_poc.database import DatabaseManager
+from ..run_poc.gcs_downloader import GCSDownloader
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -926,7 +926,7 @@ class POCProcessor:
                     extracted_nfs = extraction_result.get("notas_fiscais", [])
 
                     # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-                    from ..core.compliance_validator.nfst_fatura_cross_page_merger import merge_nfst_with_fatura
+                    from ..compliance.nfst_fatura_cross_page_merger import merge_nfst_with_fatura
                     extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
 
                     # For RUN_EXTRACTION mode, return immediately
@@ -1134,7 +1134,7 @@ class POCProcessor:
                     extracted_nfs = extraction_result.get("notas_fiscais", [])
 
                     # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-                    from ..core.compliance_validator.nfst_fatura_cross_page_merger import merge_nfst_with_fatura
+                    from ..compliance.nfst_fatura_cross_page_merger import merge_nfst_with_fatura
                     extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
                 else:
                     logger.info("  [Step 4/5] Skipping extraction (no NF pages)")
@@ -1763,7 +1763,7 @@ class POCProcessor:
         :param versao_prompt: dict with prompt versions and batch_size for traceability.
         :returns: List of per-page dicts ready for json.dump / NDJSON write.
         """
-        from ..core.compliance_validator.utils import (
+        from ..compliance.utils import (
             DocumentFields,
             match_score_3_fields,
         )
@@ -2565,7 +2565,7 @@ class POCProcessor:
                     if extracted_nfs:
                         # CENÁRIO B: PDF has extracted NFs but none matched
                         # Use most prioritized document
-                        from ..core.compliance_validator.document_prioritizer import select_prioritized_document
+                        from ..compliance.document_prioritizer import select_prioritized_document
 
                         prioritized_doc = select_prioritized_document(extracted_nfs)
                         if prioritized_doc:

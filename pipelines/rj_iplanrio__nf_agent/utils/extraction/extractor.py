@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pypdf import PdfReader, PdfWriter
 
-from .config import GEMINI_CONFIG, SERVICE_ACCOUNT_PATH
+from ..core.config import GEMINI_CONFIG, SERVICE_ACCOUNT_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -362,7 +362,7 @@ class NFExtractor:
         """
         import time
 
-        from .api_metrics_tracker import get_tracker
+        from ..core.api_metrics_tracker import get_tracker
 
         tracker = get_tracker()
 
@@ -411,7 +411,7 @@ class NFExtractor:
                 start_time = time.time()
 
                 # Rate limiting: acquire permission to make API call
-                from .rate_limiter import get_rate_limiter
+                from ..core.rate_limiter import get_rate_limiter
                 rate_limiter = get_rate_limiter()
                 rate_limiter.acquire()
 
@@ -538,7 +538,7 @@ class NFExtractor:
         :returns: Extraction result dictionary.
         """
         # Import metrics tracker
-        from .api_metrics_tracker import get_tracker
+        from ..core.api_metrics_tracker import get_tracker
         tracker = get_tracker()
 
         # Build prompt with images
@@ -546,7 +546,7 @@ class NFExtractor:
         prompt_parts.extend(images)
 
         # Rate limiting: acquire permission to make API call
-        from .rate_limiter import get_rate_limiter
+        from ..core.rate_limiter import get_rate_limiter
         rate_limiter = get_rate_limiter()
         rate_limiter.acquire()
 

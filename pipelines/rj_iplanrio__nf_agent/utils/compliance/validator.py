@@ -121,7 +121,7 @@ class ComplianceValidator:
         # Build deduplication lookup from BigQuery OR from expected_nfs
         if self.use_bigquery_deduplication:
             # Query BigQuery for complete deduplication lookup
-            from run_poc.bigquery_loader import (
+            from ..run_poc.bigquery_loader import (
                 get_deduplication_lookup_from_bigquery,
             )
 
@@ -750,7 +750,7 @@ class ComplianceValidator:
         )
 
         # Query BigQuery for each unique CNPJ
-        from run_poc.bigquery_loader import (
+        from ..run_poc.bigquery_loader import (
             get_company_start_date,
         )
 

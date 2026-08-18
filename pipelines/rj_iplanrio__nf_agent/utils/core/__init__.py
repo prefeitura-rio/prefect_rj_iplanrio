@@ -2,7 +2,7 @@
 
 from .base import BaseClassifier, BaseExtractor, BasePipeline
 from .classifiers import GeminiClassifier, NFClassifier
-from .compliance_validator import (
+from ..compliance import (
     ComplianceValidator,
     normalize_cnpj,
     normalize_number,
@@ -17,7 +17,7 @@ from .config import (
     OCR_CONFIG,
     load_categories,
 )
-from .extractor import NFExtractor, extract_nf_data
+from ..extraction import NFExtractor, extract_nf_data
 from .ocr import OCRConfig, OCRProcessor, PaddleOCRConfig, get_page_count, run_ocr_on_pdf
 from .pipeline import NFPipeline, run_pipeline
 

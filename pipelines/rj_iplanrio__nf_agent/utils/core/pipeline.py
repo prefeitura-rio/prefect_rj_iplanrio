@@ -13,7 +13,7 @@ import fitz  # PyMuPDF
 
 from .classifiers import BaseClassifier, NFClassifier
 from .config import BEST_PARAMS, load_categories
-from .extractor import NFExtractor
+from ..extraction import NFExtractor
 from .ocr import OCRProcessor, get_page_count
 
 logger = logging.getLogger(__name__)
