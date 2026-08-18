@@ -1,24 +1,107 @@
-"""Utilidades para processamento de dados de precipitação do AlertaRio via SFTP."""
+"""Utilidades para processamento de dados de precipitação do AlertaRio.
 
+Este módulo fornece funções auxiliares para download, parse e transformação
+de arquivos XML de precipitação do serviço AlertaRio do Rio de Janeiro.
+As funções consolidam múltiplos XMLs em DataFrames particionados e os salvam
+em estrutura ano/mês/data no disco local.
+"""
+
+import os
 from pathlib import Path
 from typing import Any
 
-from defusedxml import ElementTree as ET
+import dotenv
 import pandas as pd
-import pendulum
-
+from defusedxml import ElementTree as ET
+from google.cloud import storage
+from google.oauth2 import service_account
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
 
 
+def get_name_bucket_folder() -> tuple[str, str]:
+    """Obtém o nome do bucket e da pasta a partir de variáveis de ambiente.
+
+    Lê as chaves ``BUCKET`` e ``FOLDER`` do ambiente para identificar
+    o bucket GCS e o prefixo de diretório onde residem os arquivos XML.
+
+    :returns: Tupla (bucket_name, folder_name).
+    :raises ValueError: Se ``BUCKET`` ou ``FOLDER`` não estiverem definidas.
+    """
+    dotenv.load_dotenv()
+    bucket_name = os.getenv("BUCKET", "")
+    prefix = os.getenv("FOLDER", "")
+
+    if not bucket_name:
+        logger.error("Variável de ambiente BUCKET não definida")
+        raise ValueError("Variável de ambiente BUCKET não definida")
+
+    if not prefix:
+        logger.error("Variável de ambiente FOLDER não definida")
+        raise ValueError("Variável de ambiente FOLDER não definida")
+
+    return bucket_name, prefix
+
+
+def download_xml_files_from_gcs(
+    bucket_name: str,
+    file_names: list[str],
+    credentials_path: str | None = None,
+) -> list[str]:
+    """Baixa múltiplos arquivos XML do GCS e retorna seus conteúdos.
+
+    Conecta ao bucket Google Cloud Storage e baixa os arquivos XML
+    especificados, retornando uma lista com os conteúdos de cada arquivo.
+    Se nenhum arquivo for fornecido, retorna uma lista vazia.
+
+    :param bucket_name: Nome do bucket GCS.
+    :param file_names: Lista de nomes de arquivos XML a baixar.
+    :param credentials_path: Objeto de credenciais do GCS (opcional).
+    :returns: Lista com conteúdos XML como strings.
+    :raises Exception: Se houver erro ao baixar qualquer arquivo.
+    """
+    if not file_names:
+        logger.warning("Lista de arquivos vazia, retornando lista vazia")
+        return []
+
+    logger.info(
+        "Baixando %d arquivo(s) do bucket %s",
+        len(file_names),
+        bucket_name,
+    )
+
+    client = storage.Client(credentials=credentials_path)
+    bucket = client.bucket(bucket_name)
+    xml_contents: list[str] = []
+
+    for file_name in file_names:
+        try:
+            blob = bucket.blob(file_name)
+            content = blob.download_as_text(encoding="utf-8")
+            xml_contents.append(content)
+            logger.info("Arquivo baixado: %s", file_name)
+        except Exception as e:
+            logger.error("Erro ao baixar arquivo %s: %s", file_name, str(e))
+            raise
+
+    logger.info(
+        "Download concluído: %d de %d arquivo(s)",
+        len(xml_contents),
+        len(file_names),
+    )
+    return xml_contents
+
+
+
 def parse_float(value: str | None) -> float | None:
-    """Converte string para float, tratando 'None' como None.
+    """Converte string para float, tratando a string 'None' como None Python.
 
-    Valores literais "None" (string) são convertidos para None (null).
+    A string literal ``"None"`` é convertida para ``None``.
     Outros valores são convertidos para float ou retornam None se inválidos.
+    Útil para lidar com dados XML que usam a string 'None' para valores ausentes.
 
-    :param value: Valor a ser convertido.
+    :param value: Valor a ser convertido (string ou None).
     :returns: Float ou None.
     """
     if value is None or value == "None":
@@ -31,23 +114,19 @@ def parse_float(value: str | None) -> float | None:
 
 def parse_xml_to_records(
     xml_content: str,
-    source_file: str,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Parse XML AlertaRio em dois conjuntos de registros.
+    """Extrai registros de chuva e meteorológicos de um XML AlertaRio.
 
-    Extrai dados de estações do XML estruturado AlertaRio, separando
-    registros pluviométricos de meteorológicos. Cada estação pode ter
-    ambos os tipos de dados ou apenas dados de chuva.
+    Realiza parsing de um XML estruturado em estações, cada uma contendo
+    dados pluviométricos (``<chuvas>``) e/ou meteorológicos (``<met>``).
+    Os registros são separados em duas listas distintas.
 
     :param xml_content: Conteúdo XML como string.
-    :param source_file: Nome do arquivo origem (para rastreamento).
     :returns: Tupla (lista_registros_pluviometricos, lista_registros_meteorologicos).
-    :raises ET.ParseError: Se o XML não for válido.
+    :raises ET.ParseError: Se o XML não for válido ou malformado.
     """
-    logger.info("Fazendo parsing do XML: %s", source_file)
-
     try:
-        root = ET.parse(xml_content)
+        root = ET.fromstring(xml_content)
     except ET.ParseError as e:
         logger.error("Erro ao fazer parse do XML: %s", e)
         raise
@@ -59,10 +138,10 @@ def parse_xml_to_records(
         estacao_id = estacao.get("id")
         estacao_type = estacao.get("type")
 
+        # Processar dados pluviométricos
         chuvas = estacao.find("chuvas")
         if chuvas is not None:
             hora_medicao = chuvas.get("hora").replace("T", " ")
-
             record_pluv = {
                 "id_estacao": estacao_id,
                 "data_medicao": hora_medicao,
@@ -82,10 +161,10 @@ def parse_xml_to_records(
             }
             pluviometric_records.append(record_pluv)
 
+        # Processar dados meteorológicos
         met = estacao.find("met")
         if met is not None and estacao_type == "met":
-            hora_medicao = met.get("hora").replace("T", " ") if met is not None else None
-
+            hora_medicao = met.get("hora").replace("T", " ")
             record_met = {
                 "id_estacao": estacao_id,
                 "temperatura": parse_float(met.get("temperatura")),
@@ -109,13 +188,13 @@ def parse_xml_to_records(
 
 
 def transform_pluviometric_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
-    """Transforma DataFrame pluviométrico bruto para formato padrão BigQuery.
+    """Limpa e padroniza dados pluviométricos para ingestão no BigQuery.
 
-    Realiza renomeação de colunas, parse de datas, remoção de duplicatas
-    e limpeza de valores ausentes.
+    Remove duplicatas por estação e data de medição, seleciona as colunas
+    esperadas pelo schema BigQuery e registra o resultado.
 
     :param dfr: DataFrame com dados brutos de precipitação.
-    :returns: DataFrame transformado e limpo.
+    :returns: DataFrame transformado e pronto para ingestão.
     """
     if dfr.empty:
         logger.warning("DataFrame pluviométrico vazio, retornando sem transformações")
@@ -142,7 +221,6 @@ def transform_pluviometric_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
     ]
 
     dfr = dfr.drop_duplicates(subset=["id_estacao", "data_medicao"], keep="first")
-
     dfr = dfr[keep_cols]
 
     logger.info("Dados pluviométricos transformados: %d registros", len(dfr))
@@ -151,13 +229,13 @@ def transform_pluviometric_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
 
 
 def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
-    """Transforma DataFrame meteorológico bruto para formato padrão BigQuery.
+    """Limpa e padroniza dados meteorológicos para ingestão no BigQuery.
 
-    Realiza renomeação de colunas, parse de datas, remoção de duplicatas
-    e limpeza de valores ausentes.
+    Remove duplicatas por estação e data de medição, seleciona as colunas
+    esperadas pelo schema BigQuery e registra o resultado.
 
     :param dfr: DataFrame com dados brutos meteorológicos.
-    :returns: DataFrame transformado e limpo.
+    :returns: DataFrame transformado e pronto para ingestão.
     """
     if dfr.empty:
         logger.warning("DataFrame meteorológico vazio, retornando sem transformações")
@@ -178,7 +256,6 @@ def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
     ]
 
     dfr = dfr.drop_duplicates(subset=["id_estacao", "data_medicao"], keep="first")
-
     dfr = dfr[keep_cols]
 
     logger.info("Dados meteorológicos transformados: %d registros", len(dfr))
@@ -186,48 +263,56 @@ def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
     return dfr
 
 
-def save_dataframe_to_parquet_partitions(
+def save_dataframe_to_csv_partitions(
     dfr: pd.DataFrame,
     data_type: str,
     partition_column: str = "data_medicao",
 ) -> Path:
-    """Salva DataFrame em partições Parquet com estrutura ano/mes/data.
+    """Salva DataFrame em partições CSV com estrutura ano/mês/dia.
 
-    Cria estrutura de diretórios particionados e salva cada partição
-    como arquivo Parquet comprimido. O timestamp do arquivo é adicionado
-    ao nome para rastreamento.
+    Particiona o DataFrame por data e salva cada partição como arquivo CSV.
+    A estrutura de diretórios segue o padrão ``/tmp/{data_type}/ano_particao={ano}/mes_particao={mes}/data_particao={data}/``.
+    Cada arquivo é nomeado com o timestamp do primeiro registro da partição
+    para rastreabilidade.
 
     :param dfr: DataFrame a ser salvo.
-    :param data_type: Tipo de dado ("pluviometric" ou "meteorological").
-    :param partition_column: Coluna usada para particionamento.
-    :returns: Caminho do diretório raiz das partições.
+    :param data_type: Tipo de dado (``pluviometric`` ou ``meteorological``).
+    :param partition_column: Coluna usada para particionamento (padrão: ``data_medicao``).
+    :returns: Caminho do diretório raiz onde as partições foram salvas.
     """
     if dfr.empty:
         logger.warning(
             "DataFrame %s vazio, criando diretório vazio apenas", data_type
         )
-        base_path = Path(f"/tmp/precipitacao_alertario/{data_type}")
+        base_path = Path(f"/tmp/{data_type}")
         base_path.mkdir(parents=True, exist_ok=True)
         return base_path
-
-    base_path = Path(f"/tmp/precipitacao_alertario/{data_type}")
-    base_path.mkdir(parents=True, exist_ok=True)
 
     dfr[partition_column] = pd.to_datetime(dfr[partition_column])
     dfr["ano_particao"] = dfr[partition_column].dt.strftime("%Y")
     dfr["mes_particao"] = dfr[partition_column].dt.strftime("%m")
     dfr["data_particao"] = dfr[partition_column].dt.strftime("%Y-%m-%d")
 
-    grouped = dfr.groupby(["ano_particao", "mes_particao", "data_particao"], dropna=False)
-
-    timestamp_suffix = pendulum.now("America/Sao_Paulo").strftime("%Y%m%d%H%M%S")
+    grouped = dfr.groupby(
+        ["ano_particao", "mes_particao", "data_particao"], dropna=False
+    )
 
     for (ano, mes, data), group_data in grouped:
-        partition_path = base_path / f"ano={ano}" / f"mes={mes}" / f"data={data}"
+        partition_path = Path(
+            f"/tmp/{data_type}/ano_particao={ano}/mes_particao={mes}/data_particao={data}"
+        )
         partition_path.mkdir(parents=True, exist_ok=True)
 
         group_data_clean = group_data.drop(
             columns=["ano_particao", "mes_particao", "data_particao"]
+        )
+
+        # Timestamp do primeiro registro da partição para nome do arquivo
+        group_data_clean[partition_column] = pd.to_datetime(
+            group_data_clean[partition_column]
+        )
+        timestamp_suffix = group_data_clean[partition_column].iloc[0].strftime(
+            "%Y%m%d%H%M%S"
         )
 
         filename = f"data_{timestamp_suffix}.csv"
@@ -235,4 +320,116 @@ def save_dataframe_to_parquet_partitions(
         logger.info("Salvando partição: %s com %d registros", filepath, len(group_data_clean))
         group_data_clean.to_csv(filepath, index=False, sep=",")
 
-    return base_path
+    return Path(f"/tmp/{data_type}")
+
+
+def save_pluviometric_and_meteorological_dataframes(
+    dfr_pluviometric: pd.DataFrame,
+    dfr_meteorological: pd.DataFrame,
+    partition_column: str = "data_medicao",
+) -> tuple[Path, Path]:
+    """Salva DataFrames pluviométrico e meteorológico em partições separadas.
+
+    Orchestração conveniente que salva ambos os tipos de dados em operações
+    paralelas, retornando os caminhos dos diretórios raiz das partições.
+
+    :param dfr_pluviometric: DataFrame com dados pluviométricos transformados.
+    :param dfr_meteorological: DataFrame com dados meteorológicos transformados.
+    :param partition_column: Coluna usada para particionamento (padrão: ``data_medicao``).
+    :returns: Tupla (Path para pluviométricos, Path para meteorológicos).
+    """
+    logger.info("Salvando DataFrames pluviométrico e meteorológico")
+
+    pluviometric_path = save_dataframe_to_csv_partitions(
+        dfr=dfr_pluviometric,
+        data_type="pluviometric",
+        partition_column=partition_column,
+    )
+
+    meteorological_path = save_dataframe_to_csv_partitions(
+        dfr=dfr_meteorological,
+        data_type="meteorological",
+        partition_column=partition_column,
+    )
+
+    return pluviometric_path, meteorological_path
+
+
+def process_multiple_xml_files(
+    xml_contents: list[str],
+) -> tuple[Path, Path]:
+    """Processa múltiplos XMLs e salva dados consolidados em partições CSV.
+
+    Pipeline completa que itera sobre cada arquivo XML, extrai registros
+    pluviométricos e meteorológicos, consolida os dados de todos os XMLs
+    em dois DataFrames, aplica transformações de limpeza e salva em
+    partições ano/mês/dia sem duplicação.
+
+    A função segue estes passos:
+    1. Para cada XML: executa parse e acumula registros
+    2. Consolida registros em dois DataFrames
+    3. Aplica transformações de limpeza (deduplicação, seleção de colunas)
+    4. Salva em partições CSV com timestamp no nome do arquivo
+
+    :param xml_contents: Lista com conteúdos XML como strings.
+    :returns: Tupla (Path para dados pluviométricos, Path para dados meteorológicos).
+    :raises Exception: Se houver erro no parse de qualquer XML.
+    """
+    all_pluviometric_records = []
+    all_meteorological_records = []
+
+    logger.info("Iniciando processamento de %d arquivo(s) XML", len(xml_contents))
+
+    # Passo 1: Parse e consolidação de registros de cada XML
+    for xml_index, xml_content in enumerate(xml_contents, start=1):
+        try:
+            pluviometric_records, meteorological_records = parse_xml_to_records(
+                xml_content=xml_content,
+            )
+
+            all_pluviometric_records.extend(pluviometric_records)
+            all_meteorological_records.extend(meteorological_records)
+
+            logger.info(
+                "XML %d/%d processado: %d pluviométricos, %d meteorológicos",
+                xml_index,
+                len(xml_contents),
+                len(pluviometric_records),
+                len(meteorological_records),
+            )
+
+        except Exception as e:
+            logger.error("Erro ao processar XML %d: %s", xml_index, str(e))
+            raise
+
+    logger.info(
+        "Parse completo: %d registros pluviométricos, %d meteorológicos consolidados",
+        len(all_pluviometric_records),
+        len(all_meteorological_records),
+    )
+
+    # Passo 2: Criar DataFrames consolidados
+    dfr_pluviometric = pd.DataFrame(all_pluviometric_records)
+    dfr_meteorological = pd.DataFrame(all_meteorological_records)
+
+    # Passo 3: Transformar (limpar e padronizar)
+    dfr_pluviometric = transform_pluviometric_dataframe(dfr_pluviometric)
+    dfr_meteorological = transform_meteorological_dataframe(dfr_meteorological)
+
+    # Passo 4: Salvar em partições (operação única)
+    pluviometric_path, meteorological_path = (
+        save_pluviometric_and_meteorological_dataframes(
+            dfr_pluviometric=dfr_pluviometric,
+            dfr_meteorological=dfr_meteorological,
+            partition_column="data_medicao",
+        )
+    )
+
+    logger.info(
+        "Processamento completo de %d arquivo(s): pluviométricos em %s, meteorológicos em %s",
+        len(xml_contents),
+        pluviometric_path,
+        meteorological_path,
+    )
+
+    return pluviometric_path, meteorological_path

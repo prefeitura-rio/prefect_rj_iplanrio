@@ -1,202 +1,58 @@
-"""Tasks para pipeline de precipitação AlertaRio via SFTP."""
+"""Tasks para pipeline de precipitação AlertaRio.
+
+Encapsula operações do Prefect relacionadas a download, processamento
+e ingestão de dados de precipitação AlertaRio no BigQuery.
+"""
 
 import os
 import re
 from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
 from google.cloud import bigquery
 from google.cloud import storage
+from google.oauth2 import service_account
 from prefect import task
-
 from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 
-from pipelines.rj_cor__precipitacao_alertario_sftp import utils
+from . import utils
 
 logger = get_logger(__name__)
 
+def load_credentials(credentials_path: str) -> service_account.Credentials:
+    """Carrega credenciais de um arquivo JSON de conta de serviço.
 
-def extract_datetime_from_blob_name(blob_name: str) -> datetime | None:
-    """Extrai o datetime completo do nome do arquivo no bucket GCS.
-
-    Procura por padrões de datetime no nome do arquivo.
-    Formato esperado: Chuvas_YYYYMMDDHHMMSS.xml (ex: Chuvas_20260717113729.xml)
-
-    :param blob_name: Nome do blob no GCS.
-    :returns: Datetime extraído ou None se não encontrado.
+    :param credentials_path: Caminho para o arquivo de credenciais JSON.
+    :returns: Objeto Credentials da Google configurado.
+    :raises FileNotFoundError: Se o arquivo não existir.
     """
-    # Padrão para YYYYMMDDHHMMSS (formato: Chuvas_20260717113729.xml)
-    match = re.search(r"Chuvas_(\d{14})", blob_name)
-    if match:
-        try:
-            datetime_str = match.group(1)
-            year = int(datetime_str[0:4])
-            month = int(datetime_str[4:6])
-            day = int(datetime_str[6:8])
-            hour = int(datetime_str[8:10])
-            minute = int(datetime_str[10:12])
-            second = int(datetime_str[12:14])
-            return datetime(year, month, day, hour, minute, second)
-        except (ValueError, TypeError, IndexError):
-            pass
+    creds_file = Path(credentials_path)
+    if not creds_file.exists():
+        raise FileNotFoundError(f"Arquivo de credenciais não encontrado: {credentials_path}")
 
-    return None
-
-
-def get_name_bucket_folder() -> tuple[str, str]:
-    """Obtém o nome do bucket e da pasta a partir da variável de ambiente.
-
-    :returns: Tupla (bucket_name, folder_name).
-    """
-    bucket_name = os.getenv("BUCKET", "")
-    folder_name = os.getenv("FOLDER", "")
-
-    if not bucket_name:
-        logger.error("Variável de ambiente BUCKET não definida")
-        raise ValueError("Variável de ambiente BUCKET não definida")
-
-    if not folder_name:
-        logger.error("Variável de ambiente FOLDER não definida")
-        raise ValueError("Variável de ambiente FOLDER não definida")
-
-    return bucket_name, folder_name
-
-
-@task
-def parse_xml_task(
-    xml_content: str,
-    source_file: str,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Parse XML AlertaRio em DataFrames pluviométrico e meteorológico.
-
-    Extrai registros do XML, cria DataFrames a partir deles
-    e retorna dois DataFrames: um com dados de chuva e outro
-    com dados meteorológicos.
-
-    :param xml_content: Conteúdo XML como string.
-    :param source_file: Nome do arquivo origem.
-    :returns: Tupla (DataFrame pluviométrico, DataFrame meteorológico).
-    """
-    logger.info("Fazendo parsing do arquivo XML: %s", source_file)
-
-    pluviometric_records, meteorological_records = utils.parse_xml_to_records(
-        xml_content=xml_content,
-        source_file=source_file,
-    )
-
-    dfr_pluv = pd.DataFrame(pluviometric_records)
-    dfr_met = pd.DataFrame(meteorological_records)
-
-    logger.info(
-        "Parse concluído: %d pluviométricos, %d meteorológicos",
-        len(dfr_pluv),
-        len(dfr_met),
-    )
-
-    return dfr_pluv, dfr_met
-
-
-@task
-def transform_pluviometric_data_task(dfr: pd.DataFrame) -> pd.DataFrame:
-    """Transforma dados pluviométricos brutos para formato BigQuery.
-
-    Aplica renomeação de colunas, parsing de datas, limpeza de
-    duplicatas e seleção de colunas esperadas.
-
-    :param dfr: DataFrame com dados brutos.
-    :returns: DataFrame transformado.
-    """
-    logger.info("Transformando dados pluviométricos")
-
-    dfr_transformed = utils.transform_pluviometric_dataframe(dfr)
-
-    return dfr_transformed
-
-
-@task
-def transform_meteorological_data_task(dfr: pd.DataFrame) -> pd.DataFrame:
-    """Transforma dados meteorológicos brutos para formato BigQuery.
-
-    Aplica renomeação de colunas, parsing de datas, limpeza de
-    duplicatas e seleção de colunas esperadas.
-
-    :param dfr: DataFrame com dados brutos.
-    :returns: DataFrame transformado.
-    """
-    logger.info("Transformando dados meteorológicos")
-
-    dfr_transformed = utils.transform_meteorological_dataframe(dfr)
-
-    return dfr_transformed
-
-
-@task
-def save_pluviometric_data_to_parquet_task(
-    dfr: pd.DataFrame,
-) -> Path:
-    """Salva dados pluviométricos em partições Parquet.
-
-    Particiona os dados por data (ano/mes/data) e salva
-    cada partição como arquivo Parquet comprimido.
-
-    :param dfr: DataFrame com dados processados.
-    :returns: Caminho do diretório raiz das partições.
-    """
-    logger.info("Salvando dados pluviométricos em partições Parquet")
-
-    path = utils.save_dataframe_to_parquet_partitions(
-        dfr=dfr,
-        data_type="pluviometric",
-        partition_column="data_medicao",
-    )
-
-    logger.info("Dados pluviométricos salvos em: %s", path)
-
-    return path
-
-
-@task
-def save_meteorological_data_to_parquet_task(
-    dfr: pd.DataFrame,
-) -> Path:
-    """Salva dados meteorológicos em partições Parquet.
-
-    Particiona os dados por data (ano/mes/data) e salva
-    cada partição como arquivo Parquet comprimido.
-
-    :param dfr: DataFrame com dados processados.
-    :returns: Caminho do diretório raiz das partições.
-    """
-    logger.info("Salvando dados meteorológicos em partições Parquet")
-
-    path = utils.save_dataframe_to_parquet_partitions(
-        dfr=dfr,
-        data_type="meteorological",
-        partition_column="data_medicao",
-    )
-
-    logger.info("Dados meteorológicos salvos em: %s", path)
-
-    return path
+    return service_account.Credentials.from_service_account_file(credentials_path)
 
 
 @task(retries=3, retry_delay_seconds=10)
 def get_max_date_from_bigquery_task(
-    project_id: str = "rj-cor",
+    project_id: str = "rj-iplanrio",
     dataset_id: str = "clima_pluviometro_staging",
     table_id: str = "taxa_precipitacao_alertario_5min",
+    credentials_path: str = "/home/trick/.service-account/dbt.json",
 ) -> datetime | None:
-    """Obtém a data máxima de medicação do BigQuery.
+    """Obtém a data máxima de medição do BigQuery.
 
-    Executa a query SQL para obter a data máxima de data_medicao
-    da tabela de precipitação alertário.
+    Executa a query SQL para obter a data máxima de ``data_medicao``
+    da tabela de precipitação AlertaRio, servindo como marca d'água
+    para filtrar arquivos novos no bucket GCS.
 
     :param project_id: ID do projeto GCP.
     :param dataset_id: ID do dataset BigQuery.
     :param table_id: ID da tabela BigQuery.
+    :param credentials_path: Caminho para o arquivo de credenciais.
     :returns: Data máxima como datetime ou None se nenhum dado existir.
+    :raises Exception: Se houver erro ao executar a query.
     """
     logger.info(
         "Obtendo data máxima do BigQuery: %s.%s.%s",
@@ -214,7 +70,8 @@ def get_max_date_from_bigquery_task(
             table_id=table_id,
         )
 
-        client = bigquery.Client(project=project_id)
+        creds = load_credentials(credentials_path)
+        client = bigquery.Client(project=project_id, credentials=creds)
         query_job = client.query(query)
         results = query_job.result()
 
@@ -231,22 +88,51 @@ def get_max_date_from_bigquery_task(
         logger.error("Erro ao obter data máxima do BigQuery: %s", e)
         raise
 
+def extract_datetime_from_blob_name(blob_name: str) -> datetime | None:
+    """Extrai o datetime completo do nome do arquivo AlertaRio.
+
+    Procura pelo padrão ``Chuvas_YYYYMMDDHHMMSS.xml`` no nome do arquivo.
+    Exemplo: ``Chuvas_20260717113729.xml`` → ``datetime(2026, 7, 17, 11, 37, 29)``.
+
+    :param blob_name: Nome do blob no GCS.
+    :returns: Datetime extraído ou None se o padrão não for encontrado.
+    """
+    match = re.search(r"Chuvas_(\d{14})", blob_name)
+    if match:
+        try:
+            datetime_str = match.group(1)
+            year = int(datetime_str[0:4])
+            month = int(datetime_str[4:6])
+            day = int(datetime_str[6:8])
+            hour = int(datetime_str[8:10])
+            minute = int(datetime_str[10:12])
+            second = int(datetime_str[12:14])
+            return datetime(year, month, day, hour, minute, second)
+        except (ValueError, TypeError, IndexError):
+            pass
+
+    return None
+
 
 @task(retries=3, retry_delay_seconds=10)
 def get_bucket_files_with_datetime_filter_task(
-    bucket_name: str = "",
-    prefix: str = "",
-    max_datetime_from_bq: datetime | None = None,
+    bucket_name: str,
+    prefix: str,
+    max_datetime_from_bq: datetime | None,
+    credentials_path: str = "/home/trick/.service-account/dbt.json",
 ) -> list[str]:
-    """Filtra arquivos do bucket com datetime maior que o do BigQuery.
+    """Filtra arquivos XML do bucket com datetime maior que a marca d'água.
 
-    Lista arquivos XML no bucket com prefixo especificado e retorna apenas
-    aqueles cujo datetime extraído do nome é maior que o datetime máximo do BigQuery.
+    Lista todos os arquivos XML no bucket com prefixo especificado e retorna
+    apenas aqueles cujo datetime extraído do nome é maior que o máximo
+    encontrado no BigQuery, minimizando re-processamento.
 
     :param bucket_name: Nome do bucket GCS.
     :param prefix: Prefixo dos arquivos no bucket.
-    :param max_datetime_from_bq: Datetime máximo do BigQuery para comparação.
+    :param max_datetime_from_bq: Datetime máximo do BigQuery ou None.
+    :param credentials_path: Caminho para o arquivo de credenciais.
     :returns: Lista de nomes de arquivo XML com datetimes maiores.
+    :raises Exception: Se houver erro ao listar ou filtrar arquivos.
     """
     logger.info(
         "Listando arquivos do bucket %s com prefixo %s",
@@ -258,7 +144,8 @@ def get_bucket_files_with_datetime_filter_task(
         logger.info("Filtrando arquivos com datetime maior que: %s", max_datetime_from_bq)
 
     try:
-        client = storage.Client()
+        creds = load_credentials(credentials_path)
+        client = storage.Client(credentials=creds)
         bucket = client.bucket(bucket_name)
         blobs = list(bucket.list_blobs(prefix=prefix))
 
@@ -282,7 +169,7 @@ def get_bucket_files_with_datetime_filter_task(
                 )
                 continue
 
-            # Comparar datetimes completos
+            # Comparar datetimes
             if file_datetime > max_datetime_from_bq:
                 filtered_files.append(file_name)
                 logger.info(
@@ -308,3 +195,56 @@ def get_bucket_files_with_datetime_filter_task(
     except Exception as e:
         logger.error("Erro ao listar e filtrar arquivos do GCS: %s", e)
         raise
+
+
+@task(retries=3, retry_delay_seconds=10)
+def download_xml_files_from_list_task(
+    bucket_name: str,
+    file_names: list[str],
+    credentials_path: str = "/home/trick/.service-account/dbt.json",
+) -> list[str]:
+    """Baixa múltiplos arquivos XML do GCS.
+
+    Conecta ao bucket GCS e baixa os arquivos XML especificados,
+    retornando uma lista com os conteúdos de cada arquivo como strings.
+
+    :param bucket_name: Nome do bucket GCS.
+    :param file_names: Lista de nomes de arquivos XML a baixar.
+    :param credentials_path: Caminho para o arquivo de credenciais.
+    :returns: Lista com conteúdos XML como strings.
+    :raises Exception: Se houver erro ao baixar qualquer arquivo.
+    """
+    creds = load_credentials(credentials_path)
+    return utils.download_xml_files_from_gcs(
+        bucket_name=bucket_name,
+        file_names=file_names,
+        credentials_path=creds,
+    )
+
+
+@task
+def process_multiple_xml_files_task(
+    xml_contents: list[str],
+) -> tuple[Path, Path]:
+    """Processa múltiplos XMLs e salva dados em partições consolidadas.
+
+    Wrapper Prefect que orquestra o processamento completo: parse, transformação
+    e salvamento em partições CSV. Todos os XMLs são consolidados nos mesmos
+    dois diretórios (um para pluviométricos, outro para meteorológicos).
+
+    :param xml_contents: Lista com conteúdos XML como strings.
+    :returns: Tupla (Path para dados pluviométricos, Path para meteorológicos).
+    :raises Exception: Se houver erro no processamento de qualquer XML.
+    """
+    logger.info("Iniciando processamento de múltiplos XMLs via task Prefect")
+
+    pluviometric_path, meteorological_path = utils.process_multiple_xml_files(
+        xml_contents=xml_contents,
+    )
+
+    logger.info("Processamento de múltiplos XMLs concluído com sucesso")
+
+    return pluviometric_path, meteorological_path
+
+
+
