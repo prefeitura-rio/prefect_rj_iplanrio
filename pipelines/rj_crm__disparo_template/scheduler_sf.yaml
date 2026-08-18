@@ -153,7 +153,7 @@ schedules:
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo25
         data_extension_filename: whatsapp_sms_puerperas_explica_pesquisa
-        de_columns: ["nome"]
+        de_columns: ["nome", "maternidade"]
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
@@ -199,7 +199,7 @@ schedules:
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo4v3
         data_extension_filename: whatsapp_sms_puerperas_pesquisa1
-        de_columns: ["nome"]
+        de_columns: ["nome", "maternidade"]
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
@@ -242,7 +242,7 @@ schedules:
   #       dataset_id: brutos_salesforce
   #       campaign_name: smspuerperasdisparo9
   #       data_extension_filename: whatsapp_sms_puerperas_pesquisa3
-  #       de_columns: ["nome"]
+  #       de_columns: ["nome", "maternidade"]
   #       max_dispatch_retries: 0
   #       sleep_minutes: 5
   #       flow_environment: staging
@@ -280,7 +280,7 @@ schedules:
         dataset_id: brutos_salesforce
         campaign_name: smspuerperadisparo6
         data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-        de_columns: ["nome", "numero_dias"]  # única pesquisa cuja hsm usa a variável numero_dias
+        de_columns: ["nome", "numero_dias", "maternidade"]  # única pesquisa cuja hsm usa a variável numero_dias
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
@@ -320,7 +320,7 @@ schedules:
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo12
         data_extension_filename: whatsapp_sms_puerperas_pesquisa5
-        de_columns: ["nome"]
+        de_columns: ["nome", "maternidade"]
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
@@ -360,7 +360,7 @@ schedules:
   #       dataset_id: brutos_salesforce
   #       campaign_name: smspuerperasdisparo14
   #       data_extension_filename: whatsapp_sms_puerperas_pesquisa6
-  #       de_columns: ["nome"]
+  #       de_columns: ["nome", "maternidade"]
   #       max_dispatch_retries: 0
   #       sleep_minutes: 5
   #       flow_environment: staging
@@ -387,7 +387,6 @@ schedules:
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
             id_hsm_legado_placeholder: 589
             id_hsm_anterior_legado_placeholder: 610
-            id_hsm_legado_placeholder: 589
             pesquisa_id: "Pesquisa 7"
             datas_internacao: "DATE_ADD(DATE(data_alta_internacao), INTERVAL 40 DAY)"
             intervalo_filtro_disparados: 1
@@ -397,7 +396,7 @@ schedules:
         dataset_id: brutos_salesforce
         campaign_name: smspuerperasdisparo152
         data_extension_filename: whatsapp_sms_puerperas_pesquisa7
-        de_columns: ["nome"]
+        de_columns: ["nome", "maternidade"]
         max_dispatch_retries: 0
         sleep_minutes: 5
         flow_environment: staging
