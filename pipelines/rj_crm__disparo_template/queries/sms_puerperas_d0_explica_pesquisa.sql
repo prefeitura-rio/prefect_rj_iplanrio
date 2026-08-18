@@ -2,6 +2,7 @@ WITH segmentacao_original AS (
     SELECT
         lpad(cast(cpf as string) , 11, '0') as cpf,
         nome,
+        nome_maternidade_alta AS maternidade,
         data_alta_internacao,
         telefones_gestante,
     FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
@@ -13,9 +14,10 @@ WITH segmentacao_original AS (
             and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
     ),
     telefones as (
-    select 
+    select
         lpad(cast(cpf as string) , 11, '0') as cpf,
         nome,
+        MAX(maternidade) as maternidade,
         MAX(data_alta_internacao) as data_alta_internacao,
         MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
         MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
@@ -120,6 +122,7 @@ WITH segmentacao_original AS (
                 nome
             )
         ) AS nome,
+        maternidade,
         ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
     from final
     where celular_disparo is not null
