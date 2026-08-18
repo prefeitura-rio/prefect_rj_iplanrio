@@ -6,6 +6,32 @@
 > `agent-nf-validator/run_poc/*.py` abaixo são históricas (registro dos fixes);
 > os arquivos atuais são `utils/run_poc/*.py` e `utils/core/*.py`.
 
+> **Nota (Fase 3, pós-split):** as classes grandes foram desmembradas em mixins —
+> `POCProcessor` → `utils/pipeline/*.py` (setup/cache/process/metadata/database +
+> `modes.py`), `ComplianceValidator` → `utils/compliance/core,matching,validate,report.py`,
+> `NFExtractor` → `utils/extraction/auth,prompt,pdf,coalesce,api.py`. Caso veja
+> `ImportError`/ciclo de import envolvendo `utils.core`, a fachada `utils/core/__init__.py`
+> re-exporta compliance/extraction de forma **lazy** (PEP 562) justamente para evitar o ciclo.
+
+## Problema: ImportError circular ao importar `utils.core` / `utils.extraction` (pós-split)
+
+**Causa raiz:** `utils.extraction` e `utils.compliance` dependem de `utils.core`
+(config/helpers), e `utils.core` historicamente re-exportava essas classes como
+fachada — o import eager criava ciclo quando o pacote de domínio era o entry point.
+**Fix (Fase 3b):** `utils/core/__init__.py` usa `__getattr__` (PEP 562) para
+resolver `ComplianceValidator`/`NFExtractor`/`normalize_*`/`validate_against_expected`
+lazymente; `core/pipeline.py` importa `NFExtractor` lazy (TYPE_CHECKING + property).
+**Status:** ✅ resolvido — `uf.core.NFExtractor is NFExtractor` e imports 57/57 OK.
+
+## Problema: `NameError` de `ExecutionMode` ao carregar mixins do pipeline (pós-split)
+
+**Causa raiz:** defaults de assinatura (`mode: ExecutionMode = ExecutionMode.FULL`)
+são avaliadas em tempo de definição dos mixins; importar `ExecutionMode` do próprio
+`processor.py` criava ciclo.
+**Fix:** `ExecutionMode` extraído para `utils/pipeline/modes.py` (sem dependências);
+`processor.py` re-exporta com `# noqa: F401` (API pública).
+**Status:** ✅ resolvido — identidade `utils.pipeline.ExecutionMode is modes.ExecutionMode`.
+
 ## Problema: pipeline não aparece no dashboard do Prefect após CI passar
 
 ### #1 — pyproject.toml sem dependências

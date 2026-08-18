@@ -9,6 +9,7 @@ Required environment variables:
 
 import os
 from pathlib import Path
+
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
@@ -136,7 +137,7 @@ def load_expected_nfs_from_bigquery(
         d.descricao_limpa IN ({pdf_list_str})
         """
 
-    query += f"""
+    query += """
     GROUP BY
         d.id_documento,
         d.descricao_limpa,

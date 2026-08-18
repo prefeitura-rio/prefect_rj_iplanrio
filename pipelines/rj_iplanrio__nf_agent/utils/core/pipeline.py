@@ -8,13 +8,16 @@ import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
 
 from .classifiers import BaseClassifier, NFClassifier
 from .config import BEST_PARAMS, load_categories
-from ..extraction import NFExtractor
 from .ocr import OCRProcessor, get_page_count
+
+if TYPE_CHECKING:
+    from ..extraction import NFExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -103,9 +106,11 @@ class NFPipeline:
         return self._ocr_processor
 
     @property
-    def extractor(self) -> NFExtractor:
+    def extractor(self) -> "NFExtractor":
         """Lazy load extractor."""
         if self._extractor is None:
+            from ..extraction import NFExtractor
+
             self._extractor = NFExtractor(
                 service_account_file=self.gemini_service_account,
                 api_key=self.gemini_api_key
