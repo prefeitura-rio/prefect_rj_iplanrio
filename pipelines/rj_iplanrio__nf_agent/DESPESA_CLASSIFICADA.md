@@ -4,7 +4,7 @@
 **Dataset:** `brutos_cgm_poc_osinfo_ia_pipeline`  
 **Objeto:** `rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.despesa_classificada`  
 **Tipo:** VIEW (auto-atualiza a cada consulta)  
-**Arquivo SQL:** `pipelines/rj_iplanrio__nf_agent/despesa_classificada.sql`
+**Arquivo SQL:** `pipelines/rj_iplanrio__nf_agent/queries/despesa_classificada.sql`
 
 ---
 
