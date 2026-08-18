@@ -1,8 +1,7 @@
 FROM ghcr.io/prefeitura-rio/prefect_rj_iplanrio:latest
 
 # poppler-utils: system dependency for pdf2image (PDF → image conversion).
-# git: required by uv to resolve the pinned agent-nf-validator git dependency below.
-RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils git && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/prefect/prefect_rj_iplanrio
 
@@ -11,10 +10,9 @@ COPY ./src ./src/
 
 COPY ./pipelines/rj_iplanrio__nf_agent ./pipelines/rj_iplanrio__nf_agent/
 
-# agent-nf-validator is resolved as a pinned, lockfile-audited git dependency
-# (see [tool.uv.sources] in pipelines/rj_iplanrio__nf_agent/pyproject.toml),
-# not an untracked clone — the exact commit and its transitive deps are
-# recorded in uv.lock and reviewable in PR diffs.
+# Lógica de negócio NF vive em pipelines/rj_iplanrio__nf_agent/utils/ (migrada
+# de agent-nf-validator por move mecânico) e é resolvida junto da própria
+# pipeline via uv sync — lockfile-audited, reviewable em PR diffs.
 RUN uv sync --package rj_iplanrio__nf_agent
 
 # google-generativeai is excluded from agent-nf-validator's default deps

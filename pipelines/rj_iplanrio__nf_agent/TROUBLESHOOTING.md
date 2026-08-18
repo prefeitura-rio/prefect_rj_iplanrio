@@ -1,5 +1,11 @@
 # Troubleshooting — rj_iplanrio__nf_agent deploy
 
+> **Nota (pós-migração):** a lógica de negócio que antes vivia no repo
+> `agent-nf-validator` (`run_poc/`, `core/`) foi movida por *move mecânico*
+> para `utils/run_poc/` e `utils/core/` desta pipeline. As referências a
+> `agent-nf-validator/run_poc/*.py` abaixo são históricas (registro dos fixes);
+> os arquivos atuais são `utils/run_poc/*.py` e `utils/core/*.py`.
+
 ## Problema: pipeline não aparece no dashboard do Prefect após CI passar
 
 ### #1 — pyproject.toml sem dependências

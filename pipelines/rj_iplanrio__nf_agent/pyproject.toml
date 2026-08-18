@@ -1,6 +1,6 @@
 [project]
 name = "rj_iplanrio__nf_agent"
-version = "0.1.0"
+version = "1.0.0"
 description = "Pipeline de validação de notas fiscais da secretaria iplanrio"
 dependencies = [
     "prefect>=3.4.9",
@@ -20,11 +20,9 @@ dependencies = [
     "tqdm>=4.66.0",
     "pyyaml>=6.0.0",
     "python-dotenv>=1.0.0",
-    # Pipeline de validação de NF em si — resolvida e pinada via uv.lock
-    # (ver [tool.uv.sources] abaixo). google-generativeai fica de fora
-    # (extra "gemini", instalado isolado no Dockerfile — ver TROUBLESHOOTING.md #4).
-    "agent-nf-validator",
+    # Lógica de negócio migrada de agent-nf-validator para utils/ (move mecânico).
+    # google-generativeai fica de fora (extra "gemini", instalado isolado no
+    # Dockerfile — ver TROUBLESHOOTING.md #4). O toolkit genérico
+    # iplanrio-agent-toolkit ainda não é importado por este código; será
+    # integrado na fase de extração de componentes genéricos (Fase 4+).
 ]
-
-[tool.uv.sources]
-agent-nf-validator = { git = "https://github.com/prefeitura-rio/agent-nf-validator.git", rev = "1b427b4" }
