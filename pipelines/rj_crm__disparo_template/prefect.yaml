@@ -653,7 +653,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo25
           data_extension_filename: whatsapp_sms_puerperas_explica_pesquisa
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -666,16 +666,17 @@ deployments:
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
           query: "WITH segmentacao_original AS (\n    SELECT\n        lpad(cast(cpf
-            as string) , 11, '0') as cpf,\n        nome,\n        data_alta_internacao,\n\
-            \        telefones_gestante,\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
-            \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
-            \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
-            DATE(data_alta_internacao) between\n            DATE_SUB(CURRENT_DATE('America/Sao_Paulo'),
-            INTERVAL 2 DAY) and CURRENT_DATE('America/Sao_Paulo')\n            and
-            nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario\n\
-            \    ),\n    telefones as (\n    select \n        lpad(cast(cpf as string)
-            , 11, '0') as cpf,\n        nome,\n        MAX(data_alta_internacao) as
-            data_alta_internacao,\n        MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            as string) , 11, '0') as cpf,\n        nome,\n        nome_maternidade_alta
+            AS maternidade,\n        data_alta_internacao,\n        telefones_gestante,\n\
+            \    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n    -- from
+            `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n    WHERE
+            cpf is not null\n        and cpf != '00000000000'\n    AND DATE(data_alta_internacao)
+            between\n            DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL
+            2 DAY) and CURRENT_DATE('America/Sao_Paulo')\n            and nome_maternidade_alta
+            like '%MARIA AMELIA%' -- todo: remover comentario\n    ),\n    telefones
+            as (\n    select\n        lpad(cast(cpf as string) , 11, '0') as cpf,\n\
+            \        nome,\n        MAX(maternidade) as maternidade,\n        MAX(data_alta_internacao)
+            as data_alta_internacao,\n        MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n        MAX(IF(telefone.prioridade = '2',
             telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,\n    \
             \    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
@@ -738,9 +739,9 @@ deployments:
             AS externalId,\n        INITCAP(\n            IF(\n                ARRAY_LENGTH(SPLIT(nome,
             ' ')) > 1,\n                CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], '
             '),\n                nome\n            )\n        ) AS nome,\n       \
-            \ ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS
-            x WHERE x IS NOT NULL AND x != celular_disparo) AS others\n    from final\n\
-            \    where celular_disparo is not null\n"
+            \ maternidade,\n        ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\n    from final\n    where celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -772,7 +773,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo4v3
           data_extension_filename: whatsapp_sms_puerperas_pesquisa1
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -786,14 +787,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -872,10 +874,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -899,7 +902,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-          de_columns: ["nome", "numero_dias"] # única pesquisa cuja hsm usa a variável numero_dias
+          de_columns: ["nome", "numero_dias", "maternidade"] # única pesquisa cuja hsm usa a variável numero_dias
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -913,14 +916,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -999,10 +1003,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -1028,7 +1033,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo12
           data_extension_filename: whatsapp_sms_puerperas_pesquisa5
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -1042,14 +1047,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -1128,10 +1134,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -1153,7 +1160,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo152
           data_extension_filename: whatsapp_sms_puerperas_pesquisa7
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -1167,14 +1174,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -1253,10 +1261,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -2200,7 +2209,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo25
           data_extension_filename: whatsapp_sms_puerperas_explica_pesquisa
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -2213,16 +2222,17 @@ deployments:
           force_add_on_whitelist_group: true
           whitelist_replace_contacts: true
           query: "WITH segmentacao_original AS (\n    SELECT\n        lpad(cast(cpf
-            as string) , 11, '0') as cpf,\n        nome,\n        data_alta_internacao,\n\
-            \        telefones_gestante,\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
-            \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
-            \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
-            DATE(data_alta_internacao) between\n            DATE_SUB(CURRENT_DATE('America/Sao_Paulo'),
-            INTERVAL 2 DAY) and CURRENT_DATE('America/Sao_Paulo')\n            and
-            nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario\n\
-            \    ),\n    telefones as (\n    select \n        lpad(cast(cpf as string)
-            , 11, '0') as cpf,\n        nome,\n        MAX(data_alta_internacao) as
-            data_alta_internacao,\n        MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            as string) , 11, '0') as cpf,\n        nome,\n        nome_maternidade_alta
+            AS maternidade,\n        data_alta_internacao,\n        telefones_gestante,\n\
+            \    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n    -- from
+            `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n    WHERE
+            cpf is not null\n        and cpf != '00000000000'\n    AND DATE(data_alta_internacao)
+            between\n            DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL
+            2 DAY) and CURRENT_DATE('America/Sao_Paulo')\n            and nome_maternidade_alta
+            like '%MARIA AMELIA%' -- todo: remover comentario\n    ),\n    telefones
+            as (\n    select\n        lpad(cast(cpf as string) , 11, '0') as cpf,\n\
+            \        nome,\n        MAX(maternidade) as maternidade,\n        MAX(data_alta_internacao)
+            as data_alta_internacao,\n        MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n        MAX(IF(telefone.prioridade = '2',
             telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,\n    \
             \    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
@@ -2285,9 +2295,9 @@ deployments:
             AS externalId,\n        INITCAP(\n            IF(\n                ARRAY_LENGTH(SPLIT(nome,
             ' ')) > 1,\n                CONCAT(SPLIT(nome, ' ')[SAFE_OFFSET(0)], '
             '),\n                nome\n            )\n        ) AS nome,\n       \
-            \ ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS
-            x WHERE x IS NOT NULL AND x != celular_disparo) AS others\n    from final\n\
-            \    where celular_disparo is not null\n"
+            \ maternidade,\n        ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
+            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
+            AS others\n    from final\n    where celular_disparo is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -2319,7 +2329,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo4v3
           data_extension_filename: whatsapp_sms_puerperas_pesquisa1
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -2333,14 +2343,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -2419,10 +2430,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -2446,7 +2458,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-          de_columns: ["nome", "numero_dias"] # única pesquisa cuja hsm usa a variável numero_dias
+          de_columns: ["nome", "numero_dias", "maternidade"] # única pesquisa cuja hsm usa a variável numero_dias
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -2460,14 +2472,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -2546,10 +2559,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -2575,7 +2589,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo12
           data_extension_filename: whatsapp_sms_puerperas_pesquisa5
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -2589,14 +2603,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -2675,10 +2690,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -2700,7 +2716,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperasdisparo152
           data_extension_filename: whatsapp_sms_puerperas_pesquisa7
-          de_columns: ["nome"]
+          de_columns: ["nome", "maternidade"]
           max_dispatch_retries: 0
           sleep_minutes: 5
           whitelist_percentage: 0
@@ -2714,14 +2730,15 @@ deployments:
           whitelist_replace_contacts: true
           query: "-- {pesquisa_id}\nWITH segmentacao_original AS (\n    SELECT\n \
             \       lpad(cast(cpf as string) , 11, '0') as cpf,\n        nome,\n \
-            \       data_alta_internacao,\n        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
+            \       nome_maternidade_alta AS maternidade,\n        data_alta_internacao,\n\
+            \        telefones_gestante\n    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`\n\
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
             \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
-            cpf,\n    nome,\n    MAX(data_alta_internacao) as data_alta_internacao,\n\
-            \    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
+            cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
+            as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_1,\n    MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_2,\n    MAX(IF(telefone.prioridade = '3', telefone.telefone_valido_whatsapp,
             NULL)) AS celular_disparo_3\nFROM segmentacao_original,\nUNNEST(telefones_gestante)
@@ -2800,10 +2817,11 @@ deployments:
             \    CAST(cpf AS STRING) AS externalId,\n    INITCAP(\n        IF(\n \
             \           ARRAY_LENGTH(SPLIT(nome, ' ')) > 1,\n            CONCAT(SPLIT(nome,
             ' ')[SAFE_OFFSET(0)], ' '),\n            nome\n        )\n    ) AS nome,\n\
-            \    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao),
-            DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT x FROM UNNEST([celular_disparo_2,
-            celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo)
-            AS others\nfrom final\nwhere celular_disparo is not null\n"
+            \    maternidade,\n    CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'),
+            DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,\n    ARRAY(SELECT
+            x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS
+            NOT NULL AND x != celular_disparo) AS others\nfrom final\nwhere celular_disparo
+            is not null\n"
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
