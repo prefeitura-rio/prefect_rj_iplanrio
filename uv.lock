@@ -1692,7 +1692,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git?branch=staging%2Fremove-subquery-mysql-osinfo#f139142620974b2a07cdde82c4fc4f40daac5cd0" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git?branch=staging%2Fremove-subquery-mysql-osinfo#bd4a9eda2947183605681c4fcb0182cc3bfebabc" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
