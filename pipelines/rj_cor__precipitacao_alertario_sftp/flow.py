@@ -20,7 +20,7 @@ from tasks import (
 logger = get_logger(__name__)
 
 
-@flow(name="rj-cor-precipitacao-alertario-sftp")
+@flow(log_prints=True, name="rj-cor-precipitacao-alertario-sftp")
 def rj_cor__precipitacao_alertario_sftp(
     dataset_id_pluviometric: str = 'clima_pluviometro',
     table_id_pluviometric: str = 'taxa_precipitacao_alertario_5min',

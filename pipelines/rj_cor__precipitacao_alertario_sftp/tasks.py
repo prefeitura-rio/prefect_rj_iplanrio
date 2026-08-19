@@ -117,7 +117,7 @@ def extract_datetime_from_blob_name(blob_name: str) -> datetime | None:
 def get_bucket_files_with_datetime_filter_task(
     bucket_name: str,
     prefix: str,
-    max_datetime_from_bq: datetime | None,
+    max_datetime_from_bq: datetime | str | None,
 ) -> list[str]:
     """Filtra arquivos XML do bucket com datetime maior que a marca d'água.
 
@@ -127,7 +127,6 @@ def get_bucket_files_with_datetime_filter_task(
 
     :param bucket_name: Nome do bucket GCS.
     :param prefix: Prefixo dos arquivos no bucket.
-    :param max_datetime_from_bq: Datetime máximo do BigQuery ou None.
     :param credentials_path: Caminho para o arquivo de credenciais.
     :returns: Lista de nomes de arquivo XML com datetimes maiores.
     :raises Exception: Se houver erro ao listar ou filtrar arquivos.
@@ -138,11 +137,25 @@ def get_bucket_files_with_datetime_filter_task(
         prefix,
     )
 
+    # Converter string para datetime se necessário
+    if isinstance(max_datetime_from_bq, str):
+        try:
+            max_datetime_from_bq = datetime.fromisoformat(max_datetime_from_bq)
+        except ValueError:
+            try:
+                max_datetime_from_bq = datetime.strptime(
+                    max_datetime_from_bq, "%Y-%m-%d %H:%M:%S"
+                )
+            except ValueError:
+                logger.warning(
+                    "Não foi possível converter datetime: %s", max_datetime_from_bq
+                )
+                max_datetime_from_bq = None
+
     if max_datetime_from_bq:
         logger.info("Filtrando arquivos com datetime maior que: %s", max_datetime_from_bq)
 
     try:
-
         client = storage.Client()
         bucket = client.bucket(bucket_name)
         blobs = list(bucket.list_blobs(prefix=prefix))
