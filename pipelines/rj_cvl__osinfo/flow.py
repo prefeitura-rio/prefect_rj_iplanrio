@@ -1,5 +1,5 @@
 """
-This flow is used to dump the database from the CVL server to the BIGQUERY..j
+This flow is used to dump the database from the CVL server to the BIGQUERY..
 """
 
 from typing import Optional
