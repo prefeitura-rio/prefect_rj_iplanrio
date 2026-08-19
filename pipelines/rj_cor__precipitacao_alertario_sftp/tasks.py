@@ -233,7 +233,7 @@ def download_xml_files_from_list_task(
 @task
 def process_multiple_xml_files_task(
     xml_contents: list[str],
-) -> tuple[Path, Path]:
+) -> tuple[str, str]:
     """Processa múltiplos XMLs e salva dados em partições consolidadas.
 
     Wrapper Prefect que orquestra o processamento completo: parse, transformação
@@ -241,7 +241,7 @@ def process_multiple_xml_files_task(
     dois diretórios (um para pluviométricos, outro para meteorológicos).
 
     :param xml_contents: Lista com conteúdos XML como strings.
-    :returns: Tupla (Path para dados pluviométricos, Path para meteorológicos).
+    :returns: Tupla (caminho para dados pluviométricos, caminho para meteorológicos) como strings.
     :raises Exception: Se houver erro no processamento de qualquer XML.
     """
     logger.info("Iniciando processamento de múltiplos XMLs via task Prefect")

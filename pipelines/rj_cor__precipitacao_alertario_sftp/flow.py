@@ -70,10 +70,10 @@ def rj_cor__precipitacao_alertario_sftp(
 
     bucket_name = getenv_or_action("bucket-nimbus")
     prefix = getenv_or_action("prefix")
-    logger.info("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
+    print("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
 
     # Step 1: Listar arquivos XML novos
-    logger.info("📥 Listando arquivos XML na landing zone...")
+    print("📥 Listando arquivos XML na landing zone...")
     bq = get_max_date_from_bigquery_task(
         project_id=project_id
     )
@@ -93,19 +93,21 @@ def rj_cor__precipitacao_alertario_sftp(
         xml_contents=content
     )
 
-    if dataset_id_pluviometric is not None:
+    if dataset_id_pluviometric is not None and pluviometric_path is not None:
+        print("📤 Enviando dados pluviométricos para BigQuery: %s", pluviometric_path)
         create_table_and_upload_to_gcs_task(
-        data_path=str(pluviometric_path),
-        dataset_id=dataset_id_pluviometric,
-        table_id=table_id_pluviometric,
-        dump_mode=dump_mode,
-    )
+            data_path=pluviometric_path,
+            dataset_id=dataset_id_pluviometric,
+            table_id=table_id_pluviometric,
+            dump_mode=dump_mode,
+        )
 
-    if dataset_id_meteorological is not None:
+    if dataset_id_meteorological is not None and meteorological_path is not None:
+        print("📤 Enviando dados meteorológicos para BigQuery: %s", meteorological_path)
         create_table_and_upload_to_gcs_task(
-        data_path=str(meteorological_path),
-        dataset_id=dataset_id_meteorological,
-        table_id=table_id_meteorological,
-        dump_mode=dump_mode
+            data_path=meteorological_path,
+            dataset_id=dataset_id_meteorological,
+            table_id=table_id_meteorological,
+            dump_mode=dump_mode
     )
 

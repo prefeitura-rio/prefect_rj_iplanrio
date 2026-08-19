@@ -335,7 +335,7 @@ def save_pluviometric_and_meteorological_dataframes(
 
 def process_multiple_xml_files(
     xml_contents: list[str],
-) -> tuple[Path, Path]:
+) -> tuple[str, str]:
     """Processa múltiplos XMLs e salva dados consolidados em partições CSV.
 
     Pipeline completa que itera sobre cada arquivo XML, extrai registros
@@ -350,7 +350,7 @@ def process_multiple_xml_files(
     4. Salva em partições CSV com timestamp no nome do arquivo
 
     :param xml_contents: Lista com conteúdos XML como strings.
-    :returns: Tupla (Path para dados pluviométricos, Path para dados meteorológicos).
+    :returns: Tupla (caminho para dados pluviométricos, caminho para dados meteorológicos) como strings.
     :raises Exception: Se houver erro no parse de qualquer XML.
     """
     all_pluviometric_records = []
@@ -410,4 +410,4 @@ def process_multiple_xml_files(
         meteorological_path,
     )
 
-    return pluviometric_path, meteorological_path
+    return str(pluviometric_path), str(meteorological_path)
