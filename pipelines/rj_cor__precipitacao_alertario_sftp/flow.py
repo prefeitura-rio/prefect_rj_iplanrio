@@ -40,11 +40,11 @@ def rj_cor__precipitacao_alertario_sftp(
     2. Injeta credenciais do banco de dados
     3. Lista arquivos XML no bucket da landing zone
     4. Para cada arquivo:
-       - Faz download do XML do GCS
-       - Faz parse e extrai dados pluviométricos e meteorológicos
-       - Transforma dados para formato padrão
-       - Salva dados como csv particionado
-       - Faz upload para BigQuery em tabelas separadas
+        - Faz download do XML do GCS
+        - Faz parse e extrai dados pluviométricos e meteorológicos
+        - Transforma dados para formato padrão
+        - Salva dados como csv particionado
+        - Faz upload para BigQuery em tabelas separadas
 
     **Parâmetros:**
 

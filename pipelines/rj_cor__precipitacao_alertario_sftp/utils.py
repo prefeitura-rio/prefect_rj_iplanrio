@@ -115,42 +115,46 @@ def parse_xml_to_records(
         # Processar dados pluviométricos
         chuvas = estacao.find("chuvas")
         if chuvas is not None:
-            hora_medicao = chuvas.get("hora").replace("T", " ")
-            record_pluv = {
-                "id_estacao": estacao_id,
-                "data_medicao": hora_medicao,
-                "acumulado_chuva_5min": parse_float(chuvas.get("m05")),
-                "acumulado_chuva_10min": parse_float(chuvas.get("m10")),
-                "acumulado_chuva_15min": parse_float(chuvas.get("m15")),
-                "acumulado_chuva_30min": parse_float(chuvas.get("m30")),
-                "acumulado_chuva_1hora": parse_float(chuvas.get("h01")),
-                "acumulado_chuva_2hora": parse_float(chuvas.get("h02")),
-                "acumulado_chuva_3hora": parse_float(chuvas.get("h03")),
-                "acumulado_chuva_4horas": parse_float(chuvas.get("h04")),
-                "acumulado_chuva_6horas": parse_float(chuvas.get("h06")),
-                "acumulado_chuva_12horas": parse_float(chuvas.get("h12")),
-                "acumulado_chuva_24horas": parse_float(chuvas.get("h24")),
-                "acumulado_chuva_96horas": parse_float(chuvas.get("h96")),
-                "acumulado_chuva_mes": parse_float(chuvas.get("mes")),
-            }
-            pluviometric_records.append(record_pluv)
+            hora_chuva = chuvas.get("hora")
+            if hora_chuva:
+                hora_medicao = hora_chuva.replace("T", " ")
+                record_pluv = {
+                    "id_estacao": estacao_id,
+                    "data_medicao": hora_medicao,
+                    "acumulado_chuva_5min": parse_float(chuvas.get("m05")),
+                    "acumulado_chuva_10min": parse_float(chuvas.get("m10")),
+                    "acumulado_chuva_15min": parse_float(chuvas.get("m15")),
+                    "acumulado_chuva_30min": parse_float(chuvas.get("m30")),
+                    "acumulado_chuva_1hora": parse_float(chuvas.get("h01")),
+                    "acumulado_chuva_2hora": parse_float(chuvas.get("h02")),
+                    "acumulado_chuva_3hora": parse_float(chuvas.get("h03")),
+                    "acumulado_chuva_4horas": parse_float(chuvas.get("h04")),
+                    "acumulado_chuva_6horas": parse_float(chuvas.get("h06")),
+                    "acumulado_chuva_12horas": parse_float(chuvas.get("h12")),
+                    "acumulado_chuva_24horas": parse_float(chuvas.get("h24")),
+                    "acumulado_chuva_96horas": parse_float(chuvas.get("h96")),
+                    "acumulado_chuva_mes": parse_float(chuvas.get("mes")),
+                }
+                pluviometric_records.append(record_pluv)
 
         # Processar dados meteorológicos
         met = estacao.find("met")
         if met is not None and estacao_type == "met":
-            hora_medicao = met.get("hora").replace("T", " ")
-            record_met = {
-                "id_estacao": estacao_id,
-                "temperatura": parse_float(met.get("temperatura")),
-                "umidade_ar": parse_float(met.get("umidade")),
-                "sensacao_termica": parse_float(met.get("sensacao")),
-                "pressao_atmosferica": parse_float(met.get("pressao")),
-                "temperatura_orvalho": parse_float(met.get("pontoOrvalho")),
-                "velocidade_vento": parse_float(met.get("velvento")),
-                "direcao_vento": parse_float(met.get("dirvento")),
-                "data_medicao": hora_medicao,
-            }
-            meteorological_records.append(record_met)
+            hora_met = met.get("hora")
+            if hora_met:
+                hora_medicao = hora_met.replace("T", " ")
+                record_met = {
+                    "id_estacao": estacao_id,
+                    "temperatura": parse_float(met.get("temperatura")),
+                    "umidade_ar": parse_float(met.get("umidade")),
+                    "sensacao_termica": parse_float(met.get("sensacao")),
+                    "pressao_atmosferica": parse_float(met.get("pressao")),
+                    "temperatura_orvalho": parse_float(met.get("pontoOrvalho")),
+                    "velocidade_vento": parse_float(met.get("velvento")),
+                    "direcao_vento": parse_float(met.get("dirvento")),
+                    "data_medicao": hora_medicao,
+                }
+                meteorological_records.append(record_met)
 
     logger.info(
         "Parse concluído: %d registros pluviométricos, %d meteorológicos",
