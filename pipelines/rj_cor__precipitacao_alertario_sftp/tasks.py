@@ -16,7 +16,7 @@ from prefect import task
 from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 
-from . import utils
+from pipelines.rj_cor__precipitacao_alertario_sftp import utils
 
 logger = get_logger(__name__)
 
@@ -36,10 +36,9 @@ def load_credentials(credentials_path: str) -> service_account.Credentials:
 
 @task(retries=3, retry_delay_seconds=10)
 def get_max_date_from_bigquery_task(
-    project_id: str = "rj-iplanrio",
+    project_id,
     dataset_id: str = "clima_pluviometro_staging",
     table_id: str = "taxa_precipitacao_alertario_5min",
-    credentials_path: str = "/home/trick/.service-account/dbt.json",
 ) -> datetime | None:
     """Obtém a data máxima de medição do BigQuery.
 
@@ -70,8 +69,8 @@ def get_max_date_from_bigquery_task(
             table_id=table_id,
         )
 
-        creds = load_credentials(credentials_path)
-        client = bigquery.Client(project=project_id, credentials=creds)
+
+        client = bigquery.Client(project=project_id)
         query_job = client.query(query)
         results = query_job.result()
 
@@ -119,7 +118,6 @@ def get_bucket_files_with_datetime_filter_task(
     bucket_name: str,
     prefix: str,
     max_datetime_from_bq: datetime | None,
-    credentials_path: str = "/home/trick/.service-account/dbt.json",
 ) -> list[str]:
     """Filtra arquivos XML do bucket com datetime maior que a marca d'água.
 
@@ -144,8 +142,8 @@ def get_bucket_files_with_datetime_filter_task(
         logger.info("Filtrando arquivos com datetime maior que: %s", max_datetime_from_bq)
 
     try:
-        creds = load_credentials(credentials_path)
-        client = storage.Client(credentials=creds)
+
+        client = storage.Client()
         bucket = client.bucket(bucket_name)
         blobs = list(bucket.list_blobs(prefix=prefix))
 
@@ -201,7 +199,6 @@ def get_bucket_files_with_datetime_filter_task(
 def download_xml_files_from_list_task(
     bucket_name: str,
     file_names: list[str],
-    credentials_path: str = "/home/trick/.service-account/dbt.json",
 ) -> list[str]:
     """Baixa múltiplos arquivos XML do GCS.
 
@@ -214,11 +211,9 @@ def download_xml_files_from_list_task(
     :returns: Lista com conteúdos XML como strings.
     :raises Exception: Se houver erro ao baixar qualquer arquivo.
     """
-    creds = load_credentials(credentials_path)
     return utils.download_xml_files_from_gcs(
         bucket_name=bucket_name,
         file_names=file_names,
-        credentials_path=creds,
     )
 
 

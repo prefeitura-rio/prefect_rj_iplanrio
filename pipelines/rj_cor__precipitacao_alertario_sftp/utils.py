@@ -20,34 +20,9 @@ from prefect_rj_iplanrio.logging import get_logger
 logger = get_logger(__name__)
 
 
-def get_name_bucket_folder() -> tuple[str, str]:
-    """Obtém o nome do bucket e da pasta a partir de variáveis de ambiente.
-
-    Lê as chaves ``BUCKET`` e ``FOLDER`` do ambiente para identificar
-    o bucket GCS e o prefixo de diretório onde residem os arquivos XML.
-
-    :returns: Tupla (bucket_name, folder_name).
-    :raises ValueError: Se ``BUCKET`` ou ``FOLDER`` não estiverem definidas.
-    """
-    dotenv.load_dotenv()
-    bucket_name = os.getenv("BUCKET", "")
-    prefix = os.getenv("FOLDER", "")
-
-    if not bucket_name:
-        logger.error("Variável de ambiente BUCKET não definida")
-        raise ValueError("Variável de ambiente BUCKET não definida")
-
-    if not prefix:
-        logger.error("Variável de ambiente FOLDER não definida")
-        raise ValueError("Variável de ambiente FOLDER não definida")
-
-    return bucket_name, prefix
-
-
 def download_xml_files_from_gcs(
     bucket_name: str,
     file_names: list[str],
-    credentials_path: str | None = None,
 ) -> list[str]:
     """Baixa múltiplos arquivos XML do GCS e retorna seus conteúdos.
 
@@ -57,7 +32,6 @@ def download_xml_files_from_gcs(
 
     :param bucket_name: Nome do bucket GCS.
     :param file_names: Lista de nomes de arquivos XML a baixar.
-    :param credentials_path: Objeto de credenciais do GCS (opcional).
     :returns: Lista com conteúdos XML como strings.
     :raises Exception: Se houver erro ao baixar qualquer arquivo.
     """
@@ -71,7 +45,7 @@ def download_xml_files_from_gcs(
         bucket_name,
     )
 
-    client = storage.Client(credentials=credentials_path)
+    client = storage.Client()
     bucket = client.bucket(bucket_name)
     xml_contents: list[str] = []
 

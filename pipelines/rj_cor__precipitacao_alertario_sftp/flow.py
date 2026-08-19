@@ -11,7 +11,6 @@ from iplanrio.pipelines_utils.env import getenv_or_action
 from tasks import (
     get_max_date_from_bigquery_task,
     get_bucket_files_with_datetime_filter_task,
-    get_name_bucket_folder,
     process_multiple_xml_files_task,
     download_xml_files_from_list_task
 
@@ -29,7 +28,6 @@ def rj_cor__precipitacao_alertario_sftp(
     table_id_meteorological: str = 'meteorologia_alertario',
     dump_mode: str = "append",
     project_id: str = "rj-iplanrio",
-
 ) -> None:
     """Coleta dados de precipitação do AlertaRio via arquivos XML em GCS.
 
@@ -69,8 +67,9 @@ def rj_cor__precipitacao_alertario_sftp(
     # Setup
     rename_current_flow_run_task(new_name="precipitacao-alertario-sftp")
     inject_bd_credentials_task(environment="prod")
+
     bucket_name = getenv_or_action("bucket-nimbus")
-    prefix = getenv_or_action("folder-nimbus")
+    prefix = getenv_or_action("prefix")
     logger.info("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
 
     # Step 1: Listar arquivos XML novos

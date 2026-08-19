@@ -37,15 +37,26 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
 
-   - name: rj-cor--precipitacao-alertario-sftp--prod
-     tags: [prod]
-     version: "{{ get-commit-hash.stdout }}"
-     entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
-     work_pool:
-       name: k3s-pool
-       work_queue_name: default
-       job_variables:
-         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-         command: uv run --package rj_cor__precipitacao_alertario_sftp -- prefect flow-run execute
-         secretName: prefect-jobs-secrets
-         image_pull_policy: Always
+  - name: rj-cor--precipitacao-alertario-sftp--prod
+    tags: [prod]
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_cor__precipitacao_alertario_sftp -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    schedules:
+      - interval: 300
+        anchor_date: "2021-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: precipitacao-alertario-5min-xml
+        parameters:
+          dataset_id_pluviometric: "clima_pluviometro"
+          dataset_id_meteorological: "clima_estacao_meteorologica"
+          table_id_pluviometric: "taxa_precipitacao_alertario_5min"
+          table_id_meteorological: "meteorologia_alertario"
+          dump_mode: "append"
