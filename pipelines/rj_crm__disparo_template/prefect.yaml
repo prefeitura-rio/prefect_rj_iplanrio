@@ -571,7 +571,7 @@ deployments:
             \        and cpf != '00000000000'\n        AND time(data_hora_agendamento_visita_maternidade)
             != '00:00:00'\n        AND DATE(data_hora_criacao_agendamento) =\n   \
             \         DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY)\n\
-            \            and nome_maternidade_agendada like '%MARIA AMELIA%'\n   \
+            \            and nome_maternidade_agendada  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n   \
             \ GROUP BY\n        cpf,\n        nome,\n        maternidade,\n      \
             \  data_hora_agendamento_visita_maternidade\n    ),\n    dados_rmi as
             (\n    -- os dados do rmi serão usados apenas caso a puérpera não tenha
@@ -673,7 +673,7 @@ deployments:
             cpf is not null\n        and cpf != '00000000000'\n    AND DATE(data_alta_internacao)
             between\n            DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL
             2 DAY) and CURRENT_DATE('America/Sao_Paulo')\n            and nome_maternidade_alta
-            like '%MARIA AMELIA%' -- todo: remover comentario\n    ),\n    telefones
+             in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n    ),\n    telefones
             as (\n    select\n        lpad(cast(cpf as string) , 11, '0') as cpf,\n\
             \        nome,\n        MAX(maternidade) as maternidade,\n        MAX(data_alta_internacao)
             as data_alta_internacao,\n        MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -792,7 +792,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -921,7 +921,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -1052,7 +1052,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -1179,7 +1179,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -2127,7 +2127,7 @@ deployments:
             \        and cpf != '00000000000'\n        AND time(data_hora_agendamento_visita_maternidade)
             != '00:00:00'\n        AND DATE(data_hora_criacao_agendamento) =\n   \
             \         DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY)\n\
-            \            and nome_maternidade_agendada like '%MARIA AMELIA%'\n   \
+            \            and nome_maternidade_agendada  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n   \
             \ GROUP BY\n        cpf,\n        nome,\n        maternidade,\n      \
             \  data_hora_agendamento_visita_maternidade\n    ),\n    dados_rmi as
             (\n    -- os dados do rmi serão usados apenas caso a puérpera não tenha
@@ -2229,7 +2229,7 @@ deployments:
             cpf is not null\n        and cpf != '00000000000'\n    AND DATE(data_alta_internacao)
             between\n            DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL
             2 DAY) and CURRENT_DATE('America/Sao_Paulo')\n            and nome_maternidade_alta
-            like '%MARIA AMELIA%' -- todo: remover comentario\n    ),\n    telefones
+             in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n    ),\n    telefones
             as (\n    select\n        lpad(cast(cpf as string) , 11, '0') as cpf,\n\
             \        nome,\n        MAX(maternidade) as maternidade,\n        MAX(data_alta_internacao)
             as data_alta_internacao,\n        MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -2348,7 +2348,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -2477,7 +2477,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -2608,7 +2608,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
@@ -2735,7 +2735,7 @@ deployments:
             \    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`\n\
             \    WHERE cpf is not null\n        and cpf != '00000000000'\n    AND
             CURRENT_DATE('America/Sao_Paulo') in\n        (\n        {datas_internacao}\n\
-            \        )\n        and nome_maternidade_alta like '%MARIA AMELIA%'\n
+            \        )\n        and nome_maternidade_alta  in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')\n
             ),\ntelefones as (\nselect\n    lpad(cast(cpf as string) , 11, '0') as
             cpf,\n    nome,\n    MAX(maternidade) as maternidade,\n    MAX(data_alta_internacao)
             as data_alta_internacao,\n    MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp,
