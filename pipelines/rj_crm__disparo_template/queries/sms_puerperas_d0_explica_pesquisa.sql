@@ -11,7 +11,7 @@ WITH segmentacao_original AS (
         and cpf != '00000000000'
     AND DATE(data_alta_internacao) between
             DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 2 DAY) and CURRENT_DATE('America/Sao_Paulo')
-            and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
+            and nome_maternidade_alta in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')
     ),
     telefones as (
     select
