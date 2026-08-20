@@ -366,7 +366,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
         return
 
     message = f"""
-    <@821121576455634955> <@1458456241683824744>
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run failed!
     Flow: {flow.name}
     Flow Run: {flow_run.name}

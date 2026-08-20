@@ -56,7 +56,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
 
     message = f"""
-    <@821121576455634955> <@1458456241683824744>
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run failed!
     📋 **Campanha:** {campaign_name}
     🆔 **Template ID:** {id_hsm}
