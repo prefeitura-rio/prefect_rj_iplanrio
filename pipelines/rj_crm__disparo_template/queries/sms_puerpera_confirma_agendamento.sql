@@ -18,7 +18,7 @@ WITH segmentacao_original AS (
         AND time(data_hora_agendamento_visita_maternidade) != '00:00:00'
         AND DATE(data_hora_criacao_agendamento) =
             DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY)
-            and nome_maternidade_agendada like '%MARIA AMELIA%'
+            and nome_maternidade_agendada in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')
     GROUP BY
         cpf,
         nome,
