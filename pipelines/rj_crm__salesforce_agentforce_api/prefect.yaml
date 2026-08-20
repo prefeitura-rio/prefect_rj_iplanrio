@@ -63,11 +63,15 @@ deployments:
       control_dataset: agentforce_control_staging
       environment: staging
     schedules:
-      - cron: "0 9 * * *"
+      # Janela de teste de custo/impacto: roda de 15 em 15min, só das 15h às 15h45
+      # (15:00, 15:15, 15:30, 15:45 — 4 execuções). Substitui temporariamente o
+      # cron diário original ("0 9 * * *") enquanto avaliamos o custo do intervalo
+      # curto. Reverter para o cron diário após a avaliação.
+      - cron: "0,15,30,45 15 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: agentforce-full-daily
-        flow_run_name: agentforce-full-daily
+        slug: agentforce-teste-15min
+        flow_run_name: agentforce-teste-15min
 
   # -----------------------------------------------------------------------
   # Deployment de producao
