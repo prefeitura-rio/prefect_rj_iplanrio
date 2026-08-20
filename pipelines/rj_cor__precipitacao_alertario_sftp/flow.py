@@ -59,7 +59,7 @@ def rj_cor__precipitacao_alertario_sftp(
     :param table_id_meteorological: ID da tabela meteorológica
         (padrão: meteorologia_alertario).
     :param dump_mode: Modo de salvamento no BigQuery
-        (padrão: "append", alternativa: "overwrite").
+        (padrão: "append", alternativa: "overwrite")..
 
     **Returns:**
         None

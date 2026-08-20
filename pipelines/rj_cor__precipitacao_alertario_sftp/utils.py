@@ -396,11 +396,5 @@ def process_multiple_xml_files(
             logger.error("Erro ao processar XML %d: %s", xml_index, str(e))
             raise
 
-    logger.info(
-        "Processamento completo de %d arquivo(s): %d partições pluviométricas, %d meteorológicas",
-        len(xml_contents),
-        len(pluviometric_path),
-        len(meteorological_path),
-    )
 
     return pluviometric_path, meteorological_path
