@@ -206,14 +206,14 @@ def rj_crm__disparo_template_sf(
         print("Ending flow due to inactive status.")
         return
 
-    validated_campaign = validate_campaign_name(
-        campaign_name=campaign_name,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
-    if validated_campaign is None:
-        print(f"Ending flow due to invalid campaign name: {campaign_name} does not exist in table rj-crm-registry.brutos_salesforce.jornada")
-        return
+    # validated_campaign = validate_campaign_name(
+    #     campaign_name=campaign_name,
+    #     billing_project_id=billing_project_id,
+    #     bucket_name=billing_project_id,
+    # )
+    # if validated_campaign is None:
+    #     print(f"Ending flow due to invalid campaign name: {campaign_name} does not exist in table rj-crm-registry.brutos_salesforce.jornada")
+    #     return
 
     if test_mode:
         print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
