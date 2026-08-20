@@ -14,7 +14,7 @@ WITH segmentacao_original AS (
         (
         {datas_internacao}
         )
-        and nome_maternidade_alta like '%MARIA AMELIA%'
+        and nome_maternidade_alta in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')
 ),
 telefones as (
 select
