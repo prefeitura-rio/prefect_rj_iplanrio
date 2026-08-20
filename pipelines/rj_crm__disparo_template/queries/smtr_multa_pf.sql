@@ -1,5 +1,10 @@
 SELECT
-    m.*
+  CONCAT(
+    INITCAP(SPLIT(nome_proprietario, ' ')[OFFSET(0)]),
+    ' ',
+    INITCAP(SPLIT(nome_proprietario, ' ')[OFFSET(ARRAY_LENGTH(SPLIT(nome_proprietario,' ')) - 1)])
+    )  as nome_proprietario,
+    * except (nome_proprietario)
 FROM
     `rj-crm-registry.ab_test.smtr_multa` AS m
 WHERE
