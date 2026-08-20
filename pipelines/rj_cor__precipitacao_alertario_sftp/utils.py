@@ -36,7 +36,7 @@ def download_xml_files_from_gcs(
     :raises Exception: Se houver erro ao baixar qualquer arquivo.
     """
     if not file_names:
-        logger.warning("Lista de arquivos vazia, retornando lista vazia")
+        logger.info("Lista de arquivos vazia, retornando lista vazia")
         return []
 
     logger.info(
@@ -140,9 +140,14 @@ def parse_xml_to_records(
         # Processar dados meteorológicos
         met = estacao.find("met")
         if met is not None and estacao_type == "met":
-            hora_met = met.get("hora")
-            if hora_met:
-                hora_medicao = hora_met.replace("T", " ")
+            chuvas = estacao.find("chuvas")
+            hora_medicao_met = None
+            if chuvas is not None:
+                hora_chuva = chuvas.get("hora")
+                if hora_chuva:
+                    hora_medicao_met = hora_chuva.replace("T", " ")
+
+            if hora_medicao_met:
                 record_met = {
                     "id_estacao": estacao_id,
                     "temperatura": parse_float(met.get("temperatura")),
@@ -152,7 +157,7 @@ def parse_xml_to_records(
                     "temperatura_orvalho": parse_float(met.get("pontoOrvalho")),
                     "velocidade_vento": parse_float(met.get("velvento")),
                     "direcao_vento": parse_float(met.get("dirvento")),
-                    "data_medicao": hora_medicao,
+                    "data_medicao": hora_medicao_met,
                 }
                 meteorological_records.append(record_met)
 
@@ -175,7 +180,7 @@ def transform_pluviometric_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
     :returns: DataFrame transformado e pronto para ingestão.
     """
     if dfr.empty:
-        logger.warning("DataFrame pluviométrico vazio, retornando sem transformações")
+        logger.info("DataFrame pluviométrico vazio, retornando sem transformações")
         return dfr
 
     logger.info("Transformando dados pluviométricos: %d registros", len(dfr))
@@ -216,7 +221,7 @@ def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
     :returns: DataFrame transformado e pronto para ingestão.
     """
     if dfr.empty:
-        logger.warning("DataFrame meteorológico vazio, retornando sem transformações")
+        logger.info("DataFrame meteorológico vazio, retornando sem transformações")
         return dfr
 
     logger.info("Transformando dados meteorológicos: %d registros", len(dfr))
@@ -259,7 +264,7 @@ def save_dataframe_to_csv_partitions(
     :returns: Caminho do diretório raiz onde as partições foram salvas.
     """
     if dfr.empty:
-        logger.warning(
+        logger.info(
             "DataFrame %s vazio, criando diretório vazio apenas", data_type
         )
         base_path = Path(f"/tmp/{data_type}")
@@ -335,38 +340,32 @@ def save_pluviometric_and_meteorological_dataframes(
 
 def process_multiple_xml_files(
     xml_contents: list[str],
-) -> tuple[str, str]:
-    """Processa múltiplos XMLs e salva dados consolidados em partições CSV.
+) -> tuple[list[str], list[str]]:
+    """Processa múltiplos XMLs e salva um arquivo de partição por timestamp.
 
-    Pipeline completa que itera sobre cada arquivo XML, extrai registros
-    pluviométricos e meteorológicos, consolida os dados de todos os XMLs
-    em dois DataFrames, aplica transformações de limpeza e salva em
-    partições ano/mês/dia sem duplicação.
+    Pipeline que itera sobre cada arquivo XML, extrai registros pluviométricos
+    e meteorológicos, aplica transformações de limpeza e salva em partições
+    ano/mês/dia, criando um arquivo separado para cada timestamp de entrada.
 
     A função segue estes passos:
-    1. Para cada XML: executa parse e acumula registros
-    2. Consolida registros em dois DataFrames
-    3. Aplica transformações de limpeza (deduplicação, seleção de colunas)
-    4. Salva em partições CSV com timestamp no nome do arquivo
+    1. Para cada XML: executa parse, transforma e salva em partição individual
+    2. Coleta os caminhos de todos os arquivos gerados
+    3. Retorna listas de caminhos para dados pluviométricos e meteorológicos
 
     :param xml_contents: Lista com conteúdos XML como strings.
-    :returns: Tupla (caminho para dados pluviométricos, caminho para dados meteorológicos) como strings.
+    :returns: Tupla (lista de caminhos pluviométricos, lista de caminhos meteorológicos) como strings.
     :raises Exception: Se houver erro no parse de qualquer XML.
     """
-    all_pluviometric_records = []
-    all_meteorological_records = []
+
 
     logger.info("Iniciando processamento de %d arquivo(s) XML", len(xml_contents))
 
-    # Passo 1: Parse e consolidação de registros de cada XML
+    # Processa cada XML individualmente
     for xml_index, xml_content in enumerate(xml_contents, start=1):
         try:
             pluviometric_records, meteorological_records = parse_xml_to_records(
                 xml_content=xml_content,
             )
-
-            all_pluviometric_records.extend(pluviometric_records)
-            all_meteorological_records.extend(meteorological_records)
 
             logger.info(
                 "XML %d/%d processado: %d pluviométricos, %d meteorológicos",
@@ -376,38 +375,32 @@ def process_multiple_xml_files(
                 len(meteorological_records),
             )
 
+            # Criar DataFrames individuais para este XML
+            dfr_pluviometric = pd.DataFrame(pluviometric_records)
+            dfr_meteorological = pd.DataFrame(meteorological_records)
+
+            # Transformar (limpar e padronizar)
+            dfr_pluviometric = transform_pluviometric_dataframe(dfr_pluviometric)
+            dfr_meteorological = transform_meteorological_dataframe(dfr_meteorological)
+
+            # Salvar em partições individuais por timestamp
+            pluviometric_path, meteorological_path = (
+                save_pluviometric_and_meteorological_dataframes(
+                    dfr_pluviometric=dfr_pluviometric,
+                    dfr_meteorological=dfr_meteorological,
+                    partition_column="data_medicao",
+                )
+            )
+
         except Exception as e:
             logger.error("Erro ao processar XML %d: %s", xml_index, str(e))
             raise
 
     logger.info(
-        "Parse completo: %d registros pluviométricos, %d meteorológicos consolidados",
-        len(all_pluviometric_records),
-        len(all_meteorological_records),
-    )
-
-    # Passo 2: Criar DataFrames consolidados
-    dfr_pluviometric = pd.DataFrame(all_pluviometric_records)
-    dfr_meteorological = pd.DataFrame(all_meteorological_records)
-
-    # Passo 3: Transformar (limpar e padronizar)
-    dfr_pluviometric = transform_pluviometric_dataframe(dfr_pluviometric)
-    dfr_meteorological = transform_meteorological_dataframe(dfr_meteorological)
-
-    # Passo 4: Salvar em partições (operação única)
-    pluviometric_path, meteorological_path = (
-        save_pluviometric_and_meteorological_dataframes(
-            dfr_pluviometric=dfr_pluviometric,
-            dfr_meteorological=dfr_meteorological,
-            partition_column="data_medicao",
-        )
-    )
-
-    logger.info(
-        "Processamento completo de %d arquivo(s): pluviométricos em %s, meteorológicos em %s",
+        "Processamento completo de %d arquivo(s): %d partições pluviométricas, %d meteorológicas",
         len(xml_contents),
-        pluviometric_path,
-        meteorological_path,
+        len(pluviometric_path),
+        len(meteorological_path),
     )
 
-    return str(pluviometric_path), str(meteorological_path)
+    return pluviometric_path, meteorological_path

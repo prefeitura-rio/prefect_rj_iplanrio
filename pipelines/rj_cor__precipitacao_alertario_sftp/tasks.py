@@ -20,18 +20,7 @@ from pipelines.rj_cor__precipitacao_alertario_sftp import utils
 
 logger = get_logger(__name__)
 
-def load_credentials(credentials_path: str) -> service_account.Credentials:
-    """Carrega credenciais de um arquivo JSON de conta de serviço.
 
-    :param credentials_path: Caminho para o arquivo de credenciais JSON.
-    :returns: Objeto Credentials da Google configurado.
-    :raises FileNotFoundError: Se o arquivo não existir.
-    """
-    creds_file = Path(credentials_path)
-    if not creds_file.exists():
-        raise FileNotFoundError(f"Arquivo de credenciais não encontrado: {credentials_path}")
-
-    return service_account.Credentials.from_service_account_file(credentials_path)
 
 
 @task(retries=3, retry_delay_seconds=10)
@@ -80,7 +69,7 @@ def get_max_date_from_bigquery_task(
                 logger.info("Data máxima encontrada: %s", max_date)
                 return max_date
             else:
-                logger.warning("Nenhuma data máxima encontrada na tabela")
+                logger.info("Nenhuma data máxima encontrada na tabela")
                 return None
 
     except Exception as e:
@@ -158,6 +147,7 @@ def get_bucket_files_with_datetime_filter_task(
     try:
         client = storage.Client()
         bucket = client.bucket(bucket_name)
+
         blobs = list(bucket.list_blobs(prefix=prefix))
 
         xml_files = [blob.name for blob in blobs if blob.name.endswith(".xml")]
@@ -165,7 +155,7 @@ def get_bucket_files_with_datetime_filter_task(
         logger.info("Total de arquivos XML encontrados: %d", len(xml_files))
 
         if not max_datetime_from_bq:
-            logger.warning(
+            logger.info(
                 "Datetime máximo do BigQuery não definido, retornando todos os arquivos"
             )
             return xml_files
@@ -175,7 +165,7 @@ def get_bucket_files_with_datetime_filter_task(
             file_datetime = extract_datetime_from_blob_name(file_name)
 
             if file_datetime is None:
-                logger.warning(
+                logger.debug(
                     "Não foi possível extrair datetime do arquivo: %s", file_name
                 )
                 continue
@@ -183,18 +173,8 @@ def get_bucket_files_with_datetime_filter_task(
             # Comparar datetimes
             if file_datetime > max_datetime_from_bq:
                 filtered_files.append(file_name)
-                logger.info(
-                    "Arquivo incluído (%s > %s): %s",
-                    file_datetime,
-                    max_datetime_from_bq,
-                    file_name,
-                )
-            else:
                 logger.debug(
-                    "Arquivo excluído (%s <= %s): %s",
-                    file_datetime,
-                    max_datetime_from_bq,
-                    file_name,
+                    "Arquivo incluído: %s", file_name
                 )
 
         logger.info(
@@ -233,24 +213,20 @@ def download_xml_files_from_list_task(
 @task
 def process_multiple_xml_files_task(
     xml_contents: list[str],
-) -> tuple[str, str]:
-    """Processa múltiplos XMLs e salva dados em partições consolidadas.
+) -> tuple[list[str], list[str]]:
+    """Processa múltiplos XMLs e salva um arquivo de partição por timestamp.
 
     Wrapper Prefect que orquestra o processamento completo: parse, transformação
-    e salvamento em partições CSV. Todos os XMLs são consolidados nos mesmos
-    dois diretórios (um para pluviométricos, outro para meteorológicos).
+    e salvamento em partições CSV. Cada XML gera um arquivo de partição separado
+    em seus respectivos diretórios (pluviométricos e meteorológicos).
 
     :param xml_contents: Lista com conteúdos XML como strings.
-    :returns: Tupla (caminho para dados pluviométricos, caminho para meteorológicos) como strings.
+    :returns: Tupla (lista de caminhos pluviométricos, lista de caminhos meteorológicos) como strings.
     :raises Exception: Se houver erro no processamento de qualquer XML.
     """
-    logger.info("Iniciando processamento de múltiplos XMLs via task Prefect")
-
     pluviometric_path, meteorological_path = utils.process_multiple_xml_files(
         xml_contents=xml_contents,
     )
-
-    logger.info("Processamento de múltiplos XMLs concluído com sucesso")
 
     return pluviometric_path, meteorological_path
 

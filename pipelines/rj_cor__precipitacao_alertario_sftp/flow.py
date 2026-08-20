@@ -1,5 +1,7 @@
 """Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
 
+import os
+
 from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
@@ -13,9 +15,7 @@ from tasks import (
     get_bucket_files_with_datetime_filter_task,
     process_multiple_xml_files_task,
     download_xml_files_from_list_task
-
 )
-
 
 logger = get_logger(__name__)
 
@@ -70,10 +70,11 @@ def rj_cor__precipitacao_alertario_sftp(
 
     bucket_name = getenv_or_action("bucket-nimbus")
     prefix = getenv_or_action("prefix")
-    print("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
+
+    logger.info("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
 
     # Step 1: Listar arquivos XML novos
-    print("📥 Listando arquivos XML na landing zone...")
+    logger.info("📥 Listando arquivos XML na landing zone...")
     bq = get_max_date_from_bigquery_task(
         project_id=project_id
     )
@@ -89,12 +90,17 @@ def rj_cor__precipitacao_alertario_sftp(
         file_names=xml_files
     )
 
+    # Validar se houve download de arquivos
+    if not content:
+        logger.warning("Nenhum arquivo XML foi baixado. Finalizando pipeline.")
+        return
+
     pluviometric_path, meteorological_path = process_multiple_xml_files_task(
         xml_contents=content
     )
 
     if dataset_id_pluviometric is not None and pluviometric_path is not None:
-        print("📤 Enviando dados pluviométricos para BigQuery: %s", pluviometric_path)
+        logger.info("📤 Enviando dados pluviométricos para BigQuery: %s", pluviometric_path)
         create_table_and_upload_to_gcs_task(
             data_path=pluviometric_path,
             dataset_id=dataset_id_pluviometric,
@@ -103,11 +109,10 @@ def rj_cor__precipitacao_alertario_sftp(
         )
 
     if dataset_id_meteorological is not None and meteorological_path is not None:
-        print("📤 Enviando dados meteorológicos para BigQuery: %s", meteorological_path)
+        logger.info("📤 Enviando dados meteorológicos para BigQuery: %s", meteorological_path)
         create_table_and_upload_to_gcs_task(
             data_path=meteorological_path,
             dataset_id=dataset_id_meteorological,
             table_id=table_id_meteorological,
             dump_mode=dump_mode
     )
-
