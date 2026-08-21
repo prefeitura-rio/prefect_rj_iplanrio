@@ -1,0 +1,8 @@
+
+criei o flow rj_crm__salesforce_api dentro de rj_crm__salesforce_api usando os arquivos usando os arquivos de uma outra pipeline do prefect. Eu  preciso que vc crie um flow generico que vai receber como parametro uma rota GET da salesforce e vai salvar os dados em um table_id que tb sera um parametro da UI. O dataset sera por default o brutos_salesforce, mas tb terÃ¡ um parÃ¢metro. Veja como salvar os dados no gcp usando a função jÃ¡ existente no arquivo flow.py e que deva funcionar com muitas rotas, algo como ter uma coluna data com os dados de json fornecidos. Coloque um print para eu ver quais dados estão vindo da api logo após chamá-la. As diferentes rotas entratam no arquivo scheduler, com um scheduler para cada. Crie um exemplo para a rota `GET /asset/v1/content/assets/{assetId}`. Me passe quais nomes devo salvar no infisical para acessar essa api. Me informaram que ela é do tipo SOAP, vc confirma?
+
+
+vc me deu como solução para integrar o ENS delivery_receipt da salesforce com
+os templates HSMs da meta usar a API GET /interaction/v1/interactions?status=Published&extras=activities da salesforce
+indicando que nela vem o activity.configurationArguments.assetId. Acontece que 
+nessa API não vem a primeira etapa da jornada que é o template hsm. Um exemplo de jornada abaixo: repare que ela começa com o WUCR
