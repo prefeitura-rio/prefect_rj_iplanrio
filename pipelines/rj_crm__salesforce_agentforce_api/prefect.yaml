@@ -1,0 +1,87 @@
+# Salesforce Data Cloud — Agentforce Pipeline
+#
+# Entrypoint: flows/full_daily.py:agentforce_full_daily
+#
+# Fases:
+#   F1 — STDM (obrigatória): ai_agent_session, ai_agent_interaction,
+#                             ai_agent_interaction_step, ai_agent_interaction_message
+#   F2a — Messaging (opcional): messaging_session, conversation_entry
+#   F2b — MCE (opcional): mce_sent, mce_open, mce_click, mce_bounce, mce_unsub, mce_subscriber
+#   F3  — Platform Tracing (opcional): telemetry_trace_span
+#   F4  — GenAI Audit (opcional): genai_gateway_request, genai_generation, genai_quality, genai_feedback
+#
+# Credenciais necessárias no Infisical (path: /salesforce_crm):
+#   SF_DC_CLIENT_ID      : Client ID da Connected App DataCloud_Integration
+#   SF_DC_CLIENT_SECRET  : Client Secret da Connected App
+#   SF_DC_USERNAME       : datacloud-integration@prefeitura.rio
+#   SF_DC_INSTANCE_URL   : https://prefeitura-rio.my.salesforce.com
+#   SF_DC_DATASPACE      : default
+#
+# OAuth token endpoint:
+#   POST https://prefeitura-rio.my.salesforce.com/services/oauth2/token
+#   grant_type=client_credentials&client_id=...&client_secret=...
+
+name: rj_crm__salesforce_agentforce_api
+prefect-version: 3.4.3
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__salesforce_agentforce_api-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__salesforce_agentforce_api/Dockerfile
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: '{{ build-image.image_name }}'
+      tag: '{{ build-image.tag }}'
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+deployments:
+
+  # -----------------------------------------------------------------------
+  # Deployment de staging (QA)
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-agentforce-api--staging
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      dataset_id: brutos_salesforce_staging
+      control_dataset: agentforce_control_staging
+      environment: staging
+    schedules:
+      # Roda de 15 em 15min, o dia inteiro. Validado em teste na janela
+      # 15h-15h45 (2026-08-20) — custo dentro do esperado, promovido para
+      # cadência contínua.
+      - cron: "*/15 * * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: agentforce-teste-15min
+
+  # -----------------------------------------------------------------------
+  # Deployment de producao
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-agentforce-api--prod
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
