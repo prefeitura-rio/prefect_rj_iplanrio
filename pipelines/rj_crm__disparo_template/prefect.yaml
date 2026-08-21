@@ -66,7 +66,7 @@ deployments:
           query_file: queries/cvl_disparo_em_massa.sql
           batch_size: 10000
           batch_sleep_minutes: 5
-      - cron: "0 11 * * *"
+      - cron: "0 11 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-smtr-multa-pf
@@ -1643,7 +1643,7 @@ deployments:
       infisical_secret_path: /crm_disparo_template
 
     schedules:
-      - cron: "0 11 * * *"
+      - cron: "0 11 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
         slug: daily-smtr-multa-pf
