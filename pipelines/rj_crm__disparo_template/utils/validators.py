@@ -288,6 +288,7 @@ def validate_campaign_name(
 
     if total == 0:
         message = f"""
+            <@821121576455634955> <@1458456241683824744> <@302518123066556426>
             ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm
             da tabela rj-crm-registry.brutos_salesforce.jornada.
             Verifique o nome da campanha e tente novamente. Encerrando o flow.

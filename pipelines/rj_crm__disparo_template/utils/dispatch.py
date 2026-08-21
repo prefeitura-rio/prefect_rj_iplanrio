@@ -857,6 +857,7 @@ def check_flow_status(
     if not is_ativo:
         log(f"\n⚠️  Flow is not active for {row.get('nome_campanha')} in environment={flow_environment}.")
         message = f"""
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
     💻 **Ambiente:** {flow_environment}
@@ -882,6 +883,7 @@ def check_flow_status(
     if expiration_date is not None and expiration_date < current_date:
         log(f"\n⚠️  Flow for campaign_name={campaign_name} in environment={flow_environment} has expired on {expiration_date}.")
         message = f"""
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
     💻 **Ambiente:** {flow_environment}
@@ -1103,6 +1105,7 @@ def monitor_dispatch_status(
     if not campaign_found:
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
         message = f"""
+<@821121576455634955> <@1458456241683824744> <@302518123066556426>
 🚨 **Nenhum webhook de sucesso recebido!**
 📋 **Campanha:** {campaign_name}
 ⏱️ **Prazo monitorado:** {max_wait_minutes} minutos após o envio via SFTP.
