@@ -42,6 +42,29 @@ deployments:
       filter_duplicated_cpfs: true
       infisical_secret_path: /crm_disparo_template
     schedules:
+      - cron: "0 11 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: daily-smtr-multa-pf
+        flow_run_name: smtr-multa-pf
+        parameters:
+          flow_environment: staging
+          campaign_name: smtrmultasdetransitov1
+          data_extension_filename: whatsapp_smtr_multas_transito
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo",
+            "id_autuacao"]
+          csv_separator: ";"
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          whitelist_percentage: 0
+          infisical_secret_path: "/crm_disparo_template"
+          whitelist_environment: "production"
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: true
+          query_file: queries/smtr_multa_pf.sql
 # Schedule para testar flow na salesforce
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
@@ -1596,6 +1619,29 @@ deployments:
       infisical_secret_path: /crm_disparo_template
 
     schedules:
+      - cron: "0 11 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: daily-smtr-multa-pf
+        flow_run_name: smtr-multa-pf
+        parameters:
+          flow_environment: production
+          campaign_name: smtrmultasdetransitov1
+          data_extension_filename: whatsapp_smtr_multas_transito
+          de_columns: ["nome_proprietario", "descricao_veiculo", "placa_veiculo",
+            "id_autuacao"]
+          csv_separator: ";"
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          dump_mode: append
+          test_mode: false
+          sleep_minutes: 5
+          whitelist_percentage: 0
+          infisical_secret_path: "/crm_disparo_template"
+          whitelist_environment: "production"
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: true
+          query_file: queries/smtr_multa_pf.sql
   # Daily schedule para flow cvl-pesquisa1746 (unifica com solução + sem resolução num único
   # CSV/Data Extension; STATUS_DEMANDA distingue as duas linhas e a Journey no Salesforce
   # decide qual HSM enviar por linha)

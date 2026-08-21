@@ -35,6 +35,24 @@ deployments:
         command: uv run --package rj_crm__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
+    schedules:
+      # Quarterly hour (900 seconds = 15 minutes) As execuções a cada 15 min passam a reescrever apenas os dois últimos dias e sem rodar os testes (passe quente)
+      # Schedule 5: run each 15 minutes updating only last 2 days
+      - interval: 900
+        anchor_date: "2024-03-17T09:15:00"
+        timezone: America/Sao_Paulo
+        slug: dbt_quarter_hourly_build
+        parameters:
+          command: "build"
+          select: >-
+            tag:quarter_hourly --vars '{passe: quente}'
+          send_discord_report: false
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
+          bigquery_project: "rj-crm-registry"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-crm-registry_dbt"
+            dev: "rj-crm-registry-dev_dbt"
   - name: rj-crm--run_dbt--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__run_dbt/flow.py:rj_crm__run_dbt
@@ -125,7 +143,8 @@ deployments:
         slug: dbt_quarter_hourly_build
         parameters:
           command: "build"
-          select: "tag:quarter_hourly --vars '{passe: quente}'"
+          select: >-
+            tag:quarter_hourly --vars '{passe: quente}'
           send_discord_report: true
           github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
           bigquery_project: "rj-crm-registry"

@@ -72,6 +72,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     campaign_name = flow_run.parameters.get("campaign_name", "N/A")
 
     message = f"""
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run failed in PRODUCTION! 🚨
     📋 **Campanha:** {campaign_name}
     ⚠️ **Mensagem:** {state.message}
