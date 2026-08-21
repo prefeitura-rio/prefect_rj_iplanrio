@@ -229,6 +229,7 @@ def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
 
     keep_cols = [
         "id_estacao",
+        "data_medicao",
         "temperatura",
         "umidade_ar",
         "sensacao_termica",
@@ -236,7 +237,6 @@ def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
         "temperatura_orvalho",
         "velocidade_vento",
         "direcao_vento",
-        "data_medicao",
     ]
 
     dfr = dfr.drop_duplicates(subset=["id_estacao", "data_medicao"], keep="first")
@@ -274,7 +274,7 @@ def save_dataframe_to_csv_partitions(
 
     dfr[partition_column] = pd.to_datetime(dfr[partition_column])
     dfr["ano_particao"] = dfr[partition_column].dt.strftime("%Y")
-    dfr["mes_particao"] = dfr[partition_column].dt.strftime("%m")
+    dfr["mes_particao"] = dfr[partition_column].dt.month.astype(str)
     dfr["data_particao"] = dfr[partition_column].dt.strftime("%Y-%m-%d")
 
     grouped = dfr.groupby(

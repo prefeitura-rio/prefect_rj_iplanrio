@@ -1,7 +1,5 @@
 """Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS.."""
 
-import os
-
 from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
@@ -28,6 +26,7 @@ def rj_cor__precipitacao_alertario_sftp(
     table_id_meteorological: str = 'meteorologia_alertario',
     dump_mode: str = "append",
     project_id: str = "rj-iplanrio",
+    max_date_bigquery: str | None = None
 ) -> None:
     """Coleta dados de precipitação do AlertaRio via arquivos XML em GCS.
 
@@ -48,8 +47,6 @@ def rj_cor__precipitacao_alertario_sftp(
 
     **Parâmetros:**
 
-    :param bucket_landing_zone: Nome do bucket GCS da landing zone
-        (padrão: rj-iplanrio-filemage.nimbus).
     :param dataset_id_pluviometric: ID do dataset BigQuery para dados
         pluviométricos (padrão: clima_pluviometro).
     :param table_id_pluviometric: ID da tabela pluviométrica
@@ -59,7 +56,12 @@ def rj_cor__precipitacao_alertario_sftp(
     :param table_id_meteorological: ID da tabela meteorológica
         (padrão: meteorologia_alertario).
     :param dump_mode: Modo de salvamento no BigQuery
-        (padrão: "append", alternativa: "overwrite")..
+        (padrão: "append", alternativa: "overwrite").
+    :param project_id: ID do projeto Google Cloud
+        (padrão: rj-iplanrio).
+    :param max_date_bigquery: Data máxima para filtro de arquivos no formato string.
+        Se None, consulta automaticamente a data máxima do BigQuery
+        (padrão: None).
 
     **Returns:**
         None
@@ -75,9 +77,12 @@ def rj_cor__precipitacao_alertario_sftp(
 
     # Step 1: Listar arquivos XML novos
     logger.info("📥 Listando arquivos XML na landing zone...")
-    bq = get_max_date_from_bigquery_task(
-        project_id=project_id
-    )
+    if max_date_bigquery is None:
+        bq = get_max_date_from_bigquery_task(
+            project_id=project_id
+        )
+    else:
+        bq = max_date_bigquery
 
     xml_files = get_bucket_files_with_datetime_filter_task(
         max_datetime_from_bq=bq,
