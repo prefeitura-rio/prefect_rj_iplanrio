@@ -27,6 +27,7 @@ members = [
     "rj-crm-get-history-data",
     "rj-crm-relatorio-cvl",
     "rj-crm-run-dbt",
+    "rj-crm-salesforce-agentforce-api",
     "rj-crm-salesforce-api",
     "rj-crm-webhook-wetalkie-channel-quality-update",
     "rj-crm-webhook-wetalkie-template-category-update",
@@ -3970,6 +3971,39 @@ requires-dist = [
     { name = "pip", specifier = ">=25.1.1" },
     { name = "prefect-dbt", specifier = ">=0.7.5" },
     { name = "prefect-rj-iplanrio", editable = "." },
+]
+
+[[package]]
+name = "rj-crm-salesforce-agentforce-api"
+version = "0.2.0"
+source = { virtual = "pipelines/rj_crm__salesforce_agentforce_api" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "pandas" },
+    { name = "pendulum" },
+    { name = "prefect" },
+    { name = "prefect-docker" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.11.0" },
+    { name = "google-cloud-storage", specifier = "==2.10.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
+    { name = "pendulum", specifier = "==3.0.0" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "python-dotenv", specifier = "==1.0.1" },
+    { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 
 [[package]]
