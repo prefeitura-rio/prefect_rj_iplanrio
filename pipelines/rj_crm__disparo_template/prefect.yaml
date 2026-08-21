@@ -1814,7 +1814,7 @@ deployments:
             \ CAST(numero_protocolo AS STRING) AS protocolo,\n        status_demanda_tratado
             AS STATUS_DEMANDA,\n        CAST(id_chamado AS STRING) AS cc_wt_id_chamado,\n\
             \        CAST(id_subtipo AS STRING) AS cc_wt_id_subtipo\n    FROM dados_finais;\n"
-      - cron: "30 9 * * *"
+      - cron: "30 9 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
         slug: daily-pgm-divida-ativa-prod
