@@ -1,4 +1,4 @@
-"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
+"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS.."""
 
 import os
 

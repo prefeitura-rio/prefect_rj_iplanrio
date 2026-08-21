@@ -125,14 +125,14 @@ def parse_xml_to_records(
                     "acumulado_chuva_10min": parse_float(chuvas.get("m10")),
                     "acumulado_chuva_15min": parse_float(chuvas.get("m15")),
                     "acumulado_chuva_30min": parse_float(chuvas.get("m30")),
-                    "acumulado_chuva_1hora": parse_float(chuvas.get("h01")),
-                    "acumulado_chuva_2hora": parse_float(chuvas.get("h02")),
-                    "acumulado_chuva_3hora": parse_float(chuvas.get("h03")),
-                    "acumulado_chuva_4horas": parse_float(chuvas.get("h04")),
-                    "acumulado_chuva_6horas": parse_float(chuvas.get("h06")),
-                    "acumulado_chuva_12horas": parse_float(chuvas.get("h12")),
-                    "acumulado_chuva_24horas": parse_float(chuvas.get("h24")),
-                    "acumulado_chuva_96horas": parse_float(chuvas.get("h96")),
+                    "acumulado_chuva_1h": parse_float(chuvas.get("h01")),
+                    "acumulado_chuva_2h": parse_float(chuvas.get("h02")),
+                    "acumulado_chuva_3h": parse_float(chuvas.get("h03")),
+                    "acumulado_chuva_4h": parse_float(chuvas.get("h04")),
+                    "acumulado_chuva_6h": parse_float(chuvas.get("h06")),
+                    "acumulado_chuva_12h": parse_float(chuvas.get("h12")),
+                    "acumulado_chuva_24h": parse_float(chuvas.get("h24")),
+                    "acumulado_chuva_96h": parse_float(chuvas.get("h96")),
                     "acumulado_chuva_mes": parse_float(chuvas.get("mes")),
                 }
                 pluviometric_records.append(record_pluv)
@@ -150,6 +150,7 @@ def parse_xml_to_records(
             if hora_medicao_met:
                 record_met = {
                     "id_estacao": estacao_id,
+                    "data_medicao": hora_medicao_met,
                     "temperatura": parse_float(met.get("temperatura")),
                     "umidade_ar": parse_float(met.get("umidade")),
                     "sensacao_termica": parse_float(met.get("sensacao")),
@@ -157,7 +158,7 @@ def parse_xml_to_records(
                     "temperatura_orvalho": parse_float(met.get("pontoOrvalho")),
                     "velocidade_vento": parse_float(met.get("velvento")),
                     "direcao_vento": parse_float(met.get("dirvento")),
-                    "data_medicao": hora_medicao_met,
+
                 }
                 meteorological_records.append(record_met)
 
