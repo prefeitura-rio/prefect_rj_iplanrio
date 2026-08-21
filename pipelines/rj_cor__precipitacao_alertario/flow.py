@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para coleta e processamento de dados de precipitação do AlertaRio - COR.
 
