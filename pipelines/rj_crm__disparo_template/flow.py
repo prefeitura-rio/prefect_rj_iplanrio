@@ -72,6 +72,7 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
     campaign_name = flow_run.parameters.get("campaign_name", "N/A")
 
     message = f"""
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run failed in PRODUCTION! 🚨
     📋 **Campanha:** {campaign_name}
     ⚠️ **Mensagem:** {state.message}
@@ -115,6 +116,8 @@ def rj_crm__disparo_template_sf(
     monitor_check_interval_minutes: int = 5,
     monitor_max_wait_minutes: int = 40,
     sftp_remote_path: str = "/Import/",
+    batch_size: int | None = None,
+    batch_sleep_minutes: int = 5,
     debug: bool = True,
 ):
     """
@@ -177,6 +180,8 @@ def rj_crm__disparo_template_sf(
         monitor_check_interval_minutes (int, optional): Intervalo entre checagens do monitoramento. Defaults to 5.
         monitor_max_wait_minutes (int, optional): Tempo máximo de monitoramento antes de alertar. Defaults to 40.
         sftp_remote_path (str, optional): Diretório remoto no servidor SFTP onde o CSV será depositado. Defaults to "/Import/".
+        batch_size (int, optional): Número de linhas por batch de disparo. None = sem batching (envia tudo de uma vez). Defaults to None.
+        batch_sleep_minutes (int, optional): Minutos de sleep entre batches (não aplicado após o último). Defaults to 5.
     """
 
     # force deploy
@@ -206,7 +211,8 @@ def rj_crm__disparo_template_sf(
         billing_project_id=billing_project_id,
         bucket_name=billing_project_id,
     )
-    if validated_campaign is None:
+    if validated_campaign is None and max_dispatch_retries > 0:
+        # Se o flow não encerra, o loop de retry roda normalmente. CPFs que "falharam" (por não aparecerem em status_disparo, já que o nome era inválido) serão reprocessados nas tentativas seguintes — potencialmente disparando para as mesmas pessoas 2~3 vezes no mesmo dia.
         print(f"Ending flow due to invalid campaign name: {campaign_name} does not exist in table rj-crm-registry.brutos_salesforce.jornada")
         return
 
@@ -259,19 +265,6 @@ def rj_crm__disparo_template_sf(
     print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
     print(f"[DEBUG] Sample data:\n{df.head(10).to_dict('records')}")
 
-    # Enriquece com dados de API externa (ex.: consulta_debitos), se configurado.
-    # Roda antes do dedup/retry loop pra que as colunas novas propaguem pra
-    # todas as tentativas sem precisar chamar a API de novo.
-    if enrich_with_api_name:
-        df = apply_df_enricher(
-            df=df,
-            enricher_name=enrich_with_api_name,
-            enricher_params=enrich_with_api_params,
-        )
-        if df.empty:
-            send_dispatch_no_destinations_found(campaign_name, test_mode)
-            return
-
     # Dedup por CPF — base para o loop de retentativas
     df = filter_duplicated(
         df=df,
@@ -296,6 +289,19 @@ def rj_crm__disparo_template_sf(
                 df = df[~df["telefone"].isin(failed_phones)]
             print(f"[DEBUG] Após filtrar quarentena:\n{df.head(10).to_dict('records')}") if debug else None
 
+        if df.empty:
+            send_dispatch_no_destinations_found(campaign_name, test_mode)
+            return
+
+    # Enriquece com dados de API externa (ex.: consulta_debitos), se configurado.
+    # Roda antes do retry loop pra que as colunas novas propaguem pra
+    # todas as tentativas sem precisar chamar a API de novo.
+    if enrich_with_api_name:
+        df = apply_df_enricher(
+            df=df,
+            enricher_name=enrich_with_api_name,
+            enricher_params=enrich_with_api_params,
+        )
         if df.empty:
             send_dispatch_no_destinations_found(campaign_name, test_mode)
             return
@@ -464,25 +470,63 @@ def rj_crm__disparo_template_sf(
 
         print(f"\nStarting SF dispatch for campaign_name={campaign_name}, attempt={i}")
         print(f"Sample data:\n{current_df.head(5).to_dict('records')}")
-        print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and campaign_name is correct!!")
-        time.sleep(sleep_minutes * 60)
 
-        # Salva CSV (restrito a telefone/SubscriberKey/de_columns) e registra data do disparo
-        csv_path, dispatch_date = save_csv_for_sftp(
-            df=current_df.rename(columns={"cpf": "SubscriberKey"}),
-            data_extension_filename=data_extension_filename or campaign_name,
-            de_columns=de_columns,
-            csv_separator=csv_separator,
-        )
+        # ------------------------------------------------------------------
+        # BATCH LOOP
+        # Fatia current_df em batches de batch_size linhas (ou 1 batch se
+        # batch_size for None). sleep_minutes é aplicado antes de cada batch;
+        # batch_sleep_minutes é aplicado entre batches (não após o último).
+        # monitor/materialize e log BQ acontecem uma única vez no final.
+        # ------------------------------------------------------------------
+        if batch_size:
+            batches = [current_df.iloc[j:j + batch_size] for j in range(0, len(current_df), batch_size)]
+        else:
+            batches = [current_df]
+        n_batches = len(batches)
+        print(f"📦 Total de batches para attempt {i}: {n_batches} (batch_size={batch_size})")
 
-        send_to_sftp(
-            csv_path=csv_path,
-            infisical_secret_path=infisical_secret_path,
-            sftp_remote_path=sftp_remote_path,
-        )
+        all_log_dfs = []
+        last_dispatch_date = None
 
-        print(f"CSV enviado para SFTP com {len(current_df)} destinatários na tentativa {i+1}.")
+        for b_idx, batch_df in enumerate(batches):
+            print(f"\n📦 Batch {b_idx + 1}/{n_batches} — {len(batch_df)} destinatários")
+            print(f"⚠️  Sleep {sleep_minutes} minuto(s) antes do batch. Verifique data e campaign_name!")
+            time.sleep(sleep_minutes * 60)
 
+            # Salva CSV (restrito a telefone/SubscriberKey/de_columns) e registra data do disparo
+            csv_path, dispatch_date = save_csv_for_sftp(
+                df=batch_df.rename(columns={"cpf": "SubscriberKey"}),
+                data_extension_filename=data_extension_filename or campaign_name,
+                de_columns=de_columns,
+                csv_separator=csv_separator,
+            )
+            last_dispatch_date = dispatch_date
+
+            send_to_sftp(
+                csv_path=csv_path,
+                infisical_secret_path=infisical_secret_path,
+                sftp_remote_path=sftp_remote_path,
+            )
+
+            print(f"CSV enviado para SFTP: batch {b_idx + 1}/{n_batches} com {len(batch_df)} destinatários (attempt {i + 1}).")
+
+            if not test_mode and not batch_df.empty:
+                all_log_dfs.append(
+                    create_log_df(
+                        df=batch_df.rename(columns={"cpf": "SubscriberKey"}),
+                        dispatch_date=dispatch_date,
+                        campaign_name=campaign_name,
+                    )
+                )
+
+            # Sleep entre batches (não após o último)
+            if b_idx < n_batches - 1:
+                print(f"⏳ Sleep {batch_sleep_minutes} minuto(s) antes do próximo batch...")
+                time.sleep(batch_sleep_minutes * 60)
+
+        # ------------------------------------------------------------------
+        # PÓS-BATCHES: monitor / materialize (uma única vez por attempt)
+        # ------------------------------------------------------------------
         if monitor_after_sftp:
             github_token = getenv_or_action("GITHUB_TOKEN")
             git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
@@ -490,7 +534,7 @@ def rj_crm__disparo_template_sf(
             monitor_dispatch_status(
                 campaign_name=campaign_name,
                 billing_project_id=billing_project_id,
-                dispatch_date=dispatch_date,
+                dispatch_date=last_dispatch_date,
                 git_repository_path=git_repository_path,
                 initial_wait_minutes=materialization_sleep_minutes if not test_mode else 2,
                 check_interval_minutes=monitor_check_interval_minutes if not test_mode else 2,
@@ -499,7 +543,7 @@ def rj_crm__disparo_template_sf(
 
         elif materialize_after_sftp:
             print(f"⏳ Aguardando {materialization_sleep_minutes if not test_mode else 5} minutos antes de materializar o modelo dbt int_crm_status_disparo...")
-            time.sleep(materialization_sleep_minutes * 60) if not test_mode else time.sleep(5*60)
+            time.sleep(materialization_sleep_minutes * 60) if not test_mode else time.sleep(5 * 60)
             github_token = getenv_or_action("GITHUB_TOKEN")
             git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
             execute_dbt_task(
@@ -508,26 +552,25 @@ def rj_crm__disparo_template_sf(
                 git_repository_path=git_repository_path,
             )
 
+        # ------------------------------------------------------------------
+        # PÓS-BATCHES: notificação e log BQ consolidados
+        # ------------------------------------------------------------------
         if not test_mode:
             send_dispatch_success_notification(
                 total_dispatches=len(current_df),
-                dispatch_date=dispatch_date,
+                dispatch_date=last_dispatch_date,
                 campaign_name=campaign_name,
-                total_batches=1,
+                total_batches=n_batches,
                 sample_destination=(current_df.iloc[0].to_dict() if not current_df.empty else None),
                 test_mode=test_mode,
                 attempt_number=i + 1,
                 total_attempt_number=max_dispatch_retries + 1,
             )
 
-            if not current_df.empty:
+            if all_log_dfs:
                 print(f"Sample dispatched destination: {current_df.iloc[:5].to_dict()}")
                 # Log para BQ: schema fixo com coluna `data` em JSON para camada bronze
-                log_df = create_log_df(
-                    df=current_df.rename(columns={"cpf": "SubscriberKey"}),
-                    dispatch_date=dispatch_date,
-                    campaign_name=campaign_name,
-                )
+                log_df = pd.concat(all_log_dfs, ignore_index=True)
 
                 partitions_path = create_date_partitions(
                     dataframe=log_df,
