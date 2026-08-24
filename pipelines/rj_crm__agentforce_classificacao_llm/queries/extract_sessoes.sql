@@ -29,6 +29,14 @@
 -- Adaptada de clustering/queries/query_concat_agentforce.sql (repo de análise): mesma
 -- lógica, trocando a data de início fixa por uma janela rolante e somando o pré-filtro 1
 -- ao anti-join que já existia.
+--
+-- sessoes_usuario agrupa só por id_sessao (com ANY_VALUE nas demais colunas), não por
+-- id_sessao + telefone + cpf + nome_cidadao + datas: essas colunas são documentadas como
+-- repetidas/estáveis por sessão na fonte, mas isso é suposição sobre o dado, não garantia
+-- do banco — se alguma divergir entre mensagens da mesma sessão, um GROUP BY com todas
+-- geraria 2 linhas pra 1 id_sessao, e isso propagaria (LLM chamada em dobro, MERGE final
+-- falhando com "must match at most one source row"). Agrupar só por id_sessao garante o
+-- grão certo estruturalmente, não por suposição.
 
 DECLARE data_inicio DATETIME DEFAULT DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {lookback_days} DAY);
 DECLARE data_fim DATETIME DEFAULT CURRENT_DATETIME('America/Sao_Paulo');
@@ -41,11 +49,11 @@ WITH
 sessoes_usuario AS (
     SELECT
         id_interacao AS id_sessao,
-        contato.contato_telefone AS telefone,
-        contato.cpf AS cpf,
-        contato.contato_nome AS nome_cidadao,
-        inicio_datahora AS sessao_inicio_datahora,
-        fim_datahora AS sessao_fim_datahora,
+        ANY_VALUE(contato.contato_telefone) AS telefone,
+        ANY_VALUE(contato.cpf) AS cpf,
+        ANY_VALUE(contato.contato_nome) AS nome_cidadao,
+        ANY_VALUE(inicio_datahora) AS sessao_inicio_datahora,
+        ANY_VALUE(fim_datahora) AS sessao_fim_datahora,
         COUNT(*) AS qtd_mensagens_usuario,
         STRING_AGG(
             mensagens[SAFE_OFFSET(0)].texto, ' ' ORDER BY mensagem_sequencia
@@ -57,7 +65,7 @@ sessoes_usuario AS (
         AND inicio_datahora BETWEEN data_inicio AND data_fim
         AND fim_datahora IS NOT NULL  -- só sessão encerrada
         AND classificacao_llm_datahora IS NULL  -- ainda não classificada (ver cabeçalho)
-    GROUP BY id_sessao, telefone, cpf, nome_cidadao, sessao_inicio_datahora, sessao_fim_datahora
+    GROUP BY id_sessao  -- grão da CTE: 1 linha por sessão, ver nota acima
 ),
 
 -- candidatas a HSM: disparos (fonte = 'HSM') na janela de até
