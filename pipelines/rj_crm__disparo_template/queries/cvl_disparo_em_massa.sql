@@ -13,7 +13,8 @@ with final as (
     ELSE 3
     END AS phone_priority,
     pf.telefone.principal.estrategia_envio,
-    pf.telefone.principal.qualidade
+    pf.telefone.principal.qualidade,
+    pf.telefone.principal.confianca
 FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
 WHERE pf.telefone.principal.qualidade = 'VALIDO'
     AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
@@ -33,7 +34,10 @@ select
         INITCAP(SPLIT(nome, ' ')[OFFSET(ARRAY_LENGTH(SPLIT(nome,' ')) - 1)])
     ) as nome,
   telefone,
-  "BR" as Locale
+  "BR" as Locale,
+  estrategia_envio,
+  qualidade,
+  confianca
 from final
 where telefone is not null
 order by phone_priority

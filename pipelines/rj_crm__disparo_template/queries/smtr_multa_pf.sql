@@ -17,4 +17,4 @@ WHERE
             AND envio_datahora >= DATE_SUB(current_date(), interval 100 day)
     )
     AND EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) NOT IN (1, 7)
-LIMIT 100
+LIMIT cast({limit_placeholder} as int64);
