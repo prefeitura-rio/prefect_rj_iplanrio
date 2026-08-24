@@ -21,7 +21,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 deployments:
 
-  - name: rj-crm--disparos-nao-efetuados--production
+  - name: rj-crm--disparos-nao-efetuados--prod
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparos_nao_efetuados/flow.py:rj_crm__disparos_nao_efetuados
     work_pool:
@@ -29,8 +29,8 @@ deployments:
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "uv run --package rj_crm__disparo_template -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets-production
+        command: "uv run --package rj_crm__disparos_nao_efetuados -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     schedules:
       - cron: "0 15 * * *"

@@ -17,4 +17,4 @@ COPY ./src ./src/
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
 COPY ./pipelines/rj_crm__disparos_nao_efetuados ./pipelines/rj_crm__disparos_nao_efetuados/
 
-RUN uv sync --package rj_crm__disparo_template
+RUN uv sync --package rj_crm__disparos_nao_efetuados
