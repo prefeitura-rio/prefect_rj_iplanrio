@@ -84,7 +84,7 @@ def rj_crm__disparos_nao_efetuados(
     # Notifica no canal de falhas
     hoje = datetime.now(timezone("America/Sao_Paulo")).strftime("%d/%m/%Y")
     linhas = "\n".join(
-        f"• `{row['campanha_nome']}` — {row['nome_campanha_limpo']}"
+        f"• `{row['nome_campanha']} - {row['nome_hsm']}`"
         for _, row in df.iterrows()
     )
     message = (
@@ -98,7 +98,7 @@ def rj_crm__disparos_nao_efetuados(
     # Salva resultado particionado no BigQuery para histórico
     partitions_path = create_date_partitions(
         dataframe=df,
-        partition_column=None,  # usa data_particao = hoje
+        partition_column="data_particao",
         file_format="csv",
         root_folder="./data_campanhas_sem_disparo/",
     )
