@@ -18,7 +18,7 @@ with
     campanhas_ativas as (
         select
             campanha_nome as nome_hsm,
-            nome_campanha_limpo,
+            nome_campanha_limpo  as nome_campanha,
             ambiente,
             id_wetalkie_hsm,
             ativo_indicador,
@@ -40,15 +40,15 @@ with
     -- 3. Campanhas ativas sem disparo hoje
     resultado as (
         select
-            ca.nome_campanha_limpo,
+            ca.nome_campanha,
             ca.nome_hsm,
         from campanhas_ativas ca
         left join disparos_hoje
             on ca.nome_hsm = disparos_hoje.nome_hsm
         -- Exclui campanhas que já tiveram ao menos um disparo hoje
-        where disparos_hoje.nome_hsm is null
+        where disparos_hoje.nome_hsm is null and ca.nome_campanha is not null
     )
 
-select distinct nome_campanha_limpo as nome_campanha, nome_hsm, current_date('America/Sao_Paulo') as data_particao
+select distinct nome_campanha, nome_hsm, current_date('America/Sao_Paulo') as data_particao
 from resultado
 order by nome_hsm
