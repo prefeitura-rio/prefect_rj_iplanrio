@@ -88,6 +88,7 @@ def rj_crm__disparos_nao_efetuados(
         for _, row in df.iterrows()
     )
     message = (
+        "<@821121576455634955> <@1458456241683824744> <@302518123066556426>\n"
         f"⚠️ **Campanhas ativas SEM disparo hoje ({hoje}):**\n\n"
         f"{linhas}\n\n"
         f"Total: **{len(df)}** campanha(s) sem disparo."
