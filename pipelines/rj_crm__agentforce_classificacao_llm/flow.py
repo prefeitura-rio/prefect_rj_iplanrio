@@ -7,7 +7,7 @@ pré-filtro barato por classificacao_llm_datahora na fonte, mais o anti-join de 
 contra a tabela destino como garantia final — ver queries/extract_sessoes.sql), classifica
 via Bifrost/Gemini (ou por regra, quando é resposta atrasada a botão), aplica o catálogo
 de regras de tema e grava em rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao
-via MERGE (idempotente, upsert por id_sessao, sem tabela de staging — ver tasks/load.py).
+via tmp + MERGE (idempotente, upsert por id_sessao).
 
 Portado de clustering/classificacao_inicial.ipynb — ver constants.py para os parâmetros
 e docstrings dos módulos em tasks/ para o detalhe de cada etapa.
@@ -49,6 +49,7 @@ def rj_crm__agentforce_classificacao_llm(
     project_id: str = C.BQ_PROJECT_ID.value,
     dest_dataset_id: str = C.DEST_DATASET_ID.value,
     dest_table_id: str = C.DEST_TABLE_ID.value,
+    dest_tmp_table_id: str = C.DEST_TMP_TABLE_ID.value,
     taxonomia_regras_table_id: str = C.TAXONOMIA_REGRAS_TABLE_ID.value,
     source_table: str = C.SOURCE_TABLE.value,
     hsm_catalog_table: str = C.HSM_CATALOG_TABLE.value,
@@ -81,6 +82,7 @@ def rj_crm__agentforce_classificacao_llm(
         project_id=project_id,
         dataset_id=dest_dataset_id,
         table_id=dest_table_id,
+        tmp_table_id=dest_tmp_table_id,
     )
 
     # 2. Extrai sessões pendentes (janela fixa + pré-filtro por classificacao_llm_datahora
@@ -139,12 +141,13 @@ def rj_crm__agentforce_classificacao_llm(
     )
     df_final = aplica_regras_tema(df_final=df_final, df_regras=df_regras_tema)
 
-    # 7. Carrega no BigQuery (MERGE por id_sessao, sem staging — ver tasks/load.py)
+    # 7. Carrega no BigQuery (tmp + MERGE por id_sessao)
     linhas_carregadas = carrega_classificacoes(
         df_final=df_final,
         project_id=project_id,
         dataset_id=dest_dataset_id,
         table_id=dest_table_id,
+        tmp_table_id=dest_tmp_table_id,
     )
 
     notify_resumo(
