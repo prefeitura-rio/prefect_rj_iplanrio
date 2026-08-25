@@ -23,11 +23,13 @@ with
             id_wetalkie_hsm,
             ativo_indicador,
             limite_disparo_data,
-            ingestao_datahora
+            ingestao_datahora,
+            case when dispara_durante_fds_indicador is false and EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) IN (1, 7) then false else true end as permitido_disparo_fds
         from `rj-crm-registry.brutos_salesforce.raw_disparos_ativos`
         where
             ativo_indicador is true
             and (id_wetalkie_hsm = 0 or id_wetalkie_hsm is null)
+            and (limite_disparo_data >= current_date("America/Sao_Paulo") or limite_disparo_data is null)
     ),
 
     -- 2. Disparos efetuados hoje (fuso horário de Brasília)
@@ -47,6 +49,7 @@ with
             on ca.nome_hsm = disparos_hoje.nome_hsm
         -- Exclui campanhas que já tiveram ao menos um disparo hoje
         where disparos_hoje.nome_hsm is null and ca.nome_campanha is not null
+        and permitido_disparo_fds
     )
 
 select distinct nome_campanha, nome_hsm, current_date('America/Sao_Paulo') as data_particao
