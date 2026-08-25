@@ -86,19 +86,19 @@ def rj_crm__disparo_template_sf(
     campaign_name: str | None = None,
     dataset_id: str | None = None,
     table_id: str | None = None,
-    dump_mode: str | None = None,
-    test_mode: bool | None = True,
+    dump_mode: str  = "append",
+    test_mode: bool | None = False,
     query: str | None = None,
     query_file: str | None = None,
     query_processor_name: str | None = None,
     query_replacements: dict | None = None,
     filter_dispatched_phones_or_cpfs: str | None = "cpf",
-    filter_duplicated_phones: bool = True,
+    filter_duplicated_phones: bool = False,
     filter_duplicated_cpfs: bool = True,
     filter_failed_phones: bool = False,
     enrich_with_api_name: str | None = None,
     enrich_with_api_params: dict | None = None,
-    dispatch_interval_days: int = 1,
+    dispatch_interval_days: int = 0,
     sleep_minutes: int | None = 5,
     materialization_sleep_minutes: int | None = 20,
     max_dispatch_retries: int = 0,
@@ -142,7 +142,7 @@ def rj_crm__disparo_template_sf(
         dataset_id (str, optional): BigQuery dataset ID for dispatch logs.
         table_id (str, optional): BigQuery table ID for dispatch logs.
         dump_mode (str, optional): BigQuery dump mode (e.g., "append").
-        test_mode (bool, optional): If True, runs in test mode. Defaults to True.
+        test_mode (bool, optional): If True, runs in test mode. Defaults to False.
         query (str, optional): SQL query to retrieve destinations.
         query_file (str, optional): Path (relative to this file) to a .sql file to use as the
             query instead of passing the raw SQL in `query`. Takes precedence over `query`.

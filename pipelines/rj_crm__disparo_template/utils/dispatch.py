@@ -484,13 +484,7 @@ def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days:
         SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_hsm as nome_campanha, data_particao
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-          AND (
-            envio_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-              OR
-            entrega_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-              OR
-            falha_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-            )
+          AND processado_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
     """
     log(f"Buscando disparos já realizados hoje e na campanha para evitar duplicidade:\n{query}")
     try:
@@ -1000,7 +994,7 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
         SELECT DISTINCT cpf
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE indicador_quarentena = TRUE
-        AND envio_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
+        AND processado_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
         AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
         {campaign_filter}
     """
@@ -1041,7 +1035,7 @@ def check_campaign_success(
         SELECT COUNT(*) AS total_sucesso
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
-          AND (envio_datahora >= '{dispatch_date}' or falha_datahora >= '{dispatch_date}')
+          AND processado_datahora >= '{dispatch_date}'
           AND data_particao >= DATE('{dispatch_date}')
     """
     try:
