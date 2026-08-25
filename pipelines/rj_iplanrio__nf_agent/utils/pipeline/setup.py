@@ -3,6 +3,7 @@
 import io
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
 
@@ -11,152 +12,155 @@ from ..extraction import NFExtractor
 from ..run_poc.sqlite_cache_manager import DatabaseManager
 from ..run_poc.gcs_downloader import GCSDownloader
 
+if TYPE_CHECKING:
+    from .processor import POCProcessor
+
 logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
 
 
-class POCProcessorSetupMixin:
-    """Constructor, lazy classifier/extractor, and PDF byte helpers."""
+def initialize(
+    processor: "POCProcessor",
+    db_manager: DatabaseManager,
+    gcs_downloader: GCSDownloader,
+    gemini_credentials_path: Path,
+    temp_dir: Path | None = None,
+    quiet: bool = False,
+    prompt_versions: dict[str, str] | None = None,
+    extraction_batch_size: int = 5,
+    min_match_score: int = 2,
+    output_mode: str = "excel",
+    match_requires_pdf_name: bool = False,
+) -> None:
+    """
+    Initialize ``processor``.
 
-    def __init__(
-        self,
-        db_manager: DatabaseManager,
-        gcs_downloader: GCSDownloader,
-        gemini_credentials_path: Path,
-        temp_dir: Path | None = None,
-        quiet: bool = False,
-        prompt_versions: dict[str, str] | None = None,
-        extraction_batch_size: int = 5,
-        min_match_score: int = 2,
-        output_mode: str = "excel",
-        match_requires_pdf_name: bool = False,
-    ):
-        """
-        Initialize processor.
+    :param processor: The ``POCProcessor`` instance being constructed.
+    :param db_manager: Database manager for caching.
+    :param gcs_downloader: GCS downloader for PDF retrieval.
+    :param gemini_credentials_path: Path to Gemini service account credentials.
+    :param temp_dir: Temporary directory for downloaded PDFs.
+    :param quiet: Suppress debug output.
+    :param prompt_versions: Dict with 'classification' and 'extraction' versions (e.g., {'classification': 'v1', 'extraction': 'v1'}).
+        If None, uses latest available versions.
+    :param extraction_batch_size: Maximum pages per extraction API call (default: 5).
+        Set to 1 to process one page at a time and inject
+        per-page classification hints into the prompt.
+    :param min_match_score: Minimum fields (CNPJ + número + data) that must match for a
+        declaration to be considered found (2 = legacy 2/3 fallback,
+        3 = strict perfect match only). Default: 2.
+    :param output_mode: Output format for process_database results.
+        "excel" (default) saves an .xlsx file.
+        "json"  saves a per-page JSON file (no BQ/GCS writes).
+    :param match_requires_pdf_name: Controls the scope of declaration matching in JSON
+        output mode. When True (legacy behaviour), each page's
+        match_id_documento only considers declarations whose pdf_name
+        matches the current PDF. When False (default), all declarations
+        in the input are considered regardless of which PDF they point
+        to — useful for cross-PDF analysis in BigQuery.
+    """
+    processor.db_manager = db_manager
+    processor.gcs_downloader = gcs_downloader
+    processor.gemini_credentials_path = gemini_credentials_path
+    processor.temp_dir = Path(temp_dir) if temp_dir else Path("run_poc/temp")
+    processor.temp_dir.mkdir(parents=True, exist_ok=True)
+    processor.quiet = quiet
 
-        :param db_manager: Database manager for caching.
-        :param gcs_downloader: GCS downloader for PDF retrieval.
-        :param gemini_credentials_path: Path to Gemini service account credentials.
-        :param temp_dir: Temporary directory for downloaded PDFs.
-        :param quiet: Suppress debug output.
-        :param prompt_versions: Dict with 'classification' and 'extraction' versions (e.g., {'classification': 'v1', 'extraction': 'v1'}).
-            If None, uses latest available versions.
-        :param extraction_batch_size: Maximum pages per extraction API call (default: 5).
-            Set to 1 to process one page at a time and inject
-            per-page classification hints into the prompt.
-        :param min_match_score: Minimum fields (CNPJ + número + data) that must match for a
-            declaration to be considered found (2 = legacy 2/3 fallback,
-            3 = strict perfect match only). Default: 2.
-        :param output_mode: Output format for process_database results.
-            "excel" (default) saves an .xlsx file.
-            "json"  saves a per-page JSON file (no BQ/GCS writes).
-        :param match_requires_pdf_name: Controls the scope of declaration matching in JSON
-            output mode. When True (legacy behaviour), each page's
-            match_id_documento only considers declarations whose pdf_name
-            matches the current PDF. When False (default), all declarations
-            in the input are considered regardless of which PDF they point
-            to — useful for cross-PDF analysis in BigQuery.
-        """
-        self.db_manager = db_manager
-        self.gcs_downloader = gcs_downloader
-        self.gemini_credentials_path = gemini_credentials_path
-        self.temp_dir = Path(temp_dir) if temp_dir else Path("run_poc/temp")
-        self.temp_dir.mkdir(parents=True, exist_ok=True)
-        self.quiet = quiet
+    # Load prompts from specified versions
+    from ..core.prompts import list_available_versions, load_prompt_version
 
-        # Load prompts from specified versions
-        from ..core.prompts import list_available_versions, load_prompt_version
+    if prompt_versions is None:
+        # Use latest available versions
+        classification_versions = list_available_versions("classification")
+        extraction_versions = list_available_versions("extraction")
+        prompt_versions = {
+            "classification": classification_versions[-1] if classification_versions else "v1",
+            "extraction": extraction_versions[-1] if extraction_versions else "v1",
+        }
 
-        if prompt_versions is None:
-            # Use latest available versions
-            classification_versions = list_available_versions("classification")
-            extraction_versions = list_available_versions("extraction")
-            prompt_versions = {
-                "classification": classification_versions[-1] if classification_versions else "v1",
-                "extraction": extraction_versions[-1] if extraction_versions else "v1",
-            }
+    processor.prompt_versions = prompt_versions
+    processor.extraction_batch_size = extraction_batch_size
+    processor.min_match_score = min_match_score
+    processor.output_mode = output_mode
+    processor.match_requires_pdf_name = match_requires_pdf_name
 
-        self.prompt_versions = prompt_versions
-        self.extraction_batch_size = extraction_batch_size
-        self.min_match_score = min_match_score
-        self.output_mode = output_mode
-        self.match_requires_pdf_name = match_requires_pdf_name
+    # Load the actual prompt content
+    processor.classification_prompt = load_prompt_version("classification", prompt_versions["classification"])
+    processor.extraction_prompt = load_prompt_version("extraction", prompt_versions["extraction"])
 
-        # Load the actual prompt content
-        self.classification_prompt = load_prompt_version("classification", prompt_versions["classification"])
-        self.extraction_prompt = load_prompt_version("extraction", prompt_versions["extraction"])
+    # Configure logger level based on quiet flag
+    if quiet:
+        logger.setLevel(logging.WARNING)  # Only warnings and errors
+    else:
+        logger.setLevel(logging.INFO)  # Info, warnings, and errors
 
-        # Configure logger level based on quiet flag
-        if quiet:
-            logger.setLevel(logging.WARNING)  # Only warnings and errors
-        else:
-            logger.setLevel(logging.INFO)  # Info, warnings, and errors
+    # Initialize core modules (lazy loaded)
+    processor._classifier = None
+    processor._extractor = None
 
-        # Initialize core modules (lazy loaded)
-        self._classifier = None
-        self._extractor = None
 
-    @property
-    def classifier(self) -> GeminiClassifier:
-        """Lazy load classifier."""
-        if self._classifier is None:
-            self._classifier = GeminiClassifier(
-                service_account_path=str(self.gemini_credentials_path) if self.gemini_credentials_path else None,
-                save_api_responses=False,  # We manage caching ourselves
-                max_workers=10,
-                classification_prompt=self.classification_prompt,
-            )
-        return self._classifier
+def get_classifier(processor: "POCProcessor") -> GeminiClassifier:
+    """Lazy load ``processor``'s classifier."""
+    if processor._classifier is None:
+        processor._classifier = GeminiClassifier(
+            service_account_path=str(processor.gemini_credentials_path) if processor.gemini_credentials_path else None,
+            save_api_responses=False,  # We manage caching ourselves
+            max_workers=10,
+            classification_prompt=processor.classification_prompt,
+        )
+    return processor._classifier
 
-    @property
-    def extractor(self) -> NFExtractor:
-        """Lazy load extractor."""
-        if self._extractor is None:
-            self._extractor = NFExtractor(
-                service_account_file=str(self.gemini_credentials_path) if self.gemini_credentials_path else None,
-                extraction_prompt=self.extraction_prompt,
-                batch_size=self.extraction_batch_size,
-            )
-        return self._extractor
 
-    def _pdf_page_to_bytes(self, pdf_path: Path, page_number: int) -> bytes:
-        """
-        Convert a single PDF page to PNG image bytes.
+def get_extractor(processor: "POCProcessor") -> NFExtractor:
+    """Lazy load ``processor``'s extractor."""
+    if processor._extractor is None:
+        processor._extractor = NFExtractor(
+            service_account_file=str(processor.gemini_credentials_path) if processor.gemini_credentials_path else None,
+            extraction_prompt=processor.extraction_prompt,
+            batch_size=processor.extraction_batch_size,
+        )
+    return processor._extractor
 
-        :param pdf_path: Path to PDF file.
-        :param page_number: Page number (1-indexed).
-        :returns: PNG image bytes.
-        """
-        doc = fitz.open(str(pdf_path))
-        page = doc[page_number - 1]  # Convert to 0-indexed
 
-        # Render page to image (200 DPI)
-        # TODO: Since we aren't using it to send to LLM, and solely for deduplication, consider lowering DPI to save time/CPU
-        pix = page.get_pixmap(dpi=200)
-        img_bytes = pix.pil_tobytes(format="PNG")
+def pdf_page_to_bytes(pdf_path: Path, page_number: int) -> bytes:
+    """
+    Convert a single PDF page to PNG image bytes.
 
-        doc.close()
-        return img_bytes
+    :param pdf_path: Path to PDF file.
+    :param page_number: Page number (1-indexed).
+    :returns: PNG image bytes.
+    """
+    doc = fitz.open(str(pdf_path))
+    page = doc[page_number - 1]  # Convert to 0-indexed
 
-    def _create_filtered_pdf_bytes(self, pdf_path: Path, pages: list[int]) -> bytes:
-        """
-        Create filtered PDF with only specified pages.
+    # Render page to image (200 DPI)
+    # TODO: Since we aren't using it to send to LLM, and solely for deduplication, consider lowering DPI to save time/CPU
+    pix = page.get_pixmap(dpi=200)
+    img_bytes = pix.pil_tobytes(format="PNG")
 
-        :param pdf_path: Path to source PDF.
-        :param pages: Page numbers to include (1-indexed).
-        :returns: Filtered PDF as bytes.
-        """
-        from pypdf import PdfReader, PdfWriter
+    doc.close()
+    return img_bytes
 
-        reader = PdfReader(str(pdf_path))
-        writer = PdfWriter()
 
-        # Add specified pages
-        for page_num in pages:
-            writer.add_page(reader.pages[page_num - 1])
+def create_filtered_pdf_bytes(pdf_path: Path, pages: list[int]) -> bytes:
+    """
+    Create filtered PDF with only specified pages.
 
-        # Write to bytes
-        pdf_bytes = io.BytesIO()
-        writer.write(pdf_bytes)
-        pdf_bytes.seek(0)
+    :param pdf_path: Path to source PDF.
+    :param pages: Page numbers to include (1-indexed).
+    :returns: Filtered PDF as bytes.
+    """
+    from pypdf import PdfReader, PdfWriter
 
-        return pdf_bytes.read()
+    reader = PdfReader(str(pdf_path))
+    writer = PdfWriter()
+
+    # Add specified pages
+    for page_num in pages:
+        writer.add_page(reader.pages[page_num - 1])
+
+    # Write to bytes
+    pdf_bytes = io.BytesIO()
+    writer.write(pdf_bytes)
+    pdf_bytes.seek(0)
+
+    return pdf_bytes.read()
