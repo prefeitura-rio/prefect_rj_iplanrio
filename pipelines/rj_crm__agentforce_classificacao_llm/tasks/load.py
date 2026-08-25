@@ -2,15 +2,20 @@
 """
 Criação e carga da tabela de classificação no BigQuery.
 
-Mesmo padrão de pipelines/rj_crm__salesforce_agentforce_api/tasks/{ensure_tables,load_bigquery}.py
-(tabela particionada por dia + clusterizada, staging + MERGE), adaptado pra 1 tabela só e
-pra MERGE por id_sessao (sem filtro de partição — aqui reclassificar uma sessão pode
-mudar sua data_particao, então não dá pra usar partição no ON como a pipeline irmã faz).
+Diferente de pipelines/rj_crm__salesforce_agentforce_api/tasks/{ensure_tables,load_bigquery}.py
+(tabela particionada por dia + clusterizada, staging + MERGE): aqui não tem tabela de
+staging. O MERGE usa `USING (SELECT * FROM UNNEST(@linhas))` — o "source" é montado
+inline via parâmetro STRUCT array, não uma tabela física. Dois motivos: (1) a service
+account desta pipeline tem permissão de escrever dado, não de criar tabela
+(bigquery.tables.create) — staging exigiria DDL toda vez que precisasse recriar; (2)
+sem filtro de partição no ON (reclassificar uma sessão pode mudar sua data_particao,
+então não dá pra usar partição no MERGE como a pipeline irmã faz).
 """
 
 from __future__ import annotations
 
 import pandas as pd
+from google.api_core.exceptions import Forbidden, NotFound
 from google.cloud import bigquery
 from prefect import task
 
@@ -77,7 +82,23 @@ SCHEMA: list[bigquery.SchemaField] = [
 ]
 
 _COLUNAS = [f.name for f in SCHEMA]
+_COLUNAS_ARRAY = {"tema_nome", "causa_nome"}
 _PRIMARY_KEY = "id_sessao"
+
+# Tipo de parâmetro (nome padrão SQL) por coluna — não reaproveita os enums do SCHEMA
+# acima porque a nomenclatura diverge em alguns tipos: SchemaField usa "BOOLEAN"
+# (schema físico), ScalarQueryParameter espera "BOOL" (SQL padrão); idem INTEGER x INT64.
+_TIPO_PARAM = {
+    "id_sessao": "STRING", "telefone": "STRING", "cpf": "STRING", "nome_cidadao": "STRING",
+    "sessao_inicio_datahora": "TIMESTAMP", "sessao_fim_datahora": "TIMESTAMP",
+    "jornada_nome": "STRING", "id_jornada": "STRING", "id_disparo_hsm": "STRING",
+    "hsm_envio_datahora": "TIMESTAMP", "tipo_prompt": "STRING", "classificacao": "STRING",
+    "conteudo_relevante": "BOOL", "resumo": "STRING", "secretaria_relacionada": "STRING",
+    "sentimento": "STRING", "motivo": "STRING", "justificativa": "STRING",
+    "resposta_llm_bruta": "STRING", "modelo": "STRING", "prompt_enviado": "STRING",
+    "tokens_entrada": "INT64", "tokens_saida": "INT64", "tokens_total": "INT64",
+    "prompt_versao": "STRING", "classificado_em": "TIMESTAMP", "data_particao": "DATE",
+}
 
 
 def _full_table_id(project_id: str, dataset_id: str, table_id: str) -> str:
@@ -85,12 +106,28 @@ def _full_table_id(project_id: str, dataset_id: str, table_id: str) -> str:
 
 
 @task(log_prints=True)
-def ensure_destino_table(project_id: str, dataset_id: str, table_id: str, staging_table_id: str) -> None:
+def ensure_destino_table(project_id: str, dataset_id: str, table_id: str) -> None:
     """Cria a tabela destino (particionada por data_particao, clusterizada por id_sessao)
-    e a tabela staging se ainda não existirem. Idempotente — seguro rodar toda execução."""
-    client = bigquery.Client(project=project_id)
-    dataset_ref = bigquery.DatasetReference(project_id, dataset_id)
+    se ainda não existir. Idempotente — seguro rodar toda execução.
 
+    get_table primeiro, só tenta CREATE se realmente não existir: get_table pede uma
+    permissão bem mais comum (bigquery.tables.get) que create_table
+    (bigquery.tables.create) — sem esse check, client.create_table(..., exists_ok=True)
+    tentaria criar TODA execução mesmo pra tabela que já existe (exists_ok só engole o
+    erro "já existe" depois de tentar, não evita a tentativa) e quebraria com 403 se a
+    service account não tiver permissão de DDL nesse dataset — mesmo a tabela já
+    existindo e não precisando ser tocada."""
+    client = bigquery.Client(project=project_id)
+    full_id = _full_table_id(project_id, dataset_id, table_id)
+
+    try:
+        client.get_table(full_id)
+        print(f"[LOAD] Tabela '{table_id}' já existe.")
+        return
+    except NotFound:
+        pass
+
+    dataset_ref = bigquery.DatasetReference(project_id, dataset_id)
     destino = bigquery.Table(dataset_ref.table(table_id), schema=SCHEMA)
     destino.time_partitioning = bigquery.TimePartitioning(
         type_=bigquery.TimePartitioningType.DAY, field="data_particao"
@@ -101,13 +138,46 @@ def ensure_destino_table(project_id: str, dataset_id: str, table_id: str, stagin
         "id_sessao, sobrescrita via MERGE se a sessão for reclassificada. Alimentada pela "
         "pipeline rj_crm__agentforce_classificacao_llm, diariamente às 15h."
     )
-    client.create_table(destino, exists_ok=True)
+    try:
+        client.create_table(destino, exists_ok=True)
+    except Forbidden as e:
+        raise PermissionError(
+            f"'{table_id}' não existe em '{dataset_id}' e esta service account não tem "
+            f"permissão bigquery.tables.create pra criá-la. Rode o CREATE TABLE manualmente "
+            f"(DDL já enviado) com uma credencial com BigQuery Data Editor+ nesse dataset."
+        ) from e
+    print(f"[LOAD] Tabela '{table_id}' criada.")
 
-    staging = bigquery.Table(dataset_ref.table(staging_table_id), schema=SCHEMA)
-    staging.description = "Staging da pipeline rj_crm__agentforce_classificacao_llm — truncada a cada execução."
-    client.create_table(staging, exists_ok=True)
 
-    print(f"[LOAD] Tabelas OK: '{table_id}' (destino) e '{staging_table_id}' (staging).")
+def _valor_seguro(v):
+    """None/NaN/NaT/pd.NA -> None; escalar numpy/pandas -> tipo Python nativo. O cliente
+    de ScalarQueryParameter do BigQuery não aceita numpy.bool_/numpy.int64/pd.Timestamp
+    com NaT/pd.NA diretamente."""
+    if isinstance(v, list):  # tema_nome/causa_nome — tratados à parte, nunca None
+        return v
+    if v is None:
+        return None
+    try:
+        if pd.isna(v):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(v, pd.Timestamp):
+        return v.to_pydatetime()
+    if hasattr(v, "item"):  # escalar numpy (bool_, int64, float64...)
+        return v.item()
+    return v
+
+
+def _linha_para_struct(registro: dict) -> bigquery.StructQueryParameter:
+    campos = []
+    for col in _COLUNAS:
+        valor = _valor_seguro(registro.get(col))
+        if col in _COLUNAS_ARRAY:
+            campos.append(bigquery.ArrayQueryParameter(col, "STRING", valor or []))
+        else:
+            campos.append(bigquery.ScalarQueryParameter(col, _TIPO_PARAM[col], valor))
+    return bigquery.StructQueryParameter(None, *campos)
 
 
 @task(log_prints=True, retries=3, retry_delay_seconds=[30, 60, 120])
@@ -116,40 +186,38 @@ def carrega_classificacoes(
     project_id: str,
     dataset_id: str,
     table_id: str,
-    staging_table_id: str,
+    tamanho_lote: int = 200,
 ) -> int:
-    """Carrega df_final na staging table e faz MERGE (upsert por id_sessao) pro destino.
-    Se df_final estiver vazio, não faz nada (não trunca a staging à toa)."""
+    """MERGE direto na tabela destino via `USING (SELECT * FROM UNNEST(@linhas))` — sem
+    tabela de staging (ver docstring do módulo). Processa em lotes de tamanho_lote linhas
+    por chamada de MERGE, pra não estourar limite de tamanho de requisição do BigQuery com
+    resposta_llm_bruta/prompt_enviado (texto grande, pode somar MB em lotes maiores — ex.
+    primeira carga, até 14 dias de backlog). Cada lote é seu próprio commit: uma falha no
+    meio não perde os lotes já persistidos (só refaz o resto no próximo run, idempotente).
+
+    ATENÇÃO pra quem construir a pipeline de tema/motivo (etapas 2/3): este MERGE
+    sobrescreve TODAS as colunas com o valor do lote, inclusive as desta pipeline
+    (classificacao, resumo etc.). Uma pipeline de etapa 2/3 que faça MERGE nesta mesma
+    tabela só pode reaproveitar esse padrão se o lote dela trouxer a linha inteira
+    (reextraída), e não só as colunas de tema/motivo — senão apaga a classificação da
+    etapa 1 com NULL. Rever esta função (UPDATE parcial, coluna a coluna) antes de
+    escrever a pipeline de tema/motivo."""
     if df_final.empty:
         print("[LOAD] Nada a carregar — nenhuma sessão classificada com sucesso nesta execução.")
         return 0
 
     client = bigquery.Client(project=project_id)
-    staging_full = _full_table_id(project_id, dataset_id, staging_table_id)
     destino_full = _full_table_id(project_id, dataset_id, table_id)
 
     df_carga = df_final.reindex(columns=_COLUNAS)
+    registros = df_carga.to_dict("records")
 
-    job_config = bigquery.LoadJobConfig(write_disposition=bigquery.WriteDisposition.WRITE_APPEND, schema=SCHEMA)
-    job = client.load_table_from_dataframe(df_carga, staging_full, job_config=job_config)
-    job.result()
-    if job.errors:
-        raise RuntimeError(f"[LOAD] Erro ao carregar staging: {job.errors}")
-
-    # ATENÇÃO pra quem construir a pipeline de tema/motivo (etapas 2/3): este MERGE
-    # sobrescreve TODAS as colunas com o valor da staging, inclusive as desta
-    # pipeline (classificacao, resumo etc.). Uma pipeline de etapa 2/3 que faça MERGE
-    # nesta mesma tabela só pode reaproveitar este set_clause se a staging dela trouxer
-    # a linha inteira (reextraída), e não só as colunas de tema/motivo — senão apaga a
-    # classificação da etapa 1 com NULL. Rever esta função (UPDATE parcial, coluna a
-    # coluna) antes de escrever a pipeline de tema/motivo.
     set_clause = ", ".join(f"t.{c} = s.{c}" for c in _COLUNAS if c != _PRIMARY_KEY)
     insert_cols = ", ".join(_COLUNAS)
     insert_vals = ", ".join(f"s.{c}" for c in _COLUNAS)
-
     merge_sql = f"""
         MERGE `{destino_full}` AS t
-        USING `{staging_full}` AS s
+        USING (SELECT * FROM UNNEST(@linhas)) AS s
         ON t.{_PRIMARY_KEY} = s.{_PRIMARY_KEY}
         WHEN MATCHED THEN
             UPDATE SET {set_clause}
@@ -157,11 +225,19 @@ def carrega_classificacoes(
             INSERT ({insert_cols})
             VALUES ({insert_vals})
     """
-    merge_job = client.query(merge_sql)
-    merge_job.result()
-    linhas_afetadas = merge_job.num_dml_affected_rows or 0
 
-    client.query(f"TRUNCATE TABLE `{staging_full}`").result()
+    linhas_afetadas = 0
+    total_lotes = (len(registros) + tamanho_lote - 1) // tamanho_lote
+    for i, inicio in enumerate(range(0, len(registros), tamanho_lote), start=1):
+        lote = registros[inicio : inicio + tamanho_lote]
+        linhas_param = bigquery.ArrayQueryParameter(
+            "linhas", "STRUCT", [_linha_para_struct(r) for r in lote]
+        )
+        job_config = bigquery.QueryJobConfig(query_parameters=[linhas_param])
+        merge_job = client.query(merge_sql, job_config=job_config)
+        merge_job.result()
+        linhas_afetadas += merge_job.num_dml_affected_rows or 0
+        print(f"[LOAD] Lote {i}/{total_lotes}: {len(lote)} linha(s) processada(s).")
 
-    print(f"[LOAD] MERGE concluído: {linhas_afetadas} linha(s) afetada(s) em '{table_id}'. Staging limpa.")
+    print(f"[LOAD] MERGE concluído: {linhas_afetadas} linha(s) afetada(s) em '{table_id}'.")
     return linhas_afetadas

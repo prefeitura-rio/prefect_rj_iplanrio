@@ -30,9 +30,6 @@ class ClassificacaoConstants(Enum):
     # a pedido — mantém a classificação junto da fonte que ela deriva.
     DEST_DATASET_ID = "brutos_salesforce"
     DEST_TABLE_ID = "ai_agent_session_classificacao"
-    # Tabela staging intermediária (append + MERGE + truncate a cada execução)
-    DEST_STAGING_TABLE_ID = "ai_agent_session_classificacao_staging"
-
     # Catálogo de regras (funções Python) de tema/motivo — gerenciado por fora desta
     # pipeline: promovido manualmente do repo clustering depois de validado (ver
     # tasks/taxonomia.py). Mesmo dataset da tabela destino.
