@@ -15,9 +15,6 @@ Public API:
 
 # Import from validator module
 # Import from utils module
-from .core import ComplianceValidatorCoreMixin
-from .matching import ComplianceValidatorMatchingMixin
-from .report import ComplianceValidatorReportMixin
 from .utils import (
     # Constants
     VALUE_TOLERANCE,
@@ -36,7 +33,6 @@ from .utils import (
     parse_date_flexible,
     values_match,
 )
-from .validate import ComplianceValidatorValidateMixin
 from .validator import ComplianceValidator, compute_classification, validate_against_expected
 
 # Define public API
@@ -45,11 +41,6 @@ __all__ = [
     "ComplianceValidator",
     "compute_classification",
     "validate_against_expected",
-    # Extractor split mixins
-    "ComplianceValidatorCoreMixin",
-    "ComplianceValidatorMatchingMixin",
-    "ComplianceValidatorReportMixin",
-    "ComplianceValidatorValidateMixin",
     # Constants
     "VALUE_TOLERANCE",
     # Normalization
