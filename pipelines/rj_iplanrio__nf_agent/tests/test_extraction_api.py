@@ -1,8 +1,8 @@
-"""Regression/orchestration tests for ``NFExtractorApiMixin`` (extract_from_pdf / _extract_from_pdf_bytes).
+"""Regression/orchestration tests for extraction/api.py (extract_from_pdf / _extract_from_pdf_bytes).
 
 Construction strategy: ``NFExtractor`` requires real Gemini auth in its
-``__init__`` (``NFExtractorAuthMixin.__init__`` / ``_configure_genai``), and
-its ``model`` property lazily calls that auth path. We bypass ``__init__``
+``__init__`` (``auth.initialize`` / ``auth.configure_genai``), and its
+``model`` property lazily calls that auth path. We bypass ``__init__``
 entirely via ``NFExtractor.__new__(NFExtractor)`` and set ``self._model``
 directly to a controllable fake — the ``model`` property just returns
 ``self._model`` when it's not None, so this is a clean substitution with no
@@ -21,7 +21,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pipelines.rj_iplanrio__nf_agent.utils.extraction.auth import NFExtractorAuthMixin
+from pipelines.rj_iplanrio__nf_agent.utils.extraction import auth
 from pipelines.rj_iplanrio__nf_agent.utils.extraction.extractor import NFExtractor
 
 
@@ -187,19 +187,21 @@ class TestSuspiciousDecimalFallback:
 
         fallback_calls = []
 
-        def fake_init(self, model_name=None, service_account_file=None, api_key=None, extraction_prompt=None, batch_size=5):
+        def fake_init(
+            extractor, model_name=None, service_account_file=None, api_key=None, extraction_prompt=None, batch_size=5
+        ):
             fallback_calls.append(model_name)
-            self.model_name = model_name
-            self.extraction_prompt = extraction_prompt
-            self.batch_size = batch_size
-            self._service_account_file = service_account_file
-            self._api_key = api_key
-            self._model = MagicMock()
-            self._model.generate_content.return_value = FakeGeminiResponse(
+            extractor.model_name = model_name
+            extractor.extraction_prompt = extraction_prompt
+            extractor.batch_size = batch_size
+            extractor._service_account_file = service_account_file
+            extractor._api_key = api_key
+            extractor._model = MagicMock()
+            extractor._model.generate_content.return_value = FakeGeminiResponse(
                 nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12}])
             )
 
-        monkeypatch.setattr(NFExtractorAuthMixin, "__init__", fake_init)
+        monkeypatch.setattr(auth, "initialize", fake_init)
 
         result = extractor.extract_from_pdf(pdf_path=Path("suspicious.pdf"), pages=[1])
 
@@ -214,7 +216,7 @@ class TestSuspiciousDecimalFallback:
         )
 
         init_spy = MagicMock()
-        monkeypatch.setattr(NFExtractorAuthMixin, "__init__", init_spy)
+        monkeypatch.setattr(auth, "initialize", init_spy)
 
         result = extractor.extract_from_pdf(pdf_path=Path("suspicious.pdf"), pages=[1])
 
