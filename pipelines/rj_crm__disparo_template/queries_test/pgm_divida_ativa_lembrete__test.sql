@@ -144,7 +144,7 @@ INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
 (
     id_jornada, nome_jornada, chave_atividade, nome_atividade, id_ativo,
     nome_hsm, id_hsm, id_waba, categoria_hsm, canal, texto_hsm, rodape_hsm,
-    contato_telefone, cpf, envio_datahora, entrega_datahora, leitura_datahora,
+    contato_telefone, cpf, envioo_datahora, entrega_datahora, leitura_datahora,
     falha_datahora, descricao_falha, indicador_falha, indicador_quarentena,
     status_disparo, id_status_disparo, data_particao
 )
@@ -188,7 +188,7 @@ with
         -- quem recebeu os disparos de whatsapp sem erros (via Salesforce/SFTP)
         select distinct cpf,
         contato_telefone as celular_disparo,
-        DATE(envio_datahora) as data_disparo,
+        DATE(processado_datahora) as data_disparo,
         nome_hsm as id_hsm
         from `rj-crm-registry.brutos_salesforce.status_disparo`
         where nome_hsm in (

@@ -52,7 +52,7 @@ WITH segmentacao_original AS (
     FROM `rj-crm-registry.brutos_salesforce.status_disparo`
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY contato_telefone
-        ORDER BY envio_datahora DESC
+        ORDER BY processado_datahora DESC
     ) = 1
     ),
 
@@ -96,7 +96,7 @@ WITH segmentacao_original AS (
         left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
                 on sd.cpf = filtra_falhas.cpf
                 and sd.nome_hsm = '{nome_hsm_placeholder}'
-                and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY) -- pessoa só recebe essa mensagem cerca de uma vez por ano podendo pegar mais de uma gravidez
+                and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY) -- pessoa só recebe essa mensagem cerca de uma vez por ano podendo pegar mais de uma gravidez
                 and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
                 and sd.indicador_quarentena = FALSE
         left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
