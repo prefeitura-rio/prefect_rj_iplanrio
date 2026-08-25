@@ -363,8 +363,8 @@ def process_database(
             FROM api_outputs o
             JOIN api_inputs i ON i.id = o.input_id
             WHERE i.input_type = 'classification_page'
-              AND (i.pdf_name IN ({_placeholders_stem})
-                   OR i.pdf_name IN ({_placeholders_ext}))
+              AND (i.item_key IN ({_placeholders_stem})
+                   OR i.item_key IN ({_placeholders_ext}))
               AND o.elapsed_seconds > 0
             """,
             _pdf_stems + _pdf_with_ext,
@@ -378,8 +378,8 @@ def process_database(
             FROM api_outputs o
             JOIN api_inputs i ON i.id = o.input_id
             WHERE i.input_type = 'extraction_filtered_pdf'
-              AND (i.pdf_name IN ({_placeholders_stem})
-                   OR i.pdf_name IN ({_placeholders_ext}))
+              AND (i.item_key IN ({_placeholders_stem})
+                   OR i.item_key IN ({_placeholders_ext}))
               AND o.elapsed_seconds > 0
             """,
             _pdf_stems + _pdf_with_ext,

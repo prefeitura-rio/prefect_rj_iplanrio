@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 from google.cloud import bigquery
-from google.oauth2 import service_account
+from iplanrio_agent_toolkit.bigquery import BigQueryClient
 
 from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
@@ -27,6 +27,35 @@ def resolve_dataset(dataset_id: str | None) -> str:
     if not effective:
         raise ValueError("dataset_id must be provided or BIGQUERY_DATASET_ID env var must be set")
     return effective
+
+
+def _get_client(service_account_path: Path | None, dataset_id: str | None) -> BigQueryClient:
+    """
+    Build a ``BigQueryClient`` for this module's read-only queries.
+
+    Every function below used to repeat the same six lines (resolve
+    credentials path, check it exists, load service account credentials,
+    construct a raw ``bigquery.Client``) — consolidated here on top of the
+    toolkit's generic client, keeping the existing fail-fast behavior when
+    an explicit credentials file doesn't exist (the toolkit client itself
+    falls back to ADC silently, which isn't what these callers expect).
+
+    :param service_account_path: Path to BigQuery service account JSON, or
+        None to use ``BIGQUERY_SERVICE_ACCOUNT_PATH`` from config.
+    :param dataset_id: Dataset ID, or None to resolve from ``BIGQUERY_DATASET_ID``.
+    :raises FileNotFoundError: If the resolved credentials file doesn't exist.
+    """
+    if service_account_path is None:
+        service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
+
+    if not service_account_path.exists():
+        raise FileNotFoundError(
+            f"BigQuery service account file not found: {service_account_path}\n"
+            f"Please place your BigQuery service account JSON at:\n"
+            f"  {service_account_path}"
+        )
+
+    return BigQueryClient(credentials_path=service_account_path, dataset_id=resolve_dataset(dataset_id))
 
 
 def load_expected_nfs_from_bigquery(
@@ -65,25 +94,7 @@ def load_expected_nfs_from_bigquery(
         # Load all expected NFs
         all_nfs = load_expected_nfs_from_bigquery()
     """
-    # Use default path if not provided
-    if service_account_path is None:
-        service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
-
-    # Check if credentials file exists
-    if not service_account_path.exists():
-        raise FileNotFoundError(
-            f"BigQuery service account file not found: {service_account_path}\n"
-            f"Please place your BigQuery service account JSON at:\n"
-            f"  {service_account_path}"
-        )
-
-    # Load credentials
-    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
-
-    # Create BigQuery client
-    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
-    project = client.project
-    ds = resolve_dataset(dataset_id)
+    bq = _get_client(service_account_path, dataset_id)
 
     # Optional WHERE clause fragment; the .sql skeleton stays static SQL.
     pdf_filter = ""
@@ -94,13 +105,13 @@ def load_expected_nfs_from_bigquery(
     query = load_query(
         __file__,
         "expected_nfs_with_opening_date",
-        project=project,
-        dataset=ds,
+        project=bq.project_id,
+        dataset=bq.dataset_id,
         pdf_filter=pdf_filter,
     )
 
     # Execute query
-    query_job = client.query(query)
+    query_job = bq.client.query(query)
     results = query_job.result()
 
     # Convert to expected NF format
@@ -144,21 +155,11 @@ def get_pdf_list_from_bigquery(
         pdf_list = get_pdf_list_from_bigquery()
         print(f"Found {len(pdf_list)} PDFs in BigQuery")
     """
-    if service_account_path is None:
-        service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
+    bq = _get_client(service_account_path, dataset_id)
 
-    if not service_account_path.exists():
-        raise FileNotFoundError(f"BigQuery service account file not found: {service_account_path}")
+    query = load_query(__file__, "distinct_pdf_names", project=bq.project_id, dataset=bq.dataset_id)
 
-    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
-
-    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
-    project = client.project
-    ds = resolve_dataset(dataset_id)
-
-    query = load_query(__file__, "distinct_pdf_names", project=project, dataset=ds)
-
-    query_job = client.query(query)
+    query_job = bq.client.query(query)
     results = query_job.result()
 
     return [row.pdf_name for row in results]
@@ -196,27 +197,16 @@ def get_company_start_date(
     except (ValueError, TypeError):
         return None
 
-    # Use default credentials if not provided
-    if service_account_path is None:
-        service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
-
-    if not service_account_path.exists():
-        raise FileNotFoundError(f"BigQuery credentials not found: {service_account_path}")
-
-    # Create BigQuery client
-    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
-    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
-    project = client.project
-    ds = resolve_dataset(dataset_id)
+    bq = _get_client(service_account_path, dataset_id)
 
     # Query table (cnpj column is INT64)
-    query = load_query(__file__, "company_start_date", project=project, dataset=ds)
+    query = load_query(__file__, "company_start_date", project=bq.project_id, dataset=bq.dataset_id)
 
     job_config = bigquery.QueryJobConfig(
         query_parameters=[bigquery.ScalarQueryParameter("cnpj_param", "INT64", cnpj_int)]
     )
 
-    query_job = client.query(query, job_config=job_config)
+    query_job = bq.client.query(query, job_config=job_config)
     results = query_job.result()
 
     for row in results:
@@ -264,21 +254,12 @@ def get_deduplication_lookup_from_bigquery(
     # Import here to avoid circular dependency
     from ..compliance import normalize_cnpj, normalize_number
 
-    if service_account_path is None:
-        service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
-
-    if not service_account_path.exists():
-        raise FileNotFoundError(f"BigQuery credentials not found: {service_account_path}")
-
-    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
-    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
-    project = client.project
-    ds = resolve_dataset(dataset_id)
+    bq = _get_client(service_account_path, dataset_id)
 
     # Query: Get all unique (cnpj, num_documento, org, unit, descricao_limpa, data_envio, id) combinations
-    query = load_query(__file__, "deduplication_lookup", project=project, dataset=ds)
+    query = load_query(__file__, "deduplication_lookup", project=bq.project_id, dataset=bq.dataset_id)
 
-    query_job = client.query(query)
+    query_job = bq.client.query(query)
     results = query_job.result()
 
     # Build lookup: (cnpj_norm, numero_norm, cod_org, cod_unit) -> [{'pdf_name', 'data_envio', 'id_documento'}]
@@ -342,17 +323,7 @@ def validate_payment_totals(
         overpaid = [nf for nf in issues if nf['status'] == 'OVERPAID']
         print(f"Found {len(overpaid)} overpayment issues")
     """
-    if service_account_path is None:
-        service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
-
-    if not service_account_path.exists():
-        raise FileNotFoundError(f"BigQuery service account file not found: {service_account_path}")
-
-    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
-
-    client = bigquery.Client(credentials=credentials, project=credentials.project_id)
-    project = client.project
-    ds = resolve_dataset(dataset_id)
+    bq = _get_client(service_account_path, dataset_id)
 
     pdf_filter = ""
     if pdf_names:
@@ -362,12 +333,12 @@ def validate_payment_totals(
     query = load_query(
         __file__,
         "payment_totals_validation",
-        project=project,
-        dataset=ds,
+        project=bq.project_id,
+        dataset=bq.dataset_id,
         pdf_filter=pdf_filter,
     )
 
-    query_job = client.query(query)
+    query_job = bq.client.query(query)
     results = query_job.result()
 
     validation_results = []

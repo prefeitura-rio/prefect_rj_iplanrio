@@ -358,7 +358,7 @@ def check_extraction_cache(processor: "POCProcessor", pdf_path: Path) -> tuple[d
         """
         SELECT id, metadata
         FROM api_inputs
-        WHERE pdf_name = ? AND input_type = 'extraction_filtered_pdf'
+        WHERE item_key = ? AND input_type = 'extraction_filtered_pdf'
         LIMIT 1
         """,
         (pdf_name,),
@@ -399,10 +399,10 @@ def check_classification_cache(processor: "POCProcessor", pdf_path: Path, total_
 
     cursor = processor.db_manager.conn.execute(
         """
-        SELECT COUNT(DISTINCT i.page_number)
+        SELECT COUNT(DISTINCT i.sub_key)
         FROM api_inputs i
         JOIN api_outputs o ON i.id = o.input_id
-        WHERE i.pdf_name = ?
+        WHERE i.item_key = ?
         AND i.input_type = 'classification_page'
         """,
         (pdf_name,),
@@ -430,18 +430,23 @@ def load_all_cached_classifications(processor: "POCProcessor", pdf_path: Path) -
 
     cursor = processor.db_manager.conn.execute(
         """
-        SELECT i.page_number, o.response_text
+        SELECT i.sub_key, o.response_text
         FROM api_inputs i
         JOIN api_outputs o ON i.id = o.input_id
-        WHERE i.pdf_name = ?
+        WHERE i.item_key = ?
         AND i.input_type = 'classification_page'
-        ORDER BY i.page_number
+        ORDER BY i.sub_key
         """,
         (pdf_name,),
     )
 
     for row in cursor:
+        # sub_key has TEXT affinity in the toolkit's generic cache schema, so
+        # integer page numbers round-trip through SQLite as strings — cast
+        # back, since every other page_categories/page_justifications
+        # consumer indexes by int page number.
         page_num, response_text = row
+        page_num = int(page_num)
         try:
             response = json.loads(response_text)
             # Handle both Portuguese 'categoria' and English 'category'
@@ -486,8 +491,8 @@ def load_cached_page_categories(processor: "POCProcessor", pdf_path: Path, total
             SELECT o.response_text
             FROM api_inputs i
             JOIN api_outputs o ON i.id = o.input_id
-            WHERE i.pdf_name = ?
-            AND i.page_number = ?
+            WHERE i.item_key = ?
+            AND i.sub_key = ?
             AND i.input_type = 'classification_page'
             LIMIT 1
             """,
