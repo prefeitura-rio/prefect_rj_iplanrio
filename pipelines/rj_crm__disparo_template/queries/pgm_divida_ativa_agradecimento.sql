@@ -8,7 +8,7 @@ disparos_divida_ativa as (
     -- quem recebeu os disparos de whatsapp sem erros (via Salesforce/SFTP)
     select distinct cpf,
     contato_telefone as celular_disparo,
-    DATE(envio_datahora) as data_disparo,
+    DATE(processado_datahora) as data_disparo,
     nome_hsm as id_hsm,
     falha_datahora as failedDate
     from `rj-crm-registry.brutos_salesforce.status_disparo`
