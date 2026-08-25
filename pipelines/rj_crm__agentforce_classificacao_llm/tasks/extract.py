@@ -51,7 +51,13 @@ def _extrai_titulos_botoes(botoes_json) -> list[str]:
 
 def _escolhe_hsm(grupo: pd.DataFrame) -> pd.Series:
     """Escolhe 1 HSM por jornada quando há mais de uma candidata: prioriza a que não é
-    anacrônica (não veio depois de uma mudança de versão do template) e desempata por nome."""
+    anacrônica (não veio depois de uma mudança de versão do template) e desempata por nome.
+
+    Chamada via groupby("jornada_nome").apply() — no pandas >= 2.2 (obrigatório a partir do
+    3.0, ver caller) a coluna de agrupamento não é mais passada pra cá (include_groups=False
+    virou o único comportamento possível), então `grupo` aqui dentro NÃO tem jornada_nome.
+    Isso é ok: o pandas ainda usa o valor do grupo como índice do resultado, e o caller
+    recupera a coluna de lá com reset_index()."""
     nao_anacronico = grupo[grupo["template_pos_versao_indicador"] == False]  # noqa: E712
     candidatos = nao_anacronico if len(nao_anacronico) > 0 else grupo
     return candidatos.sort_values("atividade_nome").iloc[0]
@@ -151,7 +157,11 @@ def enriquece_com_catalogo_hsm(
 
     hsm_lookup = (
         hsm_por_jornada.groupby("jornada_nome", group_keys=False)
-        .apply(_escolhe_hsm)[["jornada_nome", "hsm_nome", "hsm_texto", "hsm_categoria", "hsm_botoes_json"]]
+        .apply(_escolhe_hsm)
+        # jornada_nome não vem mais como coluna (ver docstring de _escolhe_hsm), mas o
+        # pandas ainda usa o valor do grupo como índice do resultado — reset_index() sem
+        # drop transforma esse índice de volta em coluna antes de selecionar.
+        .reset_index()[["jornada_nome", "hsm_nome", "hsm_texto", "hsm_categoria", "hsm_botoes_json"]]
         .reset_index(drop=True)
     )
 
