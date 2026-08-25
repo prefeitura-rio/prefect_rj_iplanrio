@@ -166,7 +166,7 @@ WITH tabela_global AS (
                     WHEN 'ATENDIDA' THEN '{nome_hsm_com_solucao_placeholder}'
                     WHEN 'SEM_RESOLUCAO' THEN '{nome_hsm_sem_resolucao_placeholder}'
                 END
-            and DATE(sd.envio_datahora) = CURRENT_DATE("America/Sao_Paulo")
+            and DATE(sd.processado_datahora) = CURRENT_DATE("America/Sao_Paulo")
             and sd.data_particao = CURRENT_DATE("America/Sao_Paulo")
             and sd.indicador_quarentena = FALSE
     WHERE fl.flattarget is null

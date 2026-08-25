@@ -61,7 +61,7 @@ INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
     rodape_hsm,
     contato_telefone,
     cpf,
-    envio_datahora,
+    processado_datahora,
     entrega_datahora,
     leitura_datahora,
     falha_datahora,
@@ -159,7 +159,7 @@ status_final_telefone AS (
     FROM `rj-crm-registry.brutos_salesforce.status_disparo`
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY contato_telefone
-        ORDER BY envio_datahora DESC
+        ORDER BY processado_datahora DESC
     ) = 1
 ),
 filtra_falhas AS (
@@ -202,7 +202,7 @@ filtra_recebeu_primeira_hsm as (
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
             on sd.cpf = filtra_falhas.cpf
             and sd.nome_hsm = 'smspuerperasdisparo25'
-            and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)
+            and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)
             and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 51 DAY)
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             on fl.targetexternalid = filtra_falhas.cpf
@@ -220,7 +220,7 @@ filtra_disparados as (
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
             on sd.cpf = filtra_recebeu_primeira_hsm.cpf
             and sd.nome_hsm = 'smspuerperasdisparo152'
-            and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 300 DAY)
+            and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 300 DAY)
             and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 300 DAY)
             and sd.indicador_quarentena = FALSE
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
