@@ -77,18 +77,24 @@ def rj_crm__disparos_nao_efetuados(
         bucket_name=billing_project_id,
     )
 
+    hoje = datetime.now(timezone("America/Sao_Paulo")).strftime("%d/%m/%Y")
+
     if df is None or df.empty:
-        print("Todas as campanhas ativas tiveram disparo hoje. Nenhuma notificação necessária.")
+        print("Todas as campanhas ativas tiveram disparo hoje.")
+        webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
+        send_discord_notification(
+            webhook_url,
+            f"<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n✅ **Todas as campanhas ativas tiveram disparo hoje ({hoje}).**",
+        )
         return
 
     # Notifica no canal de falhas
-    hoje = datetime.now(timezone("America/Sao_Paulo")).strftime("%d/%m/%Y")
     linhas = "\n".join(
         f"• `{row['nome_campanha']} - {row['nome_hsm']}`"
         for _, row in df.iterrows()
     )
     message = (
-        "<@821121576455634955> <@1458456241683824744> <@302518123066556426>\n"
+        "<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n"
         f"⚠️ **Campanhas ativas SEM disparo hoje ({hoje}):**\n\n"
         f"{linhas}\n\n"
         f"Total: **{len(df)}** campanha(s) sem disparo."

@@ -104,7 +104,7 @@ ELSE
         LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
             ON sd.cpf = joined_status_cpi.cpf
             AND sd.nome_hsm = '{nome_hsm_placeholder}'
-            AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
+            AND sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
             AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
             AND sd.indicador_quarentena = FALSE
         LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
