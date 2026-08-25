@@ -174,8 +174,7 @@ def send_dispatch_result_notification(
             SELECT *
             FROM `rj-crm-registry.brutos_salesforce.status_disparo`
             WHERE nome_hsm = '{campaign_name}'
-                AND (envio_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 90 MINUTE)
-                or falha_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 90 MINUTE))
+                AND processado_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 90 MINUTE)
         ),
         total AS (
             SELECT COUNT(DISTINCT cpf) AS total_disparos
