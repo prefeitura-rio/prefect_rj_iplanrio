@@ -14,6 +14,7 @@ import os
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -28,6 +29,41 @@ logger = logging.getLogger(__name__)
 from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 
 from .gcs_downloader import GCSDownloader
+
+
+@dataclass(frozen=True)
+class NfProcessingFlowConfig:
+    """Parameters for :func:`nf_processing_flow`. See that function's docstring for field docs."""
+
+    csv_path: str | None = None
+    bq_input_table: str | None = None
+    batch_size: int = 1000
+    output_path: str | None = None
+    output_table: str | None = None
+    gcs_output_base_path: str | None = None
+    bq_status_table: str | None = None
+    db_path: str = "cache.db"
+    gcs_credentials: str | None = None
+    gemini_credentials: str | None = None
+    gcs_bucket: str | None = None
+    limit: int | None = None
+    temp_dir: str = "temp"
+    mode: str = "full"
+    workers: int = 200
+    keep_pdfs: bool = False
+    quiet: bool = False
+    experiment_id: str | None = None
+    prompt_versions: dict | None = None
+    filters: dict | None = None
+    requests_per_minute: int = 600
+    max_concurrent: int = 50
+    max_retries: int = 3
+    extraction_batch_size: int = 5
+    min_match_score: int = 2
+    output_mode: str = "excel"
+    match_requires_pdf_name: bool = False
+    max_pdfs: int | None = None
+    force_reprocess: bool = False
 
 
 def prepare_output_for_bq(df: pd.DataFrame, timestamp: datetime) -> pd.DataFrame:
@@ -89,42 +125,12 @@ def prepare_output_for_bq(df: pd.DataFrame, timestamp: datetime) -> pd.DataFrame
     return df
 
 
-def nf_processing_flow(
-    csv_path: str | None = None,
-    bq_input_table: str | None = None,
-    batch_size: int = 1000,
-    output_path: str | None = None,
-    output_table: str | None = None,
-    gcs_output_base_path: str | None = None,
-    bq_status_table: str | None = None,
-    db_path: str = "cache.db",
-    gcs_credentials: str | None = None,
-    gemini_credentials: str | None = None,
-    gcs_bucket: str | None = None,
-    limit: int | None = None,
-    temp_dir: str = "temp",
-    mode: str = "full",
-    workers: int = 200,
-    keep_pdfs: bool = False,
-    quiet: bool = False,
-    experiment_id: str | None = None,
-    prompt_versions: dict | None = None,
-    filters: dict | None = None,
-    requests_per_minute: int = 600,
-    max_concurrent: int = 50,
-    max_retries: int = 3,
-    extraction_batch_size: int = 5,
-    min_match_score: int = 2,
-    output_mode: str = "excel",
-    match_requires_pdf_name: bool = False,
-    max_pdfs: int | None = None,
-    force_reprocess: bool = False,
-) -> dict | None:
+def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     """
     Process the NF database with GCS integration and caching.
 
-    Called directly by ``prefect_rj_iplanrio/flow.py``; also usable as a
-    standalone Python function.
+    Called directly by ``prefect_rj_iplanrio/flow.py`` (via ``utils.run_nf_pipeline``),
+    which builds a :class:`NfProcessingFlowConfig` from ``BatchRunParams``.
 
     Input sources (one required):
         csv_path: Path to database CSV. Supports:
@@ -175,7 +181,41 @@ def nf_processing_flow(
                   using bq_input_table. Overrides the implicit "process all" behaviour
                   of the BQ batch mode. Useful for testing (e.g. max_pdfs=10).
                   When None (default), all PDFs in the batch are processed.
+
+    (Each field above is a ``NfProcessingFlowConfig`` attribute, e.g. ``config.csv_path``.)
     """
+    # Unpack config into locals with the same names the body below already used —
+    # keeps this function's internals untouched; only the external signature changed.
+    csv_path = config.csv_path
+    bq_input_table = config.bq_input_table
+    batch_size = config.batch_size
+    output_path = config.output_path
+    output_table = config.output_table
+    gcs_output_base_path = config.gcs_output_base_path
+    bq_status_table = config.bq_status_table
+    db_path = config.db_path
+    gcs_credentials = config.gcs_credentials
+    gemini_credentials = config.gemini_credentials
+    gcs_bucket = config.gcs_bucket
+    limit = config.limit
+    temp_dir = config.temp_dir
+    mode = config.mode
+    workers = config.workers
+    keep_pdfs = config.keep_pdfs
+    quiet = config.quiet
+    experiment_id = config.experiment_id
+    prompt_versions = config.prompt_versions
+    filters = config.filters
+    requests_per_minute = config.requests_per_minute
+    max_concurrent = config.max_concurrent
+    max_retries = config.max_retries
+    extraction_batch_size = config.extraction_batch_size
+    min_match_score = config.min_match_score
+    output_mode = config.output_mode
+    match_requires_pdf_name = config.match_requires_pdf_name
+    max_pdfs = config.max_pdfs
+    force_reprocess = config.force_reprocess
+
     if csv_path is None and bq_input_table is None:
         raise ValueError("Provide either csv_path or bq_input_table.")
     # Environment variable fallbacks

@@ -391,24 +391,23 @@ def run_nf_pipeline(params: BatchRunParams, force_reprocess: bool) -> dict[str, 
     :param force_reprocess: Whether to reprocess documents already marked as done.
     :returns: Timing/count stats emitted by the pipeline run, or ``{}`` if none.
     """
+    from .run_poc.run_pipeline import NfProcessingFlowConfig  # noqa: PLC0415
     from .run_poc.run_pipeline import nf_processing_flow as _run_pipeline  # noqa: PLC0415
 
-    return (
-        _run_pipeline(
-            bq_input_table=params.bq_input_table,
-            bq_status_table=params.bq_status_table,
-            batch_size=params.batch_size,
-            gcs_output_base_path=params.gcs_output_base_path,
-            db_path=params.db_path,
-            gcs_bucket=params.gcs_bucket,
-            workers=params.workers,
-            mode=params.mode,
-            requests_per_minute=params.requests_per_minute,
-            max_concurrent=params.max_concurrent,
-            max_retries=params.max_retries,
-            match_requires_pdf_name=params.match_requires_pdf_name,
-            max_pdfs=params.max_pdfs,
-            force_reprocess=force_reprocess,
-        )
-        or {}
+    config = NfProcessingFlowConfig(
+        bq_input_table=params.bq_input_table,
+        bq_status_table=params.bq_status_table,
+        batch_size=params.batch_size,
+        gcs_output_base_path=params.gcs_output_base_path,
+        db_path=params.db_path,
+        gcs_bucket=params.gcs_bucket,
+        workers=params.workers,
+        mode=params.mode,
+        requests_per_minute=params.requests_per_minute,
+        max_concurrent=params.max_concurrent,
+        max_retries=params.max_retries,
+        match_requires_pdf_name=params.match_requires_pdf_name,
+        max_pdfs=params.max_pdfs,
+        force_reprocess=force_reprocess,
     )
+    return _run_pipeline(config) or {}
