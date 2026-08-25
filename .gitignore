@@ -44,3 +44,8 @@ pipelines/**/.python-version
 
 # Egg-info dirs generated inside pipeline packages
 pipelines/**/*.egg-info/
+
+# Allow the rj_iplanrio__nf_agent pytest suite (PR 1 regression-test baseline)
+# despite the blanket "**/**/test*" ignore rule at the top of this file.
+!pipelines/rj_iplanrio__nf_agent/tests/
+!pipelines/rj_iplanrio__nf_agent/tests/**

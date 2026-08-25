@@ -31,6 +31,19 @@ dependencies = [
     # bigquery, matching, rules, credentials) são consumidos.
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
 "iplanrio-agent-toolkit" = { git = "ssh://git@ssh.github.com:443/prefeitura-rio/iplanrio-agent-toolkit.git" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+# Repo root (two levels up from this pyproject.toml) so `pipelines.rj_iplanrio__nf_agent.*`
+# imports resolve the same way they do for the rest of the codebase/CI, without needing
+# `__init__.py` files or a src-layout change just for tests.
+pythonpath = ["../.."]

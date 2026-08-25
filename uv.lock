@@ -4496,6 +4496,11 @@ dependencies = [
     { name = "tqdm" },
 ]
 
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "db-dtypes", specifier = ">=1.0.0" },
@@ -4514,10 +4519,12 @@ requires-dist = [
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "pymupdf", specifier = ">=1.23.0" },
     { name = "pypdf" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "tqdm", specifier = ">=4.66.0" },
 ]
+provides-extras = ["dev"]
 
 [[package]]
 name = "rj-iplanrio-run-dbt"
