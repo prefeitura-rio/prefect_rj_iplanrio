@@ -32,6 +32,8 @@ from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
+
 # Secretaria usada no catálogo (e no CSV de origem, clustering/data/categorias_taxonomia.csv)
 # pra sessão relevante sem secretaria identificada pela LLM — secretaria_relacionada vem
 # NULL da classificação inicial nesse caso, não essa string; o mapeamento é feito aqui.
@@ -169,7 +171,7 @@ def carrega_catalogo_regras(project_id: str, dataset_id: str, table_id: str, eta
     catálogo, só filtrando etapa diferente quando existir). Tabela é gerenciada por fora
     desta pipeline (promovida manualmente do clustering, ver docstring do módulo) — se
     ainda não existir, trata como "sem regras hoje" em vez de falhar o flow inteiro."""
-    client = bigquery.Client(project=project_id)
+    client = get_bq_client(project_id)
     full_id = f"{project_id}.{dataset_id}.{table_id}"
     query = f"""
         SELECT secretaria, categoria_pai, nome_funcao, nome, descricao, regra_python

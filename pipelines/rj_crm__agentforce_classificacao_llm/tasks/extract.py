@@ -17,8 +17,9 @@ import unicodedata
 from pathlib import Path
 
 import pandas as pd
-from google.cloud import bigquery
 from prefect import task
+
+from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
 
 _QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
 
@@ -97,7 +98,7 @@ def extrai_sessoes_nao_classificadas(
         destino_full_table_id=destino_full_table_id,
     )
 
-    client = bigquery.Client(project=project_id)
+    client = get_bq_client(project_id)
     df = client.query(query).to_dataframe()
     print(f"[EXTRACT] {len(df)} sessão(ões) pendente(s) de classificação (janela: {lookback_days}d).")
     return df
@@ -135,7 +136,7 @@ def enriquece_com_catalogo_hsm(
     sql_template = (_QUERIES_DIR / "hsm_por_jornada.sql").read_text()
     query = sql_template.format(hsm_catalog_table=hsm_catalog_table, jornadas=_sql_quote_list(jornadas_distintas))
 
-    client = bigquery.Client(project=project_id)
+    client = get_bq_client(project_id)
     df_hsm = client.query(query).to_dataframe()
 
     hsm_por_jornada = df_hsm[df_hsm["hsm_texto"].notna()].drop_duplicates(

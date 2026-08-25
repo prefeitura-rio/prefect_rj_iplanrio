@@ -17,6 +17,8 @@ from google.api_core.exceptions import Forbidden, NotFound
 from google.cloud import bigquery
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
+
 _TIMESTAMP = bigquery.enums.SqlTypeNames.TIMESTAMP
 _STRING = bigquery.enums.SqlTypeNames.STRING
 _DATE = bigquery.enums.SqlTypeNames.DATE
@@ -133,7 +135,7 @@ def ensure_destino_table(project_id: str, dataset_id: str, table_id: str, tmp_ta
     """Confirma que a tabela destino (particionada por data_particao, clusterizada por
     id_sessao) e a tmp existem — cria só se realmente faltar (ver _ensure_uma_tabela).
     Idempotente, seguro rodar toda execução."""
-    client = bigquery.Client(project=project_id)
+    client = get_bq_client(project_id)
     dataset_ref = bigquery.DatasetReference(project_id, dataset_id)
 
     _ensure_uma_tabela(
@@ -176,7 +178,7 @@ def carrega_classificacoes(
         print("[LOAD] Nada a carregar — nenhuma sessão classificada com sucesso nesta execução.")
         return 0
 
-    client = bigquery.Client(project=project_id)
+    client = get_bq_client(project_id)
     tmp_full = _full_table_id(project_id, dataset_id, tmp_table_id)
     destino_full = _full_table_id(project_id, dataset_id, table_id)
 
