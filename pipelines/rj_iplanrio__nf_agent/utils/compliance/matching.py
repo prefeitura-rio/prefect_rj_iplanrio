@@ -46,8 +46,8 @@ class ComplianceValidatorMatchingMixin:
             return False
 
         # Build 4-field dedup key: exact combination must repeat
-        cod_org_norm = cod_organizacao if cod_organizacao else ''
-        cod_unit_norm = cod_unidade if cod_unidade else ''
+        cod_org_norm = cod_organizacao if cod_organizacao else ""
+        cod_unit_norm = cod_unidade if cod_unidade else ""
         dedup_key = (cnpj_norm, numero_norm, cod_org_norm, cod_unit_norm)
 
         pdf_list = self.deduplication_lookup.get(dedup_key, [])
@@ -69,9 +69,9 @@ class ComplianceValidatorMatchingMixin:
         from datetime import datetime
 
         for entry in pdf_list:
-            other_pdf = entry['pdf_name']
-            other_date = entry.get('data_envio')
-            other_id = entry.get('id_documento')
+            other_pdf = entry["pdf_name"]
+            other_date = entry.get("data_envio")
+            other_id = entry.get("id_documento")
 
             # Skip if same PDF
             if other_pdf == pdf_name:
@@ -85,12 +85,12 @@ class ComplianceValidatorMatchingMixin:
             try:
                 # Parse dates for comparison
                 if isinstance(data_envio, str):
-                    current_date_obj = datetime.fromisoformat(data_envio.replace('/', '-'))
+                    current_date_obj = datetime.fromisoformat(data_envio.replace("/", "-"))
                 else:
                     current_date_obj = data_envio
 
                 if isinstance(other_date, str):
-                    other_date_obj = datetime.fromisoformat(other_date.replace('/', '-'))
+                    other_date_obj = datetime.fromisoformat(other_date.replace("/", "-"))
                 else:
                     other_date_obj = other_date
 
@@ -153,9 +153,9 @@ class ComplianceValidatorMatchingMixin:
                     data=data_declarada,
                 ),
                 extracted=DocumentFields(
-                    cnpj=ext_nf.get('cnpj_emitente', ''),
-                    numero=ext_nf.get('numero_nf', ''),
-                    data=ext_nf.get('data_emissao'),
+                    cnpj=ext_nf.get("cnpj_emitente", ""),
+                    numero=ext_nf.get("numero_nf", ""),
+                    data=ext_nf.get("data_emissao"),
                 ),
             )
 
@@ -163,7 +163,7 @@ class ComplianceValidatorMatchingMixin:
             if score >= min_match_score:
                 # Annotate the match with score information
                 match_copy = ext_nf.copy()
-                match_copy['_match_score'] = score
+                match_copy["_match_score"] = score
                 matches.append(match_copy)
 
         return matches
@@ -184,57 +184,57 @@ class ComplianceValidatorMatchingMixin:
         :param page_categories: Page categories list.
         :returns: Result dict with extracted document and classification.
         """
-        ext_cnpj_norm = normalize_cnpj(extracted.get('cnpj_emitente', ''))
-        ext_numero_norm = normalize_number(extracted.get('numero_nf', ''))
-        ext_valor_norm = normalize_value(extracted.get('valor_total', 0.0))
+        ext_cnpj_norm = normalize_cnpj(extracted.get("cnpj_emitente", ""))
+        ext_numero_norm = normalize_number(extracted.get("numero_nf", ""))
+        ext_valor_norm = normalize_value(extracted.get("valor_total", 0.0))
 
         # Check if valor matches
-        valor_match = abs(expected_nf['valor_norm'] - ext_valor_norm) < 0.01
+        valor_match = abs(expected_nf["valor_norm"] - ext_valor_norm) < 0.01
 
         # Determine match type
-        numero_match_type = 'exact' if expected_nf['numero_norm'] == ext_numero_norm else 'fuzzy'
+        numero_match_type = "exact" if expected_nf["numero_norm"] == ext_numero_norm else "fuzzy"
 
         # Validate date against company start date
-        data_envio = expected_nf['original'].get('data_envio')
-        inicio_atividade = expected_nf['original'].get('cnpj_data_abertura') or cnpj_start_dates.get(ext_cnpj_norm)
+        data_envio = expected_nf["original"].get("data_envio")
+        inicio_atividade = expected_nf["original"].get("cnpj_data_abertura") or cnpj_start_dates.get(ext_cnpj_norm)
         date_valid = check_date_against_company_start(data_envio, inicio_atividade)
 
         # Check for deduplication
         is_duplicate = self._is_duplicate_nf(
             ext_cnpj_norm,
             ext_numero_norm,
-            expected_nf.get('cod_organizacao', ''),
-            expected_nf.get('cod_unidade', ''),
-            expected_nf.get('pdf_name', ''),
-            expected_nf.get('id_documento'),
-            expected_nf['original'].get('data_envio')
+            expected_nf.get("cod_organizacao", ""),
+            expected_nf.get("cod_unidade", ""),
+            expected_nf.get("pdf_name", ""),
+            expected_nf.get("id_documento"),
+            expected_nf["original"].get("data_envio"),
         )
 
         # Compute classification
         rule_result = self._classify(
             nf_found=True,
-            valor_pago=expected_nf['original'].get('valor_pago'),
-            valor_documento=expected_nf['valor_norm'],
+            valor_pago=expected_nf["original"].get("valor_pago"),
+            valor_documento=expected_nf["valor_norm"],
             valor_extracted=ext_valor_norm,
-            tipo_documento=extracted.get('tipo_documento'),
+            tipo_documento=extracted.get("tipo_documento"),
             page_categories=page_categories,
             date_valid=date_valid,
             is_duplicate=is_duplicate,
-            data_emissao_expected=expected_nf['original'].get('data_emissao'),
-            data_emissao_extracted=extracted.get('data_emissao'),
-            data_servico=extracted.get('data_servico'),
-            cnpj_data_abertura=inicio_atividade
+            data_emissao_expected=expected_nf["original"].get("data_emissao"),
+            data_emissao_extracted=extracted.get("data_emissao"),
+            data_servico=extracted.get("data_servico"),
+            cnpj_data_abertura=inicio_atividade,
         )
 
         return {
-            'extracted': extracted,
-            'expected': expected_nf['original'],
-            'valor_match': valor_match,
-            'match_quality': 'PERFECT' if valor_match else 'GOOD',
-            'classification': rule_result.classification,
-            'rule_name': rule_result.rule_name,
-            'reason': rule_result.reason,
-            'numero_match_type': numero_match_type
+            "extracted": extracted,
+            "expected": expected_nf["original"],
+            "valor_match": valor_match,
+            "match_quality": "PERFECT" if valor_match else "GOOD",
+            "classification": rule_result.classification,
+            "rule_name": rule_result.rule_name,
+            "reason": rule_result.reason,
+            "numero_match_type": numero_match_type,
         }
 
     def _handle_multiple_matches(
@@ -256,7 +256,7 @@ class ComplianceValidatorMatchingMixin:
         from .document_prioritizer import select_prioritized_document
 
         # Log warning about multiple matches
-        types = [doc.get('tipo_documento') for doc in matches]
+        types = [doc.get("tipo_documento") for doc in matches]
         logger.warning(
             f"Multiple documents match CNPJ {expected_nf['cnpj_norm']} + "
             f"Número {expected_nf['numero_norm']}: {types}. "
@@ -267,12 +267,7 @@ class ComplianceValidatorMatchingMixin:
         best_extracted = select_prioritized_document(matches)
 
         # Process as single match
-        return self._handle_single_match(
-            expected_nf,
-            best_extracted,
-            cnpj_start_dates,
-            page_categories
-        )
+        return self._handle_single_match(expected_nf, best_extracted, cnpj_start_dates, page_categories)
 
     def _handle_nf_ticket_merge(
         self,
@@ -304,26 +299,21 @@ class ComplianceValidatorMatchingMixin:
         justificativa = get_merge_justificativa(nf, ticket, merged)
 
         # Check if Apontamento Leve should be applied
-        numero_declarado = expected_nf['original'].get('numero_nf', '')
+        numero_declarado = expected_nf["original"].get("numero_nf", "")
         if should_apply_apontamento_leve(numero_declarado, nf, ticket, match_type):
-            classificacao_especial = 'Apontamento Leve'
+            classificacao_especial = "Apontamento Leve"
             justificativa = get_apontamento_leve_justification(nf, ticket, numero_declarado)
         else:
             classificacao_especial = None
 
         # Process merged document as single match
-        result = self._handle_single_match(
-            expected_nf,
-            merged,
-            cnpj_start_dates,
-            page_categories
-        )
+        result = self._handle_single_match(expected_nf, merged, cnpj_start_dates, page_categories)
 
         # Override justification and classification if applicable
-        result['merge_justificativa'] = justificativa
+        result["merge_justificativa"] = justificativa
         if classificacao_especial:
-            result['classification'] = classificacao_especial
-            result['reason'] = justificativa
+            result["classification"] = classificacao_especial
+            result["reason"] = justificativa
 
         return result
 
@@ -341,39 +331,39 @@ class ComplianceValidatorMatchingMixin:
         """
         # Check for deduplication
         is_duplicate = self._is_duplicate_nf(
-            expected_nf['cnpj_norm'],
-            expected_nf['numero_norm'],
-            expected_nf.get('cod_organizacao', ''),
-            expected_nf.get('cod_unidade', ''),
-            expected_nf.get('pdf_name', ''),
-            expected_nf.get('id_documento'),
-            expected_nf['original'].get('data_envio')
+            expected_nf["cnpj_norm"],
+            expected_nf["numero_norm"],
+            expected_nf.get("cod_organizacao", ""),
+            expected_nf.get("cod_unidade", ""),
+            expected_nf.get("pdf_name", ""),
+            expected_nf.get("id_documento"),
+            expected_nf["original"].get("data_envio"),
         )
 
         # Compute classification for missing NF
         rule_result = self._classify(
             nf_found=False,
-            valor_pago=expected_nf['original'].get('valor_pago'),
-            valor_documento=expected_nf['valor_norm'],
+            valor_pago=expected_nf["original"].get("valor_pago"),
+            valor_documento=expected_nf["valor_norm"],
             valor_extracted=None,
             tipo_documento=None,
             page_categories=page_categories,
             is_duplicate=is_duplicate,
-            data_emissao_expected=expected_nf['original'].get('data_emissao'),
-            data_emissao_extracted=None
+            data_emissao_expected=expected_nf["original"].get("data_emissao"),
+            data_emissao_extracted=None,
         )
 
-        missing_nf_data = expected_nf['original'].copy()
-        missing_nf_data['classification'] = rule_result.classification
-        missing_nf_data['rule_name'] = rule_result.rule_name
-        missing_nf_data['reason'] = rule_result.reason
+        missing_nf_data = expected_nf["original"].copy()
+        missing_nf_data["classification"] = rule_result.classification
+        missing_nf_data["rule_name"] = rule_result.rule_name
+        missing_nf_data["reason"] = rule_result.reason
 
         return {
-            'expected': missing_nf_data,
-            'extracted': None,
-            'classification': rule_result.classification,
-            'rule_name': rule_result.rule_name,
-            'reason': rule_result.reason
+            "expected": missing_nf_data,
+            "extracted": None,
+            "classification": rule_result.classification,
+            "rule_name": rule_result.rule_name,
+            "reason": rule_result.reason,
         }
 
     def _process_single_declaration(
@@ -400,10 +390,7 @@ class ComplianceValidatorMatchingMixin:
         from .rps_matcher import find_nf_ticket_by_rps
 
         # STEP 1: Try RPS match (NF + Ticket)
-        nf, ticket, match_type = find_nf_ticket_by_rps(
-            expected_nf['original'],
-            extracted_nfs
-        )
+        nf, ticket, match_type = find_nf_ticket_by_rps(expected_nf["original"], extracted_nfs)
 
         if nf and ticket:
             # Case C: NF + Ticket merge
@@ -411,14 +398,7 @@ class ComplianceValidatorMatchingMixin:
                 f"NF+Ticket merge detected for {expected_nf['cnpj_norm']} / "
                 f"{expected_nf['numero_norm']} (match_type: {match_type})"
             )
-            return self._handle_nf_ticket_merge(
-                expected_nf,
-                nf,
-                ticket,
-                match_type,
-                cnpj_start_dates,
-                page_categories
-            )
+            return self._handle_nf_ticket_merge(expected_nf, nf, ticket, match_type, cnpj_start_dates, page_categories)
 
         # STEP 2: Standard match (CNPJ + número + data)
         # Strategy: always try perfect matches (3/3) first.
@@ -427,21 +407,21 @@ class ComplianceValidatorMatchingMixin:
 
         # First, try to find perfect matches (score = 3)
         perfect_matches = self._find_standard_matches(
-            expected_nf['cnpj_norm'],
-            expected_nf['numero_norm'],
-            expected_nf['original'].get('data_emissao'),
+            expected_nf["cnpj_norm"],
+            expected_nf["numero_norm"],
+            expected_nf["original"].get("data_emissao"),
             extracted_nfs,
-            min_match_score=3  # Require all 3 fields to match
+            min_match_score=3,  # Require all 3 fields to match
         )
 
         # If no perfect match found, fall back to partial matches only when configured to do so
         if len(perfect_matches) == 0 and self.min_match_score < 3:
             standard_matches = self._find_standard_matches(
-                expected_nf['cnpj_norm'],
-                expected_nf['numero_norm'],
-                expected_nf['original'].get('data_emissao'),
+                expected_nf["cnpj_norm"],
+                expected_nf["numero_norm"],
+                expected_nf["original"].get("data_emissao"),
                 extracted_nfs,
-                min_match_score=self.min_match_score  # Allow partial match per config
+                min_match_score=self.min_match_score,  # Allow partial match per config
             )
         else:
             # Use perfect matches (or empty list when min_match_score == 3 and no 3/3 found)
@@ -454,18 +434,8 @@ class ComplianceValidatorMatchingMixin:
 
         elif len(standard_matches) == 1:
             # Case A: Single match
-            return self._handle_single_match(
-                expected_nf,
-                standard_matches[0],
-                cnpj_start_dates,
-                page_categories
-            )
+            return self._handle_single_match(expected_nf, standard_matches[0], cnpj_start_dates, page_categories)
 
         else:
             # Case B: Multiple matches (prioritization)
-            return self._handle_multiple_matches(
-                expected_nf,
-                standard_matches,
-                cnpj_start_dates,
-                page_categories
-            )
+            return self._handle_multiple_matches(expected_nf, standard_matches, cnpj_start_dates, page_categories)

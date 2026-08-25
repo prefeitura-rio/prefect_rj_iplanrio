@@ -39,8 +39,5 @@ def extract_nf_data(
     :param api_key: Google API key.
     :returns: Extraction result dictionary.
     """
-    extractor = NFExtractor(
-        service_account_file=service_account_file,
-        api_key=api_key
-    )
+    extractor = NFExtractor(service_account_file=service_account_file, api_key=api_key)
     return extractor.extract_from_pdf(pdf_path, pages=pages)

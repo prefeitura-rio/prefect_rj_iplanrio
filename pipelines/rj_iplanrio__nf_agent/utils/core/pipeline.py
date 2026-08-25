@@ -25,14 +25,14 @@ logger = logging.getLogger(__name__)
 class NFPipeline:
     """
     Complete NF processing pipeline.
-    
+
     Pipeline stages:
     1. OCR: Extract text from PDF pages using EasyOCR/PaddleOCR
     2. Classification: Classify pages as NF or Non-NF
     3. Filtering: Create filtered PDF with only NF pages
     4. Extraction: Extract structured data using Gemini
     5. Mapping: Map extraction results back to original pages
-    
+
     Supports pluggable classifiers via BaseClassifier interface:
     - NFClassifier: OCR-based (requires OCR preprocessing)
     - GeminiClassifier: Vision-based (no OCR needed)
@@ -73,7 +73,7 @@ class NFPipeline:
         else:
             self.categories = categories
 
-        self.ocr_languages = ocr_languages or ['pt', 'en']
+        self.ocr_languages = ocr_languages or ["pt", "en"]
         self.ocr_gpu = ocr_gpu
         self.gemini_service_account = gemini_service_account
         self.gemini_api_key = gemini_api_key
@@ -89,20 +89,14 @@ class NFPipeline:
         if self._classifier is None:
             if self.categories is None:
                 raise ValueError("Categories required for default NFClassifier")
-            self._classifier = NFClassifier(
-                params=self.classifier_params,
-                categories=self.categories
-            )
+            self._classifier = NFClassifier(params=self.classifier_params, categories=self.categories)
         return self._classifier
 
     @property
     def ocr_processor(self) -> OCRProcessor:
         """Lazy load OCR processor."""
         if self._ocr_processor is None:
-            self._ocr_processor = OCRProcessor(
-                languages=self.ocr_languages,
-                gpu=self.ocr_gpu
-            )
+            self._ocr_processor = OCRProcessor(languages=self.ocr_languages, gpu=self.ocr_gpu)
         return self._ocr_processor
 
     @property
@@ -111,10 +105,7 @@ class NFPipeline:
         if self._extractor is None:
             from ..extraction import NFExtractor
 
-            self._extractor = NFExtractor(
-                service_account_file=self.gemini_service_account,
-                api_key=self.gemini_api_key
-            )
+            self._extractor = NFExtractor(service_account_file=self.gemini_service_account, api_key=self.gemini_api_key)
         return self._extractor
 
     def run_ocr(self, pdf_path: Path) -> list[str]:
@@ -189,7 +180,7 @@ class NFPipeline:
             new_doc.insert_pdf(
                 doc,
                 from_page=original_page_num - 1,  # 0-indexed
-                to_page=original_page_num - 1
+                to_page=original_page_num - 1,
             )
             page_mapping[new_page_idx + 1] = original_page_num
 
@@ -232,12 +223,12 @@ class NFPipeline:
         """
         result = extraction_result.copy()
 
-        if 'notas_fiscais' in result:
-            for nf in result['notas_fiscais']:
-                filtered_page = nf.get('pagina')
+        if "notas_fiscais" in result:
+            for nf in result["notas_fiscais"]:
+                filtered_page = nf.get("pagina")
                 if filtered_page and filtered_page in page_mapping:
-                    nf['pagina_filtrada'] = filtered_page
-                    nf['pagina'] = page_mapping[filtered_page]
+                    nf["pagina_filtrada"] = filtered_page
+                    nf["pagina"] = page_mapping[filtered_page]
 
         return result
 
@@ -268,7 +259,7 @@ class NFPipeline:
             "pdf_path": str(pdf_path),
             "processing_started": start_time.isoformat(),
             "total_pages": get_page_count(pdf_path),
-            "pipeline_stages": {}
+            "pipeline_stages": {},
         }
 
         # Check classifier type
@@ -290,10 +281,7 @@ class NFPipeline:
                     json.dump(
                         {
                             "pdf_name": pdf_path.name,
-                            "pages": [
-                                {"page": i + 1, "text": text}
-                                for i, text in enumerate(page_texts)
-                            ],
+                            "pages": [{"page": i + 1, "text": text} for i, text in enumerate(page_texts)],
                         },
                         f,
                         ensure_ascii=False,
@@ -450,14 +438,11 @@ class NFPipeline:
                 {
                     "total_files": len(pdf_files),
                     "successful": sum(
-                        1
-                        for r in results
-                        if r.get("extraction_result", {}).get("processed_successfully")
+                        1 for r in results if r.get("extraction_result", {}).get("processed_successfully")
                     ),
                     "failed": sum(1 for r in results if "error" in r),
                     "total_nfs_found": sum(
-                        r.get("extraction_result", {}).get("quantidade_notas_fiscais", 0)
-                        for r in results
+                        r.get("extraction_result", {}).get("quantidade_notas_fiscais", 0) for r in results
                     ),
                     "results": results,
                 },

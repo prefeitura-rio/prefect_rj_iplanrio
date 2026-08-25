@@ -5,11 +5,12 @@ Priority: 25
 Classification: "Suspect"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class InvalidDateRule(ComplianceRule):
+class InvalidDateRule(Rule[ValidationContext]):
     """
     Rule: NF submission date is before vendor company start date
 
@@ -38,7 +39,7 @@ class InvalidDateRule(ComplianceRule):
                 classification="Suspect",
                 stop_evaluation=True,
                 reason="NF submitted before vendor company existed",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

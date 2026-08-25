@@ -28,7 +28,7 @@ pull:
 deployments:
   - name: rj-iplanrio--nf-agent--staging
     version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:nf_processing_flow
+    entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -55,7 +55,7 @@ deployments:
 
   - name: rj-iplanrio--nf-agent--prod
     version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:nf_processing_flow
+    entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     work_pool:
       name: k3s-pool
       work_queue_name: default

@@ -5,11 +5,12 @@ Priority: 40
 Classification: "Not Analyzable"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class MixedDocumentRule(ComplianceRule):
+class MixedDocumentRule(Rule[ValidationContext]):
     """
     Rule: NF found AND document also has "Fatura de Locação" pages
 
@@ -35,7 +36,7 @@ class MixedDocumentRule(ComplianceRule):
                 classification="Not Analyzable",
                 stop_evaluation=True,
                 reason="Mixed document types (NF + Fatura de Locação)",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

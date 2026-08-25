@@ -1,7 +1,8 @@
 """Prompt construction and response parsing for ``NFExtractor``."""
 
-import json
 import logging
+
+from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
 logger = logging.getLogger(__name__)
 
@@ -46,15 +47,4 @@ class NFExtractorPromptMixin:
         :param response_text: Raw response from Gemini.
         :returns: Parsed JSON dictionary.
         """
-        text = response_text.strip()
-
-        # Remove markdown code blocks if present
-        if text.startswith("```json"):
-            text = text[7:]
-        if text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-
-        text = text.strip()
-        return json.loads(text)
+        return parse_json_response(response_text)

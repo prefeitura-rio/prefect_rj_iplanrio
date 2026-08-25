@@ -57,7 +57,7 @@ class NFExtractorAuthMixin:
         import google.generativeai as genai
 
         # 1. Try service account file
-        service_account_path = self._service_account_file or os.getenv('GOOGLE_SERVICE_ACCOUNT_FILE')
+        service_account_path = self._service_account_file or os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
 
         # If no explicit path, check default location
         if service_account_path is None:
@@ -66,6 +66,7 @@ class NFExtractorAuthMixin:
         if service_account_path and Path(service_account_path).exists():
             try:
                 from google.oauth2 import service_account
+
                 credentials = service_account.Credentials.from_service_account_file(
                     service_account_path,
                     scopes=["https://www.googleapis.com/auth/generative-language"],
@@ -74,14 +75,13 @@ class NFExtractorAuthMixin:
                 return genai
             except Exception as e:
                 logger.warning(
-                    "Failed to load service account from %s: %s. "
-                    "Falling back to other authentication methods.",
+                    "Failed to load service account from %s: %s. Falling back to other authentication methods.",
                     service_account_path,
                     e,
                 )
 
         # 2. Try API key
-        api_key = self._api_key or os.getenv('GOOGLE_API_KEY') or os.getenv('GEMINI_API_KEY')
+        api_key = self._api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
         if api_key:
             genai.configure(api_key=api_key)
             return genai
@@ -89,9 +89,8 @@ class NFExtractorAuthMixin:
         # 3. Try Application Default Credentials (ADC) - for GCP environments
         try:
             import google.auth
-            credentials, project = google.auth.default(
-                scopes=['https://www.googleapis.com/auth/generative-language']
-            )
+
+            credentials, project = google.auth.default(scopes=["https://www.googleapis.com/auth/generative-language"])
             genai.configure(credentials=credentials)
             logger.info("Using Application Default Credentials (ADC)")
             if project:

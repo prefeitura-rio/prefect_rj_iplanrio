@@ -5,11 +5,12 @@ Priority: 70
 Classification: "Suspect"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class DuplicateNFRule(ComplianceRule):
+class DuplicateNFRule(Rule[ValidationContext]):
     """
     Rule: Same CNPJ+Numero appears in multiple different PDFs
 
@@ -41,7 +42,7 @@ class DuplicateNFRule(ComplianceRule):
                 classification="Suspect",
                 stop_evaluation=True,
                 reason="NFe appears in multiple different PDF files",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

@@ -23,10 +23,12 @@ class DatabaseManager:
         """
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.db_path), timeout=120.0, check_same_thread=False)  # Intra-PDF page-level parallelism
-        self.conn.execute('PRAGMA journal_mode=WAL')
-        self.conn.execute('PRAGMA synchronous=NORMAL')
-        self.conn.execute('PRAGMA busy_timeout=120000')  # 120 second busy timeout
+        self.conn = sqlite3.connect(
+            str(self.db_path), timeout=120.0, check_same_thread=False
+        )  # Intra-PDF page-level parallelism
+        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA synchronous=NORMAL")
+        self.conn.execute("PRAGMA busy_timeout=120000")  # 120 second busy timeout
         self.conn.row_factory = sqlite3.Row  # Access columns by name
         self._create_tables()
 
@@ -36,7 +38,7 @@ class DatabaseManager:
 
         # Table 1: API Inputs (preprocessed data - page images, filtered PDFs)
         # NOTE: content_blob is nullable - we only store the hash for cache lookups
-        #TODO: review database schema (page_references has a lot of redundancy with this table)
+        # TODO: review database schema (page_references has a lot of redundancy with this table)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS api_inputs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -131,7 +133,7 @@ class DatabaseManager:
         content: bytes,
         page_number: int | None = None,
         metadata: dict[str, Any] | None = None,
-        content_hash_override: str | None = None
+        content_hash_override: str | None = None,
     ) -> tuple[int, bool, str | None, int | None]:
         """
         Get existing input or create new one, with page reference tracking.
@@ -166,7 +168,7 @@ class DatabaseManager:
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e) and attempt < max_retries - 1:
                     # Exponential backoff with jitter
-                    delay = base_delay * (2 ** attempt) + random.uniform(0, 0.1)
+                    delay = base_delay * (2**attempt) + random.uniform(0, 0.1)
                     time.sleep(delay)
                     continue
                 raise
@@ -178,7 +180,7 @@ class DatabaseManager:
         content: bytes,
         page_number: int | None = None,
         metadata: dict[str, Any] | None = None,
-        content_hash_override: str | None = None
+        content_hash_override: str | None = None,
     ) -> tuple[int, bool, str | None, int | None]:
         """Internal implementation of get_or_create_input."""
         # Use override hash if provided, otherwise compute from content
@@ -191,15 +193,12 @@ class DatabaseManager:
         # Step 1: Get or create api_inputs row (by content_hash)
         # Use INSERT OR IGNORE to handle race conditions where multiple threads
         # try to insert the same content_hash simultaneously
-        cursor.execute(
-            "SELECT id FROM api_inputs WHERE content_hash = ?",
-            (content_hash,)
-        )
+        cursor.execute("SELECT id FROM api_inputs WHERE content_hash = ?", (content_hash,))
         row = cursor.fetchone()
 
         if row:
             # Hash already exists
-            input_id = row['id']
+            input_id = row["id"]
             is_new_blob = False
         else:
             # Create new entry in api_inputs (no blob stored - only hash for lookups)
@@ -211,19 +210,16 @@ class DatabaseManager:
                     INSERT INTO api_inputs (input_type, pdf_name, page_number, content_hash, content_blob, metadata)
                     VALUES (?, ?, ?, ?, NULL, ?)
                     """,
-                    (input_type, pdf_name, page_number, content_hash, metadata_json)
+                    (input_type, pdf_name, page_number, content_hash, metadata_json),
                 )
                 input_id = cursor.lastrowid
                 is_new_blob = True
             except sqlite3.IntegrityError:
                 # Race condition: another thread inserted while we were checking
                 # Just fetch the existing record
-                cursor.execute(
-                    "SELECT id FROM api_inputs WHERE content_hash = ?",
-                    (content_hash,)
-                )
+                cursor.execute("SELECT id FROM api_inputs WHERE content_hash = ?", (content_hash,))
                 row = cursor.fetchone()
-                input_id = row['id']
+                input_id = row["id"]
                 is_new_blob = False
 
         # Step 2: Check if THIS (pdf_name, page_number) already has a page reference
@@ -231,7 +227,7 @@ class DatabaseManager:
         if page_number is not None:
             cursor.execute(
                 "SELECT id FROM page_references WHERE pdf_name = ? AND page_number = ? AND input_type = ?",
-                (pdf_name, page_number, input_type)
+                (pdf_name, page_number, input_type),
             )
             existing_ref = cursor.fetchone()
 
@@ -242,7 +238,7 @@ class DatabaseManager:
                     INSERT INTO page_references (pdf_name, page_number, content_hash, input_type)
                     VALUES (?, ?, ?, ?)
                     """,
-                    (pdf_name, page_number, content_hash, input_type)
+                    (pdf_name, page_number, content_hash, input_type),
                 )
 
         # Step 3: Find which page originally cached this content (if any)
@@ -255,7 +251,7 @@ class DatabaseManager:
                 ORDER BY created_at ASC
                 LIMIT 1
                 """,
-                (content_hash, pdf_name, page_number)
+                (content_hash, pdf_name, page_number),
             )
             cached_source = cursor.fetchone()
         else:
@@ -264,7 +260,7 @@ class DatabaseManager:
         self.conn.commit()
 
         if cached_source:
-            return (input_id, is_new_blob, cached_source['pdf_name'], cached_source['page_number'])
+            return (input_id, is_new_blob, cached_source["pdf_name"], cached_source["page_number"])
         else:
             return (input_id, is_new_blob, None, None)
 
@@ -284,7 +280,7 @@ class DatabaseManager:
             ORDER BY created_at DESC
             LIMIT 1
             """,
-            (input_id,)
+            (input_id,),
         )
         row = cursor.fetchone()
 
@@ -292,12 +288,12 @@ class DatabaseManager:
             return None
 
         return {
-            'model_name': row['model_name'],
-            'response_text': row['response_text'],
-            'usage_metadata': json.loads(row['usage_metadata']) if row['usage_metadata'] else None,
-            'elapsed_seconds': row['elapsed_seconds'],
-            'created_at': row['created_at'],
-            'cached': True
+            "model_name": row["model_name"],
+            "response_text": row["response_text"],
+            "usage_metadata": json.loads(row["usage_metadata"]) if row["usage_metadata"] else None,
+            "elapsed_seconds": row["elapsed_seconds"],
+            "created_at": row["created_at"],
+            "cached": True,
         }
 
     def get_cached_classification(self, pdf_name: str, page_number: int) -> dict[str, Any] | None:
@@ -324,18 +320,18 @@ class DatabaseManager:
             WHERE pr.pdf_name = ? AND pr.page_number = ? AND pr.input_type = 'classification_page'
             LIMIT 1
             """,
-            (pdf_name, page_number)
+            (pdf_name, page_number),
         )
         row = cursor.fetchone()
 
         if row:
             try:
-                response = json.loads(row['response_text'])
+                response = json.loads(row["response_text"])
                 return {
-                    'category': response.get('categoria', ''),
-                    'justification': response.get('justificativa', ''),
-                    'cached_pdf_name': row['cached_pdf_name'],
-                    'cached_page_num': row['cached_page_num']
+                    "category": response.get("categoria", ""),
+                    "justification": response.get("justificativa", ""),
+                    "cached_pdf_name": row["cached_pdf_name"],
+                    "cached_page_num": row["cached_page_num"],
                 }
             except (json.JSONDecodeError, KeyError):
                 return None
@@ -347,7 +343,7 @@ class DatabaseManager:
         model_name: str,
         response_text: str,
         usage_metadata: dict[str, Any] | None = None,
-        elapsed_seconds: float | None = None
+        elapsed_seconds: float | None = None,
     ):
         """
         Save API output to database.
@@ -366,7 +362,7 @@ class DatabaseManager:
             INSERT INTO api_outputs (input_id, model_name, response_text, usage_metadata, elapsed_seconds)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (input_id, model_name, response_text, usage_json, elapsed_seconds)
+            (input_id, model_name, response_text, usage_json, elapsed_seconds),
         )
         self.conn.commit()
 
@@ -384,17 +380,17 @@ class DatabaseManager:
             FROM api_inputs
             GROUP BY input_type
         """)
-        inputs_by_type = {row['input_type']: row['count'] for row in cursor.fetchall()}
+        inputs_by_type = {row["input_type"]: row["count"] for row in cursor.fetchall()}
 
         # Count outputs
         cursor.execute("SELECT COUNT(*) as count FROM api_outputs")
-        total_outputs = cursor.fetchone()['count']
+        total_outputs = cursor.fetchone()["count"]
 
         return {
-            'total_inputs': sum(inputs_by_type.values()),
-            'inputs_by_type': inputs_by_type,
-            'total_outputs': total_outputs,
-            'cache_hit_rate': f"{(total_outputs / max(sum(inputs_by_type.values()), 1)) * 100:.1f}%"
+            "total_inputs": sum(inputs_by_type.values()),
+            "inputs_by_type": inputs_by_type,
+            "total_outputs": total_outputs,
+            "cache_hit_rate": f"{(total_outputs / max(sum(inputs_by_type.values()), 1)) * 100:.1f}%",
         }
 
     def close(self):

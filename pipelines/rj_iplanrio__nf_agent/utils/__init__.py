@@ -41,9 +41,7 @@ def new_or_continued_session(session_id: str | None) -> str:
     return session_id
 
 
-def pending_in_session(
-    max_pdfs: int | None, total_in_session: int
-) -> tuple[int | None, int | None]:
+def pending_in_session(max_pdfs: int | None, total_in_session: int) -> tuple[int | None, int | None]:
     """
     Compute how many PDFs/docs are still allowed before ``max_pdfs`` is reached.
 

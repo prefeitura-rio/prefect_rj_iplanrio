@@ -39,4 +39,3 @@ class POCProcessor(
     POCProcessorDatabaseMixin,
 ):
     """Processes database rows using the core NF pipeline with caching."""
-

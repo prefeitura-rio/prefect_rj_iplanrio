@@ -5,11 +5,12 @@ Priority: 10 (Highest)
 Classification: "Not Analyzable"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class MissingNFWithFaturaRule(ComplianceRule):
+class MissingNFWithFaturaRule(Rule[ValidationContext]):
     """
     Rule: NF NOT found AND document has "Fatura de Locação" pages
 
@@ -31,7 +32,7 @@ class MissingNFWithFaturaRule(ComplianceRule):
                 classification="Not Analyzable",
                 stop_evaluation=True,
                 reason="Document is Fatura de Locação (no NF expected)",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

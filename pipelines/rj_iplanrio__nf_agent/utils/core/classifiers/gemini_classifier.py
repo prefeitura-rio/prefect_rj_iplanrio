@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
+from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
 from ..base import BaseClassifier
 from ..config import SERVICE_ACCOUNT_PATH
@@ -52,7 +53,7 @@ PAGE_CATEGORIES = [
     "Nota de Débito",  # Vale-alimentação/refeição (Ticket, Sodexo, etc)
     "Nota de Cobrança",  # Cobrança formal por serviço prestado
     "Nota Fiscal de Locação de Bens Móveis",  # Locação de bens móveis
-    "Nenhuma das Opções"  # Página sem documento fiscal
+    "Nenhuma das Opções",  # Página sem documento fiscal
 ]
 
 # Categories that are considered NF (Nota Fiscal) documents
@@ -65,7 +66,7 @@ NF_CATEGORIES = [
     "Fatura",
     "Nota de Débito",
     "Nota de Cobrança",
-    "Nota Fiscal de Locação de Bens Móveis"
+    "Nota Fiscal de Locação de Bens Móveis",
 ]
 
 # Category aliases for robust matching (handles typos and variations)
@@ -79,7 +80,6 @@ CATEGORY_ALIASES = {
     "nota fiscal de mercadorias": "NF-e",
     "nf eletronica": "NF-e",
     "nf eletrônica": "NF-e",
-
     # NFS-e variations
     "nfs-e": "NFS-e",
     "nfse": "NFS-e",
@@ -91,7 +91,6 @@ CATEGORY_ALIASES = {
     "nf de servicos": "NFS-e",
     "nota fiscal eletronica de serviços": "NFS-e",
     "nota fiscal eletrônica de serviços": "NFS-e",
-
     # NFST variations
     "nfst": "NFST",
     "nota fiscal de serviços de telecomunicações": "NFST",
@@ -108,7 +107,6 @@ CATEGORY_ALIASES = {
     "nota fiscal de servico de telecomunicacoes": "NFST",
     "nota fiscal de serviços de comunicação": "NFST",
     "nota fiscal de servicos de comunicacao": "NFST",
-
     # DANFE variations
     "danfe": "DANFE",
     "dafe": "DANFE",
@@ -116,7 +114,6 @@ CATEGORY_ALIASES = {
     "documento auxiliar": "DANFE",
     "documento auxiliar da nota fiscal": "DANFE",
     "documento auxiliar da nf-e": "DANFE",
-
     # Fatura variations (genérica - todas as faturas)
     "fatura": "Fatura",
     "fatura generica": "Fatura",
@@ -196,7 +193,6 @@ CATEGORY_ALIASES = {
     "fatura aerea": "Fatura",
     "rede aérea": "Fatura",
     "rede aerea": "Fatura",
-
     # Nota de Débito variations
     "nota de debito": "Nota de Débito",
     "nota de débito": "Nota de Débito",
@@ -212,14 +208,12 @@ CATEGORY_ALIASES = {
     "vale refeicao": "Nota de Débito",
     "vale-alimentação": "Nota de Débito",
     "vale-refeição": "Nota de Débito",
-
     # Nota de Cobrança variations
     "nota de cobranca": "Nota de Cobrança",
     "nota de cobrança": "Nota de Cobrança",
     "nota cobrança": "Nota de Cobrança",
     "cobrança": "Nota de Cobrança",
     "cobranca": "Nota de Cobrança",
-
     # Nenhuma das Opções variations
     "nenhuma das opções": "Nenhuma das Opções",
     "nenhuma das opcoes": "Nenhuma das Opções",
@@ -233,7 +227,6 @@ CATEGORY_ALIASES = {
     "outro": "Nenhuma das Opções",
     "outros": "Nenhuma das Opções",
     "desconhecido": "Nenhuma das Opções",
-
     # Portal da Nota Fiscal Eletrônica (printout/consulta, not a valid fiscal document)
     "portal da nota fiscal": "Nenhuma das Opções",
     "portal da nota fiscal eletrônica": "Nenhuma das Opções",
@@ -356,8 +349,7 @@ def extract_page_as_bytes(pdf_path: Path, page_num: int, as_pdf: bool = False) -
         # Validate page number is within valid range
         if page_num < 0 or page_num >= len(doc):
             raise ValueError(
-                f"Page number {page_num} is out of range. "
-                f"PDF has {len(doc)} pages (valid range: 0-{len(doc)-1})"
+                f"Page number {page_num} is out of range. PDF has {len(doc)} pages (valid range: 0-{len(doc) - 1})"
             )
 
         if as_pdf:
@@ -368,12 +360,9 @@ def extract_page_as_bytes(pdf_path: Path, page_num: int, as_pdf: bool = False) -
             except RuntimeError as e:
                 # Handle PyMuPDF errors (e.g., corrupted PDFs, object number out of range)
                 logger.error(
-                    f"Failed to insert page {page_num} from {pdf_path.name}: {e}. "
-                    f"PDF may be corrupted or malformed."
+                    f"Failed to insert page {page_num} from {pdf_path.name}: {e}. PDF may be corrupted or malformed."
                 )
-                raise RuntimeError(
-                    f"Failed to extract page {page_num} as PDF: {e}"
-                ) from e
+                raise RuntimeError(f"Failed to extract page {page_num} as PDF: {e}") from e
 
             pdf_bytes = new_doc.tobytes()
             return pdf_bytes
@@ -394,12 +383,8 @@ def extract_page_as_bytes(pdf_path: Path, page_num: int, as_pdf: bool = False) -
         raise
     except Exception as e:
         # Catch unexpected errors
-        logger.error(
-            f"Unexpected error extracting page {page_num} from {pdf_path.name}: {e}"
-        )
-        raise RuntimeError(
-            f"Unexpected error extracting page {page_num}: {e}"
-        ) from e
+        logger.error(f"Unexpected error extracting page {page_num} from {pdf_path.name}: {e}")
+        raise RuntimeError(f"Unexpected error extracting page {page_num}: {e}") from e
     finally:
         # Always close documents to free resources
         if new_doc is not None:
@@ -444,7 +429,7 @@ def classify_page_with_model(
     :returns: Classification result dict.
     """
     # Import metrics tracker
-    from ..api_metrics_tracker import get_tracker
+    from iplanrio_agent_toolkit.metrics_tracker import get_tracker
 
     options = options or ClassificationOptions()
     model_name = options.model_name
@@ -463,28 +448,18 @@ def classify_page_with_model(
     # CHECK FOR CACHED API RESPONSE - Skip API call if response file exists
     if api_response_path and api_response_path.exists():
         try:
-            with open(api_response_path, 'r', encoding='utf-8') as f:
+            with open(api_response_path, "r", encoding="utf-8") as f:
                 cached_response = json.load(f)
 
             # Extract the raw_text from cached response
-            response_text = cached_response.get('raw_text', '').strip()
-
-            # Remove markdown code blocks if present
-            if response_text.startswith("```json"):
-                response_text = response_text[7:]
-            if response_text.startswith("```"):
-                response_text = response_text[3:]
-            if response_text.endswith("```"):
-                response_text = response_text[:-3]
-
-            response_text = response_text.strip()
+            response_text = cached_response.get("raw_text", "").strip()
 
             # Parse JSON
-            classification_data = json.loads(response_text)
+            classification_data = parse_json_response(response_text)
 
             # Build result from cached data
             cached_time = time.time() - start_time
-            usage_metadata = cached_response.get('usage_metadata', {})
+            usage_metadata = cached_response.get("usage_metadata", {})
 
             result = {
                 "pdf_name": pdf_name,
@@ -493,14 +468,14 @@ def classify_page_with_model(
                 "model_name": model_name,
                 "success": True,
                 "classification": classification_data,
-                "raw_response_text": cached_response.get('raw_text', ''),
+                "raw_response_text": cached_response.get("raw_text", ""),
                 "error_message": None,
-                "input_tokens": usage_metadata.get('prompt_token_count', 0),
-                "output_tokens": usage_metadata.get('candidates_token_count', 0),
-                "total_tokens": usage_metadata.get('total_token_count', 0),
+                "input_tokens": usage_metadata.get("prompt_token_count", 0),
+                "output_tokens": usage_metadata.get("candidates_token_count", 0),
+                "total_tokens": usage_metadata.get("total_token_count", 0),
                 "processing_time_seconds": cached_time,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                "cached": True  # Mark as using cached response
+                "cached": True,  # Mark as using cached response
             }
 
             # Calculate cost
@@ -517,32 +492,23 @@ def classify_page_with_model(
 
     try:
         # Prepare input for Gemini (PDF or PNG)
-        content_b64 = base64.b64encode(page_bytes).decode('utf-8')
-        content_part = {
-            "mime_type": "application/pdf" if input_is_pdf else "image/png",
-            "data": content_b64
-        }
+        content_b64 = base64.b64encode(page_bytes).decode("utf-8")
+        content_part = {"mime_type": "application/pdf" if input_is_pdf else "image/png", "data": content_b64}
 
         # Rate limiting: acquire permission to make API call
-        from ..rate_limiter import get_rate_limiter
+        from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter
+
         rate_limiter = get_rate_limiter()
         rate_limiter.acquire()
 
         try:
             # Generate classification
             api_call_start = time.time()
-            response = model.generate_content([
-                classification_prompt,
-                content_part
-            ])
+            response = model.generate_content([classification_prompt, content_part])
             api_call_duration = (time.time() - api_call_start) * 1000  # Convert to ms
 
             # Record successful API call
-            tracker.record_call(
-                api_type='classification',
-                duration_ms=api_call_duration,
-                success=True
-            )
+            tracker.record_call(api_type="classification", duration_ms=api_call_duration, success=True)
         finally:
             # Always release rate limiter, even if error
             rate_limiter.release()
@@ -552,45 +518,37 @@ def classify_page_with_model(
         # Save full API response if requested
         if save_api_response and api_response_path:
             api_response_data = {
-                'model': model_name,
-                'pdf_name': pdf_name,
-                'page_num': page_num,
-                'page_num_1indexed': page_num + 1,
-                'elapsed_seconds': processing_time,
-                'raw_text': response.text,
-                'usage_metadata': {
-                    'prompt_token_count': getattr(response.usage_metadata, 'prompt_token_count', None),
-                    'candidates_token_count': getattr(response.usage_metadata, 'candidates_token_count', None),
-                    'total_token_count': getattr(response.usage_metadata, 'total_token_count', None),
+                "model": model_name,
+                "pdf_name": pdf_name,
+                "page_num": page_num,
+                "page_num_1indexed": page_num + 1,
+                "elapsed_seconds": processing_time,
+                "raw_text": response.text,
+                "usage_metadata": {
+                    "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", None),
+                    "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", None),
+                    "total_token_count": getattr(response.usage_metadata, "total_token_count", None),
                 },
-                'generation_config': DEFAULT_GENERATION_CONFIG,
-                'finish_reason': str(getattr(response.candidates[0], 'finish_reason', None)) if response.candidates else None,
-                'safety_ratings': [
-                    {
-                        'category': str(rating.category),
-                        'probability': str(rating.probability)
-                    } for rating in getattr(response.candidates[0], 'safety_ratings', [])
-                ] if response.candidates else []
+                "generation_config": DEFAULT_GENERATION_CONFIG,
+                "finish_reason": str(getattr(response.candidates[0], "finish_reason", None))
+                if response.candidates
+                else None,
+                "safety_ratings": [
+                    {"category": str(rating.category), "probability": str(rating.probability)}
+                    for rating in getattr(response.candidates[0], "safety_ratings", [])
+                ]
+                if response.candidates
+                else [],
             }
 
-            with open(api_response_path, 'w', encoding='utf-8') as f:
+            with open(api_response_path, "w", encoding="utf-8") as f:
                 json.dump(api_response_data, f, indent=2, ensure_ascii=False)
 
         # Extract JSON from response
         response_text = response.text.strip()
 
-        # Remove markdown code blocks if present
-        if response_text.startswith("```json"):
-            response_text = response_text[7:]
-        if response_text.startswith("```"):
-            response_text = response_text[3:]
-        if response_text.endswith("```"):
-            response_text = response_text[:-3]
-
-        response_text = response_text.strip()
-
         # Parse JSON
-        classification_data = json.loads(response_text)
+        classification_data = parse_json_response(response_text)
 
         # Build result
         result = {
@@ -606,7 +564,7 @@ def classify_page_with_model(
             "output_tokens": response.usage_metadata.candidates_token_count,
             "total_tokens": response.usage_metadata.total_token_count,
             "processing_time_seconds": processing_time,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
 
         # Calculate cost (Flash pricing: $0.10/$0.40 per 1M tokens)
@@ -621,10 +579,7 @@ def classify_page_with_model(
 
         # Record failed API call
         tracker.record_call(
-            api_type='classification',
-            duration_ms=processing_time * 1000,
-            success=False,
-            error_type=str(e)
+            api_type="classification", duration_ms=processing_time * 1000, success=False, error_type=str(e)
         )
 
         return {
@@ -641,7 +596,7 @@ def classify_page_with_model(
             "total_tokens": 0,
             "processing_time_seconds": processing_time,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "estimated_cost_usd": 0.0
+            "estimated_cost_usd": 0.0,
         }
 
 
@@ -722,20 +677,19 @@ class GeminiClassifier(BaseClassifier):
         2. Application Default Credentials (ADC) - fallback for GCP environments
         """
         if self._model is None:
-            import google.generativeai as genai  # noqa: PLC0415 — optional `gemini` extra, deferred
-            from google.oauth2 import service_account  # noqa: PLC0415
+            import google.generativeai as genai
+            from google.oauth2 import service_account
 
             # 1. Try service account file
             if self.service_account_path and Path(self.service_account_path).exists():
                 try:
                     credentials = service_account.Credentials.from_service_account_file(
                         self.service_account_path,
-                        scopes=['https://www.googleapis.com/auth/generative-language.retriever']
+                        scopes=["https://www.googleapis.com/auth/generative-language.retriever"],
                     )
                     genai.configure(credentials=credentials)
                     self._model = genai.GenerativeModel(
-                        model_name=self.model_name,
-                        generation_config=self.generation_config
+                        model_name=self.model_name, generation_config=self.generation_config
                     )
                     return self._model
                 except Exception as e:
@@ -745,13 +699,13 @@ class GeminiClassifier(BaseClassifier):
             # 3. Try Application Default Credentials (ADC)
             try:
                 import google.auth
+
                 credentials, project = google.auth.default(
-                    scopes=['https://www.googleapis.com/auth/generative-language.retriever']
+                    scopes=["https://www.googleapis.com/auth/generative-language.retriever"]
                 )
                 genai.configure(credentials=credentials)
                 self._model = genai.GenerativeModel(
-                    model_name=self.model_name,
-                    generation_config=self.generation_config
+                    model_name=self.model_name, generation_config=self.generation_config
                 )
                 logger.info("GeminiClassifier using Application Default Credentials (ADC)")
                 if project:
@@ -805,7 +759,10 @@ class GeminiClassifier(BaseClassifier):
 
         # Call classify_page function
         result = classify_page_with_model(
-            self.model, page_bytes, page_num, pdf_name,
+            self.model,
+            page_bytes,
+            page_num,
+            pdf_name,
             options=ClassificationOptions(
                 model_name=self.model_name,
                 input_is_pdf=self.use_pdf_input,
@@ -825,6 +782,7 @@ class GeminiClassifier(BaseClassifier):
             classification = "NF" if is_nf else "Non-NF"
 
             return classification, 1.0
+
     def classify_pages(self, inputs: list) -> list[dict]:
         """
         Classify multiple pages in parallel using threads.
@@ -861,29 +819,23 @@ class GeminiClassifier(BaseClassifier):
                 # CHECK CACHE FIRST - Skip expensive byte extraction if cached
                 api_response_path = None
                 if self.save_api_responses and self.api_response_output_dir:
-                    api_response_path = self.api_response_output_dir / f"{pdf_name}_page{page_num+1}_api_response.json"
+                    api_response_path = (
+                        self.api_response_output_dir / f"{pdf_name}_page{page_num + 1}_api_response.json"
+                    )
 
                     # Try to load from cache
                     if api_response_path.exists():
                         try:
                             import json
-                            with open(api_response_path, 'r', encoding='utf-8') as f:
+
+                            with open(api_response_path, "r", encoding="utf-8") as f:
                                 cached_response = json.load(f)
 
                             # Parse cached response
-                            response_text = cached_response.get('raw_text', '').strip()
-
-                            # Remove markdown if present
-                            if response_text.startswith("```json"):
-                                response_text = response_text[7:]
-                            if response_text.startswith("```"):
-                                response_text = response_text[3:]
-                            if response_text.endswith("```"):
-                                response_text = response_text[:-3]
-                            response_text = response_text.strip()
+                            response_text = cached_response.get("raw_text", "").strip()
 
                             # Parse JSON
-                            classification_data = json.loads(response_text)
+                            classification_data = parse_json_response(response_text)
 
                             # Format result (same format as classify_page_with_model output)
                             raw_category = classification_data.get("categoria", "Nenhuma das Opções")
@@ -904,7 +856,7 @@ class GeminiClassifier(BaseClassifier):
                                 "processing_time_seconds": cached_response.get("processing_time_seconds", 0.0),
                                 "model_name": cached_response.get("model_name", self.model_name),
                                 "timestamp": cached_response.get("timestamp", ""),
-                                "cached": True
+                                "cached": True,
                             }
 
                             # Cache hit - skip byte extraction!
@@ -939,7 +891,9 @@ class GeminiClassifier(BaseClassifier):
                 # Prepare API response path if saving is enabled
                 api_response_path = None
                 if self.save_api_responses and self.api_response_output_dir:
-                    api_response_path = self.api_response_output_dir / f"{pdf_name}_page{page_num+1}_api_response.json"
+                    api_response_path = (
+                        self.api_response_output_dir / f"{pdf_name}_page{page_num + 1}_api_response.json"
+                    )
 
                 future = executor.submit(
                     classify_page_with_model,
@@ -986,7 +940,7 @@ class GeminiClassifier(BaseClassifier):
                         # Processing metadata
                         "processing_time_seconds": raw_result.get("processing_time_seconds", 0.0),
                         "model_name": raw_result.get("model_name", self.model_name),
-                        "timestamp": raw_result.get("timestamp", "")
+                        "timestamp": raw_result.get("timestamp", ""),
                     }
                 else:
                     results_dict[page_num] = {
@@ -998,7 +952,7 @@ class GeminiClassifier(BaseClassifier):
                         "justificativa": None,
                         "error": raw_result.get("error_message"),
                         "processing_time_seconds": raw_result.get("processing_time_seconds", 0.0),
-                        "timestamp": raw_result.get("timestamp", "")
+                        "timestamp": raw_result.get("timestamp", ""),
                     }
 
         # Return results in original page order (includes both cached and newly processed)

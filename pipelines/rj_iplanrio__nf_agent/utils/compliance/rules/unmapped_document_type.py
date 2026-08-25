@@ -5,11 +5,12 @@ Priority: 50
 Classification: "Not Analyzable"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class UnmappedDocumentTypeRule(ComplianceRule):
+class UnmappedDocumentTypeRule(Rule[ValidationContext]):
     """
     Rule: Document type is None, empty, or contains unmapped keywords
 
@@ -18,14 +19,7 @@ class UnmappedDocumentTypeRule(ComplianceRule):
     """
 
     # Unmapped keywords that indicate unknown document type
-    UNMAPPED_KEYWORDS = [
-        'nenhuma das opções',
-        'nenhuma das opcoes',
-        'outros',
-        'outro',
-        'outra',
-        'nenhum'
-    ]
+    UNMAPPED_KEYWORDS = ["nenhuma das opções", "nenhuma das opcoes", "outros", "outro", "outra", "nenhum"]
 
     def __init__(self):
         super().__init__(priority=50)
@@ -39,13 +33,13 @@ class UnmappedDocumentTypeRule(ComplianceRule):
             return RuleResult(applies=False)
 
         # Check if tipo_documento is None or empty
-        if context.tipo_documento is None or context.tipo_documento == '':
+        if context.tipo_documento is None or context.tipo_documento == "":
             return RuleResult(
                 applies=True,
                 classification="Not Analyzable",
                 stop_evaluation=True,
                 reason="Document type is not specified",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Check if any unmapped keyword appears in tipo_documento (substring match)
@@ -56,7 +50,7 @@ class UnmappedDocumentTypeRule(ComplianceRule):
                 classification="Not Analyzable",
                 stop_evaluation=True,
                 reason=f"Document type contains unmapped keyword: {context.tipo_documento}",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

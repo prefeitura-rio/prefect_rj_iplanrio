@@ -5,6 +5,7 @@ description = "Pipeline de validação de notas fiscais da secretaria iplanrio"
 dependencies = [
     "prefect>=3.4.9",
     "prefect-docker>=0.6.5",
+    "prefect_rj_iplanrio",
     "numpy>=1.24.0",
     "pillow>=10.0.0",
     "PyMuPDF>=1.23.0",
@@ -20,9 +21,16 @@ dependencies = [
     "tqdm>=4.66.0",
     "pyyaml>=6.0.0",
     "python-dotenv>=1.0.0",
+    "iplanrio-agent-toolkit",
     # Lógica de negócio migrada de agent-nf-validator para utils/ (move mecânico).
     # google-generativeai fica de fora (extra "gemini", instalado isolado no
-    # Dockerfile — ver TROUBLESHOOTING.md #4). O toolkit genérico
-    # iplanrio-agent-toolkit ainda não é importado por este código; será
-    # integrado na fase de extração de componentes genéricos (Fase 4+).
+    # Dockerfile — ver TROUBLESHOOTING.md #4). O extra "gemini" do
+    # iplanrio-agent-toolkit NÃO deve ser requisitado aqui pelo mesmo motivo
+    # (conflito de protobuf entre google-generativeai e grpcio-status, ver
+    # TROUBLESHOOTING.md #4) — apenas os módulos base (rate limiter, gcs,
+    # bigquery, matching, rules, credentials) são consumidos.
 ]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
+"iplanrio-agent-toolkit" = { git = "ssh://git@ssh.github.com:443/prefeitura-rio/iplanrio-agent-toolkit.git" }

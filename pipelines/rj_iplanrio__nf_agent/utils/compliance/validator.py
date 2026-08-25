@@ -12,10 +12,11 @@ module tidy while preserving the public API.
 
 from pathlib import Path
 
-from .core import ComplianceValidatorCoreMixin
+from iplanrio_agent_toolkit.rules import RuleEngine
+
+from .core import _LEGACY_FALLBACK_RESULT, ComplianceValidatorCoreMixin
 from .matching import ComplianceValidatorMatchingMixin
 from .report import ComplianceValidatorReportMixin
-from .rule_engine import RuleEngine
 from .rules import DEFAULT_RULES
 from .validate import ComplianceValidatorValidateMixin
 from .validation_context import ValidationContext
@@ -60,21 +61,13 @@ def compute_classification(
         tipo_documento=tipo_documento,
         page_categories=page_categories,
         date_valid=date_valid,
-        is_duplicate=is_duplicate
+        is_duplicate=is_duplicate,
     )
 
     # Evaluate rules
-    result = engine.evaluate(context)
+    result = engine.evaluate(context, fallback=_LEGACY_FALLBACK_RESULT)
 
     return result.classification
-
-
-class ComplianceValidator:
-    """
-    Validates extraction results against expected NFs.
-
-    This is designed to be integrated as the final step in the extraction pipeline.
-    """
 
 
 class ComplianceValidator(
@@ -91,48 +84,45 @@ class ComplianceValidator(
 
     @staticmethod
     def load_expected_nfs_from_excel(excel_path: Path) -> list[dict]:
-            """
-            Load expected NFs from validation Excel file.
+        """
+        Load expected NFs from validation Excel file.
 
-            :param excel_path: Path to validation Excel file with NF_Details sheet.
-            :returns: List of expected NF dicts.
-            :raises KeyError: If the sheet ``NF_Details`` is not found in the workbook.
-            :raises ValueError: If required columns are missing from the sheet header.
-            """
-            from openpyxl import load_workbook  # noqa: PLC0415
+        :param excel_path: Path to validation Excel file with NF_Details sheet.
+        :returns: List of expected NF dicts.
+        :raises KeyError: If the sheet ``NF_Details`` is not found in the workbook.
+        :raises ValueError: If required columns are missing from the sheet header.
+        """
+        from openpyxl import load_workbook
 
-            wb = load_workbook(excel_path, read_only=True, data_only=True)
-            if 'NF_Details' not in wb.sheetnames:
-                raise KeyError(
-                    f"Sheet 'NF_Details' not found in '{excel_path}'. "
-                    f"Available sheets: {wb.sheetnames}"
-                )
-            ws = wb['NF_Details']
+        wb = load_workbook(excel_path, read_only=True, data_only=True)
+        if "NF_Details" not in wb.sheetnames:
+            raise KeyError(f"Sheet 'NF_Details' not found in '{excel_path}'. Available sheets: {wb.sheetnames}")
+        ws = wb["NF_Details"]
 
-            rows = ws.iter_rows(values_only=True)
-            header = next(rows)
-            col_idx = {name: i for i, name in enumerate(header) if name is not None}
+        rows = ws.iter_rows(values_only=True)
+        header = next(rows)
+        col_idx = {name: i for i, name in enumerate(header) if name is not None}
 
-            required_cols = {'PDF_name', 'CNPJ', 'Numero_NF', 'Valor_Total'}
-            missing = required_cols - col_idx.keys()
-            if missing:
-                raise ValueError(
-                    f"Required columns missing from 'NF_Details' sheet: {sorted(missing)}"
-                )
+        required_cols = {"PDF_name", "CNPJ", "Numero_NF", "Valor_Total"}
+        missing = required_cols - col_idx.keys()
+        if missing:
+            raise ValueError(f"Required columns missing from 'NF_Details' sheet: {sorted(missing)}")
 
-            page_col = col_idx.get('NF_Page')
-            expected_nfs = []
-            for row in rows:
-                expected_nfs.append({
-                    'pdf_name': row[col_idx['PDF_name']],
-                    'cnpj': row[col_idx['CNPJ']],
-                    'numero_nf': row[col_idx['Numero_NF']],
-                    'valor_total': row[col_idx['Valor_Total']],
-                    'page': row[page_col] if page_col is not None else 'Unknown',
-                })
+        page_col = col_idx.get("NF_Page")
+        expected_nfs = []
+        for row in rows:
+            expected_nfs.append(
+                {
+                    "pdf_name": row[col_idx["PDF_name"]],
+                    "cnpj": row[col_idx["CNPJ"]],
+                    "numero_nf": row[col_idx["Numero_NF"]],
+                    "valor_total": row[col_idx["Valor_Total"]],
+                    "page": row[page_col] if page_col is not None else "Unknown",
+                }
+            )
 
-            wb.close()
-            return expected_nfs
+        wb.close()
+        return expected_nfs
 
 
 # Convenience function for quick validation

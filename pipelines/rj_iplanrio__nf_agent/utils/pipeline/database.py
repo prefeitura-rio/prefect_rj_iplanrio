@@ -29,7 +29,7 @@ class POCProcessorDatabaseMixin:
         keep_pdfs: bool = False,  # Keep downloaded PDFs instead of cleaning up
         experiment_id: str | None = None,  # NEW: Experiment ID for metadata generation
         requests_per_minute: int = 0,  # Passado para versao_pipeline (rastreabilidade)
-        max_concurrent: int = 0,       # Passado para versao_pipeline (rastreabilidade)
+        max_concurrent: int = 0,  # Passado para versao_pipeline (rastreabilidade)
     ) -> pd.DataFrame:
         """
         Process entire database CSV with specified execution mode and parallelization.
@@ -51,16 +51,16 @@ class POCProcessorDatabaseMixin:
         # Initialize API usage counters (will be updated from cache stats)
         # These will be populated at the end from cache statistics
         api_usage_counters = {
-            'classification_calls': 0,
-            'extraction_calls': 0,
-            'total_input_tokens': 0,
-            'total_output_tokens': 0,
-            'estimated_cost_usd': 0.0
+            "classification_calls": 0,
+            "extraction_calls": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "estimated_cost_usd": 0.0,
         }
 
-        print(f"\n{'#'*80}")
-        print(f"# POC Pipeline - Database Processing [Mode: {mode.value}]")
-        print(f"{'#'*80}\n")
+        logger.info(f"\n{'#' * 80}")
+        logger.info(f"# POC Pipeline - Database Processing [Mode: {mode.value}]")
+        logger.info(f"{'#' * 80}\n")
 
         # DEBUG: Verify thread-local DB fix is loaded
         # TODO change quiet to debug logger
@@ -70,32 +70,30 @@ class POCProcessorDatabaseMixin:
 
             source = inspect.getsource(self._process_single_pdf_worker)
             if "thread_db_manager = DatabaseManager" in source:
-                print("[DEBUG] >>> Thread-local DB fix IS LOADED <<<")
+                logger.info("[DEBUG] >>> Thread-local DB fix IS LOADED <<<")
             else:
-                print(
-                    "[DEBUG] XXX Thread-local DB fix NOT LOADED - using old code! XXX"
-                )
+                logger.info("[DEBUG] XXX Thread-local DB fix NOT LOADED - using old code! XXX")
 
         # Store db_path for worker threads (each worker creates its own connection)
         self.db_path = self.db_manager.db_path
         logger.info(f"[DEBUG] Main thread DB path stored: {self.db_path}\n")
 
         # Read CSV
-        print(f"Reading database: {csv_path}")
+        logger.info(f"Reading database: {csv_path}")
         df = pd.read_csv(csv_path)
-        print(f"Total rows: {len(df)}")
+        logger.info(f"Total rows: {len(df)}")
 
         # Group by PDF (descricao_limpa column - normalized without .pdf extension)
         pdf_groups = df.groupby("descricao_limpa")
-        print(f"Unique PDFs: {len(pdf_groups)}")
+        logger.info(f"Unique PDFs: {len(pdf_groups)}")
 
         if limit:
-            print(f"Processing limit: {limit} PDFs")
+            logger.info(f"Processing limit: {limit} PDFs")
 
-        print(f"Parallel workers: {max_workers}")
+        logger.info(f"Parallel workers: {max_workers}")
 
         # Load available PDFs from pre-generated CSV (faster than GCS API call)
-        print("Loading available PDFs from CSV...")
+        logger.info("Loading available PDFs from CSV...")
         # TODO rename symbol
         if "pdf_url_download" in df.columns and df["pdf_url_download"].notna().any():
             # View provides pdf_url_download — existence already guaranteed by INNER JOIN.
@@ -109,7 +107,7 @@ class POCProcessorDatabaseMixin:
             #   https://storage.googleapis.com/<bucket>/...
             for _prefix in ("https://storage.cloud.google.com/", "https://storage.googleapis.com/"):
                 if sample_url_clean.startswith(_prefix):
-                    sample_url_clean = sample_url_clean[len(_prefix):]
+                    sample_url_clean = sample_url_clean[len(_prefix) :]
                     break
             url_parts = sample_url_clean.split("/")
             # url_parts = [bucket, ...base_path_parts..., filename]
@@ -120,17 +118,18 @@ class POCProcessorDatabaseMixin:
             if not self.gcs_downloader.bucket_name:
                 self.gcs_downloader.bucket_name = bucket_from_url
                 self.gcs_downloader._bucket = None  # force lazy reload with new bucket name
-                print(f"  [Auto] GCS bucket set from pdf_url_download: {bucket_from_url}")
+                logger.info(f"  [Auto] GCS bucket set from pdf_url_download: {bucket_from_url}")
             available_pdfs = set(df["descricao_limpa"].dropna().unique())
-            print(f"  Using pdf_url_download — {len(available_pdfs):,} PDFs (bucket: {self.gcs_downloader.bucket_name}, base_path: {gcs_base_path})")
+            logger.info(
+                f"  Using pdf_url_download — {len(available_pdfs):,} PDFs (bucket: {self.gcs_downloader.bucket_name}, base_path: {gcs_base_path})"
+            )
         else:
             available_pdfs = self.gcs_downloader.get_available_pdf_filenames_from_csv()
-            print(f"  Found {len(available_pdfs):,} PDFs in GCS")
+            logger.info(f"  Found {len(available_pdfs):,} PDFs in GCS")
             sample_bq = list(pdf_groups.groups.keys())[:5]
             sample_gcs = sorted(list(available_pdfs))[:5]
-            print(f"  [DIAG] Primeiros pdf_names do BQ:  {sample_bq}")
-            print(f"  [DIAG] Primeiros filenames do GCS: {sample_gcs}")
-        print()
+            logger.info(f"  [DIAG] Primeiros pdf_names do BQ:  {sample_bq}")
+            logger.info(f"  [DIAG] Primeiros filenames do GCS: {sample_gcs}")
 
         # Prepare PDF tasks (limit if specified)
         # Filter CSV PDFs against available GCS PDFs using fast set lookup
@@ -150,17 +149,13 @@ class POCProcessorDatabaseMixin:
             # Check if PDF exists in GCS (instant set lookup - O(1))
             if pdf_name not in available_pdfs:
                 # Show first 20 skips + any while still searching for limit
-                if checked_count <= 20 or (
-                    limit and found_count < limit and checked_count <= found_count + 30
-                ):
-                    print(f"  [{checked_count}] Skipping {pdf_name} (not found in GCS)")
+                if checked_count <= 20 or (limit and found_count < limit and checked_count <= found_count + 30):
+                    logger.info(f"  [{checked_count}] Skipping {pdf_name} (not found in GCS)")
                 not_found_pdfs.append(pdf_name)
                 continue
 
             found_count += 1
-            print(
-                f"  [{found_count}/{limit if limit else '∞'}] Found {pdf_name} in GCS"
-            )
+            logger.info(f"  [{found_count}/{limit if limit else '∞'}] Found {pdf_name} in GCS")
 
             # TODO this entire expected_nfs must occupy too much memory for large datasets, reconsider building them on the fly in the worker
             # Prepare expected NFs from all rows for this PDF
@@ -169,29 +164,15 @@ class POCProcessorDatabaseMixin:
                 expected_nf = {
                     "pdf_name": pdf_name,
                     "cnpj": str(row.get("cnpj_cpf", "")),  # Updated: cnpj → cnpj_cpf
-                    "numero_nf": str(
-                        row.get("num_documento", "")
-                    ),  # Use numero_nf for ComplianceValidator
-                    "num_documento": str(
-                        row.get("num_documento", "")
-                    ),  # Keep for backward compatibility
-                    "valor_total": row.get(
-                        "valor_documento"
-                    ),  # Use valor_total for ComplianceValidator
-                    "valor_documento": row.get(
-                        "valor_documento"
-                    ),  # Keep for backward compatibility
+                    "numero_nf": str(row.get("num_documento", "")),  # Use numero_nf for ComplianceValidator
+                    "num_documento": str(row.get("num_documento", "")),  # Keep for backward compatibility
+                    "valor_total": row.get("valor_documento"),  # Use valor_total for ComplianceValidator
+                    "valor_documento": row.get("valor_documento"),  # Keep for backward compatibility
                     # TODO: Check if this should be valor_pago instead
-                    "valor_pago": row.get(
-                        "valor_pago_total"
-                    ),  # Updated: valor_pago → valor_pago_total
-                    "tipo_documento": row.get(
-                        "id_tipo_documento", None
-                    ),  # Optional, defaults to None
+                    "valor_pago": row.get("valor_pago_total"),  # Updated: valor_pago → valor_pago_total
+                    "tipo_documento": row.get("id_tipo_documento", None),  # Optional, defaults to None
                     "data_emissao": (
-                        str(row.get("data_emissao", ""))
-                        if pd.notna(row.get("data_emissao"))
-                        else None
+                        str(row.get("data_emissao", "")) if pd.notna(row.get("data_emissao")) else None
                     ),  # For date mismatch rule
                 }
                 expected_nfs.append(expected_nf)
@@ -205,16 +186,16 @@ class POCProcessorDatabaseMixin:
             )
 
         total_pdfs = len(pdf_tasks)
-        print(f"\n{'='*80}")
-        print("GCS Search Summary:")
-        print(f"  PDFs checked: {checked_count}")
-        print(f"  PDFs found in GCS: {found_count}")
-        print(f"  PDFs skipped (not in GCS): {checked_count - found_count}")
-        print(f"{'='*80}")
+        logger.info(f"\n{'=' * 80}")
+        logger.info("GCS Search Summary:")
+        logger.info(f"  PDFs checked: {checked_count}")
+        logger.info(f"  PDFs found in GCS: {found_count}")
+        logger.info(f"  PDFs skipped (not in GCS): {checked_count - found_count}")
+        logger.info(f"{'=' * 80}")
 
         # PRE-DOWNLOAD: Download all PDFs in batches before parallel processing
-        print(f"\n[Pre-download] Downloading {total_pdfs} PDFs in batches...")
-        print("Using concurrent downloads (50 at a time) to optimize network usage")
+        logger.info(f"\n[Pre-download] Downloading {total_pdfs} PDFs in batches...")
+        logger.info("Using concurrent downloads (50 at a time) to optimize network usage")
 
         # Get PDF names
         pdf_names_to_download = [task["pdf_name"] for task in pdf_tasks]
@@ -228,9 +209,7 @@ class POCProcessorDatabaseMixin:
         )
         _t_download_total = time.time() - _t_download_start
 
-        print(
-            f"[OK] Downloaded {len(downloaded_paths)} / {len(pdf_names_to_download)} PDFs"
-        )
+        logger.info(f"[OK] Downloaded {len(downloaded_paths)} / {len(pdf_names_to_download)} PDFs")
 
         # Filter out PDFs that failed to download
         pdf_tasks_filtered = []
@@ -239,12 +218,10 @@ class POCProcessorDatabaseMixin:
                 task["pdf_path"] = downloaded_paths[task["pdf_name"]]
                 pdf_tasks_filtered.append(task)
             else:
-                print(f"[Warning] Skipping {task['pdf_name']} (download failed)")
+                logger.warning(f"[Warning] Skipping {task['pdf_name']} (download failed)")
                 failed_pdfs_download.append(task["pdf_name"])
 
-        print(
-            f"\n[Processing] Processing {len(pdf_tasks_filtered)} PDFs with {max_workers} workers...\n"
-        )
+        logger.info(f"\n[Processing] Processing {len(pdf_tasks_filtered)} PDFs with {max_workers} workers...\n")
 
         # ── Wall-clock timer for the whole processing stage ──
 
@@ -257,7 +234,7 @@ class POCProcessorDatabaseMixin:
         pdf_results = {}  # Map PDF name to result
         _n_total = len(pdf_tasks_filtered)
 
-        print(f"[Progress] Processing {_n_total} PDFs with {max_workers} workers...", flush=True)
+        logger.info(f"[Progress] Processing {_n_total} PDFs with {max_workers} workers...")
 
         _t_core_start = time.time()
         _submitted_at: dict[str, float] = {}
@@ -292,10 +269,7 @@ class POCProcessorDatabaseMixin:
                 _n_docs = len(result.get("extracted_nfs", []))
                 _truncated = task["pdf_name"][:60]
                 _status = "OK" if result.get("success") else "FAIL"
-                print(
-                    f"  {_truncated} → {_status} ({_n_docs} docs, {_pdf_elapsed:.0f}s)",
-                    flush=True,
-                )
+                logger.info(f"  {_truncated} → {_status} ({_n_docs} docs, {_pdf_elapsed:.0f}s)")
 
                 # Periodic summary every N PDFs
                 # Use len(pdf_results) instead of completed_count[0] to avoid
@@ -309,46 +283,33 @@ class POCProcessorDatabaseMixin:
                     _n_fail = _done - _n_ok
                     _rate = _done / _elapsed if _elapsed > 0 else 0
                     _eta = (_n_total - _done) / _rate if _rate > 0 else 0
-                    print(
-                        f"[Progress] {_done}/{_n_total} ({100*_done//_n_total}%) | "
+                    logger.info(
+                        f"[Progress] {_done}/{_n_total} ({100 * _done // _n_total}%) | "
                         f"{_n_ok} OK, {_n_fail} FAIL | "
                         f"elapsed={_elapsed:.0f}s rate={_rate:.1f}pdf/s "
-                        f"eta={_eta:.0f}s",
-                        flush=True,
+                        f"eta={_eta:.0f}s"
                     )
                     # When rate is low, show which PDFs are still in-flight
                     if _rate < 0.1:
-                        _inflight = {
-                            n: time.time() - t
-                            for n, t in _submitted_at.items()
-                            if n not in pdf_results
-                        }
+                        _inflight = {n: time.time() - t for n, t in _submitted_at.items() if n not in pdf_results}
                         if _inflight:
                             _slowest = sorted(_inflight.items(), key=lambda x: -x[1])[:3]
-                            print(
-                                "  ⏳ In-flight: "
-                                + ", ".join(f"{n[:40]}…({s:.0f}s)" for n, s in _slowest),
-                                flush=True,
-                            )
+                            logger.info("  ⏳ In-flight: " + ", ".join(f"{n[:40]}…({s:.0f}s)" for n, s in _slowest))
         _t_core_wall = time.time() - _t_core_start
 
         _n_ok = sum(1 for r in pdf_results.values() if r.get("success"))
         _n_fail = _n_total - _n_ok
-        print(
+        logger.info(
             f"[Progress] Done: {_n_ok} OK, {_n_fail} FAIL "
-            f"in {_t_core_wall:.0f}s ({_t_core_wall/_n_total:.1f}s/pdf avg)",
-            flush=True,
+            f"in {_t_core_wall:.0f}s ({_t_core_wall / _n_total:.1f}s/pdf avg)"
         )
 
         # ── Top 5 slowest PDFs ──
         _sorted_pdfs = sorted(
-            (
-                (n, _finished_at.get(n, 0) - _submitted_at.get(n, 0))
-                for n in pdf_results
-            ),
+            ((n, _finished_at.get(n, 0) - _submitted_at.get(n, 0)) for n in pdf_results),
             key=lambda x: -x[1],
         )
-        print("[Slowest] Top 5:")
+        logger.info("[Slowest] Top 5:")
         for _rank, (_name, _sec) in enumerate(_sorted_pdfs[:5], 1):
             _r = pdf_results[_name]
             _ok = "OK" if _r.get("success") else "FAIL"
@@ -356,20 +317,16 @@ class POCProcessorDatabaseMixin:
             _pages = _r.get("total_pages", "?")
             _cf = _r.get("_t_classif_wall_sec")
             _cf_str = f"classif={_cf:.0f}s" if _cf is not None else ""
-            print(f"  #{_rank} {_name[:60]} → {_ok} ({_sec:.0f}s, {_pages}p, {_docs} docs {_cf_str})")
+            logger.info(f"  #{_rank} {_name[:60]} → {_ok} ({_sec:.0f}s, {_pages}p, {_docs} docs {_cf_str})")
 
         # ── Intra-PDF parallelism indicator ──
         _classif_walls = [
-            r.get("_t_classif_wall_sec")
-            for r in pdf_results.values()
-            if r.get("_t_classif_wall_sec") is not None
+            r.get("_t_classif_wall_sec") for r in pdf_results.values() if r.get("_t_classif_wall_sec") is not None
         ]
         if _classif_walls:
             _avg = sum(_classif_walls) / len(_classif_walls)
-            print(
-                f"[Parallelism] Média classif intra-PDF: {_avg:.1f}s wall "
-                f"(quanto menor que páginas×3s, mais paralelo)",
-                flush=True,
+            logger.info(
+                f"[Parallelism] Média classif intra-PDF: {_avg:.1f}s wall (quanto menor que páginas×3s, mais paralelo)"
             )
 
         # ── Aggregate per-batch timing stats ─────────────────────────────────
@@ -396,7 +353,7 @@ class POCProcessorDatabaseMixin:
         _timing_list_extracao: list[float] = []
         if _pdf_stems:
             _placeholders_stem = ",".join("?" * len(_pdf_stems))
-            _placeholders_ext  = ",".join("?" * len(_pdf_with_ext))
+            _placeholders_ext = ",".join("?" * len(_pdf_with_ext))
             # Classification: stored with .pdf extension
             _cur_c = self.db_manager.conn.execute(
                 f"""
@@ -432,20 +389,20 @@ class POCProcessorDatabaseMixin:
 
         # ── Concrete timing metrics (no proportional estimation) ──
         timing_stats: dict[str, Any] = {
-            "wall_sec_download_gcs":    round(_t_download_total, 3),
-            "wall_sec_core":            round(_t_core_wall, 3),
-            "wall_sec_escrita":         None,
-            "avg_cpu_sec_preprocess_por_pdf":         _safe_avg(_timing_list_preprocess),
-            "avg_cpu_sec_classificacao_por_pagina":   _safe_avg(_timing_list_classificacao),
-            "avg_cpu_sec_extracao_por_declaracao":    _safe_avg(_timing_list_extracao),
-            "avg_cpu_sec_validacao_por_pdf":           _safe_avg(_timing_list_validacao),
+            "wall_sec_download_gcs": round(_t_download_total, 3),
+            "wall_sec_core": round(_t_core_wall, 3),
+            "wall_sec_escrita": None,
+            "avg_cpu_sec_preprocess_por_pdf": _safe_avg(_timing_list_preprocess),
+            "avg_cpu_sec_classificacao_por_pagina": _safe_avg(_timing_list_classificacao),
+            "avg_cpu_sec_extracao_por_declaracao": _safe_avg(_timing_list_extracao),
+            "avg_cpu_sec_validacao_por_pdf": _safe_avg(_timing_list_validacao),
             # Actual batch counts (not diff-based — mirrors what was really processed)
             "_n_pdfs_total": _n_total,
-            "_n_pdfs_ok":    _n_ok,
-            "_n_pdfs_fail":  _n_fail,
+            "_n_pdfs_ok": _n_ok,
+            "_n_pdfs_fail": _n_fail,
         }
 
-        print(
+        logger.info(
             f"[Timing] Wall: Download={_t_download_total:.1f}s | Core={_t_core_wall:.1f}s\n"
             f"[Timing] Per-PDF CPU avg: Preprocess={_safe_avg(_timing_list_preprocess)}s | "
             f"Classificação(pag)={_safe_avg(_timing_list_classificacao)}s | "
@@ -489,7 +446,9 @@ class POCProcessorDatabaseMixin:
                 valor_pago_total = row.get("valor_pago_total")  # Paid value (aggregated total)
                 # Get individual paid value (for cases with multiple installments/rateio)
                 # Falls back to valor_pago_total if valor_pago column doesn't exist in CSV
-                valor_pago_individual = row.get("valor_pago", row.get("valor_pago_total"))  # CORRECTED: Individual paid value per row
+                valor_pago_individual = row.get(
+                    "valor_pago", row.get("valor_pago_total")
+                )  # CORRECTED: Individual paid value per row
 
                 # Initialize model columns as empty/None
                 pagina_nf_modelo = None
@@ -502,7 +461,9 @@ class POCProcessorDatabaseMixin:
                 justificativa_modelo = None  # From classification phase (only when NF found)
                 categoria_modelo = None  # From classification phase (only when NF found)
                 indicador_nf_encontrada = False  # Indica se esta declaração teve match com alguma NF extraída (2/3 campos: CNPJ + número + data)
-                nf_extraida_pdf = len(result.get("extracted_nfs", [])) > 0  # Indica se alguma NF foi extraída do PDF (independente de match com declaração)
+                nf_extraida_pdf = (
+                    len(result.get("extracted_nfs", [])) > 0
+                )  # Indica se alguma NF foi extraída do PDF (independente de match com declaração)
                 classificacao_modelo = None  # Will only be set to "Not Analyzable" from classification phase
 
                 # New structured fields replacing debug_info
@@ -535,11 +496,9 @@ class POCProcessorDatabaseMixin:
                     classificacao_modelo = "Não foi possível analisar"
 
                     # Build structured error
-                    pipeline_error = json.dumps({
-                        "stage": stage,
-                        "error_type": error_type,
-                        "error_message": error_message
-                    }, ensure_ascii=False)
+                    pipeline_error = json.dumps(
+                        {"stage": stage, "error_type": error_type, "error_message": error_message}, ensure_ascii=False
+                    )
 
                     # Classification/extraction details are null when processing failed
                     pipeline_classification_detail = None
@@ -561,7 +520,9 @@ class POCProcessorDatabaseMixin:
                             "tipo_documento_modelo": tipo_documento_modelo,
                             "nf_extraida_pdf_modelo": nf_extraida_pdf,
                             "indicador_nf_encontrada_modelo": indicador_nf_encontrada,
-                            "classificacao_modelo": classificacao_modelo if classificacao_modelo in ["Not Analyzable", "Apontamento Leve"] else None,
+                            "classificacao_modelo": classificacao_modelo
+                            if classificacao_modelo in ["Not Analyzable", "Apontamento Leve"]
+                            else None,
                             "categoria_modelo": categoria_modelo,  # From classification phase (only when NF found)
                             "justificativa_modelo": justificativa_modelo,  # From classification phase (only when NF found)
                             "observacao_modelo": observacao_modelo,  # Pure LLM output (currently not generated)
@@ -591,16 +552,19 @@ class POCProcessorDatabaseMixin:
 
                     # Build structured pipeline details (NEW)
                     # Classification detail: full page-by-page classification
-                    pipeline_classification_detail = json.dumps(
-                        self._build_classification_detail(page_categories, page_justifications, nf_pages),
-                        ensure_ascii=False
-                    ) if page_categories else None
+                    pipeline_classification_detail = (
+                        json.dumps(
+                            self._build_classification_detail(page_categories, page_justifications, nf_pages),
+                            ensure_ascii=False,
+                        )
+                        if page_categories
+                        else None
+                    )
 
                     # Extraction detail: all extracted documents with page mapping
                     # Always populate (even when empty) - includes metadata like possui_nota_fiscal, quantidade, etc
                     pipeline_extraction_detail = json.dumps(
-                        self._build_extraction_detail(result.get("extracted_nfs", []), result),
-                        ensure_ascii=False
+                        self._build_extraction_detail(result.get("extracted_nfs", []), result), ensure_ascii=False
                     )
 
                     # No error when NF is found
@@ -612,37 +576,42 @@ class POCProcessorDatabaseMixin:
                         justificativa_modelo = page_justification
                         categoria_modelo = page_categories.get(pagina_nf_modelo)
                         # Check if page was classified as "Not Analyzable"
-                        if "não analisável" in page_justification.lower() or "not analyzable" in page_justification.lower():
+                        if (
+                            "não analisável" in page_justification.lower()
+                            or "not analyzable" in page_justification.lower()
+                        ):
                             classificacao_modelo = "Not Analyzable"
 
                     # Check if validator set "Apontamento Leve" classification
                     # This happens when declaration uses Ticket number instead of NF number (reverse RPS match)
-                    validator_classification = match_item.get('classification')
-                    if validator_classification == 'Apontamento Leve':
+                    validator_classification = match_item.get("classification")
+                    if validator_classification == "Apontamento Leve":
                         classificacao_modelo = "Apontamento Leve"
-                        justificativa_modelo = match_item.get('reason', justificativa_modelo)
+                        justificativa_modelo = match_item.get("reason", justificativa_modelo)
                 else:
                     # NF NOT found - build structured pipeline details
                     # Classification detail: full page-by-page classification
                     if page_categories:
                         pipeline_classification_detail = json.dumps(
                             self._build_classification_detail(page_categories, page_justifications, nf_pages),
-                            ensure_ascii=False
+                            ensure_ascii=False,
                         )
                     else:
                         # No classification available - mark as error
                         pipeline_classification_detail = None
-                        pipeline_error = json.dumps({
-                            "stage": "classification",
-                            "error_type": "no_classification_available",
-                            "error_message": "Nenhuma classificação disponível para este PDF"
-                        }, ensure_ascii=False)
+                        pipeline_error = json.dumps(
+                            {
+                                "stage": "classification",
+                                "error_type": "no_classification_available",
+                                "error_message": "Nenhuma classificação disponível para este PDF",
+                            },
+                            ensure_ascii=False,
+                        )
 
                     # Extraction detail: all extracted documents (even though none matched)
                     # Always populate (even when empty) - includes metadata like possui_nota_fiscal, quantidade, etc
                     pipeline_extraction_detail = json.dumps(
-                        self._build_extraction_detail(result.get("extracted_nfs", []), result),
-                        ensure_ascii=False
+                        self._build_extraction_detail(result.get("extracted_nfs", []), result), ensure_ascii=False
                     )
 
                     # No error if classification/extraction worked (just no match)
@@ -681,8 +650,7 @@ class POCProcessorDatabaseMixin:
                         first_nf_page = nf_pages[0]
                         categoria_modelo = page_categories.get(first_nf_page)
                         justificativa_modelo = page_justifications.get(first_nf_page)
-                            # tipo_documento_modelo stays None (extraction failed)
-
+                        # tipo_documento_modelo stays None (extraction failed)
 
                 # NOTE: Simplified output - validation rules disabled, only classification phase results
                 # classificacao_modelo populated for "Not Analyzable" or "Apontamento Leve"
@@ -701,7 +669,9 @@ class POCProcessorDatabaseMixin:
                         "tipo_documento_modelo": tipo_documento_modelo,
                         "nf_extraida_pdf_modelo": nf_extraida_pdf,
                         "indicador_nf_encontrada_modelo": indicador_nf_encontrada,
-                        "classificacao_modelo": classificacao_modelo if classificacao_modelo in ["Not Analyzable", "Apontamento Leve"] else None,
+                        "classificacao_modelo": classificacao_modelo
+                        if classificacao_modelo in ["Not Analyzable", "Apontamento Leve"]
+                        else None,
                         "categoria_modelo": categoria_modelo,  # From classification phase (only when NF found)
                         "justificativa_modelo": justificativa_modelo,  # From classification phase (only when NF found)
                         "observacao_modelo": observacao_modelo,  # Pure LLM output (currently not generated)
@@ -713,9 +683,9 @@ class POCProcessorDatabaseMixin:
                 )
 
         # Validate page consistency (NEW: detect page mapping issues)
-        print(f"\n{'='*80}")
-        print("Validating page consistency...")
-        print(f"{'='*80}")
+        logger.info(f"\n{'=' * 80}")
+        logger.info("Validating page consistency...")
+        logger.info(f"{'=' * 80}")
 
         inconsistencies = []
         for task in pdf_tasks:
@@ -730,42 +700,44 @@ class POCProcessorDatabaseMixin:
 
             # Validate: páginas extraídas devem estar em nf_pages
             for nf in extracted_nfs:
-                page = nf.get('pagina')
+                page = nf.get("pagina")
                 if page and page not in nf_pages:
-                    inconsistencies.append({
-                        "pdf_name": pdf_name,
-                        "extracted_page": page,
-                        "nf_pages": nf_pages,
-                        "nf_numero": nf.get('numero_nf'),
-                        "issue": "Página extraída não está em nf_pages (possível bug de mapeamento)"
-                    })
+                    inconsistencies.append(
+                        {
+                            "pdf_name": pdf_name,
+                            "extracted_page": page,
+                            "nf_pages": nf_pages,
+                            "nf_numero": nf.get("numero_nf"),
+                            "issue": "Página extraída não está em nf_pages (possível bug de mapeamento)",
+                        }
+                    )
 
         if inconsistencies:
-            print(f"\n⚠️  WARNING: Found {len(inconsistencies)} page mapping inconsistencies:")
+            logger.warning(f"\n⚠️  WARNING: Found {len(inconsistencies)} page mapping inconsistencies:")
             for issue in inconsistencies[:10]:  # Show first 10
-                print(f"  PDF: {issue['pdf_name']}")
-                print(f"    Extracted page: {issue['extracted_page']} (NF: {issue['nf_numero']})")
-                print(f"    Expected pages: {issue['nf_pages']}")
-                print(f"    Issue: {issue['issue']}")
+                logger.info(f"  PDF: {issue['pdf_name']}")
+                logger.info(f"    Extracted page: {issue['extracted_page']} (NF: {issue['nf_numero']})")
+                logger.info(f"    Expected pages: {issue['nf_pages']}")
+                logger.info(f"    Issue: {issue['issue']}")
             if len(inconsistencies) > 10:
-                print(f"  ... and {len(inconsistencies) - 10} more")
+                logger.info(f"  ... and {len(inconsistencies) - 10} more")
         else:
-            print("✓ No page mapping inconsistencies found")
+            logger.info("✓ No page mapping inconsistencies found")
 
         # Create results DataFrame
         results_df = pd.DataFrame(results)
 
         # Print summary
-        print(f"\n{'#'*80}")
-        print("# Processing Complete")
-        print(f"{'#'*80}")
-        print(f"Total rows processed: {len(results_df)}")
-        print(f"PDFs processed: {total_pdfs}")
-        print("\nClassification Summary:")
+        logger.info(f"\n{'#' * 80}")
+        logger.info("# Processing Complete")
+        logger.info(f"{'#' * 80}")
+        logger.info(f"Total rows processed: {len(results_df)}")
+        logger.info(f"PDFs processed: {total_pdfs}")
+        logger.info("\nClassification Summary:")
         if results_df.empty:
-            print("  Nenhum PDF processado.")
+            logger.info("  Nenhum PDF processado.")
         else:
-            print(results_df["classificacao_modelo"].value_counts())
+            logger.info(results_df["classificacao_modelo"].value_counts())
 
         # Save output — format depends on output_mode
         json_items = None  # populated below when output_mode == "json"
@@ -792,41 +764,44 @@ class POCProcessorDatabaseMixin:
                     versao_prompt=self._build_versao_prompt(),
                 )
                 import json as _json
+
                 with open(output_path, "w", encoding="utf-8") as _fh:
                     _json.dump(json_items, _fh, ensure_ascii=False, indent=2, default=str)
-                ok_with_doc = sum(1 for i in json_items if i['pipeline_status'] == 'ok' and i['tipo_documento_extracao'])
-                ok_without_doc = sum(1 for i in json_items if i['pipeline_status'] == 'ok' and not i['tipo_documento_extracao'])
-                erro = sum(1 for i in json_items if i['pipeline_status'] == 'erro_processamento')
-                print(f"\n[SUCCESS] JSON results saved to: {output_path}")
-                print(f"          {len(json_items)} páginas ({ok_with_doc} com documento, "
-                      f"{ok_without_doc} sem documento, {erro} com erro de processamento)")
+                ok_with_doc = sum(
+                    1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"]
+                )
+                ok_without_doc = sum(
+                    1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"]
+                )
+                erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
+                logger.info(f"\n[SUCCESS] JSON results saved to: {output_path}")
+                logger.info(
+                    f"          {len(json_items)} páginas ({ok_with_doc} com documento, "
+                    f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
+                )
             else:
                 json_items = None
                 results_df.to_excel(output_path, index=False)
-                print(f"\n[SUCCESS] Results saved to: {output_path}")
+                logger.info(f"\n[SUCCESS] Results saved to: {output_path}")
 
         # Print cache statistics
-        print("\nCache Statistics:")
+        logger.info("\nCache Statistics:")
         stats = self.db_manager.get_statistics()
         for key, value in stats.items():
-            print(f"  {key}: {value}")
+            logger.info(f"  {key}: {value}")
 
         # Cleanup pre-downloaded PDFs (optional)
         if not keep_pdfs:
-            print(
-                f"\n[Cleanup] Removing {len(downloaded_paths)} pre-downloaded PDFs..."
-            )
+            logger.info(f"\n[Cleanup] Removing {len(downloaded_paths)} pre-downloaded PDFs...")
             for pdf_path in downloaded_paths.values():
                 try:
                     self.gcs_downloader.cleanup_local_file(pdf_path)
                 except Exception:
                     pass  # Ignore cleanup errors
-            print("[OK] Cleanup complete")
+            logger.info("[OK] Cleanup complete")
         else:
-            print(
-                f"\n[Cleanup] Skipped - Keeping {len(downloaded_paths)} PDFs (--keep-pdfs flag)"
-            )
-            print(f"PDFs saved in: {self.temp_dir}")
+            logger.info(f"\n[Cleanup] Skipped - Keeping {len(downloaded_paths)} PDFs (--keep-pdfs flag)")
+            logger.info(f"PDFs saved in: {self.temp_dir}")
 
         # Generate metadata if experiment_id provided
         if experiment_id and output_path:
@@ -835,46 +810,44 @@ class POCProcessorDatabaseMixin:
 
             # Build config dict from parameters
             config = {
-                'mode': mode.value,
-                'workers': max_workers,
-                'limit': limit,
-                'keep_pdfs': keep_pdfs,
-                'input_csv': str(csv_path)
+                "mode": mode.value,
+                "workers": max_workers,
+                "limit": limit,
+                "keep_pdfs": keep_pdfs,
+                "input_csv": str(csv_path),
             }
 
             # Estimate API usage from cache stats
             # Note: This is approximate - actual API calls are tracked in cache DB
             # We use cache misses as proxy for API calls
             cache_stats_dict = {
-                'classification_hits': stats.get('classification_cache_hits', 0),
-                'classification_misses': stats.get('classification_cache_misses', 0),
-                'extraction_hits': stats.get('extraction_cache_hits', 0),
-                'extraction_misses': stats.get('extraction_cache_misses', 0),
-                'cache_hit_rate': stats.get('overall_cache_hit_rate', 0.0)
+                "classification_hits": stats.get("classification_cache_hits", 0),
+                "classification_misses": stats.get("classification_cache_misses", 0),
+                "extraction_hits": stats.get("extraction_cache_hits", 0),
+                "extraction_misses": stats.get("extraction_cache_misses", 0),
+                "cache_hit_rate": stats.get("overall_cache_hit_rate", 0.0),
             }
 
             # Approximate API usage (cache misses = API calls)
-            api_usage_counters['classification_calls'] = cache_stats_dict['classification_misses']
-            api_usage_counters['extraction_calls'] = cache_stats_dict['extraction_misses']
+            api_usage_counters["classification_calls"] = cache_stats_dict["classification_misses"]
+            api_usage_counters["extraction_calls"] = cache_stats_dict["extraction_misses"]
 
             # TODO: Get actual token counts from cache DB if available
             # For now, estimate based on typical usage:
             # - Classification: ~500 input tokens, ~50 output tokens per call
             # - Extraction: ~2000 input tokens, ~500 output tokens per call
-            api_usage_counters['total_input_tokens'] = (
-                cache_stats_dict['classification_misses'] * 500 +
-                cache_stats_dict['extraction_misses'] * 2000
+            api_usage_counters["total_input_tokens"] = (
+                cache_stats_dict["classification_misses"] * 500 + cache_stats_dict["extraction_misses"] * 2000
             )
-            api_usage_counters['total_output_tokens'] = (
-                cache_stats_dict['classification_misses'] * 50 +
-                cache_stats_dict['extraction_misses'] * 500
+            api_usage_counters["total_output_tokens"] = (
+                cache_stats_dict["classification_misses"] * 50 + cache_stats_dict["extraction_misses"] * 500
             )
 
             # Estimate cost (Gemini Flash 2.0 pricing: ~$0.075/1M input, ~$0.30/1M output)
-            api_usage_counters['estimated_cost_usd'] = round(
-                (api_usage_counters['total_input_tokens'] / 1_000_000 * 0.075) +
-                (api_usage_counters['total_output_tokens'] / 1_000_000 * 0.30),
-                2
+            api_usage_counters["estimated_cost_usd"] = round(
+                (api_usage_counters["total_input_tokens"] / 1_000_000 * 0.075)
+                + (api_usage_counters["total_output_tokens"] / 1_000_000 * 0.30),
+                2,
             )
 
             # Generate metadata
@@ -886,20 +859,20 @@ class POCProcessorDatabaseMixin:
                 config=config,
                 results_df=results_df,
                 cache_stats=cache_stats_dict,
-                api_usage=api_usage_counters
+                api_usage=api_usage_counters,
             )
 
             # Save metadata.json next to results.xlsx
-            metadata_path = output_path.parent / 'metadata.json'
-            with open(metadata_path, 'w', encoding='utf-8') as f:
+            metadata_path = output_path.parent / "metadata.json"
+            with open(metadata_path, "w", encoding="utf-8") as f:
                 json.dump(metadata, f, indent=2, ensure_ascii=False)
 
-            print(f"\n[Metadata] Saved to: {metadata_path}")
-            print(f"  Experiment: {experiment_id}")
-            print(f"  Run: {run_id}")
-            print(f"  Duration: {metadata['duration_seconds']/60:.1f} min")
-            print(f"  Classification prompt: v{metadata['prompts']['classification']['version']}")
-            print(f"  Extraction prompt: v{metadata['prompts']['extraction']['version']}")
+            logger.info(f"\n[Metadata] Saved to: {metadata_path}")
+            logger.info(f"  Experiment: {experiment_id}")
+            logger.info(f"  Run: {run_id}")
+            logger.info(f"  Duration: {metadata['duration_seconds'] / 60:.1f} min")
+            logger.info(f"  Classification prompt: v{metadata['prompts']['classification']['version']}")
+            logger.info(f"  Extraction prompt: v{metadata['prompts']['extraction']['version']}")
 
         # Return DataFrame, json_items, and timing_stats for this batch.
         # json_items is None when output_mode != "json" or output_path is not set.

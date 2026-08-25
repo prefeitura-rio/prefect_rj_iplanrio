@@ -3,13 +3,24 @@
 import logging
 from pathlib import Path
 
-from .rule_engine import RuleEngine
+from iplanrio_agent_toolkit.rules import Rule, RuleEngine, RuleResult
+
 from .rules import DEFAULT_RULES
-from .rules.base import ComplianceRule, RuleResult
 from .utils import normalize_cnpj, normalize_number, normalize_value
 from .validation_context import ValidationContext
 
 logger = logging.getLogger(__name__)
+
+# Preserves the exact legacy fallback (pre-toolkit RuleEngine always returned this
+# when no rule stopped evaluation). Should be unreachable in practice since
+# DEFAULT_RULES always includes DefaultPassRule at priority=100.
+_LEGACY_FALLBACK_RESULT = RuleResult(
+    applies=True,
+    classification="OK",
+    stop_evaluation=True,
+    reason="No validation issues found (fallback)",
+    rule_name="Fallback",
+)
 
 
 class ComplianceValidatorCoreMixin:
@@ -20,7 +31,7 @@ class ComplianceValidatorCoreMixin:
         expected_nfs: list[dict] = None,
         use_bigquery_deduplication: bool = True,
         service_account_path: Path | None = None,
-        rules: list[ComplianceRule] | None = None,
+        rules: list[Rule[ValidationContext]] | None = None,
         min_match_score: int = 2,
     ):
         """
@@ -88,35 +99,37 @@ class ComplianceValidatorCoreMixin:
 
         # Build expected_by_pdf and local deduplication (if BigQuery failed)
         for nf in self.expected_nfs:
-            pdf_name = nf['pdf_name']
+            pdf_name = nf["pdf_name"]
 
             if pdf_name not in self.expected_by_pdf:
                 self.expected_by_pdf[pdf_name] = []
 
             # Store data_envio for this PDF (for duplicate detection)
-            if 'data_envio' in nf and pdf_name not in self.pdf_data_envio:
-                self.pdf_data_envio[pdf_name] = nf['data_envio']
+            if "data_envio" in nf and pdf_name not in self.pdf_data_envio:
+                self.pdf_data_envio[pdf_name] = nf["data_envio"]
 
-            cnpj_norm = normalize_cnpj(nf['cnpj'])
-            numero_norm = normalize_number(nf['numero_nf'])
-            valor_norm = normalize_value(nf['valor_total'])
+            cnpj_norm = normalize_cnpj(nf["cnpj"])
+            numero_norm = normalize_number(nf["numero_nf"])
+            valor_norm = normalize_value(nf["valor_total"])
 
-            self.expected_by_pdf[pdf_name].append({
-                'original': nf,
-                'cnpj_norm': cnpj_norm,
-                'numero_norm': numero_norm,
-                'valor_norm': valor_norm,
-                'cod_organizacao': nf.get('cod_organizacao'),  # For duplicate detection
-                'cod_unidade': nf.get('cod_unidade'),  # For duplicate detection
-                'id_documento': nf.get('id_documento'),  # For duplicate detection tie-breaking
-                'matched': False  # Track if this expected NF was found
-            })
+            self.expected_by_pdf[pdf_name].append(
+                {
+                    "original": nf,
+                    "cnpj_norm": cnpj_norm,
+                    "numero_norm": numero_norm,
+                    "valor_norm": valor_norm,
+                    "cod_organizacao": nf.get("cod_organizacao"),  # For duplicate detection
+                    "cod_unidade": nf.get("cod_unidade"),  # For duplicate detection
+                    "id_documento": nf.get("id_documento"),  # For duplicate detection tie-breaking
+                    "matched": False,  # Track if this expected NF was found
+                }
+            )
 
             # If not using BigQuery, build local deduplication from expected_nfs
             if not self.use_bigquery_deduplication:
                 # 4-field dedup key: exact (cnpj, numero, org, unit) combination must repeat
-                cod_org = nf.get('cod_organizacao', '')
-                cod_unit = nf.get('cod_unidade', '')
+                cod_org = nf.get("cod_organizacao", "")
+                cod_unit = nf.get("cod_unidade", "")
                 dedup_key = (cnpj_norm, numero_norm, cod_org, cod_unit)
 
                 if dedup_key not in self.deduplication_lookup:
@@ -124,15 +137,15 @@ class ComplianceValidatorCoreMixin:
 
                 # Store fields matching BigQuery structure
                 entry = {
-                    'pdf_name': pdf_name,
-                    'data_envio': nf.get('data_envio'),
-                    'id_documento': nf.get('id_documento'),
-                    'cod_organizacao': cod_org,
-                    'cod_unidade': cod_unit
+                    "pdf_name": pdf_name,
+                    "data_envio": nf.get("data_envio"),
+                    "id_documento": nf.get("id_documento"),
+                    "cod_organizacao": cod_org,
+                    "cod_unidade": cod_unit,
                 }
 
                 # Only add if not already in list
-                if not any(e['pdf_name'] == pdf_name for e in self.deduplication_lookup[dedup_key]):
+                if not any(e["pdf_name"] == pdf_name for e in self.deduplication_lookup[dedup_key]):
                     self.deduplication_lookup[dedup_key].append(entry)
 
     def _classify(
@@ -182,10 +195,10 @@ class ComplianceValidatorCoreMixin:
             data_emissao_expected=data_emissao_expected,
             data_emissao_extracted=data_emissao_extracted,
             data_servico=data_servico,
-            cnpj_data_abertura=cnpj_data_abertura
+            cnpj_data_abertura=cnpj_data_abertura,
         )
 
         # Evaluate rules
-        result = self.rule_engine.evaluate(context)
+        result = self.rule_engine.evaluate(context, fallback=_LEGACY_FALLBACK_RESULT)
 
         return result  # Return full RuleResult with classification, rule_name, reason

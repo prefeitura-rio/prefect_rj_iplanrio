@@ -10,7 +10,7 @@ the `gemini` extra that powers the extraction/classification agents.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from prefect import flow
 
@@ -23,10 +23,12 @@ from .tasks import (
     write_run_summary_task,
 )
 from .utils import BatchRunParams
+from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
+
 
 
 @flow(log_prints=True)
-def nf_processing_flow(
+def rj_iplanrio__nf_agent(
     bq_input_table: str | None = None,
     bq_status_table: str | None = None,
     pipeline_runs_table: str | None = None,
@@ -46,10 +48,10 @@ def nf_processing_flow(
     session_pdfs_done: int = 0,
 ) -> None:
     """Run one batch of the NF extraction/validation pipeline and self-trigger the next one."""
-    from .utils.run_poc.credentials_helper import inject_credentials_from_env
 
     # Inject GCP credentials from Infisical before any GCP client is created
     inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
+    inject_credentials_from_env("GCS_BUCKET")
 
     session_id = new_or_continued_session_task(session_id)
     params = BatchRunParams(
@@ -69,9 +71,9 @@ def nf_processing_flow(
         max_pdfs=max_pdfs,
     )
 
-    started_at = datetime.utcnow()
+    started_at = datetime.now(timezone.utc)
     timing_stats = run_nf_pipeline_task(params=params, force_reprocess=force_reprocess)
-    finished_at = datetime.utcnow()
+    finished_at = datetime.now(timezone.utc)
 
     summary = summarize_batch_task(
         timing_stats=timing_stats,

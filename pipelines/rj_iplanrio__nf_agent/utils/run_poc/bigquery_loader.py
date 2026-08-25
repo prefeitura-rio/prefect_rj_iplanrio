@@ -13,16 +13,19 @@ from pathlib import Path
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
+from prefect_rj_iplanrio.logging import get_logger
+from prefect_rj_iplanrio.sql import load_query
+
 from ..core.config import BIGQUERY_SERVICE_ACCOUNT_PATH
+
+logger = get_logger(__name__)
 
 
 def resolve_dataset(dataset_id: str | None) -> str:
     """Resolve dataset ID from parameter or environment variable."""
     effective = dataset_id or os.getenv("BIGQUERY_DATASET_ID")
     if not effective:
-        raise ValueError(
-            "dataset_id must be provided or BIGQUERY_DATASET_ID env var must be set"
-        )
+        raise ValueError("dataset_id must be provided or BIGQUERY_DATASET_ID env var must be set")
     return effective
 
 
@@ -75,85 +78,26 @@ def load_expected_nfs_from_bigquery(
         )
 
     # Load credentials
-    credentials = service_account.Credentials.from_service_account_file(
-        str(service_account_path)
-    )
+    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
 
     # Create BigQuery client
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
     project = client.project
     ds = resolve_dataset(dataset_id)
 
-    # Build query with bcadastro join to get company opening date
-    query = f"""
-    WITH despesas AS (
-        SELECT
-            id_documento,
-            descricao_limpa,
-            cnpj,
-            num_documento,
-            valor_documento,
-            data_envio,
-            data_emissao,
-            cod_organizacao,
-            cod_unidade,
-            valor_pago,
-            LPAD(REGEXP_REPLACE(cnpj, r'[^0-9]', ''), 14, '0') AS cleaned_cnpj
-        FROM
-            `{project}.{ds}.osinfo_despesas_recorte`
-    ),
-    bcadastro AS (
-        SELECT
-            LPAD(REGEXP_REPLACE(CAST(cnpj_particao AS STRING), r'[^0-9]', ''), 14, '0') AS cleaned_cnpj_reg,
-            inicio_atividade_data AS cnpj_data_abertura
-        FROM
-            `{project}.{ds}.bcadastro_cnpj_recorte`
-    )
-    SELECT
-        d.id_documento,
-        d.descricao_limpa AS pdf_name,
-        d.cnpj,
-        d.num_documento AS numero_nf,
-        d.valor_documento AS valor_total,
-        d.data_envio,
-        d.data_emissao,
-        d.cod_organizacao,
-        d.cod_unidade,
-        d.valor_pago,
-        b.cnpj_data_abertura,
-        SUM(d.valor_pago) AS valor_pago_total,
-        COUNT(*) AS num_parcelas
-    FROM
-        despesas d
-    LEFT JOIN
-        bcadastro b ON d.cleaned_cnpj = b.cleaned_cnpj_reg
-    """
-
-    # Add WHERE clause if filtering by PDF names
+    # Optional WHERE clause fragment; the .sql skeleton stays static SQL.
+    pdf_filter = ""
     if pdf_names:
         pdf_list_str = ", ".join(f"'{pdf}'" for pdf in pdf_names)
-        query += f"""
-    WHERE
-        d.descricao_limpa IN ({pdf_list_str})
-        """
+        pdf_filter = f"WHERE d.descricao_limpa IN ({pdf_list_str})"
 
-    query += """
-    GROUP BY
-        d.id_documento,
-        d.descricao_limpa,
-        d.cnpj,
-        d.num_documento,
-        d.valor_documento,
-        d.data_envio,
-        d.data_emissao,
-        d.cod_organizacao,
-        d.cod_unidade,
-        d.valor_pago,
-        b.cnpj_data_abertura
-    ORDER BY
-        d.data_envio,
-        d.id_documento
-    """
+    query = load_query(
+        __file__,
+        "expected_nfs_with_opening_date",
+        project=project,
+        dataset=ds,
+        pdf_filter=pdf_filter,
+    )
 
     # Execute query
     query_job = client.query(query)
@@ -168,9 +112,7 @@ def load_expected_nfs_from_bigquery(
                 "pdf_name": row.pdf_name,
                 "cnpj": row.cnpj,
                 "numero_nf": str(row.numero_nf) if row.numero_nf is not None else "",
-                "valor_total": (
-                    float(row.valor_total) if row.valor_total is not None else 0.0
-                ),
+                "valor_total": (float(row.valor_total) if row.valor_total is not None else 0.0),
                 "data_envio": row.data_envio,  # Submission date for duplicate detection
                 "data_emissao": (
                     str(row.data_emissao) if row.data_emissao is not None else None
@@ -206,23 +148,15 @@ def get_pdf_list_from_bigquery(
         service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
 
     if not service_account_path.exists():
-        raise FileNotFoundError(
-            f"BigQuery service account file not found: {service_account_path}"
-        )
+        raise FileNotFoundError(f"BigQuery service account file not found: {service_account_path}")
 
-    credentials = service_account.Credentials.from_service_account_file(
-        str(service_account_path)
-    )
+    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
 
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
     project = client.project
     ds = resolve_dataset(dataset_id)
 
-    query = f"""
-    SELECT DISTINCT descricao_limpa AS pdf_name
-    FROM `{project}.{ds}.osinfo_despesas_recorte`
-    ORDER BY pdf_name
-    """
+    query = load_query(__file__, "distinct_pdf_names", project=project, dataset=ds)
 
     query_job = client.query(query)
     results = query_job.result()
@@ -267,30 +201,19 @@ def get_company_start_date(
         service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
 
     if not service_account_path.exists():
-        raise FileNotFoundError(
-            f"BigQuery credentials not found: {service_account_path}"
-        )
+        raise FileNotFoundError(f"BigQuery credentials not found: {service_account_path}")
 
     # Create BigQuery client
-    credentials = service_account.Credentials.from_service_account_file(
-        str(service_account_path)
-    )
+    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
     project = client.project
     ds = resolve_dataset(dataset_id)
 
     # Query table (cnpj column is INT64)
-    query = f"""
-    SELECT inicio_atividade_data
-    FROM `{project}.{ds}.bcadastro_cnpj_recorte`
-    WHERE cnpj = @cnpj_param
-    LIMIT 1
-    """
+    query = load_query(__file__, "company_start_date", project=project, dataset=ds)
 
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[
-            bigquery.ScalarQueryParameter("cnpj_param", "INT64", cnpj_int)
-        ]
+        query_parameters=[bigquery.ScalarQueryParameter("cnpj_param", "INT64", cnpj_int)]
     )
 
     query_job = client.query(query, job_config=job_config)
@@ -345,35 +268,15 @@ def get_deduplication_lookup_from_bigquery(
         service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
 
     if not service_account_path.exists():
-        raise FileNotFoundError(
-            f"BigQuery credentials not found: {service_account_path}"
-        )
+        raise FileNotFoundError(f"BigQuery credentials not found: {service_account_path}")
 
-    credentials = service_account.Credentials.from_service_account_file(
-        str(service_account_path)
-    )
+    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
     project = client.project
     ds = resolve_dataset(dataset_id)
 
     # Query: Get all unique (cnpj, num_documento, org, unit, descricao_limpa, data_envio, id) combinations
-    query = f"""
-    SELECT DISTINCT
-        id_documento,
-        cnpj,
-        num_documento,
-        descricao_limpa AS pdf_name,
-        data_envio,
-        cod_organizacao,
-        cod_unidade
-    FROM
-        `{project}.{ds}.osinfo_despesas_recorte`
-    WHERE
-        cnpj IS NOT NULL
-        AND num_documento IS NOT NULL
-    ORDER BY
-        cnpj, num_documento, cod_organizacao, cod_unidade, data_envio, id_documento
-    """
+    query = load_query(__file__, "deduplication_lookup", project=project, dataset=ds)
 
     query_job = client.query(query)
     results = query_job.result()
@@ -385,9 +288,7 @@ def get_deduplication_lookup_from_bigquery(
     for row in results:
         # Normalize keys (same normalization as ComplianceValidator)
         cnpj_norm = normalize_cnpj(row.cnpj)
-        numero_norm = normalize_number(
-            str(row.num_documento) if row.num_documento else ""
-        )
+        numero_norm = normalize_number(str(row.num_documento) if row.num_documento else "")
         cod_org = row.cod_organizacao if row.cod_organizacao else ""
         cod_unit = row.cod_unidade if row.cod_unidade else ""
 
@@ -410,9 +311,7 @@ def get_deduplication_lookup_from_bigquery(
         }
 
         # Only add if not already in list (should be DISTINCT, but safe)
-        if not any(
-            e["pdf_name"] == row.pdf_name for e in deduplication_lookup[dedup_key]
-        ):
+        if not any(e["pdf_name"] == row.pdf_name for e in deduplication_lookup[dedup_key]):
             deduplication_lookup[dedup_key].append(entry)
 
     return deduplication_lookup
@@ -447,54 +346,26 @@ def validate_payment_totals(
         service_account_path = BIGQUERY_SERVICE_ACCOUNT_PATH
 
     if not service_account_path.exists():
-        raise FileNotFoundError(
-            f"BigQuery service account file not found: {service_account_path}"
-        )
+        raise FileNotFoundError(f"BigQuery service account file not found: {service_account_path}")
 
-    credentials = service_account.Credentials.from_service_account_file(
-        str(service_account_path)
-    )
+    credentials = service_account.Credentials.from_service_account_file(str(service_account_path))
 
     client = bigquery.Client(credentials=credentials, project=credentials.project_id)
     project = client.project
     ds = resolve_dataset(dataset_id)
 
-    query = f"""
-    SELECT
-        descricao_limpa AS pdf_name,
-        cnpj,
-        num_documento AS numero_nf,
-        valor_documento,
-        SUM(valor_pago) AS valor_pago_total,
-        ROUND(SUM(valor_pago) - valor_documento, 2) AS difference,
-        CASE
-            WHEN SUM(valor_pago) > valor_documento THEN 'OVERPAID'
-            WHEN SUM(valor_pago) = valor_documento THEN 'OK'
-            WHEN SUM(valor_pago) < valor_documento THEN 'UNDERPAID'
-            ELSE 'UNKNOWN'
-        END AS status
-    FROM
-        `{project}.{ds}.osinfo_despesas_recorte`
-    """
-
+    pdf_filter = ""
     if pdf_names:
         pdf_list_str = ", ".join(f"'{pdf}'" for pdf in pdf_names)
-        query += f"""
-    WHERE
-        descricao_limpa IN ({pdf_list_str})
-        """
+        pdf_filter = f"WHERE descricao_limpa IN ({pdf_list_str})"
 
-    query += """
-    GROUP BY
-        descricao_limpa,
-        cnpj,
-        num_documento,
-        valor_documento
-    HAVING
-        SUM(valor_pago) != valor_documento
-    ORDER BY
-        difference DESC
-    """
+    query = load_query(
+        __file__,
+        "payment_totals_validation",
+        project=project,
+        dataset=ds,
+        pdf_filter=pdf_filter,
+    )
 
     query_job = client.query(query)
     results = query_job.result()
@@ -506,19 +377,9 @@ def validate_payment_totals(
                 "pdf_name": row.pdf_name,
                 "cnpj": row.cnpj,
                 "numero_nf": str(row.numero_nf) if row.numero_nf is not None else "",
-                "valor_documento": (
-                    float(row.valor_documento)
-                    if row.valor_documento is not None
-                    else 0.0
-                ),
-                "valor_pago_total": (
-                    float(row.valor_pago_total)
-                    if row.valor_pago_total is not None
-                    else 0.0
-                ),
-                "difference": (
-                    float(row.difference) if row.difference is not None else 0.0
-                ),
+                "valor_documento": (float(row.valor_documento) if row.valor_documento is not None else 0.0),
+                "valor_pago_total": (float(row.valor_pago_total) if row.valor_pago_total is not None else 0.0),
+                "difference": (float(row.difference) if row.difference is not None else 0.0),
                 "status": row.status,
             }
         )

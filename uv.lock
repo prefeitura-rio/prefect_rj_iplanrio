@@ -1731,6 +1731,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "iplanrio-agent-toolkit"
+version = "0.1.0"
+source = { git = "ssh://git@ssh.github.com:443/prefeitura-rio/iplanrio-agent-toolkit.git#103a25fd97a083a3cdc5314ba5da67e81157fc26" }
+dependencies = [
+    { name = "google-auth" },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "pandas" },
+]
+
+[[package]]
 name = "isodate"
 version = "0.7.2"
 source = { registry = "https://pypi.org/simple" }
@@ -4469,6 +4480,7 @@ dependencies = [
     { name = "google-cloud-bigquery" },
     { name = "google-cloud-storage" },
     { name = "google-cloud-vision" },
+    { name = "iplanrio-agent-toolkit" },
     { name = "numpy" },
     { name = "openpyxl" },
     { name = "pandas" },
@@ -4476,6 +4488,7 @@ dependencies = [
     { name = "pillow" },
     { name = "prefect" },
     { name = "prefect-docker" },
+    { name = "prefect-rj-iplanrio" },
     { name = "pymupdf" },
     { name = "pypdf" },
     { name = "python-dotenv" },
@@ -4490,6 +4503,7 @@ requires-dist = [
     { name = "google-cloud-bigquery", specifier = ">=3.0.0" },
     { name = "google-cloud-storage", specifier = ">=2.0.0" },
     { name = "google-cloud-vision", specifier = ">=3.4.0" },
+    { name = "iplanrio-agent-toolkit", git = "ssh://git@ssh.github.com:443/prefeitura-rio/iplanrio-agent-toolkit.git" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "openpyxl" },
     { name = "pandas", specifier = ">=2.0.0" },
@@ -4497,6 +4511,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "prefect", specifier = ">=3.4.9" },
     { name = "prefect-docker", specifier = ">=0.6.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
     { name = "pymupdf", specifier = ">=1.23.0" },
     { name = "pypdf" },
     { name = "python-dotenv", specifier = ">=1.0.0" },

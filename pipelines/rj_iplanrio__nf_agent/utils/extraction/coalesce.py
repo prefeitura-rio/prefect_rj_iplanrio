@@ -23,7 +23,7 @@ class NFExtractorCoalesceMixin:
 
         batches = []
         for i in range(0, len(pages), batch_size):
-            batch = pages[i:i + batch_size]
+            batch = pages[i : i + batch_size]
             batches.append(batch)
 
         return batches
@@ -51,7 +51,7 @@ class NFExtractorCoalesceMixin:
         nf_groups = defaultdict(list)
 
         for nf in all_nfs:
-            numero = nf.get('numero_nf')
+            numero = nf.get("numero_nf")
             # Use numero as key (or unique ID if null)
             key = str(numero) if numero else f"_unnamed_{id(nf)}"
             nf_groups[key].append(nf)
@@ -70,7 +70,7 @@ class NFExtractorCoalesceMixin:
                 for nf in group:
                     for field, value in nf.items():
                         # Skip null/empty values
-                        if value is None or value == '' or value == '-':
+                        if value is None or value == "" or value == "-":
                             continue
 
                         # Field not in merged yet - add it
@@ -78,12 +78,12 @@ class NFExtractorCoalesceMixin:
                             merged[field] = value
 
                         # Field exists but is null - replace
-                        elif merged[field] is None or merged[field] == '' or merged[field] == '-':
+                        elif merged[field] is None or merged[field] == "" or merged[field] == "-":
                             merged[field] = value
 
                         # SPECIAL: For valor_total field, prefer MAIOR valor
                         # TODO: Review this section! Change to "Not Analyzable" with comments
-                        elif field == 'valor_total':
+                        elif field == "valor_total":
                             if isinstance(value, (int, float)) and isinstance(merged[field], (int, float)):
                                 if value > merged[field]:
                                     old_val = merged[field]
@@ -91,7 +91,7 @@ class NFExtractorCoalesceMixin:
                                     conflicts.append(f"{field}: {old_val} → {value}")
 
                         # SPECIAL: For pagina, use earliest (menor número)
-                        elif field == 'pagina':
+                        elif field == "pagina":
                             if isinstance(value, int) and isinstance(merged[field], int):
                                 merged[field] = min(merged[field], value)
 
@@ -101,13 +101,13 @@ class NFExtractorCoalesceMixin:
 
                 # Add conflict info to observacao if any
                 if conflicts:
-                    existing_obs = merged.get('observacao', '')
+                    existing_obs = merged.get("observacao", "")
                     conflict_note = f"[MERGE: {'; '.join(conflicts)}]"
 
                     if existing_obs:
-                        merged['observacao'] = f"{existing_obs} {conflict_note}"
+                        merged["observacao"] = f"{existing_obs} {conflict_note}"
                     else:
-                        merged['observacao'] = conflict_note
+                        merged["observacao"] = conflict_note
 
                 coalesced.append(merged)
 
@@ -124,14 +124,14 @@ class NFExtractorCoalesceMixin:
             return 0
 
         # Convert to string with high precision and strip trailing zeros
-        value_str = f"{value:.10f}".rstrip('0')
+        value_str = f"{value:.10f}".rstrip("0")
 
         # If no decimal point, return 0
-        if '.' not in value_str:
+        if "." not in value_str:
             return 0
 
         # Count digits after decimal point
-        return len(value_str.split('.')[1])
+        return len(value_str.split(".")[1])
 
     def _has_suspicious_decimals(self, notas_fiscais: list[dict]) -> bool:
         """
@@ -143,7 +143,7 @@ class NFExtractorCoalesceMixin:
         """
         for nf in notas_fiscais:
             # Check valor_total
-            valor_total = nf.get('valor_total', 0.0)
+            valor_total = nf.get("valor_total", 0.0)
             if valor_total and self._count_decimals(valor_total) > 2:
                 return True
 

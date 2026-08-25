@@ -20,9 +20,7 @@ logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
 class POCProcessorCacheMixin:
     """Preprocess pages, cache lookups, and cached classification loading."""
 
-    def preprocess_classification_page(
-        self, pdf_path: Path, page_number: int
-    ) -> tuple[int, bool]:
+    def preprocess_classification_page(self, pdf_path: Path, page_number: int) -> tuple[int, bool]:
         """
         Preprocess a single PDF page for classification (Step 1).
         Converts page to image and saves to api_inputs table.
@@ -77,9 +75,7 @@ class POCProcessorCacheMixin:
         # for this exact (pdf_name, page_number). Saves expensive PNG rendering on re-runs.
         cached_result = self.db_manager.get_cached_classification(pdf_name, page_number)
         if cached_result:
-            logger.info(
-                f"[CACHE] Early skip for {pdf_name} page {page_number} -> {cached_result['category']}"
-            )
+            logger.info(f"[CACHE] Early skip for {pdf_name} page {page_number} -> {cached_result['category']}")
 
             return (
                 cached_result["category"],
@@ -104,14 +100,12 @@ class POCProcessorCacheMixin:
 
         # Get input_id (creates input if doesn't exist) - use PNG for hashing (deduplication)
         page_image_bytes = self._pdf_page_to_bytes(pdf_path, page_number)
-        input_id, is_new, cached_pdf_name, cached_page_num = (
-            self.db_manager.get_or_create_input(
-                input_type="classification_page",
-                pdf_name=pdf_name,
-                content=page_image_bytes,
-                page_number=page_number,
-                metadata={"page_number": page_number},
-            )
+        input_id, is_new, cached_pdf_name, cached_page_num = self.db_manager.get_or_create_input(
+            input_type="classification_page",
+            pdf_name=pdf_name,
+            content=page_image_bytes,
+            page_number=page_number,
+            metadata={"page_number": page_number},
         )
 
         # Check for cached output
@@ -142,14 +136,11 @@ class POCProcessorCacheMixin:
         try:
             # TODO: OPTIMIZATION - This re-extracts PNG bytes that were already extracted at line 277. However, extract_page_as_bytes has more robust error handling (validation, try/except/finally, resource cleanup) than _pdf_page_to_bytes. To optimize: refactor _pdf_page_to_bytes to match extract_page_as_bytes error handling, then reuse page_image_bytes here when use_pdf_input=False.
             # NOTE: extract_page_as_bytes expects 0-indexed page numbers, so convert from 1-indexed
-            page_bytes = extract_page_as_bytes(
-                pdf_path, page_number - 1, as_pdf=self.classifier.use_pdf_input
-            )
+            page_bytes = extract_page_as_bytes(pdf_path, page_number - 1, as_pdf=self.classifier.use_pdf_input)
         except (ValueError, RuntimeError) as e:
             # Page extraction failed (corrupted PDF, invalid page number, etc.)
             logger.warning(
-                f"Failed to extract page {page_number} from {pdf_path.name}: {e}. "
-                f"Marking as 'Nenhuma das Opções'."
+                f"Failed to extract page {page_number} from {pdf_path.name}: {e}. Marking as 'Nenhuma das Opções'."
             )
             # Return error result without calling API
             error_result = {
@@ -168,9 +159,7 @@ class POCProcessorCacheMixin:
             )
             return (error_result["categoria"], error_result["justificativa"], False, None, None)
 
-        logger.debug(
-            f"[DEBUG Thread {thread_id}] Calling classify_page_with_model()..."
-        )
+        logger.debug(f"[DEBUG Thread {thread_id}] Calling classify_page_with_model()...")
         api_result = classify_page_with_model(
             model=self.classifier.model,
             page_bytes=page_bytes,
@@ -185,9 +174,7 @@ class POCProcessorCacheMixin:
             ),
         )
         elapsed = time.time() - start_time
-        logger.debug(
-            f"[DEBUG Thread {thread_id}] [OK] classify_page_with_model() completed"
-        )
+        logger.debug(f"[DEBUG Thread {thread_id}] [OK] classify_page_with_model() completed")
 
         # Flatten result to match expected format (categoria at top level)
         if not api_result.get("success"):
@@ -227,9 +214,7 @@ class POCProcessorCacheMixin:
         justificativa = result.get("justificativa", "")
         return (category, justificativa, False, None, None)
 
-    def preprocess_extraction_pdf(
-        self, pdf_path: Path, nf_pages: list[int]
-    ) -> tuple[int, bool]:
+    def preprocess_extraction_pdf(self, pdf_path: Path, nf_pages: list[int]) -> tuple[int, bool]:
         """
         Preprocess filtered PDF for extraction (Step 3).
         Creates filtered PDF with only NF pages and saves to api_inputs table.
@@ -330,8 +315,7 @@ class POCProcessorCacheMixin:
             # "0 notas fiscais" result — that would permanently poison the
             # cache. Let the caller (process_pdf) see this as a real failure.
             raise RuntimeError(
-                f"Gemini extraction API call failed for {pdf_path.name}: "
-                f"{result.get('error', 'Unknown error')}"
+                f"Gemini extraction API call failed for {pdf_path.name}: {result.get('error', 'Unknown error')}"
             )
 
         # Save output
@@ -346,9 +330,7 @@ class POCProcessorCacheMixin:
 
         return (result, False)
 
-    def check_extraction_cache(
-        self, pdf_path: Path
-    ) -> tuple[dict | None, list[int] | None]:
+    def check_extraction_cache(self, pdf_path: Path) -> tuple[dict | None, list[int] | None]:
         """
         Check if extraction output already exists for this PDF.
 
@@ -420,9 +402,7 @@ class POCProcessorCacheMixin:
 
         return cached_pages_count == total_pages
 
-    def load_all_cached_classifications(
-        self, pdf_path: Path
-    ) -> tuple[dict[int, str], dict[int, str]]:
+    def load_all_cached_classifications(self, pdf_path: Path) -> tuple[dict[int, str], dict[int, str]]:
         """
         Load ALL cached page classifications with justifications in a single query (optimized).
 
@@ -452,9 +432,7 @@ class POCProcessorCacheMixin:
             try:
                 response = json.loads(response_text)
                 # Handle both Portuguese 'categoria' and English 'category'
-                category = response.get("categoria") or response.get(
-                    "category", "Unknown"
-                )
+                category = response.get("categoria") or response.get("category", "Unknown")
                 justificativa = response.get("justificativa", "")
                 page_categories[page_num] = category
                 page_justifications[page_num] = justificativa
@@ -465,16 +443,17 @@ class POCProcessorCacheMixin:
                 logger.warning(
                     "[cache] Malformed classification cache for %s page %d "
                     "(response_text=%r…): %s — falling back to 'Unknown'",
-                    pdf_name, page_num, (response_text or "")[:120], exc,
+                    pdf_name,
+                    page_num,
+                    (response_text or "")[:120],
+                    exc,
                 )
                 page_categories[page_num] = "Unknown"
                 page_justifications[page_num] = ""
 
         return page_categories, page_justifications
 
-    def load_cached_page_categories(
-        self, pdf_path: Path, total_pages: int
-    ) -> dict[int, str]:
+    def load_cached_page_categories(self, pdf_path: Path, total_pages: int) -> dict[int, str]:
         """
         Load cached page categories from database (legacy method, use load_all_cached_classifications for better performance).
 
@@ -505,9 +484,7 @@ class POCProcessorCacheMixin:
                 try:
                     response = json.loads(row[0])
                     # Handle both Portuguese 'categoria' and English 'category'
-                    category = response.get("categoria") or response.get(
-                        "category", "Unknown"
-                    )
+                    category = response.get("categoria") or response.get("category", "Unknown")
                     page_categories[page_num] = category
                 except Exception:
                     page_categories[page_num] = "Unknown"

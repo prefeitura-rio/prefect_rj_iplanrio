@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 # Helpers de normalização
 # ---------------------------------------------------------------------------
 
+
 def normalize_numero_conta(conta: str | None) -> str | None:
     """
     Normaliza número de conta removendo espaços, hífens e zeros à esquerda
@@ -105,6 +106,7 @@ def mes_from_data_servico(data_servico: str | None) -> str | None:
 # Lógica de match
 # ---------------------------------------------------------------------------
 
+
 def is_nfst(doc: dict) -> bool:
     tipo = (doc.get("tipo_documento") or "").strip().upper()
     return tipo == "NFST"
@@ -137,21 +139,15 @@ def find_fatura_for_nfst(
     """
     nfst_conta = normalize_numero_conta(nfst.get("numero_conta"))
     if not nfst_conta:
-        logger.warning(
-            f"NFST pág.{nfst.get('pagina')} sem numero_conta — merge impossível"
-        )
+        logger.warning(f"NFST pág.{nfst.get('pagina')} sem numero_conta — merge impossível")
         return None, None
 
     # Candidatas com mesmo numero_conta
-    candidatas = [
-        f for f in faturas
-        if normalize_numero_conta(f.get("numero_conta")) == nfst_conta
-    ]
+    candidatas = [f for f in faturas if normalize_numero_conta(f.get("numero_conta")) == nfst_conta]
 
     if not candidatas:
         logger.warning(
-            f"NFST pág.{nfst.get('pagina')} conta={nfst_conta}: "
-            "nenhuma Fatura com mesmo numero_conta encontrada"
+            f"NFST pág.{nfst.get('pagina')} conta={nfst_conta}: nenhuma Fatura com mesmo numero_conta encontrada"
         )
         return None, None
 
@@ -162,10 +158,7 @@ def find_fatura_for_nfst(
         nfst_mes = mes_from_data_servico(nfst.get("data_servico"))
 
     if nfst_mes:
-        por_mes = [
-            f for f in candidatas
-            if normalize_mes_referencia(f.get("mes_referencia")) == nfst_mes
-        ]
+        por_mes = [f for f in candidatas if normalize_mes_referencia(f.get("mes_referencia")) == nfst_mes]
         if len(por_mes) == 1:
             return por_mes[0], f"numero_conta={nfst_conta} + mes_referencia={nfst_mes}"
         if len(por_mes) > 1:
@@ -193,6 +186,7 @@ def find_fatura_for_nfst(
 # ---------------------------------------------------------------------------
 # Função principal
 # ---------------------------------------------------------------------------
+
 
 def merge_nfst_with_fatura(extracted_nfs: list[dict]) -> list[dict]:
     """
@@ -254,12 +248,8 @@ def merge_nfst_with_fatura(extracted_nfs: list[dict]) -> list[dict]:
         merged_count += 1
 
     if merged_count:
-        logger.info(
-            f"NFST merge concluído: {merged_count}/{len(nfsts_a_mergear)} NFST(s) preenchidas"
-        )
+        logger.info(f"NFST merge concluído: {merged_count}/{len(nfsts_a_mergear)} NFST(s) preenchidas")
     else:
-        logger.warning(
-            f"NFST merge: nenhuma das {len(nfsts_a_mergear)} NFST(s) pôde ser vinculada"
-        )
+        logger.warning(f"NFST merge: nenhuma das {len(nfsts_a_mergear)} NFST(s) pôde ser vinculada")
 
     return extracted_nfs

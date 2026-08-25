@@ -5,12 +5,13 @@ Priority: 80
 Classification: "Suspect"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..utils import parse_date_flexible
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class EmissionDateMismatchRule(ComplianceRule):
+class EmissionDateMismatchRule(Rule[ValidationContext]):
     """
     Rule: Extracted emission date doesn't match expected emission date
 

@@ -13,12 +13,7 @@ class BasePipeline(Protocol):
     Defines the interface that all pipeline implementations should follow.
     """
 
-    def classify_pdf(
-        self,
-        pdf_path: Path,
-        output_dir: Path = None,
-        save_results: bool = False
-    ) -> Dict:
+    def classify_pdf(self, pdf_path: Path, output_dir: Path = None, save_results: bool = False) -> Dict:
         """
         Classify all pages of a PDF.
 
@@ -34,12 +29,7 @@ class BasePipeline(Protocol):
         """
         ...
 
-    def classify_batch(
-        self,
-        pdf_files: List[Path],
-        output_dir: Path,
-        skip_existing: bool = True
-    ) -> List[Dict]:
+    def classify_batch(self, pdf_files: List[Path], output_dir: Path, skip_existing: bool = True) -> List[Dict]:
         """
         Classify multiple PDFs.
 

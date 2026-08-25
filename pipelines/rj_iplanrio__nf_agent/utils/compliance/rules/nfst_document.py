@@ -5,11 +5,12 @@ Priority: 60
 Classification: "Not Analyzable"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class NFSTDocumentRule(ComplianceRule):
+class NFSTDocumentRule(Rule[ValidationContext]):
     """
     Rule: Document type is "NFST"
 
@@ -29,13 +30,13 @@ class NFSTDocumentRule(ComplianceRule):
             return RuleResult(applies=False)
 
         # Check if tipo_documento is NFST (exact match, case-insensitive)
-        if context.tipo_documento and context.tipo_documento.strip().upper() == 'NFST':
+        if context.tipo_documento and context.tipo_documento.strip().upper() == "NFST":
             return RuleResult(
                 applies=True,
                 classification="Not Analyzable",
                 stop_evaluation=True,
                 reason="NFST documents require manual review",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

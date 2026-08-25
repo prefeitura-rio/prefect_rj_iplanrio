@@ -8,33 +8,29 @@ Can be run as:
 """
 
 import argparse
+import json
 import logging
 import os
+import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
 
+import pandas as pd
 import yaml
 
-# Load .env from repo root (or run_poc/) so GCS_BUCKET and other vars are available
-# without needing to export them manually in the shell.
-try:
-    from dotenv import load_dotenv
-    _repo_root = Path(__file__).parent.parent
-    load_dotenv(_repo_root / ".env", override=False)  # override=False: shell env takes priority
-except ImportError:
-    pass  # python-dotenv not installed; rely on shell environment variables
+from prefect_rj_iplanrio.sql import load_query
 
-from .database import DatabaseManager
+from .sqlite_cache_manager import DatabaseManager
 
 logger = logging.getLogger(__name__)
-from .credentials_helper import inject_credentials_from_env
+from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
+
 from .gcs_downloader import GCSDownloader
 
-# NOTE: POCProcessor import moved to main() to allow rate limiter initialization first
 
-
-def prepare_output_for_bq(df: "pd.DataFrame", timestamp: datetime) -> "pd.DataFrame":
+def prepare_output_for_bq(df: pd.DataFrame, timestamp: datetime) -> pd.DataFrame:
     """
     Transform pipeline output into the BQ-ready schema.
 
@@ -44,11 +40,11 @@ def prepare_output_for_bq(df: "pd.DataFrame", timestamp: datetime) -> "pd.DataFr
       2. Drop the original 'indicador_nf_encontrada_modelo' and rename
          'nf_extraida_pdf_modelo' to 'indicador_nf_encontrada_modelo'.
       3. Add 'timestamp_geracao'.
+
+    :param df: DataFrame with raw pipeline output
+    :param timestamp: Timestamp to set in 'timestamp_geracao' column
+    :return: DataFrame ready for BigQuery ingestion
     """
-    import json
-
-    import pandas as pd
-
     df = df.copy()
 
     # 1 — merge debug columns into debug_info
@@ -60,6 +56,7 @@ def prepare_output_for_bq(df: "pd.DataFrame", timestamp: datetime) -> "pd.DataFr
     present = [c for c in debug_cols if c in df.columns]
 
     if present:
+
         def _merge(row):
             result = {}
             for col in present:
@@ -82,7 +79,9 @@ def prepare_output_for_bq(df: "pd.DataFrame", timestamp: datetime) -> "pd.DataFr
     if "nf_extraida_pdf_modelo" in df.columns:
         if "indicador_nf_encontrada_modelo" in df.columns:
             df = df.drop(columns=["indicador_nf_encontrada_modelo"])
-        df = df.rename(columns={"nf_extraida_pdf_modelo": "indicador_nf_encontrada_modelo"})
+        df = df.rename(
+            columns={"nf_extraida_pdf_modelo": "indicador_nf_encontrada_modelo"}
+        )
 
     # 3 — add timestamp_geracao
     df["timestamp_geracao"] = timestamp
@@ -191,27 +190,36 @@ def nf_processing_flow(
     # 2. Environment variable (GCS_CREDENTIALS_PATH / GEMINI_CREDENTIALS_PATH)
     # 3. Local credentials/ folder
     # 4. ADC (auto-detected — covers Infisical-injected creds above, GCP VM metadata, gcloud login)
-    _REPO_ROOT = Path(__file__).parent.parent
-    _DEFAULT_GCS_CREDS = _REPO_ROOT / "credentials" / "gcs-service-account.json"
-    _DEFAULT_GEMINI_CREDS = _REPO_ROOT / "credentials" / "gemini-service-account.json"
+    repo_root = Path(__file__).parent.parent
+    default_gcs_creds = repo_root / "credentials" / "gcs-service-account.json"
+    default_gemini_creds = repo_root / "credentials" / "gemini-service-account.json"
 
     if gcs_credentials is None:
-        gcs_credentials = os.getenv("GCS_CREDENTIALS_PATH") or (str(_DEFAULT_GCS_CREDS) if _DEFAULT_GCS_CREDS.exists() else None)
+        gcs_credentials = os.getenv("GCS_CREDENTIALS_PATH") or (
+            str(default_gcs_creds) if default_gcs_creds.exists() else None
+        )
         if gcs_credentials and not Path(gcs_credentials).exists():
-            logger.warning("GCS_CREDENTIALS_PATH set but file not found: %s", gcs_credentials)
+            logger.warning(
+                "GCS_CREDENTIALS_PATH set but file not found: %s", gcs_credentials
+            )
             gcs_credentials = None
 
     if gemini_credentials is None:
-        gemini_credentials = os.getenv("GEMINI_CREDENTIALS_PATH") or (str(_DEFAULT_GEMINI_CREDS) if _DEFAULT_GEMINI_CREDS.exists() else None)
+        gemini_credentials = os.getenv("GEMINI_CREDENTIALS_PATH") or (
+            str(default_gemini_creds) if default_gemini_creds.exists() else None
+        )
         if gemini_credentials and not Path(gemini_credentials).exists():
-            logger.warning("GEMINI_CREDENTIALS_PATH set but file not found: %s", gemini_credentials)
+            logger.warning(
+                "GEMINI_CREDENTIALS_PATH set but file not found: %s", gemini_credentials
+            )
             gemini_credentials = None
 
     # If using BQ input, read the batch now (ADC already set up) and dump to temp CSV
     if bq_input_table:
         if not bq_status_table:
-            raise ValueError("bq_status_table is required when bq_input_table is provided.")
-        import tempfile as _tempfile
+            raise ValueError(
+                "bq_status_table is required when bq_input_table is provided."
+            )
 
         from .bq_input_reader import BQInputReader
 
@@ -219,12 +227,13 @@ def nf_processing_flow(
 
         # If force_reprocess, reset all rows back to pendente before reading the batch
         if force_reprocess:
-            logger.warning("FORCE REPROCESS: resetting ALL rows in controle_processamento to pendente")
-            reset_job = bq_reader.client.query(
-                f"UPDATE `{bq_status_table}` "
-                f"SET status = 'pendente', updated_at = CURRENT_TIMESTAMP() "
-                f"WHERE status IN ('processado', 'erro')"
+            logger.warning(
+                "FORCE REPROCESS: resetting ALL rows in controle_processamento to pendente"
             )
+            reset_query = load_query(
+                __file__, "reset_status_to_pendente", status_table=bq_status_table
+            )
+            reset_job = bq_reader.client.query(reset_query)
             reset_job.result()
             reset_rows = reset_job.num_dml_affected_rows or 0
             logger.info("FORCE REPROCESS: reset %d rows", reset_rows)
@@ -239,7 +248,7 @@ def nf_processing_flow(
             logger.info("No unprocessed documents found. Nothing to do.")
             return None
 
-        _tmp = _tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
+        _tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         input_df.to_csv(_tmp.name, index=False)
         csv_path = _tmp.name  # will be converted to Path below
         limit = max_pdfs  # None = process all PDFs in the batch; int = cap for testing
@@ -268,9 +277,7 @@ def nf_processing_flow(
 
     # If CSV is on GCS, download it (with optional filters) using GCSCSVReader
     if _is_gcs_csv:
-        import tempfile
-
-        from .gcs_csv_reader import GCSCSVReader
+        from iplanrio_agent_toolkit.gcs import GCSCSVReader
 
         logger.info("GCS: reading CSV from %s", csv_path)
         gcs_path_str = str(csv_path)  # e.g., "gs://my-bucket/data/file.csv"
@@ -294,58 +301,66 @@ def nf_processing_flow(
     # Load experiment configuration if provided
     experiment_config = None
     if experiment_id:
-        config_path = Path(f'../experiments/configs/{experiment_id}.yaml')
+        config_path = Path(f"../experiments/configs/{experiment_id}.yaml")
         if not config_path.exists():
             raise FileNotFoundError(
-                f"Experiment config not found: {config_path}\n"
-                f"Create config file at: {config_path}"
+                f"Experiment config not found: {config_path}\nCreate config file at: {config_path}"
             )
 
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with config_path.open(encoding="utf-8") as f:
             experiment_config = yaml.safe_load(f)
 
         # Extract prompt versions
         if prompt_versions is None:
             prompt_versions = {
-                'classification': experiment_config['prompts']['classification'],
-                'extraction': experiment_config['prompts']['extraction']
+                "classification": experiment_config["prompts"]["classification"],
+                "extraction": experiment_config["prompts"]["extraction"],
             }
 
         # Override args with experiment config values (if not explicitly provided)
-        if 'input' in experiment_config:
-            if limit is None and experiment_config['input'].get('limit') is not None:
-                limit = experiment_config['input']['limit']
+        if "input" in experiment_config:
+            if limit is None and experiment_config["input"].get("limit") is not None:
+                limit = experiment_config["input"]["limit"]
 
-        if 'pipeline' in experiment_config:
-            if mode == 'full' and experiment_config['pipeline'].get('mode'):
-                mode = experiment_config['pipeline']['mode']
-            if workers == 200 and experiment_config['pipeline'].get('workers'):
-                workers = experiment_config['pipeline']['workers']
-            if not keep_pdfs and experiment_config['pipeline'].get('keep_pdfs'):
-                keep_pdfs = experiment_config['pipeline']['keep_pdfs']
+        if "pipeline" in experiment_config:
+            if mode == "full" and experiment_config["pipeline"].get("mode"):
+                mode = experiment_config["pipeline"]["mode"]
+            if workers == 200 and experiment_config["pipeline"].get("workers"):
+                workers = experiment_config["pipeline"]["workers"]
+            if not keep_pdfs and experiment_config["pipeline"].get("keep_pdfs"):
+                keep_pdfs = experiment_config["pipeline"]["keep_pdfs"]
 
         logger.info("Experiment: loading from config %s", config_path)
-        logger.info("Experiment: classification prompt = %s", prompt_versions['classification'])
-        logger.info("Experiment: extraction prompt = %s", prompt_versions['extraction'])
+        logger.info(
+            "Experiment: classification prompt = %s", prompt_versions["classification"]
+        )
+        logger.info("Experiment: extraction prompt = %s", prompt_versions["extraction"])
         if limit:
             logger.info("Experiment: processing limit = %d PDFs", limit)
 
         # Initialize rate limiter with config from YAML (if present)
-        if 'rate_limiting' in experiment_config:
-            rate_limiting_config = experiment_config['rate_limiting']
-            if rate_limiting_config.get('enabled', True):
-                max_concurrent = rate_limiting_config.get('max_concurrent', 50)
-                requests_per_minute = rate_limiting_config.get('requests_per_minute', 600)
+        if "rate_limiting" in experiment_config:
+            rate_limiting_config = experiment_config["rate_limiting"]
+            if rate_limiting_config.get("enabled", True):
+                max_concurrent = rate_limiting_config.get("max_concurrent", 50)
+                requests_per_minute = rate_limiting_config.get(
+                    "requests_per_minute", 600
+                )
 
-                from ..core.rate_limiter import initialize_rate_limiter
+                from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
                 rate_limiter = initialize_rate_limiter(
                     max_concurrent=max_concurrent,
-                    requests_per_minute=requests_per_minute
+                    requests_per_minute=requests_per_minute,
                 )
-                logger.info("RateLimiter enabled: max_concurrent=%d, rpm=%d", max_concurrent, requests_per_minute)
+                logger.info(
+                    "RateLimiter enabled: max_concurrent=%d, rpm=%d",
+                    max_concurrent,
+                    requests_per_minute,
+                )
             else:
-                from ..core.rate_limiter import initialize_rate_limiter
+                from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
+
                 rate_limiter = initialize_rate_limiter()
                 rate_limiter.set_enabled(False)
                 logger.info("RateLimiter disabled via config")
@@ -354,26 +369,33 @@ def nf_processing_flow(
         from ..core.prompts import list_available_versions
 
         if prompt_versions is None:
-            classification_versions = list_available_versions('classification')
-            extraction_versions = list_available_versions('extraction')
+            classification_versions = list_available_versions("classification")
+            extraction_versions = list_available_versions("extraction")
 
             prompt_versions = {
-                'classification': classification_versions[-1] if classification_versions else 'v1',
-                'extraction': extraction_versions[-1] if extraction_versions else 'v1'
+                "classification": (
+                    classification_versions[-1] if classification_versions else "v1"
+                ),
+                "extraction": extraction_versions[-1] if extraction_versions else "v1",
             }
 
         logger.info(
             "No experiment: using prompt versions — classification=%s, extraction=%s",
-            prompt_versions['classification'],
-            prompt_versions['extraction'],
+            prompt_versions["classification"],
+            prompt_versions["extraction"],
         )
 
         # Initialize rate limiter with flow parameters
-        from ..core.rate_limiter import initialize_rate_limiter
-        rate_limiter = initialize_rate_limiter(max_concurrent=max_concurrent, requests_per_minute=requests_per_minute)
+        from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
+
+        rate_limiter = initialize_rate_limiter(
+            max_concurrent=max_concurrent, requests_per_minute=requests_per_minute
+        )
         logger.info(
             "RateLimiter enabled: max_concurrent=%d, rpm=%d (%.1f RPS)",
-            max_concurrent, requests_per_minute, requests_per_minute / 60,
+            max_concurrent,
+            requests_per_minute,
+            requests_per_minute / 60,
         )
 
     # NOW safe to import POCProcessor (after rate limiter initialization)
@@ -384,18 +406,23 @@ def nf_processing_flow(
 
     # Auto-generate output path if not provided
     if output_path is None:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if experiment_id:
-            outputs_dir = Path(f'../experiments/runs/{experiment_id}/run_{timestamp}')
+            outputs_dir = Path(f"../experiments/runs/{experiment_id}/run_{timestamp}")
         else:
-            outputs_dir = Path('outputs/poc_results')
+            outputs_dir = Path("outputs/poc_results")
 
         outputs_dir.mkdir(parents=True, exist_ok=True)
-        output_path = outputs_dir / 'results.xlsx' if experiment_id else outputs_dir / f'poc_results_{mode}_{timestamp}.xlsx'
+        output_path = (
+            outputs_dir / "results.xlsx"
+            if experiment_id
+            else outputs_dir / f"poc_results_{mode}_{timestamp}.xlsx"
+        )
 
     _creds_label = (
-        str(gcs_credentials) if gcs_credentials
+        str(gcs_credentials)
+        if gcs_credentials
         else "ADC / Infisical (GOOGLE_APPLICATION_CREDENTIALS)"
     )
 
@@ -404,22 +431,39 @@ def nf_processing_flow(
             "Pipeline config: mode=%s | bq_input=%s | bq_status=%s | batch=%d | "
             "gcs_out=%s | bq_out=%s | cache=%s | bucket=%s | gcs_creds=%s | "
             "gemini_creds=%s | workers=%d | extraction_batch=%d | keep_pdfs=%s | quiet=%s",
-            mode, bq_input_table, bq_status_table, batch_size,
-            gcs_output_base_path or "(none)", output_table or "(none)",
-            db_path, gcs_bucket, _creds_label,
+            mode,
+            bq_input_table,
+            bq_status_table,
+            batch_size,
+            gcs_output_base_path or "(none)",
+            output_table or "(none)",
+            db_path,
+            gcs_bucket,
+            _creds_label,
             gemini_credentials or _creds_label,
-            workers, extraction_batch_size, keep_pdfs, quiet,
+            workers,
+            extraction_batch_size,
+            keep_pdfs,
+            quiet,
         )
     else:
         logger.info(
             "Pipeline config: mode=%s | csv=%s | gcs_out=%s | excel_out=%s | bq_out=%s | "
             "cache=%s | bucket=%s | gcs_creds=%s | gemini_creds=%s | workers=%d | "
             "extraction_batch=%d | keep_pdfs=%s | quiet=%s%s",
-            mode, csv_path,
-            gcs_output_base_path or "(none)", output_path or "(none)", output_table or "(none)",
-            db_path, gcs_bucket, _creds_label,
+            mode,
+            csv_path,
+            gcs_output_base_path or "(none)",
+            output_path or "(none)",
+            output_table or "(none)",
+            db_path,
+            gcs_bucket,
+            _creds_label,
             gemini_credentials or _creds_label,
-            workers, extraction_batch_size, keep_pdfs, quiet,
+            workers,
+            extraction_batch_size,
+            keep_pdfs,
+            quiet,
             f" | limit={limit} PDFs" if limit else "",
         )
 
@@ -472,7 +516,8 @@ def nf_processing_flow(
             _t_escrita_start = time.time()
 
             if gcs_output_base_path:
-                from .gcs_results_writer import GCSResultsWriter
+                from iplanrio_agent_toolkit.gcs import GCSResultsWriter
+
                 gcs_writer = GCSResultsWriter(
                     bucket_name=gcs_bucket,
                     credentials_path=gcs_credentials,
@@ -480,17 +525,19 @@ def nf_processing_flow(
 
                 if json_items is not None:
                     # output_mode="json": escreve NDJSON por página (novo padrão)
-                    gcs_uri = gcs_writer.write_results_ndjson(
+                    gcs_uri = gcs_writer.write_ndjson(
                         items=json_items,
                         base_path=gcs_output_base_path,
+                        filename_prefix="extracao_pagina",
                         timestamp=run_timestamp,
                     )
                 else:
                     # output_mode legado: CSV achatado via prepare_output_for_bq
                     bq_ready_df = prepare_output_for_bq(results_df, run_timestamp)
-                    gcs_uri = gcs_writer.write_results(
+                    gcs_uri = gcs_writer.write_csv(
                         df=bq_ready_df,
                         base_path=gcs_output_base_path,
+                        filename_prefix="resultado_extracao_modelo",
                         timestamp=run_timestamp,
                     )
                 logger.info("GCS: results written to %s", gcs_uri)
@@ -504,8 +551,12 @@ def nf_processing_flow(
                 # bq_status_table format: "project.dataset.table"
                 _ref = bq_status_table or output_table or ""
                 _ref_parts = _ref.split(".")
-                bq_project = os.getenv("BIGQUERY_PROJECT_ID") or (_ref_parts[0] if len(_ref_parts) >= 3 else None)
-                bq_dataset = os.getenv("BIGQUERY_DATASET_ID") or (_ref_parts[1] if len(_ref_parts) >= 3 else None)
+                bq_project = os.getenv("BIGQUERY_PROJECT_ID") or (
+                    _ref_parts[0] if len(_ref_parts) >= 3 else None
+                )
+                bq_dataset = os.getenv("BIGQUERY_DATASET_ID") or (
+                    _ref_parts[1] if len(_ref_parts) >= 3 else None
+                )
 
                 bq_writer = BigQueryWriter(
                     project_id=bq_project,
@@ -520,7 +571,8 @@ def nf_processing_flow(
                     )
                     logger.info(
                         "BigQuery: results written to %s (%d rows)",
-                        bq_stats['table'], bq_stats['rows_written'],
+                        bq_stats["table"],
+                        bq_stats["rows_written"],
                     )
 
                 if bq_status_table:
@@ -534,11 +586,15 @@ def nf_processing_flow(
 
         # ── Actual doc-level counts from this batch (not BQ diff) ──
         if results_df is not None and len(results_df) > 0:
-            _has_err = results_df["pipeline_error"].notna() if "pipeline_error" in results_df.columns else pd.Series([False] * len(results_df))
-            timing_stats["_n_docs_ok"]   = int((~_has_err).sum())
+            _has_err = (
+                results_df["pipeline_error"].notna()
+                if "pipeline_error" in results_df.columns
+                else pd.Series([False] * len(results_df))
+            )
+            timing_stats["_n_docs_ok"] = int((~_has_err).sum())
             timing_stats["_n_docs_fail"] = int(_has_err.sum())
         else:
-            timing_stats["_n_docs_ok"]   = 0
+            timing_stats["_n_docs_ok"] = 0
             timing_stats["_n_docs_fail"] = 0
 
         logger.info("Processing completed successfully")
@@ -551,145 +607,152 @@ def nf_processing_flow(
 
     finally:
         # Cleanup
-        if 'db_manager' in locals():
+        if "db_manager" in locals():
             db_manager.close()
 
 
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description='POC Pipeline - Process NF database with GCS integration and caching'
+        description="POC Pipeline - Process NF database with GCS integration and caching"
     )
 
     # Paths
     parser.add_argument(
-        '--csv',
+        "--csv",
         type=Path,
-        default=Path('inputs/modulo-de-despesas.csv'),
-        help='Path to modulo-de-despesas.csv database file'
+        default=Path("inputs/modulo-de-despesas.csv"),
+        help="Path to modulo-de-despesas.csv database file",
     )
     parser.add_argument(
-        '--output',
+        "--output",
         type=Path,
         default=None,
-        help='Path to save results Excel file (default: auto-generated in outputs/)'
+        help="Path to save results Excel file (default: auto-generated in outputs/)",
     )
     parser.add_argument(
-        '--db',
+        "--db",
         type=Path,
-        default=Path('cache.db'),
-        help='Path to SQLite cache database (default: cache.db)'
+        default=Path("cache.db"),
+        help="Path to SQLite cache database (default: cache.db)",
     )
 
     # Credentials
     parser.add_argument(
-        '--gcs-credentials',
+        "--gcs-credentials",
         type=Path,
         default=None,
-        help='Path to GCS service account credentials (uses ADC if not provided)'
+        help="Path to GCS service account credentials (uses ADC if not provided)",
     )
     parser.add_argument(
-        '--gemini-credentials',
+        "--gemini-credentials",
         type=Path,
         default=None,
-        help='Path to Gemini service account credentials (uses ADC if not provided)'
+        help="Path to Gemini service account credentials (uses ADC if not provided)",
     )
 
     # GCS settings
     parser.add_argument(
-        '--bucket',
+        "--bucket",
         type=str,
         default=None,
-        help='GCS bucket name (overrides GCS_BUCKET env var)'
+        help="GCS bucket name (overrides GCS_BUCKET env var)",
     )
 
     # Processing settings
     parser.add_argument(
-        '--limit',
+        "--limit",
         type=int,
         default=None,
-        help='Limit number of PDFs to process (for testing)'
+        help="Limit number of PDFs to process (for testing)",
     )
     parser.add_argument(
-        '--temp-dir',
+        "--temp-dir",
         type=Path,
-        default=Path('temp'),
-        help='Temporary directory for downloaded PDFs (default: temp/)'
+        default=Path("temp"),
+        help="Temporary directory for downloaded PDFs (default: temp/)",
     )
     parser.add_argument(
-        '--mode',
+        "--mode",
         type=str,
-        choices=['full', 'preprocess_classification', 'run_classification',
-                 'preprocess_extraction', 'run_extraction', 'validate'],
-        default='full',
-        help='Execution mode: which pipeline steps to run (default: full)'
+        choices=[
+            "full",
+            "preprocess_classification",
+            "run_classification",
+            "preprocess_extraction",
+            "run_extraction",
+            "validate",
+        ],
+        default="full",
+        help="Execution mode: which pipeline steps to run (default: full)",
     )
     parser.add_argument(
-        '--workers',
+        "--workers",
         type=int,
         default=200,
-        help='Number of concurrent workers for parallel processing (default: 200)'
+        help="Number of concurrent workers for parallel processing (default: 200)",
     )
     parser.add_argument(
-        '--keep-pdfs',
-        action='store_true',
-        help='Keep downloaded PDFs after processing instead of cleaning up (default: False)'
+        "--keep-pdfs",
+        action="store_true",
+        help="Keep downloaded PDFs after processing instead of cleaning up (default: False)",
     )
     parser.add_argument(
-        '--quiet', '-q',
-        action='store_true',
-        help='Suppress debug output (default: False)'
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress debug output (default: False)",
     )
     parser.add_argument(
-        '--experiment',
+        "--experiment",
         type=str,
         default=None,
-        help='Experiment ID (e.g., exp001_baseline). If provided, generates metadata.json with prompt versions and run info'
+        help="Experiment ID (e.g., exp001_baseline). If provided, generates metadata.json with prompt versions and run info",
     )
     parser.add_argument(
-        '--extraction-batch-size',
+        "--extraction-batch-size",
         type=int,
         default=5,
-        dest='extraction_batch_size',
+        dest="extraction_batch_size",
         help=(
-            'Maximum pages per extraction API call (default: 5). '
-            'Set to 1 to process one page at a time and inject per-page classification hints '
-            'into the extraction prompt (requires a prompt version with {classification_hint}, '
-            'e.g., v6 or v7).'
-        )
+            "Maximum pages per extraction API call (default: 5). "
+            "Set to 1 to process one page at a time and inject per-page classification hints "
+            "into the extraction prompt (requires a prompt version with {classification_hint}, "
+            "e.g., v6 or v7)."
+        ),
     )
     parser.add_argument(
-        '--min-match-score',
+        "--min-match-score",
         type=int,
         default=2,
-        dest='min_match_score',
+        dest="min_match_score",
         help=(
-            'Minimum number of fields (CNPJ + número + data_emissão) that must match '
-            'for a declaration to be considered found (default: 2 = 2/3 fallback, '
-            '3 = strict perfect match only).'
-        )
+            "Minimum number of fields (CNPJ + número + data_emissão) that must match "
+            "for a declaration to be considered found (default: 2 = 2/3 fallback, "
+            "3 = strict perfect match only)."
+        ),
     )
     parser.add_argument(
-        '--output-mode',
+        "--output-mode",
         type=str,
-        default='excel',
-        dest='output_mode',
-        choices=['excel', 'json'],
+        default="excel",
+        dest="output_mode",
+        choices=["excel", "json"],
         help=(
-            'Output format for results (default: excel). '
+            "Output format for results (default: excel). "
             '"json" saves a per-page JSON file instead of .xlsx (no BQ/GCS writes).'
-        )
+        ),
     )
     parser.add_argument(
-        '--match-requires-pdf-name',
-        action='store_true',
+        "--match-requires-pdf-name",
+        action="store_true",
         default=False,
-        dest='match_requires_pdf_name',
+        dest="match_requires_pdf_name",
         help=(
-            'No output mode JSON: restringe o match de declarações ao pdf_name do PDF '
-            'sendo processado (comportamento legado). Por padrão (False) todas as '
-            'declarações do input são candidatas, permitindo análise cross-PDF no BigQuery.'
-        )
+            "No output mode JSON: restringe o match de declarações ao pdf_name do PDF "
+            "sendo processado (comportamento legado). Por padrão (False) todas as "
+            "declarações do input são candidatas, permitindo análise cross-PDF no BigQuery."
+        ),
     )
 
     args = parser.parse_args()
@@ -702,26 +765,36 @@ def main():
     inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
 
     # Resolve credentials: CLI arg → env var → credentials/ folder → ADC
-    _REPO_ROOT = Path(__file__).parent.parent
-    _DEFAULT_GCS_CREDS = _REPO_ROOT / "credentials" / "gcs-service-account.json"
-    _DEFAULT_GEMINI_CREDS = _REPO_ROOT / "credentials" / "gemini-service-account.json"
+    repo_root = Path(__file__).parent.parent
+    default_gcs_creds = repo_root / "credentials" / "gcs-service-account.json"
+    default_gemini_creds = repo_root / "credentials" / "gemini-service-account.json"
 
     if args.gcs_credentials is None:
         env_val = os.getenv("GCS_CREDENTIALS_PATH")
-        args.gcs_credentials = Path(env_val) if env_val else (_DEFAULT_GCS_CREDS if _DEFAULT_GCS_CREDS.exists() else None)
+        args.gcs_credentials = (
+            Path(env_val)
+            if env_val
+            else (default_gcs_creds if default_gcs_creds.exists() else None)
+        )
 
     if args.gcs_credentials and not args.gcs_credentials.exists():
-        print(f"[WARNING] GCS credentials not found: {args.gcs_credentials}")
-        print("[INFO] Will attempt to use Application Default Credentials (ADC)")
+        logger.warning(f"[WARNING] GCS credentials not found: {args.gcs_credentials}")
+        logger.info("[INFO] Will attempt to use Application Default Credentials (ADC)")
         args.gcs_credentials = None
 
     if args.gemini_credentials is None:
         env_val = os.getenv("GEMINI_CREDENTIALS_PATH")
-        args.gemini_credentials = Path(env_val) if env_val else (_DEFAULT_GEMINI_CREDS if _DEFAULT_GEMINI_CREDS.exists() else None)
+        args.gemini_credentials = (
+            Path(env_val)
+            if env_val
+            else (default_gemini_creds if default_gemini_creds.exists() else None)
+        )
 
     if args.gemini_credentials and not args.gemini_credentials.exists():
-        print(f"[WARNING] Gemini credentials not found: {args.gemini_credentials}")
-        print("[INFO] Will attempt to use Application Default Credentials (ADC)")
+        logger.warning(
+            f"[WARNING] Gemini credentials not found: {args.gemini_credentials}"
+        )
+        logger.info("[INFO] Will attempt to use Application Default Credentials (ADC)")
         args.gemini_credentials = None
 
     # Load experiment configuration if provided
@@ -729,131 +802,164 @@ def main():
     experiment_config = None
     if args.experiment:
         # Load experiment config YAML
-        config_path = Path(f'../experiments/configs/{args.experiment}.yaml')
+        config_path = Path(f"../experiments/configs/{args.experiment}.yaml")
         if not config_path.exists():
-            print(f"[ERROR] Experiment config not found: {config_path}")
-            print(f"   Create config file at: {config_path}")
+            logger.error(f"[ERROR] Experiment config not found: {config_path}")
+            logger.info(f"   Create config file at: {config_path}")
             return 1
 
-        with open(config_path, 'r', encoding='utf-8') as f:
+        with config_path.open(encoding="utf-8") as f:
             experiment_config = yaml.safe_load(f)
 
         # Extract prompt versions
         prompt_versions = {
-            'classification': experiment_config['prompts']['classification'],
-            'extraction': experiment_config['prompts']['extraction']
+            "classification": experiment_config["prompts"]["classification"],
+            "extraction": experiment_config["prompts"]["extraction"],
         }
 
         # Override args with experiment config values (if not explicitly provided via CLI)
         # Priority: CLI args > YAML config > defaults
 
         # Input settings
-        if 'input' in experiment_config:
-            if args.limit is None and experiment_config['input'].get('limit') is not None:
-                args.limit = experiment_config['input']['limit']
+        if "input" in experiment_config:
+            if (
+                args.limit is None
+                and experiment_config["input"].get("limit") is not None
+            ):
+                args.limit = experiment_config["input"]["limit"]
             # CSV path from YAML (if not provided via CLI and different from default)
-            yaml_csv = experiment_config['input'].get('csv')
-            if yaml_csv and args.csv == Path('inputs/modulo-de-despesas.csv'):
+            yaml_csv = experiment_config["input"].get("csv")
+            if yaml_csv and args.csv == Path("inputs/modulo-de-despesas.csv"):
                 # YAML paths are relative to repo root (e.g. "run_poc/inputs/foo.csv").
                 # The CLI runs from inside run_poc/, so strip the leading "run_poc/" if present.
                 yaml_csv_path = Path(yaml_csv)
-                if yaml_csv_path.parts[0] == 'run_poc':
+                if yaml_csv_path.parts[0] == "run_poc":
                     yaml_csv_path = Path(*yaml_csv_path.parts[1:])
                 args.csv = yaml_csv_path
 
         # Pipeline settings
-        if 'pipeline' in experiment_config:
+        if "pipeline" in experiment_config:
             # Mode
-            yaml_mode = experiment_config['pipeline'].get('mode')
-            if yaml_mode and args.mode == 'full':  # 'full' is the default
+            yaml_mode = experiment_config["pipeline"].get("mode")
+            if yaml_mode and args.mode == "full":  # 'full' is the default
                 args.mode = yaml_mode
 
             # Workers
-            yaml_workers = experiment_config['pipeline'].get('workers')
+            yaml_workers = experiment_config["pipeline"].get("workers")
             if yaml_workers and args.workers == 200:  # 200 is the default
                 args.workers = yaml_workers
 
             # Keep PDFs
-            yaml_keep_pdfs = experiment_config['pipeline'].get('keep_pdfs')
-            if yaml_keep_pdfs is not None and not args.keep_pdfs:  # False is the default
+            yaml_keep_pdfs = experiment_config["pipeline"].get("keep_pdfs")
+            if (
+                yaml_keep_pdfs is not None and not args.keep_pdfs
+            ):  # False is the default
                 args.keep_pdfs = yaml_keep_pdfs
 
             # Extraction batch size
-            yaml_extraction_batch_size = experiment_config['pipeline'].get('extraction_batch_size')
-            if yaml_extraction_batch_size is not None and args.extraction_batch_size == 5:  # 5 is CLI default
+            yaml_extraction_batch_size = experiment_config["pipeline"].get(
+                "extraction_batch_size"
+            )
+            if (
+                yaml_extraction_batch_size is not None
+                and args.extraction_batch_size == 5
+            ):  # 5 is CLI default
                 args.extraction_batch_size = int(yaml_extraction_batch_size)
 
             # Min match score (3 = strict 3/3; 2 = legacy 2/3 fallback)
-            yaml_min_match_score = experiment_config['pipeline'].get('min_match_score')
-            if yaml_min_match_score is not None and args.min_match_score == 2:  # 2 is CLI default
+            yaml_min_match_score = experiment_config["pipeline"].get("min_match_score")
+            if (
+                yaml_min_match_score is not None and args.min_match_score == 2
+            ):  # 2 is CLI default
                 args.min_match_score = int(yaml_min_match_score)
 
             # Output mode (excel | json)
-            yaml_output_mode = experiment_config['pipeline'].get('output_mode')
-            if yaml_output_mode and args.output_mode == 'excel':  # 'excel' is CLI default
+            yaml_output_mode = experiment_config["pipeline"].get("output_mode")
+            if (
+                yaml_output_mode and args.output_mode == "excel"
+            ):  # 'excel' is CLI default
                 args.output_mode = yaml_output_mode
 
             # Match requires pdf_name (False = cross-PDF mode, default; True = legacy)
-            yaml_match_requires_pdf_name = experiment_config['pipeline'].get('match_requires_pdf_name')
-            if yaml_match_requires_pdf_name is not None and not args.match_requires_pdf_name:
+            yaml_match_requires_pdf_name = experiment_config["pipeline"].get(
+                "match_requires_pdf_name"
+            )
+            if (
+                yaml_match_requires_pdf_name is not None
+                and not args.match_requires_pdf_name
+            ):
                 args.match_requires_pdf_name = bool(yaml_match_requires_pdf_name)
 
-        print(f"[Experiment] Loading from config: {config_path}")
-        print(f"[Experiment] Classification prompt: {prompt_versions['classification']}")
-        print(f"[Experiment] Extraction prompt: {prompt_versions['extraction']}")
+        logger.info(f"[Experiment] Loading from config: {config_path}")
+        logger.info(
+            f"[Experiment] Classification prompt: {prompt_versions['classification']}"
+        )
+        logger.info(f"[Experiment] Extraction prompt: {prompt_versions['extraction']}")
         if args.limit:
-            print(f"[Experiment] Processing limit: {args.limit} PDFs")
+            logger.info(f"[Experiment] Processing limit: {args.limit} PDFs")
 
         # Initialize rate limiter with config from YAML (if present)
         # IMPORTANT: Initialize BEFORE importing POCProcessor/GeminiClassifier
-        if 'rate_limiting' in experiment_config:
-            rate_limiting_config = experiment_config['rate_limiting']
-            if rate_limiting_config.get('enabled', True):
-                max_concurrent = rate_limiting_config.get('max_concurrent', 50)
-                requests_per_minute = rate_limiting_config.get('requests_per_minute', 600)
+        if "rate_limiting" in experiment_config:
+            rate_limiting_config = experiment_config["rate_limiting"]
+            if rate_limiting_config.get("enabled", True):
+                max_concurrent = rate_limiting_config.get("max_concurrent", 50)
+                requests_per_minute = rate_limiting_config.get(
+                    "requests_per_minute", 600
+                )
 
                 # Import and initialize rate limiter BEFORE POCProcessor
-                from ..core.rate_limiter import initialize_rate_limiter
+                from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
                 rate_limiter = initialize_rate_limiter(
                     max_concurrent=max_concurrent,
-                    requests_per_minute=requests_per_minute
+                    requests_per_minute=requests_per_minute,
                 )
-                print(f"[RateLimiter] Enabled: max_concurrent={max_concurrent}, rpm={requests_per_minute} ({requests_per_minute/60:.1f} RPS)")
+                logger.info(
+                    f"[RateLimiter] Enabled: max_concurrent={max_concurrent}, rpm={requests_per_minute} ({requests_per_minute / 60:.1f} RPS)"
+                )
             else:
                 # Disable rate limiting if explicitly set to false
-                from ..core.rate_limiter import initialize_rate_limiter
+                from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
+
                 rate_limiter = initialize_rate_limiter()
                 rate_limiter.set_enabled(False)
-                print("[RateLimiter] Disabled via config")
+                logger.info("[RateLimiter] Disabled via config")
     else:
         # No experiment - use default versions (latest available or v1)
         # Import here to avoid circular dependency
         from ..core.prompts import list_available_versions
 
         # Get latest version or fallback to v1
-        classification_versions = list_available_versions('classification')
-        extraction_versions = list_available_versions('extraction')
+        classification_versions = list_available_versions("classification")
+        extraction_versions = list_available_versions("extraction")
 
         prompt_versions = {
-            'classification': classification_versions[-1] if classification_versions else 'v1',
-            'extraction': extraction_versions[-1] if extraction_versions else 'v1'
+            "classification": (
+                classification_versions[-1] if classification_versions else "v1"
+            ),
+            "extraction": extraction_versions[-1] if extraction_versions else "v1",
         }
 
-        print("[No experiment] Using latest prompt versions:")
-        print(f"  Classification: {prompt_versions['classification']}")
-        print(f"  Extraction: {prompt_versions['extraction']}")
+        logger.info("[No experiment] Using latest prompt versions:")
+        logger.info(f"  Classification: {prompt_versions['classification']}")
+        logger.info(f"  Extraction: {prompt_versions['extraction']}")
 
         # Initialize rate limiter with defaults (no experiment config)
         max_concurrent = 50
         requests_per_minute = 600
-        from ..core.rate_limiter import initialize_rate_limiter
-        rate_limiter = initialize_rate_limiter(max_concurrent=max_concurrent, requests_per_minute=requests_per_minute)
-        print(f"[RateLimiter] Enabled with defaults: max_concurrent={max_concurrent}, rpm={requests_per_minute} ({requests_per_minute/60:.1f} RPS)")
+        from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
+
+        rate_limiter = initialize_rate_limiter(
+            max_concurrent=max_concurrent, requests_per_minute=requests_per_minute
+        )
+        logger.info(
+            f"[RateLimiter] Enabled with defaults: max_concurrent={max_concurrent}, rpm={requests_per_minute} ({requests_per_minute / 60:.1f} RPS)"
+        )
 
     # Validate CSV path (after experiment config may have overridden it)
     if not args.csv.exists():
-        print(f"[ERROR] Database CSV not found: {args.csv}")
+        logger.error(f"[ERROR] Database CSV not found: {args.csv}")
         return 1
 
     # NOW safe to import POCProcessor (after rate limiter initialization)
@@ -864,56 +970,59 @@ def main():
 
     # Auto-generate output path if not provided
     if args.output is None:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         if args.experiment:
             # New structure: experiments/runs/{experiment}/run_{timestamp}/
-            outputs_dir = Path(f'../experiments/runs/{args.experiment}/run_{timestamp}')
+            outputs_dir = Path(f"../experiments/runs/{args.experiment}/run_{timestamp}")
         else:
             # Legacy structure: outputs/poc_results/
-            outputs_dir = Path('outputs/poc_results')
+            outputs_dir = Path("outputs/poc_results")
 
         outputs_dir.mkdir(parents=True, exist_ok=True)
-        ext = 'json' if args.output_mode == 'json' else 'xlsx'
+        ext = "json" if args.output_mode == "json" else "xlsx"
         if args.experiment:
-            args.output = outputs_dir / f'results.{ext}'
+            args.output = outputs_dir / f"results.{ext}"
         else:
-            args.output = outputs_dir / f'poc_results_{mode.value}_{timestamp}.{ext}'
+            args.output = outputs_dir / f"poc_results_{mode.value}_{timestamp}.{ext}"
 
-    print("="*80)
-    print("POC Pipeline - NF Database Processing")
-    print("="*80)
-    print(f"Execution Mode:      {mode.value}")
-    print(f"Database CSV:        {args.csv}")
-    print(f"Output ({args.output_mode}):     {args.output}")
-    print(f"Cache Database:      {args.db}")
-    print(f"GCS Bucket:          {args.bucket}")
-    print(f"GCS Credentials:     {args.gcs_credentials}")
-    print(f"Gemini Credentials:  {args.gemini_credentials}")
-    print(f"Parallel Workers:    {args.workers}")
-    print(f"Extraction Batch:    {args.extraction_batch_size} page(s) per API call")
-    print(f"Min Match Score:     {args.min_match_score}/3 fields")
-    print(f"Match PDF Filter:    {args.match_requires_pdf_name} (match_requires_pdf_name)")
-    print(f"Keep PDFs:           {args.keep_pdfs}")
-    print(f"Quiet Mode:          {args.quiet}")
+    logger.info("=" * 80)
+    logger.info("POC Pipeline - NF Database Processing")
+    logger.info("=" * 80)
+    logger.info(f"Execution Mode:      {mode.value}")
+    logger.info(f"Database CSV:        {args.csv}")
+    logger.info(f"Output ({args.output_mode}):     {args.output}")
+    logger.info(f"Cache Database:      {args.db}")
+    logger.info(f"GCS Bucket:          {args.bucket}")
+    logger.info(f"GCS Credentials:     {args.gcs_credentials}")
+    logger.info(f"Gemini Credentials:  {args.gemini_credentials}")
+    logger.info(f"Parallel Workers:    {args.workers}")
+    logger.info(
+        f"Extraction Batch:    {args.extraction_batch_size} page(s) per API call"
+    )
+    logger.info(f"Min Match Score:     {args.min_match_score}/3 fields")
+    logger.info(
+        f"Match PDF Filter:    {args.match_requires_pdf_name} (match_requires_pdf_name)"
+    )
+    logger.info(f"Keep PDFs:           {args.keep_pdfs}")
+    logger.info(f"Quiet Mode:          {args.quiet}")
     if args.limit:
-        print(f"Processing Limit:    {args.limit} PDFs")
-    print("="*80)
+        logger.info(f"Processing Limit:    {args.limit} PDFs")
+    logger.info("=" * 80)
 
     # Initialize components
-    print("\nInitializing components...")
+    logger.info("\nInitializing components...")
 
     try:
         # Database manager
         db_manager = DatabaseManager(args.db)
-        print(f"  [OK] Database manager initialized: {args.db}")
+        logger.info(f"  [OK] Database manager initialized: {args.db}")
 
         # GCS downloader
         gcs_downloader = GCSDownloader(
-            credentials_path=args.gcs_credentials,
-            bucket_name=args.bucket
+            credentials_path=args.gcs_credentials, bucket_name=args.bucket
         )
-        print("  [OK] GCS downloader initialized")
+        logger.info("  [OK] GCS downloader initialized")
 
         # Processor
         processor = POCProcessor(
@@ -928,13 +1037,13 @@ def main():
             output_mode=args.output_mode,
             match_requires_pdf_name=args.match_requires_pdf_name,
         )
-        print("  [OK] Processor initialized")
-        print(f"  [OK] Extraction batch size: {args.extraction_batch_size}")
+        logger.info("  [OK] Processor initialized")
+        logger.info(f"  [OK] Extraction batch size: {args.extraction_batch_size}")
 
         # Process database
-        print("\n" + "="*80)
-        print("Starting processing...")
-        print("="*80)
+        logger.info("\n" + "=" * 80)
+        logger.info("Starting processing...")
+        logger.info("=" * 80)
 
         results_df, _json_items, _timing_stats = processor.process_database(
             csv_path=args.csv,
@@ -948,23 +1057,21 @@ def main():
             max_concurrent=max_concurrent,
         )
 
-        print("\n" + "="*80)
-        print("[SUCCESS] Processing completed successfully!")
-        print("="*80)
+        logger.info("\n" + "=" * 80)
+        logger.info("[SUCCESS] Processing completed successfully!")
+        logger.info("=" * 80)
 
         return 0
 
-    except Exception as e:
-        print(f"\n[ERROR] Error: {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("Error running pipeline")
         return 1
 
     finally:
         # Cleanup
-        if 'db_manager' in locals():
+        if "db_manager" in locals():
             db_manager.close()
 
 
-if __name__ == '__main__':
-    exit(main())
+if __name__ == "__main__":
+    sys.exit(main())

@@ -5,14 +5,15 @@ Priority: 80
 Classification: "Suspect"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 # Import value tolerance from utils
 VALUE_TOLERANCE = 0.01  # R$ 0.01
 
 
-class OverpaymentRule(ComplianceRule):
+class OverpaymentRule(Rule[ValidationContext]):
     """
     Rule: Payment amount exceeds extracted invoice value (valor_pago > valor_extracted + tolerance)
 

@@ -5,8 +5,9 @@ Priority: 90
 Classification: "Suspect"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
 # Import values_match function from utils
@@ -17,7 +18,7 @@ def values_match(val1: float, val2: float, tolerance: float = 0.01) -> bool:
     return abs(val1 - val2) <= tolerance
 
 
-class ValueMismatchRule(ComplianceRule):
+class ValueMismatchRule(Rule[ValidationContext]):
     """
     Rule: Extracted value doesn't match expected value (valor_extracted != valor_documento)
 
@@ -48,7 +49,7 @@ class ValueMismatchRule(ComplianceRule):
                 classification="Suspect",
                 stop_evaluation=True,
                 reason=f"Value mismatch: extracted R$ {context.valor_extracted:.2f}, expected R$ {context.valor_documento:.2f} (difference: R$ {difference:.2f})",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

@@ -62,9 +62,6 @@ def select_prioritized_document(candidates: list[dict]) -> dict | None:
         return candidates[0]
 
     # Sort by priority (ascending = higher priority first)
-    sorted_candidates = sorted(
-        candidates,
-        key=lambda doc: get_priority(doc.get('tipo_documento', ''))
-    )
+    sorted_candidates = sorted(candidates, key=lambda doc: get_priority(doc.get("tipo_documento", "")))
 
     return sorted_candidates[0]

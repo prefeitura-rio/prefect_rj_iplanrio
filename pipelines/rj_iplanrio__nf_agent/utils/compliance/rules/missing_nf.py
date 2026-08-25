@@ -5,11 +5,12 @@ Priority: 20
 Classification: "Suspect"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class MissingNFRule(ComplianceRule):
+class MissingNFRule(Rule[ValidationContext]):
     """
     Rule: NF NOT found AND no Fatura de Locação
 
@@ -31,7 +32,7 @@ class MissingNFRule(ComplianceRule):
                 classification="Suspect",
                 stop_evaluation=True,
                 reason="Expected NF not found in document",
-                rule_name=self.get_name()
+                rule_name=self.get_name(),
             )
 
         # Rule doesn't apply

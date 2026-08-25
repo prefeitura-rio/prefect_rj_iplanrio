@@ -30,7 +30,8 @@ def get_easyocr_reader(languages: list[str] | None = None, gpu: bool = True):
 
     if _easyocr_reader is None:
         import easyocr
-        langs = languages or ['pt', 'en']
+
+        langs = languages or ["pt", "en"]
         _easyocr_reader = easyocr.Reader(langs, gpu=gpu)
 
     return _easyocr_reader
@@ -88,7 +89,7 @@ def get_paddleocr_engine(config: PaddleOCRConfig | None = None):
             textline_orientation_batch_size=config.textline_orientation_batch_size,
             text_recognition_batch_size=config.text_recognition_batch_size,
             lang=config.lang,
-            ocr_version=config.ocr_version
+            ocr_version=config.ocr_version,
         )
 
     return _paddleocr_engine
@@ -116,7 +117,7 @@ class OCRProcessor:
         :param engine: OCR engine to use ('easyocr' or 'paddleocr').
         :param paddleocr_config: Configuration dict for PaddleOCR (optional).
         """
-        self.languages = languages or ['pt', 'en']
+        self.languages = languages or ["pt", "en"]
         self.gpu = gpu
         self.dpi = dpi
         self.engine = engine
@@ -127,7 +128,7 @@ class OCRProcessor:
             "use_doc_unwarping": True,
             "use_textline_orientation": True,
             "textline_orientation_batch_size": 1,
-            "text_recognition_batch_size": 1
+            "text_recognition_batch_size": 1,
         }
         self._reader = None
         self._paddle_engine = None
@@ -186,7 +187,7 @@ class OCRProcessor:
 
         # Extract text from results
         text_parts = [result[1] for result in results]
-        return '\n'.join(text_parts)
+        return "\n".join(text_parts)
 
     def _ocr_image_paddle(self, image: Image.Image) -> str:
         """
@@ -208,10 +209,10 @@ class OCRProcessor:
         if result and len(result) > 0:
             # PaddleOCR returns a list of results, each containing 'rec_texts' or similar
             for page_result in result:
-                if hasattr(page_result, 'rec_texts'):
+                if hasattr(page_result, "rec_texts"):
                     text_parts.extend(page_result.rec_texts)
-                elif isinstance(page_result, dict) and 'rec_texts' in page_result:
-                    text_parts.extend(page_result['rec_texts'])
+                elif isinstance(page_result, dict) and "rec_texts" in page_result:
+                    text_parts.extend(page_result["rec_texts"])
                 elif isinstance(page_result, list):
                     # Handle list format: [[box, (text, confidence)], ...]
                     for item in page_result:
@@ -222,7 +223,7 @@ class OCRProcessor:
                             elif isinstance(text_info, str):
                                 text_parts.append(text_info)
 
-        return '\n'.join(text_parts)
+        return "\n".join(text_parts)
 
     def ocr_pdf_page(self, pdf_path: Path, page_num: int) -> str:
         """
@@ -233,12 +234,7 @@ class OCRProcessor:
         :returns: Extracted text.
         """
         # Convert specific page to image
-        images = convert_from_path(
-            str(pdf_path),
-            first_page=page_num,
-            last_page=page_num,
-            dpi=self.dpi
-        )
+        images = convert_from_path(str(pdf_path), first_page=page_num, last_page=page_num, dpi=self.dpi)
 
         if not images:
             return ""
@@ -319,17 +315,14 @@ def run_ocr_on_pdf(pdf_path: Path, config: OCRConfig | None = None) -> list[str]
 def get_page_count(pdf_path: Path) -> int:
     """Get the number of pages in a PDF."""
     import fitz  # PyMuPDF
+
     doc = fitz.open(str(pdf_path))
     count = len(doc)
     doc.close()
     return count
 
 
-def extract_page_as_image(
-    pdf_path: Path,
-    page_num: int,
-    dpi: int = 200
-) -> Image.Image:
+def extract_page_as_image(pdf_path: Path, page_num: int, dpi: int = 200) -> Image.Image:
     """
     Extract a specific page from PDF as PIL Image.
 
@@ -338,10 +331,5 @@ def extract_page_as_image(
     :param dpi: Conversion DPI.
     :returns: PIL Image.
     """
-    images = convert_from_path(
-        str(pdf_path),
-        first_page=page_num,
-        last_page=page_num,
-        dpi=dpi
-    )
+    images = convert_from_path(str(pdf_path), first_page=page_num, last_page=page_num, dpi=dpi)
     return images[0] if images else None

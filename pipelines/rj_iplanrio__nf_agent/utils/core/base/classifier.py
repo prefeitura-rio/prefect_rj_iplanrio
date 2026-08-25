@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 class BaseClassifier(ABC):
     """
     Abstract base class for page classifiers.
-    
+
     All classifiers (OCR-based, Vision-based, etc.) must implement this interface
     to be compatible with NFPipeline.
     """

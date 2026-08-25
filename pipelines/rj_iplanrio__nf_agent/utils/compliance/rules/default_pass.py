@@ -5,11 +5,12 @@ Priority: 100 (Lowest)
 Classification: "OK"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class DefaultPassRule(ComplianceRule):
+class DefaultPassRule(Rule[ValidationContext]):
     """
     Rule: Default pass when all other checks pass
 
@@ -30,5 +31,5 @@ class DefaultPassRule(ComplianceRule):
             classification="OK",
             stop_evaluation=True,
             reason="All validation checks passed",
-            rule_name=self.get_name()
+            rule_name=self.get_name(),
         )

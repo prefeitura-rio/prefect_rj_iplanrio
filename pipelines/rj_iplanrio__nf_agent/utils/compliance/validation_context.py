@@ -43,7 +43,4 @@ class ValidationContext:
         """Check if any page category contains 'Fatura de Locação'."""
         if not self.page_categories:
             return False
-        return any(
-            cat and ("locação" in cat.lower() or "locacao" in cat.lower())
-            for cat in self.page_categories
-        )
+        return any(cat and ("locação" in cat.lower() or "locacao" in cat.lower()) for cat in self.page_categories)

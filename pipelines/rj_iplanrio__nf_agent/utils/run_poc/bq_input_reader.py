@@ -9,6 +9,14 @@ from pathlib import Path
 
 import pandas as pd
 from google.cloud import bigquery
+from google.oauth2 import service_account
+
+from prefect_rj_iplanrio.logging import get_logger
+from prefect_rj_iplanrio.sql import load_query
+
+logger = get_logger(__name__)
+
+_PDF_SUFFIX_RE = r"\.pdf$"
 
 
 class BQInputReader:
@@ -20,13 +28,8 @@ class BQInputReader:
         credentials_path: Path | None = None,
     ):
         if credentials_path and Path(credentials_path).exists():
-            from google.oauth2 import service_account
-            credentials = service_account.Credentials.from_service_account_file(
-                str(credentials_path)
-            )
-            self.client = bigquery.Client(
-                credentials=credentials, project=credentials.project_id
-            )
+            credentials = service_account.Credentials.from_service_account_file(str(credentials_path))
+            self.client = bigquery.Client(credentials=credentials, project=credentials.project_id)
         else:
             self.client = bigquery.Client(project=project_id)
 
@@ -57,46 +60,35 @@ class BQInputReader:
         :returns: DataFrame with all columns from input_table for the selected PDFs.
         """
         # Group by descricao (view already strips .pdf suffix).
-        # COALESCE to id_documento guards against NULL descricao so the
-        # INNER JOIN never drops rows due to NULL = NULL being FALSE in SQL.
-        query = f"""
-            WITH unprocessed AS (
-                SELECT v.*
-                FROM `{input_table}` v
-                LEFT JOIN `{status_table}` c
-                  ON CAST(v.id_documento AS STRING) = CAST(c.id_documento AS STRING)
-                WHERE c.id_documento IS NULL
-                   OR (c.status = 'erro' AND (c.retry_count IS NULL OR c.retry_count < {max_retries}))
-            ),
-            batch_pdf_keys AS (
-                SELECT DISTINCT
-                    COALESCE(descricao, CAST(id_documento AS STRING)) AS pdf_key
-                FROM unprocessed
-                LIMIT {batch_size}
-            )
-            SELECT u.*
-            FROM unprocessed u
-            INNER JOIN batch_pdf_keys bk
-              ON COALESCE(u.descricao, CAST(u.id_documento AS STRING)) = bk.pdf_key
-        """
-        print(f"[BQInputReader] Querying all rows for up to {batch_size} unprocessed PDFs...")
+        query = load_query(
+            __file__,
+            "unprocessed_batch",
+            input_table=input_table,
+            status_table=status_table,
+            max_retries=max_retries,
+            batch_size=batch_size,
+        )
+        logger.info("Querying all rows for up to %d unprocessed PDFs...", batch_size)
         df = self.client.query(query).to_dataframe()
-        distinct_pdfs = df["descricao"].str.replace(r"\.pdf$", "", case=False, regex=True).nunique() if "descricao" in df.columns else "?"
-        print(f"[BQInputReader] Got {len(df):,} rows across {distinct_pdfs} PDFs")
+        distinct_pdfs = (
+            df["descricao"].str.replace(_PDF_SUFFIX_RE, "", case=False, regex=True).nunique()
+            if "descricao" in df.columns
+            else "?"
+        )
+        logger.info("Got %d rows across %s PDFs", len(df), distinct_pdfs)
         if "descricao_limpa" not in df.columns and "descricao" in df.columns:
-            df["descricao_limpa"] = df["descricao"].str.replace(r"\.pdf$", "", case=False, regex=True)
+            df["descricao_limpa"] = df["descricao"].str.replace(_PDF_SUFFIX_RE, "", case=False, regex=True)
         return df
 
     def count_pending(self, input_table: str, status_table: str, max_retries: int = 3) -> int:
         """Return the total number of documents still pending processing."""
-        query = f"""
-            SELECT COUNT(*) AS total
-            FROM `{input_table}` v
-            LEFT JOIN `{status_table}` c
-              ON CAST(v.id_documento AS STRING) = CAST(c.id_documento AS STRING)
-            WHERE c.id_documento IS NULL
-               OR (c.status = 'erro' AND (c.retry_count IS NULL OR c.retry_count < {max_retries}))
-        """
+        query = load_query(
+            __file__,
+            "count_pending",
+            input_table=input_table,
+            status_table=status_table,
+            max_retries=max_retries,
+        )
         result = self.client.query(query).to_dataframe()
         return int(result["total"].iloc[0])
 
@@ -116,18 +108,8 @@ class BQInputReader:
                 'pendente':   {'docs':  43, 'pdfs': 12},
             }
         """
-        query = f"""
-            SELECT
-                COALESCE(c.status, 'pendente') AS status,
-                COUNT(*) AS total_docs,
-                COUNT(DISTINCT COALESCE(v.descricao, CAST(v.id_documento AS STRING))) AS total_pdfs
-            FROM `{input_table}` v
-            LEFT JOIN `{status_table}` c
-              ON CAST(v.id_documento AS STRING) = CAST(c.id_documento AS STRING)
-            GROUP BY 1
-        """
+        query = load_query(__file__, "count_by_status", input_table=input_table, status_table=status_table)
         df = self.client.query(query).to_dataframe()
         return {
-            row["status"]: {"docs": int(row["total_docs"]), "pdfs": int(row["total_pdfs"])}
-            for _, row in df.iterrows()
+            row["status"]: {"docs": int(row["total_docs"]), "pdfs": int(row["total_pdfs"])} for _, row in df.iterrows()
         }

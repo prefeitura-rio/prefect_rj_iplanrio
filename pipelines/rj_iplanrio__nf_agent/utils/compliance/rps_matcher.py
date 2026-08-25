@@ -76,10 +76,7 @@ def fuzzy_match(value1: str, value2: str) -> bool:
     return False
 
 
-def find_nf_ticket_by_rps(
-    expected_nf: dict,
-    extracted_nfs: list[dict]
-) -> tuple[dict | None, dict | None, str]:
+def find_nf_ticket_by_rps(expected_nf: dict, extracted_nfs: list[dict]) -> tuple[dict | None, dict | None, str]:
     """
     Find NF and Ticket related via RPS for a specific declaration.
 
@@ -96,49 +93,46 @@ def find_nf_ticket_by_rps(
 
         Returns (None, None, None) if no RPS match found.
     """
-    cnpj_declarado = normalize_cnpj(expected_nf.get('cnpj', ''))
-    numero_declarado = normalize_number(str(expected_nf.get('numero_nf', '')))
+    cnpj_declarado = normalize_cnpj(expected_nf.get("cnpj", ""))
+    numero_declarado = normalize_number(str(expected_nf.get("numero_nf", "")))
 
     if not cnpj_declarado or not numero_declarado:
         return (None, None, None)
 
     # Filter documents by CNPJ
-    docs_mesmo_cnpj = [
-        doc for doc in extracted_nfs
-        if normalize_cnpj(doc.get('cnpj_emitente', '')) == cnpj_declarado
-    ]
+    docs_mesmo_cnpj = [doc for doc in extracted_nfs if normalize_cnpj(doc.get("cnpj_emitente", "")) == cnpj_declarado]
 
     # Separate NFs and Tickets
-    nfs = [d for d in docs_mesmo_cnpj if is_nf_type(d.get('tipo_documento', ''))]
-    tickets = [d for d in docs_mesmo_cnpj if is_ticket_type(d.get('tipo_documento', ''))]
+    nfs = [d for d in docs_mesmo_cnpj if is_nf_type(d.get("tipo_documento", ""))]
+    tickets = [d for d in docs_mesmo_cnpj if is_ticket_type(d.get("tipo_documento", ""))]
 
     logger.debug(
-        f"RPS Matcher: CNPJ {cnpj_declarado}, número {numero_declarado} → "
-        f"Found {len(nfs)} NFs, {len(tickets)} Tickets"
+        f"RPS Matcher: CNPJ {cnpj_declarado}, número {numero_declarado} → Found {len(nfs)} NFs, {len(tickets)} Tickets"
     )
 
     # SCENARIO 1: Declaration has NF number → find Ticket via RPS
     for nf in nfs:
         # Check if NF matches declaration using 3-field logic
         from .utils import DocumentFields, match_score_3_fields
+
         score = match_score_3_fields(
             expected=DocumentFields(
                 cnpj=cnpj_declarado,
                 numero=numero_declarado,
-                data=expected_nf.get('data_emissao'),
+                data=expected_nf.get("data_emissao"),
             ),
             extracted=DocumentFields(
-                cnpj=nf.get('cnpj_emitente', ''),
-                numero=nf.get('numero_nf', ''),
-                data=nf.get('data_emissao'),
+                cnpj=nf.get("cnpj_emitente", ""),
+                numero=nf.get("numero_nf", ""),
+                data=nf.get("data_emissao"),
             ),
         )
 
         # Require at least 2 of 3 fields to match
         if score >= 2:
             # NF matches declaration directly
-            nf_numero = normalize_number(str(nf.get('numero_nf', '')))
-            numero_rps = nf.get('numero_rps')
+            nf_numero = normalize_number(str(nf.get("numero_nf", "")))
+            numero_rps = nf.get("numero_rps")
 
             if not numero_rps:
                 # NF doesn't have RPS, skip
@@ -148,30 +142,28 @@ def find_nf_ticket_by_rps(
 
             # Look for Ticket with number = RPS
             for ticket in tickets:
-                ticket_numero = normalize_number(str(ticket.get('numero_nf', '')))
+                ticket_numero = normalize_number(str(ticket.get("numero_nf", "")))
 
                 if fuzzy_match(ticket_numero, numero_rps_norm):
                     # RPS match found!
-                    logger.info(
-                        f"RPS Match (direct): NF {nf_numero} (RPS {numero_rps_norm}) + "
-                        f"Ticket {ticket_numero}"
-                    )
-                    return (nf, ticket, 'direct')
+                    logger.info(f"RPS Match (direct): NF {nf_numero} (RPS {numero_rps_norm}) + Ticket {ticket_numero}")
+                    return (nf, ticket, "direct")
 
     # SCENARIO 2: Declaration has Ticket number → find NF via RPS (reverse)
     for ticket in tickets:
         # Check if Ticket matches declaration using 3-field logic
         from .utils import DocumentFields, match_score_3_fields
+
         score = match_score_3_fields(
             expected=DocumentFields(
                 cnpj=cnpj_declarado,
                 numero=numero_declarado,
-                data=expected_nf.get('data_emissao'),
+                data=expected_nf.get("data_emissao"),
             ),
             extracted=DocumentFields(
-                cnpj=ticket.get('cnpj_emitente', ''),
-                numero=ticket.get('numero_nf', ''),
-                data=ticket.get('data_emissao'),
+                cnpj=ticket.get("cnpj_emitente", ""),
+                numero=ticket.get("numero_nf", ""),
+                data=ticket.get("data_emissao"),
             ),
         )
 
@@ -180,7 +172,7 @@ def find_nf_ticket_by_rps(
             # Ticket matches declaration directly
             # Look for NF whose RPS = ticket number
             for nf in nfs:
-                numero_rps = nf.get('numero_rps')
+                numero_rps = nf.get("numero_rps")
 
                 if not numero_rps:
                     continue
@@ -189,23 +181,18 @@ def find_nf_ticket_by_rps(
 
                 if fuzzy_match(numero_rps_norm, numero_declarado):
                     # Reverse RPS match found!
-                    nf_numero = normalize_number(str(nf.get('numero_nf', '')))
+                    nf_numero = normalize_number(str(nf.get("numero_nf", "")))
                     logger.info(
                         f"RPS Match (reverse): Declaration has Ticket number {numero_declarado}, "
                         f"found NF {nf_numero} with RPS {numero_rps_norm}"
                     )
-                    return (nf, ticket, 'reverse')
+                    return (nf, ticket, "reverse")
 
     # No RPS match found
     return (None, None, None)
 
 
-def should_apply_apontamento_leve(
-    expected_numero: str,
-    nf: dict,
-    ticket: dict,
-    match_type: str
-) -> bool:
+def should_apply_apontamento_leve(expected_numero: str, nf: dict, ticket: dict, match_type: str) -> bool:
     """
     Check if "Apontamento Leve" classification should be applied.
 
@@ -219,22 +206,18 @@ def should_apply_apontamento_leve(
     :param match_type: 'direct' or 'reverse'.
     :returns: True if Apontamento Leve should be applied.
     """
-    if match_type != 'reverse':
+    if match_type != "reverse":
         return False
 
     # In reverse match, declaration has Ticket number
     # This is technically incorrect → Apontamento Leve
     numero_declarado_norm = normalize_number(str(expected_numero))
-    ticket_numero_norm = normalize_number(str(ticket.get('numero_nf', '')))
+    ticket_numero_norm = normalize_number(str(ticket.get("numero_nf", "")))
 
     return fuzzy_match(numero_declarado_norm, ticket_numero_norm)
 
 
-def get_apontamento_leve_justification(
-    nf: dict,
-    ticket: dict,
-    numero_declarado: str
-) -> str:
+def get_apontamento_leve_justification(nf: dict, ticket: dict, numero_declarado: str) -> str:
     """
     Generate justification for Apontamento Leve case.
 
@@ -243,10 +226,10 @@ def get_apontamento_leve_justification(
     :param numero_declarado: Number from declaration.
     :returns: Justification string.
     """
-    tipo_nf = nf.get('tipo_documento', 'NF')
-    tipo_ticket = ticket.get('tipo_documento', 'Ticket')
-    numero_nf = nf.get('numero_nf', '')
-    numero_ticket = ticket.get('numero_nf', '')
+    tipo_nf = nf.get("tipo_documento", "NF")
+    tipo_ticket = ticket.get("tipo_documento", "Ticket")
+    numero_nf = nf.get("numero_nf", "")
+    numero_ticket = ticket.get("numero_nf", "")
 
     return (
         f"Declaração usa número do {tipo_ticket} ({numero_declarado}), "

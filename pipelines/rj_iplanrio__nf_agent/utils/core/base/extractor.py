@@ -13,11 +13,7 @@ class BaseExtractor(Protocol):
     Extracts structured data from NF pages (supplier, items, totals, etc.)
     """
 
-    def extract_from_pdf(
-        self,
-        pdf_path: Path,
-        nf_pages: List[int] = None
-    ) -> Dict:
+    def extract_from_pdf(self, pdf_path: Path, nf_pages: List[int] = None) -> Dict:
         """
         Extract NF data from PDF pages.
 
@@ -35,10 +31,7 @@ class BaseExtractor(Protocol):
         """
         ...
 
-    def extract_from_images(
-        self,
-        image_paths: List[Path]
-    ) -> Dict:
+    def extract_from_images(self, image_paths: List[Path]) -> Dict:
         """
         Extract NF data from image files.
 

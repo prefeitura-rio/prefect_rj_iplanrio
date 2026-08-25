@@ -10,19 +10,19 @@ from ..config import BEST_PARAMS, load_categories
 
 # Pattern definitions for regex-based matching
 PATTERNS = {
-    "PATTERN:CNPJ": r'\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b',
-    "PATTERN:CPF": r'\b\d{3}\.\d{3}\.\d{3}-\d{2}\b',
-    "PATTERN:DATE": r'\b\d{2}/\d{2}/\d{4}\b',
-    "PATTERN:MONEY": r'R\$\s*[\d.,]+(?:\s*\d+)?',
-    "PATTERN:CEP": r'\b\d{5}-?\d{3}\b',
-    "PATTERN:CFOP": r'\b\d{4}\b(?=.*(?:cfop|natureza|operação))',
-    "PATTERN:INSCRICAO_ESTADUAL": r'(?i)inscri[çc][aã]o\s*estadual[:\s]*[\d./-]+',
-    "PATTERN:INSCRICAO_MUNICIPAL": r'(?i)inscri[çc][aã]o\s*municipal[:\s]*[\d./-]+',
-    "PATTERN:NFE_ACCESS_KEY": r'\b\d{44}\b',
-    "PATTERN:NF_NUMBER": r'(?i)(?:n[úu]mero|n[°º])\s*(?:da\s*)?(?:nota|nf)[:\s]*\d+',
-    "PATTERN:RPS_NUMBER": r'(?i)rps[:\s]*\d+',
-    "PATTERN:TAX_CODE": r'(?i)c[óo]digo\s*(?:de\s*)?verifica[çc][aã]o[:\s]*[\w-]+',
-    "PATTERN:VERIFICATION_CODE": r'(?i)c[óo]digo[:\s]*[\w]{8,}'
+    "PATTERN:CNPJ": r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b",
+    "PATTERN:CPF": r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b",
+    "PATTERN:DATE": r"\b\d{2}/\d{2}/\d{4}\b",
+    "PATTERN:MONEY": r"R\$\s*[\d.,]+(?:\s*\d+)?",
+    "PATTERN:CEP": r"\b\d{5}-?\d{3}\b",
+    "PATTERN:CFOP": r"\b\d{4}\b(?=.*(?:cfop|natureza|operação))",
+    "PATTERN:INSCRICAO_ESTADUAL": r"(?i)inscri[çc][aã]o\s*estadual[:\s]*[\d./-]+",
+    "PATTERN:INSCRICAO_MUNICIPAL": r"(?i)inscri[çc][aã]o\s*municipal[:\s]*[\d./-]+",
+    "PATTERN:NFE_ACCESS_KEY": r"\b\d{44}\b",
+    "PATTERN:NF_NUMBER": r"(?i)(?:n[úu]mero|n[°º])\s*(?:da\s*)?(?:nota|nf)[:\s]*\d+",
+    "PATTERN:RPS_NUMBER": r"(?i)rps[:\s]*\d+",
+    "PATTERN:TAX_CODE": r"(?i)c[óo]digo\s*(?:de\s*)?verifica[çc][aã]o[:\s]*[\w-]+",
+    "PATTERN:VERIFICATION_CODE": r"(?i)c[óo]digo[:\s]*[\w]{8,}",
 }
 
 
@@ -167,12 +167,9 @@ class NFClassifier(BaseClassifier):
 
         for idx, text in enumerate(page_texts):
             classification, score = self.classify(text)
-            results.append({
-                "page": idx + 1,
-                "classification": classification,
-                "score": score,
-                "is_nf": classification == "NF"
-            })
+            results.append(
+                {"page": idx + 1, "classification": classification, "score": score, "is_nf": classification == "NF"}
+            )
 
         return results
 
@@ -208,7 +205,7 @@ class NFClassifier(BaseClassifier):
             "NF-specific_medium_confidence": [],
             "NF-specific_low_confidence": [],
             "Common": [],
-            "Non-NF": []
+            "Non-NF": [],
         }
 
         nf_specific = self.categories.get("NF-specific", {})
@@ -218,59 +215,44 @@ class NFClassifier(BaseClassifier):
             count = count_sequence_matches(text_lower, seq)
             if count > 0:
                 weight = self.params.get("weight_NF-specific_high_confidence", 23)
-                breakdown["NF-specific_high_confidence"].append({
-                    "sequence": seq,
-                    "count": count,
-                    "weight": weight,
-                    "contribution": count * weight
-                })
+                breakdown["NF-specific_high_confidence"].append(
+                    {"sequence": seq, "count": count, "weight": weight, "contribution": count * weight}
+                )
 
         # Medium confidence
         for seq in nf_specific.get("medium_confidence", []):
             count = count_sequence_matches(text_lower, seq)
             if count > 0:
                 weight = self.params.get("weight_NF-specific_medium_confidence", 5)
-                breakdown["NF-specific_medium_confidence"].append({
-                    "sequence": seq,
-                    "count": count,
-                    "weight": weight,
-                    "contribution": count * weight
-                })
+                breakdown["NF-specific_medium_confidence"].append(
+                    {"sequence": seq, "count": count, "weight": weight, "contribution": count * weight}
+                )
 
         # Low confidence
         for seq in nf_specific.get("low_confidence", []):
             count = count_sequence_matches(text_lower, seq)
             if count > 0:
                 weight = self.params.get("weight_NF-specific_low_confidence", 1)
-                breakdown["NF-specific_low_confidence"].append({
-                    "sequence": seq,
-                    "count": count,
-                    "weight": weight,
-                    "contribution": count * weight
-                })
+                breakdown["NF-specific_low_confidence"].append(
+                    {"sequence": seq, "count": count, "weight": weight, "contribution": count * weight}
+                )
 
         # Common
         for seq in self.categories.get("Common", []):
             count = count_sequence_matches(text_lower, seq)
             if count > 0:
                 weight = self.params.get("weight_Common", 0)
-                breakdown["Common"].append({
-                    "sequence": seq,
-                    "count": count,
-                    "weight": weight,
-                    "contribution": count * weight
-                })
+                breakdown["Common"].append(
+                    {"sequence": seq, "count": count, "weight": weight, "contribution": count * weight}
+                )
 
         # Non-NF
         for seq in self.categories.get("Non-NF", []):
             count = count_sequence_matches(text_lower, seq)
             if count > 0:
                 weight = self.params.get("weight_Non-NF", -13)
-                breakdown["Non-NF"].append({
-                    "sequence": seq,
-                    "count": count,
-                    "weight": weight,
-                    "contribution": count * weight
-                })
+                breakdown["Non-NF"].append(
+                    {"sequence": seq, "count": count, "weight": weight, "contribution": count * weight}
+                )
 
         return breakdown

@@ -8,7 +8,7 @@ import fitz  # PyMuPDF
 
 from ..core.classifiers.gemini_classifier import GeminiClassifier
 from ..extraction import NFExtractor
-from ..run_poc.database import DatabaseManager
+from ..run_poc.sqlite_cache_manager import DatabaseManager
 from ..run_poc.gcs_downloader import GCSDownloader
 
 logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
@@ -68,11 +68,11 @@ class POCProcessorSetupMixin:
 
         if prompt_versions is None:
             # Use latest available versions
-            classification_versions = list_available_versions('classification')
-            extraction_versions = list_available_versions('extraction')
+            classification_versions = list_available_versions("classification")
+            extraction_versions = list_available_versions("extraction")
             prompt_versions = {
-                'classification': classification_versions[-1] if classification_versions else 'v1',
-                'extraction': extraction_versions[-1] if extraction_versions else 'v1'
+                "classification": classification_versions[-1] if classification_versions else "v1",
+                "extraction": extraction_versions[-1] if extraction_versions else "v1",
             }
 
         self.prompt_versions = prompt_versions
@@ -82,8 +82,8 @@ class POCProcessorSetupMixin:
         self.match_requires_pdf_name = match_requires_pdf_name
 
         # Load the actual prompt content
-        self.classification_prompt = load_prompt_version('classification', prompt_versions['classification'])
-        self.extraction_prompt = load_prompt_version('extraction', prompt_versions['extraction'])
+        self.classification_prompt = load_prompt_version("classification", prompt_versions["classification"])
+        self.extraction_prompt = load_prompt_version("extraction", prompt_versions["extraction"])
 
         # Configure logger level based on quiet flag
         if quiet:

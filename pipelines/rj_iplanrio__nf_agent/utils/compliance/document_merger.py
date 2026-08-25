@@ -38,23 +38,23 @@ def merge_nf_and_ticket(nf: dict, ticket: dict) -> dict:
     :returns: Merged document dict.
     """
     # Determine which value to use (non-zero)
-    nf_valor = normalize_value(nf.get('valor_total', 0))
-    ticket_valor = normalize_value(ticket.get('valor_total', 0))
+    nf_valor = normalize_value(nf.get("valor_total", 0))
+    ticket_valor = normalize_value(ticket.get("valor_total", 0))
 
     if nf_valor == 0 and ticket_valor != 0:
         valor_final = ticket_valor
-        origem_valor = ticket.get('tipo_documento', 'Ticket')
+        origem_valor = ticket.get("tipo_documento", "Ticket")
     elif ticket_valor == 0 and nf_valor != 0:
         valor_final = nf_valor
-        origem_valor = nf.get('tipo_documento', 'NF')
+        origem_valor = nf.get("tipo_documento", "NF")
     elif nf_valor != 0 and ticket_valor != 0:
         # Both have value - use Ticket value
         valor_final = ticket_valor
-        origem_valor = ticket.get('tipo_documento', 'Ticket')
+        origem_valor = ticket.get("tipo_documento", "Ticket")
     else:
         # Both zero
         valor_final = 0.0
-        origem_valor = 'Ambos zerados'
+        origem_valor = "Ambos zerados"
 
     logger.info(
         f"Merging NF ({nf.get('tipo_documento')}, R$ {nf_valor:.2f}) + "
@@ -64,21 +64,21 @@ def merge_nf_and_ticket(nf: dict, ticket: dict) -> dict:
 
     # Create merged document (base is NF)
     merged = nf.copy()
-    merged.update({
-        # Keep NF type (NOT Ticket type!)
-        'tipo_documento': nf.get('tipo_documento'),
-
-        # Use non-zero value
-        'valor_total': valor_final,
-
-        # Metadata for tracking
-        'is_merged': True,
-        'merged_with': ticket.get('tipo_documento'),
-        'merged_ticket_numero': ticket.get('numero_nf'),
-        'merged_ticket_valor': ticket_valor,
-        'merged_nf_valor': nf_valor,
-        'merged_valor_origem': origem_valor,
-    })
+    merged.update(
+        {
+            # Keep NF type (NOT Ticket type!)
+            "tipo_documento": nf.get("tipo_documento"),
+            # Use non-zero value
+            "valor_total": valor_final,
+            # Metadata for tracking
+            "is_merged": True,
+            "merged_with": ticket.get("tipo_documento"),
+            "merged_ticket_numero": ticket.get("numero_nf"),
+            "merged_ticket_valor": ticket_valor,
+            "merged_nf_valor": nf_valor,
+            "merged_valor_origem": origem_valor,
+        }
+    )
 
     return merged
 
@@ -92,13 +92,13 @@ def get_merge_justificativa(nf: dict, ticket: dict, merged: dict) -> str:
     :param merged: Merged document.
     :returns: Justification string explaining the merge.
     """
-    tipo_nf = nf.get('tipo_documento', 'NF')
-    tipo_ticket = ticket.get('tipo_documento', 'Ticket')
-    numero_nf = nf.get('numero_nf', '')
-    numero_ticket = ticket.get('numero_nf', '')
-    numero_rps = nf.get('numero_rps', '')
-    valor_final = merged.get('valor_total', 0)
-    origem = merged.get('merged_valor_origem', '')
+    tipo_nf = nf.get("tipo_documento", "NF")
+    tipo_ticket = ticket.get("tipo_documento", "Ticket")
+    numero_nf = nf.get("numero_nf", "")
+    numero_ticket = ticket.get("numero_nf", "")
+    numero_rps = nf.get("numero_rps", "")
+    valor_final = merged.get("valor_total", 0)
+    origem = merged.get("merged_valor_origem", "")
 
     justificativa = (
         f"Foram encontrados {tipo_nf} (nº {numero_nf}) e "

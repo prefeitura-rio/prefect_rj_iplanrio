@@ -43,10 +43,7 @@ class ComplianceValidatorValidateMixin:
         cnpj_start_dates = {}
 
         # Get all unique CNPJs from extracted NFs
-        unique_cnpjs = set(
-            normalize_cnpj(nf.get('cnpj_emitente', ''))
-            for nf in extracted_nfs
-        )
+        unique_cnpjs = set(normalize_cnpj(nf.get("cnpj_emitente", "")) for nf in extracted_nfs)
 
         # Query BigQuery for each unique CNPJ
         from ..run_poc.bigquery_loader import (
@@ -65,20 +62,20 @@ class ComplianceValidatorValidateMixin:
         # If no expected NFs for this PDF, all extractions are suspicious
         if not expected_list:
             return {
-                'status': 'WARNINGS' if len(extracted_nfs) > 0 else 'OK',
-                'correctly_extracted': [],
-                'missing_nfs': [],
-                'suspicious_extractions': extracted_nfs,
-                'normalization_issues': [],
-                'summary': {
-                    'total_expected': 0,
-                    'total_extracted': len(extracted_nfs),
-                    'correctly_extracted': 0,
-                    'missing': 0,
-                    'suspicious': len(extracted_nfs),
-                    'normalization_issues': 0
+                "status": "WARNINGS" if len(extracted_nfs) > 0 else "OK",
+                "correctly_extracted": [],
+                "missing_nfs": [],
+                "suspicious_extractions": extracted_nfs,
+                "normalization_issues": [],
+                "summary": {
+                    "total_expected": 0,
+                    "total_extracted": len(extracted_nfs),
+                    "correctly_extracted": 0,
+                    "missing": 0,
+                    "suspicious": len(extracted_nfs),
+                    "normalization_issues": 0,
                 },
-                'message': f'No expected NFs for {pdf_name} - all {len(extracted_nfs)} extractions are suspicious'
+                "message": f"No expected NFs for {pdf_name} - all {len(extracted_nfs)} extractions are suspicious",
             }
 
         # NEW STRATEGY: Process each declaration independently (declaração-centric)
@@ -89,66 +86,60 @@ class ComplianceValidatorValidateMixin:
 
         for exp_nf in expected_list:
             # Store pdf_name in expected_nf for deduplication check
-            exp_nf['pdf_name'] = pdf_name
+            exp_nf["pdf_name"] = pdf_name
 
             # Process this single declaration
-            result = self._process_single_declaration(
-                exp_nf,
-                extracted_nfs,
-                cnpj_start_dates,
-                page_categories or []
-            )
+            result = self._process_single_declaration(exp_nf, extracted_nfs, cnpj_start_dates, page_categories or [])
 
             # Categorize result
-            if result.get('extracted'):
+            if result.get("extracted"):
                 # Match found
                 correctly_extracted.append(result)
             else:
                 # Missing NF
-                missing_nfs.append(result['expected'])
+                missing_nfs.append(result["expected"])
 
         # Determine overall status
         has_problems = len(missing_nfs) > 0
 
         if has_problems:
-            status = 'PROBLEMS'
+            status = "PROBLEMS"
         else:
-            status = 'OK'
+            status = "OK"
 
         # Count classifications
-        classification_counts = {'OK': 0, 'Suspect': 0, 'Not Analyzable': 0, 'Apontamento Leve': 0}
+        classification_counts = {"OK": 0, "Suspect": 0, "Not Analyzable": 0, "Apontamento Leve": 0}
 
         # Count from correctly extracted
         for item in correctly_extracted:
-            classification_counts[item.get('classification', 'OK')] += 1
+            classification_counts[item.get("classification", "OK")] += 1
 
         # Count from missing
         for item in missing_nfs:
-            classification_counts[item.get('classification', 'Suspect')] += 1
+            classification_counts[item.get("classification", "Suspect")] += 1
 
         logger.info(
-            f"Validation complete for {pdf_name}: "
-            f"{len(correctly_extracted)} matched, {len(missing_nfs)} missing"
+            f"Validation complete for {pdf_name}: {len(correctly_extracted)} matched, {len(missing_nfs)} missing"
         )
 
         return {
-            'status': status,
-            'correctly_extracted': correctly_extracted,
-            'missing_nfs': missing_nfs,
-            'suspicious_extractions': [],  # Not used in new strategy
-            'normalization_issues': [],    # Not used in new strategy
-            'summary': {
-                'total_expected': len(expected_list),
-                'total_extracted': len(extracted_nfs),
-                'correctly_extracted': len(correctly_extracted),
-                'missing': len(missing_nfs),
-                'suspicious': 0,  # Not used in new strategy
-                'normalization_issues': 0,  # Not used in new strategy
+            "status": status,
+            "correctly_extracted": correctly_extracted,
+            "missing_nfs": missing_nfs,
+            "suspicious_extractions": [],  # Not used in new strategy
+            "normalization_issues": [],  # Not used in new strategy
+            "summary": {
+                "total_expected": len(expected_list),
+                "total_extracted": len(extracted_nfs),
+                "correctly_extracted": len(correctly_extracted),
+                "missing": len(missing_nfs),
+                "suspicious": 0,  # Not used in new strategy
+                "normalization_issues": 0,  # Not used in new strategy
                 # Classification breakdown
-                'classification_ok': classification_counts['OK'],
-                'classification_suspect': classification_counts['Suspect'],
-                'classification_not_analyzable': classification_counts['Not Analyzable']
-            }
+                "classification_ok": classification_counts["OK"],
+                "classification_suspect": classification_counts["Suspect"],
+                "classification_not_analyzable": classification_counts["Not Analyzable"],
+            },
         }
 
     def validate_batch(self, extraction_results: list[dict]) -> dict:
@@ -163,52 +154,52 @@ class ComplianceValidatorValidateMixin:
         validations = []
 
         for result in extraction_results:
-            pdf_name = result['pdf_name']
-            extracted_nfs = result.get('extracted_nfs', [])
+            pdf_name = result["pdf_name"]
+            extracted_nfs = result.get("extracted_nfs", [])
 
             validation = self.validate_extraction(pdf_name, extracted_nfs)
-            validation['pdf_name'] = pdf_name
+            validation["pdf_name"] = pdf_name
             validations.append(validation)
 
         # Aggregate statistics
-        total_expected = sum(v['summary']['total_expected'] for v in validations)
-        total_extracted = sum(v['summary']['total_extracted'] for v in validations)
-        total_correct = sum(v['summary']['correctly_extracted'] for v in validations)
-        total_missing = sum(v['summary']['missing'] for v in validations)
-        total_suspicious = sum(v['summary']['suspicious'] for v in validations)
-        total_norm_issues = sum(v['summary']['normalization_issues'] for v in validations)
+        total_expected = sum(v["summary"]["total_expected"] for v in validations)
+        total_extracted = sum(v["summary"]["total_extracted"] for v in validations)
+        total_correct = sum(v["summary"]["correctly_extracted"] for v in validations)
+        total_missing = sum(v["summary"]["missing"] for v in validations)
+        total_suspicious = sum(v["summary"]["suspicious"] for v in validations)
+        total_norm_issues = sum(v["summary"]["normalization_issues"] for v in validations)
 
         # Aggregate classification counts
-        total_ok = sum(v['summary'].get('classification_ok', 0) for v in validations)
-        total_suspect = sum(v['summary'].get('classification_suspect', 0) for v in validations)
-        total_not_analyzable = sum(v['summary'].get('classification_not_analyzable', 0) for v in validations)
+        total_ok = sum(v["summary"].get("classification_ok", 0) for v in validations)
+        total_suspect = sum(v["summary"].get("classification_suspect", 0) for v in validations)
+        total_not_analyzable = sum(v["summary"].get("classification_not_analyzable", 0) for v in validations)
 
-        pdfs_with_problems = sum(1 for v in validations if v['status'] == 'PROBLEMS')
-        pdfs_with_warnings = sum(1 for v in validations if v['status'] == 'WARNINGS')
-        pdfs_ok = sum(1 for v in validations if v['status'] == 'OK')
+        pdfs_with_problems = sum(1 for v in validations if v["status"] == "PROBLEMS")
+        pdfs_with_warnings = sum(1 for v in validations if v["status"] == "WARNINGS")
+        pdfs_ok = sum(1 for v in validations if v["status"] == "OK")
 
         # Calculate metrics
         precision = 100 * total_correct / total_extracted if total_extracted > 0 else 0
         recall = 100 * total_correct / total_expected if total_expected > 0 else 0
 
         return {
-            'validations': validations,
-            'aggregate_summary': {
-                'total_pdfs': len(validations),
-                'pdfs_with_problems': pdfs_with_problems,
-                'pdfs_with_warnings': pdfs_with_warnings,
-                'pdfs_ok': pdfs_ok,
-                'total_expected_nfs': total_expected,
-                'total_extracted_nfs': total_extracted,
-                'correctly_extracted': total_correct,
-                'missing_nfs': total_missing,
-                'suspicious_extractions': total_suspicious,
-                'normalization_issues': total_norm_issues,
-                'precision': precision,
-                'recall': recall,
+            "validations": validations,
+            "aggregate_summary": {
+                "total_pdfs": len(validations),
+                "pdfs_with_problems": pdfs_with_problems,
+                "pdfs_with_warnings": pdfs_with_warnings,
+                "pdfs_ok": pdfs_ok,
+                "total_expected_nfs": total_expected,
+                "total_extracted_nfs": total_extracted,
+                "correctly_extracted": total_correct,
+                "missing_nfs": total_missing,
+                "suspicious_extractions": total_suspicious,
+                "normalization_issues": total_norm_issues,
+                "precision": precision,
+                "recall": recall,
                 # Classification breakdown
-                'classification_ok': total_ok,
-                'classification_suspect': total_suspect,
-                'classification_not_analyzable': total_not_analyzable
-            }
+                "classification_ok": total_ok,
+                "classification_suspect": total_suspect,
+                "classification_not_analyzable": total_not_analyzable,
+            },
         }

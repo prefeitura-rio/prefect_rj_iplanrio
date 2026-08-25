@@ -42,33 +42,28 @@ from .validator import ComplianceValidator, compute_classification, validate_aga
 # Define public API
 __all__ = [
     # Main classes and functions
-    'ComplianceValidator',
-    'compute_classification',
-    'validate_against_expected',
-
+    "ComplianceValidator",
+    "compute_classification",
+    "validate_against_expected",
     # Extractor split mixins
-    'ComplianceValidatorCoreMixin',
-    'ComplianceValidatorMatchingMixin',
-    'ComplianceValidatorReportMixin',
-    'ComplianceValidatorValidateMixin',
-
+    "ComplianceValidatorCoreMixin",
+    "ComplianceValidatorMatchingMixin",
+    "ComplianceValidatorReportMixin",
+    "ComplianceValidatorValidateMixin",
     # Constants
-    'VALUE_TOLERANCE',
-
+    "VALUE_TOLERANCE",
     # Normalization
-    'normalize_cnpj',
-    'normalize_number',
-    'normalize_value',
-    'extract_core_numero',
-
+    "normalize_cnpj",
+    "normalize_number",
+    "normalize_value",
+    "extract_core_numero",
     # Date functions
-    'parse_date_flexible',
-    'check_date_against_company_start',
-
+    "parse_date_flexible",
+    "check_date_against_company_start",
     # Matching
-    'fuzzy_match_numero',
-    'levenshtein_distance',
-    'find_near_match',
-    'find_extraction_match',
-    'values_match'
+    "fuzzy_match_numero",
+    "levenshtein_distance",
+    "find_near_match",
+    "find_extraction_match",
+    "values_match",
 ]

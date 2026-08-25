@@ -12,6 +12,8 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
+from iplanrio_agent_toolkit.matching.text_similarity import levenshtein_distance
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -23,6 +25,7 @@ VALUE_TOLERANCE = 0.01  # Tolerance for value comparison (R$ 0.01)
 # NORMALIZATION FUNCTIONS
 # =============================================================================
 
+
 def normalize_cnpj(cnpj: str) -> str:
     """
     Normalize CNPJ by removing all non-digit characters and padding to 14 digits.
@@ -30,9 +33,9 @@ def normalize_cnpj(cnpj: str) -> str:
     :param cnpj: CNPJ value in any format.
     :returns: CNPJ with only digits, zero-padded to 14 characters, or empty string.
     """
-    if cnpj is None or (isinstance(cnpj, float) and cnpj != cnpj) or cnpj == '-' or cnpj == '':
-        return ''
-    digits = re.sub(r'\D', '', str(cnpj))
+    if cnpj is None or (isinstance(cnpj, float) and cnpj != cnpj) or cnpj == "-" or cnpj == "":
+        return ""
+    digits = re.sub(r"\D", "", str(cnpj))
     return digits.zfill(14)
 
 
@@ -44,9 +47,9 @@ def normalize_number(num: str) -> str:
     :returns: NF number with only alphanumeric characters, leading zeros removed,
         or empty string.
     """
-    if num is None or (isinstance(num, float) and num != num) or num == '-' or num == '':
-        return ''
-    cleaned = re.sub(r'[^\w]', '', str(num)).upper()
+    if num is None or (isinstance(num, float) and num != num) or num == "-" or num == "":
+        return ""
+    cleaned = re.sub(r"[^\w]", "", str(num)).upper()
     try:
         if cleaned.isdigit():
             return str(int(cleaned))
@@ -73,8 +76,8 @@ def extract_core_numero(num: str) -> str:
     :returns: Core number without year prefix/suffix or NF markers,
         or empty string.
     """
-    if num is None or (isinstance(num, float) and num != num) or num == '-' or num == '':
-        return ''
+    if num is None or (isinstance(num, float) and num != num) or num == "-" or num == "":
+        return ""
 
     original = str(num).strip()
 
@@ -90,7 +93,7 @@ def extract_core_numero(num: str) -> str:
     # Pattern 1: Remove year prefix with separator (year + separator + rest)
     # Examples: 2024/4076, 20/4076, 2023-4076
     # Be smart: only remove if the first part looks like a year
-    match = re.match(r'^(\d{2,4})[/\-_\\]+(.+)$', original, re.IGNORECASE)
+    match = re.match(r"^(\d{2,4})[/\-_\\]+(.+)$", original, re.IGNORECASE)
     if match:
         potential_year = match.group(1)
         rest = match.group(2)
@@ -101,7 +104,7 @@ def extract_core_numero(num: str) -> str:
     # Pattern 2: Remove year suffix with separator (rest + separator + year)
     # Examples: 4076/2024, 4076-24
     # Be smart: only remove if the last part looks like a year
-    match = re.search(r'^(.+)[/\-_\\]+(\d{2,4})$', original, re.IGNORECASE)
+    match = re.search(r"^(.+)[/\-_\\]+(\d{2,4})$", original, re.IGNORECASE)
     if match:
         rest = match.group(1)
         potential_year = match.group(2)
@@ -111,12 +114,12 @@ def extract_core_numero(num: str) -> str:
 
     # Pattern 3: Remove NF prefix with optional separator
     # Examples: NF/30456, NF30456, NF-30456
-    match = re.match(r'^NF[/\-_\\]*(.+)$', original, re.IGNORECASE)
+    match = re.match(r"^NF[/\-_\\]*(.+)$", original, re.IGNORECASE)
     if match:
         original = match.group(1)
         # After removing NF, re-check for year patterns
         # This handles cases like NF/2024/4076 → 2024/4076 → 4076
-        match_year = re.match(r'^(\d{2,4})[/\-_\\]+(.+)$', original, re.IGNORECASE)
+        match_year = re.match(r"^(\d{2,4})[/\-_\\]+(.+)$", original, re.IGNORECASE)
         if match_year:
             potential_year = match_year.group(1)
             rest = match_year.group(2)
@@ -125,12 +128,12 @@ def extract_core_numero(num: str) -> str:
 
     # Pattern 4: Remove NF suffix with optional separator
     # Examples: 30456\NF, 30456/NF, 30456NF
-    match = re.search(r'^(.+?)[/\-_\\]*NF$', original, re.IGNORECASE)
+    match = re.search(r"^(.+?)[/\-_\\]*NF$", original, re.IGNORECASE)
     if match:
         original = match.group(1)
         # After removing NF, re-check for year patterns
         # This handles cases like 2024/4076-NF → 2024/4076 → 4076
-        match_year = re.match(r'^(\d{2,4})[/\-_\\]+(.+)$', original, re.IGNORECASE)
+        match_year = re.match(r"^(\d{2,4})[/\-_\\]+(.+)$", original, re.IGNORECASE)
         if match_year:
             potential_year = match_year.group(1)
             rest = match_year.group(2)
@@ -141,7 +144,7 @@ def extract_core_numero(num: str) -> str:
     # Examples: 202400000124 -> 124, 20230001234 -> 1234, 200000078 -> 78
     # Pattern: 20XX + at least 3 zeros + actual number
     # This is a fallback for cases where year and number are concatenated with zero padding
-    match = re.match(r'^(19\d{2}|20\d{2})0{3,}(\d+)$', original)
+    match = re.match(r"^(19\d{2}|20\d{2})0{3,}(\d+)$", original)
     if match:
         potential_year = match.group(1)
         number = match.group(2)
@@ -150,7 +153,7 @@ def extract_core_numero(num: str) -> str:
             original = number
 
     # Now normalize: remove remaining special chars and leading zeros
-    cleaned = re.sub(r'[^\w]', '', original).upper()
+    cleaned = re.sub(r"[^\w]", "", original).upper()
 
     # Remove leading zeros from numeric-only strings
     if cleaned.isdigit():
@@ -160,7 +163,7 @@ def extract_core_numero(num: str) -> str:
     # extract the longest sequence of consecutive digits
     # Examples: A-4756 → 4756, ABC123XYZ → 123
     if not cleaned.isdigit() and any(c.isdigit() for c in cleaned):
-        digit_sequences = re.findall(r'\d+', cleaned)
+        digit_sequences = re.findall(r"\d+", cleaned)
         if digit_sequences:
             # Return the longest sequence (remove leading zeros)
             longest = max(digit_sequences, key=len)
@@ -180,25 +183,25 @@ def normalize_value(val: object) -> float:
     :param val: Monetary value as string, int, or float.
     :returns: Normalized float value, or 0.0 if unparseable.
     """
-    if val is None or (isinstance(val, float) and val != val) or val == '-' or val == '':
+    if val is None or (isinstance(val, float) and val != val) or val == "-" or val == "":
         return 0.0
 
     if isinstance(val, (int, float)):
         return float(val)
 
-    val_str = str(val).replace('R$', '').replace(' ', '').strip()
+    val_str = str(val).replace("R$", "").replace(" ", "").strip()
 
-    decimal_pattern = r'[.,](\d{1,2})$'
+    decimal_pattern = r"[.,](\d{1,2})$"
     match = re.search(decimal_pattern, val_str)
 
     if match:
         decimal_pos = match.start()
         integer_part = val_str[:decimal_pos]
         decimal_part = match.group(1)
-        integer_part = integer_part.replace('.', '').replace(',', '')
+        integer_part = integer_part.replace(".", "").replace(",", "")
         normalized = f"{integer_part}.{decimal_part}"
     else:
-        normalized = val_str.replace('.', '').replace(',', '')
+        normalized = val_str.replace(".", "").replace(",", "")
 
     try:
         return float(normalized)
@@ -209,6 +212,7 @@ def normalize_value(val: object) -> float:
 # =============================================================================
 # DATE FUNCTIONS
 # =============================================================================
+
 
 def parse_date_flexible(date_str: str) -> date | None:
     """
@@ -286,6 +290,7 @@ def check_date_against_company_start(
 # MATCHING FUNCTIONS
 # =============================================================================
 
+
 def fuzzy_match_numero(num1: str, num2: str) -> bool:
     """
     Fuzzy match two numero_nf values.
@@ -300,8 +305,8 @@ def fuzzy_match_numero(num1: str, num2: str) -> bool:
     :returns: True if numbers fuzzy match.
     """
     # Convert to strings
-    str1 = '' if (num1 is None or (isinstance(num1, float) and num1 != num1)) else str(num1)
-    str2 = '' if (num2 is None or (isinstance(num2, float) and num2 != num2)) else str(num2)
+    str1 = "" if (num1 is None or (isinstance(num1, float) and num1 != num1)) else str(num1)
+    str2 = "" if (num2 is None or (isinstance(num2, float) and num2 != num2)) else str(num2)
 
     # Exact match of original strings (before any normalization)
     if str1 == str2:
@@ -333,37 +338,6 @@ def fuzzy_match_numero(num1: str, num2: str) -> bool:
     return False
 
 
-def levenshtein_distance(s1: str, s2: str) -> int:
-    """
-    Calculate Levenshtein distance between two strings.
-
-    This is the minimum number of single-character edits (insertions,
-    deletions, or substitutions) required to change one string into the other.
-
-    :param s1: First string.
-    :param s2: Second string.
-    :returns: Levenshtein distance (integer).
-    """
-    if len(s1) < len(s2):
-        return levenshtein_distance(s2, s1)
-
-    if len(s2) == 0:
-        return len(s1)
-
-    previous_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            # Cost of insertions, deletions, or substitutions
-            insertions = previous_row[j + 1] + 1
-            deletions = current_row[j] + 1
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-
-    return previous_row[-1]
-
-
 def find_near_match(
     extracted_nf: dict,
     expected_nfs: list[dict],
@@ -388,8 +362,8 @@ def find_near_match(
         - distance: int — Levenshtein distance
     """
     # Get normalized values from extracted NF
-    ext_cnpj_norm = normalize_cnpj(extracted_nf.get('cnpj_emitente', ''))
-    ext_numero_norm = normalize_number(extracted_nf.get('numero_nf', ''))
+    ext_cnpj_norm = normalize_cnpj(extracted_nf.get("cnpj_emitente", ""))
+    ext_numero_norm = normalize_number(extracted_nf.get("numero_nf", ""))
 
     # Skip if either field is empty
     if not ext_cnpj_norm or not ext_numero_norm:
@@ -411,11 +385,7 @@ def find_near_match(
         # Check if this is the best match so far
         if distance <= max_distance and distance < best_distance:
             best_distance = distance
-            best_match = {
-                'expected_nf': exp_nf,
-                'extracted_nf': extracted_nf,
-                'distance': distance
-            }
+            best_match = {"expected_nf": exp_nf, "extracted_nf": extracted_nf, "distance": distance}
 
     return best_match
 
@@ -456,42 +426,27 @@ def find_extraction_match(
 
     # Step 1: Try exact CNPJ + fuzzy numero match
     for ext_nf in extracted_nfs:
-        ext_cnpj_norm = normalize_cnpj(ext_nf.get('cnpj_emitente', ''))
-        ext_numero_norm = normalize_number(ext_nf.get('numero_nf', ''))
+        ext_cnpj_norm = normalize_cnpj(ext_nf.get("cnpj_emitente", ""))
+        ext_numero_norm = normalize_number(ext_nf.get("numero_nf", ""))
 
         # Exact CNPJ match
         if ext_cnpj_norm == exp_cnpj_norm:
             # Fuzzy numero match (handles leading zeros, etc.)
             if fuzzy_match_numero(ext_numero_norm, exp_numero_norm):
-                return {
-                    **ext_nf,
-                    '_match_type': 'exact',
-                    '_levenshtein_distance': 0
-                }
+                return {**ext_nf, "_match_type": "exact", "_levenshtein_distance": 0}
 
     # Step 2: Try Levenshtein near-match if enabled
     if use_levenshtein:
         # Create expected NF format for find_near_match
-        expected_nf_list = [{
-            'cnpj_norm': exp_cnpj_norm,
-            'numero_norm': exp_numero_norm
-        }]
+        expected_nf_list = [{"cnpj_norm": exp_cnpj_norm, "numero_norm": exp_numero_norm}]
 
         # Check each extracted NF for near-match
         for ext_nf in extracted_nfs:
-            near_match = find_near_match(
-                extracted_nf=ext_nf,
-                expected_nfs=expected_nf_list,
-                max_distance=2
-            )
+            near_match = find_near_match(extracted_nf=ext_nf, expected_nfs=expected_nf_list, max_distance=2)
 
             if near_match:
                 # Found a near-match within Levenshtein distance ≤ 2
-                return {
-                    **ext_nf,
-                    '_match_type': 'near_match',
-                    '_levenshtein_distance': near_match['distance']
-                }
+                return {**ext_nf, "_match_type": "near_match", "_levenshtein_distance": near_match["distance"]}
 
     # No match found
     return None

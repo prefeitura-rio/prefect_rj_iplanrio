@@ -5,12 +5,13 @@ Priority: 26
 Classification: "Suspect"
 """
 
+from iplanrio_agent_toolkit.rules import Rule, RuleResult
+
 from ..utils import parse_date_flexible
 from ..validation_context import ValidationContext
-from .base import ComplianceRule, RuleResult
 
 
-class ServiceBeforeCompanyRule(ComplianceRule):
+class ServiceBeforeCompanyRule(Rule[ValidationContext]):
     """
     Rule: Service provision date is before company opening date
 

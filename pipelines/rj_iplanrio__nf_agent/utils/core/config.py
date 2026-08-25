@@ -19,7 +19,7 @@ BEST_PARAMS = {
     "weight_Common": 0,
     "weight_Non-NF": -13,
     "threshold_NF": 2.5,
-    "threshold_NonNF": 0
+    "threshold_NonNF": 0,
 }
 
 # Path to OCR classifier sequence patterns
@@ -39,8 +39,8 @@ OCR_CONFIG = {
         "use_doc_unwarping": True,
         "use_textline_orientation": True,
         "textline_orientation_batch_size": 1,
-        "text_recognition_batch_size": 1
-    }
+        "text_recognition_batch_size": 1,
+    },
 }
 
 # Note: EXTRACTION_PROMPT is imported from .prompts module
@@ -53,7 +53,7 @@ GEMINI_CONFIG = {
     "temperature": 0.1,
     "top_p": 0.95,
     "top_k": 40,
-    "max_output_tokens": 8192
+    "max_output_tokens": 8192,
 }
 
 # Service account paths (default)
@@ -68,7 +68,7 @@ BIGQUERY_SERVICE_ACCOUNT_PATH = Path(__file__).parent.parent / "credentials" / "
 def load_categories() -> dict:
     """Load sequence categories from JSON file."""
     if CATEGORIES_FILE.exists():
-        with open(CATEGORIES_FILE, 'r', encoding='utf-8') as f:
+        with open(CATEGORIES_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     else:
         raise FileNotFoundError(f"Categories file not found: {CATEGORIES_FILE}")
