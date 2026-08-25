@@ -797,320 +797,36 @@ def main():
 
     args = parser.parse_args()
 
-    # Rate limiter parameters — may be overridden by experiment YAML's rate_limiting section
-    max_concurrent = 50
-    requests_per_minute = 600
-
-    # Inject Infisical base64 credentials if present
-    inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
-
-    # Resolve credentials: CLI arg → env var → credentials/ folder → ADC
-    repo_root = Path(__file__).parent.parent
-    default_gcs_creds = repo_root / "credentials" / "gcs-service-account.json"
-    default_gemini_creds = repo_root / "credentials" / "gemini-service-account.json"
-
-    if args.gcs_credentials is None:
-        env_val = os.getenv("GCS_CREDENTIALS_PATH")
-        args.gcs_credentials = (
-            Path(env_val)
-            if env_val
-            else (default_gcs_creds if default_gcs_creds.exists() else None)
-        )
-
-    if args.gcs_credentials and not args.gcs_credentials.exists():
-        logger.warning(f"[WARNING] GCS credentials not found: {args.gcs_credentials}")
-        logger.info("[INFO] Will attempt to use Application Default Credentials (ADC)")
-        args.gcs_credentials = None
-
-    if args.gemini_credentials is None:
-        env_val = os.getenv("GEMINI_CREDENTIALS_PATH")
-        args.gemini_credentials = (
-            Path(env_val)
-            if env_val
-            else (default_gemini_creds if default_gemini_creds.exists() else None)
-        )
-
-    if args.gemini_credentials and not args.gemini_credentials.exists():
-        logger.warning(
-            f"[WARNING] Gemini credentials not found: {args.gemini_credentials}"
-        )
-        logger.info("[INFO] Will attempt to use Application Default Credentials (ADC)")
-        args.gemini_credentials = None
-
-    # Load experiment configuration if provided
-    prompt_versions = None
-    experiment_config = None
-    if args.experiment:
-        # Load experiment config YAML
-        config_path = Path(f"../experiments/configs/{args.experiment}.yaml")
-        if not config_path.exists():
-            logger.error(f"[ERROR] Experiment config not found: {config_path}")
-            logger.info(f"   Create config file at: {config_path}")
-            return 1
-
-        with config_path.open(encoding="utf-8") as f:
-            experiment_config = yaml.safe_load(f)
-
-        # Extract prompt versions
-        prompt_versions = {
-            "classification": experiment_config["prompts"]["classification"],
-            "extraction": experiment_config["prompts"]["extraction"],
-        }
-
-        # Override args with experiment config values (if not explicitly provided via CLI)
-        # Priority: CLI args > YAML config > defaults
-
-        # Input settings
-        if "input" in experiment_config:
-            if (
-                args.limit is None
-                and experiment_config["input"].get("limit") is not None
-            ):
-                args.limit = experiment_config["input"]["limit"]
-            # CSV path from YAML (if not provided via CLI and different from default)
-            yaml_csv = experiment_config["input"].get("csv")
-            if yaml_csv and args.csv == Path("inputs/modulo-de-despesas.csv"):
-                # YAML paths are relative to repo root (e.g. "run_poc/inputs/foo.csv").
-                # The CLI runs from inside run_poc/, so strip the leading "run_poc/" if present.
-                yaml_csv_path = Path(yaml_csv)
-                if yaml_csv_path.parts[0] == "run_poc":
-                    yaml_csv_path = Path(*yaml_csv_path.parts[1:])
-                args.csv = yaml_csv_path
-
-        # Pipeline settings
-        if "pipeline" in experiment_config:
-            # Mode
-            yaml_mode = experiment_config["pipeline"].get("mode")
-            if yaml_mode and args.mode == "full":  # 'full' is the default
-                args.mode = yaml_mode
-
-            # Workers
-            yaml_workers = experiment_config["pipeline"].get("workers")
-            if yaml_workers and args.workers == 200:  # 200 is the default
-                args.workers = yaml_workers
-
-            # Keep PDFs
-            yaml_keep_pdfs = experiment_config["pipeline"].get("keep_pdfs")
-            if (
-                yaml_keep_pdfs is not None and not args.keep_pdfs
-            ):  # False is the default
-                args.keep_pdfs = yaml_keep_pdfs
-
-            # Extraction batch size
-            yaml_extraction_batch_size = experiment_config["pipeline"].get(
-                "extraction_batch_size"
-            )
-            if (
-                yaml_extraction_batch_size is not None
-                and args.extraction_batch_size == 5
-            ):  # 5 is CLI default
-                args.extraction_batch_size = int(yaml_extraction_batch_size)
-
-            # Min match score (3 = strict 3/3; 2 = legacy 2/3 fallback)
-            yaml_min_match_score = experiment_config["pipeline"].get("min_match_score")
-            if (
-                yaml_min_match_score is not None and args.min_match_score == 2
-            ):  # 2 is CLI default
-                args.min_match_score = int(yaml_min_match_score)
-
-            # Output mode (excel | json)
-            yaml_output_mode = experiment_config["pipeline"].get("output_mode")
-            if (
-                yaml_output_mode and args.output_mode == "excel"
-            ):  # 'excel' is CLI default
-                args.output_mode = yaml_output_mode
-
-            # Match requires pdf_name (False = cross-PDF mode, default; True = legacy)
-            yaml_match_requires_pdf_name = experiment_config["pipeline"].get(
-                "match_requires_pdf_name"
-            )
-            if (
-                yaml_match_requires_pdf_name is not None
-                and not args.match_requires_pdf_name
-            ):
-                args.match_requires_pdf_name = bool(yaml_match_requires_pdf_name)
-
-        logger.info(f"[Experiment] Loading from config: {config_path}")
-        logger.info(
-            f"[Experiment] Classification prompt: {prompt_versions['classification']}"
-        )
-        logger.info(f"[Experiment] Extraction prompt: {prompt_versions['extraction']}")
-        if args.limit:
-            logger.info(f"[Experiment] Processing limit: {args.limit} PDFs")
-
-        # Initialize rate limiter with config from YAML (if present)
-        # IMPORTANT: Initialize BEFORE importing POCProcessor/GeminiClassifier
-        if "rate_limiting" in experiment_config:
-            rate_limiting_config = experiment_config["rate_limiting"]
-            if rate_limiting_config.get("enabled", True):
-                max_concurrent = rate_limiting_config.get("max_concurrent", 50)
-                requests_per_minute = rate_limiting_config.get(
-                    "requests_per_minute", 600
-                )
-
-                # Import and initialize rate limiter BEFORE POCProcessor
-                from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
-
-                rate_limiter = initialize_rate_limiter(
-                    max_concurrent=max_concurrent,
-                    requests_per_minute=requests_per_minute,
-                )
-                logger.info(
-                    f"[RateLimiter] Enabled: max_concurrent={max_concurrent}, rpm={requests_per_minute} ({requests_per_minute / 60:.1f} RPS)"
-                )
-            else:
-                # Disable rate limiting if explicitly set to false
-                from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
-
-                rate_limiter = initialize_rate_limiter()
-                rate_limiter.set_enabled(False)
-                logger.info("[RateLimiter] Disabled via config")
-    else:
-        # No experiment - use default versions (latest available or v1)
-        # Import here to avoid circular dependency
-        from ..core.prompts import list_available_versions
-
-        # Get latest version or fallback to v1
-        classification_versions = list_available_versions("classification")
-        extraction_versions = list_available_versions("extraction")
-
-        prompt_versions = {
-            "classification": (
-                classification_versions[-1] if classification_versions else "v1"
-            ),
-            "extraction": extraction_versions[-1] if extraction_versions else "v1",
-        }
-
-        logger.info("[No experiment] Using latest prompt versions:")
-        logger.info(f"  Classification: {prompt_versions['classification']}")
-        logger.info(f"  Extraction: {prompt_versions['extraction']}")
-
-        # Initialize rate limiter with defaults (no experiment config)
-        max_concurrent = 50
-        requests_per_minute = 600
-        from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
-
-        rate_limiter = initialize_rate_limiter(
-            max_concurrent=max_concurrent, requests_per_minute=requests_per_minute
-        )
-        logger.info(
-            f"[RateLimiter] Enabled with defaults: max_concurrent={max_concurrent}, rpm={requests_per_minute} ({requests_per_minute / 60:.1f} RPS)"
-        )
-
-    # Validate CSV path (after experiment config may have overridden it)
-    if not args.csv.exists():
-        logger.error(f"[ERROR] Database CSV not found: {args.csv}")
-        return 1
-
-    # NOW safe to import POCProcessor (after rate limiter initialization)
-    from ..pipeline.processor import ExecutionMode, POCProcessor
-
-    # Convert mode string to enum (after loading from experiment config)
-    mode = ExecutionMode(args.mode)
-
-    # Auto-generate output path if not provided
-    if args.output is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        if args.experiment:
-            # New structure: experiments/runs/{experiment}/run_{timestamp}/
-            outputs_dir = Path(f"../experiments/runs/{args.experiment}/run_{timestamp}")
-        else:
-            # Legacy structure: outputs/poc_results/
-            outputs_dir = Path("outputs/poc_results")
-
-        outputs_dir.mkdir(parents=True, exist_ok=True)
-        ext = "json" if args.output_mode == "json" else "xlsx"
-        if args.experiment:
-            args.output = outputs_dir / f"results.{ext}"
-        else:
-            args.output = outputs_dir / f"poc_results_{mode.value}_{timestamp}.{ext}"
-
-    logger.info("=" * 80)
-    logger.info("POC Pipeline - NF Database Processing")
-    logger.info("=" * 80)
-    logger.info(f"Execution Mode:      {mode.value}")
-    logger.info(f"Database CSV:        {args.csv}")
-    logger.info(f"Output ({args.output_mode}):     {args.output}")
-    logger.info(f"Cache Database:      {args.db}")
-    logger.info(f"GCS Bucket:          {args.bucket}")
-    logger.info(f"GCS Credentials:     {args.gcs_credentials}")
-    logger.info(f"Gemini Credentials:  {args.gemini_credentials}")
-    logger.info(f"Parallel Workers:    {args.workers}")
-    logger.info(
-        f"Extraction Batch:    {args.extraction_batch_size} page(s) per API call"
+    config = NfProcessingFlowConfig(
+        csv_path=str(args.csv),
+        output_path=str(args.output) if args.output else None,
+        db_path=str(args.db),
+        gcs_credentials=str(args.gcs_credentials) if args.gcs_credentials else None,
+        gemini_credentials=str(args.gemini_credentials) if args.gemini_credentials else None,
+        gcs_bucket=args.bucket,
+        limit=args.limit,
+        temp_dir=str(args.temp_dir),
+        mode=args.mode,
+        workers=args.workers,
+        keep_pdfs=args.keep_pdfs,
+        quiet=args.quiet,
+        experiment_id=args.experiment,
+        extraction_batch_size=args.extraction_batch_size,
+        min_match_score=args.min_match_score,
+        output_mode=args.output_mode,
+        match_requires_pdf_name=args.match_requires_pdf_name,
     )
-    logger.info(f"Min Match Score:     {args.min_match_score}/3 fields")
-    logger.info(
-        f"Match PDF Filter:    {args.match_requires_pdf_name} (match_requires_pdf_name)"
-    )
-    logger.info(f"Keep PDFs:           {args.keep_pdfs}")
-    logger.info(f"Quiet Mode:          {args.quiet}")
-    if args.limit:
-        logger.info(f"Processing Limit:    {args.limit} PDFs")
-    logger.info("=" * 80)
 
-    # Initialize components
-    logger.info("\nInitializing components...")
-
+    # All setup (credential resolution, experiment YAML overrides, rate limiter,
+    # POCProcessor construction, db_manager cleanup) lives in nf_processing_flow —
+    # this CLI entrypoint only parses args and delegates, instead of duplicating
+    # ~300 lines of that logic as it previously did.
     try:
-        # Database manager
-        db_manager = DatabaseManager(args.db)
-        logger.info(f"  [OK] Database manager initialized: {args.db}")
-
-        # GCS downloader
-        gcs_downloader = GCSDownloader(
-            credentials_path=args.gcs_credentials, bucket_name=args.bucket
-        )
-        logger.info("  [OK] GCS downloader initialized")
-
-        # Processor
-        processor = POCProcessor(
-            db_manager=db_manager,
-            gcs_downloader=gcs_downloader,
-            gemini_credentials_path=args.gemini_credentials,
-            temp_dir=args.temp_dir,
-            quiet=args.quiet,
-            prompt_versions=prompt_versions,
-            extraction_batch_size=args.extraction_batch_size,
-            min_match_score=args.min_match_score,
-            output_mode=args.output_mode,
-            match_requires_pdf_name=args.match_requires_pdf_name,
-        )
-        logger.info("  [OK] Processor initialized")
-        logger.info(f"  [OK] Extraction batch size: {args.extraction_batch_size}")
-
-        # Process database
-        logger.info("\n" + "=" * 80)
-        logger.info("Starting processing...")
-        logger.info("=" * 80)
-
-        results_df, _json_items, _timing_stats = processor.process_database(
-            csv_path=args.csv,
-            output_path=args.output,
-            limit=args.limit,
-            mode=mode,
-            max_workers=args.workers,
-            keep_pdfs=args.keep_pdfs,
-            experiment_id=args.experiment,
-            requests_per_minute=requests_per_minute,
-            max_concurrent=max_concurrent,
-        )
-
-        logger.info("\n" + "=" * 80)
-        logger.info("[SUCCESS] Processing completed successfully!")
-        logger.info("=" * 80)
-
+        nf_processing_flow(config)
         return 0
-
     except Exception:
         logger.exception("Error running pipeline")
         return 1
-
-    finally:
-        # Cleanup
-        if "db_manager" in locals():
-            db_manager.close()
 
 
 if __name__ == "__main__":
