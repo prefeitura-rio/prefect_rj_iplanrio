@@ -91,4 +91,8 @@ class ClassificacaoConstants(Enum):
     # de forma que altera o significado da classificação (não a cada typo). Usada só
     # para auditoria (coluna prompt_versao); reclassificação de sessões antigas é MERGE
     # (sobrescreve), não versionamento histórico.
-    PROMPT_VERSAO = "v1"
+    # v2 (2026-08-25): rótulo "Informação" separado de "Solicitação" — antes, sessão que só
+    # avisava/justificava algo (ex.: "vou remarcar online", sem pedir nada à prefeitura)
+    # virava Solicitação por engano. ~1713 sessões classificadas em v1 têm Solicitação no
+    # sentimento e são candidatas a reclassificação (ver plano combinado com o time).
+    PROMPT_VERSAO = "v2"
