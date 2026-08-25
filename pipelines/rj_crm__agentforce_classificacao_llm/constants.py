@@ -60,6 +60,16 @@ class ClassificacaoConstants(Enum):
     MAX_TENTATIVAS_LLM = 3
     ESPERA_INICIAL_SEGUNDOS = 2
 
+    # Tamanho do lote de carga incremental dentro de classifica_sessoes: a cada N sessões
+    # classificadas com sucesso, já sobe pro BigQuery (tmp + MERGE) em vez de esperar o
+    # lote inteiro terminar. Um lote de 6mil sessões pode levar 20-30min de chamadas
+    # pagas à LLM — sem isso, um crash no meio (pod reiniciado, OOM) perde TUDO que já
+    # foi classificado, porque nada tinha sido persistido ainda. Com carga incremental,
+    # um crash perde só o lote parcial em memória no momento (no máximo TAMANHO_LOTE_CARGA
+    # sessões). 500 é um meio-termo: overhead de N/500 MERGEs extras é desprezível perto do
+    # tempo de LLM, e o "raio de perda" fica pequeno.
+    TAMANHO_LOTE_CARGA = 500
+
     # Valores de `classificacao` (exposta como escopo_hsm_tipo no fct_chatbot_v2) —
     # a coluna cobre TODA sessão, não só a que passou pelo prompt com_hsm:
     #   DENTRO_DO_ESCOPO / FORA_DO_ESCOPO / MISTO -> classificado pela LLM (tem HSM)

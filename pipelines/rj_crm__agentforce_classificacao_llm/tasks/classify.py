@@ -26,6 +26,9 @@ import pandas as pd
 import requests
 from prefect import task
 
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import carrega_classificacoes
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_tema
+
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 # Colunas de metadado da sessão (vindas da extração/enriquecimento) que precisam
@@ -221,23 +224,57 @@ def classifica_sessoes(
     max_tentativas: int,
     espera_inicial: int,
     classificacao_sem_hsm: str,
-) -> pd.DataFrame:
+    df_regras_tema: pd.DataFrame,
+    classificacao_resposta_atrasada: str,
+    justificativa_resposta_atrasada: str,
+    prompt_versao: str,
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+    tmp_table_id: str,
+    tamanho_lote: int,
+) -> tuple[int, int, int]:
     """Chama a LLM em paralelo (ThreadPoolExecutor, mesmo padrão do notebook) para cada
     prompt pendente. Sessão que falhar (erro de API, resposta fora do schema esperado)
     NÃO é escrita no resultado — fica ausente e será re-tentada automaticamente na
     próxima execução (dentro da janela de LOOKBACK_DAYS), sem precisar de lógica de
-    reprocessamento/DLQ separada."""
+    reprocessamento/DLQ separada.
+
+    Carrega no BigQuery em lotes de `tamanho_lote` sessões, à medida que vão sendo
+    classificadas (monta_dataframe_final + aplica_regras_tema + carrega_classificacoes,
+    por lote), em vez de esperar as ~6mil sessões todas terminarem pra escrever de uma
+    vez. Um run desse tamanho pode levar 20-30min de chamadas pagas à LLM — sem isso,
+    um crash no meio (pod reiniciado, OOM, cancelamento manual) perde TUDO que já foi
+    classificado, porque nada tinha sido persistido ainda (nem a tmp: load_table_from_
+    dataframe só roda no final). Com carga incremental, o prejuízo de um crash fica
+    limitado a no máximo 1 lote incompleto, não o run inteiro.
+
+    Retorna (n_classificadas_com_sucesso, n_falhas, linhas_carregadas)."""
     if df_prompts.empty:
-        return pd.DataFrame(
-            columns=[
-                "id_sessao", "tipo_prompt", "classificacao", "conteudo_relevante", "resumo",
-                "secretaria_relacionada", "sentimento", "motivo", "justificativa",
-                "resposta_llm_bruta", "modelo", "prompt_enviado", "tokens_entrada",
-                "tokens_saida", "tokens_total",
-            ]
-        )
+        return 0, 0, 0
 
     bifrost = BifrostClient(api_key=bf_key, base=base_url, model=model)
+
+    def _finaliza_e_carrega(buffer: list[dict]) -> int:
+        """Formata um lote de resultados da LLM já prontos pro formato da tabela destino
+        e carrega no BigQuery. Chamada de dentro do loop abaixo, não só no final."""
+        df_chunk = pd.DataFrame(buffer)
+        df_chunk = df_prompts[_COLUNAS_METADADO_SESSAO].merge(df_chunk, on="id_sessao", how="inner")
+        df_chunk_final = monta_dataframe_final(
+            df_classificadas=df_chunk,
+            df_pre_classificadas=pd.DataFrame(columns=_COLUNAS_METADADO_SESSAO),
+            classificacao_resposta_atrasada=classificacao_resposta_atrasada,
+            justificativa_resposta_atrasada=justificativa_resposta_atrasada,
+            prompt_versao=prompt_versao,
+        )
+        df_chunk_final = aplica_regras_tema(df_final=df_chunk_final, df_regras=df_regras_tema)
+        return carrega_classificacoes(
+            df_final=df_chunk_final,
+            project_id=project_id,
+            dataset_id=dataset_id,
+            table_id=table_id,
+            tmp_table_id=tmp_table_id,
+        )
 
     def _processa(id_sessao, tipo_prompt, prompt):
         try:
@@ -278,38 +315,41 @@ def classifica_sessoes(
         except Exception as e:  # qualquer falha aqui vira "não classificado ainda", ver docstring
             return {"id_sessao": id_sessao, "erro": f"{type(e).__name__}: {e}"}
 
-    resultados = []
+    buffer: list[dict] = []
+    n_sucesso = 0
     n_erro = 0
+    linhas_carregadas = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_processa, row.id_sessao, row.tipo_prompt, row.prompt): row.id_sessao
             for row in df_prompts.itertuples()
         }
+        total = len(futures)
         for i, future in enumerate(as_completed(futures), start=1):
             resultado = future.result()
             if resultado.get("erro"):
                 n_erro += 1
                 print(f"[CLASSIFY] FALHA id_sessao={resultado['id_sessao']}: {resultado['erro']}")
             else:
-                resultados.append(resultado)
-            if i % 50 == 0 or i == len(futures):
-                print(f"[CLASSIFY] {i}/{len(futures)} processados ({n_erro} falha(s) até agora)")
+                resultado.pop("erro", None)
+                buffer.append(resultado)
+                n_sucesso += 1
+
+            # flush por tamanho de lote OU no último resultado (garante que sobra de
+            # buffer menor que tamanho_lote também é carregada, não só descartada)
+            if len(buffer) >= tamanho_lote or (i == total and buffer):
+                linhas_carregadas += _finaliza_e_carrega(buffer)
+                print(f"[CLASSIFY] lote de {len(buffer)} carregado no BigQuery ({linhas_carregadas} linha(s) no total até agora).")
+                buffer = []
+
+            if i % 50 == 0 or i == total:
+                print(f"[CLASSIFY] {i}/{total} processados ({n_erro} falha(s) até agora)")
 
     print(
-        f"[CLASSIFY] Concluído: {len(resultados)} classificada(s) com sucesso, "
-        f"{n_erro} falha(s) (retry automático no próximo run)."
+        f"[CLASSIFY] Concluído: {n_sucesso} classificada(s) com sucesso, "
+        f"{n_erro} falha(s) (retry automático no próximo run), {linhas_carregadas} linha(s) carregada(s)."
     )
-
-    df_result = pd.DataFrame(resultados)
-    if df_result.empty:
-        return df_result
-    df_result = df_result.drop(columns=["erro"])
-
-    # _processa só sabe o que a LLM devolveu — telefone, cpf, jornada_nome etc. não
-    # passam por ali. Junta de volta aqui, por id_sessao (inner: só as sessões que
-    # deram certo, que são exatamente as que estão em df_result).
-    df_result = df_prompts[_COLUNAS_METADADO_SESSAO].merge(df_result, on="id_sessao", how="inner")
-    return df_result
+    return n_sucesso, n_erro, linhas_carregadas
 
 
 @task(log_prints=True)

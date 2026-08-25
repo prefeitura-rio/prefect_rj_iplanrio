@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 
+import pandas as pd
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
@@ -60,6 +61,7 @@ def rj_crm__agentforce_classificacao_llm(
     max_workers: int = C.MAX_WORKERS.value,
     max_tentativas_llm: int = C.MAX_TENTATIVAS_LLM.value,
     espera_inicial_segundos: int = C.ESPERA_INICIAL_SEGUNDOS.value,
+    tamanho_lote_carga: int = C.TAMANHO_LOTE_CARGA.value,
 ) -> None:
     rename_current_flow_run_task(new_name=f"classificacao_llm_{dest_dataset_id}_{dest_table_id}")
 
@@ -108,8 +110,41 @@ def rj_crm__agentforce_classificacao_llm(
     # 3. Monta os prompts (com_hsm / sem_hsm) e separa as pré-classificadas por regra
     df_prompts, df_pre_classificadas = monta_prompts(df_enriquecido)
 
-    # 4. Classifica via LLM (falha = sessão fica ausente do resultado, retry automático amanhã)
-    df_classificadas = classifica_sessoes(
+    # 4. Catálogo de regras de tema — carregado antes da classificação porque tanto o
+    #    passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote) precisam dele.
+    #    Catálogo ausente ou sem regra pra secretaria da sessão: tema_nome fica vazio,
+    #    não bloqueia nada.
+    df_regras_tema = carrega_catalogo_regras(
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        table_id=taxonomia_regras_table_id,
+        etapa=C.TAXONOMIA_ETAPA_TEMA.value,
+    )
+
+    # 5. Sessões decididas por regra (resposta_atrasada_btn) já são conhecidas sem
+    #    nenhuma chamada de LLM — carrega elas de uma vez, imediatamente, sem esperar a
+    #    classificação (que pode levar dezenas de minutos) terminar.
+    df_pre_final = monta_dataframe_final(
+        df_classificadas=pd.DataFrame(),
+        df_pre_classificadas=df_pre_classificadas,
+        classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
+        justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
+        prompt_versao=C.PROMPT_VERSAO.value,
+    )
+    df_pre_final = aplica_regras_tema(df_final=df_pre_final, df_regras=df_regras_tema)
+    linhas_pre = carrega_classificacoes(
+        df_final=df_pre_final,
+        project_id=project_id,
+        dataset_id=dest_dataset_id,
+        table_id=dest_table_id,
+        tmp_table_id=dest_tmp_table_id,
+    )
+
+    # 6. Classifica via LLM e já carrega no BigQuery em lotes de tamanho_lote_carga
+    #    sessões (tmp + MERGE por lote, dentro da própria task — ver docstring de
+    #    classifica_sessoes) — não espera as ~6mil sessões todas terminarem pra
+    #    escrever: um crash no meio perde só o lote parcial, não o run inteiro.
+    n_classificadas_llm, n_falhas, linhas_llm = classifica_sessoes(
         df_prompts=df_prompts,
         bf_key=bf_key,
         base_url=bifrost_base_url,
@@ -118,44 +153,23 @@ def rj_crm__agentforce_classificacao_llm(
         max_tentativas=max_tentativas_llm,
         espera_inicial=espera_inicial_segundos,
         classificacao_sem_hsm=C.CLASSIFICACAO_SEM_HSM_ASSOCIADO.value,
-    )
-    n_falhas = len(df_prompts) - len(df_classificadas)
-
-    # 5. Junta LLM + regra num único DataFrame no formato da tabela destino
-    df_final = monta_dataframe_final(
-        df_classificadas=df_classificadas,
-        df_pre_classificadas=df_pre_classificadas,
+        df_regras_tema=df_regras_tema,
         classificacao_resposta_atrasada=C.CLASSIFICACAO_RESPOSTA_ATRASADA_BTN.value,
         justificativa_resposta_atrasada=C.JUSTIFICATIVA_RESPOSTA_ATRASADA_BTN.value,
         prompt_versao=C.PROMPT_VERSAO.value,
-    )
-
-    # 6. Aplica as regras de tema já promovidas pro catálogo (sem custo de LLM — as
-    #    funções já existem, só são executadas contra o resumo). Catálogo ausente ou
-    #    sem regra pra secretaria da sessão: tema_nome fica vazio, não bloqueia nada.
-    df_regras_tema = carrega_catalogo_regras(
-        project_id=project_id,
-        dataset_id=dest_dataset_id,
-        table_id=taxonomia_regras_table_id,
-        etapa=C.TAXONOMIA_ETAPA_TEMA.value,
-    )
-    df_final = aplica_regras_tema(df_final=df_final, df_regras=df_regras_tema)
-
-    # 7. Carrega no BigQuery (tmp + MERGE por id_sessao)
-    linhas_carregadas = carrega_classificacoes(
-        df_final=df_final,
         project_id=project_id,
         dataset_id=dest_dataset_id,
         table_id=dest_table_id,
         tmp_table_id=dest_tmp_table_id,
+        tamanho_lote=tamanho_lote_carga,
     )
 
     notify_resumo(
         n_extraidas=n_extraidas,
         n_pre_classificadas=len(df_pre_classificadas),
-        n_classificadas_llm=len(df_classificadas),
+        n_classificadas_llm=n_classificadas_llm,
         n_falhas=n_falhas,
-        linhas_carregadas=linhas_carregadas,
+        linhas_carregadas=linhas_pre + linhas_llm,
     )
 
     print("[FLOW] Concluído.")
