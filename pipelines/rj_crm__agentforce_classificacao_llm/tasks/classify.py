@@ -27,7 +27,7 @@ import requests
 from prefect import task
 
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import carrega_classificacoes
-from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_tema
+from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_causa, aplica_regras_tema
 
 _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
@@ -225,6 +225,7 @@ def classifica_sessoes(
     espera_inicial: int,
     classificacao_sem_hsm: str,
     df_regras_tema: pd.DataFrame,
+    df_regras_causa: pd.DataFrame,
     classificacao_resposta_atrasada: str,
     justificativa_resposta_atrasada: str,
     prompt_versao: str,
@@ -241,13 +242,13 @@ def classifica_sessoes(
     reprocessamento/DLQ separada.
 
     Carrega no BigQuery em lotes de `tamanho_lote` sessões, à medida que vão sendo
-    classificadas (monta_dataframe_final + aplica_regras_tema + carrega_classificacoes,
-    por lote), em vez de esperar as ~6mil sessões todas terminarem pra escrever de uma
-    vez. Um run desse tamanho pode levar 20-30min de chamadas pagas à LLM — sem isso,
-    um crash no meio (pod reiniciado, OOM, cancelamento manual) perde TUDO que já foi
-    classificado, porque nada tinha sido persistido ainda (nem a tmp: load_table_from_
-    dataframe só roda no final). Com carga incremental, o prejuízo de um crash fica
-    limitado a no máximo 1 lote incompleto, não o run inteiro.
+    classificadas (monta_dataframe_final + aplica_regras_tema + aplica_regras_causa +
+    carrega_classificacoes, por lote), em vez de esperar as ~6mil sessões todas
+    terminarem pra escrever de uma vez. Um run desse tamanho pode levar 20-30min de
+    chamadas pagas à LLM — sem isso, um crash no meio (pod reiniciado, OOM, cancelamento
+    manual) perde TUDO que já foi classificado, porque nada tinha sido persistido ainda
+    (nem a tmp: load_table_from_dataframe só roda no final). Com carga incremental, o
+    prejuízo de um crash fica limitado a no máximo 1 lote incompleto, não o run inteiro.
 
     Retorna (n_classificadas_com_sucesso, n_falhas, linhas_carregadas)."""
     if df_prompts.empty:
@@ -268,6 +269,7 @@ def classifica_sessoes(
             prompt_versao=prompt_versao,
         )
         df_chunk_final = aplica_regras_tema(df_final=df_chunk_final, df_regras=df_regras_tema)
+        df_chunk_final = aplica_regras_causa(df_final=df_chunk_final, df_regras=df_regras_causa)
         return carrega_classificacoes(
             df_final=df_chunk_final,
             project_id=project_id,

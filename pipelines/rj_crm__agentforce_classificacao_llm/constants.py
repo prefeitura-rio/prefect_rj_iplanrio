@@ -39,6 +39,21 @@ class ClassificacaoConstants(Enum):
     # tasks/taxonomia.py). Mesmo dataset da tabela destino.
     TAXONOMIA_REGRAS_TABLE_ID = "taxonomia_regras"
     TAXONOMIA_ETAPA_TEMA = "tema"
+    # Catálogo ainda não tem nenhuma regra com esta etapa — carrega_catalogo_regras já
+    # trata "sem regra" como no-op (não bloqueia nada), então já ligar essa etapa nos
+    # dois fluxos (normal e recalcula_taxonomia) é seguro hoje e evita precisar mexer
+    # em flow.py de novo quando a primeira regra de motivo for promovida.
+    TAXONOMIA_ETAPA_MOTIVO = "motivo"
+
+    # --- Recálculo de taxonomia (parâmetro recalcula_taxonomia do flow) ---
+    # tema_nome/causa_nome também são publicadas nas tabelas mart (dbt, repo
+    # queries-rj-crm-registry) — quando a taxonomia muda e o flow roda com
+    # recalcula_taxonomia=True, o MERGE parcial (só essas 2 colunas) precisa propagar
+    # pra lá também, senão essas tabelas incrementais ficam com o tema antigo até um
+    # --full-refresh (ver tasks/taxonomia.py::propaga_tema_causa_chatbot).
+    CHATBOT_DATASET_ID = "rmi_conversas"
+    CHATBOT_V1_TABLE_ID = "chatbot"
+    CHATBOT_V2_TABLE_ID = "v2_chatbot_conversas"
 
     # --- Extração incremental ---
     # Janela fixa de busca — sem parametrização/watermark por decisão de projeto: dois
