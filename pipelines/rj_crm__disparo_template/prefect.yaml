@@ -94,7 +94,6 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
           query_file: queries/smtr_multa_pf.sql
-          query_replacements: {"limit_placeholder": 400}
 
       # Ciclo de vida da pesquisa 1746 (unificado)
       - cron: "0 11 * * *"
@@ -127,8 +126,7 @@ deployments:
         parameters:
           flow_environment: staging
           query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "limit_placeholder": 600, "id_hsm_legado_cobranca_placeholder": "196,
-              239"}
+            "id_hsm_legado_cobranca_placeholder": "196, 239"}
           campaign_name: pgm_divida_ativa_prod_v2
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
           enrich_with_api_name: consulta_debitos
@@ -477,8 +475,6 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
           query_file: queries/smtr_multa_pf.sql
-          query_replacements: {"limit_placeholder": 400}
-
   # Daily schedule para flow cvl-pesquisa1746 (unifica com solução + sem resolução num único
   # CSV/Data Extension; STATUS_DEMANDA distingue as duas linhas e a Journey no Salesforce
   # decide qual HSM enviar por linha)
@@ -512,8 +508,7 @@ deployments:
         parameters:
           flow_environment: production
           query_replacements: {"nome_hsm_cobranca_placeholder": "pgm_divida_ativa_prod_v2",
-            "limit_placeholder": 600, "id_hsm_legado_cobranca_placeholder": "196,
-              239"}
+            "id_hsm_legado_cobranca_placeholder": "196, 239"}
           campaign_name: pgm_divida_ativa_prod_v2
           data_extension_filename: whatsapp_pgm_divida_ativa_cobranca
           dispatch_interval_days: 150
