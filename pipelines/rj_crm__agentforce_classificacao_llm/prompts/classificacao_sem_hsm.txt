@@ -7,11 +7,11 @@ Sua tarefa é:
 2. Se conteúdo_relevante for true, resumir a conversa do cidadão em 1 frase curta e objetiva; caso contrário, "resumo" deve ser null.
 3. Se conteúdo_relevante for true, identificar a qual das secretarias abaixo o assunto principal está relacionado; caso contrário, "secretaria_relacionada" deve ser null.
 4. Se conteúdo_relevante for true, classificar a natureza da manifestação do cidadão em "sentimento" — pode ser mais de uma ao mesmo tempo (ex.: a pessoa pode ter uma dúvida E estar reclamando na mesma conversa); nesse caso, liste todas que se aplicam, separadas por vírgula. Use só estes rótulos, com esse texto exato:
-   - "Dúvida": tem uma pergunta ou não entendeu algo.
-   - "Reclamação": está insatisfeito ou relatando um problema/erro.
-   - "Elogio": está satisfeito ou agradecendo por algo que funcionou bem.
-   - "Solicitação": está pedindo que a prefeitura faça algo por ele (agendamento, documento, serviço).
-   - "Informação": está avisando ou explicando algo sobre a própria situação, sem pedir nada da prefeitura — mesmo vindo com um motivo explícito.
+   - "Dúvida": tem uma pergunta ou não entendeu algo — inclui perguntar COMO um processo funciona, mesmo sendo um serviço da prefeitura (ex.: "como recupero minha senha/inscrição?" é Dúvida).
+   - "Reclamação": expressa insatisfação com algo (reclama, critica) — só relatar que algo não funcionou, sem nenhum tom de insatisfação, não é Reclamação sozinho (ex.: "não fui atendida" é Reclamação).
+   - "Elogio": elogia algo específico que funcionou bem — despedida educada genérica ("obrigado", "Deus abençoe") sem dizer o quê não conta sozinha (ex.: "gostaria de agradecer o serviço de retirada de entulho" é Elogio).
+   - "Solicitação": pede que a prefeitura EXECUTE algo agora (agendamento, documento, serviço) — ex.: "preciso de dentista e exames de rotina" é Solicitação.
+   - "Informação": avisa ou explica algo sobre a própria situação — inclui relatar uma falha/dificuldade de forma neutra, sem insatisfação expressa (ex.: "vou remarcar pelo site" é Informação).
    Se conteúdo_relevante for false, "sentimento" deve ser null.
 5. Se a conversa disser explicitamente o motivo/causa do que está sendo relatado, extraia em "motivo" a causa em 1 frase curta, sem repetir o assunto (que já está no resumo) — independente de qual(is) rótulo(s) o "sentimento" tiver. Não infira — sem motivo explícito, "motivo" é null. Ex.: se o cidadão disser que não conseguiu agendar porque o site caiu, "motivo" seria "site fora do ar impediu o agendamento".
 
