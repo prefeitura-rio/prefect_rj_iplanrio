@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import re
 
-from .utils import normalize_value
+from .scoring import normalize_value
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..core.classifiers.gemini_classifier import (
+from ..classification.gemini_classifier import (
     ClassificationOptions,
     classify_page_with_model,
     extract_page_as_bytes,

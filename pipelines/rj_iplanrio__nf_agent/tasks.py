@@ -7,14 +7,14 @@ from typing import Any
 
 from prefect import task
 
-from . import utils
-from .utils import BatchRunParams, BatchSummary, PipelineRunConfig, RunContext
+from . import orchestration
+from .orchestration import BatchRunParams, BatchSummary, PipelineRunConfig, RunContext
 
 
 @task
 def new_or_continued_session_task(session_id: str | None) -> str:
     """Return an existing session ID or create a fresh one."""
-    return utils.new_or_continued_session(session_id)
+    return orchestration.new_or_continued_session(session_id)
 
 
 @task
@@ -25,7 +25,7 @@ def run_nf_pipeline_task(params: BatchRunParams, force_reprocess: bool) -> dict[
     :param force_reprocess: Whether to reprocess documents already marked as done.
     :return: Dictionary of timing stats and counters for the batch run
     """
-    return utils.run_nf_pipeline(params=params, force_reprocess=force_reprocess)
+    return orchestration.run_nf_pipeline(params=params, force_reprocess=force_reprocess)
 
 
 @task
@@ -36,7 +36,7 @@ def summarize_batch_task(
     duration_seconds: float,
 ) -> BatchSummary:
     """Derive per-batch and per-session counters from the raw pipeline timing stats."""
-    return utils.summarize_batch(
+    return orchestration.summarize_batch(
         timing_stats=timing_stats,
         session_pdfs_done=session_pdfs_done,
         max_pdfs=max_pdfs,
@@ -47,7 +47,7 @@ def summarize_batch_task(
 @task
 def log_batch_summary_task(session_id: str, summary: BatchSummary, max_pdfs: int | None) -> None:
     """Log a structured summary of the batch just processed."""
-    utils.log_batch_summary(session_id=session_id, summary=summary, max_pdfs=max_pdfs)
+    orchestration.log_batch_summary(session_id=session_id, summary=summary, max_pdfs=max_pdfs)
 
 
 @task
@@ -66,7 +66,7 @@ def write_run_summary_task(
     timing_stats: dict[str, Any],
 ) -> None:
     """Write a run-summary row to BigQuery."""
-    utils.write_run_summary(
+    orchestration.write_run_summary(
         context=RunContext(
             pipeline_runs_table=pipeline_runs_table,
             bq_status_table=bq_status_table,
@@ -94,7 +94,7 @@ def trigger_next_batch_if_pending_task(
     batch_did_work: bool,
 ) -> None:
     """Self-trigger the next batch flow run when pending documents remain."""
-    utils.trigger_next_batch_if_pending(
+    orchestration.trigger_next_batch_if_pending(
         params=params,
         session_id=session_id,
         total_in_session=total_in_session,

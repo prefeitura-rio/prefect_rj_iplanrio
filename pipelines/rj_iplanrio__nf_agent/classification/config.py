@@ -6,7 +6,7 @@ Prompts are stored in core/prompts/ folder.
 
 from pathlib import Path
 
-from .prompts import EXTRACTION_PROMPT  # noqa: F401  # re-exported by core/__init__
+from .prompts import EXTRACTION_PROMPT  # noqa: F401  # re-exported by classification/__init__
 
 # Note: EXTRACTION_PROMPT is imported from .prompts module
 # Prompts are versioned in core/prompts/versions/{classification,extraction}/v*.txt

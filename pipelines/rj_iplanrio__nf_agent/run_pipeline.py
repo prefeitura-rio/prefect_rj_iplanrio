@@ -1,10 +1,10 @@
 """
-Entry point script for running the POC pipeline.
-Processes modulo-despesas.csv database and classifies each row as OK/Suspect/Not Analyzable.
+Batch entry point: reads a source of documents (BigQuery view or local/GCS CSV),
+runs each PDF through ``processing.processor.POCProcessor``, and writes results.
 
 Can be run as:
-1. Python library function (imported by prefect_rj_iplanrio/flow.py)
-2. CLI script (local development/debugging)
+1. Python library function (``nf_processing_flow``, called via ``orchestration.py``)
+2. CLI script (local development/debugging, ``main()`` below)
 """
 
 import argparse
@@ -22,12 +22,12 @@ import yaml
 
 from prefect_rj_iplanrio.sql import load_query
 
-from .sqlite_cache_manager import DatabaseManager
+from .io.sqlite_cache import DatabaseManager
 
 logger = logging.getLogger(__name__)
 from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 
-from .gcs_downloader import GCSDownloader
+from .io.gcs_downloader import GCSDownloader
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     """
     Process the NF database with GCS integration and caching.
 
-    Called directly by ``prefect_rj_iplanrio/flow.py`` (via ``utils.run_nf_pipeline``),
+    Called directly by ``prefect_rj_iplanrio/flow.py`` (via ``orchestration.run_nf_pipeline``),
     which builds a :class:`NfProcessingFlowConfig` from ``BatchRunParams``.
 
     Input sources (one required):
@@ -189,7 +189,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         if not bq_status_table:
             raise ValueError("bq_status_table is required when bq_input_table is provided.")
 
-        from .bq_input_reader import BQInputReader
+        from .io.bigquery import BQInputReader
 
         bq_reader = BQInputReader()
 
@@ -324,7 +324,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                 logger.info("RateLimiter disabled via config")
     else:
         # No experiment - use default versions
-        from ..core.prompts import list_available_versions
+        from .classification.prompts import list_available_versions
 
         if prompt_versions is None:
             classification_versions = list_available_versions("classification")
@@ -353,7 +353,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         )
 
     # NOW safe to import POCProcessor (after rate limiter initialization)
-    from ..pipeline.processor import ExecutionMode, POCProcessor
+    from .processing.processor import ExecutionMode, POCProcessor
 
     # Convert mode string to enum
     mode_enum = ExecutionMode(mode)
@@ -476,7 +476,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                 logger.info("GCS: results written to %s", gcs_uri)
 
             if bq_status_table:
-                from .bigquery_writer import BigQueryWriter
+                from .io.bigquery import BigQueryWriter
 
                 # Derive project/dataset from bq_status_table when env vars are absent.
                 # bq_status_table format: "project.dataset.table"

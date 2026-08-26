@@ -17,7 +17,7 @@ attribute lookup favors instance ``__dict__`` over the class's mixin methods.
 NOTE (found while writing these tests, not fixed here per the "additive
 only" PR-1 rule): ``process_pdf`` reads ``self.MAX_INTRA_PDF_WORKERS`` in its
 Step 2 classification loop, but no mixin/``__init__`` in
-``utils/pipeline/*.py`` ever sets that attribute on a real ``POCProcessor``.
+``processing/*.py`` ever sets that attribute on a real ``POCProcessor``.
 Any real call to ``process_pdf`` that reaches Step 2 would raise
 ``AttributeError`` today. We set it explicitly on our test doubles so these
 orchestration tests aren't blocked by that latent bug — flagging it here for
@@ -31,8 +31,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pipelines.rj_iplanrio__nf_agent.utils.pipeline.modes import ExecutionMode
-from pipelines.rj_iplanrio__nf_agent.utils.pipeline.processor import POCProcessor
+from pipelines.rj_iplanrio__nf_agent.processing.modes import ExecutionMode
+from pipelines.rj_iplanrio__nf_agent.processing.processor import POCProcessor
 
 
 def make_processor(gcs_downloader=None, temp_dir: Path | None = None, min_match_score: int = 2) -> POCProcessor:

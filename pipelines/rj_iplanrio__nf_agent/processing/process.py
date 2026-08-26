@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import fitz  # PyMuPDF
 
-from ..run_poc.sqlite_cache_manager import DatabaseManager
+from ..io.sqlite_cache import DatabaseManager
 from .modes import ExecutionMode
 
 if TYPE_CHECKING:
@@ -86,7 +86,7 @@ def process_pdf(
                 page_categories, page_justifications = processor.load_all_cached_classifications(pdf_path)
 
                 # Identify NF pages from cached classifications
-                from ..core.classifiers.gemini_classifier import NF_CATEGORIES
+                from ..classification.gemini_classifier import NF_CATEGORIES
 
                 nf_pages = []
                 for page_num, category in page_categories.items():
@@ -122,7 +122,7 @@ def process_pdf(
                         # For FULL/VALIDATE: return the cached extraction directly.
                         # (Compliance validation used to run here; its result was never
                         # read by the JSON per-page output path, only computed and
-                        # discarded — removed along with utils/compliance/'s dead
+                        # discarded — removed along with matching/'s dead
                         # ComplianceValidator machinery.)
                         if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
                             return {
@@ -169,7 +169,7 @@ def process_pdf(
                 extracted_nfs = extraction_result.get("notas_fiscais", [])
 
                 # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-                from ..compliance.nfst_fatura_cross_page_merger import merge_nfst_with_fatura
+                from ..matching.nfst_fatura_merger import merge_nfst_with_fatura
 
                 extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
 
@@ -248,7 +248,7 @@ def process_pdf(
 
             _t_preprocess_start = time.time()
             _t_classif_start = time.time()
-            from ..core.classifiers.gemini_classifier import NF_CATEGORIES
+            from ..classification.gemini_classifier import NF_CATEGORIES
 
             _max_inner = min(processor.MAX_INTRA_PDF_WORKERS, total_pages)
             with ThreadPoolExecutor(max_workers=_max_inner) as _exec:
@@ -339,7 +339,7 @@ def process_pdf(
                 extracted_nfs = extraction_result.get("notas_fiscais", [])
 
                 # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-                from ..compliance.nfst_fatura_cross_page_merger import merge_nfst_with_fatura
+                from ..matching.nfst_fatura_merger import merge_nfst_with_fatura
 
                 extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
             else:
@@ -359,7 +359,7 @@ def process_pdf(
         # STEP 5: return the final result.
         # (Compliance validation used to run here; its result was never read by
         # the JSON per-page output path, only computed and discarded — removed
-        # along with utils/compliance/'s dead ComplianceValidator machinery.)
+        # along with matching/'s dead ComplianceValidator machinery.)
         if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
             logger.info("  [OK] Processing complete")
 

@@ -1,8 +1,8 @@
 """
 Prefect entrypoint for the NF (Nota Fiscal) validation pipeline.
 
-The NF business logic lives in ``utils/`` (migrated from agent-nf-validator by
-mechanical move). All ``utils.run_poc`` imports are deferred to the function
+The NF business logic lives in this package (migrated from agent-nf-validator by
+mechanical move). Some imports are deferred to the function
 body so this module stays importable during `prefect deploy` in CI, which only
 needs this pipeline's own dependencies (prefect, prefect-docker) synced — not
 the `gemini` extra that powers the extraction/classification agents.
@@ -23,7 +23,7 @@ from .tasks import (
     trigger_next_batch_if_pending_task,
     write_run_summary_task,
 )
-from .utils import BatchRunParams
+from .orchestration import BatchRunParams
 
 
 @flow(log_prints=True)

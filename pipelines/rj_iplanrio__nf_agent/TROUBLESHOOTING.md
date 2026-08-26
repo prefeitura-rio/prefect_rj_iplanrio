@@ -2,16 +2,22 @@
 
 > **Nota (pós-migração):** a lógica de negócio que antes vivia no repo
 > `agent-nf-validator` (`run_poc/`, `core/`) foi movida por *move mecânico*
-> para `utils/run_poc/` e `utils/core/` desta pipeline. As referências a
-> `agent-nf-validator/run_poc/*.py` abaixo são históricas (registro dos fixes);
-> os arquivos atuais são `utils/run_poc/*.py` e `utils/core/*.py`.
+> para esta pipeline, e desde então reorganizada em pacotes com nomes
+> intuitivos. As referências a `agent-nf-validator/run_poc/*.py`,
+> `utils/run_poc/*.py` e `utils/core/*.py` abaixo são históricas (registro dos
+> fixes); os arquivos atuais são `io/*.py` e `classification/*.py`.
 
-> **Nota (Fase 3, pós-split):** as classes grandes foram desmembradas em mixins —
-> `POCProcessor` → `utils/pipeline/*.py` (setup/cache/process/metadata/database +
-> `modes.py`), `ComplianceValidator` → `utils/compliance/core,matching,validate,report.py`,
-> `NFExtractor` → `utils/extraction/auth,prompt,pdf,coalesce,api.py`. Caso veja
-> `ImportError`/ciclo de import envolvendo `utils.core`, a fachada `utils/core/__init__.py`
-> re-exporta compliance/extraction de forma **lazy** (PEP 562) justamente para evitar o ciclo.
+> **Nota (Fase 3, pós-split; caminhos históricos):** as classes grandes foram
+> desmembradas em mixins — `POCProcessor` → `utils/pipeline/*.py` (setup/cache/
+> process/metadata/database + `modes.py`), `ComplianceValidator` →
+> `utils/compliance/core,matching,validate,report.py`, `NFExtractor` →
+> `utils/extraction/auth,prompt,pdf,coalesce,api.py`. Esses caminhos hoje são
+> `processing/*.py`, `matching/*.py` (o `ComplianceValidator` em si foi removido
+> depois, ver `matching/README.md`) e `extraction/*.py`, respectivamente. O
+> `__getattr__` lazy (PEP 562) descrito no problema abaixo era do antigo
+> `utils/core/__init__.py`; essa fachada foi simplificada num eager facade
+> comum depois que o código morto que dependia dela foi removido —
+> `classification/__init__.py` hoje não usa mais PEP 562.
 
 ## Problema: ImportError circular ao importar `utils.core` / `utils.extraction` (pós-split)
 

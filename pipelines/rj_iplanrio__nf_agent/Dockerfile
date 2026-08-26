@@ -10,7 +10,7 @@ COPY ./src ./src/
 
 COPY ./pipelines/rj_iplanrio__nf_agent ./pipelines/rj_iplanrio__nf_agent/
 
-# Lógica de negócio NF vive em pipelines/rj_iplanrio__nf_agent/utils/ (migrada
+# Lógica de negócio NF vive em pipelines/rj_iplanrio__nf_agent/ (migrada
 # de agent-nf-validator por move mecânico) e é resolvida junto da própria
 # pipeline via uv sync — lockfile-audited, reviewable em PR diffs.
 RUN uv sync --package rj_iplanrio__nf_agent

@@ -29,10 +29,10 @@ _stream_handler.setFormatter(formatter)
 
 logger.addHandler(_stream_handler)
 
-from ..core.classifiers.gemini_classifier import GeminiClassifier
+from ..classification.gemini_classifier import GeminiClassifier
 from ..extraction import NFExtractor
-from ..run_poc.gcs_downloader import GCSDownloader
-from ..run_poc.sqlite_cache_manager import DatabaseManager
+from ..io.gcs_downloader import GCSDownloader
+from ..io.sqlite_cache import DatabaseManager
 from . import cache, database, process, setup
 from .modes import ExecutionMode
 

@@ -21,8 +21,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pipelines.rj_iplanrio__nf_agent.utils.extraction import auth
-from pipelines.rj_iplanrio__nf_agent.utils.extraction.extractor import NFExtractor
+from pipelines.rj_iplanrio__nf_agent.extraction import auth
+from pipelines.rj_iplanrio__nf_agent.extraction.extractor import NFExtractor
 
 
 class FakeGeminiResponse:

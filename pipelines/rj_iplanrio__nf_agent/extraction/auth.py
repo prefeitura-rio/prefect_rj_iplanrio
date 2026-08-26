@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..core.config import EXTRACTION_PROMPT, GEMINI_CONFIG, SERVICE_ACCOUNT_PATH
+from ..classification.config import EXTRACTION_PROMPT, GEMINI_CONFIG, SERVICE_ACCOUNT_PATH
 
 if TYPE_CHECKING:
     from .extractor import NFExtractor

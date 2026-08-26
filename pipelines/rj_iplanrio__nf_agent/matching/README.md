@@ -1,7 +1,7 @@
-# `utils/compliance/`
+# `matching/`
 
 Small package: normalization/matching helpers and the NFST↔Fatura cross-page
-merger. Used by `utils/pipeline/metadata.py`'s `build_json_output` (the
+merger. Used by `processing/metadata.py`'s `build_json_output` (the
 pipeline's official per-page output, written to
 `extracao_pagina` in BigQuery) and by `process_pdf`.
 
@@ -9,8 +9,8 @@ pipeline's official per-page output, written to
 
 | File | Used by | Purpose |
 |---|---|---|
-| `utils.py` | `metadata.py`, `nfst_fatura_cross_page_merger.py` | `normalize_cnpj`, `normalize_number`, `normalize_value`, `extract_core_numero`, `fuzzy_match_numero`, `parse_date_flexible`, `DocumentFields`, `match_score_3_fields` — the exact matching logic `build_json_output` uses to compute `match_id_documento` per page. |
-| `nfst_fatura_cross_page_merger.py` | `process.py` (unconditionally, every PDF) | Links NFST pages to their Fatura page within the same telecom billing cycle, filling in `valor_total` on the NFST side. |
+| `scoring.py` | `metadata.py`, `nfst_fatura_merger.py` | `normalize_cnpj`, `normalize_number`, `normalize_value`, `extract_core_numero`, `fuzzy_match_numero`, `parse_date_flexible`, `DocumentFields`, `match_score_3_fields` — the exact matching logic `build_json_output` uses to compute `match_id_documento` per page. |
+| `nfst_fatura_merger.py` | `process.py` (unconditionally, every PDF) | Links NFST pages to their Fatura page within the same telecom billing cycle, filling in `valor_total` on the NFST side. |
 
 ## What used to be here and isn't anymore
 

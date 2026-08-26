@@ -1,5 +1,5 @@
 """
-Compliance Package
+Matching Package
 
 Small survivor of a much larger ``ComplianceValidator`` rule-engine package
 (ripped out — see ``README.md`` in this directory for why). What's left are
@@ -13,8 +13,8 @@ Public API:
 - merge_nfst_with_fatura(): NFST <-> Fatura cross-page merge
 """
 
-from .nfst_fatura_cross_page_merger import merge_nfst_with_fatura
-from .utils import (
+from .nfst_fatura_merger import merge_nfst_with_fatura
+from .scoring import (
     DocumentFields,
     extract_core_numero,
     fuzzy_match_numero,

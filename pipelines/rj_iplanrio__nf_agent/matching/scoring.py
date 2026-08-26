@@ -7,13 +7,13 @@ This module contains utility functions for normalizing and matching NF data:
 - Date parsing
 - Fuzzy number matching and 3-field match scoring
 
-Every function here is a real dependency of ``utils/pipeline/metadata.py``'s
+Every function here is a real dependency of ``processing/metadata.py``'s
 ``build_json_output`` (the per-page JSON output, the pipeline's only official
-output format) or of ``nfst_fatura_cross_page_merger.py``. Functions that were
+output format) or of ``nfst_fatura_merger.py``. Functions that were
 only reachable via the now-removed ``ComplianceValidator`` rule-engine
 machinery (``values_match``, ``find_extraction_match``, ``find_near_match``,
 ``check_date_against_company_start``, ``VALUE_TOLERANCE``) were deleted along
-with it — see ``utils/compliance/README.md``.
+with it — see ``matching/README.md``.
 """
 
 import re

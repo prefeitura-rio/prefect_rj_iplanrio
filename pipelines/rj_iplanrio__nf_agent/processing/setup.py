@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
 
-from ..core.classifiers.gemini_classifier import GeminiClassifier
+from ..classification.gemini_classifier import GeminiClassifier
 from ..extraction import NFExtractor
-from ..run_poc.gcs_downloader import GCSDownloader
-from ..run_poc.sqlite_cache_manager import DatabaseManager
+from ..io.gcs_downloader import GCSDownloader
+from ..io.sqlite_cache import DatabaseManager
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
@@ -62,7 +62,7 @@ def initialize(
     processor.quiet = quiet
 
     # Load prompts from specified versions
-    from ..core.prompts import list_available_versions, load_prompt_version
+    from ..classification.prompts import list_available_versions, load_prompt_version
 
     if prompt_versions is None:
         # Use latest available versions

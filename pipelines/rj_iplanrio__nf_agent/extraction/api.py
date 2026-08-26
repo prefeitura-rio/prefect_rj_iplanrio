@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from pypdf import PdfReader
 
-from ..core.config import GEMINI_CONFIG
+from ..classification.config import GEMINI_CONFIG
 from . import coalesce
 from . import prompt as prompt_module
 

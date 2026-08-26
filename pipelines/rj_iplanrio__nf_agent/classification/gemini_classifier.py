@@ -18,9 +18,9 @@ from pathlib import Path
 import fitz  # PyMuPDF
 from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
-from ..base import BaseClassifier
-from ..config import SERVICE_ACCOUNT_PATH
-from ..prompts import CLASSIFICATION_PROMPT
+from .base import BaseClassifier
+from .config import SERVICE_ACCOUNT_PATH
+from .prompts import CLASSIFICATION_PROMPT
 from .categories import (  # noqa: F401  (re-exported; public API)
     CATEGORY_ALIASES,
     NF_CATEGORIES,

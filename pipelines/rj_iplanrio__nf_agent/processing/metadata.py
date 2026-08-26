@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
-from ..compliance.utils import normalize_cnpj, normalize_number
+from ..matching.scoring import normalize_cnpj, normalize_number
 from .modes import ExecutionMode
 
 if TYPE_CHECKING:
@@ -279,7 +279,7 @@ def build_json_output(
     :param versao_prompt: dict with prompt versions and batch_size for traceability.
     :returns: List of per-page dicts ready for json.dump / NDJSON write.
     """
-    from ..compliance.utils import (
+    from ..matching.scoring import (
         DocumentFields,
         match_score_3_fields,
     )
