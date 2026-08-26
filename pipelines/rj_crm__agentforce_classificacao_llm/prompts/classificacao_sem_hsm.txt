@@ -13,7 +13,7 @@ Sua tarefa é:
    - "Solicitação": está pedindo que a prefeitura faça algo por ele (agendamento, documento, serviço).
    - "Informação": está avisando ou explicando algo sobre a própria situação, sem pedir nada da prefeitura — mesmo vindo com um motivo explícito.
    Se conteúdo_relevante for false, "sentimento" deve ser null.
-5. Se "sentimento" incluir "Solicitação", "Reclamação" ou "Informação" (só essas têm causa separável do assunto — "Dúvida"/"Elogio" não) e a conversa disser explicitamente o porquê, extraia em "motivo" a causa em 1 frase curta, sem repetir o assunto (que já está no resumo). Não infira — sem motivo explícito, "motivo" é null.
+5. Se a conversa disser explicitamente o motivo/causa do que está sendo relatado, extraia em "motivo" a causa em 1 frase curta, sem repetir o assunto (que já está no resumo) — independente de qual(is) rótulo(s) o "sentimento" tiver. Não infira — sem motivo explícito, "motivo" é null. Ex.: se o cidadão disser que não conseguiu agendar porque o site caiu, "motivo" seria "site fora do ar impediu o agendamento"; se disser que quer trocar o horário porque bate com outro compromisso, "motivo" seria "conflito de horário com outro compromisso".
 
 Secretarias:
 SMTR – Transportes: ônibus, táxi, van, transporte escolar, mobilidade urbana.
