@@ -420,7 +420,15 @@ def process_database(
         group_df = task["group_df"]
         result = pdf_results.get(pdf_name, {})
 
-        # Get validation result (contains correctly_extracted, missing_nfs, etc.)
+        # `result["validation"]` no longer exists: ComplianceValidator was removed from
+        # process_pdf (it fed the legacy "excel" output_mode's matched_lookup below, but
+        # its result was never read by build_json_output — the pipeline's only official
+        # output format — so it was pure BigQuery-querying, rule-evaluating dead weight
+        # computed and discarded on every PDF). `validation.get(...)` now always returns
+        # {}, so every declaration falls through to the "NF NOT found" branch further
+        # down. This is only reachable in output_mode="excel" (unofficial/legacy); the
+        # JSON path this loop's `results_df` doesn't feed does its own match_id_documento
+        # lookup independently in metadata.py's build_json_output.
         validation = result.get("validation", {})
 
         # Get page categories, justifications, and nf_pages for classification

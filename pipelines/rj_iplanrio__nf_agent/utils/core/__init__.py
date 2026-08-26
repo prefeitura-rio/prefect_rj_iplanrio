@@ -22,7 +22,6 @@ __all__ = [
     "BaseClassifier",
     "BaseExtractor",
     "BasePipeline",
-    "ComplianceValidator",
     "GeminiClassifier",
     "NFClassifier",
     "NFExtractor",
@@ -38,7 +37,6 @@ __all__ = [
     "normalize_value",
     "run_ocr_on_pdf",
     "run_pipeline",
-    "validate_against_expected",
 ]
 
 
@@ -53,11 +51,9 @@ def __getattr__(name: str):
     import importlib
 
     if name in {
-        "ComplianceValidator",
         "normalize_cnpj",
         "normalize_number",
         "normalize_value",
-        "validate_against_expected",
     }:
         mod = importlib.import_module("..compliance", __name__)
         return getattr(mod, name)

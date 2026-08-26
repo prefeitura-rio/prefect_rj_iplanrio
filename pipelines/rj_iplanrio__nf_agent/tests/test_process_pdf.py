@@ -111,9 +111,7 @@ class TestDownloadBranch:
 
 
 class TestClassificationFastPath:
-    def test_full_mode_extraction_cache_hit_goes_straight_to_validation(
-        self, make_pdf, tmp_path, no_bigquery_start_date
-    ):
+    def test_full_mode_extraction_cache_hit_returns_cached_extraction(self, make_pdf, tmp_path):
         pdf_path = make_pdf(n_pages=1, name="cached.pdf")
         proc = make_processor(temp_dir=tmp_path)
         proc.check_classification_cache = MagicMock(return_value=True)
@@ -136,10 +134,9 @@ class TestClassificationFastPath:
         assert result["fast_path"] is True
         assert result["nf_pages"] == [1]
         assert result["extracted_nf_count"] == 1
-        assert result["validation"]["status"] == "OK"
-        assert result["validation"]["summary"]["correctly_extracted"] == 1
+        assert result["extracted_nfs"] == [extracted_nf()]
 
-    def test_run_extraction_mode_returns_immediately_without_validating(self, make_pdf, tmp_path):
+    def test_run_extraction_mode_returns_immediately(self, make_pdf, tmp_path):
         pdf_path = make_pdf(n_pages=1, name="cached.pdf")
         proc = make_processor(temp_dir=tmp_path)
         proc.check_classification_cache = MagicMock(return_value=True)
@@ -155,12 +152,9 @@ class TestClassificationFastPath:
 
         assert result["success"] is True
         assert result["mode"] == "run_extraction"
-        assert "validation" not in result
         assert result["extracted_nf_count"] == 1
 
-    def test_all_classified_no_nf_pages_validates_with_empty_extraction(
-        self, make_pdf, tmp_path, no_bigquery_start_date
-    ):
+    def test_all_classified_no_nf_pages_returns_empty_extraction(self, make_pdf, tmp_path):
         pdf_path = make_pdf(n_pages=1, name="no_nf.pdf")
         proc = make_processor(temp_dir=tmp_path)
         proc.check_classification_cache = MagicMock(return_value=True)
@@ -176,8 +170,6 @@ class TestClassificationFastPath:
         assert result["success"] is True
         assert result["nf_pages"] == []
         assert result["extracted_nfs"] == []
-        assert result["validation"]["status"] == "PROBLEMS"  # expected NF never found
-        assert len(result["validation"]["missing_nfs"]) == 1
 
 
 class TestSlowPathModeShortCircuits:
@@ -249,7 +241,7 @@ class TestSlowPathModeShortCircuits:
 
 
 class TestFullSlowPathEndToEnd:
-    def test_full_mode_runs_all_five_steps_and_validates(self, make_pdf, tmp_path, no_bigquery_start_date):
+    def test_full_mode_runs_all_steps_and_returns_extraction(self, make_pdf, tmp_path):
         pdf_path = make_pdf(n_pages=2, name="full.pdf")
         proc = make_processor(temp_dir=tmp_path)
         proc.check_classification_cache = MagicMock(return_value=False)
@@ -280,20 +272,8 @@ class TestFullSlowPathEndToEnd:
         assert result["total_pages"] == 2
         assert result["nf_pages"] == [1]
         assert result["extracted_nf_count"] == 1
-        assert result["validation"]["status"] == "OK"
-        # NOTE (discovered while writing this test, not fixed here — additive-only
-        # PR-1 rule): the `classifications` block built at the bottom of Step 5
-        # (process.py ~442-462) looks up `entry.get("expected_cnpj")` /
-        # `"expected_numero"` in `validation_result["entries"]`, but
-        # `ComplianceValidatorValidateMixin.validate_extraction` no longer returns
-        # an "entries" key (it returns "correctly_extracted"/"missing_nfs" instead,
-        # per its "NEW STRATEGY: declaração-centric" docstring). So this lookup
-        # always misses and every entry silently falls back to "Not Analyzable",
-        # regardless of the real (correct) validation status above. Captured here
-        # as the current (buggy) behavior so a future PR that fixes/removes this
-        # block has a regression test to update deliberately.
-        assert len(result["classifications"]) == 1
-        assert result["classifications"][0]["classification"] == "Not Analyzable"
+        assert result["extracted_nfs"] == [extracted_nf(pagina=1)]
+        assert result["expected_nf_count"] == 1
         proc.preprocess_extraction_pdf.assert_called_once_with(pdf_path, [1])
         proc.extract_nf_from_cache.assert_called_once()
 

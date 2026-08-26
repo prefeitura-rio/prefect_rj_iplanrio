@@ -1,60 +1,38 @@
 """
-Compliance Validator Package
+Compliance Package
 
-This package provides utilities and classes for validating extracted NFs against expected NFs.
+Small survivor of a much larger ``ComplianceValidator`` rule-engine package
+(ripped out — see ``README.md`` in this directory for why). What's left are
+the normalization/matching helpers the per-page JSON output actually uses,
+plus the NFST/Fatura cross-page merger.
 
 Public API:
-- ComplianceValidator: Main validator class
-- compute_classification(): Classification function
-- validate_against_expected(): Convenience validation function
 - Normalization functions: normalize_cnpj, normalize_number, normalize_value
-- Matching functions: fuzzy_match_numero, values_match, find_extraction_match
-- Date functions: parse_date_flexible, check_date_against_company_start
-- Constants: VALUE_TOLERANCE
+- Matching: fuzzy_match_numero, match_score_3_fields, DocumentFields
+- Date function: parse_date_flexible
+- merge_nfst_with_fatura(): NFST <-> Fatura cross-page merge
 """
 
-# Import from validator module
-# Import from utils module
+from .nfst_fatura_cross_page_merger import merge_nfst_with_fatura
 from .utils import (
-    # Constants
-    VALUE_TOLERANCE,
-    check_date_against_company_start,
+    DocumentFields,
     extract_core_numero,
-    find_extraction_match,
-    find_near_match,
-    # Matching functions
     fuzzy_match_numero,
-    levenshtein_distance,
-    # Normalization functions
+    match_score_3_fields,
     normalize_cnpj,
     normalize_number,
     normalize_value,
-    # Date functions
     parse_date_flexible,
-    values_match,
 )
-from .validator import ComplianceValidator, compute_classification, validate_against_expected
 
-# Define public API
 __all__ = [
-    # Main classes and functions
-    "ComplianceValidator",
-    "compute_classification",
-    "validate_against_expected",
-    # Constants
-    "VALUE_TOLERANCE",
-    # Normalization
+    "DocumentFields",
+    "extract_core_numero",
+    "fuzzy_match_numero",
+    "match_score_3_fields",
+    "merge_nfst_with_fatura",
     "normalize_cnpj",
     "normalize_number",
     "normalize_value",
-    "extract_core_numero",
-    # Date functions
     "parse_date_flexible",
-    "check_date_against_company_start",
-    # Matching
-    "fuzzy_match_numero",
-    "levenshtein_distance",
-    "find_near_match",
-    "find_extraction_match",
-    "values_match",
 ]

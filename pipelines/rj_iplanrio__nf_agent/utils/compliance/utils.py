@@ -4,22 +4,21 @@ Compliance Validation Utility Functions
 This module contains utility functions for normalizing and matching NF data:
 - CNPJ and number normalization
 - Value normalization
-- Date parsing and validation
-- String matching algorithms (fuzzy matching, Levenshtein distance)
+- Date parsing
+- Fuzzy number matching and 3-field match scoring
+
+Every function here is a real dependency of ``utils/pipeline/metadata.py``'s
+``build_json_output`` (the per-page JSON output, the pipeline's only official
+output format) or of ``nfst_fatura_cross_page_merger.py``. Functions that were
+only reachable via the now-removed ``ComplianceValidator`` rule-engine
+machinery (``values_match``, ``find_extraction_match``, ``find_near_match``,
+``check_date_against_company_start``, ``VALUE_TOLERANCE``) were deleted along
+with it — see ``utils/compliance/README.md``.
 """
 
 import re
 from dataclasses import dataclass
 from datetime import date, datetime
-
-from iplanrio_agent_toolkit.matching.text_similarity import levenshtein_distance
-
-# =============================================================================
-# CONSTANTS
-# =============================================================================
-
-VALUE_TOLERANCE = 0.01  # Tolerance for value comparison (R$ 0.01)
-
 
 # =============================================================================
 # NORMALIZATION FUNCTIONS
@@ -256,36 +255,6 @@ def parse_date_flexible(date_str: str) -> date | None:
     return None
 
 
-def check_date_against_company_start(
-    data_emissao: str | None,
-    inicio_atividade_data: str | None,
-) -> bool | None:
-    """
-    Check if a date is valid against company start date.
-
-    Note: Despite the parameter name, this is typically called with data_envio
-    (submission date) to validate against vendor company start date, not
-    data_emissao (printed issue date) which can be forged.
-
-    :param data_emissao: Date to validate (typically data_envio - submission
-        date), format DD/MM/YYYY or YYYY-MM-DD.
-    :param inicio_atividade_data: Company start date (DD/MM/YYYY or YYYY-MM-DD).
-    :returns: True if valid (date >= inicio_atividade), False if invalid
-        (date < inicio_atividade), None if validation cannot be performed
-        (missing dates or parse errors).
-    """
-    if not data_emissao or not inicio_atividade_data:
-        return None  # Can't validate if either date is missing
-
-    emissao_date = parse_date_flexible(data_emissao)
-    inicio_date = parse_date_flexible(inicio_atividade_data)
-
-    if not emissao_date or not inicio_date:
-        return None  # Can't validate if parsing fails
-
-    return emissao_date >= inicio_date
-
-
 # =============================================================================
 # MATCHING FUNCTIONS
 # =============================================================================
@@ -336,146 +305,6 @@ def fuzzy_match_numero(num1: str, num2: str) -> bool:
                 return True
 
     return False
-
-
-def find_near_match(
-    extracted_nf: dict,
-    expected_nfs: list[dict],
-    max_distance: int = 2,
-) -> dict | None:
-    """
-    Find near-match for an extracted NF in the list of expected NFs using Levenshtein distance.
-
-    Concatenates normalized CNPJ + numero_nf and checks if any expected NF
-    is within max_distance characters of the extracted NF.
-
-    This helps detect extraction errors (OCR mistakes, parsing issues) where
-    the model extracted something close but not exact.
-
-    :param extracted_nf: Single extracted NF dict with cnpj_emitente, numero_nf.
-    :param expected_nfs: List of expected NFs with cnpj_norm, numero_norm fields.
-    :param max_distance: Maximum Levenshtein distance to consider a match
-        (default: 2).
-    :returns: Dict with near-match details if found, None otherwise:
-        - expected_nf: dict — the matched expected NF
-        - extracted_nf: dict — the extracted NF (input)
-        - distance: int — Levenshtein distance
-    """
-    # Get normalized values from extracted NF
-    ext_cnpj_norm = normalize_cnpj(extracted_nf.get("cnpj_emitente", ""))
-    ext_numero_norm = normalize_number(extracted_nf.get("numero_nf", ""))
-
-    # Skip if either field is empty
-    if not ext_cnpj_norm or not ext_numero_norm:
-        return None
-
-    # Build extracted combined string
-    ext_combined = f"{ext_cnpj_norm}{ext_numero_norm}"
-
-    best_match = None
-    best_distance = max_distance + 1  # Start beyond threshold
-
-    for exp_nf in expected_nfs:
-        # Build expected combined string
-        exp_combined = f"{exp_nf['cnpj_norm']}{exp_nf['numero_norm']}"
-
-        # Calculate Levenshtein distance
-        distance = levenshtein_distance(ext_combined, exp_combined)
-
-        # Check if this is the best match so far
-        if distance <= max_distance and distance < best_distance:
-            best_distance = distance
-            best_match = {"expected_nf": exp_nf, "extracted_nf": extracted_nf, "distance": distance}
-
-    return best_match
-
-
-def find_extraction_match(
-    expected_cnpj: str,
-    expected_numero: str,
-    extracted_nfs: list[dict],
-    use_levenshtein: bool = True,
-) -> dict | None:
-    """
-    Find matching extracted NF for a given expected CNPJ+numero.
-
-    This is a module-level function used by evaluation scripts to match
-    a single expected NF (from goldenset) against a pool of extracted NFs
-    (from the model) for the same PDF.
-
-    Matching strategy:
-    1. Exact CNPJ + fuzzy numero match (allows leading zeros)
-    2. If use_levenshtein=True: Near-match using Levenshtein distance ≤ 2
-
-    :param expected_cnpj: Expected CNPJ (any format, will be normalized).
-    :param expected_numero: Expected numero_nf (any format, will be normalized).
-    :param extracted_nfs: List of extracted NF dicts with keys:
-        - cnpj_emitente: Extracted CNPJ
-        - numero_nf: Extracted NF number
-        - (other fields preserved in return value)
-    :param use_levenshtein: Whether to use Levenshtein matching as fallback
-        (default: True).
-    :returns: Matching NF dict with additional keys, or None if no match:
-        - All original fields from the extracted NF
-        - _match_type: 'exact' or 'near_match'
-        - _levenshtein_distance: int (0 for exact, >0 for near_match)
-    """
-    # Normalize expected values
-    exp_cnpj_norm = normalize_cnpj(expected_cnpj)
-    exp_numero_norm = normalize_number(expected_numero)
-
-    # Step 1: Try exact CNPJ + fuzzy numero match
-    for ext_nf in extracted_nfs:
-        ext_cnpj_norm = normalize_cnpj(ext_nf.get("cnpj_emitente", ""))
-        ext_numero_norm = normalize_number(ext_nf.get("numero_nf", ""))
-
-        # Exact CNPJ match
-        if ext_cnpj_norm == exp_cnpj_norm:
-            # Fuzzy numero match (handles leading zeros, etc.)
-            if fuzzy_match_numero(ext_numero_norm, exp_numero_norm):
-                return {**ext_nf, "_match_type": "exact", "_levenshtein_distance": 0}
-
-    # Step 2: Try Levenshtein near-match if enabled
-    if use_levenshtein:
-        # Create expected NF format for find_near_match
-        expected_nf_list = [{"cnpj_norm": exp_cnpj_norm, "numero_norm": exp_numero_norm}]
-
-        # Check each extracted NF for near-match
-        for ext_nf in extracted_nfs:
-            near_match = find_near_match(extracted_nf=ext_nf, expected_nfs=expected_nf_list, max_distance=2)
-
-            if near_match:
-                # Found a near-match within Levenshtein distance ≤ 2
-                return {**ext_nf, "_match_type": "near_match", "_levenshtein_distance": near_match["distance"]}
-
-    # No match found
-    return None
-
-
-def values_match(val1: float, val2: float, tolerance: float = VALUE_TOLERANCE) -> bool:
-    """
-    Check if two monetary values match within tolerance.
-
-    :param val1: First value.
-    :param val2: Second value.
-    :param tolerance: Maximum allowed difference (default: VALUE_TOLERANCE).
-    :returns: True if values match within tolerance.
-    """
-    if val1 is None or val2 is None:
-        return False
-    if isinstance(val1, float) and val1 != val1:
-        return False
-    if isinstance(val2, float) and val2 != val2:
-        return False
-
-    # Convert to float if needed (handle string values)
-    try:
-        val1_float = float(val1) if not isinstance(val1, (int, float)) else val1
-        val2_float = float(val2) if not isinstance(val2, (int, float)) else val2
-    except (ValueError, TypeError):
-        return False
-
-    return abs(val1_float - val2_float) <= tolerance
 
 
 @dataclass(frozen=True)

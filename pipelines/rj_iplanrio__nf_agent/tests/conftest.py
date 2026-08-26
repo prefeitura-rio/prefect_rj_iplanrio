@@ -64,19 +64,3 @@ def _disable_real_rate_limiter():
     limiter.set_enabled(False)
     yield
     reset_rate_limiter()
-
-
-@pytest.fixture
-def no_bigquery_start_date(monkeypatch: pytest.MonkeyPatch):
-    """Prevent ``ComplianceValidator.validate_extraction`` from hitting real BigQuery.
-
-    ``validate_extraction`` always calls ``get_company_start_date`` per unique
-    extracted CNPJ, regardless of ``use_bigquery_deduplication``. It is
-    imported locally inside the function body
-    (``from ..run_poc.bigquery_loader import get_company_start_date``), so we
-    patch it at its definition site.
-    """
-    monkeypatch.setattr(
-        "pipelines.rj_iplanrio__nf_agent.utils.run_poc.bigquery_loader.get_company_start_date",
-        lambda *args, **kwargs: None,
-    )

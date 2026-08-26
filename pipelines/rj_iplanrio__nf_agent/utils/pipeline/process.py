@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any
 
 import fitz  # PyMuPDF
 
-from ..compliance import ComplianceValidator
-from ..compliance.rules import UnmappedDocumentTypeRule
 from ..run_poc.sqlite_cache_manager import DatabaseManager
 from .modes import ExecutionMode
 
@@ -18,51 +16,6 @@ if TYPE_CHECKING:
     from .processor import POCProcessor
 
 logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
-
-
-def _build_classifications(expected_nfs: list[dict[str, Any]], validation_result: dict) -> list[dict]:
-    """
-    Derive a per-expected-NF classification list from a ``validate_extraction`` result.
-
-    ``ComplianceValidator.validate_extraction`` returns matched declarations under
-    ``correctly_extracted`` (each with an ``"expected"`` dict — the original expected-NF
-    dict — and a ``"classification"``) and unmatched ones under ``missing_nfs`` (the
-    original expected-NF dict itself, with ``"classification"`` merged in). Neither key
-    is named ``"entries"`` — an earlier version of this function read
-    ``validation_result.get("entries", [])``, which doesn't exist on the current
-    validator output shape, so every declaration silently fell back to
-    ``"Not Analyzable"`` regardless of its real status.
-
-    :param expected_nfs: The expected-NF dicts originally passed to ``ComplianceValidator``.
-    :param validation_result: Output of ``ComplianceValidator.validate_extraction``.
-    :returns: One classification dict per item in ``expected_nfs``, matched by (cnpj, numero_nf).
-    """
-    classification_by_key: dict[tuple[str, str], str] = {}
-    for item in validation_result.get("correctly_extracted", []):
-        expected = item.get("expected", {})
-        key = (expected.get("cnpj", ""), expected.get("numero_nf", ""))
-        classification_by_key[key] = item.get("classification", "Not Analyzable")
-    for item in validation_result.get("missing_nfs", []):
-        key = (item.get("cnpj", ""), item.get("numero_nf", ""))
-        classification_by_key[key] = item.get("classification", "Not Analyzable")
-
-    classifications = []
-    for expected_nf in expected_nfs:
-        cnpj = expected_nf.get("cnpj", "")
-        numero = expected_nf.get("num_documento", "")
-        classification = classification_by_key.get((cnpj, numero), "Not Analyzable")
-
-        classifications.append(
-            {
-                "cnpj": cnpj,
-                "numero_nf": numero,
-                "valor_documento": expected_nf.get("valor_documento"),
-                "valor_pago": expected_nf.get("valor_pago"),
-                "classification": classification,
-            }
-        )
-
-    return classifications
 
 
 def process_pdf(
@@ -87,9 +40,8 @@ def process_pdf(
     logger.info(f"Expected NFs: {len(expected_nfs)}")
     logger.info(f"{'=' * 80}")
 
-    # Per-PDF timing accumulators (seconds); None = not measured / all cache hits
+    # Per-PDF timing accumulator (seconds); None = not measured / all cache hits
     _t_preprocess: float | None = None  # classification pages + filtered-PDF creation
-    _t_validacao: float | None = None  # ComplianceValidator + validate_extraction
 
     # Use pre-downloaded PDF or download from GCS
     clean_temp_file = False
@@ -167,27 +119,12 @@ def process_pdf(
                                 "fast_path": True,
                             }
 
-                        # For FULL/VALIDATE: go to validation
+                        # For FULL/VALIDATE: return the cached extraction directly.
+                        # (Compliance validation used to run here; its result was never
+                        # read by the JSON per-page output path, only computed and
+                        # discarded — removed along with utils/compliance/'s dead
+                        # ComplianceValidator machinery.)
                         if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
-                            logger.info("  [Step 5/5] Validating against expected NFs...")
-                            # NOTE: Validation rules disabled - all validation in BigQuery
-                            validator = ComplianceValidator(
-                                expected_nfs=expected_nfs,
-                                use_bigquery_deduplication=False,
-                                rules=[UnmappedDocumentTypeRule()],
-                                min_match_score=processor.min_match_score,
-                            )
-
-                            page_categories_list = [page_categories.get(i + 1) for i in range(total_pages)]
-
-                            validation_result = validator.validate_extraction(
-                                pdf_name=pdf_filename,
-                                extracted_nfs=extracted_nfs,
-                                page_categories=page_categories_list,
-                            )
-
-                            logger.info(f"  [Validation] Status: {validation_result['status']}")
-
                             return {
                                 "pdf_name": pdf_filename,
                                 "mode": mode.value,
@@ -198,31 +135,11 @@ def process_pdf(
                                 "page_justifications": page_justifications,  # ADDED: Include justifications
                                 "extracted_nf_count": len(extracted_nfs),
                                 "extracted_nfs": extracted_nfs,
-                                "validation": validation_result,
                                 "fast_path": True,
                             }
                     # else: No extraction cache but has NF pages → continue to Step 4
-                # No NF pages → validate with empty extraction
+                # No NF pages → nothing to extract, return directly
                 elif mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
-                    logger.info("  [Step 5/5] Validating against expected NFs...")
-                    # NOTE: Validation rules disabled - all validation in BigQuery
-                    validator = ComplianceValidator(
-                        expected_nfs=expected_nfs,
-                        use_bigquery_deduplication=False,
-                        rules=[UnmappedDocumentTypeRule()],
-                        min_match_score=processor.min_match_score,
-                    )
-
-                    page_categories_list = [page_categories.get(i + 1) for i in range(total_pages)]
-
-                    validation_result = validator.validate_extraction(
-                        pdf_name=pdf_filename,
-                        extracted_nfs=[],
-                        page_categories=page_categories_list,
-                    )
-
-                    logger.info(f"  [Validation] Status: {validation_result['status']}")
-
                     return {
                         "pdf_name": pdf_filename,
                         "mode": mode.value,
@@ -233,7 +150,6 @@ def process_pdf(
                         "page_justifications": page_justifications,  # ADDED: Include justifications
                         "extracted_nf_count": 0,
                         "extracted_nfs": [],
-                        "validation": validation_result,
                         "fast_path": True,
                     }
 
@@ -270,36 +186,13 @@ def process_pdf(
                         "fast_path": True,  # Indicates we skipped classification
                     }
 
-                # For FULL/VALIDATE modes, set variables and skip to STEP 5
+                # For FULL/VALIDATE modes, set variables and return directly
                 nf_pages = cached_nf_pages
 
                 # Load cached page categories and justifications from database
                 page_categories, page_justifications = processor.load_all_cached_classifications(pdf_path)
 
-                # Convert to list format for validation (0-indexed list for pages 1..N)
-                # page_categories_list[0] = Page 1, page_categories_list[1] = Page 2, etc.
-                page_categories_list = [page_categories.get(i + 1) for i in range(total_pages)]
-
-                # Jump to validation (STEP 5)
                 if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
-                    logger.info("  [Step 5/5] Validating against expected NFs...")
-                    # NOTE: Validation rules disabled - all validation in BigQuery
-                    validator = ComplianceValidator(
-                        expected_nfs=expected_nfs,
-                        use_bigquery_deduplication=False,  # TEMPORARILY DISABLED: Avoid repeated BigQuery queries
-                        rules=[UnmappedDocumentTypeRule()],
-                        min_match_score=processor.min_match_score,
-                    )
-
-                    # Run validation
-                    validation_result = validator.validate_extraction(
-                        pdf_name=pdf_filename,
-                        extracted_nfs=extracted_nfs,
-                        page_categories=page_categories_list,
-                    )
-
-                    logger.info(f"  [Validation] Status: {validation_result['status']}")
-
                     return {
                         "pdf_name": pdf_filename,
                         "mode": mode.value,
@@ -310,7 +203,6 @@ def process_pdf(
                         "page_justifications": page_justifications,  # ADDED: Include justifications
                         "extracted_nf_count": len(extracted_nfs),
                         "extracted_nfs": extracted_nfs,
-                        "validation": validation_result,
                         "fast_path": True,  # Indicates we skipped classification
                     }
 
@@ -464,33 +356,12 @@ def process_pdf(
                     "extracted_nfs": extracted_nfs,
                 }
 
-        # STEP 5: Validation and Classification
+        # STEP 5: return the final result.
+        # (Compliance validation used to run here; its result was never read by
+        # the JSON per-page output path, only computed and discarded — removed
+        # along with utils/compliance/'s dead ComplianceValidator machinery.)
         if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
-            logger.info("  [Step 5/5] Validating against expected NFs...")
-            # NOTE: Validation rules are disabled - all validation will be done in BigQuery
-            # Only keeping validation structure for NF matching logic
-            _t_validacao_start = time.time()
-            validator = ComplianceValidator(
-                expected_nfs=expected_nfs,
-                use_bigquery_deduplication=False,  # TEMPORARILY DISABLED: Avoid repeated BigQuery queries
-                rules=[UnmappedDocumentTypeRule()],
-                min_match_score=processor.min_match_score,
-            )
-
-            # Get page categories list for validation
-            page_categories_list = [page_categories.get(i) for i in range(1, total_pages + 1)]
-
-            validation_result = validator.validate_extraction(
-                pdf_name=pdf_filename,
-                extracted_nfs=extracted_nfs,
-                page_categories=page_categories_list,
-            )
-            _t_validacao = time.time() - _t_validacao_start
-
-            classifications = _build_classifications(expected_nfs, validation_result)
-
-            logger.info("  [OK] Validation complete")
-            logger.debug(f"    Summary: {validation_result.get('summary', {})}")
+            logger.info("  [OK] Processing complete")
 
             return {
                 "pdf_name": pdf_filename,
@@ -503,11 +374,8 @@ def process_pdf(
                 "extracted_nf_count": len(extracted_nfs),
                 "extracted_nfs": extracted_nfs,
                 "expected_nf_count": len(expected_nfs),
-                "validation": validation_result,
-                "classifications": classifications,
                 # Timing fields (None = not measured / all cache hits)
                 "_t_preprocess_sec": _t_preprocess,
-                "_t_validacao_sec": _t_validacao,
                 "_t_classif_wall_sec": _t_classif_wall,
             }
 
@@ -529,9 +397,8 @@ def process_pdf(
             "page_justifications": local_vars.get("page_justifications", {}),
             "nf_pages": local_vars.get("nf_pages", []),
             "extracted_nfs": local_vars.get("extracted_nfs", []),
-            # Timing fields — partial values from whatever was measured before the error
+            # Timing field — partial value from whatever was measured before the error
             "_t_preprocess_sec": local_vars.get("_t_preprocess"),
-            "_t_validacao_sec": local_vars.get("_t_validacao"),
         }
 
     finally:
