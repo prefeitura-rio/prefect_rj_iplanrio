@@ -449,7 +449,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             mode=mode_enum,
             max_workers=workers,
             keep_pdfs=keep_pdfs,
-            experiment_id=experiment_id,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
         )

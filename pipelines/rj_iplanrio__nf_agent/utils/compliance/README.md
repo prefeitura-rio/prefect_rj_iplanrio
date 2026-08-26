@@ -9,9 +9,8 @@ pipeline's official per-page output, written to
 
 | File | Used by | Purpose |
 |---|---|---|
-| `utils.py` | `metadata.py`, `nfst_fatura_cross_page_merger.py`, `bigquery_loader.py` | `normalize_cnpj`, `normalize_number`, `normalize_value`, `extract_core_numero`, `fuzzy_match_numero`, `parse_date_flexible`, `DocumentFields`, `match_score_3_fields` — the exact matching logic `build_json_output` uses to compute `match_id_documento` per page. |
+| `utils.py` | `metadata.py`, `nfst_fatura_cross_page_merger.py` | `normalize_cnpj`, `normalize_number`, `normalize_value`, `extract_core_numero`, `fuzzy_match_numero`, `parse_date_flexible`, `DocumentFields`, `match_score_3_fields` — the exact matching logic `build_json_output` uses to compute `match_id_documento` per page. |
 | `nfst_fatura_cross_page_merger.py` | `process.py` (unconditionally, every PDF) | Links NFST pages to their Fatura page within the same telecom billing cycle, filling in `valor_total` on the NFST side. |
-| `document_prioritizer.py` | `database.py` (legacy `output_mode="excel"` path only) | Picks the highest-priority document type when multiple extracted docs would otherwise tie. |
 
 ## What used to be here and isn't anymore
 
@@ -26,12 +25,13 @@ human-readable report builder — `core.py`, `matching.py`, `validate.py`,
 **It was dead weight.** `process_pdf` called
 `ComplianceValidator.validate_extraction()` on every single PDF — including a
 real BigQuery query (`get_company_start_date`) per unique extracted CNPJ — but
-`build_json_output` (the pipeline's only official output format; the earlier
-`output_mode="excel"` CSV path is legacy and not exposed as a Prefect
-parameter) never read the result. It computed `match_id_documento` itself,
-independently, via `match_score_3_fields` directly against the input
-declarations — the entire rule-engine's output was thrown away, unread, after
-paying for it in BigQuery calls and CPU on every run.
+`build_json_output` (the pipeline's only supported output format — JSON is
+now hardcoded, the old `output_mode="excel"` CSV path and everything that only
+existed to feed it, including `document_prioritizer.py`, were removed) never
+read the result. It computed `match_id_documento` itself, independently, via
+`match_score_3_fields` directly against the input declarations — the entire
+rule-engine's output was thrown away, unread, after paying for it in
+BigQuery calls and CPU on every run.
 
 If a rule-engine-style classification is needed again in the future, it
 belongs downstream in BigQuery (the `despesa_classificada` view already
