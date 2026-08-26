@@ -29,13 +29,13 @@ from .categories import (  # noqa: F401  (re-exported; public API)
     normalize_category,
     similarity_score,
 )
-from .page_classification import (  # noqa: F401  (re-exported; public API)
+from .page_classification import (
     DEFAULT_GENERATION_CONFIG,
     DEFAULT_MODEL_NAME,
     ClassificationOptions,
     classify_page_with_model,
 )
-from .page_extraction import extract_page_as_bytes  # noqa: F401  (re-exported; public API)
+from .page_extraction import extract_page_as_bytes
 
 logger = logging.getLogger(__name__)
 

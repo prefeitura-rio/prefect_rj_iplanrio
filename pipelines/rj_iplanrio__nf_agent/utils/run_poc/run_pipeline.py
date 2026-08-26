@@ -115,9 +115,7 @@ def prepare_output_for_bq(df: pd.DataFrame, timestamp: datetime) -> pd.DataFrame
     if "nf_extraida_pdf_modelo" in df.columns:
         if "indicador_nf_encontrada_modelo" in df.columns:
             df = df.drop(columns=["indicador_nf_encontrada_modelo"])
-        df = df.rename(
-            columns={"nf_extraida_pdf_modelo": "indicador_nf_encontrada_modelo"}
-        )
+        df = df.rename(columns={"nf_extraida_pdf_modelo": "indicador_nf_encontrada_modelo"})
 
     # 3 — add timestamp_geracao
     df["timestamp_geracao"] = timestamp
@@ -239,9 +237,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             str(default_gcs_creds) if default_gcs_creds.exists() else None
         )
         if gcs_credentials and not Path(gcs_credentials).exists():
-            logger.warning(
-                "GCS_CREDENTIALS_PATH set but file not found: %s", gcs_credentials
-            )
+            logger.warning("GCS_CREDENTIALS_PATH set but file not found: %s", gcs_credentials)
             gcs_credentials = None
 
     if gemini_credentials is None:
@@ -249,17 +245,13 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             str(default_gemini_creds) if default_gemini_creds.exists() else None
         )
         if gemini_credentials and not Path(gemini_credentials).exists():
-            logger.warning(
-                "GEMINI_CREDENTIALS_PATH set but file not found: %s", gemini_credentials
-            )
+            logger.warning("GEMINI_CREDENTIALS_PATH set but file not found: %s", gemini_credentials)
             gemini_credentials = None
 
     # If using BQ input, read the batch now (ADC already set up) and dump to temp CSV
     if bq_input_table:
         if not bq_status_table:
-            raise ValueError(
-                "bq_status_table is required when bq_input_table is provided."
-            )
+            raise ValueError("bq_status_table is required when bq_input_table is provided.")
 
         from .bq_input_reader import BQInputReader
 
@@ -267,12 +259,8 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
         # If force_reprocess, reset all rows back to pendente before reading the batch
         if force_reprocess:
-            logger.warning(
-                "FORCE REPROCESS: resetting ALL rows in controle_processamento to pendente"
-            )
-            reset_query = load_query(
-                __file__, "reset_status_to_pendente", status_table=bq_status_table
-            )
+            logger.warning("FORCE REPROCESS: resetting ALL rows in controle_processamento to pendente")
+            reset_query = load_query(__file__, "reset_status_to_pendente", status_table=bq_status_table)
             reset_job = bq_reader.client.query(reset_query)
             reset_job.result()
             reset_rows = reset_job.num_dml_affected_rows or 0
@@ -343,9 +331,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     if experiment_id:
         config_path = Path(f"../experiments/configs/{experiment_id}.yaml")
         if not config_path.exists():
-            raise FileNotFoundError(
-                f"Experiment config not found: {config_path}\nCreate config file at: {config_path}"
-            )
+            raise FileNotFoundError(f"Experiment config not found: {config_path}\nCreate config file at: {config_path}")
 
         with config_path.open(encoding="utf-8") as f:
             experiment_config = yaml.safe_load(f)
@@ -371,9 +357,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                 keep_pdfs = experiment_config["pipeline"]["keep_pdfs"]
 
         logger.info("Experiment: loading from config %s", config_path)
-        logger.info(
-            "Experiment: classification prompt = %s", prompt_versions["classification"]
-        )
+        logger.info("Experiment: classification prompt = %s", prompt_versions["classification"])
         logger.info("Experiment: extraction prompt = %s", prompt_versions["extraction"])
         if limit:
             logger.info("Experiment: processing limit = %d PDFs", limit)
@@ -383,9 +367,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             rate_limiting_config = experiment_config["rate_limiting"]
             if rate_limiting_config.get("enabled", True):
                 max_concurrent = rate_limiting_config.get("max_concurrent", 50)
-                requests_per_minute = rate_limiting_config.get(
-                    "requests_per_minute", 600
-                )
+                requests_per_minute = rate_limiting_config.get("requests_per_minute", 600)
 
                 from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
@@ -413,9 +395,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             extraction_versions = list_available_versions("extraction")
 
             prompt_versions = {
-                "classification": (
-                    classification_versions[-1] if classification_versions else "v1"
-                ),
+                "classification": (classification_versions[-1] if classification_versions else "v1"),
                 "extraction": extraction_versions[-1] if extraction_versions else "v1",
             }
 
@@ -428,9 +408,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         # Initialize rate limiter with flow parameters
         from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
-        rate_limiter = initialize_rate_limiter(
-            max_concurrent=max_concurrent, requests_per_minute=requests_per_minute
-        )
+        rate_limiter = initialize_rate_limiter(max_concurrent=max_concurrent, requests_per_minute=requests_per_minute)
         logger.info(
             "RateLimiter enabled: max_concurrent=%d, rpm=%d (%.1f RPS)",
             max_concurrent,
@@ -455,16 +433,10 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
         outputs_dir.mkdir(parents=True, exist_ok=True)
         output_path = (
-            outputs_dir / "results.xlsx"
-            if experiment_id
-            else outputs_dir / f"poc_results_{mode}_{timestamp}.xlsx"
+            outputs_dir / "results.xlsx" if experiment_id else outputs_dir / f"poc_results_{mode}_{timestamp}.xlsx"
         )
 
-    _creds_label = (
-        str(gcs_credentials)
-        if gcs_credentials
-        else "ADC / Infisical (GOOGLE_APPLICATION_CREDENTIALS)"
-    )
+    _creds_label = str(gcs_credentials) if gcs_credentials else "ADC / Infisical (GOOGLE_APPLICATION_CREDENTIALS)"
 
     if bq_input_table:
         logger.info(
@@ -591,12 +563,8 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                 # bq_status_table format: "project.dataset.table"
                 _ref = bq_status_table or output_table or ""
                 _ref_parts = _ref.split(".")
-                bq_project = os.getenv("BIGQUERY_PROJECT_ID") or (
-                    _ref_parts[0] if len(_ref_parts) >= 3 else None
-                )
-                bq_dataset = os.getenv("BIGQUERY_DATASET_ID") or (
-                    _ref_parts[1] if len(_ref_parts) >= 3 else None
-                )
+                bq_project = os.getenv("BIGQUERY_PROJECT_ID") or (_ref_parts[0] if len(_ref_parts) >= 3 else None)
+                bq_dataset = os.getenv("BIGQUERY_DATASET_ID") or (_ref_parts[1] if len(_ref_parts) >= 3 else None)
 
                 bq_writer = BigQueryWriter(
                     project_id=bq_project,
@@ -653,9 +621,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
 def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="POC Pipeline - Process NF database with GCS integration and caching"
-    )
+    parser = argparse.ArgumentParser(description="POC Pipeline - Process NF database with GCS integration and caching")
 
     # Paths
     parser.add_argument(

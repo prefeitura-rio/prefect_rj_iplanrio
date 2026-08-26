@@ -9,8 +9,8 @@ import fitz  # PyMuPDF
 
 from ..core.classifiers.gemini_classifier import GeminiClassifier
 from ..extraction import NFExtractor
-from ..run_poc.sqlite_cache_manager import DatabaseManager
 from ..run_poc.gcs_downloader import GCSDownloader
+from ..run_poc.sqlite_cache_manager import DatabaseManager
 
 if TYPE_CHECKING:
     from .processor import POCProcessor

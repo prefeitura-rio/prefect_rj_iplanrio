@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 from pypdf import PdfReader
 
 from ..core.config import GEMINI_CONFIG
-from . import coalesce, prompt as prompt_module
+from . import coalesce
+from . import prompt as prompt_module
 
 if TYPE_CHECKING:
     from .extractor import NFExtractor

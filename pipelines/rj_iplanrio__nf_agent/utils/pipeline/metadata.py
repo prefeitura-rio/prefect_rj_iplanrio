@@ -282,9 +282,7 @@ def generate_metadata(
     nf_encontrada_counts = (
         results_df["indicador_nf_encontrada_modelo"].value_counts().to_dict() if not results_df.empty else {}
     )
-    classification_counts = (
-        results_df["classificacao_modelo"].value_counts().to_dict() if not results_df.empty else {}
-    )
+    classification_counts = results_df["classificacao_modelo"].value_counts().to_dict() if not results_df.empty else {}
 
     # Map to legacy format for compatibility
     total_nf_encontrada = nf_encontrada_counts.get(True, 0)

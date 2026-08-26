@@ -123,9 +123,7 @@ def validate_extraction(
     for item in missing_nfs:
         classification_counts[item.get("classification", "Suspect")] += 1
 
-    logger.info(
-        f"Validation complete for {pdf_name}: {len(correctly_extracted)} matched, {len(missing_nfs)} missing"
-    )
+    logger.info(f"Validation complete for {pdf_name}: {len(correctly_extracted)} matched, {len(missing_nfs)} missing")
 
     return {
         "status": status,

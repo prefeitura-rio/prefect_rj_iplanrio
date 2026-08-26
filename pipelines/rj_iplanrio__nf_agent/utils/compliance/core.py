@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from iplanrio_agent_toolkit.rules import Rule, RuleResult, RuleEngine
+from iplanrio_agent_toolkit.rules import Rule, RuleEngine, RuleResult
 
 from .rules import DEFAULT_RULES
 from .utils import normalize_cnpj, normalize_number, normalize_value

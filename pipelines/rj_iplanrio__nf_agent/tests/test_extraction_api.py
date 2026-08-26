@@ -36,7 +36,9 @@ class FakeGeminiResponse:
         self.candidates = candidates or []
 
 
-def make_extractor(model_name: str = "gemini-3.1-flash-lite", batch_size: int = 5, prompt: str = "PROMPT") -> NFExtractor:
+def make_extractor(
+    model_name: str = "gemini-3.1-flash-lite", batch_size: int = 5, prompt: str = "PROMPT"
+) -> NFExtractor:
     """Build a bare NFExtractor without running the real (credential-requiring) __init__."""
     extractor = NFExtractor.__new__(NFExtractor)
     extractor.model_name = model_name

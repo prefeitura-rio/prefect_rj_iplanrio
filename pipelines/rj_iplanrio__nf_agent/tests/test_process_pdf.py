@@ -39,7 +39,7 @@ def make_processor(gcs_downloader=None, temp_dir: Path | None = None, min_match_
     """Build a bare POCProcessor without running the real (I/O-heavy) __init__."""
     proc = POCProcessor.__new__(POCProcessor)
     proc.gcs_downloader = gcs_downloader or MagicMock()
-    proc.temp_dir = temp_dir or Path(".")
+    proc.temp_dir = temp_dir or Path()
     proc.min_match_score = min_match_score
     proc.MAX_INTRA_PDF_WORKERS = 2  # see module docstring: never set in production code today
     return proc
@@ -89,9 +89,7 @@ class TestDownloadBranch:
         proc.preprocess_classification_page = MagicMock(return_value=(1, True))
         proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None))
 
-        result = proc.process_pdf(
-            "some.pdf", expected_nfs=[], mode=ExecutionMode.RUN_CLASSIFICATION, pdf_path=None
-        )
+        result = proc.process_pdf("some.pdf", expected_nfs=[], mode=ExecutionMode.RUN_CLASSIFICATION, pdf_path=None)
 
         assert result["success"] is True
         fake_gcs_downloader.download_pdf_by_name.assert_called_once()
@@ -105,9 +103,7 @@ class TestDownloadBranch:
         proc.preprocess_classification_page = MagicMock(return_value=(1, True))
         proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None))
 
-        result = proc.process_pdf(
-            "some.pdf", expected_nfs=[], mode=ExecutionMode.RUN_CLASSIFICATION, pdf_path=pdf_path
-        )
+        result = proc.process_pdf("some.pdf", expected_nfs=[], mode=ExecutionMode.RUN_CLASSIFICATION, pdf_path=pdf_path)
 
         assert result["success"] is True
         fake_gcs_downloader.download_pdf_by_name.assert_not_called()
@@ -155,9 +151,7 @@ class TestClassificationFastPath:
             )
         )
 
-        result = proc.process_pdf(
-            "cached.pdf", expected_nfs=[], mode=ExecutionMode.RUN_EXTRACTION, pdf_path=pdf_path
-        )
+        result = proc.process_pdf("cached.pdf", expected_nfs=[], mode=ExecutionMode.RUN_EXTRACTION, pdf_path=pdf_path)
 
         assert result["success"] is True
         assert result["mode"] == "run_extraction"
@@ -215,9 +209,7 @@ class TestSlowPathModeShortCircuits:
 
         proc.classify_page_from_cache = MagicMock(side_effect=classify)
 
-        result = proc.process_pdf(
-            "slow.pdf", expected_nfs=[], mode=ExecutionMode.RUN_CLASSIFICATION, pdf_path=pdf_path
-        )
+        result = proc.process_pdf("slow.pdf", expected_nfs=[], mode=ExecutionMode.RUN_CLASSIFICATION, pdf_path=pdf_path)
 
         assert result["success"] is True
         assert result["nf_pages"] == [1]
@@ -327,9 +319,7 @@ class TestExceptionSurfacesPartialState:
 
         proc.classify_page_from_cache = MagicMock(side_effect=classify)
 
-        result = proc.process_pdf(
-            "broken.pdf", expected_nfs=[], mode=ExecutionMode.FULL, pdf_path=pdf_path
-        )
+        result = proc.process_pdf("broken.pdf", expected_nfs=[], mode=ExecutionMode.FULL, pdf_path=pdf_path)
 
         assert result["success"] is False
         assert "Gemini classification API call failed" in result["error"]
@@ -350,9 +340,7 @@ class TestExceptionSurfacesPartialState:
         proc.preprocess_extraction_pdf = MagicMock(return_value=(10, True))
         proc.extract_nf_from_cache = MagicMock(side_effect=RuntimeError("Gemini extraction API call failed"))
 
-        result = proc.process_pdf(
-            "broken2.pdf", expected_nfs=[], mode=ExecutionMode.FULL, pdf_path=pdf_path
-        )
+        result = proc.process_pdf("broken2.pdf", expected_nfs=[], mode=ExecutionMode.FULL, pdf_path=pdf_path)
 
         assert result["success"] is False
         assert "Gemini extraction API call failed" in result["error"]

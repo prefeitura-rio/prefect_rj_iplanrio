@@ -302,8 +302,7 @@ def process_database(
     _n_ok = sum(1 for r in pdf_results.values() if r.get("success"))
     _n_fail = _n_total - _n_ok
     logger.info(
-        f"[Progress] Done: {_n_ok} OK, {_n_fail} FAIL "
-        f"in {_t_core_wall:.0f}s ({_t_core_wall / _n_total:.1f}s/pdf avg)"
+        f"[Progress] Done: {_n_ok} OK, {_n_fail} FAIL in {_t_core_wall:.0f}s ({_t_core_wall / _n_total:.1f}s/pdf avg)"
     )
 
     # ── Top 5 slowest PDFs ──
@@ -462,7 +461,9 @@ def process_database(
             observacao_modelo = None  # Pure LLM output from extraction (if exists)
             justificativa_modelo = None  # From classification phase (only when NF found)
             categoria_modelo = None  # From classification phase (only when NF found)
-            indicador_nf_encontrada = False  # Indica se esta declaração teve match com alguma NF extraída (2/3 campos: CNPJ + número + data)
+            indicador_nf_encontrada = (
+                False  # Indica se esta declaração teve match com alguma NF extraída (2/3 campos: CNPJ + número + data)
+            )
             nf_extraida_pdf = (
                 len(result.get("extracted_nfs", [])) > 0
             )  # Indica se alguma NF foi extraída do PDF (independente de match com declaração)
@@ -578,10 +579,7 @@ def process_database(
                     justificativa_modelo = page_justification
                     categoria_modelo = page_categories.get(pagina_nf_modelo)
                     # Check if page was classified as "Not Analyzable"
-                    if (
-                        "não analisável" in page_justification.lower()
-                        or "not analyzable" in page_justification.lower()
-                    ):
+                    if "não analisável" in page_justification.lower() or "not analyzable" in page_justification.lower():
                         classificacao_modelo = "Not Analyzable"
 
                 # Check if validator set "Apontamento Leve" classification
@@ -770,9 +768,7 @@ def process_database(
 
             with open(output_path, "w", encoding="utf-8") as _fh:
                 _json.dump(json_items, _fh, ensure_ascii=False, indent=2, default=str)
-            ok_with_doc = sum(
-                1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"]
-            )
+            ok_with_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
             ok_without_doc = sum(
                 1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"]
             )

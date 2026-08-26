@@ -29,12 +29,12 @@ _stream_handler.setFormatter(formatter)
 
 logger.addHandler(_stream_handler)
 
-from . import cache, database, process, setup
-from .modes import ExecutionMode  # noqa: F401  (re-exported; public API)
 from ..core.classifiers.gemini_classifier import GeminiClassifier
 from ..extraction import NFExtractor
-from ..run_poc.sqlite_cache_manager import DatabaseManager
 from ..run_poc.gcs_downloader import GCSDownloader
+from ..run_poc.sqlite_cache_manager import DatabaseManager
+from . import cache, database, process, setup
+from .modes import ExecutionMode
 
 
 class POCProcessor:

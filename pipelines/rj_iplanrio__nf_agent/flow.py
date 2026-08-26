@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 from prefect import flow
 
 from .tasks import (
@@ -23,8 +24,6 @@ from .tasks import (
     write_run_summary_task,
 )
 from .utils import BatchRunParams
-from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
-
 
 
 @flow(log_prints=True)

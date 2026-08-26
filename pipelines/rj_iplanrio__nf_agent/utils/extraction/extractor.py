@@ -11,7 +11,9 @@ method surface other modules and tests call directly (e.g. ``extract_from_pdf``,
 
 from pathlib import Path
 
-from . import api, auth, coalesce, pdf as pdf_module, prompt as prompt_module
+from . import api, auth, coalesce
+from . import pdf as pdf_module
+from . import prompt as prompt_module
 
 
 class NFExtractor:
