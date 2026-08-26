@@ -1,4 +1,5 @@
--- O limite cresce 100 por dia útil a partir da data de início da campanha (start_date_placeholder).
+-- O limite cresce 100 por dia útil
+.
 SELECT * EXCEPT (rn)
 FROM (
     SELECT
