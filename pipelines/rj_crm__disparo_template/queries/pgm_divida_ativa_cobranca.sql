@@ -186,6 +186,7 @@ FROM tmp_grupos;
 -- ===================== 3) Estrutura dados para o disparo =====================
 -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por
 -- CPF) e é descartado do CSV pelo de_columns antes do envio à Data Extension.
+-- O limite cresce 100 por dia útil a partir de {start_date_placeholder} (data de início da campanha).
 SELECT
     celular_disparo AS telefone,
     CAST(cpf AS STRING) AS SubscriberKey,
@@ -200,6 +201,16 @@ SELECT
             nome
         )
     ) AS nome_sobrenome
-FROM tmp_grupos
-ORDER BY ordem_sorteio
-LIMIT cast({limit_placeholder} as int64);
+FROM (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (ORDER BY ordem_sorteio) AS rn
+    FROM tmp_grupos
+)
+WHERE rn <= (
+    -- dias úteis desde start_date (inclusivo: start_date = dia 1)
+    DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-08-19'), DAY)
+    - DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-08-19'), WEEK)        -- remove domingos
+    - DATE_DIFF(DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 1 DAY), DATE_ADD(DATE('2026-08-19'), INTERVAL 1 DAY), WEEK)  -- remove sábados
+    + 1  -- start_date conta como dia 1
+) * 100;
