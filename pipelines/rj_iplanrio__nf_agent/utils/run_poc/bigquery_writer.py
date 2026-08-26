@@ -12,7 +12,6 @@ import json
 from datetime import UTC, datetime
 
 import pandas as pd
-from google.cloud import bigquery
 from iplanrio_agent_toolkit.bigquery import BigQueryClient
 
 from prefect_rj_iplanrio.logging import get_logger
@@ -103,53 +102,6 @@ class BigQueryWriter(BigQueryClient):
             table_id=table_id,
             write_mode=write_mode,
             add_timestamp_column="processed_at" if add_timestamp else None,
-        )
-
-    def create_partitioned_table(
-        self,
-        table_id: str,
-        partition_field: str = "processed_at",
-        partition_type: str = "DAY",
-        clustering_fields: list | None = None,
-    ):
-        """
-        Create a partitioned table (useful for large result tables).
-
-        Uses the fixed ``nf_pipeline_results`` schema — this is NF-pipeline
-        domain knowledge that the generic ``BigQueryClient.create_partitioned_table``
-        deliberately requires callers to supply explicitly.
-
-        :param table_id: Table ID to create.
-        :param partition_field: Field to partition by (must be DATE/TIMESTAMP).
-        :param partition_type: Partition granularity (DAY, HOUR, MONTH, YEAR).
-        :param clustering_fields: Optional list of fields to cluster by
-            (e.g., ['pdf_name', 'classification']).
-
-        Example::
-
-            # Create partitioned table for pipeline results
-            writer.create_partitioned_table(
-                'nf_pipeline_results',
-                partition_field='processed_at',
-                partition_type='DAY',
-                clustering_fields=['pdf_name', 'classification']
-            )
-        """
-        schema = [
-            bigquery.SchemaField("pdf_name", "STRING"),
-            bigquery.SchemaField("id_documento", "STRING"),
-            bigquery.SchemaField("classification", "STRING"),
-            bigquery.SchemaField("extracted_nfs", "STRING"),  # JSON string
-            bigquery.SchemaField("validation_notes", "STRING"),
-            bigquery.SchemaField("processing_time_seconds", "FLOAT"),
-            bigquery.SchemaField(partition_field, "TIMESTAMP"),
-        ]
-        return super().create_partitioned_table(
-            table_id=table_id,
-            schema=schema,
-            partition_field=partition_field,
-            partition_type=partition_type,
-            clustering_fields=clustering_fields,
         )
 
     def _run_upsert_merge(self, status_table: str, status_rows: list, now: datetime) -> None:
@@ -298,28 +250,3 @@ class BigQueryWriter(BigQueryClient):
             );
         """
         self.insert_row(pipeline_runs_table, row)
-
-    def query_results(
-        self,
-        table_id: str,
-        filters: dict | None = None,
-        limit: int | None = None,
-    ) -> pd.DataFrame:
-        """
-        Query results from BigQuery table.
-
-        :param table_id: Source table ID.
-        :param filters: Optional dict of filters (same format as GCSCSVReader).
-        :param limit: Max rows to return.
-        :returns: DataFrame with query results.
-
-        Example::
-
-            # Get all OK results
-            df = writer.query_results(
-                'nf_pipeline_results',
-                filters={'classification': 'OK'},
-                limit=1000
-            )
-        """
-        return self.query_dataframe(table_id=table_id, filters=filters, limit=limit)
