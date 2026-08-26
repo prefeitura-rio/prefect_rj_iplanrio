@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
-from .prompts import CLASSIFICATION_PROMPT
+from ..prompts import CLASSIFICATION_PROMPT
 
 if TYPE_CHECKING:
     # google-generativeai is an optional extra (see pyproject.toml [gemini]);

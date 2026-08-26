@@ -13,7 +13,6 @@ from pathlib import Path
 
 from . import api, auth, coalesce
 from . import pdf as pdf_module
-from . import prompt as prompt_module
 
 
 class NFExtractor:
@@ -47,14 +46,6 @@ class NFExtractor:
         """Lazy load Gemini model. See ``auth.get_model``."""
         return auth.get_model(self)
 
-    def _build_prompt_with_hint(self, classification_hint: str | None = None) -> str:
-        """See ``prompt.build_prompt_with_hint``."""
-        return prompt_module.build_prompt_with_hint(self, classification_hint)
-
-    def _parse_response(self, response_text: str) -> dict:
-        """See ``prompt.parse_response``."""
-        return prompt_module.parse_response(response_text)
-
     def _create_filtered_pdf(self, pdf_path: Path, pages: list[int]) -> bytes:
         """See ``pdf.create_filtered_pdf``."""
         return pdf_module.create_filtered_pdf(pdf_path, pages)
@@ -66,10 +57,6 @@ class NFExtractor:
     def _coalesce_nfs_by_numero(self, all_nfs: list[dict]) -> list[dict]:
         """See ``coalesce.coalesce_nfs_by_numero``."""
         return coalesce.coalesce_nfs_by_numero(all_nfs)
-
-    def _count_decimals(self, value: float) -> int:
-        """See ``coalesce.count_decimals``."""
-        return coalesce.count_decimals(value)
 
     def _has_suspicious_decimals(self, notas_fiscais: list[dict]) -> bool:
         """See ``coalesce.has_suspicious_decimals``."""
@@ -88,10 +75,6 @@ class NFExtractor:
             self, pdf_bytes, num_pages, save_api_response, api_response_path, resolved_prompt
         )
 
-    def extract_from_images(self, images: list) -> dict:
-        """See ``api.extract_from_images``."""
-        return api.extract_from_images(self, images)
-
     def extract_from_pdf(
         self,
         pdf_path: Path,
@@ -109,26 +92,3 @@ class NFExtractor:
             api_response_output_dir=api_response_output_dir,
             page_classifications=page_classifications,
         )
-
-    def extract_batch(self, pdf_dir: Path, output_dir: Path | None = None) -> list[dict]:
-        """See ``api.extract_batch``."""
-        return api.extract_batch(self, pdf_dir, output_dir)
-
-
-def extract_nf_data(
-    pdf_path: Path,
-    pages: list[int] | None = None,
-    service_account_file: str | None = None,
-    api_key: str | None = None,
-) -> dict:
-    """
-    Convenience function to extract NF data from a PDF.
-
-    :param pdf_path: Path to PDF file.
-    :param pages: Specific pages to process (1-indexed).
-    :param service_account_file: Path to Google service account JSON.
-    :param api_key: Google API key.
-    :returns: Extraction result dictionary.
-    """
-    extractor = NFExtractor(service_account_file=service_account_file, api_key=api_key)
-    return extractor.extract_from_pdf(pdf_path, pages=pages)

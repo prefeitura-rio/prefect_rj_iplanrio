@@ -324,7 +324,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                 logger.info("RateLimiter disabled via config")
     else:
         # No experiment - use default versions
-        from .classification.prompts import list_available_versions
+        from .prompts import list_available_versions
 
         if prompt_versions is None:
             classification_versions = list_available_versions("classification")

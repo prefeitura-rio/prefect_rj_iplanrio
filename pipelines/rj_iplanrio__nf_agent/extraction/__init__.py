@@ -1,8 +1,7 @@
 """Package ``extraction`` — extração de dados de Nota Fiscal via Gemini."""
 
-from .extractor import NFExtractor, extract_nf_data
+from .extractor import NFExtractor
 
 __all__ = [
     "NFExtractor",
-    "extract_nf_data",
 ]

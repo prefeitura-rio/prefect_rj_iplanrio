@@ -62,7 +62,7 @@ def initialize(
     processor.quiet = quiet
 
     # Load prompts from specified versions
-    from ..classification.prompts import list_available_versions, load_prompt_version
+    from ..prompts import list_available_versions, load_prompt_version
 
     if prompt_versions is None:
         # Use latest available versions
@@ -98,8 +98,6 @@ def get_classifier(processor: "POCProcessor") -> GeminiClassifier:
     if processor._classifier is None:
         processor._classifier = GeminiClassifier(
             service_account_path=str(processor.gemini_credentials_path) if processor.gemini_credentials_path else None,
-            save_api_responses=False,  # We manage caching ourselves
-            max_workers=10,
             classification_prompt=processor.classification_prompt,
         )
     return processor._classifier

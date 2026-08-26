@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from pypdf import PdfReader
 
-from ..classification.config import GEMINI_CONFIG
+from .config import GEMINI_CONFIG
 from . import coalesce
 from . import prompt as prompt_module
 
@@ -41,8 +41,6 @@ def extract_from_pdf_bytes(
         ``extractor.extraction_prompt`` as-is (placeholder becomes empty string).
     :returns: Extraction result dictionary.
     """
-    import time
-
     from iplanrio_agent_toolkit.metrics_tracker import get_tracker
 
     tracker = get_tracker()
@@ -202,68 +200,6 @@ def extract_from_pdf_bytes(
         "total_paginas": num_pages,
         "notas_fiscais": [],
     }
-
-
-def extract_from_images(extractor: "NFExtractor", images: list) -> dict:
-    """
-    Extract NF data from a list of PIL Images.
-
-    :param extractor: The ``NFExtractor`` instance (supplies the model and prompt).
-    :param images: List of PIL Images (PDF pages).
-    :returns: Extraction result dictionary.
-    """
-    # Import metrics tracker
-    from iplanrio_agent_toolkit.metrics_tracker import get_tracker
-
-    tracker = get_tracker()
-
-    # Build prompt with images
-    prompt_parts = [extractor.extraction_prompt]
-    prompt_parts.extend(images)
-
-    # Rate limiting: acquire permission to make API call
-    from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter
-
-    rate_limiter = get_rate_limiter()
-    rate_limiter.acquire()
-
-    try:
-        api_call_start = time.time()
-        response = extractor.model.generate_content(
-            prompt_parts,
-            generation_config={
-                "temperature": GEMINI_CONFIG["temperature"],
-                "top_p": GEMINI_CONFIG["top_p"],
-                "top_k": GEMINI_CONFIG["top_k"],
-                "max_output_tokens": GEMINI_CONFIG["max_output_tokens"],
-            },
-        )
-        api_call_duration = (time.time() - api_call_start) * 1000
-
-        # Record successful API call
-        tracker.record_call(api_type="extraction", duration_ms=api_call_duration, success=True)
-
-        result = prompt_module.parse_response(response.text)
-        result["processed_successfully"] = True
-        return result
-
-    except Exception as e:
-        elapsed = (time.time() - api_call_start) * 1000 if "api_call_start" in locals() else 0
-
-        # Record failed API call
-        tracker.record_call(api_type="extraction", duration_ms=elapsed, success=False, error_type=str(e))
-
-        return {
-            "processed_successfully": False,
-            "error": str(e),
-            "possui_nota_fiscal": False,
-            "quantidade_notas_fiscais": 0,
-            "total_paginas": len(images),
-            "notas_fiscais": [],
-        }
-    finally:
-        # Always release rate limiter, even if error
-        rate_limiter.release()
 
 
 def _remap_batch_page_numbers(nfs: list[dict], batch_pages: list[int], batch_idx: int | None) -> None:
@@ -642,44 +578,3 @@ def extract_from_pdf(
     return _retry_with_fallback_model(
         extractor, result, pdf_path, pages, save_api_response, api_response_output_dir, page_classifications
     )
-
-
-def extract_batch(extractor: "NFExtractor", pdf_dir: Path, output_dir: Path | None = None) -> list[dict]:
-    """
-    Extract NF data from all PDFs in a directory.
-
-    :param extractor: The ``NFExtractor`` instance.
-    :param pdf_dir: Directory containing PDF files.
-    :param output_dir: Directory to save results (optional).
-    :returns: List of extraction results.
-    """
-    pdf_dir = Path(pdf_dir)
-    pdf_files = list(pdf_dir.glob("*.pdf"))
-    logger.info("Found %d PDF files to process", len(pdf_files))
-
-    results = []
-
-    for idx, pdf_path in enumerate(pdf_files, 1):
-        logger.info("[%d/%d] Processing: %s", idx, len(pdf_files), pdf_path.name)
-
-        result = extractor.extract_from_pdf(pdf_path)
-        results.append(result)
-
-        # Save individual result if output_dir specified
-        if output_dir:
-            output_dir = Path(output_dir)
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            output_file = output_dir / f"{pdf_path.stem}_extracted.json"
-            with open(output_file, "w", encoding="utf-8") as f:
-                json.dump(result, f, ensure_ascii=False, indent=2)
-            logger.info("Saved to: %s", output_file.name)
-
-    # Save summary if output_dir specified
-    if output_dir:
-        summary_file = output_dir / "extraction_summary.json"
-        with open(summary_file, "w", encoding="utf-8") as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
-        logger.info("Batch complete. Summary: %s", summary_file)
-
-    return results
