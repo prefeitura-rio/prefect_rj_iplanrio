@@ -186,7 +186,7 @@ FROM tmp_grupos;
 -- ===================== 3) Estrutura dados para o disparo =====================
 -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por
 -- CPF) e é descartado do CSV pelo de_columns antes do envio à Data Extension.
--- O limite cresce 100 por dia útil a partir de {start_date_placeholder} (data de início da campanha).
+-- O limite cresce 100 por dia útil a partir da data de início da campanha (start_date_placeholder).
 SELECT
     celular_disparo AS telefone,
     CAST(cpf AS STRING) AS SubscriberKey,
