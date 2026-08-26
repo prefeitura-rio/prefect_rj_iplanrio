@@ -35,10 +35,14 @@ _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 # sobreviver até a tabela destino — tanto pras sessões que passam pela LLM quanto
 # pras pré-classificadas por regra. _processa (em classifica_sessoes) não as
 # recebe: ela só sabe o que a LLM devolveu, então elas voltam via merge por
-# id_sessao depois.
+# id_sessao depois. mensagens_usuario_concatenadas/hsm_texto entram aqui pra
+# permitir validar a classificação (resumo/motivo/tema) lendo a conversa original
+# direto da tabela destino, sem precisar reconstruir a partir de prompt_enviado
+# (que é null nas sessões RESPOSTA_ATRASADA_BTN, decididas por regra sem LLM).
 _COLUNAS_METADADO_SESSAO = [
     "id_sessao", "telefone", "cpf", "nome_cidadao", "sessao_inicio_datahora",
     "sessao_fim_datahora", "jornada_nome", "id_jornada", "id_disparo_hsm", "hsm_envio_datahora",
+    "mensagens_usuario_concatenadas", "hsm_texto",
 ]
 _TEMPLATE_COM_HSM = (_PROMPTS_DIR / "classificacao_hsm.txt").read_text()
 _TEMPLATE_SEM_HSM = (_PROMPTS_DIR / "classificacao_sem_hsm.txt").read_text()

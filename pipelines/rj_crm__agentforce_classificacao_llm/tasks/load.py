@@ -36,6 +36,11 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("id_jornada", _STRING),
     bigquery.SchemaField("id_disparo_hsm", _STRING),
     bigquery.SchemaField("hsm_envio_datahora", _TIMESTAMP),
+    # Conversa/HSM originais — pra permitir validar resumo/motivo/tema/classificacao
+    # lendo direto daqui, sem precisar reconstruir a partir de prompt_enviado (que é
+    # null nas sessões RESPOSTA_ATRASADA_BTN, decididas por regra sem chamar a LLM).
+    bigquery.SchemaField("mensagens_usuario_concatenadas", _STRING),
+    bigquery.SchemaField("hsm_texto", _STRING),
     # com_hsm | sem_hsm | null (resposta_atrasada_btn não passa por prompt nenhum —
     # ver coluna `modelo` pra saber que foi decidida por regra)
     bigquery.SchemaField("tipo_prompt", _STRING),
