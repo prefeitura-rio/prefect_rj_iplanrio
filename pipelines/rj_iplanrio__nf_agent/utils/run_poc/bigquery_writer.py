@@ -61,49 +61,6 @@ def _has_rate_limit_error(classification_detail, pipeline_error=None) -> bool:
 class BigQueryWriter(BigQueryClient):
     """Write pipeline results to BigQuery table."""
 
-    def write_results(
-        self,
-        df: pd.DataFrame,
-        table_id: str,
-        write_mode: str = "WRITE_APPEND",
-        add_timestamp: bool = True,
-    ) -> dict:
-        """
-        Write results DataFrame to BigQuery table.
-
-        :param df: Results DataFrame to write.
-        :param table_id: Target table ID (e.g., 'nf_pipeline_results').
-        :param write_mode: Write mode (default: WRITE_APPEND).
-            Options:
-              - WRITE_APPEND: Append to existing table
-              - WRITE_TRUNCATE: Replace table contents
-              - WRITE_EMPTY: Only write if table is empty
-        :param add_timestamp: If True, add 'processed_at' column with current timestamp.
-        :returns: Dict with load job stats:
-            - table: Full table reference
-            - rows_written: Number of rows written
-            - bytes_processed: Bytes processed
-            - job_id: BigQuery job ID
-
-        Example::
-
-            # Append results
-            writer.write_results(results_df, 'nf_pipeline_results')
-
-            # Replace table
-            writer.write_results(
-                results_df,
-                'nf_pipeline_results',
-                write_mode='WRITE_TRUNCATE'
-            )
-        """
-        return self.write_dataframe(
-            df=df,
-            table_id=table_id,
-            write_mode=write_mode,
-            add_timestamp_column="processed_at" if add_timestamp else None,
-        )
-
     def _run_upsert_merge(self, status_table: str, status_rows: list, now: datetime) -> None:
         """
         MERGE status rows into the control table.

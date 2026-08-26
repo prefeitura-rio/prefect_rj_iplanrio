@@ -28,7 +28,6 @@ def initialize(
     prompt_versions: dict[str, str] | None = None,
     extraction_batch_size: int = 5,
     min_match_score: int = 2,
-    output_mode: str = "excel",
     match_requires_pdf_name: bool = False,
 ) -> None:
     """
@@ -48,11 +47,8 @@ def initialize(
     :param min_match_score: Minimum fields (CNPJ + número + data) that must match for a
         declaration to be considered found (2 = legacy 2/3 fallback,
         3 = strict perfect match only). Default: 2.
-    :param output_mode: Output format for process_database results.
-        "excel" (default) saves an .xlsx file.
-        "json"  saves a per-page JSON file (no BQ/GCS writes).
-    :param match_requires_pdf_name: Controls the scope of declaration matching in JSON
-        output mode. When True (legacy behaviour), each page's
+    :param match_requires_pdf_name: Controls the scope of declaration matching. When
+        True (legacy behaviour), each page's
         match_id_documento only considers declarations whose pdf_name
         matches the current PDF. When False (default), all declarations
         in the input are considered regardless of which PDF they point
@@ -80,7 +76,6 @@ def initialize(
     processor.prompt_versions = prompt_versions
     processor.extraction_batch_size = extraction_batch_size
     processor.min_match_score = min_match_score
-    processor.output_mode = output_mode
     processor.match_requires_pdf_name = match_requires_pdf_name
 
     # Load the actual prompt content

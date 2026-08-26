@@ -470,7 +470,6 @@ def process_single_pdf_worker(
             prompt_versions=processor.prompt_versions,
             extraction_batch_size=processor.extraction_batch_size,
             min_match_score=processor.min_match_score,
-            output_mode=processor.output_mode,
         )
         logger.debug(f"[DEBUG Thread {thread_id}] [OK] POCProcessor created")
 

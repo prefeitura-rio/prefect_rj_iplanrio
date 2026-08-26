@@ -747,49 +747,44 @@ def process_database(
     else:
         logger.info(results_df["classificacao_modelo"].value_counts())
 
-    # Save output — format depends on output_mode
-    json_items = None  # populated below when output_mode == "json"
+    # Save output — per-page JSON is the only supported format.
+    json_items = None  # populated below when output_path is set
     if output_path:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if processor.output_mode == "json":
-            # Build and save per-page JSON (no BQ/GCS writes here — caller handles GCS/BQ)
-            _run_ts = datetime.utcnow()
-            json_items = metadata.build_json_output(
-                pdf_tasks=pdf_tasks,
-                pdf_results=pdf_results,
-                input_df=df,
-                min_match_score=processor.min_match_score,
-                match_requires_pdf_name=processor.match_requires_pdf_name,
-                timestamp_geracao=_run_ts,
-                versao_pipeline=metadata.build_versao_pipeline(
-                    processor,
-                    mode=mode,
-                    workers=max_workers,
-                    requests_per_minute=requests_per_minute,
-                    max_concurrent=max_concurrent,
-                ),
-                versao_prompt=metadata.build_versao_prompt(processor),
-            )
-            import json as _json
+        # Build and save per-page JSON (no BQ/GCS writes here — caller handles GCS/BQ)
+        _run_ts = datetime.utcnow()
+        json_items = metadata.build_json_output(
+            pdf_tasks=pdf_tasks,
+            pdf_results=pdf_results,
+            input_df=df,
+            min_match_score=processor.min_match_score,
+            match_requires_pdf_name=processor.match_requires_pdf_name,
+            timestamp_geracao=_run_ts,
+            versao_pipeline=metadata.build_versao_pipeline(
+                processor,
+                mode=mode,
+                workers=max_workers,
+                requests_per_minute=requests_per_minute,
+                max_concurrent=max_concurrent,
+            ),
+            versao_prompt=metadata.build_versao_prompt(processor),
+        )
+        import json as _json
 
-            with open(output_path, "w", encoding="utf-8") as _fh:
-                _json.dump(json_items, _fh, ensure_ascii=False, indent=2, default=str)
-            ok_with_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
-            ok_without_doc = sum(
-                1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"]
-            )
-            erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
-            logger.info(f"\n[SUCCESS] JSON results saved to: {output_path}")
-            logger.info(
-                f"          {len(json_items)} páginas ({ok_with_doc} com documento, "
-                f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
-            )
-        else:
-            json_items = None
-            results_df.to_excel(output_path, index=False)
-            logger.info(f"\n[SUCCESS] Results saved to: {output_path}")
+        with open(output_path, "w", encoding="utf-8") as _fh:
+            _json.dump(json_items, _fh, ensure_ascii=False, indent=2, default=str)
+        ok_with_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
+        ok_without_doc = sum(
+            1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"]
+        )
+        erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
+        logger.info(f"\n[SUCCESS] JSON results saved to: {output_path}")
+        logger.info(
+            f"          {len(json_items)} páginas ({ok_with_doc} com documento, "
+            f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
+        )
 
     # Print cache statistics
     logger.info("\nCache Statistics:")
@@ -883,6 +878,6 @@ def process_database(
         logger.info(f"  Extraction prompt: v{metadata_dict['prompts']['extraction']['version']}")
 
     # Return DataFrame, json_items, and timing_stats for this batch.
-    # json_items is None when output_mode != "json" or output_path is not set.
+    # json_items is None only when output_path is not set.
     # timing_stats contains avg_sec_* metrics to be written to pipeline_runs.
     return results_df, json_items, timing_stats

@@ -56,7 +56,6 @@ class POCProcessor:
         prompt_versions: dict[str, str] | None = None,
         extraction_batch_size: int = 5,
         min_match_score: int = 2,
-        output_mode: str = "excel",
         match_requires_pdf_name: bool = False,
     ):
         """Initialize processor. See ``setup.initialize`` for full parameter documentation."""
@@ -70,7 +69,6 @@ class POCProcessor:
             prompt_versions=prompt_versions,
             extraction_batch_size=extraction_batch_size,
             min_match_score=min_match_score,
-            output_mode=output_mode,
             match_requires_pdf_name=match_requires_pdf_name,
         )
 

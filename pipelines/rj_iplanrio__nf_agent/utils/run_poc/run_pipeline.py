@@ -8,7 +8,6 @@ Can be run as:
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -39,7 +38,6 @@ class NfProcessingFlowConfig:
     bq_input_table: str | None = None
     batch_size: int = 1000
     output_path: str | None = None
-    output_table: str | None = None
     gcs_output_base_path: str | None = None
     bq_status_table: str | None = None
     db_path: str = "cache.db"
@@ -60,67 +58,9 @@ class NfProcessingFlowConfig:
     max_retries: int = 3
     extraction_batch_size: int = 5
     min_match_score: int = 2
-    output_mode: str = "excel"
     match_requires_pdf_name: bool = False
     max_pdfs: int | None = None
     force_reprocess: bool = False
-
-
-def prepare_output_for_bq(df: pd.DataFrame, timestamp: datetime) -> pd.DataFrame:
-    """
-    Transform pipeline output into the BQ-ready schema.
-
-    Mirrors the logic from run_poc/analysis/merge_table_prepare_for_bq.ipynb:
-      1. Merge pipeline_classification_detail / pipeline_extraction_detail /
-         pipeline_error into a single 'debug_info' JSON column.
-      2. Drop the original 'indicador_nf_encontrada_modelo' and rename
-         'nf_extraida_pdf_modelo' to 'indicador_nf_encontrada_modelo'.
-      3. Add 'timestamp_geracao'.
-
-    :param df: DataFrame with raw pipeline output
-    :param timestamp: Timestamp to set in 'timestamp_geracao' column
-    :return: DataFrame ready for BigQuery ingestion
-    """
-    df = df.copy()
-
-    # 1 — merge debug columns into debug_info
-    debug_cols = [
-        "pipeline_classification_detail",
-        "pipeline_extraction_detail",
-        "pipeline_error",
-    ]
-    present = [c for c in debug_cols if c in df.columns]
-
-    if present:
-
-        def _merge(row):
-            result = {}
-            for col in present:
-                val = row[col]
-                if isinstance(val, str) and val.strip():
-                    try:
-                        result[col] = json.loads(val)
-                    except (json.JSONDecodeError, ValueError):
-                        result[col] = val
-                elif not isinstance(val, (dict, list)) and pd.isna(val):
-                    result[col] = None
-                else:
-                    result[col] = val
-            return json.dumps(result, ensure_ascii=False)
-
-        df["debug_info"] = df.apply(_merge, axis=1)
-        df = df.drop(columns=present)
-
-    # 2 — rename nf_extraida_pdf_modelo → indicador_nf_encontrada_modelo
-    if "nf_extraida_pdf_modelo" in df.columns:
-        if "indicador_nf_encontrada_modelo" in df.columns:
-            df = df.drop(columns=["indicador_nf_encontrada_modelo"])
-        df = df.rename(columns={"nf_extraida_pdf_modelo": "indicador_nf_encontrada_modelo"})
-
-    # 3 — add timestamp_geracao
-    df["timestamp_geracao"] = timestamp
-
-    return df
 
 
 def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
@@ -141,11 +81,9 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                     per run (default: 1000). Ignored when csv_path is used.
 
     Output options:
-        output_path: Path to save results Excel file (local dev only)
-        output_table: BigQuery table ID to APPEND full results to
-                      (e.g., 'nf_pipeline_results'). Uses BIGQUERY_PROJECT_ID /
-                      BIGQUERY_DATASET_ID env vars for project/dataset.
-        gcs_output_base_path: GCS path prefix for partitioned CSVs
+        output_path: Path to save the per-page JSON results locally (local dev only)
+        gcs_output_base_path: GCS path prefix for the per-page NDJSON output
+                      (written under filename_prefix="extracao_pagina").
                       Set to None to skip GCS output.
         bq_status_table: Full BQ table ID for the processing control table
                       (e.g., 'project.dataset.controle_processamento').
@@ -188,7 +126,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     bq_input_table = config.bq_input_table
     batch_size = config.batch_size
     output_path = config.output_path
-    output_table = config.output_table
     gcs_output_base_path = config.gcs_output_base_path
     bq_status_table = config.bq_status_table
     db_path = config.db_path
@@ -209,7 +146,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     max_retries = config.max_retries
     extraction_batch_size = config.extraction_batch_size
     min_match_score = config.min_match_score
-    output_mode = config.output_mode
     match_requires_pdf_name = config.match_requires_pdf_name
     max_pdfs = config.max_pdfs
     force_reprocess = config.force_reprocess
@@ -433,7 +369,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
         outputs_dir.mkdir(parents=True, exist_ok=True)
         output_path = (
-            outputs_dir / "results.xlsx" if experiment_id else outputs_dir / f"poc_results_{mode}_{timestamp}.xlsx"
+            outputs_dir / "results.json" if experiment_id else outputs_dir / f"poc_results_{mode}_{timestamp}.json"
         )
 
     _creds_label = str(gcs_credentials) if gcs_credentials else "ADC / Infisical (GOOGLE_APPLICATION_CREDENTIALS)"
@@ -441,14 +377,13 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     if bq_input_table:
         logger.info(
             "Pipeline config: mode=%s | bq_input=%s | bq_status=%s | batch=%d | "
-            "gcs_out=%s | bq_out=%s | cache=%s | bucket=%s | gcs_creds=%s | "
+            "gcs_out=%s | cache=%s | bucket=%s | gcs_creds=%s | "
             "gemini_creds=%s | workers=%d | extraction_batch=%d | keep_pdfs=%s | quiet=%s",
             mode,
             bq_input_table,
             bq_status_table,
             batch_size,
             gcs_output_base_path or "(none)",
-            output_table or "(none)",
             db_path,
             gcs_bucket,
             _creds_label,
@@ -460,14 +395,13 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         )
     else:
         logger.info(
-            "Pipeline config: mode=%s | csv=%s | gcs_out=%s | excel_out=%s | bq_out=%s | "
+            "Pipeline config: mode=%s | csv=%s | gcs_out=%s | json_out=%s | "
             "cache=%s | bucket=%s | gcs_creds=%s | gemini_creds=%s | workers=%d | "
             "extraction_batch=%d | keep_pdfs=%s | quiet=%s%s",
             mode,
             csv_path,
             gcs_output_base_path or "(none)",
             output_path or "(none)",
-            output_table or "(none)",
             db_path,
             gcs_bucket,
             _creds_label,
@@ -504,7 +438,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             prompt_versions=prompt_versions,
             extraction_batch_size=extraction_batch_size,
             min_match_score=min_match_score,
-            output_mode=output_mode,
         )
         logger.info("Processor initialized")
         logger.info("Starting processing...")
@@ -535,34 +468,20 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                     credentials_path=gcs_credentials,
                 )
 
-                if json_items is not None:
-                    # output_mode="json": escreve NDJSON por página (novo padrão)
-                    gcs_uri = gcs_writer.write_ndjson(
-                        items=json_items,
-                        base_path=gcs_output_base_path,
-                        filename_prefix="extracao_pagina",
-                        timestamp=run_timestamp,
-                    )
-                else:
-                    # output_mode legado: CSV achatado via prepare_output_for_bq
-                    bq_ready_df = prepare_output_for_bq(results_df, run_timestamp)
-                    gcs_uri = gcs_writer.write_csv(
-                        df=bq_ready_df,
-                        base_path=gcs_output_base_path,
-                        filename_prefix="resultado_extracao_modelo",
-                        timestamp=run_timestamp,
-                    )
+                gcs_uri = gcs_writer.write_ndjson(
+                    items=json_items,
+                    base_path=gcs_output_base_path,
+                    filename_prefix="extracao_pagina",
+                    timestamp=run_timestamp,
+                )
                 logger.info("GCS: results written to %s", gcs_uri)
 
-            if output_table is not None or bq_status_table:
+            if bq_status_table:
                 from .bigquery_writer import BigQueryWriter
-
-                bq_write_mode = os.getenv("BIGQUERY_WRITE_MODE", "WRITE_APPEND")
 
                 # Derive project/dataset from bq_status_table when env vars are absent.
                 # bq_status_table format: "project.dataset.table"
-                _ref = bq_status_table or output_table or ""
-                _ref_parts = _ref.split(".")
+                _ref_parts = bq_status_table.split(".")
                 bq_project = os.getenv("BIGQUERY_PROJECT_ID") or (_ref_parts[0] if len(_ref_parts) >= 3 else None)
                 bq_dataset = os.getenv("BIGQUERY_DATASET_ID") or (_ref_parts[1] if len(_ref_parts) >= 3 else None)
 
@@ -571,23 +490,10 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                     dataset_id=bq_dataset,
                 )
 
-                if output_table is not None:
-                    bq_stats = bq_writer.write_results(
-                        df=results_df,
-                        table_id=output_table,
-                        write_mode=bq_write_mode,
-                    )
-                    logger.info(
-                        "BigQuery: results written to %s (%d rows)",
-                        bq_stats["table"],
-                        bq_stats["rows_written"],
-                    )
-
-                if bq_status_table:
-                    bq_writer.upsert_status(
-                        df_results=results_df,
-                        status_table=bq_status_table,
-                    )
+                bq_writer.upsert_status(
+                    df_results=results_df,
+                    status_table=bq_status_table,
+                )
 
             _escrita_elapsed = time.time() - _t_escrita_start
             timing_stats["wall_sec_escrita"] = round(_escrita_elapsed, 3)
@@ -634,7 +540,7 @@ def main():
         "--output",
         type=Path,
         default=None,
-        help="Path to save results Excel file (default: auto-generated in outputs/)",
+        help="Path to save the per-page JSON results locally (default: auto-generated in outputs/)",
     )
     parser.add_argument(
         "--db",
@@ -739,25 +645,14 @@ def main():
         ),
     )
     parser.add_argument(
-        "--output-mode",
-        type=str,
-        default="excel",
-        dest="output_mode",
-        choices=["excel", "json"],
-        help=(
-            "Output format for results (default: excel). "
-            '"json" saves a per-page JSON file instead of .xlsx (no BQ/GCS writes).'
-        ),
-    )
-    parser.add_argument(
         "--match-requires-pdf-name",
         action="store_true",
         default=False,
         dest="match_requires_pdf_name",
         help=(
-            "No output mode JSON: restringe o match de declarações ao pdf_name do PDF "
-            "sendo processado (comportamento legado). Por padrão (False) todas as "
-            "declarações do input são candidatas, permitindo análise cross-PDF no BigQuery."
+            "Restringe o match de declarações ao pdf_name do PDF sendo processado "
+            "(comportamento legado). Por padrão (False) todas as declarações do input "
+            "são candidatas, permitindo análise cross-PDF no BigQuery."
         ),
     )
 
@@ -779,7 +674,6 @@ def main():
         experiment_id=args.experiment,
         extraction_batch_size=args.extraction_batch_size,
         min_match_score=args.min_match_score,
-        output_mode=args.output_mode,
         match_requires_pdf_name=args.match_requires_pdf_name,
     )
 
