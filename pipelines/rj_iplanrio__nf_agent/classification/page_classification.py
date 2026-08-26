@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
 from ..prompts import CLASSIFICATION_PROMPT
+from .config import DEFAULT_GENERATION_CONFIG, DEFAULT_MODEL_NAME
 
 if TYPE_CHECKING:
     # google-generativeai is an optional extra (see pyproject.toml [gemini]);
@@ -20,17 +21,6 @@ if TYPE_CHECKING:
     import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
-
-# Default configuration - can be overridden in constructor
-DEFAULT_MODEL_NAME = "gemini-3.1-flash-lite"
-
-DEFAULT_GENERATION_CONFIG = {
-    "temperature": 0.1,
-    "top_p": 0.95,
-    "top_k": 40,
-    "max_output_tokens": 8192,
-    "response_mime_type": "application/json",
-}
 
 
 @dataclass(frozen=True)

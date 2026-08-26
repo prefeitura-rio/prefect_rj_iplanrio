@@ -30,9 +30,8 @@ from .categories import (  # noqa: F401  (re-exported; public API)
     normalize_category,
     similarity_score,
 )
+from .config import DEFAULT_GENERATION_CONFIG, DEFAULT_MODEL_NAME
 from .page_classification import (
-    DEFAULT_GENERATION_CONFIG,
-    DEFAULT_MODEL_NAME,
     ClassificationOptions,  # noqa: F401  (re-exported; public API)
     classify_page_with_model,  # noqa: F401  (re-exported; public API)
 )
