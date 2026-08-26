@@ -1,6 +1,5 @@
 """
-Base Classifier Interface - All classifiers must implement this interface
-to be compatible with the NFPipeline.
+Base Classifier Interface - abstract contract for page classifiers.
 """
 
 from abc import ABC, abstractmethod
@@ -10,8 +9,8 @@ class BaseClassifier(ABC):
     """
     Abstract base class for page classifiers.
 
-    All classifiers (OCR-based, Vision-based, etc.) must implement this interface
-    to be compatible with NFPipeline.
+    ``GeminiClassifier`` is the only implementation; kept as a real ABC (not
+    a Protocol) so its abstract methods are enforced at instantiation time.
     """
 
     @abstractmethod

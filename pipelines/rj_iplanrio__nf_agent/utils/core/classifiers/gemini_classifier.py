@@ -20,7 +20,7 @@ from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
 from ..base import BaseClassifier
 from ..config import SERVICE_ACCOUNT_PATH
-from ..prompts import ALT_CLASSIFICATION_PROMPT, CLASSIFICATION_PROMPT
+from ..prompts import CLASSIFICATION_PROMPT
 from .categories import (  # noqa: F401  (re-exported; public API)
     CATEGORY_ALIASES,
     NF_CATEGORIES,
@@ -51,8 +51,6 @@ class GeminiClassifier(BaseClassifier):
     """
     Vision-based classifier using Gemini Flash API.
     Does NOT require OCR - works directly with PDF/image input.
-
-    Compatible with NFPipeline through BaseClassifier interface.
     """
 
     def __init__(
@@ -64,7 +62,6 @@ class GeminiClassifier(BaseClassifier):
         save_api_responses: bool = False,
         api_response_output_dir: Path | None = None,
         use_pdf_input: bool = True,
-        use_alternative_prompt: bool = False,
         classification_prompt: str | None = None,
     ):
         """
@@ -79,10 +76,8 @@ class GeminiClassifier(BaseClassifier):
         :param api_response_output_dir: Directory to save API responses (for debugging).
         :param use_pdf_input: If True, send single-page PDFs to Gemini; if False,
             send PNG images (default: True).
-        :param use_alternative_prompt: If True, use ALT_CLASSIFICATION_PROMPT
-            instead of CLASSIFICATION_PROMPT (default: False).
         :param classification_prompt: Custom classification prompt to use
-            (overrides use_alternative_prompt if provided).
+            (default: CLASSIFICATION_PROMPT).
         """
         # If no explicit path, check default location (but allow None)
         if service_account_path is None:
@@ -101,15 +96,7 @@ class GeminiClassifier(BaseClassifier):
         self.save_api_responses = save_api_responses
         self.api_response_output_dir = Path(api_response_output_dir) if api_response_output_dir else None
         self.use_pdf_input = use_pdf_input
-        self.use_alternative_prompt = use_alternative_prompt
-
-        # Determine which prompt to use (priority: custom > alternative > default)
-        if classification_prompt is not None:
-            self.classification_prompt = classification_prompt
-        elif use_alternative_prompt:
-            self.classification_prompt = ALT_CLASSIFICATION_PROMPT
-        else:
-            self.classification_prompt = CLASSIFICATION_PROMPT
+        self.classification_prompt = classification_prompt or CLASSIFICATION_PROMPT
 
         self._model = None
         self._pdf_path = None  # Set when classifying a PDF
@@ -238,7 +225,7 @@ class GeminiClassifier(BaseClassifier):
             - List of image bytes (PNG)
             - List of page numbers (int, 0-indexed) - requires set_pdf() first
             - None - classify all pages of PDF set with set_pdf()
-        :returns: List of classification results compatible with NFClassifier output.
+        :returns: List of classification result dicts (page, classification, score, is_nf, categories).
         """
         # If inputs is None or empty, classify all pages of set PDF
         if inputs is None or (isinstance(inputs, list) and len(inputs) == 0):
