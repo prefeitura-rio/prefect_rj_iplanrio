@@ -6,8 +6,6 @@ from typing import TYPE_CHECKING, Any
 
 from prefect_rj_iplanrio.logging import get_logger
 
-from .modes import ExecutionMode
-
 if TYPE_CHECKING:
     from .processor import POCProcessor
 
@@ -45,7 +43,6 @@ def build_classification_detail(
 
 def build_versao_pipeline(
     processor: "POCProcessor",
-    mode: "ExecutionMode",
     workers: int,
     requests_per_minute: int,
     max_concurrent: int,
@@ -59,7 +56,6 @@ def build_versao_pipeline(
     :param processor: The ``POCProcessor`` instance (supplies config fields).
     """
     info: dict[str, Any] = {
-        "mode": mode.value,
         "extraction_batch_size": 1,
         "workers": workers,
         "requests_per_minute": requests_per_minute,

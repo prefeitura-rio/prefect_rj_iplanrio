@@ -79,7 +79,6 @@ class BatchRunParams:
     batch_size: int
     max_concurrent: int
     max_pdfs: int | None
-    mode: str
     requests_per_minute: int
     workers: int
 
@@ -376,7 +375,6 @@ def trigger_next_batch_if_pending(
             "db_path": params.db_path,
             "gcs_bucket": params.gcs_bucket,
             "workers": params.workers,
-            "mode": params.mode,
             "requests_per_minute": params.requests_per_minute,
             "max_concurrent": params.max_concurrent,
             "session_id": session_id,
@@ -404,7 +402,6 @@ def run_nf_pipeline(params: BatchRunParams) -> dict[str, Any]:
         db_path=params.db_path,
         gcs_bucket=params.gcs_bucket,
         workers=params.workers,
-        mode=params.mode,
         requests_per_minute=params.requests_per_minute,
         max_concurrent=params.max_concurrent,
         max_pdfs=params.max_pdfs,

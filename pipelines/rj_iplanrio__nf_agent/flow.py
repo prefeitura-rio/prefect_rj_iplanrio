@@ -38,7 +38,6 @@ def rj_iplanrio__nf_agent(
     batch_size: int = 1000,
     max_concurrent: int = 50,
     max_pdfs: int | None = None,
-    mode: str = "full",
     requests_per_minute: int = 600,
     workers: int = 200,
     # --- Sessão (self-trigger) ---
@@ -61,7 +60,6 @@ def rj_iplanrio__nf_agent(
         db_path=db_path,
         gcs_bucket=gcs_bucket,
         workers=workers,
-        mode=mode,
         requests_per_minute=requests_per_minute,
         max_concurrent=max_concurrent,
         max_pdfs=max_pdfs,

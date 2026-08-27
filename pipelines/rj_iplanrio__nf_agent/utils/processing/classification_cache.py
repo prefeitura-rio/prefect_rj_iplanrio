@@ -102,9 +102,8 @@ def classify_page_from_cache(
     #   2. If not found, check by content_hash for cross-PDF dedup (requires PDF→PNG)
     # This way we only convert PDF→PNG once, and only when necessary.
     #
-    # Current behavior serves two purposes:
+    # Current behavior serves this purpose:
     #   - Cross-PDF deduplication (identical pages from different PDFs reuse classification)
-    #   - RUN_CLASSIFICATION mode support (without preprocess)
 
     # Get input_id (creates input if doesn't exist) - use PNG for hashing (deduplication)
     page_image_bytes = processor._pdf_page_to_bytes(pdf_path, page_number)

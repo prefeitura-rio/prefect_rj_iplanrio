@@ -55,7 +55,6 @@ deployments:
       batch_size: 500
       max_concurrent: 50
       max_pdfs: null
-      mode: "full"
       requests_per_minute: 600
       workers: 200
 
@@ -83,6 +82,5 @@ deployments:
       batch_size: 500
       max_concurrent: 50
       max_pdfs: null
-      mode: "full"
       requests_per_minute: 600
       workers: 200

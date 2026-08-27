@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any
 from prefect_rj_iplanrio.logging import get_logger
 
 from . import metadata
-from .modes import ExecutionMode
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
@@ -24,13 +23,12 @@ logger = get_logger(__name__)
 def process_database(
     processor: "POCProcessor",
     pdf_names: list[str],
-    mode: ExecutionMode = ExecutionMode.FULL,
     max_workers: int = 1000,  # Batch download enables 1000 workers
     requests_per_minute: int = 0,  # Passado para versao_pipeline (rastreabilidade)
     max_concurrent: int = 0,  # Passado para versao_pipeline (rastreabilidade)
 ) -> tuple[list[dict], dict]:
     """
-    Process a list of PDF filenames with specified execution mode and parallelization.
+    Process a list of PDF filenames in parallel.
 
     ``pdf_names`` is the pending-work list already resolved by the caller
     (GCS bucket listing minus files already done at the current pipeline
@@ -41,14 +39,13 @@ def process_database(
 
     :param processor: The ``POCProcessor`` instance.
     :param pdf_names: PDF filenames (without extension) to process.
-    :param mode: Execution mode controlling which steps to run.
     :param max_workers: Number of concurrent workers (default: 20).
     :param requests_per_minute: RPM configurado no rate limiter (para versao_pipeline).
     :param max_concurrent: Máximo de requisições simultâneas (para versao_pipeline).
     :returns: ``(json_items, timing_stats)`` — per-page results and batch timing metrics.
     """
     logger.warning(f"\n{'#' * 80}")
-    logger.warning(f"# POC Pipeline - Database Processing [Mode: {mode.value}]")
+    logger.warning("# POC Pipeline - Database Processing")
     logger.warning(f"{'#' * 80}\n")
 
     # DEBUG: Verify thread-local DB fix is loaded
@@ -127,7 +124,6 @@ def process_database(
             future = executor.submit(
                 processor._process_single_pdf_worker,
                 pdf_name=task["pdf_name"],
-                mode=mode,
                 progress_lock=progress_lock,
                 completed_count=completed_count,
                 total_pdfs=_n_total,
@@ -340,7 +336,6 @@ def process_database(
         timestamp_geracao=_run_ts,
         versao_pipeline=metadata.build_versao_pipeline(
             processor,
-            mode=mode,
             workers=max_workers,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,

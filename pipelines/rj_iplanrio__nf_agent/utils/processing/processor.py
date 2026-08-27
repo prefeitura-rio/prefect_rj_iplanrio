@@ -20,7 +20,6 @@ from ..classification.gemini_classifier import GeminiClassifier
 from ..extraction.extractor import NFExtractor
 from ..gcs import GCSDownloader
 from . import batch, classification_cache, process, setup
-from .modes import ExecutionMode
 
 logger = get_logger(__name__)
 
@@ -109,30 +108,25 @@ class POCProcessor:
     def process_pdf(
         self,
         pdf_filename: str,
-        mode: ExecutionMode = ExecutionMode.FULL,
         pdf_path: Path | None = None,
     ) -> dict[str, Any]:
         """See ``process.process_pdf``."""
-        return process.process_pdf(self, pdf_filename, mode, pdf_path)
+        return process.process_pdf(self, pdf_filename, pdf_path)
 
     def _process_single_pdf_worker(
         self,
         pdf_name: str,
-        mode: ExecutionMode,
         progress_lock: threading.Lock,
         completed_count: list[int],
         total_pdfs: int,
         pdf_path: Path | None = None,
     ) -> dict[str, Any]:
         """See ``process.process_single_pdf_worker``."""
-        return process.process_single_pdf_worker(
-            self, pdf_name, mode, progress_lock, completed_count, total_pdfs, pdf_path
-        )
+        return process.process_single_pdf_worker(self, pdf_name, progress_lock, completed_count, total_pdfs, pdf_path)
 
     def process_database(
         self,
         pdf_names: list[str],
-        mode: ExecutionMode = ExecutionMode.FULL,
         max_workers: int = 1000,
         requests_per_minute: int = 0,
         max_concurrent: int = 0,
@@ -141,7 +135,6 @@ class POCProcessor:
         return batch.process_database(
             self,
             pdf_names,
-            mode=mode,
             max_workers=max_workers,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
