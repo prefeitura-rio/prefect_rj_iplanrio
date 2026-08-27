@@ -61,7 +61,7 @@ def discover_pending_files(
 
 @dataclass(frozen=True)
 class NfProcessingFlowConfig:
-    """Parameters for :func:`nf_processing_flow`. See that function's docstring for field docs.
+    """Parameters for :func:`nf_processing_flow`.
 
     The last block (``prompt_versions``/``quiet``/``temp_dir``) is
     internal-only: kept for direct construction (tests, ad-hoc scripts) but
@@ -71,25 +71,24 @@ class NfProcessingFlowConfig:
     """
 
     # --- BigQuery / GCS ---
-    bq_extracao_pagina_table: str | None = None
-    db_path: str = "cache.db"
-    gcs_bucket: str | None = None
-    gcs_output_base_path: str | None = None
+    bq_extracao_pagina_table: str | None = None  # project.dataset.extracao_pagina; required
+    db_path: str = "cache.db"  # SQLite cache path
+    gcs_bucket: str | None = None  # default: GCS_BUCKET env var
+    gcs_output_base_path: str | None = None  # per-page NDJSON prefix; None skips GCS output
     # --- Execução ---
-    batch_size: int = 1000
-    max_concurrent: int = 50
-    max_pdfs: int | None = None
-    requests_per_minute: int = 600
-    workers: int = 200
+    batch_size: int = 1000  # cap on pending files per run, when max_pdfs isn't set
+    max_concurrent: int = 50  # rate limiter: max in-flight LLM requests
+    max_pdfs: int | None = None  # overrides batch_size; e.g. for a small test run
+    requests_per_minute: int = 600  # rate limiter: LLM request-rate cap
+    workers: int = 200  # concurrent worker threads
     # --- Interno (não exposto via deployment) ---
-    prompt_versions: dict | None = None
+    prompt_versions: dict | None = None  # {'classification': 'vN', 'extraction': 'vN'}
     quiet: bool = False
-    temp_dir: str = "temp"
+    temp_dir: str = "temp"  # downloaded-PDF scratch dir
 
 
 def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
-    """
-    Process pending PDFs found in GCS, with per-page caching against BigQuery.
+    """Process pending PDFs found in GCS, with per-page caching against BigQuery.
 
     Called directly by ``prefect_rj_iplanrio/flow.py`` (via ``orchestration.run_nf_pipeline``),
     which builds a :class:`NfProcessingFlowConfig` from ``BatchRunParams``.
@@ -103,32 +102,10 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     the current version (``ok`` or ``erro_processamento``) is considered
     done and won't be reprocessed until the pipeline version changes.
 
-    Args:
-        # --- BigQuery / GCS ---
-        bq_extracao_pagina_table: Full BQ table ID for this pipeline's own
-                      per-page output table, e.g.
-                      'project.dataset.extracao_pagina'. Required — this is
-                      the only source of "already processed" state.
-        db_path: Path to SQLite cache database (default: cache.db)
-        gcs_bucket: GCS bucket name (default: from GCS_BUCKET env var)
-        gcs_output_base_path: GCS path prefix for the per-page NDJSON output
-                      (written under filename_prefix="extracao_pagina").
-                      Set to None to skip GCS output.
-        # --- Execução ---
-        batch_size: Default cap on how many pending files to process in one
-                    run, when ``max_pdfs`` isn't set (default: 1000).
-        max_concurrent: Max in-flight LLM requests at once (rate limiter).
-        max_pdfs: Maximum number of pending files to process in this execution.
-                  Overrides ``batch_size``. Useful for testing (e.g. max_pdfs=10).
-                  When None (default), up to ``batch_size`` pending files are processed.
-        requests_per_minute: LLM request-rate cap (rate limiter).
-        workers: Number of concurrent workers for parallel processing (default: 200)
-        # --- Interno (não exposto via deployment) ---
-        prompt_versions: Dict with 'classification' and 'extraction' versions
-        quiet: Suppress debug output
-        temp_dir: Temporary directory for downloaded PDFs (default: temp/)
-
-    (Each field above is a ``NfProcessingFlowConfig`` attribute, e.g. ``config.workers``.)
+    :param config: See :class:`NfProcessingFlowConfig` for field docs.
+    :returns: Timing/count stats for this batch, or ``None`` if there was
+        nothing pending to process.
+    :raises ValueError: If ``config.bq_extracao_pagina_table`` is not set.
     """
     workers = config.workers
     quiet = config.quiet
