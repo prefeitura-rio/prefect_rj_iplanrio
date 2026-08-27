@@ -258,10 +258,8 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             timing_stats["wall_sec_escrita"] = round(_escrita_elapsed, 3)
 
         # ── Actual per-page counts from this batch ──
-        timing_stats["_n_docs_ok"] = sum(
-            1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok"
-        )
-        timing_stats["_n_docs_fail"] = sum(
+        timing_stats["_n_pages_ok"] = sum(1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok")
+        timing_stats["_n_pages_fail"] = sum(
             1 for i in extracao_pagina_rows if i["pipeline_status"] == "erro_processamento"
         )
 

@@ -47,17 +47,17 @@ def new_or_continued_session(session_id: str | None) -> str:
 
 def pending_in_session(max_pdfs: int | None, total_in_session: int) -> tuple[int | None, int | None]:
     """
-    Compute how many PDFs/docs are still allowed before ``max_pdfs`` is reached.
+    Compute how many PDFs/pages are still allowed before ``max_pdfs`` is reached.
 
     :param max_pdfs: Session cap on the total number of PDFs, or ``None`` for uncapped.
     :param total_in_session: PDFs already processed in the current session.
-    :returns: ``(pending_pdfs, pending_docs)`` tuple, or ``(None, None)`` when uncapped.
+    :returns: ``(pending_pdfs, pending_pages)`` tuple, or ``(None, None)`` when uncapped.
     """
     if max_pdfs is None:
         return None, None
     pending_pdfs = max(0, max_pdfs - total_in_session)
-    pending_docs = pending_pdfs  # estimate — exact doc count per PDF is unknown upfront
-    return pending_pdfs, pending_docs
+    pending_pages = pending_pdfs  # estimate — exact page count per PDF is unknown upfront
+    return pending_pdfs, pending_pages
 
 
 # ---------------------------------------------------------------------------
@@ -89,14 +89,14 @@ class BatchSummary:
 
     pdfs_processed: int
     pdfs_failed: int
-    docs_processed: int
-    docs_failed: int
+    pages_processed: int
+    pages_failed: int
     duration_seconds: float
     total_in_session: int
     pending_pdfs: int | None
-    pending_docs: int | None
+    pending_pages: int | None
     avg_sec_per_pdf: float
-    avg_sec_per_doc: float
+    avg_sec_per_page: float
     batch_did_work: bool
 
 
@@ -117,26 +117,26 @@ def summarize_batch(
     """
     pdfs_processed = timing_stats.get("_n_pdfs_ok", 0) or 0
     pdfs_failed = timing_stats.get("_n_pdfs_fail", 0) or 0
-    docs_processed = timing_stats.get("_n_docs_ok", 0) or 0
-    docs_failed = timing_stats.get("_n_docs_fail", 0) or 0
+    pages_processed = timing_stats.get("_n_pages_ok", 0) or 0
+    pages_failed = timing_stats.get("_n_pages_fail", 0) or 0
 
     total_in_session = session_pdfs_done + pdfs_processed + pdfs_failed
-    pending_pdfs, pending_docs = pending_in_session(max_pdfs, total_in_session)
+    pending_pdfs, pending_pages = pending_in_session(max_pdfs, total_in_session)
 
     avg_sec_per_pdf = round(duration_seconds / pdfs_processed, 2) if pdfs_processed > 0 else 0.0
-    avg_sec_per_doc = round(duration_seconds / docs_processed, 2) if docs_processed > 0 else 0.0
+    avg_sec_per_page = round(duration_seconds / pages_processed, 2) if pages_processed > 0 else 0.0
 
     return BatchSummary(
         pdfs_processed=pdfs_processed,
         pdfs_failed=pdfs_failed,
-        docs_processed=docs_processed,
-        docs_failed=docs_failed,
+        pages_processed=pages_processed,
+        pages_failed=pages_failed,
         duration_seconds=duration_seconds,
         total_in_session=total_in_session,
         pending_pdfs=pending_pdfs,
-        pending_docs=pending_docs,
+        pending_pages=pending_pages,
         avg_sec_per_pdf=avg_sec_per_pdf,
-        avg_sec_per_doc=avg_sec_per_doc,
+        avg_sec_per_page=avg_sec_per_page,
         batch_did_work=(pdfs_processed + pdfs_failed) > 0,
     )
 
@@ -158,14 +158,14 @@ def log_batch_summary(session_id: str, summary: BatchSummary, max_pdfs: int | No
     lines = [
         "── Batch summary ──────────────────────",
         f"  Session:        {session_id}",
-        f"  Processed:      {summary.pdfs_processed} PDFs / {summary.docs_processed} docs",
-        f"  Failed:         {summary.pdfs_failed} PDFs / {summary.docs_failed} docs",
+        f"  Processed:      {summary.pdfs_processed} PDFs / {summary.pages_processed} pages",
+        f"  Failed:         {summary.pdfs_failed} PDFs / {summary.pages_failed} pages",
         f"  Duration:       {summary.duration_seconds / 60:.1f} min",
         f"  Avg / PDF:      {summary.avg_sec_per_pdf:.1f} sec",
-        f"  Avg / doc:      {summary.avg_sec_per_doc:.1f} sec",
+        f"  Avg / page:     {summary.avg_sec_per_page:.1f} sec",
     ]
     if summary.pending_pdfs is not None:
-        lines.append(f"  Pending in session: {summary.pending_pdfs} PDFs / {summary.pending_docs} docs")
+        lines.append(f"  Pending in session: {summary.pending_pdfs} PDFs / {summary.pending_pages} pages")
         if summary.avg_sec_per_pdf > 0 and summary.pending_pdfs > 0:
             est_remaining_min = round(summary.pending_pdfs * summary.avg_sec_per_pdf / 60, 1)
             lines.append(f"  Est. remaining: ~{est_remaining_min} min")
@@ -242,13 +242,17 @@ def write_run_summary(
             "finished_at": context.finished_at,
             "duration_seconds": summary.duration_seconds,
             "pdfs_processed": summary.pdfs_processed,
-            "docs_processed": summary.docs_processed,
+            # BQ column is still "docs_*"/"pending_docs"/"avg_sec_per_doc" — this
+            # table already has historical rows under those names; what's actually
+            # counted is pages (see BatchSummary.pages_processed docstring/rename),
+            # not worth a schema migration just to match the column name.
+            "docs_processed": summary.pages_processed,
             "pdfs_failed": summary.pdfs_failed,
-            "docs_failed": summary.docs_failed,
+            "docs_failed": summary.pages_failed,
             "pending_pdfs": summary.pending_pdfs or 0,
-            "pending_docs": summary.pending_docs or 0,
+            "pending_docs": summary.pending_pages or 0,
             "avg_sec_per_pdf": summary.avg_sec_per_pdf,
-            "avg_sec_per_doc": summary.avg_sec_per_doc,
+            "avg_sec_per_doc": summary.avg_sec_per_page,
             "batch_size": config.batch_size,
             "workers": config.workers,
             "requests_per_minute": config.requests_per_minute,
