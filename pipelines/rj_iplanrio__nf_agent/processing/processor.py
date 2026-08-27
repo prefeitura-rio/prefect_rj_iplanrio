@@ -157,7 +157,6 @@ class POCProcessor:
         mode: ExecutionMode = ExecutionMode.FULL,
         max_workers: int = 1000,
         keep_pdfs: bool = False,
-        experiment_id: str | None = None,
         requests_per_minute: int = 0,
         max_concurrent: int = 0,
     ):
@@ -170,7 +169,6 @@ class POCProcessor:
             mode=mode,
             max_workers=max_workers,
             keep_pdfs=keep_pdfs,
-            experiment_id=experiment_id,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
         )
