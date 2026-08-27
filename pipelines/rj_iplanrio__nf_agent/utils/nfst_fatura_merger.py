@@ -23,6 +23,10 @@ import re
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +270,7 @@ def merge_nfst_with_fatura(extracted_nfs: list[dict]) -> list[dict]:
         fatura_valor = normalize_value(fatura.get("valor_total"))
         nfst_conta = nfst.get("numero_conta") or fatura.get("numero_conta")
 
-        logger.info(
+        logger.warning(
             f"Merge NFST pág.{nfst.get('pagina')} + Fatura pág.{fatura.get('pagina')} "
             f"via {descricao} → valor_total = R$ {fatura_valor:.2f}"
         )
@@ -281,7 +285,7 @@ def merge_nfst_with_fatura(extracted_nfs: list[dict]) -> list[dict]:
         merged_count += 1
 
     if merged_count:
-        logger.info(f"NFST merge concluído: {merged_count}/{len(nfsts_a_mergear)} NFST(s) preenchidas")
+        logger.warning(f"NFST merge concluído: {merged_count}/{len(nfsts_a_mergear)} NFST(s) preenchidas")
     else:
         logger.warning(f"NFST merge: nenhuma das {len(nfsts_a_mergear)} NFST(s) pôde ser vinculada")
 

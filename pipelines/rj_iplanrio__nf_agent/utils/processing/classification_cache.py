@@ -19,6 +19,10 @@ if TYPE_CHECKING:
     from .processor import POCProcessor
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 def preprocess_classification_page(processor: "POCProcessor", pdf_path: Path, page_number: int) -> tuple[int, bool]:
@@ -79,7 +83,7 @@ def classify_page_from_cache(
     # for this exact (pdf_name, page_number). Saves expensive PNG rendering on re-runs.
     cached_result = processor.db_manager.get_cached_classification(pdf_name, page_number)
     if cached_result:
-        logger.info(f"[CACHE] Early skip for {pdf_name} page {page_number} -> {cached_result['category']}")
+        logger.warning(f"[CACHE] Early skip for {pdf_name} page {page_number} -> {cached_result['category']}")
 
         return (
             cached_result["category"],

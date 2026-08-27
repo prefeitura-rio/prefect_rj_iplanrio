@@ -21,6 +21,10 @@ from iplanrio_agent_toolkit.gcs import GCSDownloader as _BaseGCSDownloader
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 _MAX_FAILURES_LOGGED = 5
 
@@ -95,12 +99,12 @@ class GCSDownloader(_BaseGCSDownloader):
                 to_download.append(pdf_name)
 
         if skip_existing and results:
-            logger.info("Skipped %d already-downloaded PDFs", len(results))
+            logger.warning("Skipped %d already-downloaded PDFs", len(results))
         if not to_download:
-            logger.info("All PDFs already exist locally, skipping download")
+            logger.warning("All PDFs already exist locally, skipping download")
             return results
 
-        logger.info("Downloading %d new PDFs...", len(to_download))
+        logger.warning("Downloading %d new PDFs...", len(to_download))
 
         def download_single(pdf_name: str) -> tuple:
             try:
@@ -125,7 +129,7 @@ class GCSDownloader(_BaseGCSDownloader):
                     failed.append((pdf_name, error))
 
                 if completed % batch_size == 0 or completed == len(to_download):
-                    logger.info("Downloaded %d/%d PDFs", completed, len(to_download))
+                    logger.warning("Downloaded %d/%d PDFs", completed, len(to_download))
 
         if failed:
             logger.warning("%d downloads failed:", len(failed))

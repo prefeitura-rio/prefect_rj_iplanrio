@@ -29,6 +29,10 @@ from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 class PageStatusReader:
@@ -87,7 +91,7 @@ class PageStatusReader:
         done = set(df["nome_arquivo"]) if "nome_arquivo" in df.columns and not df.empty else set()
         pending = candidate_filenames - done
 
-        logger.info(
+        logger.warning(
             "extracao_pagina: %d/%d candidate files already done at commit %s — %d pending",
             len(done),
             len(candidate_filenames),

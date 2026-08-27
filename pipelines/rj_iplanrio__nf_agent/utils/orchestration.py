@@ -16,6 +16,10 @@ from typing import Any
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 # ---------------------------------------------------------------------------
@@ -33,11 +37,11 @@ def new_or_continued_session(session_id: str | None) -> str:
     import uuid
 
     if session_id:
-        logger.info("Continuing session: %s", session_id)
+        logger.warning("Continuing session: %s", session_id)
         return session_id
 
     session_id = str(uuid.uuid4())
-    logger.info("New session started: %s", session_id)
+    logger.warning("New session started: %s", session_id)
     return session_id
 
 
@@ -143,7 +147,8 @@ def summarize_batch(
 
 def log_batch_summary(session_id: str, summary: BatchSummary, max_pdfs: int | None) -> None:
     """
-    Emit a structured batch-summary log entry at INFO level.
+    Emit a structured batch-summary log entry (WARNING level — see the
+    module-level TODO(Trick) note on the INFO-visibility workaround).
 
     :param session_id: Current session UUID.
     :param summary: Counters and averages for the batch just processed.
@@ -165,7 +170,7 @@ def log_batch_summary(session_id: str, summary: BatchSummary, max_pdfs: int | No
             lines.append(f"  Est. remaining: ~{est_remaining_min} min")
     lines.append(f"  Cumulative:     {summary.total_in_session} / {max_pdfs if max_pdfs else '∞'} PDFs")
     lines.append("──────────────────────────────────────")
-    logger.info("\n".join(lines))
+    logger.warning("\n".join(lines))
 
 
 # ---------------------------------------------------------------------------
@@ -317,16 +322,16 @@ def trigger_next_batch_if_pending(
     """
     flow_run_id = get_flow_run_id()
     if not flow_run_id:
-        logger.info("Not running as a flow run — skipping self-trigger check")
+        logger.warning("Not running as a flow run — skipping self-trigger check")
         return
 
     deployment_id = get_current_deployment_id(flow_run_id)
     if not deployment_id:
-        logger.info("Flow run has no deployment — skipping self-trigger check")
+        logger.warning("Flow run has no deployment — skipping self-trigger check")
         return
 
     if not params.bq_extracao_pagina_table:
-        logger.info("No bq_extracao_pagina_table configured — skipping self-trigger check")
+        logger.warning("No bq_extracao_pagina_table configured — skipping self-trigger check")
         return
 
     from .gcs import GCSDownloader  # noqa: PLC0415
@@ -335,10 +340,10 @@ def trigger_next_batch_if_pending(
     gcs_downloader = GCSDownloader(credentials_path=resolve_gcs_credentials(None), bucket_name=params.gcs_bucket)
     pending_files, current_commit = discover_pending_files(gcs_downloader, params.bq_extracao_pagina_table)
     pending = len(pending_files)
-    logger.info("%d files still pending after this batch (commit %s)", pending, current_commit)
+    logger.warning("%d files still pending after this batch (commit %s)", pending, current_commit)
 
     if params.max_pdfs is not None and total_in_session >= params.max_pdfs:
-        logger.info(
+        logger.warning(
             "max_pdfs=%d atingido na sessão (%d PDFs) — encerrando cadeia",
             params.max_pdfs,
             total_in_session,
@@ -346,7 +351,7 @@ def trigger_next_batch_if_pending(
         return
 
     if pending == 0:
-        logger.info("Queue exhausted — no more batches to trigger")
+        logger.warning("Queue exhausted — no more batches to trigger")
         return
 
     if not batch_did_work:
@@ -357,7 +362,7 @@ def trigger_next_batch_if_pending(
 
     from prefect.deployments import run_deployment  # noqa: PLC0415
 
-    logger.info("Triggering next batch (deployment_id=%s)", deployment_id)
+    logger.warning("Triggering next batch (deployment_id=%s)", deployment_id)
     run_deployment(
         name=deployment_id,
         parameters={

@@ -18,6 +18,10 @@ from .cache import DatabaseManager
 from .gcs import GCSDownloader
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 def resolve_gcs_credentials(gcs_credentials: str | Path | None) -> Path | None:
@@ -62,7 +66,7 @@ def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_tab
 
     available_pdfs = gcs_downloader.get_available_pdf_filenames()
     candidate_filenames = {name[:-4] if name.lower().endswith(".pdf") else name for name in available_pdfs}
-    logger.info("GCS: found %d PDFs in bucket", len(candidate_filenames))
+    logger.warning("GCS: found %d PDFs in bucket", len(candidate_filenames))
 
     from .bigquery import PageStatusReader
 
@@ -173,14 +177,14 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     gcs_downloader = GCSDownloader(credentials_path=gcs_credentials, bucket_name=gcs_bucket)
     pending_files, current_commit = discover_pending_files(gcs_downloader, bq_extracao_pagina_table)
     if not pending_files:
-        logger.info("No pending files found. Nothing to do.")
+        logger.warning("No pending files found. Nothing to do.")
         return None
 
     effective_cap = max_pdfs_per_session if max_pdfs_per_session is not None else batch_size
     pdf_names = sorted(pending_files)
     if effective_cap is not None:
         pdf_names = pdf_names[:effective_cap]
-    logger.info(
+    logger.warning(
         "Pending: %d files at commit %s — processing %d this run",
         len(pending_files),
         current_commit,
@@ -199,7 +203,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             "extraction": extraction_versions[-1] if extraction_versions else "v1",
         }
 
-    logger.info(
+    logger.warning(
         "Using prompt versions — classification=%s, extraction=%s",
         prompt_versions["classification"],
         prompt_versions["extraction"],
@@ -209,7 +213,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
     rate_limiter = initialize_rate_limiter(max_concurrent=max_concurrent, requests_per_minute=requests_per_minute)
-    logger.info(
+    logger.warning(
         "RateLimiter enabled: max_concurrent=%d, rpm=%d (%.1f RPS)",
         max_concurrent,
         requests_per_minute,
@@ -224,7 +228,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
     _creds_label = str(gcs_credentials) if gcs_credentials else "ADC / Infisical (GOOGLE_APPLICATION_CREDENTIALS)"
 
-    logger.info(
+    logger.warning(
         "Pipeline config: mode=%s | pending_files=%d | bq_extracao_pagina=%s | "
         "gcs_out=%s | cache=%s | bucket=%s | gcs_creds=%s | workers=%d | quiet=%s",
         mode,
@@ -239,12 +243,12 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     )
 
     # Initialize components
-    logger.info("Initializing components...")
+    logger.warning("Initializing components...")
 
     try:
         # Database manager
         db_manager = DatabaseManager(db_path)
-        logger.info("Database manager initialized: %s", db_path)
+        logger.warning("Database manager initialized: %s", db_path)
 
         # GCS downloader already constructed above (used for the pending-files listing)
 
@@ -256,8 +260,8 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             quiet=quiet,
             prompt_versions=prompt_versions,
         )
-        logger.info("Processor initialized")
-        logger.info("Starting processing...")
+        logger.warning("Processor initialized")
+        logger.warning("Starting processing...")
 
         json_items, timing_stats = processor.process_database(
             pdf_names=pdf_names,
@@ -288,7 +292,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                     filename_prefix="extracao_pagina",
                     timestamp=run_timestamp,
                 )
-                logger.info("GCS: results written to %s", gcs_uri)
+                logger.warning("GCS: results written to %s", gcs_uri)
 
             _escrita_elapsed = time.time() - _t_escrita_start
             timing_stats["wall_sec_escrita"] = round(_escrita_elapsed, 3)
@@ -297,7 +301,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         timing_stats["_n_docs_ok"] = sum(1 for i in json_items if i["pipeline_status"] == "ok")
         timing_stats["_n_docs_fail"] = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
 
-        logger.info("Processing completed successfully")
+        logger.warning("Processing completed successfully")
 
         return timing_stats  # propagated to flow.py → write_run_summary()
 

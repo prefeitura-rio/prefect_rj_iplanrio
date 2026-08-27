@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from .processor import POCProcessor
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 def process_pdf(
@@ -34,9 +38,9 @@ def process_pdf(
     :param pdf_path: Optional pre-downloaded PDF path (if None, will download from GCS).
     :returns: Processing result (structure depends on mode).
     """
-    logger.info(f"\n{'=' * 80}")
-    logger.info(f"Processing: {pdf_filename} [Mode: {mode.value}]")
-    logger.info(f"{'=' * 80}")
+    logger.warning(f"\n{'=' * 80}")
+    logger.warning(f"Processing: {pdf_filename} [Mode: {mode.value}]")
+    logger.warning(f"{'=' * 80}")
 
     # Per-PDF timing accumulator (seconds); None = not measured / all cache hits
     _t_preprocess: float | None = None  # classification pages + filtered-PDF creation
@@ -45,11 +49,11 @@ def process_pdf(
     clean_temp_file = False
     if pdf_path is None:
         try:
-            logger.info("  [Download] Downloading from GCS...")
+            logger.warning("  [Download] Downloading from GCS...")
             pdf_path = processor.gcs_downloader.download_pdf_by_name(
                 pdf_name=pdf_filename, local_dir=processor.temp_dir
             )
-            logger.info(f"  [OK] Downloaded to: {pdf_path}")
+            logger.warning(f"  [OK] Downloaded to: {pdf_path}")
             clean_temp_file = True
         except Exception as e:
             logger.error(f"  [X] Download failed: {e}")
@@ -60,7 +64,7 @@ def process_pdf(
                 "error": f"Download failed: {e!s}",
             }
     else:
-        logger.info(f"  [Using pre-downloaded PDF: {pdf_path}]")
+        logger.warning(f"  [Using pre-downloaded PDF: {pdf_path}]")
 
     try:
         # Get total pages
@@ -79,7 +83,7 @@ def process_pdf(
 
             if all_classified:
                 # All pages classified! Load all classifications in 1 query
-                logger.info(f"  [Classification Fast Path] All {total_pages} pages already classified")
+                logger.warning(f"  [Classification Fast Path] All {total_pages} pages already classified")
 
                 page_categories, page_justifications = processor.load_all_cached_classifications(pdf_path)
 
@@ -91,7 +95,7 @@ def process_pdf(
                     if category in NF_CATEGORIES:
                         nf_pages.append(page_num)
 
-                logger.info(f"  [OK] Found {len(nf_pages)} NF pages (from classification cache): {nf_pages}")
+                logger.warning(f"  [OK] Found {len(nf_pages)} NF pages (from classification cache): {nf_pages}")
 
                 # Try extraction cache
                 if nf_pages:
@@ -100,7 +104,7 @@ def process_pdf(
                     if extraction_result and cached_nf_pages is not None:
                         # Have extraction cache! Go straight to validation
                         nf_count = extraction_result.get("quantidade_notas_fiscais", 0)
-                        logger.info(f"  [OK] Extracted {nf_count} NFs [cached]")
+                        logger.warning(f"  [OK] Extracted {nf_count} NFs [cached]")
 
                         extracted_nfs = extraction_result.get("notas_fiscais", [])
 
@@ -158,11 +162,11 @@ def process_pdf(
 
             if extraction_result and cached_nf_pages is not None:
                 # We have cached extraction! Skip ALL preprocessing and classification
-                logger.info("  [Fast Path] Extraction already cached, skipping all preprocessing")
-                logger.info(f"  [OK] Found {len(cached_nf_pages)} NF pages (from cache): {cached_nf_pages}")
+                logger.warning("  [Fast Path] Extraction already cached, skipping all preprocessing")
+                logger.warning(f"  [OK] Found {len(cached_nf_pages)} NF pages (from cache): {cached_nf_pages}")
 
                 nf_count = extraction_result.get("quantidade_notas_fiscais", 0)
-                logger.info(f"  [OK] Extracted {nf_count} NFs [cached]")
+                logger.warning(f"  [OK] Extracted {nf_count} NFs [cached]")
 
                 extracted_nfs = extraction_result.get("notas_fiscais", [])
 
@@ -207,16 +211,16 @@ def process_pdf(
         # STEP 1: Preprocess Classification Inputs
         # Only reached if fast path didn't apply
         if mode in [ExecutionMode.FULL, ExecutionMode.PREPROCESS_CLASSIFICATION]:
-            logger.info("  [Step 1/5] Preprocessing classification inputs...")
+            logger.warning("  [Step 1/5] Preprocessing classification inputs...")
             preprocessed_count = 0
             for page_num in range(1, total_pages + 1):
                 input_id, is_new = processor.preprocess_classification_page(pdf_path, page_num)
                 status = "[NEW]" if is_new else "[CACHED]"
-                logger.info(f"    Page {page_num}: input_id={input_id} {status}")
+                logger.warning(f"    Page {page_num}: input_id={input_id} {status}")
                 if is_new:
                     preprocessed_count += 1
 
-            logger.info(f"  [OK] Preprocessed {preprocessed_count}/{total_pages} pages (rest already cached)")
+            logger.warning(f"  [OK] Preprocessed {preprocessed_count}/{total_pages} pages (rest already cached)")
 
             if mode == ExecutionMode.PREPROCESS_CLASSIFICATION:
                 return {
@@ -240,7 +244,7 @@ def process_pdf(
             ExecutionMode.VALIDATE,
         ]:
             _max_inner_workers = processor.MAX_INTRA_PDF_WORKERS
-            logger.info(
+            logger.warning(
                 f"  [Step 2/5] Running classification ({total_pages} pages, {_max_inner_workers} inner workers)..."
             )
 
@@ -262,10 +266,10 @@ def process_pdf(
                     if category in NF_CATEGORIES:
                         nf_pages.append(pn)
                     if not from_cache:
-                        logger.info(f"    Page {pn}: {category} [new]")
+                        logger.warning(f"    Page {pn}: {category} [new]")
 
             _t_classif_wall = time.time() - _t_classif_start
-            logger.info(f"  [OK] Found {len(nf_pages)} NF pages: {nf_pages}")
+            logger.warning(f"  [OK] Found {len(nf_pages)} NF pages: {nf_pages}")
 
             # Close preprocess timer here for modes that skip Step 3
             if mode not in [ExecutionMode.FULL, ExecutionMode.PREPROCESS_EXTRACTION]:
@@ -288,12 +292,12 @@ def process_pdf(
         # to the llm, that logic can be moved to inside the extractor class.
         if mode in [ExecutionMode.FULL, ExecutionMode.PREPROCESS_EXTRACTION]:
             if nf_pages:
-                logger.info("  [Step 3/5] Preprocessing extraction inputs...")
+                logger.warning("  [Step 3/5] Preprocessing extraction inputs...")
                 input_id, is_new = processor.preprocess_extraction_pdf(pdf_path, nf_pages)
                 status = "[NEW]" if is_new else "[CACHED]"
-                logger.info(f"    Filtered PDF ({len(nf_pages)} pages): input_id={input_id} {status}")
+                logger.warning(f"    Filtered PDF ({len(nf_pages)} pages): input_id={input_id} {status}")
             else:
-                logger.info("  [Step 3/5] Skipping extraction preprocessing (no NF pages)")
+                logger.warning("  [Step 3/5] Skipping extraction preprocessing (no NF pages)")
 
             # Close preprocess timer (steps 2+3 = local CPU work, no API)
             _t_preprocess = time.time() - _t_preprocess_start
@@ -318,7 +322,7 @@ def process_pdf(
             ExecutionMode.VALIDATE,
         ]:
             if nf_pages:
-                logger.info("  [Step 4/5] Running extraction...")
+                logger.warning("  [Step 4/5] Running extraction...")
                 # Pass page_classifications so that per-page hints can be injected
                 # into the prompt when extraction_batch_size=1. page_categories may be
                 # empty here if we arrived via the extraction fast-path (no classification
@@ -332,7 +336,7 @@ def process_pdf(
 
                 cache_marker = "[cached]" if from_cache else "[new]"
                 nf_count = extraction_result.get("quantidade_notas_fiscais", 0)
-                logger.info(f"  [OK] Extracted {nf_count} NFs {cache_marker}")
+                logger.warning(f"  [OK] Extracted {nf_count} NFs {cache_marker}")
 
                 extracted_nfs = extraction_result.get("notas_fiscais", [])
 
@@ -341,7 +345,7 @@ def process_pdf(
 
                 extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
             else:
-                logger.info("  [Step 4/5] Skipping extraction (no NF pages)")
+                logger.warning("  [Step 4/5] Skipping extraction (no NF pages)")
 
             if mode == ExecutionMode.RUN_EXTRACTION:
                 return {
@@ -359,7 +363,7 @@ def process_pdf(
         # the JSON per-page output path, only computed and discarded — removed
         # along with the old compliance package's dead ComplianceValidator machinery.)
         if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
-            logger.info("  [OK] Processing complete")
+            logger.warning("  [OK] Processing complete")
 
             return {
                 "pdf_name": pdf_filename,
@@ -401,9 +405,9 @@ def process_pdf(
     finally:
         # Cleanup - delete downloaded PDF only if we downloaded it
         if clean_temp_file:
-            logger.info("  [Cleanup] Deleting temporary PDF...")
+            logger.warning("  [Cleanup] Deleting temporary PDF...")
             processor.gcs_downloader.cleanup_local_file(pdf_path)
-            logger.info("  [OK] Cleanup complete")
+            logger.warning("  [OK] Cleanup complete")
 
 
 def process_single_pdf_worker(

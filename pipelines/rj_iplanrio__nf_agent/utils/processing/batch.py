@@ -15,6 +15,10 @@ if TYPE_CHECKING:
     from .processor import POCProcessor
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 def process_database(
@@ -43,9 +47,9 @@ def process_database(
     :param max_concurrent: Máximo de requisições simultâneas (para versao_pipeline).
     :returns: ``(json_items, timing_stats)`` — per-page results and batch timing metrics.
     """
-    logger.info(f"\n{'#' * 80}")
-    logger.info(f"# POC Pipeline - Database Processing [Mode: {mode.value}]")
-    logger.info(f"{'#' * 80}\n")
+    logger.warning(f"\n{'#' * 80}")
+    logger.warning(f"# POC Pipeline - Database Processing [Mode: {mode.value}]")
+    logger.warning(f"{'#' * 80}\n")
 
     # DEBUG: Verify thread-local DB fix is loaded
     # TODO change quiet to debug logger
@@ -55,23 +59,23 @@ def process_database(
 
         source = inspect.getsource(processor._process_single_pdf_worker)
         if "thread_db_manager = DatabaseManager" in source:
-            logger.info("[DEBUG] >>> Thread-local DB fix IS LOADED <<<")
+            logger.warning("[DEBUG] >>> Thread-local DB fix IS LOADED <<<")
         else:
-            logger.info("[DEBUG] XXX Thread-local DB fix NOT LOADED - using old code! XXX")
+            logger.warning("[DEBUG] XXX Thread-local DB fix NOT LOADED - using old code! XXX")
 
     # Store db_path for worker threads (each worker creates its own connection)
     processor.db_path = processor.db_manager.db_path
-    logger.info(f"[DEBUG] Main thread DB path stored: {processor.db_path}\n")
+    logger.warning(f"[DEBUG] Main thread DB path stored: {processor.db_path}\n")
 
-    logger.info(f"PDFs to process: {len(pdf_names)}")
-    logger.info(f"Parallel workers: {max_workers}")
+    logger.warning(f"PDFs to process: {len(pdf_names)}")
+    logger.warning(f"Parallel workers: {max_workers}")
 
     pdf_tasks = [{"pdf_name": pdf_name} for pdf_name in pdf_names]
     total_pdfs = len(pdf_tasks)
 
     # PRE-DOWNLOAD: Download all PDFs in batches before parallel processing
-    logger.info(f"\n[Pre-download] Downloading {total_pdfs} PDFs in batches...")
-    logger.info("Using concurrent downloads (50 at a time) to optimize network usage")
+    logger.warning(f"\n[Pre-download] Downloading {total_pdfs} PDFs in batches...")
+    logger.warning("Using concurrent downloads (50 at a time) to optimize network usage")
 
     # Get PDF names
     pdf_names_to_download = [task["pdf_name"] for task in pdf_tasks]
@@ -85,7 +89,7 @@ def process_database(
     )
     _t_download_total = time.time() - _t_download_start
 
-    logger.info(f"[OK] Downloaded {len(downloaded_paths)} / {len(pdf_names_to_download)} PDFs")
+    logger.warning(f"[OK] Downloaded {len(downloaded_paths)} / {len(pdf_names_to_download)} PDFs")
 
     # Filter out PDFs that failed to download
     pdf_tasks_filtered = []
@@ -98,7 +102,7 @@ def process_database(
             logger.warning(f"[Warning] Skipping {task['pdf_name']} (download failed)")
             failed_pdfs_download.append(task["pdf_name"])
 
-    logger.info(f"\n[Processing] Processing {len(pdf_tasks_filtered)} PDFs with {max_workers} workers...\n")
+    logger.warning(f"\n[Processing] Processing {len(pdf_tasks_filtered)} PDFs with {max_workers} workers...\n")
 
     # ── Wall-clock timer for the whole processing stage ──
 
@@ -110,7 +114,7 @@ def process_database(
     pdf_results = {}  # Map PDF name to result
     _n_total = len(pdf_tasks_filtered)
 
-    logger.info(f"[Progress] Processing {_n_total} PDFs with {max_workers} workers...")
+    logger.warning(f"[Progress] Processing {_n_total} PDFs with {max_workers} workers...")
 
     _t_core_start = time.time()
     _submitted_at: dict[str, float] = {}
@@ -144,7 +148,7 @@ def process_database(
             _n_docs = len(result.get("extracted_nfs", []))
             _truncated = task["pdf_name"][:60]
             _status = "OK" if result.get("success") else "FAIL"
-            logger.info(f"  {_truncated} → {_status} ({_n_docs} docs, {_pdf_elapsed:.0f}s)")
+            logger.warning(f"  {_truncated} → {_status} ({_n_docs} docs, {_pdf_elapsed:.0f}s)")
 
             # Periodic summary every N PDFs
             # Use len(pdf_results) instead of completed_count[0] to avoid
@@ -158,7 +162,7 @@ def process_database(
                 _n_fail = _done - _n_ok
                 _rate = _done / _elapsed if _elapsed > 0 else 0
                 _eta = (_n_total - _done) / _rate if _rate > 0 else 0
-                logger.info(
+                logger.warning(
                     f"[Progress] {_done}/{_n_total} ({100 * _done // _n_total}%) | "
                     f"{_n_ok} OK, {_n_fail} FAIL | "
                     f"elapsed={_elapsed:.0f}s rate={_rate:.1f}pdf/s "
@@ -169,12 +173,12 @@ def process_database(
                     _inflight = {n: time.time() - t for n, t in _submitted_at.items() if n not in pdf_results}
                     if _inflight:
                         _slowest = sorted(_inflight.items(), key=lambda x: -x[1])[:3]
-                        logger.info("  ⏳ In-flight: " + ", ".join(f"{n[:40]}…({s:.0f}s)" for n, s in _slowest))
+                        logger.warning("  ⏳ In-flight: " + ", ".join(f"{n[:40]}…({s:.0f}s)" for n, s in _slowest))
     _t_core_wall = time.time() - _t_core_start
 
     _n_ok = sum(1 for r in pdf_results.values() if r.get("success"))
     _n_fail = _n_total - _n_ok
-    logger.info(
+    logger.warning(
         f"[Progress] Done: {_n_ok} OK, {_n_fail} FAIL in {_t_core_wall:.0f}s ({_t_core_wall / _n_total:.1f}s/pdf avg)"
     )
 
@@ -183,7 +187,7 @@ def process_database(
         ((n, _finished_at.get(n, 0) - _submitted_at.get(n, 0)) for n in pdf_results),
         key=lambda x: -x[1],
     )
-    logger.info("[Slowest] Top 5:")
+    logger.warning("[Slowest] Top 5:")
     for _rank, (_name, _sec) in enumerate(_sorted_pdfs[:5], 1):
         _r = pdf_results[_name]
         _ok = "OK" if _r.get("success") else "FAIL"
@@ -191,7 +195,7 @@ def process_database(
         _pages = _r.get("total_pages", "?")
         _cf = _r.get("_t_classif_wall_sec")
         _cf_str = f"classif={_cf:.0f}s" if _cf is not None else ""
-        logger.info(f"  #{_rank} {_name[:60]} → {_ok} ({_sec:.0f}s, {_pages}p, {_docs} docs {_cf_str})")
+        logger.warning(f"  #{_rank} {_name[:60]} → {_ok} ({_sec:.0f}s, {_pages}p, {_docs} docs {_cf_str})")
 
     # ── Intra-PDF parallelism indicator ──
     _classif_walls = [
@@ -199,7 +203,7 @@ def process_database(
     ]
     if _classif_walls:
         _avg = sum(_classif_walls) / len(_classif_walls)
-        logger.info(
+        logger.warning(
             f"[Parallelism] Média classif intra-PDF: {_avg:.1f}s wall (quanto menor que páginas×3s, mais paralelo)"
         )
 
@@ -276,7 +280,7 @@ def process_database(
         "_n_pdfs_fail": _n_fail,
     }
 
-    logger.info(
+    logger.warning(
         f"[Timing] Wall: Download={_t_download_total:.1f}s | Core={_t_core_wall:.1f}s\n"
         f"[Timing] Per-PDF CPU avg: Preprocess={_safe_avg(_timing_list_preprocess)}s | "
         f"Classificação(pag)={_safe_avg(_timing_list_classificacao)}s | "
@@ -286,9 +290,9 @@ def process_database(
     # ─────────────────────────────────────────────────────────────────────
 
     # Validate page consistency (NEW: detect page mapping issues)
-    logger.info(f"\n{'=' * 80}")
-    logger.info("Validating page consistency...")
-    logger.info(f"{'=' * 80}")
+    logger.warning(f"\n{'=' * 80}")
+    logger.warning("Validating page consistency...")
+    logger.warning(f"{'=' * 80}")
 
     inconsistencies = []
     for task in pdf_tasks:
@@ -318,14 +322,14 @@ def process_database(
     if inconsistencies:
         logger.warning(f"\n⚠️  WARNING: Found {len(inconsistencies)} page mapping inconsistencies:")
         for issue in inconsistencies[:10]:  # Show first 10
-            logger.info(f"  PDF: {issue['pdf_name']}")
-            logger.info(f"    Extracted page: {issue['extracted_page']} (NF: {issue['nf_numero']})")
-            logger.info(f"    Expected pages: {issue['nf_pages']}")
-            logger.info(f"    Issue: {issue['issue']}")
+            logger.warning(f"  PDF: {issue['pdf_name']}")
+            logger.warning(f"    Extracted page: {issue['extracted_page']} (NF: {issue['nf_numero']})")
+            logger.warning(f"    Expected pages: {issue['nf_pages']}")
+            logger.warning(f"    Issue: {issue['issue']}")
         if len(inconsistencies) > 10:
-            logger.info(f"  ... and {len(inconsistencies) - 10} more")
+            logger.warning(f"  ... and {len(inconsistencies) - 10} more")
     else:
-        logger.info("✓ No page mapping inconsistencies found")
+        logger.warning("✓ No page mapping inconsistencies found")
 
     # Build per-page JSON output — always (this is the pipeline's only output
     # format; GCS/BQ writes happen in the caller, using this same json_items).
@@ -348,33 +352,33 @@ def process_database(
     erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
 
     # Print summary
-    logger.info(f"\n{'#' * 80}")
-    logger.info("# Processing Complete")
-    logger.info(f"{'#' * 80}")
-    logger.info(f"PDFs processed: {total_pdfs}")
+    logger.warning(f"\n{'#' * 80}")
+    logger.warning("# Processing Complete")
+    logger.warning(f"{'#' * 80}")
+    logger.warning(f"PDFs processed: {total_pdfs}")
     if not json_items:
-        logger.info("  Nenhum PDF processado.")
+        logger.warning("  Nenhum PDF processado.")
     else:
-        logger.info(f"Status: {ok_with_doc + ok_without_doc} ok, {erro} com erro de processamento")
-    logger.info(
+        logger.warning(f"Status: {ok_with_doc + ok_without_doc} ok, {erro} com erro de processamento")
+    logger.warning(
         f"\n[SUCCESS] Built {len(json_items)} páginas ({ok_with_doc} com documento, "
         f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
     )
 
     # Print cache statistics
-    logger.info("\nCache Statistics:")
+    logger.warning("\nCache Statistics:")
     stats = processor.db_manager.get_statistics()
     for key, value in stats.items():
-        logger.info(f"  {key}: {value}")
+        logger.warning(f"  {key}: {value}")
 
     # Cleanup pre-downloaded PDFs — always (no persistent disk between Prefect runs).
-    logger.info(f"\n[Cleanup] Removing {len(downloaded_paths)} pre-downloaded PDFs...")
+    logger.warning(f"\n[Cleanup] Removing {len(downloaded_paths)} pre-downloaded PDFs...")
     for pdf_path in downloaded_paths.values():
         try:
             processor.gcs_downloader.cleanup_local_file(pdf_path)
         except Exception:
             pass  # Ignore cleanup errors
-    logger.info("[OK] Cleanup complete")
+    logger.warning("[OK] Cleanup complete")
 
     # Return json_items and timing_stats for this batch.
     # timing_stats contains avg_sec_* metrics to be written to pipeline_runs.

@@ -17,6 +17,10 @@ if TYPE_CHECKING:
     from .extractor import NFExtractor
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 
 def extract_from_pdf_bytes(
@@ -166,13 +170,13 @@ def extract_from_pdf_bytes(
             if nf_count > 0 or attempt == max_attempts:
                 if attempt > 1:
                     if nf_count > 0:
-                        logger.info("RETRY SUCCESS: Found %d NFs on attempt %d", nf_count, attempt)
+                        logger.warning("RETRY SUCCESS: Found %d NFs on attempt %d", nf_count, attempt)
                     else:
                         logger.warning("RETRY FAILED: Still found 0 NFs after %d attempts", attempt)
                 return result
 
             # No NFs found on first attempt - retry
-            logger.info("RETRY: 0 NFs found on attempt %d, retrying...", attempt)
+            logger.warning("RETRY: 0 NFs found on attempt %d, retrying...", attempt)
 
         except Exception as e:
             # Record failed API call
@@ -268,20 +272,20 @@ def _extract_with_batching(
         used for per-page hints when ``extractor.batch_size == 1``.
     :returns: Extraction result dictionary with ``batching_used=True``.
     """
-    logger.info(
+    logger.warning(
         "Large document detected (%d pages). Using batching: %d pages per batch.",
         len(page_list),
         extractor.batch_size,
     )
 
     batches = coalesce.split_pages_into_batches(page_list, extractor.batch_size)
-    logger.info("Created %d batches", len(batches))
+    logger.warning("Created %d batches", len(batches))
 
     all_nfs = []
     batch_details = []  # Track each batch's details
 
     for batch_idx, batch_pages in enumerate(batches, 1):
-        logger.info(
+        logger.warning(
             "[Batch %d/%d] Processing pages %d-%d...",
             batch_idx,
             len(batches),
@@ -330,7 +334,7 @@ def _extract_with_batching(
         )
 
         # Show batch result with page range from original PDF
-        logger.info(
+        logger.warning(
             "Found %d NFs in this batch (pages mapped: %d-%d)",
             len(batch_nfs),
             batch_pages[0],
@@ -338,10 +342,10 @@ def _extract_with_batching(
         )
 
     # Coalesce NFs across batches
-    logger.info("Coalescing %d NFs from all batches...", len(all_nfs))
+    logger.warning("Coalescing %d NFs from all batches...", len(all_nfs))
     coalesced_nfs = coalesce.coalesce_nfs_by_numero(all_nfs)
 
-    logger.info("Coalesced %d -> %d NFs", len(all_nfs), len(coalesced_nfs))
+    logger.warning("Coalesced %d -> %d NFs", len(all_nfs), len(coalesced_nfs))
 
     return {
         "processed_successfully": True,
@@ -378,7 +382,7 @@ def _extract_single_call(
     :param page_classifications: Optional mapping of original page number to document type.
     :returns: Extraction result dictionary.
     """
-    logger.info("Sending PDF to Gemini for analysis...")
+    logger.warning("Sending PDF to Gemini for analysis...")
 
     # Resolve classification hint for the single-call path.
     # If batch_size=1 and we have exactly one page with a known classification, use it.
@@ -441,7 +445,7 @@ def _retry_with_fallback_model(
         api_response_path = Path(api_response_output_dir) / f"{pdf_path.stem}_api_response.json"
         if api_response_path.exists():
             api_response_path.unlink()
-            logger.info("Deleted cache to force re-extraction")
+            logger.warning("Deleted cache to force re-extraction")
 
     # Create fallback extractor with gemini-2.5-flash-lite
     fallback_extractor = type(extractor)(
@@ -459,7 +463,7 @@ def _retry_with_fallback_model(
     )
 
     # Log the change
-    logger.info(
+    logger.warning(
         "Fallback complete. Original model: %s (%d NFs). Fallback model: %s (%d NFs).",
         extractor.model_name,
         len(notas_fiscais),
@@ -493,7 +497,7 @@ def extract_from_pdf(
     :returns: Extraction result dictionary.
     """
     pdf_path = Path(pdf_path)
-    logger.info("Processing PDF: %s", pdf_path.name)
+    logger.warning("Processing PDF: %s", pdf_path.name)
 
     # Prepare API response path if needed
     api_response_path = None
@@ -519,8 +523,8 @@ def extract_from_pdf(
             result["cached"] = True  # Mark as using cached response
             result["pdf_name"] = pdf_path.name
 
-            logger.info("Loaded from cache")
-            logger.info(
+            logger.warning("Loaded from cache")
+            logger.warning(
                 "Extraction complete: %d NFs found",
                 result.get("quantidade_notas_fiscais", 0),
             )
@@ -537,19 +541,19 @@ def extract_from_pdf(
     # Cache doesn't exist or failed to load - do normal PDF processing
     # Create filtered PDF with only specified pages
     if pages:
-        logger.info("Creating filtered PDF with pages: %s", pages)
+        logger.warning("Creating filtered PDF with pages: %s", pages)
         pdf_bytes = extractor._create_filtered_pdf(pdf_path, pages)
         num_pages = len(pages)
     else:
         # Use entire PDF
-        logger.info("Loading entire PDF...")
+        logger.warning("Loading entire PDF...")
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
         # Get page count
         reader = PdfReader(str(pdf_path))
         num_pages = len(reader.pages)
 
-    logger.info("Total pages to process: %d", num_pages)
+    logger.warning("Total pages to process: %d", num_pages)
 
     # Detect if batching is needed
     needs_batching = num_pages > extractor.batch_size
@@ -567,7 +571,7 @@ def extract_from_pdf(
     result["total_paginas"] = num_pages
 
     if result["processed_successfully"]:
-        logger.info(
+        logger.warning(
             "Extraction complete: %d NFs found",
             result.get("quantidade_notas_fiscais", 0),
         )
