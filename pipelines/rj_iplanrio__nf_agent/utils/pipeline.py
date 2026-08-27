@@ -20,13 +20,15 @@ from .gcs import GCSDownloader
 from .processing.metadata import get_git_info, utc_now_naive
 from .prompts import list_available_versions
 
-# ``POCProcessor`` (via GeminiClassifier/NFExtractor) is the only thing in this
-# module that needs ``google-generativeai`` — isolated outside `uv sync`
-# (see `Dockerfile` and `flow.py`'s module docstring for the full protobuf-
-# conflict story). It's imported where it's used, inside nf_processing_flow,
-# instead of here at module level, so this module stays importable during
-# `prefect deploy` in CI (which doesn't run the isolated install). Everything
-# else above is a regular dependency of this package — no reason to defer it.
+# ``POCProcessor`` is the one import in this module that must stay deferred
+# — not for the google-generativeai/protobuf reason (that's already isolated
+# two layers deeper, inside utils/llm.py::build_gemini_model), but because
+# ``classification/gemini_classifier.py`` reads a ``PROMPT_*`` env var
+# (Infisical secret) the moment it's imported. That env var only exists once
+# the flow actually runs — not during `prefect deploy` in CI (see flow.py's
+# module docstring). Importing it here at module level would break every
+# deploy. Everything else above is safe to import unconditionally: it never
+# touches Gemini or prompts, just by being imported.
 
 logger = get_logger(__name__)
 # TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect

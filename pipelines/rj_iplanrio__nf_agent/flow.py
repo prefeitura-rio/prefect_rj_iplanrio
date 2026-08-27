@@ -4,32 +4,51 @@ Prefect entrypoint for the NF (Nota Fiscal) validation pipeline.
 The NF business logic lives in this package (migrated from agent-nf-validator by
 mechanical move).
 
-Why some imports downstream (``utils/pipeline.py``, ``utils/processing/processor.py``)
-are deferred to function bodies instead of living at module level: this
-package's own `pyproject.toml` cannot declare `google-generativeai` as a
-normal dependency. The workspace root `pyproject.toml` has
-`[tool.uv] override-dependencies = ["grpcio-status==1.78.0", ...]`, forced
-across every pipeline in the monorepo — `grpcio-status==1.78.0` requires
-`protobuf>=6.31`, while `google-generativeai`'s pinned `google-ai-generativelanguage`
-dependency requires `protobuf<6.0`. No per-package exception exists in `uv`
-for a workspace-wide override, so `google-generativeai` is installed isolated
-(`pip install --target`, see `Dockerfile`) and added to `PYTHONPATH`, entirely
-outside `uv sync` — confined to this pipeline, no change to the shared
-workspace config. `prefect deploy` in CI only runs `uv sync --package
-rj_iplanrio__nf_agent` (no Docker build, so no isolated install yet), so
-anything that imports `google.generativeai` transitively must stay deferred
-until it's actually called, or CI deploys would fail on import. This is why
-`flow.py` itself stays importable with zero deferred imports — the deferral
-lives further down the call chain, where the Gemini-touching code actually is.
+``flow.py``/``tasks.py``/``utils/orchestration.py``/``utils/pipeline.py`` all
+import cleanly with zero setup — verified directly, no ``google-generativeai``
+installed and no ``PROMPT_*`` env vars set. Exactly one import stays deferred
+to a function body: ``POCProcessor`` inside
+``utils/pipeline.py::nf_processing_flow``. Two real constraints combine to
+require that, and it's worth knowing both — fixing only one wouldn't be enough:
+
+1. ``google-generativeai`` itself. This package's own `pyproject.toml` can't
+   declare it as a normal dependency: the workspace root `pyproject.toml` has
+   `[tool.uv] override-dependencies = ["grpcio-status==1.78.0", ...]`, forced
+   across every pipeline in the monorepo — `grpcio-status==1.78.0` requires
+   `protobuf>=6.31`, while `google-generativeai`'s pinned
+   `google-ai-generativelanguage` dependency requires `protobuf<6.0`. No
+   per-package exception exists in `uv` for a workspace-wide override, so
+   `google-generativeai` is installed isolated (`pip install --target`, see
+   `Dockerfile`) and added to `PYTHONPATH`, entirely outside `uv sync`. This
+   part is already handled at the right depth, though: nothing in
+   `POCProcessor`'s own import chain (`setup.py`, `gemini_classifier.py`,
+   `extractor.py`, `auth.py`) imports `google.generativeai` at module level —
+   that's deferred one layer further, inside `utils/llm.py::build_gemini_model`,
+   which only runs on an actual API call. Confirmed by direct test: importing
+   `POCProcessor` with `google-generativeai` genuinely absent works fine.
+
+2. Prompt env vars (the part that actually forces the deferral today).
+   `classification/gemini_classifier.py` does
+   `from ..prompts import CLASSIFICATION_PROMPT` at module level, which reads
+   the `PROMPT_CLASSIFICATION_V*` env var (an Infisical secret) the moment
+   the module is imported — not lazily, despite `utils/prompts.py`'s
+   `__getattr__` trick being designed for exactly that. That env var is only
+   present once the flow runs for real in its k8s pod; `prefect deploy` in CI
+   never has it (confirmed against
+   `.github/actions/deploy-prefect-flows/action.yaml` — that step's env has
+   only 10 non-secret vars, no Infisical secrets at all). So importing
+   `POCProcessor` at module level here would break every `prefect deploy`.
+
+Fixing constraint 2 (make `gemini_classifier.py`/`extraction/auth.py` read the
+prompt lazily, at construction time instead of at import time) would let this
+last import move to the top too — not done here, since it touches the real
+Gemini call path; flagged as a follow-up, not attempted in a lint pass.
 """
 
 from __future__ import annotations
-
 from datetime import datetime, timezone
-
 from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 from prefect import flow
-
 from .tasks import (
     log_batch_summary_task,
     new_or_continued_session_task,
