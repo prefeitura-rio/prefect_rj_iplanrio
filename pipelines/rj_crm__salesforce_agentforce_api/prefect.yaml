@@ -63,12 +63,16 @@ deployments:
       control_dataset: agentforce_control_staging
       environment: staging
     schedules:
-      # Roda de 15 em 15min, o dia inteiro. Validado em teste na janela
-      # 15h-15h45 (2026-08-20) — custo dentro do esperado, promovido para
-      # cadência contínua.
+      # Cadência de 15 em 15min foi um teste (2026-08-20) que ficou ligado — e foi
+      # exatamente o que expôs o bug do write_mode='replace' em messaging_session/
+      # messaging_end_user (cada execução apagava a partição do dia inteiro e
+      # recarregava só a fatia de 15min, perdendo o que runs anteriores do mesmo dia
+      # já tinham carregado — corrigido pra write_mode='merge', ver flow.py).
+      # Desativado agora que produção tem schedule próprio — staging volta a ser
+      # só sob demanda (QA), não uma cadência contínua paralela à de prod.
       - cron: "*/15 * * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: agentforce-teste-15min
 
   # -----------------------------------------------------------------------
@@ -85,3 +89,14 @@ deployments:
         command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
+    parameters:
+      environment: prod
+    schedules:
+      # Nunca teve schedule — só rodava sob demanda (explica o checkpoint de prod,
+      # agentforce_control.pipeline_checkpoints, estar vazio). De 15 em 15min, mesma
+      # cadência que staging usava — só é seguro agora com write_mode='merge' (ver
+      # flow.py); com o 'replace' antigo, essa frequência destruiria dado a cada run.
+      - cron: "*/15 * * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: agentforce-producao-15min
