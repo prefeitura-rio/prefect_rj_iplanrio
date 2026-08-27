@@ -2,6 +2,7 @@
 
 import threading
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -11,6 +12,8 @@ import fitz  # PyMuPDF
 from prefect_rj_iplanrio.logging import get_logger
 
 from ..cache import DatabaseManager
+from ..classification.gemini_classifier import NF_CATEGORIES
+from ..nfst_fatura_merger import merge_nfst_with_fatura
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
@@ -86,8 +89,6 @@ def process_pdf(
             page_categories, page_justifications = processor.load_all_cached_classifications(pdf_path)
 
             # Identify NF pages from cached classifications
-            from ..classification.gemini_classifier import NF_CATEGORIES
-
             nf_pages = []
             for page_num, category in page_categories.items():
                 if category in NF_CATEGORIES:
@@ -152,8 +153,6 @@ def process_pdf(
             extracted_nfs = extraction_result.get("notas_fiscais", [])
 
             # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-            from ..nfst_fatura_merger import merge_nfst_with_fatura
-
             extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
 
             # Load cached page categories and justifications from database
@@ -196,7 +195,6 @@ def process_pdf(
 
         _t_preprocess_start = time.time()
         _t_classif_start = time.time()
-        from ..classification.gemini_classifier import NF_CATEGORIES
 
         _max_inner = min(processor.MAX_INTRA_PDF_WORKERS, total_pages)
         with ThreadPoolExecutor(max_workers=_max_inner) as _exec:
@@ -257,8 +255,6 @@ def process_pdf(
             extracted_nfs = extraction_result.get("notas_fiscais", [])
 
             # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-            from ..nfst_fatura_merger import merge_nfst_with_fatura
-
             extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
         else:
             logger.warning("  [Step 4/5] Skipping extraction (no NF pages)")
@@ -391,8 +387,6 @@ def process_single_pdf_worker(
         logger.error(f"\n[ERROR Thread {thread_id}] Exception caught in worker:")
         logger.error(f"  Error type: {type(e).__name__}")
         logger.error(f"  Error message: {e!s}")
-        import traceback
-
         logger.error("  Full stack trace:")
         traceback.print_exc()
 

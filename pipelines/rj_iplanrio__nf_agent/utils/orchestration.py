@@ -9,6 +9,7 @@ extra that powers the extraction/classification agents.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -34,8 +35,6 @@ def new_or_continued_session(session_id: str | None) -> str:
     :param session_id: Existing session UUID, or ``None`` to start a new session.
     :returns: Session UUID string (existing or newly generated).
     """
-    import uuid
-
     if session_id:
         logger.warning("Continuing session: %s", session_id)
         return session_id

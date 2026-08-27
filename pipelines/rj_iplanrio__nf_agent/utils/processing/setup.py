@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
+from pypdf import PdfReader, PdfWriter
 
 from prefect_rj_iplanrio.logging import get_logger
 
@@ -12,6 +13,7 @@ from ..cache import DatabaseManager
 from ..classification.gemini_classifier import GeminiClassifier
 from ..extraction.extractor import NFExtractor
 from ..gcs import GCSDownloader
+from ..prompts import list_available_versions, load_prompt_version
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
@@ -46,8 +48,6 @@ def initialize(
     processor.quiet = quiet
 
     # Load prompts from specified versions
-    from ..prompts import list_available_versions, load_prompt_version
-
     if prompt_versions is None:
         # Use latest available versions
         classification_versions = list_available_versions("classification")
@@ -127,8 +127,6 @@ def create_filtered_pdf_bytes(pdf_path: Path, pages: list[int]) -> bytes:
     :param pages: Page numbers to include (1-indexed).
     :returns: Filtered PDF as bytes.
     """
-    from pypdf import PdfReader, PdfWriter
-
     reader = PdfReader(str(pdf_path))
     writer = PdfWriter()
 

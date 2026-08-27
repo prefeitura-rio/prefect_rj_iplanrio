@@ -1,5 +1,7 @@
 """NF coalescing and decimal sanity checks for ``NFExtractor``."""
 
+from collections import defaultdict
+
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -40,8 +42,6 @@ def coalesce_nfs_by_numero(all_nfs: list[dict]) -> list[dict]:
     :param all_nfs: List of NF dictionaries from all batches.
     :returns: List of coalesced NFs.
     """
-    from collections import defaultdict
-
     if not all_nfs:
         return []
 

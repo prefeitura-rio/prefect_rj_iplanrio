@@ -47,18 +47,6 @@ def process_database(
     logger.warning("# POC Pipeline - Database Processing")
     logger.warning(f"{'#' * 80}\n")
 
-    # DEBUG: Verify thread-local DB fix is loaded
-    # TODO change quiet to debug logger
-    # TODO remove this inspect section
-    if not processor.quiet:
-        import inspect
-
-        source = inspect.getsource(processor._process_single_pdf_worker)
-        if "thread_db_manager = DatabaseManager" in source:
-            logger.warning("[DEBUG] >>> Thread-local DB fix IS LOADED <<<")
-        else:
-            logger.warning("[DEBUG] XXX Thread-local DB fix NOT LOADED - using old code! XXX")
-
     # Store db_path for worker threads (each worker creates its own connection)
     processor.db_path = processor.db_manager.db_path
     logger.warning(f"[DEBUG] Main thread DB path stored: {processor.db_path}\n")

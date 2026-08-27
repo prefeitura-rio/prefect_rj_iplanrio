@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
+from iplanrio_agent_toolkit.metrics_tracker import get_tracker
+from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter
 
 from prefect_rj_iplanrio.logging import get_logger
 
@@ -97,8 +99,6 @@ def _call_gemini_for_classification(
     content_part = {"mime_type": "application/pdf" if input_is_pdf else "image/png", "data": content_b64}
 
     # Rate limiting: acquire permission to make API call
-    from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter
-
     rate_limiter = get_rate_limiter()
     rate_limiter.acquire()
 
@@ -186,9 +186,6 @@ def classify_page_with_model(
         :class:`ClassificationOptions`).
     :returns: Classification result dict.
     """
-    # Import metrics tracker
-    from iplanrio_agent_toolkit.metrics_tracker import get_tracker
-
     options = options or ClassificationOptions()
     model_name = options.model_name
     save_api_response = options.save_api_response

@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 
 import fitz  # PyMuPDF
 import pytest
+from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter, reset_rate_limiter
 
 # Prompts now come from Infisical-injected env vars (PROMPT_{TIPO}_{VERSAO} —
 # see utils/prompts.py), not from files in the repo. gemini_classifier.py and
@@ -70,8 +71,6 @@ def _disable_real_rate_limiter():
     are no-ops so tests never sleep waiting on a rate window, and reset the
     singleton before/after each test so tests don't leak state into each other.
     """
-    from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter, reset_rate_limiter
-
     reset_rate_limiter()
     limiter = get_rate_limiter()
     limiter.set_enabled(False)

@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from iplanrio_agent_toolkit.metrics_tracker import get_tracker
+from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter
 from pypdf import PdfReader
 
 from prefect_rj_iplanrio.logging import get_logger
@@ -46,8 +48,6 @@ def extract_from_pdf_bytes(
         ``extractor.extraction_prompt`` as-is (placeholder becomes empty string).
     :returns: Extraction result dictionary.
     """
-    from iplanrio_agent_toolkit.metrics_tracker import get_tracker
-
     tracker = get_tracker()
 
     # CHECK FOR CACHED API RESPONSE - Skip API call if response file exists
@@ -93,8 +93,6 @@ def extract_from_pdf_bytes(
             start_time = time.time()
 
             # Rate limiting: acquire permission to make API call
-            from iplanrio_agent_toolkit.rate_limiter import get_rate_limiter
-
             rate_limiter = get_rate_limiter()
             rate_limiter.acquire()
 
