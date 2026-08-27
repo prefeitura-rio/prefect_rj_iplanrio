@@ -83,12 +83,14 @@ _F2A_CRM_QUERIES = {
         "date_columns": ["created_date", "last_modified_date"],
         "watermark_field": "LastModifiedDate",
         "clustering_fields": ["id"],
+        "staging_table": "messaging_end_user_staging",
     },
     "messaging_session": {
         "soql": "SELECT Id, Status, StartTime, EndTime, MessagingChannelId, MessagingEndUserId, Origin, CreatedDate, LastModifiedDate FROM MessagingSession WHERE LastModifiedDate >= {watermark} ORDER BY CreatedDate ASC",
         "date_columns": ["start_time", "end_time", "created_date", "last_modified_date"],
         "watermark_field": "LastModifiedDate",
         "clustering_fields": ["id"],
+        "staging_table": "messaging_session_staging",
     },
 }
 
@@ -211,7 +213,13 @@ def agentforce_full_daily(
         t0 = time.time()
         f2a_rows: dict[str, int] = {}
         try:
-            # CRM REST usa as mesmas credenciais do Data Cloud (client_credentials)
+            # CRM REST usa as mesmas credenciais do Data Cloud (client_credentials).
+            # write_mode='merge' (não 'replace'): staging + MERGE por Id — 'replace'
+            # apagava a partição do dia inteiro a cada execução, o que é seguro 1x/dia
+            # mas ficou destrutivo quando o schedule de staging passou a rodar de 15
+            # em 15min (cada run apagava o que as runs anteriores do mesmo dia tinham
+            # carregado — causa raiz da queda de cobertura de telefone/HSM em
+            # v2_chatbot_conversas a partir de 2026-08-20).
             for table, cfg in _F2A_CRM_QUERIES.items():
                 f2a_rows[table] = sf_to_bq(
                     source="crm_rest",
@@ -220,7 +228,9 @@ def agentforce_full_daily(
                     crm_session=dc_session,
                     date_columns=cfg["date_columns"],
                     clustering_fields=cfg["clustering_fields"],
-                    write_mode="replace",
+                    write_mode="merge",
+                    staging_table=cfg["staging_table"],
+                    primary_key="id",
                     **bq_base,
                 )
 
