@@ -69,17 +69,19 @@ def pending_in_session(max_pdfs: int | None, total_in_session: int) -> tuple[int
 class BatchRunParams:
     """Parameters shared by a pipeline batch run and its self-triggered continuation."""
 
+    # --- BigQuery / GCS ---
     bq_extracao_pagina_table: str | None
-    pipeline_runs_table: str | None
-    batch_size: int
-    gcs_output_base_path: str
     db_path: str
     gcs_bucket: str | None
-    workers: int
-    mode: str
-    requests_per_minute: int
+    gcs_output_base_path: str
+    pipeline_runs_table: str | None
+    # --- Execução ---
+    batch_size: int
     max_concurrent: int
     max_pdfs: int | None
+    mode: str
+    requests_per_minute: int
+    workers: int
 
 
 @dataclass(frozen=True)

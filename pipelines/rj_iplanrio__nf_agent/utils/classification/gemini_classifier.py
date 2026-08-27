@@ -51,7 +51,6 @@ class GeminiClassifier:
 
     def __init__(
         self,
-        service_account_path: str | None = None,
         model_name: str | None = None,
         generation_config: dict | None = None,
         use_pdf_input: bool = True,
@@ -60,8 +59,6 @@ class GeminiClassifier:
         """
         Initialize Gemini classifier.
 
-        :param service_account_path: Deprecated — LLM auth is handled by the
-            Bifrost gateway; retained for call-site compatibility.
         :param model_name: Gemini model name (default: ``DEFAULT_MODEL_NAME``).
         :param generation_config: Generation config dict (default: optimized for
             classification).
@@ -70,8 +67,6 @@ class GeminiClassifier:
         :param classification_prompt: Custom classification prompt to use
             (default: CLASSIFICATION_PROMPT).
         """
-        self.service_account_path = service_account_path
-
         self.model_name = model_name or DEFAULT_MODEL_NAME
         self.generation_config = generation_config or DEFAULT_GENERATION_CONFIG
         self.use_pdf_input = use_pdf_input

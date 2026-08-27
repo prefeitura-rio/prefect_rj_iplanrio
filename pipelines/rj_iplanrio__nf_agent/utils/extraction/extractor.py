@@ -24,8 +24,6 @@ class NFExtractor:
     def __init__(
         self,
         model_name: str | None = None,
-        service_account_file: str | None = None,
-        api_key: str | None = None,
         extraction_prompt: str | None = None,
     ):
         """
@@ -37,8 +35,6 @@ class NFExtractor:
         auth.initialize(
             self,
             model_name=model_name,
-            service_account_file=service_account_file,
-            api_key=api_key,
             extraction_prompt=extraction_prompt,
         )
 

@@ -28,18 +28,21 @@ from .utils.orchestration import BatchRunParams
 
 @flow(log_prints=True)
 def rj_iplanrio__nf_agent(
+    # --- BigQuery / GCS ---
     bq_extracao_pagina_table: str | None = None,
-    pipeline_runs_table: str | None = None,
-    batch_size: int = 1000,
-    gcs_output_base_path: str = "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo",
     db_path: str = "/tmp/nf_pipeline_cache.db",
     gcs_bucket: str | None = None,
-    workers: int = 200,
+    gcs_output_base_path: str = "staging/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina",
+    pipeline_runs_table: str | None = None,
+    # --- Execução ---
+    batch_size: int = 1000,
+    max_concurrent: int = 50,
+    max_pdfs: int | None = None,
     mode: str = "full",
     requests_per_minute: int = 600,
-    max_concurrent: int = 50,
+    workers: int = 200,
+    # --- Sessão (self-trigger) ---
     session_id: str | None = None,
-    max_pdfs: int | None = None,
     session_pdfs_done: int = 0,
 ) -> None:
     """Run one batch of the NF extraction/validation pipeline and self-trigger the next one."""

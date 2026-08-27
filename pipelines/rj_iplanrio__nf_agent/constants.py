@@ -1,14 +1,10 @@
 """Shared constants for the NF Agent pipeline.
 
-Holds the Gemini service-account path (still used for GCS/BigQuery credential
-discovery) and the Bifrost LLM-gateway configuration used by both the
+Holds the Bifrost LLM-gateway configuration used by both the
 ``classification`` and ``extraction`` code paths.
 """
 
 import os
-from pathlib import Path
-
-SERVICE_ACCOUNT_PATH = Path(__file__).parent / "credentials" / "gemini-service-account.json"
 
 # --- Bifrost LLM gateway ----------------------------------------------------
 # Every LLM call (page classification + NF extraction) is routed through the

@@ -80,22 +80,32 @@ def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_tab
 
 @dataclass(frozen=True)
 class NfProcessingFlowConfig:
-    """Parameters for :func:`nf_processing_flow`. See that function's docstring for field docs."""
+    """Parameters for :func:`nf_processing_flow`. See that function's docstring for field docs.
 
+    The last block (``gcs_credentials``/``prompt_versions``/``quiet``/
+    ``temp_dir``) is internal-only: kept for direct construction (tests,
+    ad-hoc scripts) but there's no path to set them from outside this
+    module — ``orchestration.run_nf_pipeline`` never passes them, so real
+    runs always get the hardcoded defaults below.
+    """
+
+    # --- BigQuery / GCS ---
     bq_extracao_pagina_table: str | None = None
-    batch_size: int = 1000
-    gcs_output_base_path: str | None = None
     db_path: str = "cache.db"
-    gcs_credentials: str | None = None
     gcs_bucket: str | None = None
-    temp_dir: str = "temp"
-    mode: str = "full"
-    workers: int = 200
-    quiet: bool = False
-    prompt_versions: dict | None = None
-    requests_per_minute: int = 600
+    gcs_output_base_path: str | None = None
+    # --- Execução ---
+    batch_size: int = 1000
     max_concurrent: int = 50
     max_pdfs: int | None = None
+    mode: str = "full"
+    requests_per_minute: int = 600
+    workers: int = 200
+    # --- Interno (não exposto via deployment) ---
+    gcs_credentials: str | None = None
+    prompt_versions: dict | None = None
+    quiet: bool = False
+    temp_dir: str = "temp"
 
 
 def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
@@ -115,26 +125,31 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     done and won't be reprocessed until the pipeline version changes.
 
     Args:
+        # --- BigQuery / GCS ---
         bq_extracao_pagina_table: Full BQ table ID for this pipeline's own
                       per-page output table, e.g.
                       'project.dataset.extracao_pagina'. Required — this is
                       the only source of "already processed" state.
-        batch_size: Default cap on how many pending files to process in one
-                    run, when ``max_pdfs`` isn't set (default: 1000).
+        db_path: Path to SQLite cache database (default: cache.db)
+        gcs_bucket: GCS bucket name (default: from GCS_BUCKET env var)
         gcs_output_base_path: GCS path prefix for the per-page NDJSON output
                       (written under filename_prefix="extracao_pagina").
                       Set to None to skip GCS output.
-        db_path: Path to SQLite cache database (default: cache.db)
-        gcs_credentials: Path to GCS service account JSON (uses ADC if None)
-        gcs_bucket: GCS bucket name (default: from GCS_BUCKET env var)
-        temp_dir: Temporary directory for downloaded PDFs (default: temp/)
-        mode: Execution mode (full, preprocess_classification, run_classification, etc.)
-        workers: Number of concurrent workers for parallel processing (default: 200)
-        quiet: Suppress debug output
-        prompt_versions: Dict with 'classification' and 'extraction' versions
+        # --- Execução ---
+        batch_size: Default cap on how many pending files to process in one
+                    run, when ``max_pdfs`` isn't set (default: 1000).
+        max_concurrent: Max in-flight LLM requests at once (rate limiter).
         max_pdfs: Maximum number of pending files to process in this execution.
                   Overrides ``batch_size``. Useful for testing (e.g. max_pdfs=10).
                   When None (default), up to ``batch_size`` pending files are processed.
+        mode: Execution mode (full, preprocess_classification, run_classification, etc.)
+        requests_per_minute: LLM request-rate cap (rate limiter).
+        workers: Number of concurrent workers for parallel processing (default: 200)
+        # --- Interno (não exposto via deployment) ---
+        gcs_credentials: Path to GCS service account JSON (uses ADC if None)
+        prompt_versions: Dict with 'classification' and 'extraction' versions
+        quiet: Suppress debug output
+        temp_dir: Temporary directory for downloaded PDFs (default: temp/)
 
     (Each field above is a ``NfProcessingFlowConfig`` attribute, e.g. ``config.mode``.)
     """

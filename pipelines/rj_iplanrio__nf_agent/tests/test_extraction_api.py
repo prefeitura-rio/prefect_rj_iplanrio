@@ -43,8 +43,6 @@ def make_extractor(
     extractor.model_name = model_name
     extractor.extraction_prompt = prompt
     extractor.batch_size = batch_size
-    extractor._service_account_file = None
-    extractor._api_key = None
     extractor._model = MagicMock()
     return extractor
 
@@ -188,15 +186,11 @@ class TestSuspiciousDecimalFallback:
 
         fallback_calls = []
 
-        def fake_init(
-            extractor, model_name=None, service_account_file=None, api_key=None, extraction_prompt=None, batch_size=5
-        ):
+        def fake_init(extractor, model_name=None, extraction_prompt=None, batch_size=5):
             fallback_calls.append(model_name)
             extractor.model_name = model_name
             extractor.extraction_prompt = extraction_prompt
             extractor.batch_size = batch_size
-            extractor._service_account_file = service_account_file
-            extractor._api_key = api_key
             extractor._model = MagicMock()
             extractor._model.generate_content.return_value = FakeGeminiResponse(
                 nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12}])

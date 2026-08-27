@@ -44,17 +44,19 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
+      # --- BigQuery / GCS ---
       bq_extracao_pagina_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.extracao_pagina"
-      pipeline_runs_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.pipeline_runs"
-      batch_size: 500
-      gcs_output_base_path: "staging/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina"
       db_path: "/tmp/nf_pipeline_cache.db"
       gcs_bucket: "rj-nf-agent"
-      workers: 200
-      mode: "full"
-      requests_per_minute: 600
+      gcs_output_base_path: "staging/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina"
+      pipeline_runs_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.pipeline_runs"
+      # --- Execução ---
+      batch_size: 500
       max_concurrent: 50
       max_pdfs: null
+      mode: "full"
+      requests_per_minute: 600
+      workers: 200
 
   - name: rj-iplanrio--nf-agent--prod
     version: "{{ get-commit-hash.stdout }}"
@@ -68,14 +70,18 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
+      # --- BigQuery / GCS ---
       bq_extracao_pagina_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.extracao_pagina"
-      pipeline_runs_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.pipeline_runs"
-      batch_size: 500
-      gcs_output_base_path: "staging/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina"
       db_path: "/tmp/nf_pipeline_cache.db"
       gcs_bucket: "rj-nf-agent"
-      workers: 200
-      mode: "full"
-      requests_per_minute: 600
+      # NOTE: was "staging/..." before this cleanup — copy-paste leftover from
+      # the staging deployment block above; prod writes need the prod prefix.
+      gcs_output_base_path: "prod/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina"
+      pipeline_runs_table: "rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.pipeline_runs"
+      # --- Execução ---
+      batch_size: 500
       max_concurrent: 50
       max_pdfs: null
+      mode: "full"
+      requests_per_minute: 600
+      workers: 200
