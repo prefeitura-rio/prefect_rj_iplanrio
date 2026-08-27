@@ -2,9 +2,10 @@ name: rj_iplanrio__nf_agent
 prefect-version: 3.4.3
 
 # Secrets: the k3s `secretName` below is mounted as env vars into the job pod.
-# LLM calls go through the Bifrost gateway, so the secret must provide
-# `BIFROST_API_KEY` (Bifrost virtual key). Optionally `BIFROST_BASE_URL` to
-# override the default in constants.py. GCP creds for GCS/BigQuery keep coming
+# LLM calls go through the Bifrost gateway, so the secret must provide both
+# `BIFROST_API_KEY` (Bifrost virtual key) and `BIFROST_BASE_URL` (gateway
+# endpoint) — both required, no default/fallback in code (see constants.py /
+# utils/llm.py::build_gemini_model). GCP creds for GCS/BigQuery keep coming
 # from `RJ_NF_AGENT_CREDENTIALS` (see flow.py).
 
 build:

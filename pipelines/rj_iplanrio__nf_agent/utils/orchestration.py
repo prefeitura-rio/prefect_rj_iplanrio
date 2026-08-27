@@ -337,9 +337,10 @@ def trigger_next_batch_if_pending(
         return
 
     from .gcs import GCSDownloader  # noqa: PLC0415
-    from .pipeline import discover_pending_files, resolve_gcs_credentials  # noqa: PLC0415
+    from .pipeline import discover_pending_files  # noqa: PLC0415
 
-    gcs_downloader = GCSDownloader(credentials_path=resolve_gcs_credentials(None), bucket_name=params.gcs_bucket)
+    # ADC only — see utils/pipeline.py::nf_processing_flow's credentials comment.
+    gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=params.gcs_bucket)
     pending_files, current_commit = discover_pending_files(gcs_downloader, params.bq_extracao_pagina_table)
     pending = len(pending_files)
     logger.warning("%d files still pending after this batch (commit %s)", pending, current_commit)

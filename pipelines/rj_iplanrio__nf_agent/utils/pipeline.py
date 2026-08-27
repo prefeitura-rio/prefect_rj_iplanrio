@@ -10,8 +10,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
-
 from prefect_rj_iplanrio.logging import get_logger
 
 from .cache import DatabaseManager
@@ -22,28 +20,6 @@ logger = get_logger(__name__)
 # (bug em investigação). Workaround temporário: usamos logger.warning()
 # nos lugares que logicamente seriam logger.info() abaixo. Reverter para
 # logger.info() quando o bug for corrigido.
-
-
-def resolve_gcs_credentials(gcs_credentials: str | Path | None) -> Path | None:
-    """
-    Resolve the GCS credentials file path, in priority order: explicit
-    argument → ``GCS_CREDENTIALS_PATH`` env var → ``None`` (falls back to
-    ADC, which is how the Infisical-injected credentials from
-    ``RJ_NF_AGENT_CREDENTIALS`` are actually picked up — see
-    ``inject_credentials_from_env`` below).
-
-    No local-file fallback: every credential this pipeline uses must come
-    from an env var (Infisical-injected), never from a file checked into
-    the repo.
-    """
-    if gcs_credentials is not None:
-        return Path(gcs_credentials)
-
-    resolved = os.getenv("GCS_CREDENTIALS_PATH")
-    if resolved and not Path(resolved).exists():
-        logger.warning("GCS_CREDENTIALS_PATH set but file not found: %s", resolved)
-        return None
-    return Path(resolved) if resolved else None
 
 
 def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str) -> tuple[set[str], str]:
@@ -83,11 +59,11 @@ def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_tab
 class NfProcessingFlowConfig:
     """Parameters for :func:`nf_processing_flow`. See that function's docstring for field docs.
 
-    The last block (``gcs_credentials``/``prompt_versions``/``quiet``/
-    ``temp_dir``) is internal-only: kept for direct construction (tests,
-    ad-hoc scripts) but there's no path to set them from outside this
-    module — ``orchestration.run_nf_pipeline`` never passes them, so real
-    runs always get the hardcoded defaults below.
+    The last block (``prompt_versions``/``quiet``/``temp_dir``) is
+    internal-only: kept for direct construction (tests, ad-hoc scripts) but
+    there's no path to set them from outside this module —
+    ``orchestration.run_nf_pipeline`` never passes them, so real runs always
+    get the hardcoded defaults below.
     """
 
     # --- BigQuery / GCS ---
@@ -103,7 +79,6 @@ class NfProcessingFlowConfig:
     requests_per_minute: int = 600
     workers: int = 200
     # --- Interno (não exposto via deployment) ---
-    gcs_credentials: str | None = None
     prompt_versions: dict | None = None
     quiet: bool = False
     temp_dir: str = "temp"
@@ -147,7 +122,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         requests_per_minute: LLM request-rate cap (rate limiter).
         workers: Number of concurrent workers for parallel processing (default: 200)
         # --- Interno (não exposto via deployment) ---
-        gcs_credentials: Path to GCS service account JSON (uses ADC if None)
         prompt_versions: Dict with 'classification' and 'extraction' versions
         quiet: Suppress debug output
         temp_dir: Temporary directory for downloaded PDFs (default: temp/)
@@ -163,7 +137,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     batch_size = config.batch_size
     max_pdfs_per_session = config.max_pdfs
     gcs_output_base_path = config.gcs_output_base_path
-    gcs_credentials = config.gcs_credentials
     gcs_bucket = config.gcs_bucket
     temp_dir = config.temp_dir
     prompt_versions = config.prompt_versions
@@ -174,22 +147,18 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     # Environment variable fallbacks
     gcs_bucket = gcs_bucket or os.getenv("GCS_BUCKET")
 
-    # Inject Infisical base64 credentials if present — sets GOOGLE_APPLICATION_CREDENTIALS
-    # so all GCP clients (GCS, Gemini, BigQuery) pick them up automatically via ADC.
-    inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
-
-    # Credentials: priority order for explicit file paths:
-    # 1. Explicit parameter
-    # 2. Environment variable (GCS_CREDENTIALS_PATH)
-    # 3. ADC (auto-detected — covers Infisical-injected creds above, GCP VM metadata, gcloud login)
-    gcs_credentials = resolve_gcs_credentials(gcs_credentials)
-
+    # GCP credentials: always ADC. flow.py already calls
+    # inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS") once, at the start
+    # of the Prefect flow run, before this function is ever reached — that's
+    # the only caller of nf_processing_flow, so GOOGLE_APPLICATION_CREDENTIALS
+    # is already set by the time we get here. No local-file credential option:
+    # every credential this pipeline uses comes from that one Infisical secret.
     db_path = Path(db_path)
     temp_dir = Path(temp_dir)
 
     # Discover pending work: list every PDF in the GCS bucket, then exclude
     # files already fully done at the current pipeline version (git commit).
-    gcs_downloader = GCSDownloader(credentials_path=gcs_credentials, bucket_name=gcs_bucket)
+    gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket)
     pending_files, current_commit = discover_pending_files(gcs_downloader, bq_extracao_pagina_table)
     if not pending_files:
         logger.warning("No pending files found. Nothing to do.")
@@ -241,18 +210,15 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     # Convert mode string to enum
     mode_enum = ExecutionMode(mode)
 
-    _creds_label = str(gcs_credentials) if gcs_credentials else "ADC / Infisical (GOOGLE_APPLICATION_CREDENTIALS)"
-
     logger.warning(
         "Pipeline config: mode=%s | pending_files=%d | bq_extracao_pagina=%s | "
-        "gcs_out=%s | cache=%s | bucket=%s | gcs_creds=%s | workers=%d | quiet=%s",
+        "gcs_out=%s | cache=%s | bucket=%s | workers=%d | quiet=%s",
         mode,
         len(pdf_names),
         bq_extracao_pagina_table,
         gcs_output_base_path or "(none)",
         db_path,
         gcs_bucket,
-        _creds_label,
         workers,
         quiet,
     )
@@ -298,7 +264,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
                 gcs_writer = GCSResultsWriter(
                     bucket_name=gcs_bucket,
-                    credentials_path=gcs_credentials,
+                    credentials_path=None,
                 )
 
                 gcs_uri = gcs_writer.write_ndjson(

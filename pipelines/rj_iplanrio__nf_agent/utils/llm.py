@@ -23,8 +23,8 @@ def build_gemini_model(model_name: str, generation_config: dict[str, object] | N
     :param generation_config: Optional ``generation_config`` dict forwarded to
         ``GenerativeModel``.
     :returns: A configured ``google.generativeai.GenerativeModel`` whose requests
-        go to ``constants.BIFROST_BASE_URL``.
-    :raises RuntimeError: If the Bifrost virtual key env var is not set.
+        go through the Bifrost gateway.
+    :raises RuntimeError: If the Bifrost virtual key or base URL env var is not set.
     """
     api_key = os.environ.get(constants.BIFROST_API_KEY_ENV)
     if not api_key:
@@ -32,12 +32,18 @@ def build_gemini_model(model_name: str, generation_config: dict[str, object] | N
             f"{constants.BIFROST_API_KEY_ENV} is not set — required to reach the Bifrost LLM gateway"
         )
 
+    base_url = os.environ.get(constants.BIFROST_BASE_URL_ENV)
+    if not base_url:
+        raise RuntimeError(
+            f"{constants.BIFROST_BASE_URL_ENV} is not set — required to reach the Bifrost LLM gateway"
+        )
+
     import google.generativeai as genai  # noqa: PLC0415  (SDK installed only in the Docker image)
 
     genai.configure(
         api_key=api_key,
         transport="rest",
-        client_options={"api_endpoint": constants.BIFROST_BASE_URL},
+        client_options={"api_endpoint": base_url},
     )
     # INFO
     logger.warning("Gemini model %s configured via Bifrost", model_name)
