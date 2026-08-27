@@ -2,10 +2,25 @@
 Prefect entrypoint for the NF (Nota Fiscal) validation pipeline.
 
 The NF business logic lives in this package (migrated from agent-nf-validator by
-mechanical move). Some imports are deferred to the function
-body so this module stays importable during `prefect deploy` in CI, which only
-needs this pipeline's own dependencies (prefect, prefect-docker) synced — not
-the `gemini` extra that powers the extraction/classification agents.
+mechanical move).
+
+Why some imports downstream (``utils/pipeline.py``, ``utils/processing/processor.py``)
+are deferred to function bodies instead of living at module level: this
+package's own `pyproject.toml` cannot declare `google-generativeai` as a
+normal dependency. The workspace root `pyproject.toml` has
+`[tool.uv] override-dependencies = ["grpcio-status==1.78.0", ...]`, forced
+across every pipeline in the monorepo — `grpcio-status==1.78.0` requires
+`protobuf>=6.31`, while `google-generativeai`'s pinned `google-ai-generativelanguage`
+dependency requires `protobuf<6.0`. No per-package exception exists in `uv`
+for a workspace-wide override, so `google-generativeai` is installed isolated
+(`pip install --target`, see `Dockerfile`) and added to `PYTHONPATH`, entirely
+outside `uv sync` — confined to this pipeline, no change to the shared
+workspace config. `prefect deploy` in CI only runs `uv sync --package
+rj_iplanrio__nf_agent` (no Docker build, so no isolated install yet), so
+anything that imports `google.generativeai` transitively must stay deferred
+until it's actually called, or CI deploys would fail on import. This is why
+`flow.py` itself stays importable with zero deferred imports — the deferral
+lives further down the call chain, where the Gemini-touching code actually is.
 """
 
 from __future__ import annotations
