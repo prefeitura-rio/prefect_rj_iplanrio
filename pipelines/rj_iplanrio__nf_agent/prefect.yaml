@@ -56,7 +56,6 @@ deployments:
       requests_per_minute: 600
       max_concurrent: 50
       max_retries: 3
-      force_reprocess: false
       max_pdfs: null
 
   - name: rj-iplanrio--nf-agent--prod
@@ -83,5 +82,4 @@ deployments:
       requests_per_minute: 600
       max_concurrent: 50
       max_retries: 3
-      force_reprocess: false
       max_pdfs: null

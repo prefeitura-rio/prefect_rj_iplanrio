@@ -18,14 +18,13 @@ def new_or_continued_session_task(session_id: str | None) -> str:
 
 
 @task
-def run_nf_pipeline_task(params: BatchRunParams, force_reprocess: bool) -> dict[str, Any]:
+def run_nf_pipeline_task(params: BatchRunParams) -> dict[str, Any]:
     """Run one batch of the agent-nf-validator pipeline.
 
     :param params: Batch parameters controlling input/output tables, paths and concurrency.
-    :param force_reprocess: Whether to reprocess documents already marked as done.
     :return: Dictionary of timing stats and counters for the batch run
     """
-    return orchestration.run_nf_pipeline(params=params, force_reprocess=force_reprocess)
+    return orchestration.run_nf_pipeline(params=params)
 
 
 @task
@@ -62,7 +61,6 @@ def write_run_summary_task(
     workers: int,
     requests_per_minute: int,
     max_concurrent: int,
-    force_reprocess: bool,
     timing_stats: dict[str, Any],
 ) -> None:
     """Write a run-summary row to BigQuery."""
@@ -80,7 +78,6 @@ def write_run_summary_task(
             workers=workers,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
-            force_reprocess=force_reprocess,
         ),
         timing_stats=timing_stats,
     )

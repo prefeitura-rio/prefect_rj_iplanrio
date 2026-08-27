@@ -60,7 +60,7 @@ def build_versao_pipeline(
     """
     info: dict[str, Any] = {
         "mode": mode.value,
-        "extraction_batch_size": processor.extraction_batch_size,
+        "extraction_batch_size": 1,
         "workers": workers,
         "requests_per_minute": requests_per_minute,
         "max_concurrent": max_concurrent,
@@ -81,7 +81,7 @@ def build_versao_prompt(processor: "POCProcessor") -> dict[str, Any]:
     return {
         "versao_prompt_classificacao": processor.prompt_versions.get("classification"),
         "versao_prompt_extracao": processor.prompt_versions.get("extraction"),
-        "batch_size_extracao": processor.extraction_batch_size,
+        "batch_size_extracao": 1,
     }
 
 

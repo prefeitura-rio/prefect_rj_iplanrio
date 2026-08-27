@@ -27,7 +27,6 @@ class NFExtractor:
         service_account_file: str | None = None,
         api_key: str | None = None,
         extraction_prompt: str | None = None,
-        batch_size: int = 5,
     ):
         """
         Initialize extractor with Gemini model.
@@ -41,7 +40,6 @@ class NFExtractor:
             service_account_file=service_account_file,
             api_key=api_key,
             extraction_prompt=extraction_prompt,
-            batch_size=batch_size,
         )
 
     @property

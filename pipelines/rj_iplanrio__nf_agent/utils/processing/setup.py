@@ -26,7 +26,6 @@ def initialize(
     temp_dir: Path | None = None,
     quiet: bool = False,
     prompt_versions: dict[str, str] | None = None,
-    extraction_batch_size: int = 5,
 ) -> None:
     """
     Initialize ``processor``.
@@ -38,9 +37,6 @@ def initialize(
     :param quiet: Suppress debug output.
     :param prompt_versions: Dict with 'classification' and 'extraction' versions (e.g., {'classification': 'v1', 'extraction': 'v1'}).
         If None, uses latest available versions.
-    :param extraction_batch_size: Maximum pages per extraction API call (default: 5).
-        Set to 1 to process one page at a time and inject
-        per-page classification hints into the prompt.
     """
     processor.db_manager = db_manager
     processor.gcs_downloader = gcs_downloader
@@ -61,7 +57,6 @@ def initialize(
         }
 
     processor.prompt_versions = prompt_versions
-    processor.extraction_batch_size = extraction_batch_size
 
     # Load the actual prompt content
     processor.classification_prompt = load_prompt_version("classification", prompt_versions["classification"])
@@ -88,11 +83,16 @@ def get_classifier(processor: "POCProcessor") -> GeminiClassifier:
 
 
 def get_extractor(processor: "POCProcessor") -> NFExtractor:
-    """Lazy load ``processor``'s extractor."""
+    """Lazy load ``processor``'s extractor.
+
+    ``NFExtractor.batch_size`` is hardcoded to 1 internally (see
+    ``extraction/auth.py::initialize``) — one page per Gemini extraction
+    call, which enables per-page classification-hint injection into the
+    prompt (see ``extraction/prompt.py``).
+    """
     if processor._extractor is None:
         processor._extractor = NFExtractor(
             extraction_prompt=processor.extraction_prompt,
-            batch_size=processor.extraction_batch_size,
         )
     return processor._extractor
 

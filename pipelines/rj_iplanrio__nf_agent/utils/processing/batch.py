@@ -114,11 +114,9 @@ def build_status_rows(pdf_tasks: list[dict], pdf_results: dict[str, dict]) -> li
 def process_database(
     processor: "POCProcessor",
     csv_path: Path,
-    output_path: Path | None = None,
     limit: int | None = None,
     mode: ExecutionMode = ExecutionMode.FULL,
     max_workers: int = 1000,  # Batch download enables 1000 workers
-    keep_pdfs: bool = False,  # Keep downloaded PDFs instead of cleaning up
     requests_per_minute: int = 0,  # Passado para versao_pipeline (rastreabilidade)
     max_concurrent: int = 0,  # Passado para versao_pipeline (rastreabilidade)
 ) -> pd.DataFrame:
@@ -127,11 +125,9 @@ def process_database(
 
     :param processor: The ``POCProcessor`` instance.
     :param csv_path: Path to modulo-de-despesas.csv.
-    :param output_path: Optional path to save the per-page JSON results.
     :param limit: Optional limit on number of PDFs to process.
     :param mode: Execution mode controlling which steps to run.
     :param max_workers: Number of concurrent workers (default: 20).
-    :param keep_pdfs: Keep downloaded PDFs after processing.
     :param requests_per_minute: RPM configurado no rate limiter (para versao_pipeline).
     :param max_concurrent: Máximo de requisições simultâneas (para versao_pipeline).
     :returns: DataFrame with processing results.
@@ -525,41 +521,29 @@ def process_database(
         _n_status_err = int(results_df["pipeline_error"].notna().sum())
         logger.info(f"Status: {_n_status_ok} ok, {_n_status_err} com erro de processamento")
 
-    # Save output — per-page JSON is the only supported format.
-    json_items = None  # populated below when output_path is set
-    if output_path:
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Build and save per-page JSON (no BQ/GCS writes here — caller handles GCS/BQ)
-        _run_ts = datetime.utcnow()
-        json_items = metadata.build_json_output(
-            pdf_tasks=pdf_tasks,
-            pdf_results=pdf_results,
-            timestamp_geracao=_run_ts,
-            versao_pipeline=metadata.build_versao_pipeline(
-                processor,
-                mode=mode,
-                workers=max_workers,
-                requests_per_minute=requests_per_minute,
-                max_concurrent=max_concurrent,
-            ),
-            versao_prompt=metadata.build_versao_prompt(processor),
-        )
-        import json as _json
-
-        with open(output_path, "w", encoding="utf-8") as _fh:
-            _json.dump(json_items, _fh, ensure_ascii=False, indent=2, default=str)
-        ok_with_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
-        ok_without_doc = sum(
-            1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"]
-        )
-        erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
-        logger.info(f"\n[SUCCESS] JSON results saved to: {output_path}")
-        logger.info(
-            f"          {len(json_items)} páginas ({ok_with_doc} com documento, "
-            f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
-        )
+    # Build per-page JSON output — always, regardless of caller (GCS/BQ writes
+    # happen in the caller, using this same json_items; no local disk write here).
+    _run_ts = datetime.utcnow()
+    json_items = metadata.build_json_output(
+        pdf_tasks=pdf_tasks,
+        pdf_results=pdf_results,
+        timestamp_geracao=_run_ts,
+        versao_pipeline=metadata.build_versao_pipeline(
+            processor,
+            mode=mode,
+            workers=max_workers,
+            requests_per_minute=requests_per_minute,
+            max_concurrent=max_concurrent,
+        ),
+        versao_prompt=metadata.build_versao_prompt(processor),
+    )
+    ok_with_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
+    ok_without_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"])
+    erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
+    logger.info(
+        f"\n[SUCCESS] Built {len(json_items)} páginas ({ok_with_doc} com documento, "
+        f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
+    )
 
     # Print cache statistics
     logger.info("\nCache Statistics:")
@@ -567,20 +551,15 @@ def process_database(
     for key, value in stats.items():
         logger.info(f"  {key}: {value}")
 
-    # Cleanup pre-downloaded PDFs (optional)
-    if not keep_pdfs:
-        logger.info(f"\n[Cleanup] Removing {len(downloaded_paths)} pre-downloaded PDFs...")
-        for pdf_path in downloaded_paths.values():
-            try:
-                processor.gcs_downloader.cleanup_local_file(pdf_path)
-            except Exception:
-                pass  # Ignore cleanup errors
-        logger.info("[OK] Cleanup complete")
-    else:
-        logger.info(f"\n[Cleanup] Skipped - Keeping {len(downloaded_paths)} PDFs (--keep-pdfs flag)")
-        logger.info(f"PDFs saved in: {processor.temp_dir}")
+    # Cleanup pre-downloaded PDFs — always (no persistent disk between Prefect runs).
+    logger.info(f"\n[Cleanup] Removing {len(downloaded_paths)} pre-downloaded PDFs...")
+    for pdf_path in downloaded_paths.values():
+        try:
+            processor.gcs_downloader.cleanup_local_file(pdf_path)
+        except Exception:
+            pass  # Ignore cleanup errors
+    logger.info("[OK] Cleanup complete")
 
     # Return DataFrame, json_items, and timing_stats for this batch.
-    # json_items is None only when output_path is not set.
     # timing_stats contains avg_sec_* metrics to be written to pipeline_runs.
     return results_df, json_items, timing_stats

@@ -42,7 +42,6 @@ def rj_iplanrio__nf_agent(
     max_retries: int = 3,
     session_id: str | None = None,
     max_pdfs: int | None = None,
-    force_reprocess: bool = False,
     session_pdfs_done: int = 0,
 ) -> None:
     """Run one batch of the NF extraction/validation pipeline and self-trigger the next one."""
@@ -69,7 +68,7 @@ def rj_iplanrio__nf_agent(
     )
 
     started_at = datetime.now(timezone.utc)
-    timing_stats = run_nf_pipeline_task(params=params, force_reprocess=force_reprocess)
+    timing_stats = run_nf_pipeline_task(params=params)
     finished_at = datetime.now(timezone.utc)
 
     summary = summarize_batch_task(
@@ -93,7 +92,6 @@ def rj_iplanrio__nf_agent(
             workers=workers,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
-            force_reprocess=force_reprocess,
             timing_stats=timing_stats,
         )
 

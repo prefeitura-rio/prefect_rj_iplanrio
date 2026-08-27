@@ -462,7 +462,6 @@ def process_single_pdf_worker(
             temp_dir=processor.temp_dir,
             quiet=processor.quiet,
             prompt_versions=processor.prompt_versions,
-            extraction_batch_size=processor.extraction_batch_size,
         )
         logger.debug(f"[DEBUG Thread {thread_id}] [OK] POCProcessor created")
 

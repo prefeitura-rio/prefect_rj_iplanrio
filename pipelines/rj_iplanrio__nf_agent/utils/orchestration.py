@@ -208,7 +208,6 @@ class PipelineRunConfig:
     workers: int
     requests_per_minute: int
     max_concurrent: int
-    force_reprocess: bool
 
 
 def write_run_summary(
@@ -260,7 +259,6 @@ def write_run_summary(
             "avg_cpu_sec_classificacao_por_pagina": timing_stats.get("avg_cpu_sec_classificacao_por_pagina"),
             "avg_cpu_sec_extracao_por_declaracao": timing_stats.get("avg_cpu_sec_extracao_por_declaracao"),
             "avg_cpu_sec_validacao_por_pdf": timing_stats.get("avg_cpu_sec_validacao_por_pdf"),
-            "force_reprocess": config.force_reprocess,
         },
     )
 
@@ -381,12 +379,11 @@ def trigger_next_batch_if_pending(
     )
 
 
-def run_nf_pipeline(params: BatchRunParams, force_reprocess: bool) -> dict[str, Any]:
+def run_nf_pipeline(params: BatchRunParams) -> dict[str, Any]:
     """
     Run one batch of the agent-nf-validator extraction/validation pipeline.
 
     :param params: Batch parameters controlling input/output tables, paths and concurrency.
-    :param force_reprocess: Whether to reprocess documents already marked as done.
     :returns: Timing/count stats emitted by the pipeline run, or ``{}`` if none.
     """
     from .pipeline import NfProcessingFlowConfig  # noqa: PLC0415
@@ -405,6 +402,5 @@ def run_nf_pipeline(params: BatchRunParams, force_reprocess: bool) -> dict[str, 
         max_concurrent=params.max_concurrent,
         max_retries=params.max_retries,
         max_pdfs=params.max_pdfs,
-        force_reprocess=force_reprocess,
     )
     return _run_pipeline(config) or {}

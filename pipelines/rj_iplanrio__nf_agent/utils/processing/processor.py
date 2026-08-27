@@ -41,7 +41,6 @@ class POCProcessor:
         temp_dir: Path | None = None,
         quiet: bool = False,
         prompt_versions: dict[str, str] | None = None,
-        extraction_batch_size: int = 5,
     ):
         """Initialize processor. See ``setup.initialize`` for full parameter documentation."""
         setup.initialize(
@@ -51,7 +50,6 @@ class POCProcessor:
             temp_dir=temp_dir,
             quiet=quiet,
             prompt_versions=prompt_versions,
-            extraction_batch_size=extraction_batch_size,
         )
 
     @property
@@ -134,11 +132,9 @@ class POCProcessor:
     def process_database(
         self,
         csv_path: Path,
-        output_path: Path | None = None,
         limit: int | None = None,
         mode: ExecutionMode = ExecutionMode.FULL,
         max_workers: int = 1000,
-        keep_pdfs: bool = False,
         requests_per_minute: int = 0,
         max_concurrent: int = 0,
     ):
@@ -146,11 +142,9 @@ class POCProcessor:
         return batch.process_database(
             self,
             csv_path,
-            output_path=output_path,
             limit=limit,
             mode=mode,
             max_workers=max_workers,
-            keep_pdfs=keep_pdfs,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
         )

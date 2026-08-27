@@ -446,7 +446,6 @@ def _retry_with_fallback_model(
     # Create fallback extractor with gemini-2.5-flash-lite
     fallback_extractor = type(extractor)(
         model_name="gemini-2.5-flash-lite",
-        batch_size=extractor.batch_size,
         extraction_prompt=extractor.extraction_prompt,
     )
 

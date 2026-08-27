@@ -20,7 +20,6 @@ def initialize(
     service_account_file: str | None = None,
     api_key: str | None = None,
     extraction_prompt: str | None = None,
-    batch_size: int = 5,
 ) -> None:
     """Initialize ``extractor`` with Gemini model settings.
 
@@ -33,16 +32,16 @@ def initialize(
     :param service_account_file: Deprecated — retained for call-site compatibility.
     :param api_key: Deprecated — retained for call-site compatibility.
     :param extraction_prompt: Custom prompt text (default: ``EXTRACTION_PROMPT``).
-    :param batch_size: Maximum number of pages per extraction API call (default: 5).
-        Set to 1 to process one page at a time (useful for testing and when passing
-        per-page classification hints via ``page_classifications``).
     """
     extractor.model_name = model_name or GEMINI_CONFIG["model_name"]
     extractor._model = None
     extractor._service_account_file = service_account_file
     extractor._api_key = api_key
     extractor.extraction_prompt = extraction_prompt or EXTRACTION_PROMPT
-    extractor.batch_size = batch_size
+    # Always 1 page per extraction API call — enables per-page classification-hint
+    # injection into the prompt (see extraction/prompt.py); see also
+    # utils/processing/setup.py::get_extractor.
+    extractor.batch_size = 1
 
 
 def get_model(extractor: "NFExtractor"):
