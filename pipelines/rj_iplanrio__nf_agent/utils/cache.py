@@ -20,7 +20,10 @@ from iplanrio_agent_toolkit.cache import SQLiteCache
 class DatabaseManager(SQLiteCache):
     """Manages SQLite database for API call caching (NF-pipeline naming)."""
 
-    def get_or_create_input(
+    def get_or_create_input(  # noqa: PLR0913, PLR0917
+        # Overrides SQLiteCache.get_or_create_input, adapting its param names
+        # (pdf_name -> item_key) — grouping into a dataclass here would break
+        # the override's positional/keyword shape without adding clarity.
         self,
         input_type: str,
         pdf_name: str,

@@ -21,7 +21,10 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def initialize(
+def initialize(  # noqa: PLR0913, PLR0917
+    # Mirrors POCProcessor.__init__'s own public constructor signature — a
+    # dataclass here would need to change that public, test-exercised
+    # constructor shape too, for one internal call site.
     processor: "POCProcessor",
     db_manager: DatabaseManager,
     gcs_downloader: GCSDownloader,

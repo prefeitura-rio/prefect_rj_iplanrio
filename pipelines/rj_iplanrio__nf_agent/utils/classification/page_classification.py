@@ -81,7 +81,10 @@ def _estimate_cost_usd(input_tokens: int, output_tokens: int) -> float:
     return input_cost + output_cost
 
 
-def _call_gemini_for_classification(
+def _call_gemini_for_classification(  # noqa: PLR0913, PLR0917
+    # Single call site (below), pure decomposition of one already-private
+    # function — each param is independent call-time context for the one
+    # Gemini request, not a reusable config bundle worth a dataclass.
     model: "genai.GenerativeModel",
     page_bytes: bytes,
     page_num: int,

@@ -125,7 +125,10 @@ def get_git_info() -> dict[str, Any]:
 # ------------------------------------------------------------------
 
 
-def empty_json_item(
+def empty_json_item(  # noqa: PLR0913, PLR0917
+    # 5 call sites, all within this module (build_extracao_pagina_rows) —
+    # each param maps 1:1 to an independent output column, not a reusable
+    # config; a dataclass here would just rename "params" to "fields".
     pdf_name: str,
     page_num: int | None,
     pipeline_status: str,
