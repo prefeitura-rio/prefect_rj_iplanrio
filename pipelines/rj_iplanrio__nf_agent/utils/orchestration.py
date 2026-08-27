@@ -65,8 +65,7 @@ def pending_in_session(max_pdfs: int | None, total_in_session: int) -> tuple[int
 class BatchRunParams:
     """Parameters shared by a pipeline batch run and its self-triggered continuation."""
 
-    bq_input_table: str | None
-    bq_status_table: str | None
+    bq_extracao_pagina_table: str | None
     pipeline_runs_table: str | None
     batch_size: int
     gcs_output_base_path: str
@@ -76,7 +75,6 @@ class BatchRunParams:
     mode: str
     requests_per_minute: int
     max_concurrent: int
-    max_retries: int
     max_pdfs: int | None
 
 
@@ -194,7 +192,6 @@ class RunContext:
     """Identity and timing of a single flow run, for the run-summary row."""
 
     pipeline_runs_table: str
-    bq_status_table: str | None
     session_id: str
     started_at: datetime
     finished_at: datetime
@@ -226,7 +223,7 @@ def write_run_summary(
     """
     from .bigquery import BigQueryWriter  # noqa: PLC0415
 
-    bq_project, bq_dataset = parse_project_and_dataset(context.bq_status_table)
+    bq_project, bq_dataset = parse_project_and_dataset(context.pipeline_runs_table)
     if not (bq_project and bq_dataset):
         return
 
@@ -318,8 +315,6 @@ def trigger_next_batch_if_pending(
     :param total_in_session: Cumulative PDFs processed in the current session.
     :param batch_did_work: ``True`` if the current batch processed at least one PDF.
     """
-    from .bigquery import BQInputReader  # noqa: PLC0415
-
     flow_run_id = get_flow_run_id()
     if not flow_run_id:
         logger.info("Not running as a flow run — skipping self-trigger check")
@@ -330,10 +325,17 @@ def trigger_next_batch_if_pending(
         logger.info("Flow run has no deployment — skipping self-trigger check")
         return
 
-    pending = BQInputReader().count_pending(
-        params.bq_input_table, params.bq_status_table, max_retries=params.max_retries
-    )
-    logger.info("%d documents still pending after this batch", pending)
+    if not params.bq_extracao_pagina_table:
+        logger.info("No bq_extracao_pagina_table configured — skipping self-trigger check")
+        return
+
+    from .gcs import GCSDownloader  # noqa: PLC0415
+    from .pipeline import discover_pending_files, resolve_gcs_credentials  # noqa: PLC0415
+
+    gcs_downloader = GCSDownloader(credentials_path=resolve_gcs_credentials(None), bucket_name=params.gcs_bucket)
+    pending_files, current_commit = discover_pending_files(gcs_downloader, params.bq_extracao_pagina_table)
+    pending = len(pending_files)
+    logger.info("%d files still pending after this batch (commit %s)", pending, current_commit)
 
     if params.max_pdfs is not None and total_in_session >= params.max_pdfs:
         logger.info(
@@ -359,8 +361,7 @@ def trigger_next_batch_if_pending(
     run_deployment(
         name=deployment_id,
         parameters={
-            "bq_input_table": params.bq_input_table,
-            "bq_status_table": params.bq_status_table,
+            "bq_extracao_pagina_table": params.bq_extracao_pagina_table,
             "pipeline_runs_table": params.pipeline_runs_table,
             "batch_size": params.batch_size,
             "gcs_output_base_path": params.gcs_output_base_path,
@@ -370,7 +371,6 @@ def trigger_next_batch_if_pending(
             "mode": params.mode,
             "requests_per_minute": params.requests_per_minute,
             "max_concurrent": params.max_concurrent,
-            "max_retries": params.max_retries,
             "session_id": session_id,
             "max_pdfs": params.max_pdfs,
             "session_pdfs_done": total_in_session,
@@ -390,8 +390,7 @@ def run_nf_pipeline(params: BatchRunParams) -> dict[str, Any]:
     from .pipeline import nf_processing_flow as _run_pipeline  # noqa: PLC0415
 
     config = NfProcessingFlowConfig(
-        bq_input_table=params.bq_input_table,
-        bq_status_table=params.bq_status_table,
+        bq_extracao_pagina_table=params.bq_extracao_pagina_table,
         batch_size=params.batch_size,
         gcs_output_base_path=params.gcs_output_base_path,
         db_path=params.db_path,
@@ -400,7 +399,6 @@ def run_nf_pipeline(params: BatchRunParams) -> dict[str, Any]:
         mode=params.mode,
         requests_per_minute=params.requests_per_minute,
         max_concurrent=params.max_concurrent,
-        max_retries=params.max_retries,
         max_pdfs=params.max_pdfs,
     )
     return _run_pipeline(config) or {}

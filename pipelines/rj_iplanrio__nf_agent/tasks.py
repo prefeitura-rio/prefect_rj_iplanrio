@@ -52,7 +52,6 @@ def log_batch_summary_task(session_id: str, summary: BatchSummary, max_pdfs: int
 @task
 def write_run_summary_task(
     pipeline_runs_table: str,
-    bq_status_table: str | None,
     session_id: str,
     started_at: datetime,
     finished_at: datetime,
@@ -67,7 +66,6 @@ def write_run_summary_task(
     orchestration.write_run_summary(
         context=RunContext(
             pipeline_runs_table=pipeline_runs_table,
-            bq_status_table=bq_status_table,
             session_id=session_id,
             started_at=started_at,
             finished_at=finished_at,

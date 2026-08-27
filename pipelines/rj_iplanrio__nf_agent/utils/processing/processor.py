@@ -131,8 +131,7 @@ class POCProcessor:
 
     def process_database(
         self,
-        csv_path: Path,
-        limit: int | None = None,
+        pdf_names: list[str],
         mode: ExecutionMode = ExecutionMode.FULL,
         max_workers: int = 1000,
         requests_per_minute: int = 0,
@@ -141,8 +140,7 @@ class POCProcessor:
         """See ``batch.process_database``."""
         return batch.process_database(
             self,
-            csv_path,
-            limit=limit,
+            pdf_names,
             mode=mode,
             max_workers=max_workers,
             requests_per_minute=requests_per_minute,

@@ -28,8 +28,7 @@ from .utils.orchestration import BatchRunParams
 
 @flow(log_prints=True)
 def rj_iplanrio__nf_agent(
-    bq_input_table: str | None = None,
-    bq_status_table: str | None = None,
+    bq_extracao_pagina_table: str | None = None,
     pipeline_runs_table: str | None = None,
     batch_size: int = 1000,
     gcs_output_base_path: str = "staging/brutos_poc_osinfo_ia/resultado_extracao_modelo",
@@ -39,7 +38,6 @@ def rj_iplanrio__nf_agent(
     mode: str = "full",
     requests_per_minute: int = 600,
     max_concurrent: int = 50,
-    max_retries: int = 3,
     session_id: str | None = None,
     max_pdfs: int | None = None,
     session_pdfs_done: int = 0,
@@ -52,8 +50,7 @@ def rj_iplanrio__nf_agent(
 
     session_id = new_or_continued_session_task(session_id)
     params = BatchRunParams(
-        bq_input_table=bq_input_table,
-        bq_status_table=bq_status_table,
+        bq_extracao_pagina_table=bq_extracao_pagina_table,
         pipeline_runs_table=pipeline_runs_table,
         batch_size=batch_size,
         gcs_output_base_path=gcs_output_base_path,
@@ -63,7 +60,6 @@ def rj_iplanrio__nf_agent(
         mode=mode,
         requests_per_minute=requests_per_minute,
         max_concurrent=max_concurrent,
-        max_retries=max_retries,
         max_pdfs=max_pdfs,
     )
 
@@ -83,7 +79,6 @@ def rj_iplanrio__nf_agent(
     if pipeline_runs_table:
         write_run_summary_task(
             pipeline_runs_table=pipeline_runs_table,
-            bq_status_table=bq_status_table,
             session_id=session_id,
             started_at=started_at,
             finished_at=finished_at,

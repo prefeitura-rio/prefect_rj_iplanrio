@@ -1,14 +1,10 @@
-"""Database-scale (CSV batch) processing for ``POCProcessor``."""
+"""File-list-scale (GCS batch) processing for ``POCProcessor``."""
 
-import json
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
-
-import pandas as pd
 
 from prefect_rj_iplanrio.logging import get_logger
 
@@ -21,116 +17,31 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def build_status_rows(pdf_tasks: list[dict], pdf_results: dict[str, dict]) -> list[dict]:
-    """
-    Build minimal per-declaration status rows for ``BigQueryWriter.upsert_status()``.
-
-    ``upsert_status`` only reads ``id_documento``, ``pipeline_error``, and
-    ``pipeline_classification_detail`` (the latter for its 429-detection
-    heuristic) — this used to build a 19-column row per declaration
-    (``cnpj_modelo``, ``indicador_nf_encontrada_modelo``, a
-    ``match_id_documento``-style lookup, ``document_prioritizer`` selection,
-    ...) for the now-removed excel/output_table paths. None of that ever fed
-    the JSON output or ``upsert_status`` — ``match_id_documento`` itself was
-    later removed from ``metadata.build_json_output`` too (that matching now
-    happens as BigQuery post-processing, not in this pipeline).
-
-    ``pipeline_error``/``pipeline_classification_detail`` are PDF-level
-    (derived once from a PDF's ``result``, never from a declaration/row
-    field), so they're computed once per PDF and repeated across that PDF's
-    declarations.
-
-    :param pdf_tasks: List of task dicts produced earlier in
-        ``process_database`` (each with ``pdf_name`` and ``group_df``).
-    :param pdf_results: Mapping of ``pdf_name`` -> result dict from
-        ``process_pdf``.
-    :returns: One row dict per declaration, with keys ``id_documento``,
-        ``pipeline_error``, ``pipeline_classification_detail``.
-    """
-    rows: list[dict] = []
-
-    for task in pdf_tasks:
-        pdf_name = task["pdf_name"]
-        group_df = task["group_df"]
-        result = pdf_results.get(pdf_name, {})
-
-        page_categories = result.get("page_categories", {})
-        page_justifications = result.get("page_justifications", {})
-        nf_pages = result.get("nf_pages", [])
-
-        pipeline_error = None
-        pipeline_classification_detail = None
-
-        if not result.get("success", True):
-            # Processing error (download failure, API timeout, etc.)
-            error_message = result.get("error", "Unknown processing error")
-
-            error_type = "unknown_error"
-            stage = "unknown"
-            if "download" in error_message.lower():
-                error_type = "download_failed"
-                stage = "download"
-            elif "timeout" in error_message.lower():
-                error_type = "api_timeout"
-                stage = "extraction"  # Usually happens during extraction
-            elif "extraction" in error_message.lower():
-                error_type = "extraction_failed"
-                stage = "extraction"
-            elif "classification" in error_message.lower():
-                error_type = "classification_failed"
-                stage = "classification"
-
-            pipeline_error = json.dumps(
-                {"stage": stage, "error_type": error_type, "error_message": error_message}, ensure_ascii=False
-            )
-        elif page_categories:
-            pipeline_classification_detail = json.dumps(
-                metadata.build_classification_detail(page_categories, page_justifications, nf_pages),
-                ensure_ascii=False,
-            )
-        else:
-            # Processing succeeded but no classification is available for this PDF.
-            pipeline_error = json.dumps(
-                {
-                    "stage": "classification",
-                    "error_type": "no_classification_available",
-                    "error_message": "Nenhuma classificação disponível para este PDF",
-                },
-                ensure_ascii=False,
-            )
-
-        for _, row in group_df.iterrows():
-            rows.append(
-                {
-                    "id_documento": row.get("id_documento", ""),
-                    "pipeline_error": pipeline_error,
-                    "pipeline_classification_detail": pipeline_classification_detail,
-                }
-            )
-
-    return rows
-
-
 def process_database(
     processor: "POCProcessor",
-    csv_path: Path,
-    limit: int | None = None,
+    pdf_names: list[str],
     mode: ExecutionMode = ExecutionMode.FULL,
     max_workers: int = 1000,  # Batch download enables 1000 workers
     requests_per_minute: int = 0,  # Passado para versao_pipeline (rastreabilidade)
     max_concurrent: int = 0,  # Passado para versao_pipeline (rastreabilidade)
-) -> pd.DataFrame:
+) -> tuple[list[dict], dict]:
     """
-    Process entire database CSV with specified execution mode and parallelization.
+    Process a list of PDF filenames with specified execution mode and parallelization.
+
+    ``pdf_names`` is the pending-work list already resolved by the caller
+    (GCS bucket listing minus files already done at the current pipeline
+    version in ``extracao_pagina`` — see ``utils.pipeline.nf_processing_flow``
+    and ``utils.bigquery.PageStatusReader``). This function no longer reads
+    a declarations CSV or cross-checks GCS itself — every name in
+    ``pdf_names`` is assumed to already exist in the bucket.
 
     :param processor: The ``POCProcessor`` instance.
-    :param csv_path: Path to modulo-de-despesas.csv.
-    :param limit: Optional limit on number of PDFs to process.
+    :param pdf_names: PDF filenames (without extension) to process.
     :param mode: Execution mode controlling which steps to run.
     :param max_workers: Number of concurrent workers (default: 20).
     :param requests_per_minute: RPM configurado no rate limiter (para versao_pipeline).
     :param max_concurrent: Máximo de requisições simultâneas (para versao_pipeline).
-    :returns: DataFrame with processing results.
+    :returns: ``(json_items, timing_stats)`` — per-page results and batch timing metrics.
     """
     logger.info(f"\n{'#' * 80}")
     logger.info(f"# POC Pipeline - Database Processing [Mode: {mode.value}]")
@@ -152,99 +63,11 @@ def process_database(
     processor.db_path = processor.db_manager.db_path
     logger.info(f"[DEBUG] Main thread DB path stored: {processor.db_path}\n")
 
-    # Read CSV
-    logger.info(f"Reading database: {csv_path}")
-    df = pd.read_csv(csv_path)
-    logger.info(f"Total rows: {len(df)}")
-
-    # Group by PDF (descricao_limpa column - normalized without .pdf extension)
-    pdf_groups = df.groupby("descricao_limpa")
-    logger.info(f"Unique PDFs: {len(pdf_groups)}")
-
-    if limit:
-        logger.info(f"Processing limit: {limit} PDFs")
-
+    logger.info(f"PDFs to process: {len(pdf_names)}")
     logger.info(f"Parallel workers: {max_workers}")
 
-    # Load available PDFs from pre-generated CSV (faster than GCS API call)
-    logger.info("Loading available PDFs from CSV...")
-    # TODO rename symbol
-    if "pdf_url_download" in df.columns and df["pdf_url_download"].notna().any():
-        # View provides pdf_url_download — existence already guaranteed by INNER JOIN.
-        # Extract GCS base_path from the URL and skip bucket listing entirely.
-        # URL format: https://storage.cloud.google.com/<bucket>/<base_path>/<filename>
-        sample_url = df["pdf_url_download"].dropna().iloc[0]
-        # Strip query-string params (signed URLs) before parsing
-        sample_url_clean = sample_url.split("?")[0]
-        # Support both GCS URL formats:
-        #   https://storage.cloud.google.com/<bucket>/...
-        #   https://storage.googleapis.com/<bucket>/...
-        for _prefix in ("https://storage.cloud.google.com/", "https://storage.googleapis.com/"):
-            if sample_url_clean.startswith(_prefix):
-                sample_url_clean = sample_url_clean[len(_prefix) :]
-                break
-        url_parts = sample_url_clean.split("/")
-        # url_parts = [bucket, ...base_path_parts..., filename]
-        bucket_from_url = url_parts[0]
-        gcs_base_path = "/".join(url_parts[1:-1])
-        processor.gcs_downloader.default_base_path = gcs_base_path
-        # If no bucket was supplied via CLI/env, derive it from the URL
-        if not processor.gcs_downloader.bucket_name:
-            processor.gcs_downloader.bucket_name = bucket_from_url
-            processor.gcs_downloader._bucket = None  # force lazy reload with new bucket name
-            logger.info(f"  [Auto] GCS bucket set from pdf_url_download: {bucket_from_url}")
-        available_pdfs = set(df["descricao_limpa"].dropna().unique())
-        logger.info(
-            f"  Using pdf_url_download — {len(available_pdfs):,} PDFs (bucket: {processor.gcs_downloader.bucket_name}, base_path: {gcs_base_path})"
-        )
-    else:
-        available_pdfs = processor.gcs_downloader.get_available_pdf_filenames_from_csv()
-        logger.info(f"  Found {len(available_pdfs):,} PDFs in GCS")
-        sample_bq = list(pdf_groups.groups.keys())[:5]
-        sample_gcs = sorted(list(available_pdfs))[:5]
-        logger.info(f"  [DIAG] Primeiros pdf_names do BQ:  {sample_bq}")
-        logger.info(f"  [DIAG] Primeiros filenames do GCS: {sample_gcs}")
-
-    # Prepare PDF tasks (limit if specified)
-    # Filter CSV PDFs against available GCS PDFs using fast set lookup
-    pdf_tasks = []
-    checked_count = 0
-    found_count = 0
-    not_found_pdfs = []  # For debugging: track PDFs not found in GCS
-    failed_pdfs_download = []  # For debugging: track PDFs that failed to download
-
-    for pdf_idx, (pdf_name, group_df) in enumerate(pdf_groups):
-        # Stop if we've found enough PDFs
-        if limit and found_count >= limit:
-            break
-
-        checked_count += 1
-
-        # Check if PDF exists in GCS (instant set lookup - O(1))
-        if pdf_name not in available_pdfs:
-            # Show first 20 skips + any while still searching for limit
-            if checked_count <= 20 or (limit and found_count < limit and checked_count <= found_count + 30):
-                logger.info(f"  [{checked_count}] Skipping {pdf_name} (not found in GCS)")
-            not_found_pdfs.append(pdf_name)
-            continue
-
-        found_count += 1
-        logger.info(f"  [{found_count}/{limit if limit else '∞'}] Found {pdf_name} in GCS")
-
-        pdf_tasks.append(
-            {
-                "pdf_name": pdf_name,
-                "group_df": group_df,
-            }
-        )
-
+    pdf_tasks = [{"pdf_name": pdf_name} for pdf_name in pdf_names]
     total_pdfs = len(pdf_tasks)
-    logger.info(f"\n{'=' * 80}")
-    logger.info("GCS Search Summary:")
-    logger.info(f"  PDFs checked: {checked_count}")
-    logger.info(f"  PDFs found in GCS: {found_count}")
-    logger.info(f"  PDFs skipped (not in GCS): {checked_count - found_count}")
-    logger.info(f"{'=' * 80}")
 
     # PRE-DOWNLOAD: Download all PDFs in batches before parallel processing
     logger.info(f"\n[Pre-download] Downloading {total_pdfs} PDFs in batches...")
@@ -266,6 +89,7 @@ def process_database(
 
     # Filter out PDFs that failed to download
     pdf_tasks_filtered = []
+    failed_pdfs_download = []  # For debugging: track PDFs that failed to download
     for task in pdf_tasks:
         if task["pdf_name"] in downloaded_paths:
             task["pdf_path"] = downloaded_paths[task["pdf_name"]]
@@ -461,8 +285,6 @@ def process_database(
     )
     # ─────────────────────────────────────────────────────────────────────
 
-    results = build_status_rows(pdf_tasks, pdf_results)
-
     # Validate page consistency (NEW: detect page mapping issues)
     logger.info(f"\n{'=' * 80}")
     logger.info("Validating page consistency...")
@@ -505,24 +327,8 @@ def process_database(
     else:
         logger.info("✓ No page mapping inconsistencies found")
 
-    # Create results DataFrame
-    results_df = pd.DataFrame(results)
-
-    # Print summary
-    logger.info(f"\n{'#' * 80}")
-    logger.info("# Processing Complete")
-    logger.info(f"{'#' * 80}")
-    logger.info(f"Total rows processed: {len(results_df)}")
-    logger.info(f"PDFs processed: {total_pdfs}")
-    if results_df.empty:
-        logger.info("  Nenhum PDF processado.")
-    else:
-        _n_status_ok = int(results_df["pipeline_error"].isna().sum())
-        _n_status_err = int(results_df["pipeline_error"].notna().sum())
-        logger.info(f"Status: {_n_status_ok} ok, {_n_status_err} com erro de processamento")
-
-    # Build per-page JSON output — always, regardless of caller (GCS/BQ writes
-    # happen in the caller, using this same json_items; no local disk write here).
+    # Build per-page JSON output — always (this is the pipeline's only output
+    # format; GCS/BQ writes happen in the caller, using this same json_items).
     _run_ts = datetime.utcnow()
     json_items = metadata.build_json_output(
         pdf_tasks=pdf_tasks,
@@ -540,6 +346,16 @@ def process_database(
     ok_with_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
     ok_without_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"])
     erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
+
+    # Print summary
+    logger.info(f"\n{'#' * 80}")
+    logger.info("# Processing Complete")
+    logger.info(f"{'#' * 80}")
+    logger.info(f"PDFs processed: {total_pdfs}")
+    if not json_items:
+        logger.info("  Nenhum PDF processado.")
+    else:
+        logger.info(f"Status: {ok_with_doc + ok_without_doc} ok, {erro} com erro de processamento")
     logger.info(
         f"\n[SUCCESS] Built {len(json_items)} páginas ({ok_with_doc} com documento, "
         f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
@@ -560,6 +376,6 @@ def process_database(
             pass  # Ignore cleanup errors
     logger.info("[OK] Cleanup complete")
 
-    # Return DataFrame, json_items, and timing_stats for this batch.
+    # Return json_items and timing_stats for this batch.
     # timing_stats contains avg_sec_* metrics to be written to pipeline_runs.
-    return results_df, json_items, timing_stats
+    return json_items, timing_stats
