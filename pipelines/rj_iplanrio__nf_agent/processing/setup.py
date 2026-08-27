@@ -27,8 +27,6 @@ def initialize(
     quiet: bool = False,
     prompt_versions: dict[str, str] | None = None,
     extraction_batch_size: int = 5,
-    min_match_score: int = 2,
-    match_requires_pdf_name: bool = False,
 ) -> None:
     """
     Initialize ``processor``.
@@ -44,15 +42,6 @@ def initialize(
     :param extraction_batch_size: Maximum pages per extraction API call (default: 5).
         Set to 1 to process one page at a time and inject
         per-page classification hints into the prompt.
-    :param min_match_score: Minimum fields (CNPJ + número + data) that must match for a
-        declaration to be considered found (2 = legacy 2/3 fallback,
-        3 = strict perfect match only). Default: 2.
-    :param match_requires_pdf_name: Controls the scope of declaration matching. When
-        True (legacy behaviour), each page's
-        match_id_documento only considers declarations whose pdf_name
-        matches the current PDF. When False (default), all declarations
-        in the input are considered regardless of which PDF they point
-        to — useful for cross-PDF analysis in BigQuery.
     """
     processor.db_manager = db_manager
     processor.gcs_downloader = gcs_downloader
@@ -75,8 +64,6 @@ def initialize(
 
     processor.prompt_versions = prompt_versions
     processor.extraction_batch_size = extraction_batch_size
-    processor.min_match_score = min_match_score
-    processor.match_requires_pdf_name = match_requires_pdf_name
 
     # Load the actual prompt content
     processor.classification_prompt = load_prompt_version("classification", prompt_versions["classification"])

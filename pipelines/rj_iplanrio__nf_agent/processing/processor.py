@@ -55,8 +55,6 @@ class POCProcessor:
         quiet: bool = False,
         prompt_versions: dict[str, str] | None = None,
         extraction_batch_size: int = 5,
-        min_match_score: int = 2,
-        match_requires_pdf_name: bool = False,
     ):
         """Initialize processor. See ``setup.initialize`` for full parameter documentation."""
         setup.initialize(
@@ -68,8 +66,6 @@ class POCProcessor:
             quiet=quiet,
             prompt_versions=prompt_versions,
             extraction_batch_size=extraction_batch_size,
-            min_match_score=min_match_score,
-            match_requires_pdf_name=match_requires_pdf_name,
         )
 
     @property
@@ -133,17 +129,15 @@ class POCProcessor:
     def process_pdf(
         self,
         pdf_filename: str,
-        expected_nfs: list[dict[str, Any]],
         mode: ExecutionMode = ExecutionMode.FULL,
         pdf_path: Path | None = None,
     ) -> dict[str, Any]:
         """See ``process.process_pdf``."""
-        return process.process_pdf(self, pdf_filename, expected_nfs, mode, pdf_path)
+        return process.process_pdf(self, pdf_filename, mode, pdf_path)
 
     def _process_single_pdf_worker(
         self,
         pdf_name: str,
-        expected_nfs: list[dict[str, Any]],
         mode: ExecutionMode,
         progress_lock: threading.Lock,
         completed_count: list[int],
@@ -152,7 +146,7 @@ class POCProcessor:
     ) -> dict[str, Any]:
         """See ``process.process_single_pdf_worker``."""
         return process.process_single_pdf_worker(
-            self, pdf_name, expected_nfs, mode, progress_lock, completed_count, total_pdfs, pdf_path
+            self, pdf_name, mode, progress_lock, completed_count, total_pdfs, pdf_path
         )
 
     def process_database(

@@ -5,9 +5,6 @@ import subprocess
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-import pandas as pd
-
-from ..matching.scoring import normalize_cnpj, normalize_number
 from .modes import ExecutionMode
 
 if TYPE_CHECKING:
@@ -111,8 +108,6 @@ def build_versao_pipeline(
     info: dict[str, Any] = {
         "mode": mode.value,
         "extraction_batch_size": processor.extraction_batch_size,
-        "min_match_score": processor.min_match_score,
-        "match_requires_pdf_name": processor.match_requires_pdf_name,
         "workers": workers,
         "requests_per_minute": requests_per_minute,
         "max_concurrent": max_concurrent,
@@ -191,7 +186,6 @@ def empty_json_item(
         "numero_documento": None,
         "data_emissao_documento": None,
         "cnpj_emitente": None,
-        "match_id_documento": [],
         "valor_documento": None,
         "cnpj_destinatario": None,
         "data_competencia_documento": None,
@@ -206,9 +200,6 @@ def empty_json_item(
 def build_json_output(
     pdf_tasks: list[dict],
     pdf_results: dict[str, dict],
-    input_df: "pd.DataFrame",
-    min_match_score: int,
-    match_requires_pdf_name: bool = False,
     timestamp_geracao: datetime | None = None,
     versao_pipeline: dict | None = None,
     versao_prompt: dict | None = None,
@@ -251,7 +242,6 @@ def build_json_output(
         "numero_documento":          str | null,
         "data_emissao_documento":    str | null,
         "cnpj_emitente":             str | null,
-        "match_id_documento":        list[str],
         "valor_documento":           float | null,
         "cnpj_destinatario":         str | null,
         "data_competencia_documento": str | null,
@@ -267,43 +257,17 @@ def build_json_output(
 
     :param pdf_tasks: list of task dicts produced in process_database.
     :param pdf_results: mapping pdf_name -> result dict from process_pdf.
-    :param input_df: the full input DataFrame (used to build id_documento lookup).
-    :param min_match_score: minimum match_score_3_fields threshold for match_id_documento.
-    :param match_requires_pdf_name: when True, only declarations whose pdf_name matches the
-        current PDF are candidates for match_id_documento (legacy
-        behaviour). When False (default), every declaration in
-        input_df is a candidate regardless of pdf_name, enabling
-        cross-PDF match analysis in BigQuery.
     :param timestamp_geracao: UTC timestamp of this pipeline run (auto-generated if None).
     :param versao_pipeline: dict with pipeline config params for traceability.
     :param versao_prompt: dict with prompt versions and batch_size for traceability.
     :returns: List of per-page dicts ready for json.dump / NDJSON write.
     """
-    from ..matching.scoring import (
-        DocumentFields,
-        match_score_3_fields,
-    )
-
     # Garante que timestamp_geracao é sempre gerado automaticamente pela pipeline.
     # O campo NUNCA deve depender de input manual — gerado aqui uma única vez
     # por run e injetado em todos os itens de saída.
     if timestamp_geracao is None:
         timestamp_geracao = datetime.utcnow()
     ts_iso = timestamp_geracao.isoformat() + "Z"
-
-    # Pre-build a lookup from pdf_name -> list of declaration dicts,
-    # used to resolve match_id_documento for each extracted NF page.
-    declaration_lookup: dict[str, list] = {}
-    for _, row in input_df.iterrows():
-        pdf_name = str(row.get("descricao_limpa", ""))
-        declaration_lookup.setdefault(pdf_name, []).append(
-            {
-                "id_documento": str(row.get("id_documento", "")),
-                "cnpj_norm": normalize_cnpj(str(row.get("cnpj_cpf", ""))),
-                "numero_norm": normalize_number(str(row.get("num_documento", ""))),
-                "data_emissao": str(row.get("data_emissao", "")),
-            }
-        )
 
     output_items: list[dict] = []
 
@@ -320,14 +284,6 @@ def build_json_output(
 
         # A page can yield at most one extracted document in the current schema.
         extracted_by_page = {nf.get("pagina"): nf for nf in extracted_nfs if nf.get("pagina") is not None}
-        if match_requires_pdf_name:
-            # Legacy behaviour: only declarations that explicitly point to this PDF.
-            declarations = declaration_lookup.get(pdf_name, [])
-        else:
-            # Cross-PDF mode: all declarations in the input are candidates.
-            # Useful for BigQuery analysis of documents declared in one PDF
-            # that match content extracted from a different PDF.
-            declarations = [d for dlist in declaration_lookup.values() for d in dlist]
 
         if not total_pages:
             # Page count itself is unknown (e.g. download failed before the
@@ -403,29 +359,6 @@ def build_json_output(
                 output_items.append(item)
                 continue
 
-            # Find which declarations match this NF with the configured threshold.
-            # match_id_documento is a list (possibly multiple declarations match same NF).
-            matched_ids: list[str] = []
-            ext_cnpj = nf.get("cnpj_emitente", "") or ""
-            ext_numero = nf.get("numero_nf", "") or ""
-            ext_data = nf.get("data_emissao") or ""
-
-            for decl in declarations:
-                score = match_score_3_fields(
-                    expected=DocumentFields(
-                        cnpj=decl["cnpj_norm"],
-                        numero=decl["numero_norm"],
-                        data=decl["data_emissao"],
-                    ),
-                    extracted=DocumentFields(
-                        cnpj=ext_cnpj,
-                        numero=ext_numero,
-                        data=ext_data,
-                    ),
-                )
-                if score >= min_match_score:
-                    matched_ids.append(decl["id_documento"])
-
             item = empty_json_item(
                 pdf_name,
                 page_num,
@@ -440,7 +373,6 @@ def build_json_output(
                     "numero_documento": nf.get("numero_nf"),
                     "data_emissao_documento": nf.get("data_emissao"),
                     "cnpj_emitente": nf.get("cnpj_emitente"),
-                    "match_id_documento": matched_ids,
                     "valor_documento": nf.get("valor_total"),
                     "cnpj_destinatario": nf.get("cnpj_destinatario"),
                     "data_competencia_documento": nf.get("data_competencia"),

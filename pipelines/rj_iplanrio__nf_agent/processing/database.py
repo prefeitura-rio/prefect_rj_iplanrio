@@ -30,8 +30,9 @@ def build_status_rows(pdf_tasks: list[dict], pdf_results: dict[str, dict]) -> li
     (``cnpj_modelo``, ``indicador_nf_encontrada_modelo``, a
     ``match_id_documento``-style lookup, ``document_prioritizer`` selection,
     ...) for the now-removed excel/output_table paths. None of that ever fed
-    the JSON output (``metadata.build_json_output`` computes
-    ``match_id_documento`` independently) or ``upsert_status``.
+    the JSON output or ``upsert_status`` — ``match_id_documento`` itself was
+    later removed from ``metadata.build_json_output`` too (that matching now
+    happens as BigQuery post-processing, not in this pipeline).
 
     ``pipeline_error``/``pipeline_classification_detail`` are PDF-level
     (derived once from a PDF's ``result``, never from a declaration/row
@@ -233,31 +234,10 @@ def process_database(
         found_count += 1
         logger.info(f"  [{found_count}/{limit if limit else '∞'}] Found {pdf_name} in GCS")
 
-        # TODO this entire expected_nfs must occupy too much memory for large datasets, reconsider building them on the fly in the worker
-        # Prepare expected NFs from all rows for this PDF
-        expected_nfs = []
-        for _, row in group_df.iterrows():
-            expected_nf = {
-                "pdf_name": pdf_name,
-                "cnpj": str(row.get("cnpj_cpf", "")),  # Updated: cnpj → cnpj_cpf
-                "numero_nf": str(row.get("num_documento", "")),  # Use numero_nf for ComplianceValidator
-                "num_documento": str(row.get("num_documento", "")),  # Keep for backward compatibility
-                "valor_total": row.get("valor_documento"),  # Use valor_total for ComplianceValidator
-                "valor_documento": row.get("valor_documento"),  # Keep for backward compatibility
-                # TODO: Check if this should be valor_pago instead
-                "valor_pago": row.get("valor_pago_total"),  # Updated: valor_pago → valor_pago_total
-                "tipo_documento": row.get("id_tipo_documento", None),  # Optional, defaults to None
-                "data_emissao": (
-                    str(row.get("data_emissao", "")) if pd.notna(row.get("data_emissao")) else None
-                ),  # For date mismatch rule
-            }
-            expected_nfs.append(expected_nf)
-
         pdf_tasks.append(
             {
                 "pdf_name": pdf_name,
                 "group_df": group_df,
-                "expected_nfs": expected_nfs,
             }
         )
 
@@ -322,7 +302,6 @@ def process_database(
             future = executor.submit(
                 processor._process_single_pdf_worker,
                 pdf_name=task["pdf_name"],
-                expected_nfs=task["expected_nfs"],
                 mode=mode,
                 progress_lock=progress_lock,
                 completed_count=completed_count,
@@ -556,9 +535,6 @@ def process_database(
         json_items = metadata.build_json_output(
             pdf_tasks=pdf_tasks,
             pdf_results=pdf_results,
-            input_df=df,
-            min_match_score=processor.min_match_score,
-            match_requires_pdf_name=processor.match_requires_pdf_name,
             timestamp_geracao=_run_ts,
             versao_pipeline=metadata.build_versao_pipeline(
                 processor,

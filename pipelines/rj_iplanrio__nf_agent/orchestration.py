@@ -77,7 +77,6 @@ class BatchRunParams:
     requests_per_minute: int
     max_concurrent: int
     max_retries: int
-    match_requires_pdf_name: bool
     max_pdfs: int | None
 
 
@@ -375,7 +374,6 @@ def trigger_next_batch_if_pending(
             "max_concurrent": params.max_concurrent,
             "max_retries": params.max_retries,
             "session_id": session_id,
-            "match_requires_pdf_name": params.match_requires_pdf_name,
             "max_pdfs": params.max_pdfs,
             "session_pdfs_done": total_in_session,
         },
@@ -406,7 +404,6 @@ def run_nf_pipeline(params: BatchRunParams, force_reprocess: bool) -> dict[str, 
         requests_per_minute=params.requests_per_minute,
         max_concurrent=params.max_concurrent,
         max_retries=params.max_retries,
-        match_requires_pdf_name=params.match_requires_pdf_name,
         max_pdfs=params.max_pdfs,
         force_reprocess=force_reprocess,
     )

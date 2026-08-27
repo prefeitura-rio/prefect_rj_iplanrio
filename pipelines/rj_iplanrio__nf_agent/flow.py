@@ -41,7 +41,6 @@ def rj_iplanrio__nf_agent(
     max_concurrent: int = 50,
     max_retries: int = 3,
     session_id: str | None = None,
-    match_requires_pdf_name: bool = False,
     max_pdfs: int | None = None,
     force_reprocess: bool = False,
     session_pdfs_done: int = 0,
@@ -66,7 +65,6 @@ def rj_iplanrio__nf_agent(
         requests_per_minute=requests_per_minute,
         max_concurrent=max_concurrent,
         max_retries=max_retries,
-        match_requires_pdf_name=match_requires_pdf_name,
         max_pdfs=max_pdfs,
     )
 

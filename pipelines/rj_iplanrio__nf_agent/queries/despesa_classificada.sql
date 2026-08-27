@@ -10,6 +10,19 @@
 -- Ao rodar novas declarações no Prefect, a view automaticamente reflete os
 -- novos resultados — sem necessidade de script de recarga.
 -- =============================================================================
+-- ⚠️ QUEBRADA a partir da remoção de match_id_documento de extracao_pagina
+-- (pipeline Python, Sweep 4). match_proprio/match_outro_pdf (CTEs abaixo)
+-- fazem UNNEST(ep.match_id_documento) — esse campo não existe mais no schema
+-- de extracao_pagina. Como pagina_match (derivado dessas duas CTEs) é o join
+-- usado por praticamente tudo a partir da CTE 7 (nf_encontrada, match_valor,
+-- match_cnpj, match_numero_documento, match_data_emissao, nf_nao_duplicada,
+-- valor_pago_menor_documento, cnpj_ativo, emissao_posterior_abertura_cnpj,
+-- nf_nao_cancelada, classificacao_modelo, o array indicadores inteiro), a
+-- view inteira depende de ser reescrita para fazer esse matching
+-- (declaração vs. extraído, CNPJ+número+data) como parte do pós-processamento
+-- em BigQuery — não é mais responsabilidade da pipeline Python. Ver
+-- ../matching/README.md para o histórico completo dessa decisão.
+-- =============================================================================
 
 CREATE OR REPLACE VIEW
   `rj-nf-agent.brutos_cgm_poc_osinfo_ia_pipeline.despesa_classificada`

@@ -57,8 +57,6 @@ class NfProcessingFlowConfig:
     max_concurrent: int = 50
     max_retries: int = 3
     extraction_batch_size: int = 5
-    min_match_score: int = 2
-    match_requires_pdf_name: bool = False
     max_pdfs: int | None = None
     force_reprocess: bool = False
 
@@ -107,12 +105,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                                Set to 1 to process one page at a time, which enables
                                per-page classification hints in the extraction prompt
                                (requires a prompt version with {classification_hint}).
-        match_requires_pdf_name: Controls declaration matching scope in JSON output mode.
-                               False (default): all declarations are candidates for
-                               match_id_documento regardless of which PDF they point to —
-                               enables cross-PDF match analysis in BigQuery.
-                               True: only declarations whose pdf_name matches the current
-                               PDF are considered (legacy behaviour).
         max_pdfs: Maximum number of distinct PDFs to process in this execution when
                   using bq_input_table. Overrides the implicit "process all" behaviour
                   of the BQ batch mode. Useful for testing (e.g. max_pdfs=10).
@@ -145,8 +137,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     max_concurrent = config.max_concurrent
     max_retries = config.max_retries
     extraction_batch_size = config.extraction_batch_size
-    min_match_score = config.min_match_score
-    match_requires_pdf_name = config.match_requires_pdf_name
     max_pdfs = config.max_pdfs
     force_reprocess = config.force_reprocess
 
@@ -437,7 +427,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             quiet=quiet,
             prompt_versions=prompt_versions,
             extraction_batch_size=extraction_batch_size,
-            min_match_score=min_match_score,
         )
         logger.info("Processor initialized")
         logger.info("Starting processing...")
@@ -632,29 +621,6 @@ def main():
             "e.g., v6 or v7)."
         ),
     )
-    parser.add_argument(
-        "--min-match-score",
-        type=int,
-        default=2,
-        dest="min_match_score",
-        help=(
-            "Minimum number of fields (CNPJ + número + data_emissão) that must match "
-            "for a declaration to be considered found (default: 2 = 2/3 fallback, "
-            "3 = strict perfect match only)."
-        ),
-    )
-    parser.add_argument(
-        "--match-requires-pdf-name",
-        action="store_true",
-        default=False,
-        dest="match_requires_pdf_name",
-        help=(
-            "Restringe o match de declarações ao pdf_name do PDF sendo processado "
-            "(comportamento legado). Por padrão (False) todas as declarações do input "
-            "são candidatas, permitindo análise cross-PDF no BigQuery."
-        ),
-    )
-
     args = parser.parse_args()
 
     config = NfProcessingFlowConfig(
@@ -672,8 +638,6 @@ def main():
         quiet=args.quiet,
         experiment_id=args.experiment,
         extraction_batch_size=args.extraction_batch_size,
-        min_match_score=args.min_match_score,
-        match_requires_pdf_name=args.match_requires_pdf_name,
     )
 
     # All setup (credential resolution, experiment YAML overrides, rate limiter,

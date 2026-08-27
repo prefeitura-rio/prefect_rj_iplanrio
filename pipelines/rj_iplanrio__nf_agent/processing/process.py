@@ -21,7 +21,6 @@ logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
 def process_pdf(
     processor: "POCProcessor",
     pdf_filename: str,
-    expected_nfs: list[dict[str, Any]],
     mode: ExecutionMode = ExecutionMode.FULL,
     pdf_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -30,14 +29,12 @@ def process_pdf(
 
     :param processor: The ``POCProcessor`` instance.
     :param pdf_filename: Name of PDF file (with or without .pdf extension).
-    :param expected_nfs: List of expected NF dictionaries from database.
     :param mode: Execution mode controlling which steps to run.
     :param pdf_path: Optional pre-downloaded PDF path (if None, will download from GCS).
     :returns: Processing result (structure depends on mode).
     """
     logger.info(f"\n{'=' * 80}")
     logger.info(f"Processing: {pdf_filename} [Mode: {mode.value}]")
-    logger.info(f"Expected NFs: {len(expected_nfs)}")
     logger.info(f"{'=' * 80}")
 
     # Per-PDF timing accumulator (seconds); None = not measured / all cache hits
@@ -373,7 +370,6 @@ def process_pdf(
                 "page_justifications": page_justifications,  # ADDED: Include justifications
                 "extracted_nf_count": len(extracted_nfs),
                 "extracted_nfs": extracted_nfs,
-                "expected_nf_count": len(expected_nfs),
                 # Timing fields (None = not measured / all cache hits)
                 "_t_preprocess_sec": _t_preprocess,
                 "_t_classif_wall_sec": _t_classif_wall,
@@ -412,7 +408,6 @@ def process_pdf(
 def process_single_pdf_worker(
     processor: "POCProcessor",
     pdf_name: str,
-    expected_nfs: list[dict[str, Any]],
     mode: ExecutionMode,
     progress_lock: threading.Lock,
     completed_count: list[int],
@@ -425,7 +420,6 @@ def process_single_pdf_worker(
 
     :param processor: The ``POCProcessor`` instance whose config/credentials to clone.
     :param pdf_name: PDF filename.
-    :param expected_nfs: List of expected NF dicts for this PDF.
     :param mode: Execution mode.
     :param progress_lock: Thread lock for progress tracking.
     :param completed_count: Mutable list with single element for tracking progress.
@@ -469,7 +463,6 @@ def process_single_pdf_worker(
             quiet=processor.quiet,
             prompt_versions=processor.prompt_versions,
             extraction_batch_size=processor.extraction_batch_size,
-            min_match_score=processor.min_match_score,
         )
         logger.debug(f"[DEBUG Thread {thread_id}] [OK] POCProcessor created")
 
@@ -478,7 +471,7 @@ def process_single_pdf_worker(
 
         # Process PDF (with optional pre-downloaded path)
         logger.debug(f"[DEBUG Thread {thread_id}] Calling process_pdf()...")
-        result = thread_processor.process_pdf(pdf_name, expected_nfs, mode=mode, pdf_path=pdf_path)
+        result = thread_processor.process_pdf(pdf_name, mode=mode, pdf_path=pdf_path)
         logger.debug(f"[DEBUG Thread {thread_id}] [OK] process_pdf() completed successfully")
 
         _elapsed = time.time() - _t_start
