@@ -6,6 +6,10 @@ from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Brazilian currency values have at most 2 decimal places; more than that on
+# valor_total is a sign the model hallucinated digits (see has_suspicious_decimals).
+MAX_SANE_DECIMAL_PLACES = 2
+
 
 def split_pages_into_batches(pages: list[int], batch_size: int = 5) -> list[list[int]]:
     """
@@ -144,7 +148,7 @@ def has_suspicious_decimals(notas_fiscais: list[dict]) -> bool:
     for nf in notas_fiscais:
         # Check valor_total
         valor_total = nf.get("valor_total", 0.0)
-        if valor_total and count_decimals(valor_total) > 2:
+        if valor_total and count_decimals(valor_total) > MAX_SANE_DECIMAL_PLACES:
             return True
 
     return False

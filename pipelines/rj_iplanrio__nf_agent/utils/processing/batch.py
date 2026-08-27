@@ -18,6 +18,10 @@ logger = get_logger(__name__)
 # nos lugares que logicamente seriam logger.info() abaixo. Reverter para
 # logger.info() quando o bug for corrigido.
 
+PROGRESS_LOG_INTERVAL_PDFS = 10  # log a progress summary every N completed PDFs
+LOW_THROUGHPUT_RATE_PDFS_PER_SEC = 0.1  # below this, also log which PDFs are still in-flight
+MAX_INCONSISTENCIES_TO_LOG = 10  # cap on page-mapping-inconsistency detail lines printed
+
 
 def process_database(
     processor: "POCProcessor",
@@ -137,7 +141,7 @@ def process_database(
             # phantom FAILs caused by the worker incrementing the counter
             # before the result reaches pdf_results (race condition).
             _done = len(pdf_results)
-            if _done - _last_summary_count >= 10 or _done == _n_total:
+            if _done - _last_summary_count >= PROGRESS_LOG_INTERVAL_PDFS or _done == _n_total:
                 _last_summary_count = _done
                 _elapsed = time.time() - _t_core_start
                 _n_ok = sum(1 for r in pdf_results.values() if r.get("success"))
@@ -151,7 +155,7 @@ def process_database(
                     f"eta={_eta:.0f}s"
                 )
                 # When rate is low, show which PDFs are still in-flight
-                if _rate < 0.1:
+                if _rate < LOW_THROUGHPUT_RATE_PDFS_PER_SEC:
                     _inflight = {n: time.time() - t for n, t in _submitted_at.items() if n not in pdf_results}
                     if _inflight:
                         _slowest = sorted(_inflight.items(), key=lambda x: -x[1])[:3]
@@ -303,13 +307,13 @@ def process_database(
 
     if inconsistencies:
         logger.warning(f"\n⚠️  WARNING: Found {len(inconsistencies)} page mapping inconsistencies:")
-        for issue in inconsistencies[:10]:  # Show first 10
+        for issue in inconsistencies[:MAX_INCONSISTENCIES_TO_LOG]:
             logger.warning(f"  PDF: {issue['pdf_name']}")
             logger.warning(f"    Extracted page: {issue['extracted_page']} (NF: {issue['nf_numero']})")
             logger.warning(f"    Expected pages: {issue['nf_pages']}")
             logger.warning(f"    Issue: {issue['issue']}")
-        if len(inconsistencies) > 10:
-            logger.warning(f"  ... and {len(inconsistencies) - 10} more")
+        if len(inconsistencies) > MAX_INCONSISTENCIES_TO_LOG:
+            logger.warning(f"  ... and {len(inconsistencies) - MAX_INCONSISTENCIES_TO_LOG} more")
     else:
         logger.warning("✓ No page mapping inconsistencies found")
 

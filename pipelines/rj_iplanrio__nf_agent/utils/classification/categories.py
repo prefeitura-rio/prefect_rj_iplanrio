@@ -1,5 +1,8 @@
 """Page-classification category constants and normalization for the Gemini classifier."""
 
+# Minimum similarity score for fuzzy category matching (see normalize_category below).
+FUZZY_MATCH_THRESHOLD = 0.7
+
 # Valid Page Classification Categories (must match prompt v3)
 # Aligned with extraction categories - no more "Nota Fiscal" generic, now specific types
 PAGE_CATEGORIES = [
@@ -233,7 +236,7 @@ def normalize_category(raw_category: str) -> str:
 
     for valid_cat in PAGE_CATEGORIES:
         score = similarity_score(cleaned, valid_cat.lower())
-        if score > best_score and score > 0.7:  # Threshold of 70% similarity
+        if score > best_score and score > FUZZY_MATCH_THRESHOLD:
             best_score = score
             best_match = valid_cat
 

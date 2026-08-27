@@ -186,8 +186,9 @@ def parse_project_and_dataset(bq_table_ref: str | None) -> tuple[str | None, str
     :returns: ``(project, dataset)`` tuple, or ``(None, None)`` if the reference
         is absent or malformed (fewer than three dot-separated parts).
     """
+    project_dataset_table_part_count = 3
     parts = (bq_table_ref or "").split(".")
-    if len(parts) < 3:
+    if len(parts) < project_dataset_table_part_count:
         return None, None
     return parts[0], parts[1]
 
