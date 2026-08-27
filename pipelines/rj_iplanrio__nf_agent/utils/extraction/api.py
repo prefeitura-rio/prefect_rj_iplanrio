@@ -1,21 +1,22 @@
 """Gemini API calls for ``NFExtractor``."""
 
 import json
-import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pypdf import PdfReader
 
-from .config import GEMINI_CONFIG
+from prefect_rj_iplanrio.logging import get_logger
+
 from . import coalesce
 from . import prompt as prompt_module
+from .config import GEMINI_CONFIG
 
 if TYPE_CHECKING:
     from .extractor import NFExtractor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def extract_from_pdf_bytes(

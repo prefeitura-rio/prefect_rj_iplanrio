@@ -1,16 +1,17 @@
 """Metadata and JSON output builders for ``POCProcessor``."""
 
-import logging
 import subprocess
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
+
+from prefect_rj_iplanrio.logging import get_logger
 
 from .modes import ExecutionMode
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
 
-logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
+logger = get_logger(__name__)
 
 
 def build_classification_detail(
@@ -40,54 +41,6 @@ def build_classification_detail(
         "valid_document_pages": sorted(nf_pages),
         "pages": pages_detail,
     }
-
-
-def build_extraction_detail(extracted_nfs: list[dict], result: dict) -> dict:
-    """
-    Constrói detalhe estruturado da extração por documento.
-    Inclui metadados completos da resposta do modelo (possui_nota_fiscal, quantidade, etc).
-
-    :param extracted_nfs: Lista de NFs extraídas.
-    :param result: Resultado completo da extração.
-    :returns: Dicionário estruturado com detalhes da extração.
-    """
-    # Capturar resposta completa do modelo (se disponível)
-    possui_nota_fiscal = result.get("possui_nota_fiscal", len(extracted_nfs) > 0)
-    quantidade = result.get("quantidade_notas_fiscais", len(extracted_nfs))
-
-    documents_detail = []
-    for nf in extracted_nfs:
-        doc = {
-            "original_page": nf.get("pagina"),
-            "tipo_documento": nf.get("tipo_documento"),
-            "cnpj_emitente": nf.get("cnpj_emitente"),
-            "cnpj_destinatario": nf.get("cnpj_destinatario"),
-            "numero_nf": nf.get("numero_nf"),
-            "valor_total": nf.get("valor_total"),
-            "data_emissao": nf.get("data_emissao"),
-        }
-
-        # Adicionar batch_info se presente (novo campo de rastreabilidade)
-        if "_page_mapping" in nf:
-            doc["batch_info"] = nf["_page_mapping"]
-
-        documents_detail.append(doc)
-
-    extraction_method = "batch" if result.get("batching_used", False) else "single"
-
-    extraction_detail = {
-        "possui_nota_fiscal": possui_nota_fiscal,
-        "quantidade_notas_fiscais": quantidade,
-        "documents_extracted": len(extracted_nfs),
-        "extraction_method": extraction_method,
-        "documents": documents_detail,
-    }
-
-    # Adicionar batch_details se batching foi usado (inclui raw responses)
-    if result.get("batching_used"):
-        extraction_detail["batch_details"] = result.get("batch_details", [])
-
-    return extraction_detail
 
 
 def build_versao_pipeline(

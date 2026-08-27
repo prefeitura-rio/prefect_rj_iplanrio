@@ -1,11 +1,12 @@
 """Single-page PDF extraction helper for the Gemini classifier."""
 
-import logging
 from pathlib import Path
 
 import fitz  # PyMuPDF
 
-logger = logging.getLogger(__name__)
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def extract_page_as_bytes(pdf_path: Path, page_num: int, as_pdf: bool = False) -> bytes:

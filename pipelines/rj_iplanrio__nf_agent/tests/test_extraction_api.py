@@ -1,12 +1,11 @@
 """Regression/orchestration tests for extraction/api.py (extract_from_pdf / _extract_from_pdf_bytes).
 
-Construction strategy: ``NFExtractor`` requires real Gemini auth in its
-``__init__`` (``auth.initialize`` / ``auth.configure_genai``), and its
-``model`` property lazily calls that auth path. We bypass ``__init__``
-entirely via ``NFExtractor.__new__(NFExtractor)`` and set ``self._model``
-directly to a controllable fake — the ``model`` property just returns
-``self._model`` when it's not None, so this is a clean substitution with no
-monkeypatching of the property itself needed.
+Construction strategy: ``NFExtractor.__init__`` builds its model lazily via
+``auth.get_model`` -> ``utils.llm.build_gemini_model`` (Bifrost). We bypass
+``__init__`` entirely via ``NFExtractor.__new__(NFExtractor)`` and set
+``self._model`` directly to a controllable fake — ``auth.get_model`` just
+returns ``self._model`` when it's not None, so this is a clean substitution
+with no monkeypatching of the model builder needed.
 
 Rate limiter / metrics tracker: per the task brief, we use the real
 ``iplanrio_agent_toolkit`` singletons (harmless, in-memory) rather than
@@ -21,8 +20,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pipelines.rj_iplanrio__nf_agent.extraction import auth
-from pipelines.rj_iplanrio__nf_agent.extraction.extractor import NFExtractor
+from pipelines.rj_iplanrio__nf_agent.utils.extraction import auth, coalesce
+from pipelines.rj_iplanrio__nf_agent.utils.extraction.extractor import NFExtractor
 
 
 class FakeGeminiResponse:
@@ -228,36 +227,29 @@ class TestSuspiciousDecimalFallback:
 
 class TestCoalesceAndDecimalHelpers:
     def test_split_pages_into_batches(self):
-        extractor = make_extractor()
-        assert extractor._split_pages_into_batches([1, 2, 3], batch_size=5) == [[1, 2, 3]]
-        assert extractor._split_pages_into_batches(list(range(1, 8)), batch_size=3) == [
+        assert coalesce.split_pages_into_batches([1, 2, 3], batch_size=5) == [[1, 2, 3]]
+        assert coalesce.split_pages_into_batches(list(range(1, 8)), batch_size=3) == [
             [1, 2, 3],
             [4, 5, 6],
             [7],
         ]
 
     def test_has_suspicious_decimals(self):
-        extractor = make_extractor()
-        assert extractor._has_suspicious_decimals([{"valor_total": 12.12}]) is False
-        assert extractor._has_suspicious_decimals([{"valor_total": 12.12345}]) is True
-        assert extractor._has_suspicious_decimals([{"valor_total": 0.0}]) is False
+        assert coalesce.has_suspicious_decimals([{"valor_total": 12.12}]) is False
+        assert coalesce.has_suspicious_decimals([{"valor_total": 12.12345}]) is True
+        assert coalesce.has_suspicious_decimals([{"valor_total": 0.0}]) is False
 
     def test_coalesce_merges_duplicate_numero_and_prefers_largest_value(self):
-        extractor = make_extractor()
         all_nfs = [
             {"numero_nf": "1", "valor_total": 100.0, "pagina": 3},
             {"numero_nf": "1", "valor_total": 150.0, "pagina": 1},
             {"numero_nf": "2", "valor_total": 50.0, "pagina": 2},
         ]
 
-        coalesced = extractor._coalesce_nfs_by_numero(all_nfs)
+        coalesced = coalesce.coalesce_nfs_by_numero(all_nfs)
 
         by_numero = {nf["numero_nf"]: nf for nf in coalesced}
         assert len(coalesced) == 2
         assert by_numero["1"]["valor_total"] == 150.0  # larger value wins
         assert by_numero["1"]["pagina"] == 1  # earliest page wins
         assert "MERGE" in by_numero["1"]["observacao"]
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

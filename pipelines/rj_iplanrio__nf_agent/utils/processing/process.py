@@ -1,6 +1,5 @@
 """Per-PDF processing for ``POCProcessor``."""
 
-import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -9,13 +8,15 @@ from typing import TYPE_CHECKING, Any
 
 import fitz  # PyMuPDF
 
-from ..io.sqlite_cache import DatabaseManager
+from prefect_rj_iplanrio.logging import get_logger
+
+from ..cache import DatabaseManager
 from .modes import ExecutionMode
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
 
-logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
+logger = get_logger(__name__)
 
 
 def process_pdf(
@@ -119,7 +120,7 @@ def process_pdf(
                         # For FULL/VALIDATE: return the cached extraction directly.
                         # (Compliance validation used to run here; its result was never
                         # read by the JSON per-page output path, only computed and
-                        # discarded — removed along with matching/'s dead
+                        # discarded — removed along with the old compliance package's dead
                         # ComplianceValidator machinery.)
                         if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
                             return {
@@ -166,7 +167,7 @@ def process_pdf(
                 extracted_nfs = extraction_result.get("notas_fiscais", [])
 
                 # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-                from ..matching.nfst_fatura_merger import merge_nfst_with_fatura
+                from ..nfst_fatura_merger import merge_nfst_with_fatura
 
                 extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
 
@@ -336,7 +337,7 @@ def process_pdf(
                 extracted_nfs = extraction_result.get("notas_fiscais", [])
 
                 # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
-                from ..matching.nfst_fatura_merger import merge_nfst_with_fatura
+                from ..nfst_fatura_merger import merge_nfst_with_fatura
 
                 extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
             else:
@@ -356,7 +357,7 @@ def process_pdf(
         # STEP 5: return the final result.
         # (Compliance validation used to run here; its result was never read by
         # the JSON per-page output path, only computed and discarded — removed
-        # along with matching/'s dead ComplianceValidator machinery.)
+        # along with the old compliance package's dead ComplianceValidator machinery.)
         if mode in [ExecutionMode.FULL, ExecutionMode.VALIDATE]:
             logger.info("  [OK] Processing complete")
 
@@ -458,7 +459,6 @@ def process_single_pdf_worker(
         thread_processor = type(processor)(
             db_manager=thread_db_manager,  # Thread-local connection
             gcs_downloader=processor.gcs_downloader,  # Shared (thread-safe)
-            gemini_credentials_path=processor.gemini_credentials_path,
             temp_dir=processor.temp_dir,
             quiet=processor.quiet,
             prompt_versions=processor.prompt_versions,

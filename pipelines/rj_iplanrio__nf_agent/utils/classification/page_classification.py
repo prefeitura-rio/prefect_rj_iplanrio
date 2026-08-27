@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
+
+from prefect_rj_iplanrio.logging import get_logger
 
 from ..prompts import CLASSIFICATION_PROMPT
 from .config import DEFAULT_GENERATION_CONFIG, DEFAULT_MODEL_NAME
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
     # only needed for type checking here, real import is deferred to GeminiClassifier.model.
     import google.generativeai as genai
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)

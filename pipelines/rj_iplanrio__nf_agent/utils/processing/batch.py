@@ -1,7 +1,6 @@
 """Database-scale (CSV batch) processing for ``POCProcessor``."""
 
 import json
-import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -11,13 +10,15 @@ from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 
+from prefect_rj_iplanrio.logging import get_logger
+
 from . import metadata
 from .modes import ExecutionMode
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
 
-logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
+logger = get_logger(__name__)
 
 
 def build_status_rows(pdf_tasks: list[dict], pdf_results: dict[str, dict]) -> list[dict]:

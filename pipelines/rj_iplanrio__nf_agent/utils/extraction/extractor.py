@@ -4,14 +4,17 @@ NF Data Extractor using the ``NFExtractor`` class.
 ``NFExtractor`` composes plain-function modules (``auth``, ``prompt``, ``pdf``,
 ``coalesce``, ``api``) rather than mixin classes: each module operates on an
 explicit ``extractor`` instance passed as its first argument, and the class
-below just holds state and delegates — preserving the original public/private
-method surface other modules and tests call directly (e.g. ``extract_from_pdf``,
-``_extract_from_pdf_bytes``, ``model``).
+below just holds state and delegates — preserving the public/private method
+surface other modules and tests call directly (``extract_from_pdf``,
+``_extract_from_pdf_bytes``, ``_create_filtered_pdf``, ``model``). ``api.py``
+calls the ``coalesce``/``pdf`` module functions directly rather than through
+this class, so there are no delegate wrappers for those beyond
+``_create_filtered_pdf``.
 """
 
 from pathlib import Path
 
-from . import api, auth, coalesce
+from . import api, auth
 from . import pdf as pdf_module
 
 
@@ -49,18 +52,6 @@ class NFExtractor:
     def _create_filtered_pdf(self, pdf_path: Path, pages: list[int]) -> bytes:
         """See ``pdf.create_filtered_pdf``."""
         return pdf_module.create_filtered_pdf(pdf_path, pages)
-
-    def _split_pages_into_batches(self, pages: list[int], batch_size: int = 5) -> list[list[int]]:
-        """See ``coalesce.split_pages_into_batches``."""
-        return coalesce.split_pages_into_batches(pages, batch_size)
-
-    def _coalesce_nfs_by_numero(self, all_nfs: list[dict]) -> list[dict]:
-        """See ``coalesce.coalesce_nfs_by_numero``."""
-        return coalesce.coalesce_nfs_by_numero(all_nfs)
-
-    def _has_suspicious_decimals(self, notas_fiscais: list[dict]) -> bool:
-        """See ``coalesce.has_suspicious_decimals``."""
-        return coalesce.has_suspicious_decimals(notas_fiscais)
 
     def _extract_from_pdf_bytes(
         self,

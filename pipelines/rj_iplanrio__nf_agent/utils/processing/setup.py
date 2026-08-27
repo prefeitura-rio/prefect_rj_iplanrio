@@ -1,28 +1,28 @@
 """Construction and lazy helpers for ``POCProcessor``."""
 
 import io
-import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
 
+from prefect_rj_iplanrio.logging import get_logger
+
+from ..cache import DatabaseManager
 from ..classification.gemini_classifier import GeminiClassifier
-from ..extraction import NFExtractor
-from ..io.gcs_downloader import GCSDownloader
-from ..io.sqlite_cache import DatabaseManager
+from ..extraction.extractor import NFExtractor
+from ..gcs import GCSDownloader
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
 
-logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
+logger = get_logger(__name__)
 
 
 def initialize(
     processor: "POCProcessor",
     db_manager: DatabaseManager,
     gcs_downloader: GCSDownloader,
-    gemini_credentials_path: Path,
     temp_dir: Path | None = None,
     quiet: bool = False,
     prompt_versions: dict[str, str] | None = None,
@@ -34,7 +34,6 @@ def initialize(
     :param processor: The ``POCProcessor`` instance being constructed.
     :param db_manager: Database manager for caching.
     :param gcs_downloader: GCS downloader for PDF retrieval.
-    :param gemini_credentials_path: Path to Gemini service account credentials.
     :param temp_dir: Temporary directory for downloaded PDFs.
     :param quiet: Suppress debug output.
     :param prompt_versions: Dict with 'classification' and 'extraction' versions (e.g., {'classification': 'v1', 'extraction': 'v1'}).
@@ -45,7 +44,6 @@ def initialize(
     """
     processor.db_manager = db_manager
     processor.gcs_downloader = gcs_downloader
-    processor.gemini_credentials_path = gemini_credentials_path
     processor.temp_dir = Path(temp_dir) if temp_dir else Path("run_poc/temp")
     processor.temp_dir.mkdir(parents=True, exist_ok=True)
     processor.quiet = quiet
@@ -71,9 +69,9 @@ def initialize(
 
     # Configure logger level based on quiet flag
     if quiet:
-        logger.setLevel(logging.WARNING)  # Only warnings and errors
+        logger.setLevel("WARNING")
     else:
-        logger.setLevel(logging.INFO)  # Info, warnings, and errors
+        logger.setLevel("INFO")
 
     # Initialize core modules (lazy loaded)
     processor._classifier = None
@@ -84,7 +82,6 @@ def get_classifier(processor: "POCProcessor") -> GeminiClassifier:
     """Lazy load ``processor``'s classifier."""
     if processor._classifier is None:
         processor._classifier = GeminiClassifier(
-            service_account_path=str(processor.gemini_credentials_path) if processor.gemini_credentials_path else None,
             classification_prompt=processor.classification_prompt,
         )
     return processor._classifier
@@ -94,7 +91,6 @@ def get_extractor(processor: "POCProcessor") -> NFExtractor:
     """Lazy load ``processor``'s extractor."""
     if processor._extractor is None:
         processor._extractor = NFExtractor(
-            service_account_file=str(processor.gemini_credentials_path) if processor.gemini_credentials_path else None,
             extraction_prompt=processor.extraction_prompt,
             batch_size=processor.extraction_batch_size,
         )

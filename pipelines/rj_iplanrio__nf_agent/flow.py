@@ -23,7 +23,7 @@ from .tasks import (
     trigger_next_batch_if_pending_task,
     write_run_summary_task,
 )
-from .orchestration import BatchRunParams
+from .utils.orchestration import BatchRunParams
 
 
 @flow(log_prints=True)

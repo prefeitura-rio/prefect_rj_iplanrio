@@ -2,11 +2,12 @@
 
 import hashlib
 import json
-import logging
 import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from prefect_rj_iplanrio.logging import get_logger
 
 from ..classification.gemini_classifier import (
     ClassificationOptions,
@@ -17,7 +18,7 @@ from ..classification.gemini_classifier import (
 if TYPE_CHECKING:
     from .processor import POCProcessor
 
-logger = logging.getLogger(".".join(__name__.split(".")[:-1] + ["processor"]))
+logger = get_logger(__name__)
 
 
 def preprocess_classification_page(processor: "POCProcessor", pdf_path: Path, page_number: int) -> tuple[int, bool]:
@@ -470,45 +471,3 @@ def load_all_cached_classifications(processor: "POCProcessor", pdf_path: Path) -
             page_justifications[page_num] = ""
 
     return page_categories, page_justifications
-
-
-def load_cached_page_categories(processor: "POCProcessor", pdf_path: Path, total_pages: int) -> dict[int, str]:
-    """
-    Load cached page categories from database (legacy method, use load_all_cached_classifications for better performance).
-
-    :param processor: The ``POCProcessor`` instance.
-    :param pdf_path: Path to PDF file.
-    :param total_pages: Total number of pages in PDF.
-    :returns: Dictionary mapping page_number -> category.
-    """
-    # Use full filename with .pdf extension (as stored in database)
-    pdf_name = pdf_path.name
-    page_categories = {}
-
-    for page_num in range(1, total_pages + 1):
-        cursor = processor.db_manager.conn.execute(
-            """
-            SELECT o.response_text
-            FROM api_inputs i
-            JOIN api_outputs o ON i.id = o.input_id
-            WHERE i.item_key = ?
-            AND i.sub_key = ?
-            AND i.input_type = 'classification_page'
-            LIMIT 1
-            """,
-            (pdf_name, page_num),
-        )
-
-        row = cursor.fetchone()
-        if row:
-            try:
-                response = json.loads(row[0])
-                # Handle both Portuguese 'categoria' and English 'category'
-                category = response.get("categoria") or response.get("category", "Unknown")
-                page_categories[page_num] = category
-            except Exception:
-                page_categories[page_num] = "Unknown"
-        else:
-            page_categories[page_num] = None
-
-    return page_categories

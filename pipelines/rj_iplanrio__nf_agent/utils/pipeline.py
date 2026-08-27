@@ -1,16 +1,10 @@
-"""
-Batch entry point: reads a source of documents (BigQuery view or local/GCS CSV),
-runs each PDF through ``processing.processor.POCProcessor``, and writes results.
-
-Can be run as:
-1. Python library function (``nf_processing_flow``, called via ``orchestration.py``)
-2. CLI script (local development/debugging, ``main()`` below)
+"""Batch helper: reads a source of documents (BigQuery view or local/GCS CSV),
+runs each PDF through ``utils.processing.processor.POCProcessor``, and writes the
+results. Exposes ``nf_processing_flow`` / ``NfProcessingFlowConfig``, called from
+``utils.orchestration``.
 """
 
-import argparse
-import logging
 import os
-import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -19,15 +13,15 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
-
-from prefect_rj_iplanrio.sql import load_query
-
-from .io.sqlite_cache import DatabaseManager
-
-logger = logging.getLogger(__name__)
 from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 
-from .io.gcs_downloader import GCSDownloader
+from prefect_rj_iplanrio.logging import get_logger
+from prefect_rj_iplanrio.sql import load_query
+
+from .cache import DatabaseManager
+from .gcs import GCSDownloader
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -42,7 +36,6 @@ class NfProcessingFlowConfig:
     bq_status_table: str | None = None
     db_path: str = "cache.db"
     gcs_credentials: str | None = None
-    gemini_credentials: str | None = None
     gcs_bucket: str | None = None
     limit: int | None = None
     temp_dir: str = "temp"
@@ -90,7 +83,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     Other args:
         db_path: Path to SQLite cache database (default: cache.db)
         gcs_credentials: Path to GCS service account JSON (uses ADC if None)
-        gemini_credentials: Path to Gemini service account JSON (uses ADC if None)
         gcs_bucket: GCS bucket name (default: from GCS_BUCKET env var)
         limit: Limit number of PDFs to process (for testing; only applies to csv_path mode)
         temp_dir: Temporary directory for downloaded PDFs (default: temp/)
@@ -114,32 +106,39 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     """
     # Unpack config into locals with the same names the body below already used —
     # keeps this function's internals untouched; only the external signature changed.
-    csv_path = config.csv_path
-    bq_input_table = config.bq_input_table
-    batch_size = config.batch_size
-    output_path = config.output_path
-    gcs_output_base_path = config.gcs_output_base_path
-    bq_status_table = config.bq_status_table
-    db_path = config.db_path
-    gcs_credentials = config.gcs_credentials
-    gemini_credentials = config.gemini_credentials
-    gcs_bucket = config.gcs_bucket
-    limit = config.limit
-    temp_dir = config.temp_dir
+
+    # Per session:
+    # Config:
     mode = config.mode
     workers = config.workers
-    keep_pdfs = config.keep_pdfs
     quiet = config.quiet
-    experiment_id = config.experiment_id
-    prompt_versions = config.prompt_versions
-    filters = config.filters
     requests_per_minute = config.requests_per_minute
     max_concurrent = config.max_concurrent
     max_retries = config.max_retries
-    extraction_batch_size = config.extraction_batch_size
-    max_pdfs = config.max_pdfs
-    force_reprocess = config.force_reprocess
+    keep_pdfs = config.keep_pdfs # TODO: Remove (local config)
+    csv_path = config.csv_path # TODO: Remove csv input
+    bq_input_table = config.bq_input_table # TODO: remove BQ input table
 
+    max_pdfs_per_session = config.max_pdfs
+    output_path = config.output_path # TODO: Remove local JSON output option
+    bq_status_table = config.bq_status_table # TODO: change status logic per page (extracao_pagina_controle)
+    gcs_output_base_path = config.gcs_output_base_path
+    gcs_credentials = config.gcs_credentials
+    gcs_bucket = config.gcs_bucket
+    limit = config.limit # TODO: Remove limit (use max_pdfs_per_session instead)
+    temp_dir = config.temp_dir
+    experiment_id = config.experiment_id # TODO: Remove experiments (local)
+    prompt_versions = config.prompt_versions
+    filters = config.filters # TODO: Evaluate/Remove (legacy)
+    extraction_batch_size = config.extraction_batch_size # TODO: Remove (always 1)
+    force_reprocess = config.force_reprocess # TODO: Remove option
+
+    # Per-run parameters
+    batch_size = config.batch_size # TODO:
+    # TODO: export page hashes to BQ, as well as other relevant data filtered by pipeline version
+    db_path = config.db_path # Cache
+
+    # TODO: Remove csv option from GCS
     if csv_path is None and bq_input_table is None:
         raise ValueError("Provide either csv_path or bq_input_table.")
     # Environment variable fallbacks
@@ -151,12 +150,11 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
     # Credentials: priority order for explicit file paths:
     # 1. Explicit parameter
-    # 2. Environment variable (GCS_CREDENTIALS_PATH / GEMINI_CREDENTIALS_PATH)
+    # 2. Environment variable (GCS_CREDENTIALS_PATH)
     # 3. Local credentials/ folder
     # 4. ADC (auto-detected — covers Infisical-injected creds above, GCP VM metadata, gcloud login)
     repo_root = Path(__file__).parent.parent
     default_gcs_creds = repo_root / "credentials" / "gcs-service-account.json"
-    default_gemini_creds = repo_root / "credentials" / "gemini-service-account.json"
 
     if gcs_credentials is None:
         gcs_credentials = os.getenv("GCS_CREDENTIALS_PATH") or (
@@ -166,20 +164,12 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             logger.warning("GCS_CREDENTIALS_PATH set but file not found: %s", gcs_credentials)
             gcs_credentials = None
 
-    if gemini_credentials is None:
-        gemini_credentials = os.getenv("GEMINI_CREDENTIALS_PATH") or (
-            str(default_gemini_creds) if default_gemini_creds.exists() else None
-        )
-        if gemini_credentials and not Path(gemini_credentials).exists():
-            logger.warning("GEMINI_CREDENTIALS_PATH set but file not found: %s", gemini_credentials)
-            gemini_credentials = None
-
     # If using BQ input, read the batch now (ADC already set up) and dump to temp CSV
     if bq_input_table:
         if not bq_status_table:
             raise ValueError("bq_status_table is required when bq_input_table is provided.")
 
-        from .io.bigquery import BQInputReader
+        from .bigquery import BQInputReader
 
         bq_reader = BQInputReader()
 
@@ -205,7 +195,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         _tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
         input_df.to_csv(_tmp.name, index=False)
         csv_path = _tmp.name  # will be converted to Path below
-        limit = max_pdfs  # None = process all PDFs in the batch; int = cap for testing
+        limit = max_pdfs_per_session  # None = process all PDFs in the batch; int = cap for testing
         filters = None
         logger.info("BQ: loaded %d documents → temp file: %s", len(input_df), csv_path)
 
@@ -221,9 +211,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
     if gcs_credentials:
         gcs_credentials = Path(gcs_credentials)
-
-    if gemini_credentials:
-        gemini_credentials = Path(gemini_credentials)
 
     # Validate CSV exists (local only; GCS paths are validated when reading)
     if not _is_gcs_csv and not csv_path.exists():
@@ -252,6 +239,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         filters = None  # Already applied filters
         logger.info("GCS: CSV loaded (%d rows) → temp file: %s", len(csv_df), csv_path)
 
+    # TODO: Remove experiments from flow
     # Load experiment configuration if provided
     experiment_config = None
     if experiment_id:
@@ -368,7 +356,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         logger.info(
             "Pipeline config: mode=%s | bq_input=%s | bq_status=%s | batch=%d | "
             "gcs_out=%s | cache=%s | bucket=%s | gcs_creds=%s | "
-            "gemini_creds=%s | workers=%d | extraction_batch=%d | keep_pdfs=%s | quiet=%s",
+            "workers=%d | extraction_batch=%d | keep_pdfs=%s | quiet=%s",
             mode,
             bq_input_table,
             bq_status_table,
@@ -377,7 +365,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             db_path,
             gcs_bucket,
             _creds_label,
-            gemini_credentials or _creds_label,
             workers,
             extraction_batch_size,
             keep_pdfs,
@@ -386,7 +373,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     else:
         logger.info(
             "Pipeline config: mode=%s | csv=%s | gcs_out=%s | json_out=%s | "
-            "cache=%s | bucket=%s | gcs_creds=%s | gemini_creds=%s | workers=%d | "
+            "cache=%s | bucket=%s | gcs_creds=%s | workers=%d | "
             "extraction_batch=%d | keep_pdfs=%s | quiet=%s%s",
             mode,
             csv_path,
@@ -395,7 +382,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             db_path,
             gcs_bucket,
             _creds_label,
-            gemini_credentials or _creds_label,
             workers,
             extraction_batch_size,
             keep_pdfs,
@@ -422,7 +408,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         processor = POCProcessor(
             db_manager=db_manager,
             gcs_downloader=gcs_downloader,
-            gemini_credentials_path=gemini_credentials,
             temp_dir=temp_dir,
             quiet=quiet,
             prompt_versions=prompt_versions,
@@ -465,7 +450,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
                 logger.info("GCS: results written to %s", gcs_uri)
 
             if bq_status_table:
-                from .io.bigquery import BigQueryWriter
+                from .bigquery import BigQueryWriter
 
                 # Derive project/dataset from bq_status_table when env vars are absent.
                 # bq_status_table format: "project.dataset.table"
@@ -511,146 +496,3 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         # Cleanup
         if "db_manager" in locals():
             db_manager.close()
-
-
-def main():
-    """Main entry point."""
-    parser = argparse.ArgumentParser(description="POC Pipeline - Process NF database with GCS integration and caching")
-
-    # Paths
-    parser.add_argument(
-        "--csv",
-        type=Path,
-        default=Path("inputs/modulo-de-despesas.csv"),
-        help="Path to modulo-de-despesas.csv database file",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=None,
-        help="Path to save the per-page JSON results locally (default: auto-generated in outputs/)",
-    )
-    parser.add_argument(
-        "--db",
-        type=Path,
-        default=Path("cache.db"),
-        help="Path to SQLite cache database (default: cache.db)",
-    )
-
-    # Credentials
-    parser.add_argument(
-        "--gcs-credentials",
-        type=Path,
-        default=None,
-        help="Path to GCS service account credentials (uses ADC if not provided)",
-    )
-    parser.add_argument(
-        "--gemini-credentials",
-        type=Path,
-        default=None,
-        help="Path to Gemini service account credentials (uses ADC if not provided)",
-    )
-
-    # GCS settings
-    parser.add_argument(
-        "--bucket",
-        type=str,
-        default=None,
-        help="GCS bucket name (overrides GCS_BUCKET env var)",
-    )
-
-    # Processing settings
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Limit number of PDFs to process (for testing)",
-    )
-    parser.add_argument(
-        "--temp-dir",
-        type=Path,
-        default=Path("temp"),
-        help="Temporary directory for downloaded PDFs (default: temp/)",
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        choices=[
-            "full",
-            "preprocess_classification",
-            "run_classification",
-            "preprocess_extraction",
-            "run_extraction",
-            "validate",
-        ],
-        default="full",
-        help="Execution mode: which pipeline steps to run (default: full)",
-    )
-    parser.add_argument(
-        "--workers",
-        type=int,
-        default=200,
-        help="Number of concurrent workers for parallel processing (default: 200)",
-    )
-    parser.add_argument(
-        "--keep-pdfs",
-        action="store_true",
-        help="Keep downloaded PDFs after processing instead of cleaning up (default: False)",
-    )
-    parser.add_argument(
-        "--quiet",
-        "-q",
-        action="store_true",
-        help="Suppress debug output (default: False)",
-    )
-    parser.add_argument(
-        "--experiment",
-        type=str,
-        default=None,
-        help="Experiment ID (e.g., exp001_baseline). If provided, generates metadata.json with prompt versions and run info",
-    )
-    parser.add_argument(
-        "--extraction-batch-size",
-        type=int,
-        default=5,
-        dest="extraction_batch_size",
-        help=(
-            "Maximum pages per extraction API call (default: 5). "
-            "Set to 1 to process one page at a time and inject per-page classification hints "
-            "into the extraction prompt (requires a prompt version with {classification_hint}, "
-            "e.g., v6 or v7)."
-        ),
-    )
-    args = parser.parse_args()
-
-    config = NfProcessingFlowConfig(
-        csv_path=str(args.csv),
-        output_path=str(args.output) if args.output else None,
-        db_path=str(args.db),
-        gcs_credentials=str(args.gcs_credentials) if args.gcs_credentials else None,
-        gemini_credentials=str(args.gemini_credentials) if args.gemini_credentials else None,
-        gcs_bucket=args.bucket,
-        limit=args.limit,
-        temp_dir=str(args.temp_dir),
-        mode=args.mode,
-        workers=args.workers,
-        keep_pdfs=args.keep_pdfs,
-        quiet=args.quiet,
-        experiment_id=args.experiment,
-        extraction_batch_size=args.extraction_batch_size,
-    )
-
-    # All setup (credential resolution, experiment YAML overrides, rate limiter,
-    # POCProcessor construction, db_manager cleanup) lives in nf_processing_flow —
-    # this CLI entrypoint only parses args and delegates, instead of duplicating
-    # ~300 lines of that logic as it previously did.
-    try:
-        nf_processing_flow(config)
-        return 0
-    except Exception:
-        logger.exception("Error running pipeline")
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

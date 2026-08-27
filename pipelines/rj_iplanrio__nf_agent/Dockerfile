@@ -15,10 +15,11 @@ COPY ./pipelines/rj_iplanrio__nf_agent ./pipelines/rj_iplanrio__nf_agent/
 # pipeline via uv sync — lockfile-audited, reviewable em PR diffs.
 RUN uv sync --package rj_iplanrio__nf_agent
 
-# google-generativeai is excluded from agent-nf-validator's default deps
-# (extra "gemini") because it requires protobuf<6.0, which conflicts with the
-# workspace's grpcio-status==1.78.0 (protobuf>=6.31.1) — see TROUBLESHOOTING.md #4.
+# google-generativeai is kept out of the uv deps because it requires protobuf<6.0,
+# which conflicts with the workspace's grpcio-status==1.78.0 (protobuf>=6.31.1).
 # Installed isolated via pip --target so it doesn't interfere with uv's resolution.
+# The SDK is pointed at the Bifrost gateway at runtime (see utils/llm.py), not the
+# Gemini API directly.
 RUN pip install --target /opt/agent-packages google-generativeai>=0.4.0
 
 ENV PYTHONPATH="/opt/agent-packages:${PYTHONPATH}"

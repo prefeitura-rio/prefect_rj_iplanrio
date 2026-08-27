@@ -17,7 +17,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from iplanrio_agent_toolkit.gcs import GCSDownloader as _BaseGCSDownloader
-from iplanrio_agent_toolkit.logging import get_logger
+
+from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
 

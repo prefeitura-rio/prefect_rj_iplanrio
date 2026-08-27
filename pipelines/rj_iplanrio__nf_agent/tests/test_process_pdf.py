@@ -29,10 +29,8 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import pytest
-
-from pipelines.rj_iplanrio__nf_agent.processing.modes import ExecutionMode
-from pipelines.rj_iplanrio__nf_agent.processing.processor import POCProcessor
+from pipelines.rj_iplanrio__nf_agent.utils.processing.modes import ExecutionMode
+from pipelines.rj_iplanrio__nf_agent.utils.processing.processor import POCProcessor
 
 
 def make_processor(gcs_downloader=None, temp_dir: Path | None = None) -> POCProcessor:
@@ -312,7 +310,3 @@ class TestExceptionSurfacesPartialState:
         assert result["nf_pages"] == [1]
         assert result["page_categories"] == {1: "NFS-e"}
         assert result["extracted_nfs"] == []
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

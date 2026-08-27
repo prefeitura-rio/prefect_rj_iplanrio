@@ -1,14 +1,15 @@
 """Prompt construction and response parsing for ``NFExtractor``."""
 
-import logging
 from typing import TYPE_CHECKING
 
 from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
+from prefect_rj_iplanrio.logging import get_logger
+
 if TYPE_CHECKING:
     from .extractor import NFExtractor
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def build_prompt_with_hint(extractor: "NFExtractor", classification_hint: str | None = None) -> str:

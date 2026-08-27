@@ -225,7 +225,7 @@ def write_run_summary(
     :param config: Batch/concurrency configuration active during the run.
     :param timing_stats: Detailed per-stage timing statistics from the pipeline.
     """
-    from .io.bigquery import BigQueryWriter  # noqa: PLC0415
+    from .bigquery import BigQueryWriter  # noqa: PLC0415
 
     bq_project, bq_dataset = parse_project_and_dataset(context.bq_status_table)
     if not (bq_project and bq_dataset):
@@ -320,7 +320,7 @@ def trigger_next_batch_if_pending(
     :param total_in_session: Cumulative PDFs processed in the current session.
     :param batch_did_work: ``True`` if the current batch processed at least one PDF.
     """
-    from .io.bigquery import BQInputReader  # noqa: PLC0415
+    from .bigquery import BQInputReader  # noqa: PLC0415
 
     flow_run_id = get_flow_run_id()
     if not flow_run_id:
@@ -389,8 +389,8 @@ def run_nf_pipeline(params: BatchRunParams, force_reprocess: bool) -> dict[str, 
     :param force_reprocess: Whether to reprocess documents already marked as done.
     :returns: Timing/count stats emitted by the pipeline run, or ``{}`` if none.
     """
-    from .run_pipeline import NfProcessingFlowConfig  # noqa: PLC0415
-    from .run_pipeline import nf_processing_flow as _run_pipeline  # noqa: PLC0415
+    from .pipeline import NfProcessingFlowConfig  # noqa: PLC0415
+    from .pipeline import nf_processing_flow as _run_pipeline  # noqa: PLC0415
 
     config = NfProcessingFlowConfig(
         bq_input_table=params.bq_input_table,

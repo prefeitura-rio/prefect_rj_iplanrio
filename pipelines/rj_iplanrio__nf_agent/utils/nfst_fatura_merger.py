@@ -14,24 +14,57 @@ Contexto:
 
 Uso:
     extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
-
-Padrão seguido:
-    document_merger.py (merge NF + Ticket de Alimentação via RPS)
 """
 
 from __future__ import annotations
 
-import logging
 import re
 
-from .scoring import normalize_value
+from prefect_rj_iplanrio.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
 # Helpers de normalização
 # ---------------------------------------------------------------------------
+
+
+def normalize_value(val: object) -> float:
+    """
+    Normaliza valor monetário para float.
+
+    Trata o formato de moeda brasileiro, onde pontos são separadores de
+    milhar e vírgulas são separadores decimais. Só trata . ou , como
+    separador decimal se seguido de 1-2 dígitos no final.
+
+    :param val: Valor monetário como string, int ou float.
+    :returns: Valor float normalizado, ou 0.0 se não for possível parsear.
+    """
+    if val is None or (isinstance(val, float) and val != val) or val == "-" or val == "":
+        return 0.0
+
+    if isinstance(val, (int, float)):
+        return float(val)
+
+    val_str = str(val).replace("R$", "").replace(" ", "").strip()
+
+    decimal_pattern = r"[.,](\d{1,2})$"
+    match = re.search(decimal_pattern, val_str)
+
+    if match:
+        decimal_pos = match.start()
+        integer_part = val_str[:decimal_pos]
+        decimal_part = match.group(1)
+        integer_part = integer_part.replace(".", "").replace(",", "")
+        normalized = f"{integer_part}.{decimal_part}"
+    else:
+        normalized = val_str.replace(".", "").replace(",", "")
+
+    try:
+        return float(normalized)
+    except Exception:
+        return 0.0
 
 
 def normalize_numero_conta(conta: str | None) -> str | None:

@@ -15,7 +15,7 @@ Versioning:
 
 from pathlib import Path
 
-PROMPTS_DIR = Path(__file__).parent
+PROMPTS_DIR = Path(__file__).parents[1] / "prompts"
 VERSIONS_DIR = PROMPTS_DIR / "versions"
 
 
@@ -37,8 +37,7 @@ def load_prompt_version(prompt_type: str, version: str) -> str:
     if not version_file.exists():
         raise FileNotFoundError(f"Prompt version not found: {version_file}")
 
-    with open(version_file, "r", encoding="utf-8") as f:
-        return f.read().strip()
+    return version_file.read_text(encoding="utf-8").strip()
 
 
 def list_available_versions(prompt_type: str) -> list[str]:
@@ -86,9 +85,27 @@ def get_classification_prompt(version: str | None = None) -> str:
     return load_prompt_version("classification", version)
 
 
-# Pre-load prompts for convenience (using latest versions)
-EXTRACTION_PROMPT = get_extraction_prompt()
-CLASSIFICATION_PROMPT = get_classification_prompt()
+def __getattr__(name: str) -> str:
+    """Resolve ``EXTRACTION_PROMPT`` / ``CLASSIFICATION_PROMPT`` lazily.
+
+    Module-level constants would read the filesystem at import time (forbidden by
+    the styleguide); this defers the read to first access while keeping the
+    ``from .prompts import EXTRACTION_PROMPT`` call sites unchanged.
+
+    :param name: Attribute being accessed.
+    :returns: The rendered prompt text.
+    :raises AttributeError: For any other attribute name.
+    """
+    if name == "EXTRACTION_PROMPT":
+        return get_extraction_prompt()
+    if name == "CLASSIFICATION_PROMPT":
+        return get_classification_prompt()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# Lazily provided by ``__getattr__`` above (annotation-only: no import-time read).
+CLASSIFICATION_PROMPT: str
+EXTRACTION_PROMPT: str
 
 __all__ = [
     "CLASSIFICATION_PROMPT",

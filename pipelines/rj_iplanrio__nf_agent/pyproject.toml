@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__nf_agent"
 version = "1.0.0"
-description = "Pipeline de validação de notas fiscais da secretaria iplanrio"
+description = "Extracts and classifies fields from Rio de Janeiro fiscal-note (NF) PDFs with an LLM (via the Bifrost gateway) and loads the structured results into BigQuery and GCS for the CGM expense-auditing workflow."
 dependencies = [
     "prefect>=3.4.9",
     "prefect-docker>=0.6.5",
@@ -23,12 +23,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "iplanrio-agent-toolkit",
     # Lógica de negócio migrada de agent-nf-validator para utils/ (move mecânico).
-    # google-generativeai fica de fora (extra "gemini", instalado isolado no
-    # Dockerfile — ver TROUBLESHOOTING.md #4). O extra "gemini" do
-    # iplanrio-agent-toolkit NÃO deve ser requisitado aqui pelo mesmo motivo
-    # (conflito de protobuf entre google-generativeai e grpcio-status, ver
-    # TROUBLESHOOTING.md #4) — apenas os módulos base (rate limiter, gcs,
-    # bigquery, matching, rules, credentials) são consumidos.
+    # google-generativeai fica de fora e é instalado isolado no Dockerfile: há um
+    # conflito de protobuf entre google-generativeai e grpcio-status. Pelo mesmo
+    # motivo o extra "gemini" do iplanrio-agent-toolkit NÃO é requisitado aqui —
+    # apenas os módulos base (rate limiter, gcs, bigquery, matching, credentials).
 ]
 
 [project.optional-dependencies]

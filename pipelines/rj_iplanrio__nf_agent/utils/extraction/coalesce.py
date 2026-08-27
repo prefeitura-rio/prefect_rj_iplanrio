@@ -1,8 +1,8 @@
 """NF coalescing and decimal sanity checks for ``NFExtractor``."""
 
-import logging
+from prefect_rj_iplanrio.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def split_pages_into_batches(pages: list[int], batch_size: int = 5) -> list[list[int]]:

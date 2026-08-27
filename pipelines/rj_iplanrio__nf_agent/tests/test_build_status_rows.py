@@ -12,7 +12,7 @@ import json
 
 import pandas as pd
 
-from pipelines.rj_iplanrio__nf_agent.processing.database import build_status_rows
+from pipelines.rj_iplanrio__nf_agent.utils.processing.batch import build_status_rows
 
 
 def make_task(pdf_name: str, id_documentos: list[int]) -> dict:

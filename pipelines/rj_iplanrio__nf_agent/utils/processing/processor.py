@@ -2,39 +2,27 @@
 POC Pipeline Processor - Processes database rows using core NF pipeline with caching.
 Integrates GCS downloading, SQLite caching, and core NF processing modules.
 
-``POCProcessor`` composes plain-function modules (``setup``, ``cache``, ``process``,
-``database``) rather than mixin classes: each module operates on an explicit
+``POCProcessor`` composes plain-function modules (``setup``, ``classification_cache``,
+``process``, ``batch``) rather than mixin classes: each module operates on an explicit
 ``processor`` instance passed as its first argument, and the class below just
 holds state and delegates — preserving the exact method surface other modules
 and tests call directly (``process_pdf``, ``classify_page_from_cache``, etc).
 """
 
-import logging
-import sys
 import threading
 from pathlib import Path
 from typing import Any
 
-# Configure logger
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # Capture all levels, filter in handler
+from prefect_rj_iplanrio.logging import get_logger
 
-# Create handler that writes to stdout (visible in Prefect Cloud logs)
-_stream_handler = logging.StreamHandler(sys.stdout)
-_stream_handler.setLevel(logging.INFO)  # Default to INFO level
-
-# Format: [timestamp] [level] message
-formatter = logging.Formatter("%(message)s")  # Keep it clean for now
-_stream_handler.setFormatter(formatter)
-
-logger.addHandler(_stream_handler)
-
+from ..cache import DatabaseManager
 from ..classification.gemini_classifier import GeminiClassifier
-from ..extraction import NFExtractor
-from ..io.gcs_downloader import GCSDownloader
-from ..io.sqlite_cache import DatabaseManager
-from . import cache, database, process, setup
+from ..extraction.extractor import NFExtractor
+from ..gcs import GCSDownloader
+from . import batch, classification_cache, process, setup
 from .modes import ExecutionMode
+
+logger = get_logger(__name__)
 
 
 class POCProcessor:
@@ -50,7 +38,6 @@ class POCProcessor:
         self,
         db_manager: DatabaseManager,
         gcs_downloader: GCSDownloader,
-        gemini_credentials_path: Path,
         temp_dir: Path | None = None,
         quiet: bool = False,
         prompt_versions: dict[str, str] | None = None,
@@ -61,7 +48,6 @@ class POCProcessor:
             self,
             db_manager=db_manager,
             gcs_downloader=gcs_downloader,
-            gemini_credentials_path=gemini_credentials_path,
             temp_dir=temp_dir,
             quiet=quiet,
             prompt_versions=prompt_versions,
@@ -87,18 +73,18 @@ class POCProcessor:
         return setup.create_filtered_pdf_bytes(pdf_path, pages)
 
     def preprocess_classification_page(self, pdf_path: Path, page_number: int) -> tuple[int, bool]:
-        """See ``cache.preprocess_classification_page``."""
-        return cache.preprocess_classification_page(self, pdf_path, page_number)
+        """See ``classification_cache.preprocess_classification_page``."""
+        return classification_cache.preprocess_classification_page(self, pdf_path, page_number)
 
     def classify_page_from_cache(
         self, pdf_path: Path, page_number: int, skip_api_call: bool = False
     ) -> tuple[str | None, str | None, bool, str | None, int | None]:
-        """See ``cache.classify_page_from_cache``."""
-        return cache.classify_page_from_cache(self, pdf_path, page_number, skip_api_call)
+        """See ``classification_cache.classify_page_from_cache``."""
+        return classification_cache.classify_page_from_cache(self, pdf_path, page_number, skip_api_call)
 
     def preprocess_extraction_pdf(self, pdf_path: Path, nf_pages: list[int]) -> tuple[int, bool]:
-        """See ``cache.preprocess_extraction_pdf``."""
-        return cache.preprocess_extraction_pdf(self, pdf_path, nf_pages)
+        """See ``classification_cache.preprocess_extraction_pdf``."""
+        return classification_cache.preprocess_extraction_pdf(self, pdf_path, nf_pages)
 
     def extract_nf_from_cache(
         self,
@@ -107,24 +93,20 @@ class POCProcessor:
         skip_api_call: bool = False,
         page_classifications: dict[int, str] | None = None,
     ) -> tuple[dict[str, Any] | None, bool]:
-        """See ``cache.extract_nf_from_cache``."""
-        return cache.extract_nf_from_cache(self, pdf_path, nf_pages, skip_api_call, page_classifications)
+        """See ``classification_cache.extract_nf_from_cache``."""
+        return classification_cache.extract_nf_from_cache(self, pdf_path, nf_pages, skip_api_call, page_classifications)
 
     def check_extraction_cache(self, pdf_path: Path) -> tuple[dict | None, list[int] | None]:
-        """See ``cache.check_extraction_cache``."""
-        return cache.check_extraction_cache(self, pdf_path)
+        """See ``classification_cache.check_extraction_cache``."""
+        return classification_cache.check_extraction_cache(self, pdf_path)
 
     def check_classification_cache(self, pdf_path: Path, total_pages: int) -> bool:
-        """See ``cache.check_classification_cache``."""
-        return cache.check_classification_cache(self, pdf_path, total_pages)
+        """See ``classification_cache.check_classification_cache``."""
+        return classification_cache.check_classification_cache(self, pdf_path, total_pages)
 
     def load_all_cached_classifications(self, pdf_path: Path) -> tuple[dict[int, str], dict[int, str]]:
-        """See ``cache.load_all_cached_classifications``."""
-        return cache.load_all_cached_classifications(self, pdf_path)
-
-    def load_cached_page_categories(self, pdf_path: Path, total_pages: int) -> dict[int, str]:
-        """See ``cache.load_cached_page_categories``."""
-        return cache.load_cached_page_categories(self, pdf_path, total_pages)
+        """See ``classification_cache.load_all_cached_classifications``."""
+        return classification_cache.load_all_cached_classifications(self, pdf_path)
 
     def process_pdf(
         self,
@@ -160,8 +142,8 @@ class POCProcessor:
         requests_per_minute: int = 0,
         max_concurrent: int = 0,
     ):
-        """See ``database.process_database``."""
-        return database.process_database(
+        """See ``batch.process_database``."""
+        return batch.process_database(
             self,
             csv_path,
             output_path=output_path,
