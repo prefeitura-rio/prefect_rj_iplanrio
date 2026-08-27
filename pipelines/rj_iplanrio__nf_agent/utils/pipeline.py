@@ -80,7 +80,7 @@ class NfProcessingFlowConfig:
     bq_extracao_pagina_table: str | None = None  # project.dataset.extracao_pagina; required
     db_path: str = "cache.db"  # SQLite cache path
     gcs_bucket: str | None = None  # default: GCS_BUCKET env var
-    gcs_output_base_path: str | None = None  # per-page NDJSON prefix; None skips GCS output
+    gcs_output_base_path: str | None = None  # per-page NDJSON prefix; required (only write path)
     # --- Execução ---
     batch_size: int = 1000  # cap on pending files per run, when max_pdfs isn't set
     max_concurrent: int = 50  # rate limiter: max in-flight LLM requests
@@ -128,6 +128,12 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
     if not bq_extracao_pagina_table:
         raise ValueError("bq_extracao_pagina_table is required.")
+    if not gcs_output_base_path:
+        # json_items (this run's actual output) is only ever persisted via GCS —
+        # there's no other write path (see GCSResultsWriter.write_ndjson below).
+        # Skipping it silently would mean processing everything and discarding
+        # every result, so this is required, not optional.
+        raise ValueError("gcs_output_base_path is required.")
     # Environment variable fallbacks
     gcs_bucket = gcs_bucket or os.getenv("GCS_BUCKET")
 
@@ -187,7 +193,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         "gcs_out=%s | cache=%s | bucket=%s | workers=%d | quiet=%s",
         len(pdf_names),
         bq_extracao_pagina_table,
-        gcs_output_base_path or "(none)",
+        gcs_output_base_path,
         db_path,
         gcs_bucket,
         workers,
@@ -229,19 +235,14 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         if json_items:
             _t_escrita_start = time.time()
 
-            if gcs_output_base_path:
-                gcs_writer = GCSResultsWriter(
-                    bucket_name=gcs_bucket,
-                    credentials_path=None,
-                )
-
-                gcs_uri = gcs_writer.write_ndjson(
-                    items=json_items,
-                    base_path=gcs_output_base_path,
-                    filename_prefix="extracao_pagina",
-                    timestamp=run_timestamp,
-                )
-                logger.warning("GCS: results written to %s", gcs_uri)
+            gcs_writer = GCSResultsWriter(bucket_name=gcs_bucket, credentials_path=None)
+            gcs_uri = gcs_writer.write_ndjson(
+                items=json_items,
+                base_path=gcs_output_base_path,
+                filename_prefix="extracao_pagina",
+                timestamp=run_timestamp,
+            )
+            logger.warning("GCS: results written to %s", gcs_uri)
 
             _escrita_elapsed = time.time() - _t_escrita_start
             timing_stats["wall_sec_escrita"] = round(_escrita_elapsed, 3)
