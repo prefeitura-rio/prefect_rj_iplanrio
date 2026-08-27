@@ -138,6 +138,37 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("created_date", _TIMESTAMP),
         bigquery.SchemaField("last_modified_date", _TIMESTAMP),
     ]),
+    # Staging das duas acima — write_mode='merge' (ver flow.py): carrega aqui via
+    # load_chunk_to_staging, depois MERGE pra tabela final via merge_staging_to_target
+    # (mesmo padrão de telemetry_trace_span_staging). Substituiu write_mode='replace',
+    # que apagava a partição do dia inteiro a cada execução — seguro rodando 1x/dia,
+    # mas destrutivo com o schedule de 15 em 15min (cada run apagava o que as runs
+    # anteriores do mesmo dia já tinham carregado).
+    "messaging_end_user_staging": _base_fields([
+        bigquery.SchemaField("id", _STRING),
+        bigquery.SchemaField("name", _STRING),
+        bigquery.SchemaField("messaging_channel_id", _STRING),
+        bigquery.SchemaField("message_type", _STRING),
+        bigquery.SchemaField("messaging_platform_key", _STRING),
+        bigquery.SchemaField("locale", _STRING),
+        bigquery.SchemaField("iso_country_code", _STRING),
+        bigquery.SchemaField("messaging_consent_status", _STRING),
+        bigquery.SchemaField("is_fully_opted_in", _BOOL),
+        bigquery.SchemaField("messaging_external_user_key", _STRING),
+        bigquery.SchemaField("created_date", _TIMESTAMP),
+        bigquery.SchemaField("last_modified_date", _TIMESTAMP),
+    ]),
+    "messaging_session_staging": _base_fields([
+        bigquery.SchemaField("id", _STRING),
+        bigquery.SchemaField("status", _STRING),
+        bigquery.SchemaField("start_time", _TIMESTAMP),
+        bigquery.SchemaField("end_time", _TIMESTAMP),
+        bigquery.SchemaField("messaging_channel_id", _STRING),
+        bigquery.SchemaField("messaging_end_user_id", _STRING),
+        bigquery.SchemaField("origin", _STRING),
+        bigquery.SchemaField("created_date", _TIMESTAMP),
+        bigquery.SchemaField("last_modified_date", _TIMESTAMP),
+    ]),
     "conversation_entry": _base_fields([
         bigquery.SchemaField("id", _STRING),
         bigquery.SchemaField("conversation_id", _STRING),
@@ -206,7 +237,8 @@ PARTITIONED_TABLES: dict[str, list[str]] = {
     "messaging_session": ["id"],
     "conversation_entry": ["id"],
     "telemetry_trace_span": ["id"],
-    # telemetry_trace_span_staging: sem particionamento (staging table)
+    # telemetry_trace_span_staging, messaging_end_user_staging, messaging_session_staging:
+    # sem particionamento (staging tables)
 }
 
 

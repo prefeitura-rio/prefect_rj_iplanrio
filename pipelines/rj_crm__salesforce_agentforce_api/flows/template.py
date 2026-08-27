@@ -256,15 +256,38 @@ def sf_to_bq(
             partition_date=partition_date,
         )
 
-        total_rows = load_to_bigquery(
-            df=df,
-            project_id=project_id,
-            dataset_id=dataset_id,
-            table_id=target_table,
-            write_mode=write_mode,
-            partition_field="data_particao",
-            clustering_fields=clustering_fields,
-        )
+        if write_mode == "merge":
+            # write_mode='replace' apaga a partição do dia inteiro a cada execução —
+            # seguro 1x/dia, mas destrutivo num schedule mais frequente (cada run
+            # apaga o que runs anteriores do mesmo dia já carregaram). merge evita
+            # isso: staging (append) + MERGE por primary_key, mesmo padrão da Fase 3
+            # (data_cloud_chunked), só que num chunk só (df inteiro de uma vez).
+            assert staging_table, "staging_table é obrigatório para write_mode='merge'"
+            staged_rows = load_chunk_to_staging(
+                df_chunk=df,
+                project_id=project_id,
+                dataset_id=dataset_id,
+                staging_table_id=staging_table,
+                chunk_num=1,
+            )
+            total_rows = 0 if staged_rows == 0 else merge_staging_to_target(
+                project_id=project_id,
+                dataset_id=dataset_id,
+                staging_table_id=staging_table,
+                target_table_id=target_table,
+                primary_key=primary_key,
+                partition_field="data_particao",
+            )
+        else:
+            total_rows = load_to_bigquery(
+                df=df,
+                project_id=project_id,
+                dataset_id=dataset_id,
+                table_id=target_table,
+                write_mode=write_mode,
+                partition_field="data_particao",
+                clustering_fields=clustering_fields,
+            )
 
     else:
         raise ValueError(f"[TEMPLATE] source inválido: '{source}'. Use 'bulk_api', 'data_cloud', 'data_cloud_chunked' ou 'crm_rest'.")
