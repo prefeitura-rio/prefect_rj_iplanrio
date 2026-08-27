@@ -36,7 +36,9 @@ logger = get_logger(__name__)
 # logger.info() quando o bug for corrigido.
 
 
-def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str) -> tuple[set[str], str]:
+def discover_pending_files(
+    gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str
+) -> tuple[set[str], str]:
     """
     List every PDF in the GCS bucket and return the ones still pending —
     excluding files already fully done (every known page has a row) at the
@@ -54,7 +56,9 @@ def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_tab
         )
 
     available_pdfs = gcs_downloader.get_available_pdf_filenames()
-    candidate_filenames = {name[:-4] if name.lower().endswith(".pdf") else name for name in available_pdfs}
+    candidate_filenames = {
+        name[:-4] if name.lower().endswith(".pdf") else name for name in available_pdfs
+    }
     logger.warning("GCS: found %d PDFs in bucket", len(candidate_filenames))
 
     pending_files = PageStatusReader().find_pending_files(
@@ -77,10 +81,14 @@ class NfProcessingFlowConfig:
     """
 
     # --- BigQuery / GCS ---
-    bq_extracao_pagina_table: str | None = None  # project.dataset.extracao_pagina; required
+    bq_extracao_pagina_table: str | None = (
+        None  # project.dataset.extracao_pagina; required
+    )
     db_path: str = "cache.db"  # SQLite cache path
     gcs_bucket: str | None = None  # default: GCS_BUCKET env var
-    gcs_output_base_path: str | None = None  # per-page NDJSON prefix; required (only write path)
+    gcs_output_base_path: str | None = (
+        None  # per-page NDJSON prefix; required (only write path)
+    )
     # --- Execução ---
     batch_size: int = 1000  # cap on pending files per run, when max_pdfs isn't set
     max_concurrent: int = 50  # rate limiter: max in-flight LLM requests
@@ -129,10 +137,6 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     if not bq_extracao_pagina_table:
         raise ValueError("bq_extracao_pagina_table is required.")
     if not gcs_output_base_path:
-        # json_items (this run's actual output) is only ever persisted via GCS —
-        # there's no other write path (see GCSResultsWriter.write_ndjson below).
-        # Skipping it silently would mean processing everything and discarding
-        # every result, so this is required, not optional.
         raise ValueError("gcs_output_base_path is required.")
     # Environment variable fallbacks
     gcs_bucket = gcs_bucket or os.getenv("GCS_BUCKET")
@@ -140,12 +144,16 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     # Discover pending work: list every PDF in the GCS bucket, then exclude
     # files already fully done at the current pipeline version (git commit).
     gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket)
-    pending_files, current_commit = discover_pending_files(gcs_downloader, bq_extracao_pagina_table)
+    pending_files, current_commit = discover_pending_files(
+        gcs_downloader, bq_extracao_pagina_table
+    )
     if not pending_files:
         logger.warning("No pending files found. Nothing to do.")
         return None
 
-    effective_cap = max_pdfs_per_session if max_pdfs_per_session is not None else batch_size
+    effective_cap = (
+        max_pdfs_per_session if max_pdfs_per_session is not None else batch_size
+    )
     pdf_names = sorted(pending_files)
     if effective_cap is not None:
         pdf_names = pdf_names[:effective_cap]
@@ -177,7 +185,9 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     )
 
     # Initialize rate limiter with flow parameters
-    initialize_rate_limiter(max_concurrent=max_concurrent, requests_per_minute=requests_per_minute)
+    initialize_rate_limiter(
+        max_concurrent=max_concurrent, requests_per_minute=requests_per_minute
+    )
     logger.warning(
         "RateLimiter enabled: max_concurrent=%d, rpm=%d (%.1f RPS)",
         max_concurrent,
@@ -221,7 +231,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         logger.warning("Processor initialized")
         logger.warning("Starting processing...")
 
-        json_items, timing_stats = processor.process_database(
+        extracao_pagina_rows, timing_stats = processor.process_database(
             pdf_names=pdf_names,
             max_workers=workers,
             requests_per_minute=requests_per_minute,
@@ -232,12 +242,12 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         # extracao_pagina itself (loaded from this NDJSON) is the status.
         run_timestamp = datetime.utcnow()
 
-        if json_items:
+        if extracao_pagina_rows:
             _t_escrita_start = time.time()
 
             gcs_writer = GCSResultsWriter(bucket_name=gcs_bucket, credentials_path=None)
             gcs_uri = gcs_writer.write_ndjson(
-                items=json_items,
+                items=extracao_pagina_rows,
                 base_path=gcs_output_base_path,
                 filename_prefix="extracao_pagina",
                 timestamp=run_timestamp,
@@ -248,8 +258,12 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
             timing_stats["wall_sec_escrita"] = round(_escrita_elapsed, 3)
 
         # ── Actual per-page counts from this batch ──
-        timing_stats["_n_docs_ok"] = sum(1 for i in json_items if i["pipeline_status"] == "ok")
-        timing_stats["_n_docs_fail"] = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
+        timing_stats["_n_docs_ok"] = sum(
+            1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok"
+        )
+        timing_stats["_n_docs_fail"] = sum(
+            1 for i in extracao_pagina_rows if i["pipeline_status"] == "erro_processamento"
+        )
 
         logger.warning("Processing completed successfully")
 

@@ -146,7 +146,7 @@ def empty_json_item(
     }
 
 
-def build_json_output(
+def build_extracao_pagina_rows(
     pdf_tasks: list[dict],
     pdf_results: dict[str, dict],
     timestamp_geracao: datetime | None = None,
@@ -154,7 +154,7 @@ def build_json_output(
     versao_prompt: dict | None = None,
 ) -> list[dict]:
     """
-    Build the per-page JSON output list.
+    Build the per-page ``extracao_pagina`` row list.
 
     Every page of every processed PDF gets exactly one item in the output
     list — regardless of whether a fiscal document was found on it or

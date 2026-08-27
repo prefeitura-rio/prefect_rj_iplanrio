@@ -42,7 +42,7 @@ def process_database(
     :param max_workers: Number of concurrent workers (default: 20).
     :param requests_per_minute: RPM configurado no rate limiter (para versao_pipeline).
     :param max_concurrent: Máximo de requisições simultâneas (para versao_pipeline).
-    :returns: ``(json_items, timing_stats)`` — per-page results and batch timing metrics.
+    :returns: ``(extracao_pagina_rows, timing_stats)`` — per-page results and batch timing metrics.
     """
     logger.warning(f"\n{'#' * 80}")
     logger.warning("# POC Pipeline - Database Processing")
@@ -327,10 +327,10 @@ def process_database(
     else:
         logger.warning("✓ No page mapping inconsistencies found")
 
-    # Build per-page JSON output — always (this is the pipeline's only output
-    # format; GCS/BQ writes happen in the caller, using this same json_items).
+    # Build per-page rows — always (this is the pipeline's only output format;
+    # GCS/BQ writes happen in the caller, using this same extracao_pagina_rows).
     _run_ts = datetime.utcnow()
-    json_items = metadata.build_json_output(
+    extracao_pagina_rows = metadata.build_extracao_pagina_rows(
         pdf_tasks=pdf_tasks,
         pdf_results=pdf_results,
         timestamp_geracao=_run_ts,
@@ -342,21 +342,25 @@ def process_database(
         ),
         versao_prompt=metadata.build_versao_prompt(processor),
     )
-    ok_with_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
-    ok_without_doc = sum(1 for i in json_items if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"])
-    erro = sum(1 for i in json_items if i["pipeline_status"] == "erro_processamento")
+    ok_with_doc = sum(
+        1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"]
+    )
+    ok_without_doc = sum(
+        1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"]
+    )
+    erro = sum(1 for i in extracao_pagina_rows if i["pipeline_status"] == "erro_processamento")
 
     # Print summary
     logger.warning(f"\n{'#' * 80}")
     logger.warning("# Processing Complete")
     logger.warning(f"{'#' * 80}")
     logger.warning(f"PDFs processed: {total_pdfs}")
-    if not json_items:
+    if not extracao_pagina_rows:
         logger.warning("  Nenhum PDF processado.")
     else:
         logger.warning(f"Status: {ok_with_doc + ok_without_doc} ok, {erro} com erro de processamento")
     logger.warning(
-        f"\n[SUCCESS] Built {len(json_items)} páginas ({ok_with_doc} com documento, "
+        f"\n[SUCCESS] Built {len(extracao_pagina_rows)} páginas ({ok_with_doc} com documento, "
         f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
     )
 
@@ -375,6 +379,6 @@ def process_database(
             pass  # Ignore cleanup errors
     logger.warning("[OK] Cleanup complete")
 
-    # Return json_items and timing_stats for this batch.
+    # Return extracao_pagina_rows and timing_stats for this batch.
     # timing_stats contains avg_sec_* metrics to be written to pipeline_runs.
-    return json_items, timing_stats
+    return extracao_pagina_rows, timing_stats
