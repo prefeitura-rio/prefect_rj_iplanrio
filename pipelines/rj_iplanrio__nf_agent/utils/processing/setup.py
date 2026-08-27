@@ -35,8 +35,9 @@ def initialize(
     :param gcs_downloader: GCS downloader for PDF retrieval.
     :param temp_dir: Temporary directory for downloaded PDFs.
     :param quiet: Suppress debug output.
-    :param prompt_versions: Dict with 'classification' and 'extraction' versions (e.g., {'classification': 'v1', 'extraction': 'v1'}).
-        If None, uses latest available versions.
+    :param prompt_versions: Dict with 'classification' and 'extraction' versions
+        (e.g., {'classification': 'v1', 'extraction': 'v1'}). If None, uses latest
+        available versions.
     """
     processor.db_manager = db_manager
     processor.gcs_downloader = gcs_downloader
@@ -109,7 +110,8 @@ def pdf_page_to_bytes(pdf_path: Path, page_number: int) -> bytes:
     page = doc[page_number - 1]  # Convert to 0-indexed
 
     # Render page to image (200 DPI)
-    # TODO: Since we aren't using it to send to LLM, and solely for deduplication, consider lowering DPI to save time/CPU
+    # TODO: Since we aren't using it to send to LLM, and solely for deduplication,
+    # consider lowering DPI to save time/CPU
     pix = page.get_pixmap(dpi=200)
     img_bytes = pix.pil_tobytes(format="PNG")
 

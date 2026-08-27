@@ -53,7 +53,7 @@ def extract_from_pdf_bytes(
     # CHECK FOR CACHED API RESPONSE - Skip API call if response file exists
     if api_response_path and api_response_path.exists():
         try:
-            with open(api_response_path, "r", encoding="utf-8") as f:
+            with api_response_path.open("r", encoding="utf-8") as f:
                 cached_response = json.load(f)
 
             # Extract the raw_text from cached response
@@ -155,7 +155,7 @@ def extract_from_pdf_bytes(
                     else [],
                 }
 
-                with open(retry_path, "w", encoding="utf-8") as f:
+                with retry_path.open("w", encoding="utf-8") as f:
                     json.dump(api_response_data, f, indent=2, ensure_ascii=False)
 
                 logger.debug("Saved API response (attempt %d) to %s", attempt, retry_path)
@@ -511,7 +511,7 @@ def extract_from_pdf(
     # CHECK CACHE FIRST - Skip expensive PDF processing if cache exists
     if api_response_path and api_response_path.exists():
         try:
-            with open(api_response_path, "r", encoding="utf-8") as f:
+            with api_response_path.open("r", encoding="utf-8") as f:
                 cached_response = json.load(f)
 
             # Extract the raw_text from cached response
@@ -547,7 +547,7 @@ def extract_from_pdf(
     else:
         # Use entire PDF
         logger.warning("Loading entire PDF...")
-        with open(pdf_path, "rb") as f:
+        with pdf_path.open("rb") as f:
             pdf_bytes = f.read()
         # Get page count
         reader = PdfReader(str(pdf_path))

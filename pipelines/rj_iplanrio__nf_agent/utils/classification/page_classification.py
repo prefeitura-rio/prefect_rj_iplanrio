@@ -43,7 +43,7 @@ def _load_cached_classification(api_response_path: Path, pdf_name: str, page_num
         callers are expected to catch and fall back to a live API call.
     """
     start_time = time.time()
-    with open(api_response_path, "r", encoding="utf-8") as f:
+    with api_response_path.open("r", encoding="utf-8") as f:
         cached_response = json.load(f)
 
     response_text = cached_response.get("raw_text", "").strip()
@@ -142,7 +142,7 @@ def _call_gemini_for_classification(
             else [],
         }
 
-        with open(api_response_path, "w", encoding="utf-8") as f:
+        with api_response_path.open("w", encoding="utf-8") as f:
             json.dump(api_response_data, f, indent=2, ensure_ascii=False)
 
     # Extract JSON from response

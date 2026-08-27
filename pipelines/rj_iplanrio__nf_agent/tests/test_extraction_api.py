@@ -89,7 +89,7 @@ class TestCachedResponsePath:
 
 
 class TestRetryOnZeroNfs:
-    def test_retries_once_when_first_attempt_finds_zero_nfs(self, tmp_path: Path):
+    def test_retries_once_when_first_attempt_finds_zero_nfs(self):
         extractor = make_extractor()
         extractor.model.generate_content.side_effect = [
             FakeGeminiResponse(nf_payload(0)),
@@ -102,7 +102,7 @@ class TestRetryOnZeroNfs:
         assert result["quantidade_notas_fiscais"] == 1
         assert result["notas_fiscais"][0]["numero_nf"] == "42"
 
-    def test_does_not_retry_when_first_attempt_finds_nfs(self, tmp_path: Path):
+    def test_does_not_retry_when_first_attempt_finds_nfs(self):
         extractor = make_extractor()
         extractor.model.generate_content.return_value = FakeGeminiResponse(
             nf_payload(1, [{"numero_nf": "1", "pagina": 1}])
@@ -113,7 +113,7 @@ class TestRetryOnZeroNfs:
         assert extractor.model.generate_content.call_count == 1
         assert result["quantidade_notas_fiscais"] == 1
 
-    def test_gives_up_after_max_attempts_still_zero(self, tmp_path: Path):
+    def test_gives_up_after_max_attempts_still_zero(self):
         extractor = make_extractor()
         extractor.model.generate_content.return_value = FakeGeminiResponse(nf_payload(0))
 
@@ -122,7 +122,7 @@ class TestRetryOnZeroNfs:
         assert extractor.model.generate_content.call_count == 2
         assert result["quantidade_notas_fiscais"] == 0
 
-    def test_api_error_on_last_attempt_returns_failure_dict_not_raise(self, tmp_path: Path):
+    def test_api_error_on_last_attempt_returns_failure_dict_not_raise(self):
         extractor = make_extractor()
         extractor.model.generate_content.side_effect = RuntimeError("quota exceeded")
 
@@ -135,13 +135,13 @@ class TestRetryOnZeroNfs:
 
 
 class TestBatchingAndPageRemapping:
-    def test_multi_batch_pagina_remapped_to_original_pdf_pages(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_multi_batch_pagina_remapped_to_original_pdf_pages(self, monkeypatch: pytest.MonkeyPatch):
         extractor = make_extractor(batch_size=2)
 
         # Avoid needing a real multi-page PDF on disk: stub out the pure PDF-slicing
         # helper (pdf.py) since this test is only about the page-remapping/coalescing
         # logic in api.py, not real PDF byte handling.
-        monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda pdf_path, pages: b"fake-bytes")
+        monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda _pdf_path, _pages: b"fake-bytes")
 
         batch_results = [
             nf_payload(2, [{"numero_nf": "A", "pagina": 1}, {"numero_nf": "B", "pagina": 2}]),
@@ -161,7 +161,7 @@ class TestBatchingAndPageRemapping:
 
     def test_single_call_pagina_remapped_when_pages_filtered(self, monkeypatch: pytest.MonkeyPatch):
         extractor = make_extractor(batch_size=5)
-        monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda pdf_path, pages: b"fake-bytes")
+        monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda _pdf_path, _pages: b"fake-bytes")
         extractor.model.generate_content.return_value = FakeGeminiResponse(
             nf_payload(1, [{"numero_nf": "X", "pagina": 1}])
         )
@@ -178,7 +178,7 @@ class TestSuspiciousDecimalFallback:
         # Patch at the class level (not just this instance): the suspicious-decimal
         # path constructs a brand-new `type(self)(...)` fallback extractor internally,
         # so the stub must apply to that new instance too.
-        monkeypatch.setattr(NFExtractor, "_create_filtered_pdf", lambda self, pdf_path, pages: b"fake-bytes")
+        monkeypatch.setattr(NFExtractor, "_create_filtered_pdf", lambda _self, _pdf_path, _pages: b"fake-bytes")
         # Suspicious: more than 2 decimal places.
         extractor.model.generate_content.return_value = FakeGeminiResponse(
             nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12345}])
@@ -205,7 +205,7 @@ class TestSuspiciousDecimalFallback:
 
     def test_no_fallback_when_already_on_fallback_model(self, monkeypatch: pytest.MonkeyPatch):
         extractor = make_extractor(model_name="gemini-2.5-flash-lite", batch_size=5, prompt="PROMPT")
-        monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda pdf_path, pages: b"fake-bytes")
+        monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda _pdf_path, _pages: b"fake-bytes")
         extractor.model.generate_content.return_value = FakeGeminiResponse(
             nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12345}])
         )

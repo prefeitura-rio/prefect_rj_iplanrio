@@ -143,7 +143,7 @@ class TestFullSlowPathEndToEnd:
         proc.check_extraction_cache = MagicMock(return_value=(None, None))
         proc.preprocess_classification_page = MagicMock(side_effect=[(1, True), (2, True)])
 
-        def classify(pdf_path_arg, page_number, skip_api_call):
+        def classify(_pdf_path_arg, page_number, _skip_api_call):
             category = "NFS-e" if page_number == 1 else "Outro"
             return (category, f"just{page_number}", False, None, None)
 
@@ -197,7 +197,7 @@ class TestExceptionSurfacesPartialState:
         proc.check_extraction_cache = MagicMock(return_value=(None, None))
         proc.preprocess_classification_page = MagicMock(return_value=(1, True))
 
-        def classify(pdf_path_arg, page_number, skip_api_call):
+        def classify(_pdf_path_arg, page_number, _skip_api_call):
             if page_number == 2:
                 raise RuntimeError("Gemini classification API call failed")
             return ("Outro", "", False, None, None)

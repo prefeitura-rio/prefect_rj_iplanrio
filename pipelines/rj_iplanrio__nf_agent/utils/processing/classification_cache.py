@@ -107,7 +107,7 @@ def classify_page_from_cache(
 
     # Get input_id (creates input if doesn't exist) - use PNG for hashing (deduplication)
     page_image_bytes = processor._pdf_page_to_bytes(pdf_path, page_number)
-    input_id, is_new, cached_pdf_name, cached_page_num = processor.db_manager.get_or_create_input(
+    input_id, _is_new, cached_pdf_name, cached_page_num = processor.db_manager.get_or_create_input(
         input_type="classification_page",
         pdf_name=pdf_name,
         content=page_image_bytes,
@@ -141,7 +141,11 @@ def classify_page_from_cache(
 
     # Try to extract page bytes - handle corrupted PDFs gracefully
     try:
-        # TODO: OPTIMIZATION - This re-extracts PNG bytes that were already extracted at line 277. However, extract_page_as_bytes has more robust error handling (validation, try/except/finally, resource cleanup) than _pdf_page_to_bytes. To optimize: refactor _pdf_page_to_bytes to match extract_page_as_bytes error handling, then reuse page_image_bytes here when use_pdf_input=False.
+        # TODO: OPTIMIZATION - This re-extracts PNG bytes that were already extracted
+        # at line 277. However, extract_page_as_bytes has more robust error handling
+        # (validation, try/except/finally, resource cleanup) than _pdf_page_to_bytes.
+        # To optimize: refactor _pdf_page_to_bytes to match extract_page_as_bytes error
+        # handling, then reuse page_image_bytes here when use_pdf_input=False.
         # NOTE: extract_page_as_bytes expects 0-indexed page numbers, so convert from 1-indexed
         page_bytes = extract_page_as_bytes(pdf_path, page_number - 1, as_pdf=processor.classifier.use_pdf_input)
     except (ValueError, RuntimeError) as e:

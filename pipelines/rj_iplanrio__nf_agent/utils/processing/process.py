@@ -317,7 +317,6 @@ def process_single_pdf_worker(
     pdf_name: str,
     progress_lock: threading.Lock,
     completed_count: list[int],
-    total_pdfs: int,
     pdf_path: Path | None = None,
 ) -> dict[str, Any]:
     """
@@ -328,7 +327,6 @@ def process_single_pdf_worker(
     :param pdf_name: PDF filename.
     :param progress_lock: Thread lock for progress tracking.
     :param completed_count: Mutable list with single element for tracking progress.
-    :param total_pdfs: Total number of PDFs being processed.
     :param pdf_path: Optional pre-downloaded PDF path (if None, will download from GCS).
     :returns: Processing result dict.
     """

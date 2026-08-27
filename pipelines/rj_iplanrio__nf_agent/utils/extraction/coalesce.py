@@ -56,7 +56,7 @@ def coalesce_nfs_by_numero(all_nfs: list[dict]) -> list[dict]:
 
     # Coalesce each group
     coalesced = []
-    for numero_key, group in nf_groups.items():
+    for _numero_key, group in nf_groups.items():
         if len(group) == 1:
             # Single NF, no coalescing needed
             coalesced.append(group[0])
@@ -68,7 +68,7 @@ def coalesce_nfs_by_numero(all_nfs: list[dict]) -> list[dict]:
             for nf in group:
                 for field, value in nf.items():
                     # Skip null/empty values
-                    if value is None or value == "" or value == "-":
+                    if value is None or value in ("", "-"):
                         continue
 
                     # Field not in merged yet - add it

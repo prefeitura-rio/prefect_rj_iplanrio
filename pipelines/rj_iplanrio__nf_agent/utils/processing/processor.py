@@ -118,11 +118,10 @@ class POCProcessor:
         pdf_name: str,
         progress_lock: threading.Lock,
         completed_count: list[int],
-        total_pdfs: int,
         pdf_path: Path | None = None,
     ) -> dict[str, Any]:
         """See ``process.process_single_pdf_worker``."""
-        return process.process_single_pdf_worker(self, pdf_name, progress_lock, completed_count, total_pdfs, pdf_path)
+        return process.process_single_pdf_worker(self, pdf_name, progress_lock, completed_count, pdf_path)
 
     def process_database(
         self,

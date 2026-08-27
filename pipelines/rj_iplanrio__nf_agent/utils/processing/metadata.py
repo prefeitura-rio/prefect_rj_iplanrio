@@ -1,7 +1,7 @@
 """Metadata and JSON output builders for ``POCProcessor``."""
 
 import subprocess
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from prefect_rj_iplanrio.logging import get_logger
@@ -10,6 +10,19 @@ if TYPE_CHECKING:
     from .processor import POCProcessor
 
 logger = get_logger(__name__)
+
+
+def utc_now_naive() -> datetime:
+    """Current UTC time as a naive ``datetime`` (no tzinfo).
+
+    ``datetime.utcnow()`` is deprecated (it's naive but silently assumes UTC);
+    this reads the clock via the timezone-aware ``datetime.now(UTC)`` and
+    strips the tzinfo back off. Naive-on-purpose: every ``timestamp_geracao``
+    in this module is built as ``dt.isoformat() + "Z"`` — an aware datetime
+    here would double up the offset (``...+00:00Z``), corrupting the field
+    written to BigQuery.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def build_classification_detail(
@@ -42,7 +55,6 @@ def build_classification_detail(
 
 
 def build_versao_pipeline(
-    processor: "POCProcessor",
     workers: int,
     requests_per_minute: int,
     max_concurrent: int,
@@ -52,8 +64,6 @@ def build_versao_pipeline(
 
     Inclui parâmetros operacionais e informações do repositório git para
     permitir comparar resultados apenas entre execuções com a mesma config.
-
-    :param processor: The ``POCProcessor`` instance (supplies config fields).
     """
     info: dict[str, Any] = {
         "extraction_batch_size": 1,
@@ -215,7 +225,7 @@ def build_extracao_pagina_rows(
     # O campo NUNCA deve depender de input manual — gerado aqui uma única vez
     # por run e injetado em todos os itens de saída.
     if timestamp_geracao is None:
-        timestamp_geracao = datetime.utcnow()
+        timestamp_geracao = utc_now_naive()
     ts_iso = timestamp_geracao.isoformat() + "Z"
 
     output_items: list[dict] = []

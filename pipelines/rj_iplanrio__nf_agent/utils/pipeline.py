@@ -7,7 +7,6 @@
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from iplanrio_agent_toolkit.gcs import GCSResultsWriter
@@ -18,7 +17,7 @@ from prefect_rj_iplanrio.logging import get_logger
 from .bigquery import PageStatusReader
 from .cache import DatabaseManager
 from .gcs import GCSDownloader
-from .processing.metadata import get_git_info
+from .processing.metadata import get_git_info, utc_now_naive
 from .prompts import list_available_versions
 
 # ``POCProcessor`` (via GeminiClassifier/NFExtractor) is the only thing in this
@@ -240,7 +239,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
         # Post-processing: write to GCS. No separate status table to update —
         # extracao_pagina itself (loaded from this NDJSON) is the status.
-        run_timestamp = datetime.utcnow()
+        run_timestamp = utc_now_naive()
 
         if extracao_pagina_rows:
             _t_escrita_start = time.time()

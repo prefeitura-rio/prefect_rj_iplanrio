@@ -18,6 +18,7 @@ Uso:
 
 from __future__ import annotations
 
+import math
 import re
 
 from prefect_rj_iplanrio.logging import get_logger
@@ -45,7 +46,7 @@ def normalize_value(val: object) -> float:
     :param val: Valor monetário como string, int ou float.
     :returns: Valor float normalizado, ou 0.0 se não for possível parsear.
     """
-    if val is None or (isinstance(val, float) and val != val) or val == "-" or val == "":
+    if val is None or (isinstance(val, float) and math.isnan(val)) or val in ("-", ""):
         return 0.0
 
     if isinstance(val, (int, float)):

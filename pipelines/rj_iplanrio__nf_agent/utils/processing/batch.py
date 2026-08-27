@@ -3,7 +3,6 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from prefect_rj_iplanrio.logging import get_logger
@@ -126,7 +125,6 @@ def process_database(
                 pdf_name=task["pdf_name"],
                 progress_lock=progress_lock,
                 completed_count=completed_count,
-                total_pdfs=_n_total,
                 pdf_path=task.get("pdf_path"),
             )
             future_to_pdf[future] = task
@@ -200,7 +198,7 @@ def process_database(
     if _classif_walls:
         _avg = sum(_classif_walls) / len(_classif_walls)
         logger.warning(
-            f"[Parallelism] Média classif intra-PDF: {_avg:.1f}s wall (quanto menor que páginas×3s, mais paralelo)"
+            f"[Parallelism] Média classif intra-PDF: {_avg:.1f}s wall (quanto menor que páginas x 3s, mais paralelo)"
         )
 
     # ── Aggregate per-batch timing stats ─────────────────────────────────
@@ -329,13 +327,12 @@ def process_database(
 
     # Build per-page rows — always (this is the pipeline's only output format;
     # GCS/BQ writes happen in the caller, using this same extracao_pagina_rows).
-    _run_ts = datetime.utcnow()
+    _run_ts = metadata.utc_now_naive()
     extracao_pagina_rows = metadata.build_extracao_pagina_rows(
         pdf_tasks=pdf_tasks,
         pdf_results=pdf_results,
         timestamp_geracao=_run_ts,
         versao_pipeline=metadata.build_versao_pipeline(
-            processor,
             workers=max_workers,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
