@@ -1,10 +1,14 @@
 """
 Utility helpers for the NF Agent Prefect pipeline.
 
-All imports of ``io``, ``run_pipeline`` and other migrated agent modules are deferred
-to the function body so this module stays importable during ``prefect deploy``
-in CI, which only synchronises prefect/prefect-docker — not the ``gemini``
-extra that powers the extraction/classification agents.
+The only thing in this module that needs a deferred (function-body) import
+is anything that transitively reaches ``google.generativeai`` or reads a
+``PROMPT_*`` env var at import time (Infisical secret, only present when
+the flow actually runs — not during ``prefect deploy`` in CI, see
+``flow.py``'s module docstring for the full story). None of this module's
+own top-level imports do that — ``bigquery``/``gcs``/``pipeline`` only get
+risky *inside* ``nf_processing_flow``'s own body, not from importing their
+names.
 """
 
 from __future__ import annotations
@@ -15,6 +19,11 @@ from datetime import datetime
 from typing import Any
 
 from prefect_rj_iplanrio.logging import get_logger
+
+from .bigquery import BigQueryWriter
+from .gcs import GCSDownloader
+from .pipeline import NfProcessingFlowConfig, discover_pending_files
+from .pipeline import nf_processing_flow as _run_pipeline
 
 logger = get_logger(__name__)
 # TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
@@ -227,8 +236,6 @@ def write_run_summary(
     :param config: Batch/concurrency configuration active during the run.
     :param timing_stats: Detailed per-stage timing statistics from the pipeline.
     """
-    from .bigquery import BigQueryWriter  # noqa: PLC0415
-
     bq_project, bq_dataset = parse_project_and_dataset(context.pipeline_runs_table)
     if not (bq_project and bq_dataset):
         return
@@ -339,9 +346,6 @@ def trigger_next_batch_if_pending(
         logger.warning("No bq_extracao_pagina_table configured — skipping self-trigger check")
         return
 
-    from .gcs import GCSDownloader  # noqa: PLC0415
-    from .pipeline import discover_pending_files  # noqa: PLC0415
-
     # ADC only — see utils/pipeline.py::nf_processing_flow's credentials comment.
     gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=params.gcs_bucket)
     pending_files, current_commit = discover_pending_files(gcs_downloader, params.bq_extracao_pagina_table)
@@ -396,9 +400,6 @@ def run_nf_pipeline(params: BatchRunParams) -> dict[str, Any]:
     :param params: Batch parameters controlling input/output tables, paths and concurrency.
     :returns: Timing/count stats emitted by the pipeline run, or ``{}`` if none.
     """
-    from .pipeline import NfProcessingFlowConfig  # noqa: PLC0415
-    from .pipeline import nf_processing_flow as _run_pipeline  # noqa: PLC0415
-
     config = NfProcessingFlowConfig(
         bq_extracao_pagina_table=params.bq_extracao_pagina_table,
         batch_size=params.batch_size,
