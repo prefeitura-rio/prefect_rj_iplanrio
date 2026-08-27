@@ -26,19 +26,20 @@ logger = get_logger(__name__)
 
 def resolve_gcs_credentials(gcs_credentials: str | Path | None) -> Path | None:
     """
-    Resolve the GCS credentials file path, in priority order:
-    explicit argument → ``GCS_CREDENTIALS_PATH`` env var → local
-    ``credentials/gcs-service-account.json`` → ``None`` (falls back to ADC,
-    which also covers Infisical-injected credentials, GCP VM metadata, and
-    ``gcloud auth login``).
+    Resolve the GCS credentials file path, in priority order: explicit
+    argument → ``GCS_CREDENTIALS_PATH`` env var → ``None`` (falls back to
+    ADC, which is how the Infisical-injected credentials from
+    ``RJ_NF_AGENT_CREDENTIALS`` are actually picked up — see
+    ``inject_credentials_from_env`` below).
+
+    No local-file fallback: every credential this pipeline uses must come
+    from an env var (Infisical-injected), never from a file checked into
+    the repo.
     """
     if gcs_credentials is not None:
         return Path(gcs_credentials)
 
-    repo_root = Path(__file__).parent.parent
-    default_gcs_creds = repo_root / "credentials" / "gcs-service-account.json"
-
-    resolved = os.getenv("GCS_CREDENTIALS_PATH") or (str(default_gcs_creds) if default_gcs_creds.exists() else None)
+    resolved = os.getenv("GCS_CREDENTIALS_PATH")
     if resolved and not Path(resolved).exists():
         logger.warning("GCS_CREDENTIALS_PATH set but file not found: %s", resolved)
         return None
@@ -180,8 +181,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     # Credentials: priority order for explicit file paths:
     # 1. Explicit parameter
     # 2. Environment variable (GCS_CREDENTIALS_PATH)
-    # 3. Local credentials/ folder
-    # 4. ADC (auto-detected — covers Infisical-injected creds above, GCP VM metadata, gcloud login)
+    # 3. ADC (auto-detected — covers Infisical-injected creds above, GCP VM metadata, gcloud login)
     gcs_credentials = resolve_gcs_credentials(gcs_credentials)
 
     db_path = Path(db_path)

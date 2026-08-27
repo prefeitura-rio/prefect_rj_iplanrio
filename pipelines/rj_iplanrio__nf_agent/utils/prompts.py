@@ -1,57 +1,61 @@
 """
 Prompts module - Contains all prompts used by the NF processing pipeline.
 
-Prompts are stored as separate .txt files for easy editing and version control.
+Prompt text is not committed to the repo (it's not public) — each version
+is an env var, injected at runtime from Infisical the same way
+``RJ_NF_AGENT_CREDENTIALS``/``BIFROST_API_KEY`` already are (k8s secret,
+one Infisical environment per deployment — teste/prod).
 
 Versioning:
-    Prompts are versioned in `versions/` subdirectories using simple numbering:
-    - v1.txt, v2.txt, v3.txt, etc.
-
-    Active prompts (classification_prompt.txt, extraction_prompt.txt) point to
-    current versions being used in production.
-
-    Each version has a corresponding CHANGELOG.md documenting changes.
+    Env var naming convention: ``PROMPT_{TIPO}_{VERSAO}`` (uppercase), e.g.
+    ``PROMPT_CLASSIFICATION_V8``, ``PROMPT_EXTRACTION_V9``.
+    ``list_available_versions`` discovers versions by scanning ``os.environ``
+    for that prefix — adding a new version means adding a new secret with
+    the right name, no code change needed.
 """
 
-from pathlib import Path
+import os
 
-PROMPTS_DIR = Path(__file__).parents[1] / "prompts"
-VERSIONS_DIR = PROMPTS_DIR / "versions"
+_ENV_PREFIX = "PROMPT"
+
+
+def _env_var_name(prompt_type: str, version: str) -> str:
+    return f"{_ENV_PREFIX}_{prompt_type.upper()}_{version.upper()}"
 
 
 def load_prompt_version(prompt_type: str, version: str) -> str:
     """
-    Load a specific version of a prompt.
+    Load a specific version of a prompt from its Infisical-injected env var.
 
     :param prompt_type: Type of prompt ('classification' or 'extraction').
-    :param version: Version string (e.g., 'v1', 'v2', 'v3'). Note: Legacy
-        format 'v1.0.0' also supported for compatibility.
+    :param version: Version string (e.g., 'v1', 'v2', 'v3').
     :returns: Prompt text content.
-    :raises FileNotFoundError: If versioned prompt file doesn't exist.
+    :raises FileNotFoundError: If the env var for that version isn't set
+        (Infisical secret missing from the deployment's environment).
     :raises ValueError: If prompt_type is invalid.
     """
     if prompt_type not in ["classification", "extraction"]:
         raise ValueError(f"Invalid prompt_type: {prompt_type}. Must be 'classification' or 'extraction'")
 
-    version_file = VERSIONS_DIR / prompt_type / f"{version}.txt"
-    if not version_file.exists():
-        raise FileNotFoundError(f"Prompt version not found: {version_file}")
-
-    return version_file.read_text(encoding="utf-8").strip()
+    env_var = _env_var_name(prompt_type, version)
+    value = os.environ.get(env_var)
+    if value is None:
+        raise FileNotFoundError(
+            f"Prompt version not found: env var {env_var} is not set "
+            f"(check the Infisical secret for this deployment's environment)."
+        )
+    return value.strip()
 
 
 def list_available_versions(prompt_type: str) -> list[str]:
     """
-    List all available versions of a prompt type.
+    List all available versions of a prompt type, by scanning env vars.
 
     :param prompt_type: Type of prompt ('classification' or 'extraction').
-    :returns: List of version strings (e.g., ['v1.0.0', 'v1.1.0']).
+    :returns: List of version strings (e.g., ['v1', 'v2']), sorted.
     """
-    versions_path = VERSIONS_DIR / prompt_type
-    if not versions_path.exists():
-        return []
-
-    return sorted([f.stem for f in versions_path.glob("v*.txt")])
+    prefix = f"{_ENV_PREFIX}_{prompt_type.upper()}_"
+    return sorted(key[len(prefix) :].lower() for key in os.environ if key.startswith(prefix))
 
 
 def get_extraction_prompt(version: str | None = None) -> str:
@@ -88,9 +92,10 @@ def get_classification_prompt(version: str | None = None) -> str:
 def __getattr__(name: str) -> str:
     """Resolve ``EXTRACTION_PROMPT`` / ``CLASSIFICATION_PROMPT`` lazily.
 
-    Module-level constants would read the filesystem at import time (forbidden by
-    the styleguide); this defers the read to first access while keeping the
-    ``from .prompts import EXTRACTION_PROMPT`` call sites unchanged.
+    Module-level constants would read the environment at import time
+    (forbidden by the styleguide); this defers the read to first access
+    while keeping the ``from .prompts import EXTRACTION_PROMPT`` call sites
+    unchanged.
 
     :param name: Attribute being accessed.
     :returns: The rendered prompt text.
@@ -110,8 +115,6 @@ EXTRACTION_PROMPT: str
 __all__ = [
     "CLASSIFICATION_PROMPT",
     "EXTRACTION_PROMPT",
-    "PROMPTS_DIR",
-    "VERSIONS_DIR",
     "get_classification_prompt",
     "get_extraction_prompt",
     "list_available_versions",

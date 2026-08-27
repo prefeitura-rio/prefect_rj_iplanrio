@@ -47,9 +47,10 @@ def rj_iplanrio__nf_agent(
 ) -> None:
     """Run one batch of the NF extraction/validation pipeline and self-trigger the next one."""
 
-    # Inject GCP credentials from Infisical before any GCP client is created
+    # Inject GCP credentials from Infisical before any GCP client is created.
+    # (GCS_BUCKET is a plain bucket-name string, not a base64 credential blob —
+    # it already arrives as a plain env var via the k8s secret, no injection needed.)
     inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
-    inject_credentials_from_env("GCS_BUCKET")
 
     session_id = new_or_continued_session_task(session_id)
     params = BatchRunParams(

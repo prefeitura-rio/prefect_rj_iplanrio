@@ -9,11 +9,24 @@ object is constructed without running its real ``__init__``.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import fitz  # PyMuPDF
 import pytest
+
+# Prompts now come from Infisical-injected env vars (PROMPT_{TIPO}_{VERSAO} —
+# see utils/prompts.py), not from files in the repo. gemini_classifier.py and
+# extraction/auth.py resolve CLASSIFICATION_PROMPT/EXTRACTION_PROMPT at
+# *module import time*, so these need to be set before any test module
+# imports them — a fixture would run too late (collection already imports
+# the modules). Real prompt text is never needed for these tests; they only
+# exercise pipeline logic around the extracted/classified result.
+os.environ.setdefault("PROMPT_CLASSIFICATION_V1", "TEST classification prompt (placeholder for test suite).")
+os.environ.setdefault(
+    "PROMPT_EXTRACTION_V1", "TEST extraction prompt {classification_hint} (placeholder for test suite)."
+)
 
 
 def make_pdf_bytes(n_pages: int = 1) -> bytes:
