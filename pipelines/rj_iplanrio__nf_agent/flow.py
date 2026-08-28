@@ -46,9 +46,12 @@ Gemini call path; flagged as a follow-up, not attempted in a lint pass.
 """
 
 from __future__ import annotations
+
 from datetime import datetime, timezone
+
 from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 from prefect import flow
+
 from .tasks import (
     log_batch_summary_task,
     new_or_continued_session_task,
