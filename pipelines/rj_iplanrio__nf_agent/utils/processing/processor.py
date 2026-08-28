@@ -129,7 +129,7 @@ class POCProcessor:
         max_workers: int = 1000,
         requests_per_minute: int = 0,
         max_concurrent: int = 0,
-    ):
+    ) -> batch.BatchProcessingResult:
         """See ``batch.process_database``."""
         return batch.process_database(
             self,

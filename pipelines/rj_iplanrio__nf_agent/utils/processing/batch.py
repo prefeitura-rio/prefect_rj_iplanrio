@@ -3,6 +3,8 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from prefect_rj_iplanrio.logging import get_logger
@@ -21,15 +23,43 @@ logger = get_logger(__name__)
 PROGRESS_LOG_INTERVAL_PDFS = 10  # log a progress summary every N completed PDFs
 LOW_THROUGHPUT_RATE_PDFS_PER_SEC = 0.1  # below this, also log which PDFs are still in-flight
 MAX_INCONSISTENCIES_TO_LOG = 10  # cap on page-mapping-inconsistency detail lines printed
+SLOWEST_PDFS_TO_LOG = 5  # how many of the slowest PDFs to report per batch
+
+
+@dataclass(frozen=True)
+class BatchProcessingResult:
+    """What one call to :func:`process_database` produced."""
+
+    extracao_pagina_rows: list[dict]  # per-page output rows — see metadata.build_extracao_pagina_rows
+    timing_stats: dict[str, Any]  # wall/CPU timing + counts, written to pipeline_runs by the caller
+
+
+@dataclass(frozen=True)
+class _DownloadOutcome:
+    """Internal: result of the pre-download step."""
+
+    tasks: list[dict]  # pdf_tasks that downloaded successfully, each with "pdf_path" set
+    downloaded_paths: dict[str, Path]  # pdf_name -> local path, for cleanup at the end
+    wall_sec: float
+
+
+@dataclass(frozen=True)
+class _ParallelProcessingOutcome:
+    """Internal: result of running every PDF through the worker pool."""
+
+    results: dict[str, dict]  # pdf_name -> process_pdf result dict
+    wall_sec: float
+    submitted_at: dict[str, float]
+    finished_at: dict[str, float]
 
 
 def process_database(
     processor: "POCProcessor",
     pdf_names: list[str],
-    max_workers: int = 1000,  # Batch download enables 1000 workers
+    max_workers: int = 1000,
     requests_per_minute: int = 0,  # Passado para versao_pipeline (rastreabilidade)
     max_concurrent: int = 0,  # Passado para versao_pipeline (rastreabilidade)
-) -> tuple[list[dict], dict]:
+) -> BatchProcessingResult:
     """
     Process a list of PDF filenames in parallel.
 
@@ -42,10 +72,11 @@ def process_database(
 
     :param processor: The ``POCProcessor`` instance.
     :param pdf_names: PDF filenames (without extension) to process.
-    :param max_workers: Number of concurrent workers (default: 20).
+    :param max_workers: Number of concurrent workers (default: 1000 — batch
+        download makes that many workers viable).
     :param requests_per_minute: RPM configurado no rate limiter (para versao_pipeline).
     :param max_concurrent: Máximo de requisições simultâneas (para versao_pipeline).
-    :returns: ``(extracao_pagina_rows, timing_stats)`` — per-page results and batch timing metrics.
+    :returns: Per-page output rows plus batch timing metrics.
     """
     logger.warning(f"\n{'#' * 80}")
     logger.warning("# POC Pipeline - Database Processing")
@@ -53,65 +84,84 @@ def process_database(
 
     # Store db_path for worker threads (each worker creates its own connection)
     processor.db_path = processor.db_manager.db_path
-    logger.warning(f"[DEBUG] Main thread DB path stored: {processor.db_path}\n")
-
-    logger.warning(f"PDFs to process: {len(pdf_names)}")
-    logger.warning(f"Parallel workers: {max_workers}")
 
     pdf_tasks = [{"pdf_name": pdf_name} for pdf_name in pdf_names]
     total_pdfs = len(pdf_tasks)
+    logger.warning(f"PDFs to process: {total_pdfs} | Parallel workers: {max_workers}")
 
-    # PRE-DOWNLOAD: Download all PDFs in batches before parallel processing
-    logger.warning(f"\n[Pre-download] Downloading {total_pdfs} PDFs in batches...")
-    logger.warning("Using concurrent downloads (50 at a time) to optimize network usage")
+    download = _download_pdfs(processor, pdf_tasks, max_workers)
+    parallel = _run_workers_in_parallel(processor, download.tasks, max_workers)
 
-    # Get PDF names
+    _log_slowest_pdfs(parallel)
+    _log_parallelism_indicator(parallel.results)
+
+    timing_stats = _build_timing_stats(processor, download, parallel)
+
+    _validate_page_consistency(pdf_tasks, parallel.results)
+
+    extracao_pagina_rows = metadata.build_extracao_pagina_rows(
+        pdf_tasks=pdf_tasks,
+        pdf_results=parallel.results,
+        timestamp_geracao=metadata.utc_now_naive(),
+        versao_pipeline=metadata.build_versao_pipeline(
+            workers=max_workers,
+            requests_per_minute=requests_per_minute,
+            max_concurrent=max_concurrent,
+        ),
+        versao_prompt=metadata.build_versao_prompt(processor),
+    )
+    _log_processing_summary(total_pdfs, extracao_pagina_rows)
+    _log_cache_statistics(processor)
+    _cleanup_downloaded_pdfs(processor, download.downloaded_paths)
+
+    return BatchProcessingResult(extracao_pagina_rows=extracao_pagina_rows, timing_stats=timing_stats)
+
+
+def _download_pdfs(processor: "POCProcessor", pdf_tasks: list[dict], max_workers: int) -> _DownloadOutcome:
+    """Batch-download every PDF from GCS, dropping any that failed to download."""
+    logger.warning(f"\n[Pre-download] Downloading {len(pdf_tasks)} PDFs in batches...")
+
     pdf_names_to_download = [task["pdf_name"] for task in pdf_tasks]
 
-    # Batch download all PDFs — time the whole block for avg_sec_download_gcs
-    _t_download_start = time.time()
+    t_start = time.time()
     downloaded_paths = processor.gcs_downloader.download_pdfs_batch(
         pdf_names=pdf_names_to_download,
         local_dir=processor.temp_dir,
         batch_size=max_workers,  # align with processing workers to avoid urllib3 pool exhaustion
     )
-    _t_download_total = time.time() - _t_download_start
+    wall_sec = time.time() - t_start
 
     logger.warning(f"[OK] Downloaded {len(downloaded_paths)} / {len(pdf_names_to_download)} PDFs")
 
-    # Filter out PDFs that failed to download
-    pdf_tasks_filtered = []
-    failed_pdfs_download = []  # For debugging: track PDFs that failed to download
+    tasks_filtered = []
     for task in pdf_tasks:
         if task["pdf_name"] in downloaded_paths:
             task["pdf_path"] = downloaded_paths[task["pdf_name"]]
-            pdf_tasks_filtered.append(task)
+            tasks_filtered.append(task)
         else:
             logger.warning(f"[Warning] Skipping {task['pdf_name']} (download failed)")
-            failed_pdfs_download.append(task["pdf_name"])
 
-    logger.warning(f"\n[Processing] Processing {len(pdf_tasks_filtered)} PDFs with {max_workers} workers...\n")
+    return _DownloadOutcome(tasks=tasks_filtered, downloaded_paths=downloaded_paths, wall_sec=wall_sec)
 
-    # ── Wall-clock timer for the whole processing stage ──
 
-    # Thread-safe progress tracking
+def _run_workers_in_parallel(
+    processor: "POCProcessor", pdf_tasks: list[dict], max_workers: int
+) -> _ParallelProcessingOutcome:
+    """Submit every (already-downloaded) PDF to the worker pool and collect results, logging progress."""
+    logger.warning(f"\n[Processing] Processing {len(pdf_tasks)} PDFs with {max_workers} workers...\n")
+
     progress_lock = threading.Lock()
-    completed_count = [0]  # Mutable for thread-safe updates
+    completed_count = [0]  # mutable, for thread-safe updates
+    results: dict[str, dict] = {}
+    total = len(pdf_tasks)
 
-    # Parallel processing (using pre-downloaded PDFs)
-    pdf_results = {}  # Map PDF name to result
-    _n_total = len(pdf_tasks_filtered)
-
-    logger.warning(f"[Progress] Processing {_n_total} PDFs with {max_workers} workers...")
-
-    _t_core_start = time.time()
-    _submitted_at: dict[str, float] = {}
-    _finished_at: dict[str, float] = {}
+    t_start = time.time()
+    submitted_at: dict[str, float] = {}
+    finished_at: dict[str, float] = {}
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all PDF processing tasks (with pre-downloaded paths)
         future_to_pdf = {}
-        for task in pdf_tasks_filtered:
-            _submitted_at[task["pdf_name"]] = time.time()
+        for task in pdf_tasks:
+            submitted_at[task["pdf_name"]] = time.time()
             future = executor.submit(
                 processor._process_single_pdf_worker,
                 pdf_name=task["pdf_name"],
@@ -121,161 +171,183 @@ def process_database(
             )
             future_to_pdf[future] = task
 
-        # Collect results as they complete
-        _last_summary_count = 0
+        last_summary_count = 0
         for future in as_completed(future_to_pdf):
             task = future_to_pdf[future]
             result = future.result()
-            pdf_results[task["pdf_name"]] = result
-            _finished_at[task["pdf_name"]] = time.time()
+            results[task["pdf_name"]] = result
+            finished_at[task["pdf_name"]] = time.time()
 
-            # Print each PDF result (now from main thread — visible in Prefect Cloud)
-            _pdf_elapsed = _finished_at[task["pdf_name"]] - _submitted_at[task["pdf_name"]]
-            _n_docs = len(result.get("extracted_nfs", []))
-            _truncated = task["pdf_name"][:60]
-            _status = "OK" if result.get("success") else "FAIL"
-            logger.warning(f"  {_truncated} → {_status} ({_n_docs} docs, {_pdf_elapsed:.0f}s)")
+            # Print each PDF result (from the main thread — visible in Prefect Cloud)
+            pdf_elapsed = finished_at[task["pdf_name"]] - submitted_at[task["pdf_name"]]
+            n_docs = len(result.get("extracted_nfs", []))
+            status = "OK" if result.get("success") else "FAIL"
+            logger.warning(f"  {task['pdf_name'][:60]} → {status} ({n_docs} docs, {pdf_elapsed:.0f}s)")
 
-            # Periodic summary every N PDFs
-            # Use len(pdf_results) instead of completed_count[0] to avoid
-            # phantom FAILs caused by the worker incrementing the counter
-            # before the result reaches pdf_results (race condition).
-            _done = len(pdf_results)
-            if _done - _last_summary_count >= PROGRESS_LOG_INTERVAL_PDFS or _done == _n_total:
-                _last_summary_count = _done
-                _elapsed = time.time() - _t_core_start
-                _n_ok = sum(1 for r in pdf_results.values() if r.get("success"))
-                _n_fail = _done - _n_ok
-                _rate = _done / _elapsed if _elapsed > 0 else 0
-                _eta = (_n_total - _done) / _rate if _rate > 0 else 0
-                logger.warning(
-                    f"[Progress] {_done}/{_n_total} ({100 * _done // _n_total}%) | "
-                    f"{_n_ok} OK, {_n_fail} FAIL | "
-                    f"elapsed={_elapsed:.0f}s rate={_rate:.1f}pdf/s "
-                    f"eta={_eta:.0f}s"
-                )
-                # When rate is low, show which PDFs are still in-flight
-                if _rate < LOW_THROUGHPUT_RATE_PDFS_PER_SEC:
-                    _inflight = {n: time.time() - t for n, t in _submitted_at.items() if n not in pdf_results}
-                    if _inflight:
-                        _slowest = sorted(_inflight.items(), key=lambda x: -x[1])[:3]
-                        logger.warning("  ⏳ In-flight: " + ", ".join(f"{n[:40]}…({s:.0f}s)" for n, s in _slowest))
-    _t_core_wall = time.time() - _t_core_start
+            # Periodic summary every N PDFs. Uses len(results) instead of
+            # completed_count[0] to avoid phantom FAILs caused by the worker
+            # incrementing the counter before the result reaches `results`
+            # (race condition).
+            done = len(results)
+            if done - last_summary_count >= PROGRESS_LOG_INTERVAL_PDFS or done == total:
+                last_summary_count = done
+                _log_progress_summary(results, submitted_at, t_start, done, total)
+    wall_sec = time.time() - t_start
 
-    _n_ok = sum(1 for r in pdf_results.values() if r.get("success"))
-    _n_fail = _n_total - _n_ok
-    logger.warning(
-        f"[Progress] Done: {_n_ok} OK, {_n_fail} FAIL in {_t_core_wall:.0f}s ({_t_core_wall / _n_total:.1f}s/pdf avg)"
+    n_ok = sum(1 for r in results.values() if r.get("success"))
+    n_fail = total - n_ok
+    logger.warning(f"[Progress] Done: {n_ok} OK, {n_fail} FAIL in {wall_sec:.0f}s ({wall_sec / total:.1f}s/pdf avg)")
+
+    return _ParallelProcessingOutcome(
+        results=results, wall_sec=wall_sec, submitted_at=submitted_at, finished_at=finished_at
     )
 
-    # ── Top 5 slowest PDFs ──
-    _sorted_pdfs = sorted(
-        ((n, _finished_at.get(n, 0) - _submitted_at.get(n, 0)) for n in pdf_results),
+
+def _log_progress_summary(
+    results: dict[str, dict], submitted_at: dict[str, float], t_core_start: float, done: int, total: int
+) -> None:
+    """Log one periodic '[Progress] X/Y' line, plus in-flight PDFs if throughput is low."""
+    elapsed = time.time() - t_core_start
+    n_ok = sum(1 for r in results.values() if r.get("success"))
+    n_fail = done - n_ok
+    rate = done / elapsed if elapsed > 0 else 0
+    eta = (total - done) / rate if rate > 0 else 0
+    logger.warning(
+        f"[Progress] {done}/{total} ({100 * done // total}%) | "
+        f"{n_ok} OK, {n_fail} FAIL | "
+        f"elapsed={elapsed:.0f}s rate={rate:.1f}pdf/s "
+        f"eta={eta:.0f}s"
+    )
+    if rate < LOW_THROUGHPUT_RATE_PDFS_PER_SEC:
+        inflight = {n: time.time() - t for n, t in submitted_at.items() if n not in results}
+        if inflight:
+            slowest = sorted(inflight.items(), key=lambda x: -x[1])[:3]
+            logger.warning("  ⏳ In-flight: " + ", ".join(f"{n[:40]}…({s:.0f}s)" for n, s in slowest))
+
+
+def _log_slowest_pdfs(parallel: _ParallelProcessingOutcome) -> None:
+    """Log the ``SLOWEST_PDFS_TO_LOG`` slowest PDFs in this batch."""
+    sorted_pdfs = sorted(
+        ((n, parallel.finished_at.get(n, 0) - parallel.submitted_at.get(n, 0)) for n in parallel.results),
         key=lambda x: -x[1],
     )
-    logger.warning("[Slowest] Top 5:")
-    for _rank, (_name, _sec) in enumerate(_sorted_pdfs[:5], 1):
-        _r = pdf_results[_name]
-        _ok = "OK" if _r.get("success") else "FAIL"
-        _docs = len(_r.get("extracted_nfs", []))
-        _pages = _r.get("total_pages", "?")
-        _cf = _r.get("_t_classif_wall_sec")
-        _cf_str = f"classif={_cf:.0f}s" if _cf is not None else ""
-        logger.warning(f"  #{_rank} {_name[:60]} → {_ok} ({_sec:.0f}s, {_pages}p, {_docs} docs {_cf_str})")
+    logger.warning(f"[Slowest] Top {SLOWEST_PDFS_TO_LOG}:")
+    for rank, (name, sec) in enumerate(sorted_pdfs[:SLOWEST_PDFS_TO_LOG], 1):
+        r = parallel.results[name]
+        status = "OK" if r.get("success") else "FAIL"
+        n_docs = len(r.get("extracted_nfs", []))
+        pages = r.get("total_pages", "?")
+        classif_wall = r.get("_t_classif_wall_sec")
+        classif_str = f"classif={classif_wall:.0f}s" if classif_wall is not None else ""
+        logger.warning(f"  #{rank} {name[:60]} → {status} ({sec:.0f}s, {pages}p, {n_docs} docs {classif_str})")
 
-    # ── Intra-PDF parallelism indicator ──
-    _classif_walls = [
-        r.get("_t_classif_wall_sec") for r in pdf_results.values() if r.get("_t_classif_wall_sec") is not None
-    ]
-    if _classif_walls:
-        _avg = sum(_classif_walls) / len(_classif_walls)
+
+def _log_parallelism_indicator(results: dict[str, dict]) -> None:
+    """Log the average intra-PDF classification wall time, as a rough parallelism signal."""
+    classif_walls = [r.get("_t_classif_wall_sec") for r in results.values() if r.get("_t_classif_wall_sec") is not None]
+    if classif_walls:
+        avg = sum(classif_walls) / len(classif_walls)
         logger.warning(
-            f"[Parallelism] Média classif intra-PDF: {_avg:.1f}s wall (quanto menor que páginas x 3s, mais paralelo)"
+            f"[Parallelism] Média classif intra-PDF: {avg:.1f}s wall (quanto menor que páginas x 3s, mais paralelo)"
         )
 
-    # ── Aggregate per-batch timing stats ─────────────────────────────────
-    _timing_list_preprocess: list[float] = []
-    _timing_list_validacao: list[float] = []
-    for task in pdf_tasks_filtered:
-        res = pdf_results.get(task["pdf_name"], {})
-        t_pre = res.get("_t_preprocess_sec")
-        t_val = res.get("_t_validacao_sec")
+
+def _safe_avg(values: list[float]) -> float | None:
+    return round(sum(values) / len(values), 3) if values else None
+
+
+def _build_timing_stats(
+    processor: "POCProcessor", download: _DownloadOutcome, parallel: _ParallelProcessingOutcome
+) -> dict[str, Any]:
+    """Aggregate wall-clock and per-stage CPU timing into the dict written to ``pipeline_runs``."""
+    timing_list_preprocess: list[float] = []
+    for task in download.tasks:
+        t_pre = parallel.results.get(task["pdf_name"], {}).get("_t_preprocess_sec")
         if t_pre is not None:
-            _timing_list_preprocess.append(t_pre)
-        if t_val is not None:
-            _timing_list_validacao.append(t_val)
+            timing_list_preprocess.append(t_pre)
 
     # Classification and extraction elapsed times come from SQLite api_outputs.
     # We only count rows inserted during THIS batch (elapsed_seconds > 0 means
     # real API call, not a cache hit — cache hits have elapsed_seconds = 0 or
     # the row simply doesn't exist for the new pdf_name).
-    _pdf_stems = list({t["pdf_name"].replace(".pdf", "").replace(".PDF", "") for t in pdf_tasks_filtered})
+    pdf_stems = list({t["pdf_name"].replace(".pdf", "").replace(".PDF", "") for t in download.tasks})
     # api_inputs stores classification pages WITH .pdf extension; extraction inputs WITHOUT.
     # Build both variants so the IN clause matches regardless of how pdf_name was stored.
-    _pdf_with_ext = [s + ".pdf" for s in _pdf_stems]
-    _timing_list_classificacao: list[float] = []
-    _timing_list_extracao: list[float] = []
-    if _pdf_stems:
-        _placeholders_stem = ",".join("?" * len(_pdf_stems))
-        _placeholders_ext = ",".join("?" * len(_pdf_with_ext))
+    pdf_with_ext = [s + ".pdf" for s in pdf_stems]
+    timing_list_classificacao: list[float] = []
+    timing_list_extracao: list[float] = []
+    if pdf_stems:
+        placeholders_stem = ",".join("?" * len(pdf_stems))
+        placeholders_ext = ",".join("?" * len(pdf_with_ext))
         # Classification: stored with .pdf extension
-        _cur_c = processor.db_manager.conn.execute(
+        cur_c = processor.db_manager.conn.execute(
             f"""
             SELECT o.elapsed_seconds
             FROM api_outputs o
             JOIN api_inputs i ON i.id = o.input_id
             WHERE i.input_type = 'classification_page'
-              AND (i.item_key IN ({_placeholders_stem})
-                   OR i.item_key IN ({_placeholders_ext}))
+              AND (i.item_key IN ({placeholders_stem})
+                   OR i.item_key IN ({placeholders_ext}))
               AND o.elapsed_seconds > 0
             """,
-            _pdf_stems + _pdf_with_ext,
+            pdf_stems + pdf_with_ext,
         )
-        _timing_list_classificacao = [r[0] for r in _cur_c.fetchall()]
+        timing_list_classificacao = [r[0] for r in cur_c.fetchall()]
 
         # Extraction: stored without .pdf extension, but handle both variants for safety
-        _cur_e = processor.db_manager.conn.execute(
+        cur_e = processor.db_manager.conn.execute(
             f"""
             SELECT o.elapsed_seconds
             FROM api_outputs o
             JOIN api_inputs i ON i.id = o.input_id
             WHERE i.input_type = 'extraction_filtered_pdf'
-              AND (i.item_key IN ({_placeholders_stem})
-                   OR i.item_key IN ({_placeholders_ext}))
+              AND (i.item_key IN ({placeholders_stem})
+                   OR i.item_key IN ({placeholders_ext}))
               AND o.elapsed_seconds > 0
             """,
-            _pdf_stems + _pdf_with_ext,
+            pdf_stems + pdf_with_ext,
         )
-        _timing_list_extracao = [r[0] for r in _cur_e.fetchall()]
+        timing_list_extracao = [r[0] for r in cur_e.fetchall()]
 
-    def _safe_avg(lst: list[float]) -> float | None:
-        return round(sum(lst) / len(lst), 3) if lst else None
+    n_ok = sum(1 for r in parallel.results.values() if r.get("success"))
+    n_total = len(download.tasks)
 
-    # ── Concrete timing metrics (no proportional estimation) ──
     timing_stats: dict[str, Any] = {
-        "wall_sec_download_gcs": round(_t_download_total, 3),
-        "wall_sec_core": round(_t_core_wall, 3),
+        "wall_sec_download_gcs": round(download.wall_sec, 3),
+        "wall_sec_core": round(parallel.wall_sec, 3),
         "wall_sec_escrita": None,
-        "avg_cpu_sec_preprocess_por_pdf": _safe_avg(_timing_list_preprocess),
-        "avg_cpu_sec_classificacao_por_pagina": _safe_avg(_timing_list_classificacao),
-        "avg_cpu_sec_extracao_por_declaracao": _safe_avg(_timing_list_extracao),
-        "avg_cpu_sec_validacao_por_pdf": _safe_avg(_timing_list_validacao),
+        "avg_cpu_sec_preprocess_por_pdf": _safe_avg(timing_list_preprocess),
+        "avg_cpu_sec_classificacao_por_pagina": _safe_avg(timing_list_classificacao),
+        # Column name says "por_declaracao" (per declaration) — stale, this
+        # pipeline is per-page now, no declarations involved. It actually
+        # measures extraction CPU time per PDF. Kept as-is: pipeline_runs
+        # already has historical rows under this column name; renaming it
+        # is a BigQuery schema decision, not a code cleanup (see the "docs
+        # -> pages" rename in orchestration.py for the same reasoning).
+        "avg_cpu_sec_extracao_por_declaracao": _safe_avg(timing_list_extracao),
+        # Always None: the compliance-validation step this once measured
+        # was removed along with the old ComplianceValidator machinery —
+        # nothing in process.py produces "_t_validacao_sec" anymore. Kept
+        # as an explicit None (not omitted) for the same pipeline_runs
+        # schema-stability reason as the field above.
+        "avg_cpu_sec_validacao_por_pdf": None,
         # Actual batch counts (not diff-based — mirrors what was really processed)
-        "_n_pdfs_total": _n_total,
-        "_n_pdfs_ok": _n_ok,
-        "_n_pdfs_fail": _n_fail,
+        "_n_pdfs_total": n_total,
+        "_n_pdfs_ok": n_ok,
+        "_n_pdfs_fail": n_total - n_ok,
     }
 
     logger.warning(
-        f"[Timing] Wall: Download={_t_download_total:.1f}s | Core={_t_core_wall:.1f}s\n"
-        f"[Timing] Per-PDF CPU avg: Preprocess={_safe_avg(_timing_list_preprocess)}s | "
-        f"Classificação(pag)={_safe_avg(_timing_list_classificacao)}s | "
-        f"Extração(doc)={_safe_avg(_timing_list_extracao)}s | "
-        f"Validação={_safe_avg(_timing_list_validacao)}s"
+        f"\n[Timing] Wall: Download={download.wall_sec:.1f}s | Core={parallel.wall_sec:.1f}s\n"
+        f"[Timing] Per-PDF CPU avg: Preprocess={_safe_avg(timing_list_preprocess)}s | "
+        f"Classificação(pag)={_safe_avg(timing_list_classificacao)}s | "
+        f"Extração(pdf)={_safe_avg(timing_list_extracao)}s"
     )
-    # ─────────────────────────────────────────────────────────────────────
+    return timing_stats
 
-    # Validate page consistency (NEW: detect page mapping issues)
+
+def _validate_page_consistency(pdf_tasks: list[dict], results: dict[str, dict]) -> None:
+    """Log a warning for every extracted page that doesn't appear in its own PDF's ``nf_pages`` (mapping bugs)."""
     logger.warning(f"\n{'=' * 80}")
     logger.warning("Validating page consistency...")
     logger.warning(f"{'=' * 80}")
@@ -283,16 +355,12 @@ def process_database(
     inconsistencies = []
     for task in pdf_tasks:
         pdf_name = task["pdf_name"]
-        result = pdf_results.get(pdf_name, {})
-
+        result = results.get(pdf_name, {})
         if not result.get("success", True):
             continue  # Skip failed PDFs
 
-        extracted_nfs = result.get("extracted_nfs", [])
         nf_pages = result.get("nf_pages", [])
-
-        # Validate: páginas extraídas devem estar em nf_pages
-        for nf in extracted_nfs:
+        for nf in result.get("extracted_nfs", []):
             page = nf.get("pagina")
             if page and page not in nf_pages:
                 inconsistencies.append(
@@ -305,32 +373,22 @@ def process_database(
                     }
                 )
 
-    if inconsistencies:
-        logger.warning(f"\n⚠️  WARNING: Found {len(inconsistencies)} page mapping inconsistencies:")
-        for issue in inconsistencies[:MAX_INCONSISTENCIES_TO_LOG]:
-            logger.warning(f"  PDF: {issue['pdf_name']}")
-            logger.warning(f"    Extracted page: {issue['extracted_page']} (NF: {issue['nf_numero']})")
-            logger.warning(f"    Expected pages: {issue['nf_pages']}")
-            logger.warning(f"    Issue: {issue['issue']}")
-        if len(inconsistencies) > MAX_INCONSISTENCIES_TO_LOG:
-            logger.warning(f"  ... and {len(inconsistencies) - MAX_INCONSISTENCIES_TO_LOG} more")
-    else:
+    if not inconsistencies:
         logger.warning("✓ No page mapping inconsistencies found")
+        return
 
-    # Build per-page rows — always (this is the pipeline's only output format;
-    # GCS/BQ writes happen in the caller, using this same extracao_pagina_rows).
-    _run_ts = metadata.utc_now_naive()
-    extracao_pagina_rows = metadata.build_extracao_pagina_rows(
-        pdf_tasks=pdf_tasks,
-        pdf_results=pdf_results,
-        timestamp_geracao=_run_ts,
-        versao_pipeline=metadata.build_versao_pipeline(
-            workers=max_workers,
-            requests_per_minute=requests_per_minute,
-            max_concurrent=max_concurrent,
-        ),
-        versao_prompt=metadata.build_versao_prompt(processor),
-    )
+    logger.warning(f"\n⚠️  WARNING: Found {len(inconsistencies)} page mapping inconsistencies:")
+    for issue in inconsistencies[:MAX_INCONSISTENCIES_TO_LOG]:
+        logger.warning(f"  PDF: {issue['pdf_name']}")
+        logger.warning(f"    Extracted page: {issue['extracted_page']} (NF: {issue['nf_numero']})")
+        logger.warning(f"    Expected pages: {issue['nf_pages']}")
+        logger.warning(f"    Issue: {issue['issue']}")
+    if len(inconsistencies) > MAX_INCONSISTENCIES_TO_LOG:
+        logger.warning(f"  ... and {len(inconsistencies) - MAX_INCONSISTENCIES_TO_LOG} more")
+
+
+def _log_processing_summary(total_pdfs: int, extracao_pagina_rows: list[dict]) -> None:
+    """Log the final '# Processing Complete' block with ok/error counts."""
     ok_with_doc = sum(
         1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"]
     )
@@ -339,7 +397,6 @@ def process_database(
     )
     erro = sum(1 for i in extracao_pagina_rows if i["pipeline_status"] == "erro_processamento")
 
-    # Print summary
     logger.warning(f"\n{'#' * 80}")
     logger.warning("# Processing Complete")
     logger.warning(f"{'#' * 80}")
@@ -353,13 +410,15 @@ def process_database(
         f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
     )
 
-    # Print cache statistics
+
+def _log_cache_statistics(processor: "POCProcessor") -> None:
     logger.warning("\nCache Statistics:")
-    stats = processor.db_manager.get_statistics()
-    for key, value in stats.items():
+    for key, value in processor.db_manager.get_statistics().items():
         logger.warning(f"  {key}: {value}")
 
-    # Cleanup pre-downloaded PDFs — always (no persistent disk between Prefect runs).
+
+def _cleanup_downloaded_pdfs(processor: "POCProcessor", downloaded_paths: dict[str, Path]) -> None:
+    """Delete every pre-downloaded PDF — always (no persistent disk between Prefect runs)."""
     logger.warning(f"\n[Cleanup] Removing {len(downloaded_paths)} pre-downloaded PDFs...")
     for pdf_path in downloaded_paths.values():
         try:
@@ -367,7 +426,3 @@ def process_database(
         except Exception:
             pass  # Ignore cleanup errors
     logger.warning("[OK] Cleanup complete")
-
-    # Return extracao_pagina_rows and timing_stats for this batch.
-    # timing_stats contains avg_sec_* metrics to be written to pipeline_runs.
-    return extracao_pagina_rows, timing_stats

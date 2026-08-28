@@ -232,12 +232,14 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
         logger.warning("Processor initialized")
         logger.warning("Starting processing...")
 
-        extracao_pagina_rows, timing_stats = processor.process_database(
+        batch_result = processor.process_database(
             pdf_names=pdf_names,
             max_workers=workers,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
         )
+        extracao_pagina_rows = batch_result.extracao_pagina_rows
+        timing_stats = batch_result.timing_stats
 
         # Post-processing: write to GCS. No separate status table to update —
         # extracao_pagina itself (loaded from this NDJSON) is the status.
