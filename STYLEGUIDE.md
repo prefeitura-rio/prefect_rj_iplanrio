@@ -20,7 +20,7 @@ Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra d
 10. [`pyproject.toml`](#10-pyprojecttoml)
 11. [`src/prefect_rj_iplanrio/` — código compartilhado do workspace](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)
 12. [Higiene do repositório](#12-higiene-do-repositório)
-13. [Labels de pipeline](#13-labels-de-pipeline)
+13. [Tags de pipeline](#13-tags-de-pipeline)
 
 ## 1. Filosofia
 
