@@ -78,7 +78,7 @@ def download_inea_data_task() -> pd.DataFrame:
         print(f"   Baixando estação {key} - {value}...")
         print(f"   URL: {url}")
         try:
-            response = requests.get(url, timeout=30, verify=False)
+            response = requests.get(url, timeout=30)
             if response.status_code == http_ok:
                 # Ler arquivo Excel diretamente do conteúdo da resposta
                 dfr_station = pd.read_excel(BytesIO(response.content))
