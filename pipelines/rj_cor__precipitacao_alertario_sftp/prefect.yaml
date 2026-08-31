@@ -25,7 +25,10 @@ pull:
 
 deployments:
   - name: rj-cor--precipitacao-alertario-sftp--staging
-    tags: [staging]
+    tags:
+      - environment:staging
+      - severity:high
+      - code_owners:tricktx
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
     work_pool:
@@ -38,7 +41,10 @@ deployments:
         image_pull_policy: Always
 
   - name: rj-cor--precipitacao-alertario-sftp--prod
-    tags: [prod]
+    tags:
+      - environment:prod
+      - severity:high
+      - code_owners:tricktx
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cor__precipitacao_alertario_sftp/flow.py:rj_cor__precipitacao_alertario_sftp
     work_pool:

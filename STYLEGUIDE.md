@@ -755,57 +755,83 @@ Veja a [Seção 3.3](#33-proibidos-nos-diretórios-de-pipeline) para a lista com
 
 Na dúvida, pergunte: "Um novo membro do time lendo este arquivo entenderia por que ele existe e o que fazer com ele?" Se a resposta for não, apague-o.
 
-## 13. Labels de pipeline
+## 13. Tags de pipeline
 
-### 13.1 O que são labels
+### 13.1 O que são tags
 
-Toda pipeline **nova** deve ter dois labels definidos no `prefect.yaml`:
-- **`code_owner`**: GitHub username do desenvolvedor responsável
-- **`severity`**: Criticidade (`"low"`, `"medium"`, `"high"`, `"critical"`)
+Toda pipeline **deve ter tags de metadados** definidas no `prefect.yaml` para indicar:
+- **Code owner**: GitHub username do desenvolvedor responsável
+- **Severidade**: Criticidade da pipeline (`low`, `medium`, `high`, `critical`)
+- **Ambiente**: Estágio de execução (`staging`, `prod`)
 
-Esses labels são propagados a todos os logs estruturados e usados pelo sistema de observabilidade para atribuição de alertas e priorização de incidentes.
+Tags são metadados da infraestrutura do Prefect, não parâmetros da pipeline. Elas são propagadas a todos os logs estruturados e usadas pelo sistema de observabilidade para atribuição de alertas e priorização de incidentes.
 
-**Nota:** Pipelines existentes sem labels continuam funcionando normalmente (backward compatibility). A validação só é aplicada quando os labels estão presentes.
+### 13.2 Como definir tags
 
-### 13.2 Como definir labels
-
-Labels são definidos **uma única vez** na seção `parameters:` de cada deployment:
+Tags são definidas na seção `tags:` de cada deployment, usando o padrão semântico `chave:valor`:
 
 ```yaml
 deployments:
+  - name: rj-secretaria--pipeline--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:seu_username
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
+        secretName: prefect-jobs-secrets-staging
+        image_pull_policy: Always
+
   - name: rj-secretaria--pipeline--prod
-    parameters:
-      code_owner: "seu_username"    # GitHub username
-      severity: "high"              # low, medium, high, critical
-      dataset_id: "brutos_data"     # ... outros parâmetros
+    tags:
+      - environment:prod
+      - severity:high
+      - code_owner:seu_username
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
 ```
 
-### 13.3 Como usá-los no flow
+**Padrão de tags:** Use `chave:valor` para facilitar filtros e buscas no Prefect Cloud.
 
-No `@flow`, receba como parâmetros padrão e injete no contexto com uma linha:
+### 13.3 Valores válidos
 
-```python
-from prefect import flow
-from prefect_rj_iplanrio.labels import set_labels, SeverityLevel
+| Tag                | Valores válidos           | Descrição                                                    |
+| ------------------ | ------------------------- | ------------------------------------------------------------ |
+| `environment`      | `staging`, `prod`         | Estágio de execução — obrigatório em todo deployment        |
+| `severity`         | `low`, `medium`, `high`, `critical` | Criticidade da pipeline — obrigatório em todo deployment    |
+| `code_owner`       | GitHub username           | Responsável pelo código — obrigatório em todo deployment    |
 
-@flow(log_prints=True)
-def rj_secretaria__pipeline(
-    code_owner: str = "unassigned",
-    severity: SeverityLevel = "medium",
-    dataset_id: str = "",
-) -> None:
-    """Pipeline para secretaria."""
-    set_labels(code_owner=code_owner, severity=severity)
-    # Resto da pipeline...
-```
+### 13.4 Por que tags em vez de parâmetros
 
-Pronto. Todos os logs herdam as labels automaticamente.
+| Aspecto              | Tags                                           | Parâmetros                                     |
+| -------------------- | ---------------------------------------------- | ---------------------------------------------- |
+| **Definição**        | Metadados imutáveis da infraestrutura           | Configuração mutável do flow                   |
+| **Escopo**           | Visíveis no Prefect Cloud; usado em filtros    | Passados como argumentos ao flow               |
+| **Mutabilidade**     | Alteradas apenas no `prefect.yaml`             | Podem ser sobrescritas em tempo de execução    |
+| **Observabilidade**  | Automaticamente propagadas aos logs estruturados | Requerem injeção manual no flow                |
+| **Contaminação**     | O flow fica limpo; sem parâmetros "framework"  | O flow acumula parâmetros de infraestrutura    |
 
-### 13.4 Validação
+Tags separam **infraestrutura** (Prefect) de **negócio** (parâmetros do flow).
 
-O CI valida em todo PR que modifica `prefect.yaml`. Quando labels estão presentes em um deployment:
-- `code_owner` não pode estar vazio
-- `severity` deve ser uma das 4 opções válidas
-- Se um label está presente, o outro também deve estar
+### 13.5 Validação
 
-Deployments sem labels são ignorados (backward compatibility). Se um deployment violar essas regras, o workflow rejeita o PR.
+O CI valida em todo PR que modifica `prefect.yaml`. Cada deployment deve incluir:
+- `environment:staging` ou `environment:prod`
+- `severity` com um dos 4 valores válidos
+- `code_owner` com um GitHub username válido
+
+Se um deployment violar essas regras, o workflow rejeita o PR. Deployments sem tags são sinalizados como erro.
