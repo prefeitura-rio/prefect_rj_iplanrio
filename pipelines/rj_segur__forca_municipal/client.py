@@ -88,7 +88,6 @@ class FMApi:
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             proxy=self._proxy_url,
             timeout=httpx.Timeout(API_TIMEOUT, connect=API_CONNECT_TIMEOUT),
-            verify=False,
         )
         log(f"Conectando à API: {self._base_url}")
         await self._authenticate()
