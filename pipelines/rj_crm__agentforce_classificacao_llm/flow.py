@@ -32,6 +32,7 @@ from prefect import flow
 
 from pipelines.rj_crm__agentforce_classificacao_llm.constants import ClassificacaoConstants as C
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.classify import (
+    carrega_prompts,
     classifica_sessoes,
     monta_dataframe_final,
     monta_prompts,
@@ -134,6 +135,11 @@ def rj_crm__agentforce_classificacao_llm(
             "(mesmo secretName usado por rj_crm__salesforce_agentforce_api)."
         )
 
+    # Diferente de BF_KEY: ausência não é erro fatal — carrega_prompts cai pro .txt local
+    # (prompts/ deste pipeline) e só loga aviso. Sem o token só perde a conveniência de
+    # editar prompt sem deploy; o flow continua rodando normalmente.
+    github_token_clustering = os.environ.get("GITHUB_TOKEN_CLUSTERING")
+
     # Não precisa de try/except aqui: on_failure=[notify_falha_flow] no decorator acima já
     # notifica o Discord em qualquer exceção não tratada, e o flow run continua marcado
     # como falho no Prefect (mesmo padrão de rj_crm__disparo_template/flow.py).
@@ -167,8 +173,13 @@ def rj_crm__agentforce_classificacao_llm(
         df_sessoes=df_sessoes, project_id=project_id, hsm_catalog_table=hsm_catalog_table
     )
 
-    # 3. Monta os prompts (com_hsm / sem_hsm) e separa as pré-classificadas por regra
-    df_prompts, df_pre_classificadas = monta_prompts(df_enriquecido)
+    # 3. Busca os templates de prompt (clustering-conversas-whatsapp, com fallback local —
+    #    ver tasks/classify.py) e monta os prompts (com_hsm / sem_hsm), separando as
+    #    pré-classificadas por regra
+    template_com_hsm, template_sem_hsm = carrega_prompts(github_token=github_token_clustering)
+    df_prompts, df_pre_classificadas = monta_prompts(
+        df_enriquecido, template_com_hsm=template_com_hsm, template_sem_hsm=template_sem_hsm
+    )
 
     # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
     #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)
