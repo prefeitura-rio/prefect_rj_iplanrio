@@ -92,7 +92,12 @@ def _parse_json_response(texto: str) -> dict:
 
 
 def _deriva_sentimento(natureza):
-    if not natureza:
+    # pd.isna() é essencial aqui: natureza ausente chega como float('nan'), não
+    # None — e `not float('nan')` é False em Python (nan é truthy), então um
+    # "if not natureza" simples deixaria passar o nan pro `in` abaixo e
+    # estouraria TypeError. Visto em produção (run 2026-09-01, ~50 sessões
+    # RESPOSTA_ATRASADA_BTN sem natureza no mesmo chunk).
+    if pd.isna(natureza) or not natureza:
         return None
     if "Reclamação" in natureza or "Problema" in natureza:
         return "negativo"
