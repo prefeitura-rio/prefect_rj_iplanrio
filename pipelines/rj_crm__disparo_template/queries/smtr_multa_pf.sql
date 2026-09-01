@@ -1,5 +1,4 @@
 -- O limite cresce 100 por dia útil
-.
 SELECT * EXCEPT (rn)
 FROM (
     SELECT
