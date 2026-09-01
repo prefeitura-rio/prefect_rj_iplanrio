@@ -2,5 +2,5 @@
   "secretaria": "sec",
   "pipeline": "example",
   "severidade": "high",
-  "code_owners": "github account"
+  "code_owner": "github_account"
 }

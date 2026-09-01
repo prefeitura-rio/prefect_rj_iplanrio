@@ -793,7 +793,7 @@ deployments:
       - environment:prod
       - severity:high
       - code_owner:seu_username
-    version: "{{ build-image.tag }}"
+    version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
     work_pool:
       name: k3s-pool
@@ -801,8 +801,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
-        image_pull_policy: Always
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
 ```
 
 **Padrão de tags:** Use `chave:valor` para facilitar filtros e buscas no Prefect Cloud.
