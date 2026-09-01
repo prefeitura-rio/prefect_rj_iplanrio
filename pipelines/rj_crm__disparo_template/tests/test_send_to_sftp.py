@@ -3,6 +3,7 @@
 Testes para o host key pinning do send_to_sftp (CHATA-140).
 
 - test_host_key_algs_*: unitários, sempre rodam, sem rede.
+- test_normalize_host_key_value_*: unitários, sempre rodam, sem rede.
 - test_sftp_connect_*: de integração contra o SFTP real de homologação da
   Salesforce. Pulados automaticamente se as credenciais não estiverem no
   ambiente (mesmas variáveis que o Infisical injeta em produção: sf_sftp_host,
@@ -14,7 +15,10 @@ import os
 import asyncssh
 import pytest
 
-from pipelines.rj_crm__disparo_template.utils.dispatch import host_key_algs_for_pinned_key
+from pipelines.rj_crm__disparo_template.utils.dispatch import (
+    host_key_algs_for_pinned_key,
+    normalize_host_key_value,
+)
 
 # --- unitários (sem rede) -----------------------------------------------
 
@@ -38,6 +42,47 @@ def test_host_key_algs_non_rsa_key_uses_its_own_algorithm(key):
     # Chaves ed25519/ecdsa não têm variante SHA-1 vs SHA-2 pra escolher --
     # devem seguir exatamente como get_algorithm() já reporta.
     assert host_key_algs_for_pinned_key(key) == [key.get_algorithm()]
+
+
+# --- normalize_host_key_value (formato do secret sf_sftp_host_key) ------
+
+_PUB_LINE = RSA_TEST_KEY.export_public_key().decode().strip()
+
+
+def test_normalize_host_key_value_accepts_bare_key_unchanged():
+    # Formato já aceito hoje -- não pode mudar de comportamento.
+    assert normalize_host_key_value(_PUB_LINE) == _PUB_LINE
+
+
+def test_normalize_host_key_value_strips_trailing_comment():
+    # Formato de arquivo .pub real: "ssh-rsa AAAA... user@host"
+    with_comment = f"{_PUB_LINE} usuario@algumamaquina"
+    assert normalize_host_key_value(with_comment) == _PUB_LINE
+
+
+def test_normalize_host_key_value_converts_known_hosts_line():
+    # A causa raiz do CHATA-140: colar a saída do ssh-keyscan (que sempre
+    # inclui o hostname na frente) direto no secret quebrava a importação.
+    known_hosts_line = f"meuhost.com.br {_PUB_LINE}"
+    normalized = normalize_host_key_value(known_hosts_line)
+
+    assert normalized == _PUB_LINE
+    # e o resultado tem que ser importável de verdade, não só "parecer certo"
+    imported = asyncssh.import_public_key(normalized)
+    assert imported.export_public_key() == RSA_TEST_KEY.export_public_key()
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "meuhost.com.br",
+        "meuhost.com.br,192.0.2.10",  # known_hosts com múltiplos hosts/IP
+        "[meuhost.com.br]:2222",  # known_hosts com porta não-padrão
+    ],
+)
+def test_normalize_host_key_value_strips_various_hostname_formats(prefix):
+    line = f"{prefix} {_PUB_LINE}"
+    assert normalize_host_key_value(line) == _PUB_LINE
 
 
 # --- integração contra o SFTP real de homologação -----------------------
@@ -67,6 +112,32 @@ def test_sftp_connect_succeeds_with_pinned_key():
     e a negociação deve preferir rsa-sha2-* quando o servidor suportar."""
     cfg = _sftp_config()
     pinned_key = asyncssh.import_public_key(cfg["host_key"])
+
+    async def _connect():
+        async with asyncssh.connect(
+            cfg["host"],
+            port=cfg["port"],
+            username=cfg["user"],
+            password=cfg["password"],
+            server_host_key_algs=host_key_algs_for_pinned_key(pinned_key),
+            known_hosts=([pinned_key], [], []),
+            connect_timeout=15,
+        ) as conn:
+            return conn.get_server_host_key()
+
+    server_key = asyncio.run(_connect())
+    assert server_key.export_public_key() == pinned_key.export_public_key()
+
+
+@pytestmark_integration
+def test_sftp_connect_succeeds_with_known_hosts_style_secret_value():
+    """Reproduz o cenário do CHATA-140: se sf_sftp_host_key tivesse sido
+    cadastrado como uma linha completa de ssh-keyscan/known_hosts (hostname +
+    chave), a conexão real ainda deve funcionar depois de
+    normalize_host_key_value()."""
+    cfg = _sftp_config()
+    known_hosts_style_value = f"{cfg['host']} {cfg['host_key']}"
+    pinned_key = asyncssh.import_public_key(normalize_host_key_value(known_hosts_style_value))
 
     async def _connect():
         async with asyncssh.connect(

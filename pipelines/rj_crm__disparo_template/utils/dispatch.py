@@ -1309,6 +1309,36 @@ def host_key_algs_for_pinned_key(pinned_key: "asyncssh.SSHKey") -> List[str]:
     return [pinned_key.get_algorithm()]
 
 
+# Tipos de chave SSH reconhecidos -- usado por normalize_host_key_value() pra
+# distinguir "primeiro campo é o tipo da chave" de "primeiro campo é hostname".
+_KNOWN_SSH_KEY_TYPE_PREFIXES = ("ssh-", "ecdsa-sha2-", "sk-ssh-", "sk-ecdsa-sha2-")
+
+
+def normalize_host_key_value(value: str) -> str:
+    """
+    Aceita tanto uma chave pública "crua" ("ssh-rsa AAAA...") quanto uma
+    linha completa de known_hosts/ssh-keyscan ("host ssh-rsa AAAA...",
+    opcionalmente com múltiplos hosts separados por vírgula ou porta entre
+    colchetes), e devolve sempre só "<tipo> <base64>" — o formato que
+    asyncssh.import_public_key() aceita (CHATA-140).
+
+    ssh-keyscan é a ferramenta padrão pra obter o host key de um servidor, e
+    o formato que ela produz por padrão inclui o hostname na frente da chave
+    -- exatamente o formato que import_public_key() rejeita com
+    KeyImportError. Sem essa normalização, colar a saída do ssh-keyscan
+    direto no secret (o passo mais natural numa rotação de chave) quebra o
+    disparo, mesmo seguindo a documentação à risca.
+    """
+    fields = value.strip().split()
+    if len(fields) >= 2 and not fields[0].startswith(_KNOWN_SSH_KEY_TYPE_PREFIXES):
+        # primeiro campo não é um tipo de chave conhecido -> é hostname
+        # (known_hosts/ssh-keyscan), não faz parte da chave em si
+        fields = fields[1:]
+    # mantém só tipo + base64; descarta comentário se houver (ex.: "user@host"
+    # no final de um arquivo .pub)
+    return " ".join(fields[:2])
+
+
 @task
 def send_to_sftp(
     csv_path: str,
@@ -1355,10 +1385,15 @@ def send_to_sftp(
         sftp_password: Senha SFTP
         sftp_port: Porta do servidor SFTP (padrão: 22)
         sftp_remote_path: Diretório remoto onde o arquivo será depositado
-        sftp_host_key: Chave pública do servidor, no formato "ssh-rsa AAAA..."
-            (mesmo formato de uma linha de known_hosts). Precisa ser
-            confirmada com a Salesforce por um canal separado da própria
-            conexão SSH (suporte, documentação oficial) antes de ser
+        sftp_host_key: Chave pública do servidor. Formato esperado: só o
+            tipo + a chave em base64 (ex.: "ssh-rsa AAAA..." — SEM hostname
+            ou prefixo de known_hosts na frente). Uma linha completa de
+            `ssh-keyscan`/known_hosts ("meuhost.com ssh-rsa AAAA...") também
+            é aceita — normalize_host_key_value() remove o hostname
+            automaticamente antes de importar a chave — mas o valor
+            recomendado a cadastrar no secret é só a chave, sem o hostname.
+            Precisa ser confirmada com a Salesforce por um canal separado da
+            própria conexão SSH (suporte, documentação oficial) antes de ser
             cadastrada — nunca aceitar só o que a primeira conexão apresentar.
     """
     if infisical_secret_path:
@@ -1376,7 +1411,7 @@ def send_to_sftp(
     remote_dir = sftp_remote_path.rstrip("/") if sftp_remote_path else ""
     remote_file = f"{remote_dir}/{filename}" if remote_dir else filename
 
-    pinned_key = asyncssh.import_public_key(sftp_host_key)
+    pinned_key = asyncssh.import_public_key(normalize_host_key_value(sftp_host_key))
 
     async def _upload() -> None:
         log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")

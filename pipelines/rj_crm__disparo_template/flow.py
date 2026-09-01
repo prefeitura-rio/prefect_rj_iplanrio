@@ -130,11 +130,16 @@ def rj_crm__disparo_template_sf(
 
     SFTP credentials (sf_sftp_host, sf_sftp_user, sf_sftp_password, sf_sftp_host_key)
     must be available as environment variables injected from Infisical at
-    infisical_secret_path. sf_sftp_host_key is the server's public host key
-    (format "ssh-rsa AAAA...", same as a known_hosts line) used to pin the SFTP
-    server's identity and reject man-in-the-middle connections — it must be
-    confirmed with Salesforce through a channel separate from the SSH connection
-    itself before being stored.
+    infisical_secret_path. sf_sftp_host_key is the server's public host key,
+    used to pin the SFTP server's identity and reject man-in-the-middle
+    connections. Expected format: only the key type + base64 (e.g.
+    "ssh-rsa AAAA...") — WITHOUT a hostname or known_hosts prefix. A full
+    `ssh-keyscan`/known_hosts line ("myhost.com ssh-rsa AAAA...") is also
+    accepted (the hostname is stripped automatically, see
+    normalize_host_key_value() in utils/dispatch.py), but the recommended
+    value to store in the secret is the bare key, without the hostname. The
+    value must be confirmed with Salesforce through a channel separate from
+    the SSH connection itself before being stored.
 
     Args:
         campaign_name (str, optional): The name of the dispatch campaign.
