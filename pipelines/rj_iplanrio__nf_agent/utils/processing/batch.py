@@ -279,35 +279,43 @@ def _build_timing_stats(
     if pdf_stems:
         placeholders_stem = ",".join("?" * len(pdf_stems))
         placeholders_ext = ",".join("?" * len(pdf_with_ext))
-        # Classification: stored with .pdf extension
-        cur_c = processor.db_manager.conn.execute(
-            f"""
-            SELECT o.elapsed_seconds
-            FROM api_outputs o
-            JOIN api_inputs i ON i.id = o.input_id
-            WHERE i.input_type = 'classification_page'
-              AND (i.item_key IN ({placeholders_stem})
-                   OR i.item_key IN ({placeholders_ext}))
-              AND o.elapsed_seconds > 0
-            """,
-            pdf_stems + pdf_with_ext,
-        )
-        timing_list_classificacao = [r[0] for r in cur_c.fetchall()]
+        # Lock: raw .conn.execute() calls — see DatabaseManager.lock's
+        # docstring. Runs after _run_workers_in_parallel has already joined
+        # every worker thread, so this specific call site is never actually
+        # concurrent with itself — locked anyway to keep the "every
+        # self.conn access on a DatabaseManager is serialized" invariant
+        # simple to verify by grepping, rather than relying on call-site
+        # timing analysis staying correct forever.
+        with processor.db_manager.lock:
+            # Classification: stored with .pdf extension
+            cur_c = processor.db_manager.conn.execute(
+                f"""
+                SELECT o.elapsed_seconds
+                FROM api_outputs o
+                JOIN api_inputs i ON i.id = o.input_id
+                WHERE i.input_type = 'classification_page'
+                  AND (i.item_key IN ({placeholders_stem})
+                       OR i.item_key IN ({placeholders_ext}))
+                  AND o.elapsed_seconds > 0
+                """,
+                pdf_stems + pdf_with_ext,
+            )
+            timing_list_classificacao = [r[0] for r in cur_c.fetchall()]
 
-        # Extraction: stored without .pdf extension, but handle both variants for safety
-        cur_e = processor.db_manager.conn.execute(
-            f"""
-            SELECT o.elapsed_seconds
-            FROM api_outputs o
-            JOIN api_inputs i ON i.id = o.input_id
-            WHERE i.input_type = 'extraction_filtered_pdf'
-              AND (i.item_key IN ({placeholders_stem})
-                   OR i.item_key IN ({placeholders_ext}))
-              AND o.elapsed_seconds > 0
-            """,
-            pdf_stems + pdf_with_ext,
-        )
-        timing_list_extracao = [r[0] for r in cur_e.fetchall()]
+            # Extraction: stored without .pdf extension, but handle both variants for safety
+            cur_e = processor.db_manager.conn.execute(
+                f"""
+                SELECT o.elapsed_seconds
+                FROM api_outputs o
+                JOIN api_inputs i ON i.id = o.input_id
+                WHERE i.input_type = 'extraction_filtered_pdf'
+                  AND (i.item_key IN ({placeholders_stem})
+                       OR i.item_key IN ({placeholders_ext}))
+                  AND o.elapsed_seconds > 0
+                """,
+                pdf_stems + pdf_with_ext,
+            )
+            timing_list_extracao = [r[0] for r in cur_e.fetchall()]
 
     n_ok = sum(1 for r in parallel.results.values() if r.get("success"))
     n_total = len(download.tasks)

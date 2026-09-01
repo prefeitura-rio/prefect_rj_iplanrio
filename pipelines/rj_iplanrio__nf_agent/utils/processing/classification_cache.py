@@ -362,17 +362,21 @@ def check_extraction_cache(processor: "POCProcessor", pdf_path: Path) -> tuple[d
     pdf_name = pdf_path.stem  # Without .pdf extension
 
     # Query for any extraction inputs for this PDF
-    cursor = processor.db_manager.conn.execute(
-        """
-        SELECT id, metadata
-        FROM api_inputs
-        WHERE item_key = ? AND input_type = 'extraction_filtered_pdf'
-        LIMIT 1
-        """,
-        (pdf_name,),
-    )
+    # Lock: this bypasses DatabaseManager's wrapper methods with a raw
+    # .conn.execute() — see DatabaseManager.lock's docstring for why every
+    # self.conn-touching call must be serialized on a shared instance.
+    with processor.db_manager.lock:
+        cursor = processor.db_manager.conn.execute(
+            """
+            SELECT id, metadata
+            FROM api_inputs
+            WHERE item_key = ? AND input_type = 'extraction_filtered_pdf'
+            LIMIT 1
+            """,
+            (pdf_name,),
+        )
+        row = cursor.fetchone()
 
-    row = cursor.fetchone()
     if not row:
         return (None, None)
 
@@ -405,18 +409,20 @@ def check_classification_cache(processor: "POCProcessor", pdf_path: Path, total_
     """
     pdf_name = pdf_path.name
 
-    cursor = processor.db_manager.conn.execute(
-        """
-        SELECT COUNT(DISTINCT i.sub_key)
-        FROM api_inputs i
-        JOIN api_outputs o ON i.id = o.input_id
-        WHERE i.item_key = ?
-        AND i.input_type = 'classification_page'
-        """,
-        (pdf_name,),
-    )
+    # Lock: raw .conn.execute() — see DatabaseManager.lock's docstring.
+    with processor.db_manager.lock:
+        cursor = processor.db_manager.conn.execute(
+            """
+            SELECT COUNT(DISTINCT i.sub_key)
+            FROM api_inputs i
+            JOIN api_outputs o ON i.id = o.input_id
+            WHERE i.item_key = ?
+            AND i.input_type = 'classification_page'
+            """,
+            (pdf_name,),
+        )
+        row = cursor.fetchone()
 
-    row = cursor.fetchone()
     cached_pages_count = row[0] if row else 0
 
     return cached_pages_count == total_pages
@@ -436,19 +442,24 @@ def load_all_cached_classifications(processor: "POCProcessor", pdf_path: Path) -
     page_categories = {}
     page_justifications = {}
 
-    cursor = processor.db_manager.conn.execute(
-        """
-        SELECT i.sub_key, o.response_text
-        FROM api_inputs i
-        JOIN api_outputs o ON i.id = o.input_id
-        WHERE i.item_key = ?
-        AND i.input_type = 'classification_page'
-        ORDER BY i.sub_key
-        """,
-        (pdf_name,),
-    )
+    # Lock + eager fetchall(): raw .conn.execute() — see DatabaseManager.lock's
+    # docstring. fetchall() (rather than iterating the cursor below) keeps the
+    # lock held only for the query itself, not the JSON-parsing loop after it.
+    with processor.db_manager.lock:
+        cursor = processor.db_manager.conn.execute(
+            """
+            SELECT i.sub_key, o.response_text
+            FROM api_inputs i
+            JOIN api_outputs o ON i.id = o.input_id
+            WHERE i.item_key = ?
+            AND i.input_type = 'classification_page'
+            ORDER BY i.sub_key
+            """,
+            (pdf_name,),
+        )
+        rows = cursor.fetchall()
 
-    for row in cursor:
+    for row in rows:
         # sub_key has TEXT affinity in the toolkit's generic cache schema, so
         # integer page numbers round-trip through SQLite as strings — cast
         # back, since every other page_categories/page_justifications

@@ -12,6 +12,8 @@ which additionally parses the cached response JSON into
 """
 
 import json
+import threading
+from pathlib import Path
 from typing import Any
 
 from iplanrio_agent_toolkit.cache import SQLiteCache
@@ -19,6 +21,40 @@ from iplanrio_agent_toolkit.cache import SQLiteCache
 
 class DatabaseManager(SQLiteCache):
     """Manages SQLite database for API call caching (NF-pipeline naming)."""
+
+    def __init__(self, db_path: Path) -> None:
+        """Open the cache database and set up its intra-instance concurrency lock.
+
+        ``SQLiteCache``'s connection is opened with ``check_same_thread=False``
+        (so a single instance CAN be handed to multiple threads), but that
+        flag only disables Python's own thread-affinity check — the
+        underlying SQLite C driver still isn't safe for *concurrent* calls
+        from multiple threads on one connection. When that happens anyway
+        (see ``self.lock``'s docstring below), it corrupts the driver's
+        internal state, surfacing as ``sqlite3.InterfaceError: bad parameter
+        or other API misuse`` (or similar low-level errors) instead of a
+        clean, catchable condition.
+
+        :param db_path: Path to the SQLite database file. Parent directories are created.
+        """
+        super().__init__(db_path)
+        # Guards every ``self.conn``-touching call on THIS instance. Needed
+        # because ``process_pdf``'s Step 2 (see
+        # ``processing.classification_cache.classify_page_from_cache``) runs
+        # up to ``POCProcessor.MAX_INTRA_PDF_WORKERS`` threads concurrently,
+        # all sharing the single ``POCProcessor.db_manager`` instance/connection
+        # created for that PDF (outer, per-PDF parallelism already gives each
+        # thread its OWN ``DatabaseManager``/connection — see
+        # ``processing.process.process_single_pdf_worker`` — so this lock only
+        # ever contends between a single PDF's own inner classification workers).
+        # The lock is taken only around the cache's own (fast, in-process)
+        # SQLite calls, never around the slow network calls to the
+        # classification/extraction APIs, so the actual parallelism this
+        # worker pool exists for is preserved.
+        # RLock (not Lock): get_cached_classification below calls
+        # get_cached_output_by_reference while already holding the lock —
+        # a plain Lock would deadlock on that re-entrant acquisition.
+        self.lock = threading.RLock()
 
     def get_or_create_input(  # noqa: PLR0913, PLR0917
         # Overrides SQLiteCache.get_or_create_input, adapting its param names
@@ -48,14 +84,48 @@ class DatabaseManager(SQLiteCache):
             Useful for extraction where content is just a placeholder.
         :returns: Tuple of (input_id, is_new_blob, cached_pdf_name, cached_page_number).
         """
-        return super().get_or_create_input(
-            input_type=input_type,
-            item_key=pdf_name,
-            content=content,
-            sub_key=page_number,
-            metadata=metadata,
-            content_hash_override=content_hash_override,
-        )
+        with self.lock:
+            return super().get_or_create_input(
+                input_type=input_type,
+                item_key=pdf_name,
+                content=content,
+                sub_key=page_number,
+                metadata=metadata,
+                content_hash_override=content_hash_override,
+            )
+
+    def get_output(self, input_id: int) -> dict[str, Any] | None:
+        """Thread-safe wrapper around ``SQLiteCache.get_output`` — see ``self.lock``."""
+        with self.lock:
+            return super().get_output(input_id)
+
+    def get_cached_output_by_reference(self, item_key: str, sub_key: str, input_type: str) -> dict[str, Any] | None:
+        """Thread-safe wrapper around ``SQLiteCache.get_cached_output_by_reference`` — see ``self.lock``."""
+        with self.lock:
+            return super().get_cached_output_by_reference(item_key=item_key, sub_key=sub_key, input_type=input_type)
+
+    def save_output(
+        self,
+        input_id: int,
+        model_name: str,
+        response_text: str,
+        usage_metadata: dict[str, Any] | None = None,
+        elapsed_seconds: float | None = None,
+    ) -> None:
+        """Thread-safe wrapper around ``SQLiteCache.save_output`` — see ``self.lock``."""
+        with self.lock:
+            super().save_output(
+                input_id=input_id,
+                model_name=model_name,
+                response_text=response_text,
+                usage_metadata=usage_metadata,
+                elapsed_seconds=elapsed_seconds,
+            )
+
+    def get_statistics(self) -> dict[str, Any]:
+        """Thread-safe wrapper around ``SQLiteCache.get_statistics`` — see ``self.lock``."""
+        with self.lock:
+            return super().get_statistics()
 
     def get_cached_classification(self, pdf_name: str, page_number: int) -> dict[str, Any] | None:
         """
