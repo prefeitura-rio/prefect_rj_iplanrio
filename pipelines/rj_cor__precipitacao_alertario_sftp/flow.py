@@ -1,4 +1,4 @@
-"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS.."""
+"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
 
 from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
