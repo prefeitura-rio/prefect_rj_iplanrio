@@ -20,16 +20,12 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from pathlib import Path
-
 import pandas as pd
 import requests
 from prefect import task
 
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import carrega_classificacoes
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_causa, aplica_regras_tema
-
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 # Colunas de metadado da sessão (vindas da extração/enriquecimento) que precisam
 # sobreviver até a tabela destino — tanto pras sessões que passam pela LLM quanto
@@ -44,8 +40,49 @@ _COLUNAS_METADADO_SESSAO = [
     "sessao_fim_datahora", "jornada_nome", "id_jornada", "id_disparo_hsm", "hsm_envio_datahora",
     "mensagens_usuario_concatenadas", "hsm_texto",
 ]
-_TEMPLATE_COM_HSM = (_PROMPTS_DIR / "classificacao_hsm.txt").read_text()
-_TEMPLATE_SEM_HSM = (_PROMPTS_DIR / "classificacao_sem_hsm.txt").read_text()
+
+# ---------------------------------------------------------------------------
+# Prompt — fonte de verdade é o repo clustering-conversas-whatsapp (privado),
+# buscado em runtime via GitHub raw a cada execução do flow (carrega_prompts
+# abaixo), pra editar o prompt virar só um commit+push na main de lá, sem
+# precisar de CI/CD/rebuild de imagem deste pipeline. SEM fallback local
+# proposital: existir uma cópia .txt aqui só criaria confusão sobre qual é a
+# fonte de verdade e o risco de ela ficar desatualizada sem ninguém perceber —
+# se o fetch falhar (token ausente/inválido, rede fora, repo indisponível), o
+# flow deve falhar alto (com retry, ver decorator) e alertar, não silenciosamente
+# classificar sessões com um prompt velho.
+# ---------------------------------------------------------------------------
+_CLUSTERING_REPO = "prefeitura-rio/clustering-conversas-whatsapp"
+_CLUSTERING_REF = "main"
+_CLUSTERING_FETCH_TIMEOUT_SEGUNDOS = 10
+
+
+def _busca_prompt(nome_arquivo: str, github_token: str) -> str:
+    """Busca prompts/{nome_arquivo} na main do clustering-conversas-whatsapp via GitHub raw.
+    Propaga qualquer falha (sem fallback) — ver carrega_prompts."""
+    url = f"https://raw.githubusercontent.com/{_CLUSTERING_REPO}/{_CLUSTERING_REF}/prompts/{nome_arquivo}"
+    resp = requests.get(
+        url,
+        headers={"Authorization": f"token {github_token}"},
+        timeout=_CLUSTERING_FETCH_TIMEOUT_SEGUNDOS,
+    )
+    resp.raise_for_status()
+    texto = resp.text
+    if not texto.strip():
+        raise ValueError(f"[PROMPTS] resposta vazia buscando '{nome_arquivo}' de {_CLUSTERING_REPO}@{_CLUSTERING_REF}")
+    print(f"[PROMPTS] '{nome_arquivo}' carregado de {_CLUSTERING_REPO}@{_CLUSTERING_REF}.")
+    return texto
+
+
+@task(log_prints=True, retries=2, retry_delay_seconds=10)
+def carrega_prompts(github_token: str) -> tuple[str, str]:
+    """Retorna (template_com_hsm, template_sem_hsm), buscados do clustering-conversas-whatsapp
+    (ver _busca_prompt) — chamado uma vez no início do flow. Sem fallback: qualquer falha de
+    fetch propaga (com retry no decorator), derrubando o flow — de propósito, ver módulo."""
+    return (
+        _busca_prompt("classificacao_hsm.txt", github_token),
+        _busca_prompt("classificacao_sem_hsm.txt", github_token),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -189,7 +226,9 @@ class BifrostClient:
 
 
 @task(log_prints=True)
-def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def monta_prompts(
+    df_enriquecido: pd.DataFrame, template_com_hsm: str, template_sem_hsm: str
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Separa as sessões em 3 grupos (igual ao notebook):
       - pré-classificadas (resposta_atrasada_btn): não vão pra LLM;
       - com_hsm: tem hsm_texto e não é resposta atrasada;
@@ -197,6 +236,9 @@ def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     Sessão sem nenhuma mensagem do usuário é descartada dos 3 grupos (nada a classificar) —
     ela continua "pendente" e será extraída de novo nas próximas execuções, dentro da
     janela de LOOKBACK_DAYS, sem custo de LLM.
+
+    template_com_hsm/template_sem_hsm vêm de carrega_prompts (buscados do
+    clustering-conversas-whatsapp, com fallback local — ver módulo).
 
     Retorna (df_prompts, df_pre_classificadas).
     """
@@ -219,7 +261,7 @@ def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     df_com_hsm["tipo_prompt"] = "com_hsm"
     df_com_hsm["prompt"] = df_com_hsm.apply(
         lambda row: _render(
-            _TEMPLATE_COM_HSM, hsm_texto=row["hsm_texto"], conversa=row["mensagens_usuario_concatenadas"]
+            template_com_hsm, hsm_texto=row["hsm_texto"], conversa=row["mensagens_usuario_concatenadas"]
         ),
         axis=1,
     )
@@ -227,7 +269,7 @@ def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     df_sem_hsm = df_enriquecido.loc[enviar_llm_sem_hsm].copy()
     df_sem_hsm["tipo_prompt"] = "sem_hsm"
     df_sem_hsm["prompt"] = df_sem_hsm["mensagens_usuario_concatenadas"].apply(
-        lambda conversa: _render(_TEMPLATE_SEM_HSM, conversa=conversa)
+        lambda conversa: _render(template_sem_hsm, conversa=conversa)
     )
 
     df_prompts = pd.concat([df_com_hsm, df_sem_hsm], ignore_index=True)

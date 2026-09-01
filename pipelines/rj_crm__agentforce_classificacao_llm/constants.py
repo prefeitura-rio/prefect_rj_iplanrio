@@ -102,10 +102,11 @@ class ClassificacaoConstants(Enum):
         "da janela de 24h (não foi capturada como clique de botão)."
     )
 
-    # Versão do conjunto de prompts — sobe manualmente quando os .txt em ./prompts mudam
-    # de forma que altera o significado da classificação (não a cada typo). Usada só
-    # para auditoria (coluna prompt_versao); reclassificação de sessões antigas é MERGE
-    # (sobrescreve), não versionamento histórico.
+    # Versão do conjunto de prompts — sobe manualmente quando os .txt em
+    # clustering-conversas-whatsapp/prompts (fonte de verdade, buscada em runtime — ver
+    # tasks/classify.py:carrega_prompts) mudam de forma que altera o significado da
+    # classificação (não a cada typo). Usada só para auditoria (coluna prompt_versao);
+    # reclassificação de sessões antigas é MERGE (sobrescreve), não versionamento histórico.
     # v2 (2026-08-25): rótulo "Informação" separado de "Solicitação" — antes, sessão que só
     # avisava/justificava algo (ex.: "vou remarcar online", sem pedir nada à prefeitura)
     # virava Solicitação por engano. ~1713 sessões classificadas em v1 têm Solicitação no
