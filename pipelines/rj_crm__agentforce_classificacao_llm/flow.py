@@ -135,10 +135,14 @@ def rj_crm__agentforce_classificacao_llm(
             "(mesmo secretName usado por rj_crm__salesforce_agentforce_api)."
         )
 
-    # Diferente de BF_KEY: ausência não é erro fatal — carrega_prompts cai pro .txt local
-    # (prompts/ deste pipeline) e só loga aviso. Sem o token só perde a conveniência de
-    # editar prompt sem deploy; o flow continua rodando normalmente.
+    # Sem fallback local pro prompt (ver tasks/classify.py) — token é obrigatório, mesmo
+    # padrão do BF_KEY acima.
     github_token_clustering = os.environ.get("GITHUB_TOKEN_CLUSTERING")
+    if not github_token_clustering:
+        raise ValueError(
+            "GITHUB_TOKEN_CLUSTERING não encontrada nas variáveis de ambiente — adicionar ao "
+            "secret do work pool (PAT com leitura no repo privado clustering-conversas-whatsapp)."
+        )
 
     # Não precisa de try/except aqui: on_failure=[notify_falha_flow] no decorator acima já
     # notifica o Discord em qualquer exceção não tratada, e o flow run continua marcado

@@ -20,16 +20,12 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
-from pathlib import Path
-
 import pandas as pd
 import requests
 from prefect import task
 
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import carrega_classificacoes
 from pipelines.rj_crm__agentforce_classificacao_llm.tasks.taxonomia import aplica_regras_causa, aplica_regras_tema
-
-_PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 
 # Colunas de metadado da sessão (vindas da extração/enriquecimento) que precisam
 # sobreviver até a tabela destino — tanto pras sessões que passam pela LLM quanto
@@ -47,51 +43,42 @@ _COLUNAS_METADADO_SESSAO = [
 
 # ---------------------------------------------------------------------------
 # Prompt — fonte de verdade é o repo clustering-conversas-whatsapp (privado),
-# não este repo. Buscado em runtime via GitHub raw a cada execução do flow, pra
-# editar o prompt virar só um commit+push na main de lá, sem precisar de
-# CI/CD/rebuild de imagem deste pipeline (ver carrega_prompts abaixo). Os .txt
-# em prompts/ aqui continuam existindo só como FALLBACK caso o fetch falhe
-# (rede fora, repo indisponível, token ausente/inválido) — nunca são a fonte
-# preferida, só a rede de segurança pra não derrubar o flow por causa disso.
-# Podem ficar desatualizados em relação ao que está rodando de fato; olhar
-# sempre no clustering-conversas-whatsapp pra saber o prompt vigente.
+# buscado em runtime via GitHub raw a cada execução do flow (carrega_prompts
+# abaixo), pra editar o prompt virar só um commit+push na main de lá, sem
+# precisar de CI/CD/rebuild de imagem deste pipeline. SEM fallback local
+# proposital: existir uma cópia .txt aqui só criaria confusão sobre qual é a
+# fonte de verdade e o risco de ela ficar desatualizada sem ninguém perceber —
+# se o fetch falhar (token ausente/inválido, rede fora, repo indisponível), o
+# flow deve falhar alto (com retry, ver decorator) e alertar, não silenciosamente
+# classificar sessões com um prompt velho.
 # ---------------------------------------------------------------------------
 _CLUSTERING_REPO = "prefeitura-rio/clustering-conversas-whatsapp"
 _CLUSTERING_REF = "main"
 _CLUSTERING_FETCH_TIMEOUT_SEGUNDOS = 10
 
 
-def _busca_prompt(nome_arquivo: str, github_token: str | None) -> str:
+def _busca_prompt(nome_arquivo: str, github_token: str) -> str:
     """Busca prompts/{nome_arquivo} na main do clustering-conversas-whatsapp via GitHub raw.
-    Cai pro .txt local (prompts/ deste pipeline) em qualquer falha — sem token, rede fora,
-    404, timeout etc. — logando um aviso, sem derrubar o flow."""
-    fallback_path = _PROMPTS_DIR / nome_arquivo
-    if not github_token:
-        print(f"[PROMPTS] GITHUB_TOKEN_CLUSTERING ausente — usando fallback local pra '{nome_arquivo}'.")
-        return fallback_path.read_text()
-
+    Propaga qualquer falha (sem fallback) — ver carrega_prompts."""
     url = f"https://raw.githubusercontent.com/{_CLUSTERING_REPO}/{_CLUSTERING_REF}/prompts/{nome_arquivo}"
-    try:
-        resp = requests.get(
-            url,
-            headers={"Authorization": f"token {github_token}"},
-            timeout=_CLUSTERING_FETCH_TIMEOUT_SEGUNDOS,
-        )
-        resp.raise_for_status()
-        texto = resp.text
-        if not texto.strip():
-            raise ValueError("resposta vazia")
-        print(f"[PROMPTS] '{nome_arquivo}' carregado de {_CLUSTERING_REPO}@{_CLUSTERING_REF}.")
-        return texto
-    except Exception as e:  # noqa: BLE001 — qualquer falha de rede/parsing cai pro fallback, de propósito
-        print(f"[PROMPTS] Falha ao buscar '{nome_arquivo}' do GitHub ({e!r}) — usando fallback local.")
-        return fallback_path.read_text()
+    resp = requests.get(
+        url,
+        headers={"Authorization": f"token {github_token}"},
+        timeout=_CLUSTERING_FETCH_TIMEOUT_SEGUNDOS,
+    )
+    resp.raise_for_status()
+    texto = resp.text
+    if not texto.strip():
+        raise ValueError(f"[PROMPTS] resposta vazia buscando '{nome_arquivo}' de {_CLUSTERING_REPO}@{_CLUSTERING_REF}")
+    print(f"[PROMPTS] '{nome_arquivo}' carregado de {_CLUSTERING_REPO}@{_CLUSTERING_REF}.")
+    return texto
 
 
 @task(log_prints=True, retries=2, retry_delay_seconds=10)
-def carrega_prompts(github_token: str | None) -> tuple[str, str]:
+def carrega_prompts(github_token: str) -> tuple[str, str]:
     """Retorna (template_com_hsm, template_sem_hsm), buscados do clustering-conversas-whatsapp
-    (ver _busca_prompt) — chamado uma vez no início do flow."""
+    (ver _busca_prompt) — chamado uma vez no início do flow. Sem fallback: qualquer falha de
+    fetch propaga (com retry no decorator), derrubando o flow — de propósito, ver módulo."""
     return (
         _busca_prompt("classificacao_hsm.txt", github_token),
         _busca_prompt("classificacao_sem_hsm.txt", github_token),

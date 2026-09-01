@@ -9,13 +9,12 @@
 # Credenciais necessárias no secret do work pool (mesmo secretName usado por
 # rj_crm__salesforce_agentforce_api, já que escreve no mesmo dataset):
 #   BF_KEY                                        : API key do gateway Bifrost
-#   GITHUB_TOKEN_CLUSTERING                        : (opcional, recomendado) PAT com acesso de
-#                                                     leitura ao repo privado prefeitura-rio/
-#                                                     clustering-conversas-whatsapp — usado pra
-#                                                     buscar o prompt em runtime (ver
+#   GITHUB_TOKEN_CLUSTERING                        : PAT com acesso de leitura ao repo privado
+#                                                     prefeitura-rio/clustering-conversas-whatsapp
+#                                                     — usado pra buscar o prompt em runtime (ver
 #                                                     tasks/classify.py:carrega_prompts). Sem
-#                                                     ele, cai pro .txt local em prompts/
-#                                                     (defasado em relação à main de lá).
+#                                                     fallback local: obrigatória, mesmo padrão
+#                                                     do BF_KEY.
 #   DISCORD_WEBHOOK_URL_AGENTFORCE_CLASSIFICACAO   : (opcional) resumo diário
 #   DISCORD_WEBHOOK_URL_ERRORS                     : (opcional) alerta de falha crítica
 
