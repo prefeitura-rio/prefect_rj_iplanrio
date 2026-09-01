@@ -4,13 +4,19 @@ Testes para o host key pinning do send_to_sftp (CHATA-140).
 
 - test_host_key_algs_*: unitários, sempre rodam, sem rede.
 - test_normalize_host_key_value_*: unitários, sempre rodam, sem rede.
-- test_sftp_connect_*: de integração contra o SFTP real de homologação da
-  Salesforce. Pulados automaticamente se as credenciais não estiverem no
-  ambiente (mesmas variáveis que o Infisical injeta em produção: sf_sftp_host,
-  sf_sftp_user, sf_sftp_password, sf_sftp_host_key, opcionalmente sf_sftp_port).
+- test_send_to_sftp_raises_*: unitários, sempre rodam, sem rede -- a
+  validação de csv_path acontece antes de qualquer conexão, então nem
+  precisa de credenciais reais pra testar.
+- test_sftp_connect_*/test_send_to_sftp_uploads_successfully: de integração
+  contra o SFTP real de homologação da Salesforce. Pulados automaticamente
+  se as credenciais não estiverem no ambiente (mesmas variáveis que o
+  Infisical injeta em produção: sf_sftp_host, sf_sftp_user, sf_sftp_password,
+  sf_sftp_host_key, opcionalmente sf_sftp_port).
 """
 import asyncio
 import os
+import tempfile
+from pathlib import Path
 
 import asyncssh
 import pytest
@@ -18,6 +24,7 @@ import pytest
 from pipelines.rj_crm__disparo_template.utils.dispatch import (
     host_key_algs_for_pinned_key,
     normalize_host_key_value,
+    send_to_sftp,
 )
 
 # --- unitários (sem rede) -----------------------------------------------
@@ -83,6 +90,24 @@ def test_normalize_host_key_value_converts_known_hosts_line():
 def test_normalize_host_key_value_strips_various_hostname_formats(prefix):
     line = f"{prefix} {_PUB_LINE}"
     assert normalize_host_key_value(line) == _PUB_LINE
+
+
+# --- send_to_sftp: validação de csv_path (CHATA-140) --------------------
+# A checagem roda como a primeira linha da função, antes de qualquer coisa
+# relacionada a rede/credenciais -- por isso esses dois testes rodam sempre,
+# sem precisar de sftp_host_key nem de conexão nenhuma.
+
+
+def test_send_to_sftp_raises_for_missing_csv():
+    with pytest.raises(FileNotFoundError):
+        send_to_sftp.fn(csv_path="/caminho/que/definitivamente/nao/existe_chata140.csv")
+
+
+def test_send_to_sftp_raises_for_directory_as_csv_path(tmp_path):
+    # os.path.isfile() rejeita diretórios -- "exigir que o caminho seja um
+    # arquivo regular" era um critério de aceite explícito do CHATA-140.
+    with pytest.raises(FileNotFoundError):
+        send_to_sftp.fn(csv_path=str(tmp_path))
 
 
 # --- integração contra o SFTP real de homologação -----------------------
@@ -153,6 +178,29 @@ def test_sftp_connect_succeeds_with_known_hosts_style_secret_value():
 
     server_key = asyncio.run(_connect())
     assert server_key.export_public_key() == pinned_key.export_public_key()
+
+
+@pytestmark_integration
+def test_send_to_sftp_uploads_successfully():
+    """Chama send_to_sftp() de verdade (não só o handshake asyncssh cru) com
+    um CSV real contra o SFTP de homologação -- deve completar sem lançar
+    nada quando o arquivo existe e o upload dá certo (CHATA-140: garante que
+    o caminho de sucesso continua funcionando depois de mover a validação
+    de csv_path pra antes da conexão)."""
+    cfg = _sftp_config()
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        csv_path = Path(tmp_dir) / "teste_chata140.csv"
+        csv_path.write_text("telefone;SubscriberKey\n5521999999999;00000000000\n")
+
+        send_to_sftp.fn(
+            csv_path=str(csv_path),
+            sftp_host=cfg["host"],
+            sftp_port=cfg["port"],
+            sftp_user=cfg["user"],
+            sftp_password=cfg["password"],
+            sftp_host_key=cfg["host_key"],
+            sftp_remote_path="/Import/",
+        )
 
 
 @pytestmark_integration

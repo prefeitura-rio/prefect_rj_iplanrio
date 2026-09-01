@@ -1395,7 +1395,22 @@ def send_to_sftp(
             Precisa ser confirmada com a Salesforce por um canal separado da
             própria conexão SSH (suporte, documentação oficial) antes de ser
             cadastrada — nunca aceitar só o que a primeira conexão apresentar.
+
+    Raises:
+        FileNotFoundError: se `csv_path` não existir ou não for um arquivo
+            regular — verificado antes de abrir qualquer conexão SFTP, pra
+            não reportar sucesso (nem gastar uma conexão) quando não há
+            nada de fato pra enviar (CHATA-140: essa checagem já existiu
+            uma vez, mas rodava DEPOIS da conexão aberta e só logava +
+            retornava silenciosamente, deixando o flow achar que o envio
+            tinha dado certo).
     """
+    if not os.path.isfile(csv_path):
+        raise FileNotFoundError(
+            f"csv_path não existe ou não é um arquivo regular: {csv_path}. "
+            "Abortando antes de abrir qualquer conexão SFTP -- nada foi enviado."
+        )
+
     if infisical_secret_path:
         sftp_host = sftp_host or getenv_or_action("sf_sftp_host")
         sftp_user = sftp_user or getenv_or_action("sf_sftp_user")
@@ -1428,10 +1443,6 @@ def send_to_sftp(
             keepalive_interval=SFTP_KEEPALIVE_SECONDS,
         ) as conn:
             log("Host key validada contra o fingerprint fixado. Conexão estabelecida com sucesso ao SFTP!")
-
-            if not os.path.exists(csv_path):
-                log(f"Arquivo não encontrado: {csv_path}")
-                return
 
             async with conn.start_sftp_client() as sftp:
                 log(f"Enviando {filename}...")
