@@ -37,7 +37,7 @@ from pipelines.rj_crm__agentforce_classificacao_llm.tasks.load import SCHEMA, _f
 from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq_client
 
 # Secretaria usada no catálogo (e no CSV de origem, clustering/data/categorias_taxonomia.csv)
-# pra sessão relevante sem secretaria identificada pela LLM — secretaria_relacionada vem
+# pra sessão relevante sem secretaria identificada pela LLM — secretaria_principal vem
 # NULL da classificação inicial nesse caso, não essa string; o mapeamento é feito aqui.
 _SECRETARIA_NAO_IDENTIFICADA = "Sem secretaria identificada"
 
@@ -236,7 +236,7 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
         if not resumo or (isinstance(resumo, float) and pd.isna(resumo)):
             return []
 
-        secretaria = row.get("secretaria_relacionada") or _SECRETARIA_NAO_IDENTIFICADA
+        secretaria = row.get("secretaria_principal") or _SECRETARIA_NAO_IDENTIFICADA
         regras = regras_por_secretaria.get(secretaria, [])
         matches = []
         for regra in regras:
@@ -287,7 +287,7 @@ def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.D
 # Cenário: a taxonomia (catálogo de regras) muda — uma regra é corrigida, uma
 # categoria é adicionada — e as sessões já classificadas precisam refletir isso,
 # sem rechamar a LLM (custo zero, é só reavaliar função Python contra o resumo
-# que já está salvo) e sem sobrescrever classificacao/resumo/motivo/etc. (só
+# que já está salvo) e sem sobrescrever relacao_hsm/resumo/motivo/etc. (só
 # tema_nome/causa_nome mudam). Opção A discutida: MERGE parcial (só essas 2
 # colunas) direto na tabela auxiliar E nas tabelas mart do dbt (chatbot/
 # v2_chatbot_conversas), que são incrementais e não reprocessam retroativamente
@@ -298,7 +298,7 @@ def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.D
 @task(log_prints=True, retries=2, retry_delay_seconds=30)
 def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, table_id: str) -> pd.DataFrame:
     """Lê da própria tabela destino (não da fonte, não rechama a LLM) só o que
-    aplica_regras_tema precisa: id_sessao, resumo, secretaria_relacionada,
+    aplica_regras_tema precisa: id_sessao, resumo, secretaria_principal,
     conteudo_relevante — mesmo filtro (conteudo_relevante = true) que a etapa 1 já usa
     internamente pra decidir quem entra na avaliação de regra. Inclui causa_nome já
     existente (não recalculado aqui — aplica_regras_tema só sabe recalcular tema; sem
@@ -306,7 +306,7 @@ def extrai_sessoes_para_recalculo_taxonomia(project_id: str, dataset_id: str, ta
     client = get_bq_client(project_id)
     full_id = _full_table_id(project_id, dataset_id, table_id)
     query = f"""
-        SELECT id_sessao, resumo, secretaria_relacionada, conteudo_relevante, causa_nome
+        SELECT id_sessao, resumo, secretaria_principal, conteudo_relevante, causa_nome
         FROM `{full_id}`
         WHERE conteudo_relevante = true
     """
@@ -324,7 +324,7 @@ def atualiza_tema_causa(
     tmp_table_id: str,
 ) -> int:
     """MERGE PARCIAL — atualiza só tema_nome/causa_nome (por id_sessao) na tabela
-    destino, sem tocar em nenhuma outra coluna (classificacao, resumo, motivo etc.
+    destino, sem tocar em nenhuma outra coluna (relacao_hsm, resumo, motivo etc.
     ficam intactos). Diferente de carrega_classificacoes (tasks/load.py), que
     sobrescreve a linha inteira — esta função é exatamente o "UPDATE parcial,
     coluna a coluna" que o docstring daquela função avisa ser necessário aqui.

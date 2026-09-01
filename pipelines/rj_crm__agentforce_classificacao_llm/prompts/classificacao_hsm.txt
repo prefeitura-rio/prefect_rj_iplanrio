@@ -12,15 +12,15 @@ Sua tarefa é:
    - "MISTO": parte da conversa é sobre o assunto do HSM e parte é sobre outro assunto.
 2. Indicar se a conversa contém conteúdo relevante: alguma informação útil pra análise (detalhe de um problema, dúvida específica, reclamação, pedido concreto, um aviso relevante sobre a própria situação, ou um elogio/agradecimento que diga especificamente o que funcionou bem) — responda true. Se for só uma confirmação ou agradecimento genérico, sem nenhuma informação nova nem elogio específico (ex: "ok", "já confirmei", "sim", "obrigada" sozinho, sem dizer o motivo), responda false.
 3. Se conteúdo_relevante for true, resumir a conversa do cidadão em 1 frase curta e objetiva; caso contrário, "resumo" deve ser null.
-4. Se conteúdo_relevante for true, identificar a qual das secretarias abaixo o assunto principal está relacionado; caso contrário, "secretaria_relacionada" deve ser null.
-5. Se conteúdo_relevante for true, classificar a natureza da manifestação do cidadão em "sentimento". Pode haver mais de um rótulo ao mesmo tempo — liste todos que se aplicam, separados por vírgula. Use só estes rótulos, com esse texto exato:
+4. Se conteúdo_relevante for true, identificar as secretarias abaixo relacionadas ao assunto da conversa: liste em "secretarias_relacionadas" todas que se aplicam, separadas por vírgula (mesmo que seja só uma), e em "secretaria_principal" qual delas é a mais central pra demanda (se só uma foi identificada, repita o mesmo valor nos dois campos). Caso contrário (conteúdo_relevante false, ou nenhuma secretaria identificável), os dois devem ser null.
+5. Se conteúdo_relevante for true, classificar a natureza da manifestação do cidadão em "natureza". Pode haver mais de um rótulo ao mesmo tempo — liste todos que se aplicam, separados por vírgula. Use só estes rótulos, com esse texto exato:
    - "Dúvida": tem uma pergunta ou não entendeu algo, incluindo perguntar COMO um processo funciona.
    - "Problema": relata que algo não funcionou/deu errado, com ou sem insatisfação.
    - "Reclamação": expressa insatisfação ou crítica explícita.
    - "Elogio": elogia algo específico que funcionou bem (despedida genérica tipo "obrigado" sozinha não conta).
    - "Solicitação": pede que A PREFEITURA execute algo (agendamento, documento, serviço).
    - "Informação": avisa/explica uma decisão ou ação própria, ou fornece um dado pedido pelo agente (CPF, endereço etc.), sem relatar falha nem fazer pedido.
-   Se conteúdo_relevante for false, "sentimento" deve ser null.
+   Se conteúdo_relevante for false, "natureza" deve ser null.
 
    Exemplos simples (um rótulo):
    - "como recupero minha senha?" → Dúvida
@@ -33,8 +33,8 @@ Sua tarefa é:
    Exemplos com múltiplos rótulos:
    - "tentei marcar consulta e não consegui, como faço agora?" → Problema, Dúvida
    - "já é a terceira vez que ligo e ninguém resolve, preciso que agendem logo" → Reclamação, Solicitação
-6. Se a conversa disser explicitamente o motivo/causa do que está sendo relatado, extraia em "motivo" a causa em 1 frase curta, sem repetir o assunto (que já está no resumo) — independente de qual(is) rótulo(s) o "sentimento" tiver. Não infira — sem motivo explícito, "motivo" é null. Ex.: se o cidadão disser que não conseguiu agendar porque o site caiu, "motivo" seria "site fora do ar impediu o agendamento".
-7. Justificar em 1 frase o raciocínio das classificações acima como um todo (escopo, secretaria, sentimento e motivo), não só do escopo.
+6. Se a conversa disser explicitamente o motivo/causa do que está sendo relatado, extraia em "motivo" a causa em 1 frase curta, sem repetir o assunto (que já está no resumo) — independente de qual(is) rótulo(s) a "natureza" tiver. Não infira — sem motivo explícito, "motivo" é null. Ex.: se o cidadão disser que não conseguiu agendar porque o site caiu, "motivo" seria "site fora do ar impediu o agendamento".
+7. Justificar em 1 frase o raciocínio das classificações acima como um todo (relação com o HSM, secretarias, natureza e motivo), não só da relação com o HSM.
 
 Secretarias:
 SMTR – Transportes: ônibus, táxi, van, transporte escolar, mobilidade urbana.
@@ -48,7 +48,7 @@ SME – Educação: creches e escolas municipais, ensino fundamental.
 Regra importante: baseie TODAS as suas classificações exclusivamente no que está escrito na CONVERSA DO CIDADÃO. Não infira, suponha ou complete informação a partir do assunto do HSM.
 
 Responda APENAS com um JSON válido, sem texto antes ou depois, no formato exato:
-{"classificacao": "DENTRO_DO_ESCOPO" | "FORA_DO_ESCOPO" | "MISTO", "conteudo_relevante": true | false, "resumo": "resumo da conversa em 1 frase curta" | null, "secretaria_relacionada": "SMTR" | "Comlurb" | "RioLuz" | "Seconserva" | "SMS" | "SMAS" | "SME" | null, "sentimento": "um ou mais de Dúvida/Problema/Reclamação/Elogio/Solicitação/Informação separados por vírgula (ex.: \"Dúvida, Problema\")" | null, "motivo": "causa explícita, 1 frase curta" | null, "justificativa": "explicação em 1 frase curta"}
+{"relacao_hsm": "DENTRO_DO_ESCOPO" | "FORA_DO_ESCOPO" | "MISTO", "conteudo_relevante": true | false, "resumo": "resumo da conversa em 1 frase curta" | null, "secretarias_relacionadas": "uma ou mais de SMTR/Comlurb/RioLuz/Seconserva/SMS/SMAS/SME separadas por vírgula (ex.: \"SMAS, SMS\")" | null, "secretaria_principal": "SMTR" | "Comlurb" | "RioLuz" | "Seconserva" | "SMS" | "SMAS" | "SME" | null, "natureza": "um ou mais de Dúvida/Problema/Reclamação/Elogio/Solicitação/Informação separados por vírgula (ex.: \"Dúvida, Problema\")" | null, "motivo": "causa explícita, 1 frase curta" | null, "justificativa": "explicação em 1 frase curta"}
 
 --- HSM ENVIADO ---
 <<HSM_TEXTO>>

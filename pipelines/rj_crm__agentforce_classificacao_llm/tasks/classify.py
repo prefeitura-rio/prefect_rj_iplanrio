@@ -80,6 +80,28 @@ def _parse_json_response(texto: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Sentimento — derivado por REGRA (não pela LLM) a partir de `natureza`, que
+# essa sim vem da LLM. Ordem de prioridade fixa: Reclamação/Problema pesa mais
+# que Elogio (uma sessão pode ter os dois — ex.: elogia uma coisa e reclama de
+# outra — e aqui conta como negativo). Cai em neutro só quando TEM natureza mas
+# nenhum dos dois (Dúvida/Solicitação/Informação isoladas). Sem natureza (null —
+# caso das sessões RESPOSTA_ATRASADA_BTN, que não passam pela LLM, ou
+# conteudo_relevante=false), sentimento também fica null — não é "sem opinião
+# forte", é "não avaliado".
+# ---------------------------------------------------------------------------
+
+
+def _deriva_sentimento(natureza):
+    if not natureza:
+        return None
+    if "Reclamação" in natureza or "Problema" in natureza:
+        return "negativo"
+    if "Elogio" in natureza:
+        return "positivo"
+    return "neutro"
+
+
+# ---------------------------------------------------------------------------
 # Cliente Bifrost — portado de clustering/modules/bifrost.py, curl -> requests
 # ---------------------------------------------------------------------------
 
@@ -293,21 +315,22 @@ def classifica_sessoes(
             )
             texto_bruto = BifrostClient.extract_text(response)
             parsed = _parse_json_response(texto_bruto)
-            # o prompt sem_hsm não pergunta "classificacao" pra LLM (não há HSM pra
+            # o prompt sem_hsm não pergunta "relacao_hsm" pra LLM (não há HSM pra
             # comparar escopo) — mas a coluna cobre toda sessão, então forçamos o
             # rótulo explícito aqui em vez de deixar null (null viraria "não
             # classificado ainda", que é outra coisa)
-            classificacao = classificacao_sem_hsm if tipo_prompt == "sem_hsm" else parsed.get("classificacao")
+            relacao_hsm = classificacao_sem_hsm if tipo_prompt == "sem_hsm" else parsed.get("relacao_hsm")
             # usageMetadata vem de graça na mesma resposta — sem chamada extra à API
             usage = response.get("usageMetadata", {})
             return {
                 "id_sessao": id_sessao,
                 "tipo_prompt": tipo_prompt,
-                "classificacao": classificacao,
+                "relacao_hsm": relacao_hsm,
                 "conteudo_relevante": parsed.get("conteudo_relevante"),
                 "resumo": parsed.get("resumo"),
-                "secretaria_relacionada": parsed.get("secretaria_relacionada"),
-                "sentimento": parsed.get("sentimento"),
+                "secretarias_relacionadas": parsed.get("secretarias_relacionadas"),
+                "secretaria_principal": parsed.get("secretaria_principal"),
+                "natureza": parsed.get("natureza"),
                 "motivo": parsed.get("motivo"),
                 "justificativa": parsed.get("justificativa"),
                 "resposta_llm_bruta": texto_bruto,
@@ -372,16 +395,17 @@ def monta_dataframe_final(
 
     if not df_pre_classificadas.empty:
         df_pre_classificadas = df_pre_classificadas.copy()
-        df_pre_classificadas["classificacao"] = classificacao_resposta_atrasada
+        df_pre_classificadas["relacao_hsm"] = classificacao_resposta_atrasada
         df_pre_classificadas["justificativa"] = justificativa_resposta_atrasada
         df_pre_classificadas["conteudo_relevante"] = None
         df_pre_classificadas["resumo"] = None
-        df_pre_classificadas["secretaria_relacionada"] = None
-        df_pre_classificadas["sentimento"] = None
+        df_pre_classificadas["secretarias_relacionadas"] = None
+        df_pre_classificadas["secretaria_principal"] = None
+        df_pre_classificadas["natureza"] = None
         df_pre_classificadas["motivo"] = None
         df_pre_classificadas["resposta_llm_bruta"] = None
         # null, não um valor tipo "regra:...": sessão decidida por regra não passou
-        # por modelo nenhum. Essa informação já está inteira em `classificacao`
+        # por modelo nenhum. Essa informação já está inteira em `relacao_hsm`
         # (RESPOSTA_ATRASADA_BTN) — não precisa duplicar aqui.
         df_pre_classificadas["modelo"] = None
         # sem prompt e sem tokens: sessão decidida por regra nunca chama a LLM
@@ -408,6 +432,10 @@ def monta_dataframe_final(
     # partir daí é só ARRAY_LENGTH(coluna) > 0, sem precisar de flag own separada.
     df_final["tema_nome"] = [[] for _ in range(len(df_final))]
     df_final["causa_nome"] = [[] for _ in range(len(df_final))]
+
+    # sentimento (positivo/negativo/neutro) — derivado por regra a partir de
+    # natureza, não pela LLM (ver docstring de _deriva_sentimento)
+    df_final["sentimento"] = df_final["natureza"].apply(_deriva_sentimento)
 
     if "conteudo_relevante" in df_final.columns:
         df_final["conteudo_relevante"] = df_final["conteudo_relevante"].astype("boolean")

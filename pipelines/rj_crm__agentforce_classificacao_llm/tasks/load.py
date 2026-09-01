@@ -36,7 +36,7 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("id_jornada", _STRING),
     bigquery.SchemaField("id_disparo_hsm", _STRING),
     bigquery.SchemaField("hsm_envio_datahora", _TIMESTAMP),
-    # Conversa/HSM originais — pra permitir validar resumo/motivo/tema/classificacao
+    # Conversa/HSM originais — pra permitir validar resumo/motivo/tema/relacao_hsm
     # lendo direto daqui, sem precisar reconstruir a partir de prompt_enviado (que é
     # null nas sessões RESPOSTA_ATRASADA_BTN, decididas por regra sem chamar a LLM).
     bigquery.SchemaField("mensagens_usuario_concatenadas", _STRING),
@@ -48,14 +48,20 @@ SCHEMA: list[bigquery.SchemaField] = [
     # SEM_HSM_ASSOCIADO (LLM roda, não avalia escopo) | RESPOSTA_ATRASADA_BTN
     # (decidido por regra, sem LLM). Não deveria ficar null na prática (todo caminho
     # do código força um destes 5 valores), mas o campo continua NULLABLE de
-    # propósito: um JSON incompleto da LLM (sem a chave "classificacao", apesar do
+    # propósito: um JSON incompleto da LLM (sem a chave "relacao_hsm", apesar do
     # prompt pedir) não pode travar a carga do lote inteiro por violar NOT NULL.
-    bigquery.SchemaField("classificacao", _STRING),
+    bigquery.SchemaField("relacao_hsm", _STRING),
     bigquery.SchemaField("conteudo_relevante", _BOOL),
     bigquery.SchemaField("resumo", _STRING),
-    bigquery.SchemaField("secretaria_relacionada", _STRING),
+    # todas as secretarias mencionadas (multi-label, separadas por vírgula) vs. a
+    # mais central pra demanda — ver docstring do prompt (item 3/4).
+    bigquery.SchemaField("secretarias_relacionadas", _STRING),
+    bigquery.SchemaField("secretaria_principal", _STRING),
     # rótulos de natureza da manifestação (multi-label, separados por vírgula):
-    # Dúvida | Reclamação | Elogio | Solicitação — apesar do nome, não é sentimento/polaridade
+    # Dúvida | Problema | Reclamação | Elogio | Solicitação | Informação — vem da LLM.
+    bigquery.SchemaField("natureza", _STRING),
+    # positivo | negativo | neutro — derivado por REGRA a partir de `natureza`
+    # (não pela LLM, ver _deriva_sentimento em tasks/classify.py).
     bigquery.SchemaField("sentimento", _STRING),
     bigquery.SchemaField("motivo", _STRING),
     bigquery.SchemaField("justificativa", _STRING),
@@ -174,7 +180,7 @@ def carrega_classificacoes(
 
     ATENÇÃO pra quem construir a pipeline de tema/motivo (etapas 2/3): este MERGE
     sobrescreve TODAS as colunas com o valor da tmp, inclusive as desta pipeline
-    (classificacao, resumo etc.). Uma pipeline de etapa 2/3 que faça MERGE nesta mesma
+    (relacao_hsm, resumo etc.). Uma pipeline de etapa 2/3 que faça MERGE nesta mesma
     tabela só pode reaproveitar este set_clause se a tmp dela trouxer a linha inteira
     (reextraída), e não só as colunas de tema/motivo — senão apaga a classificação da
     etapa 1 com NULL. Rever esta função (UPDATE parcial, coluna a coluna) antes de
