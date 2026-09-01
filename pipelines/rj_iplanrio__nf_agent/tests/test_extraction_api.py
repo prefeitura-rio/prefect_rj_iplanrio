@@ -1,9 +1,9 @@
 """Regression/orchestration tests for extraction/api.py (extract_from_pdf / _extract_from_pdf_bytes).
 
 Construction strategy: ``NFExtractor.__init__`` builds its model lazily via
-``auth.get_model`` -> ``utils.llm.build_gemini_model`` (Bifrost). We bypass
-``__init__`` entirely via ``NFExtractor.__new__(NFExtractor)`` and set
-``self._model`` directly to a controllable fake — ``auth.get_model`` just
+``auth.get_model`` -> ``utils.llm.build_llm_client`` (Bifrost, OpenAI-compatible
+protocol). We bypass ``__init__`` entirely via ``NFExtractor.__new__(NFExtractor)``
+and set ``self._model`` directly to a controllable fake — ``auth.get_model`` just
 returns ``self._model`` when it's not None, so this is a clean substitution
 with no monkeypatching of the model builder needed.
 
@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -24,19 +25,17 @@ from pipelines.rj_iplanrio__nf_agent.utils.extraction import auth, coalesce
 from pipelines.rj_iplanrio__nf_agent.utils.extraction.extractor import NFExtractor
 
 
-class FakeGeminiResponse:
-    """Minimal stand-in for the google.generativeai response object."""
+class FakeChatCompletion:
+    """Minimal stand-in for an OpenAI-shaped ``chat.completions.create()`` response."""
 
-    def __init__(self, payload: dict, usage_metadata=None, candidates=None):
-        self.text = json.dumps(payload, ensure_ascii=False)
-        self.usage_metadata = usage_metadata or MagicMock(
-            prompt_token_count=10, candidates_token_count=10, total_token_count=20
-        )
-        self.candidates = candidates or []
+    def __init__(self, payload: dict, usage=None, finish_reason: str = "stop"):
+        content = json.dumps(payload, ensure_ascii=False)
+        self.choices = [SimpleNamespace(message=SimpleNamespace(content=content), finish_reason=finish_reason)]
+        self.usage = usage or SimpleNamespace(prompt_tokens=10, completion_tokens=10, total_tokens=20)
 
 
 def make_extractor(
-    model_name: str = "gemini-3.1-flash-lite", batch_size: int = 5, prompt: str = "PROMPT"
+    model_name: str = "vertex/gemini-3.5-flash", batch_size: int = 5, prompt: str = "PROMPT"
 ) -> NFExtractor:
     """Build a bare NFExtractor without running the real (credential-requiring) __init__."""
     extractor = NFExtractor.__new__(NFExtractor)
@@ -73,7 +72,7 @@ class TestCachedResponsePath:
 
         assert result["cached"] is True
         assert result["quantidade_notas_fiscais"] == 1
-        extractor.model.generate_content.assert_not_called()
+        extractor.model.chat.completions.create.assert_not_called()
 
     def test_extract_from_pdf_bytes_uses_cache_directly(self, tmp_path: Path):
         extractor = make_extractor()
@@ -85,50 +84,50 @@ class TestCachedResponsePath:
         assert result["cached"] is True
         assert result["quantidade_notas_fiscais"] == 2
         assert result["processed_successfully"] is True
-        extractor.model.generate_content.assert_not_called()
+        extractor.model.chat.completions.create.assert_not_called()
 
 
 class TestRetryOnZeroNfs:
     def test_retries_once_when_first_attempt_finds_zero_nfs(self):
         extractor = make_extractor()
-        extractor.model.generate_content.side_effect = [
-            FakeGeminiResponse(nf_payload(0)),
-            FakeGeminiResponse(nf_payload(1, [{"numero_nf": "42", "pagina": 1}])),
+        extractor.model.chat.completions.create.side_effect = [
+            FakeChatCompletion(nf_payload(0)),
+            FakeChatCompletion(nf_payload(1, [{"numero_nf": "42", "pagina": 1}])),
         ]
 
         result = extractor._extract_from_pdf_bytes(b"fake-pdf-bytes", num_pages=1)
 
-        assert extractor.model.generate_content.call_count == 2
+        assert extractor.model.chat.completions.create.call_count == 2
         assert result["quantidade_notas_fiscais"] == 1
         assert result["notas_fiscais"][0]["numero_nf"] == "42"
 
     def test_does_not_retry_when_first_attempt_finds_nfs(self):
         extractor = make_extractor()
-        extractor.model.generate_content.return_value = FakeGeminiResponse(
+        extractor.model.chat.completions.create.return_value = FakeChatCompletion(
             nf_payload(1, [{"numero_nf": "1", "pagina": 1}])
         )
 
         result = extractor._extract_from_pdf_bytes(b"fake-pdf-bytes", num_pages=1)
 
-        assert extractor.model.generate_content.call_count == 1
+        assert extractor.model.chat.completions.create.call_count == 1
         assert result["quantidade_notas_fiscais"] == 1
 
     def test_gives_up_after_max_attempts_still_zero(self):
         extractor = make_extractor()
-        extractor.model.generate_content.return_value = FakeGeminiResponse(nf_payload(0))
+        extractor.model.chat.completions.create.return_value = FakeChatCompletion(nf_payload(0))
 
         result = extractor._extract_from_pdf_bytes(b"fake-pdf-bytes", num_pages=1)
 
-        assert extractor.model.generate_content.call_count == 2
+        assert extractor.model.chat.completions.create.call_count == 2
         assert result["quantidade_notas_fiscais"] == 0
 
     def test_api_error_on_last_attempt_returns_failure_dict_not_raise(self):
         extractor = make_extractor()
-        extractor.model.generate_content.side_effect = RuntimeError("quota exceeded")
+        extractor.model.chat.completions.create.side_effect = RuntimeError("quota exceeded")
 
         result = extractor._extract_from_pdf_bytes(b"fake-pdf-bytes", num_pages=1)
 
-        assert extractor.model.generate_content.call_count == 2
+        assert extractor.model.chat.completions.create.call_count == 2
         assert result["processed_successfully"] is False
         assert "quota exceeded" in result["error"]
         assert result["notas_fiscais"] == []
@@ -162,7 +161,7 @@ class TestBatchingAndPageRemapping:
     def test_single_call_pagina_remapped_when_pages_filtered(self, monkeypatch: pytest.MonkeyPatch):
         extractor = make_extractor(batch_size=5)
         monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda _pdf_path, _pages: b"fake-bytes")
-        extractor.model.generate_content.return_value = FakeGeminiResponse(
+        extractor.model.chat.completions.create.return_value = FakeChatCompletion(
             nf_payload(1, [{"numero_nf": "X", "pagina": 1}])
         )
 
@@ -174,13 +173,13 @@ class TestBatchingAndPageRemapping:
 
 class TestSuspiciousDecimalFallback:
     def test_fallback_model_triggered_and_result_returned(self, monkeypatch: pytest.MonkeyPatch):
-        extractor = make_extractor(model_name="gemini-3.1-flash-lite", batch_size=5, prompt="PROMPT")
+        extractor = make_extractor(model_name="vertex/gemini-3.5-flash", batch_size=5, prompt="PROMPT")
         # Patch at the class level (not just this instance): the suspicious-decimal
         # path constructs a brand-new `type(self)(...)` fallback extractor internally,
         # so the stub must apply to that new instance too.
         monkeypatch.setattr(NFExtractor, "_create_filtered_pdf", lambda _self, _pdf_path, _pages: b"fake-bytes")
         # Suspicious: more than 2 decimal places.
-        extractor.model.generate_content.return_value = FakeGeminiResponse(
+        extractor.model.chat.completions.create.return_value = FakeChatCompletion(
             nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12345}])
         )
 
@@ -192,7 +191,7 @@ class TestSuspiciousDecimalFallback:
             extractor.extraction_prompt = extraction_prompt
             extractor.batch_size = batch_size
             extractor._model = MagicMock()
-            extractor._model.generate_content.return_value = FakeGeminiResponse(
+            extractor._model.chat.completions.create.return_value = FakeChatCompletion(
                 nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12}])
             )
 
@@ -200,13 +199,13 @@ class TestSuspiciousDecimalFallback:
 
         result = extractor.extract_from_pdf(pdf_path=Path("suspicious.pdf"), pages=[1])
 
-        assert fallback_calls == ["gemini-2.5-flash-lite"]
+        assert fallback_calls == ["vertex/gemini-2.5-flash-lite"]
         assert result["notas_fiscais"][0]["valor_total"] == 12.12
 
     def test_no_fallback_when_already_on_fallback_model(self, monkeypatch: pytest.MonkeyPatch):
-        extractor = make_extractor(model_name="gemini-2.5-flash-lite", batch_size=5, prompt="PROMPT")
+        extractor = make_extractor(model_name="vertex/gemini-2.5-flash-lite", batch_size=5, prompt="PROMPT")
         monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda _pdf_path, _pages: b"fake-bytes")
-        extractor.model.generate_content.return_value = FakeGeminiResponse(
+        extractor.model.chat.completions.create.return_value = FakeChatCompletion(
             nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12345}])
         )
 

@@ -1,10 +1,12 @@
-"""Single-page Gemini classification call, with response caching."""
+"""Single-page Gemini classification call (via Bifrost's OpenAI-compatible
+endpoint), with response caching."""
 
 from __future__ import annotations
 
 import base64
 import json
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,9 +21,7 @@ from ..prompts import CLASSIFICATION_PROMPT
 from .config import DEFAULT_GENERATION_CONFIG, DEFAULT_MODEL_NAME
 
 if TYPE_CHECKING:
-    # google-generativeai is an optional extra (see pyproject.toml [gemini]);
-    # only needed for type checking here, real import is deferred to GeminiClassifier.model.
-    import google.generativeai as genai
+    import openai
 
 logger = get_logger(__name__)
 
@@ -81,11 +81,43 @@ def _estimate_cost_usd(input_tokens: int, output_tokens: int) -> float:
     return input_cost + output_cost
 
 
+def _error_detail(e: Exception) -> str:
+    """``str(e)`` plus the file:line it was actually raised at.
+
+    The bare message alone (e.g. ``'NoneType' object is not iterable``) can
+    come from several unrelated places — our own ``_extract_response_text``,
+    or from inside the SDK's own response parsing before we ever get a
+    ``response`` object back — and there's no other way to tell them apart
+    from the ``pipeline_erro`` string alone.
+    """
+    tb = traceback.extract_tb(e.__traceback__)
+    if not tb:
+        return f"{type(e).__name__}: {e}"
+    frame = tb[-1]
+    return f"{type(e).__name__}: {e} (at {Path(frame.filename).name}:{frame.lineno} in {frame.name})"
+
+
+def _extract_response_text(response, pdf_name: str, page_num: int) -> str:
+    """Pull the message text out of an OpenAI-shaped chat-completion response,
+    turning a ``None`` content (refusal, filtered output, no completion
+    generated — ``choice.finish_reason`` says which) into a diagnosable error
+    instead of an opaque ``AttributeError``/``TypeError`` downstream.
+    """
+    choice = response.choices[0] if response.choices else None
+    text = choice.message.content if choice and choice.message else None
+    if text is None:
+        finish_reason = getattr(choice, "finish_reason", None) if choice else None
+        raise RuntimeError(
+            f"Gemini returned no usable text for {pdf_name} page {page_num} (finish_reason={finish_reason})"
+        )
+    return text
+
+
 def _call_gemini_for_classification(  # noqa: PLR0913, PLR0917
     # Single call site (below), pure decomposition of one already-private
     # function — each param is independent call-time context for the one
     # Gemini request, not a reusable config bundle worth a dataclass.
-    model: "genai.GenerativeModel",
+    model: "openai.OpenAI",
     page_bytes: bytes,
     page_num: int,
     pdf_name: str,
@@ -97,9 +129,25 @@ def _call_gemini_for_classification(  # noqa: PLR0913, PLR0917
     start_time: float,
     tracker,
 ) -> dict:
-    """Make the live Gemini API call and build the classification result dict."""
+    """Make the live Gemini (via Bifrost's OpenAI-compatible endpoint) API
+    call and build the classification result dict."""
     content_b64 = base64.b64encode(page_bytes).decode("utf-8")
-    content_part = {"mime_type": "application/pdf" if input_is_pdf else "image/png", "data": content_b64}
+    if input_is_pdf:
+        # NOTE: the OpenAI chat-completions "file" content-part convention
+        # (Vercel AI SDK / newer OpenAI style) — Bifrost's Google adapter is
+        # `@ai-sdk/openai-compatible` (see utils/llm.py), so this is the
+        # documented shape for it. Not independently verified against a real
+        # Bifrost response yet, since inline PDF classification wasn't
+        # exercised before this migration — flag if it turns out wrong.
+        content_part = {
+            "type": "file",
+            "file": {
+                "filename": f"{pdf_name}_page{page_num}.pdf",
+                "file_data": f"data:application/pdf;base64,{content_b64}",
+            },
+        }
+    else:
+        content_part = {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{content_b64}"}}
 
     # Rate limiting: acquire permission to make API call
     rate_limiter = get_rate_limiter()
@@ -108,7 +156,14 @@ def _call_gemini_for_classification(  # noqa: PLR0913, PLR0917
     try:
         # Generate classification
         api_call_start = time.time()
-        response = model.generate_content([classification_prompt, content_part])
+        response = model.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": [{"type": "text", "text": classification_prompt}, content_part]}],
+            temperature=DEFAULT_GENERATION_CONFIG["temperature"],
+            top_p=DEFAULT_GENERATION_CONFIG["top_p"],
+            max_tokens=DEFAULT_GENERATION_CONFIG["max_output_tokens"],
+            response_format={"type": "json_object"},
+        )
         api_call_duration = (time.time() - api_call_start) * 1000  # Convert to ms
 
         # Record successful API call
@@ -118,38 +173,33 @@ def _call_gemini_for_classification(  # noqa: PLR0913, PLR0917
         rate_limiter.release()
 
     processing_time = time.time() - start_time
+    response_text = _extract_response_text(response, pdf_name, page_num).strip()
+    usage = response.usage
 
     # Save full API response if requested
     if save_api_response and api_response_path:
+        choice = response.choices[0]
         api_response_data = {
             "model": model_name,
             "pdf_name": pdf_name,
             "page_num": page_num,
             "page_num_1indexed": page_num + 1,
             "elapsed_seconds": processing_time,
-            "raw_text": response.text,
+            "raw_text": response_text,
             "usage_metadata": {
-                "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", None),
-                "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", None),
-                "total_token_count": getattr(response.usage_metadata, "total_token_count", None),
+                "prompt_token_count": getattr(usage, "prompt_tokens", None),
+                "candidates_token_count": getattr(usage, "completion_tokens", None),
+                "total_token_count": getattr(usage, "total_tokens", None),
             },
             "generation_config": DEFAULT_GENERATION_CONFIG,
-            "finish_reason": str(getattr(response.candidates[0], "finish_reason", None))
-            if response.candidates
-            else None,
-            "safety_ratings": [
-                {"category": str(rating.category), "probability": str(rating.probability)}
-                for rating in getattr(response.candidates[0], "safety_ratings", [])
-            ]
-            if response.candidates
-            else [],
+            "finish_reason": choice.finish_reason,
+            # No equivalent in the OpenAI chat-completions protocol.
+            "safety_ratings": [],
         }
 
         with api_response_path.open("w", encoding="utf-8") as f:
             json.dump(api_response_data, f, indent=2, ensure_ascii=False)
 
-    # Extract JSON from response
-    response_text = response.text.strip()
     classification_data = parse_json_response(response_text)
 
     result = {
@@ -159,11 +209,11 @@ def _call_gemini_for_classification(  # noqa: PLR0913, PLR0917
         "model_name": model_name,
         "success": True,
         "classification": classification_data,
-        "raw_response_text": response.text,
+        "raw_response_text": response_text,
         "error_message": None,
-        "input_tokens": response.usage_metadata.prompt_token_count,
-        "output_tokens": response.usage_metadata.candidates_token_count,
-        "total_tokens": response.usage_metadata.total_token_count,
+        "input_tokens": usage.prompt_tokens,
+        "output_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
         "processing_time_seconds": processing_time,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
@@ -172,16 +222,16 @@ def _call_gemini_for_classification(  # noqa: PLR0913, PLR0917
 
 
 def classify_page_with_model(
-    model: "genai.GenerativeModel",
+    model: "openai.OpenAI",
     page_bytes: bytes,
     page_num: int,
     pdf_name: str,
     options: ClassificationOptions | None = None,
 ) -> dict:
     """
-    Classify a single page using Gemini Vision API.
+    Classify a single page using Gemini Vision (via Bifrost's OpenAI-compatible endpoint).
 
-    :param model: Gemini model instance.
+    :param model: ``openai.OpenAI`` client routed through Bifrost.
     :param page_bytes: PNG image bytes or PDF bytes.
     :param page_num: Page number (0-indexed).
     :param pdf_name: Name of the PDF file.
@@ -229,10 +279,11 @@ def classify_page_with_model(
 
     except Exception as e:
         processing_time = time.time() - start_time
+        detail = _error_detail(e)
 
         # Record failed API call
         tracker.record_call(
-            api_type="classification", duration_ms=processing_time * 1000, success=False, error_type=str(e)
+            api_type="classification", duration_ms=processing_time * 1000, success=False, error_type=detail
         )
 
         return {
@@ -243,7 +294,7 @@ def classify_page_with_model(
             "success": False,
             "classification": None,
             "raw_response_text": None,
-            "error_message": str(e),
+            "error_message": detail,
             "input_tokens": 0,
             "output_tokens": 0,
             "total_tokens": 0,

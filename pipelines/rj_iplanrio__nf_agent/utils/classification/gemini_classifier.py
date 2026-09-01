@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from prefect_rj_iplanrio.logging import get_logger
 
-from ..llm import build_gemini_model
+from ..llm import build_llm_client
 from ..prompts import CLASSIFICATION_PROMPT
 from .categories import (  # noqa: F401  (re-exported; public API)
     CATEGORY_ALIASES,
@@ -76,10 +76,15 @@ class GeminiClassifier:
 
     @property
     def model(self):
-        """Lazy-load the Bifrost-routed Gemini model.
+        """Lazy-load the Bifrost-routed OpenAI-compatible client.
 
-        :returns: A ``google.generativeai.GenerativeModel`` for ``self.model_name``.
+        Unlike the old Gemini-native model object, this client isn't bound
+        to ``self.model_name``/``self.generation_config`` — those are
+        applied per-call instead (see ``page_classification.py``), since
+        that's how the OpenAI chat-completions protocol works.
+
+        :returns: An ``openai.OpenAI`` client routed through Bifrost.
         """
         if self._model is None:
-            self._model = build_gemini_model(self.model_name, self.generation_config)
+            self._model = build_llm_client()
         return self._model

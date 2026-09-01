@@ -21,14 +21,15 @@ from .processing.metadata import get_git_info, utc_now_naive
 from .prompts import list_available_versions
 
 # ``POCProcessor`` is the one import in this module that must stay deferred
-# — not for the google-generativeai/protobuf reason (that's already isolated
-# two layers deeper, inside utils/llm.py::build_gemini_model), but because
-# ``classification/gemini_classifier.py`` reads a ``PROMPT_*`` env var
-# (Infisical secret) the moment it's imported. That env var only exists once
-# the flow actually runs — not during `prefect deploy` in CI (see flow.py's
-# module docstring). Importing it here at module level would break every
-# deploy. Everything else above is safe to import unconditionally: it never
-# touches Gemini or prompts, just by being imported.
+# — because ``classification/gemini_classifier.py`` reads a ``PROMPT_*`` env
+# var (Infisical secret) the moment it's imported. That env var only exists
+# once the flow actually runs — not during `prefect deploy` in CI (see
+# flow.py's module docstring). Importing it here at module level would break
+# every deploy. Everything else above is safe to import unconditionally: it
+# never touches the LLM or prompts, just by being imported. (There used to
+# also be a google-generativeai/protobuf constraint here — gone now that LLM
+# calls go through the `openai` SDK via Bifrost's OpenAI-compatible endpoint,
+# a normal dependency with no conflict — see utils/llm.py.)
 
 logger = get_logger(__name__)
 # TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect

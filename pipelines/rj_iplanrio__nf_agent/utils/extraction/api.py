@@ -1,7 +1,9 @@
-"""Gemini API calls for ``NFExtractor``."""
+"""Gemini API calls for ``NFExtractor`` (via Bifrost's OpenAI-compatible endpoint)."""
 
+import base64
 import json
 import time
+import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -23,6 +25,33 @@ logger = get_logger(__name__)
 # (bug em investigação). Workaround temporário: usamos logger.warning()
 # nos lugares que logicamente seriam logger.info() abaixo. Reverter para
 # logger.info() quando o bug for corrigido.
+
+
+def _error_detail(e: Exception) -> str:
+    """``str(e)`` plus the file:line it was actually raised at — see the twin
+    helper in ``classification/page_classification.py`` for why this matters
+    (the bare message alone doesn't say which of several possible origins
+    actually raised it).
+    """
+    tb = traceback.extract_tb(e.__traceback__)
+    if not tb:
+        return f"{type(e).__name__}: {e}"
+    frame = tb[-1]
+    return f"{type(e).__name__}: {e} (at {Path(frame.filename).name}:{frame.lineno} in {frame.name})"
+
+
+def _extract_response_text(response) -> str:
+    """Pull the message text out of an OpenAI-shaped chat-completion response.
+    See ``classification/page_classification.py``'s twin helper for the full
+    explanation — same protocol, same failure shape, here for the extraction
+    call instead of classification.
+    """
+    choice = response.choices[0] if response.choices else None
+    text = choice.message.content if choice and choice.message else None
+    if text is None:
+        finish_reason = getattr(choice, "finish_reason", None) if choice else None
+        raise RuntimeError(f"Gemini returned no usable text for extraction (finish_reason={finish_reason})")
+    return text
 
 
 def extract_from_pdf_bytes(
@@ -86,9 +115,19 @@ def extract_from_pdf_bytes(
 
     for attempt in range(1, max_attempts + 1):
         try:
-            # Build prompt with PDF
-            # Upload PDF bytes inline
-            prompt_parts = [effective_prompt, {"mime_type": "application/pdf", "data": pdf_bytes}]
+            # Build prompt with PDF. OpenAI-protocol "file" content-part (see
+            # classification/page_classification.py's matching NOTE — same
+            # Bifrost adapter, not independently verified against a real
+            # response yet) — always base64, unlike the old Gemini-native
+            # inline_data part which took raw bytes.
+            pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+            content_parts = [
+                {"type": "text", "text": effective_prompt},
+                {
+                    "type": "file",
+                    "file": {"filename": "extraction.pdf", "file_data": f"data:application/pdf;base64,{pdf_b64}"},
+                },
+            ]
 
             start_time = time.time()
 
@@ -98,14 +137,13 @@ def extract_from_pdf_bytes(
 
             try:
                 api_call_start = time.time()
-                response = extractor.model.generate_content(
-                    prompt_parts,
-                    generation_config={
-                        "temperature": GEMINI_CONFIG["temperature"],
-                        "top_p": GEMINI_CONFIG["top_p"],
-                        "top_k": GEMINI_CONFIG["top_k"],
-                        "max_output_tokens": GEMINI_CONFIG["max_output_tokens"],
-                    },
+                response = extractor.model.chat.completions.create(
+                    model=extractor.model_name,
+                    messages=[{"role": "user", "content": content_parts}],
+                    temperature=GEMINI_CONFIG["temperature"],
+                    top_p=GEMINI_CONFIG["top_p"],
+                    max_tokens=GEMINI_CONFIG["max_output_tokens"],
+                    response_format={"type": "json_object"},
                 )
                 api_call_duration = (time.time() - api_call_start) * 1000  # Convert to ms
                 elapsed_time = time.time() - start_time
@@ -115,6 +153,9 @@ def extract_from_pdf_bytes(
             finally:
                 # Always release rate limiter, even if error
                 rate_limiter.release()
+
+            response_text = _extract_response_text(response)
+            usage = response.usage
 
             # Save full API response if requested
             if save_api_response and api_response_path:
@@ -130,11 +171,11 @@ def extract_from_pdf_bytes(
                     "model": extractor.model_name,
                     "attempt": attempt,
                     "elapsed_seconds": elapsed_time,
-                    "raw_text": response.text,
+                    "raw_text": response_text,
                     "usage_metadata": {
-                        "prompt_token_count": getattr(response.usage_metadata, "prompt_token_count", None),
-                        "candidates_token_count": getattr(response.usage_metadata, "candidates_token_count", None),
-                        "total_token_count": getattr(response.usage_metadata, "total_token_count", None),
+                        "prompt_token_count": getattr(usage, "prompt_tokens", None),
+                        "candidates_token_count": getattr(usage, "completion_tokens", None),
+                        "total_token_count": getattr(usage, "total_tokens", None),
                     },
                     "generation_config": {
                         "temperature": GEMINI_CONFIG["temperature"],
@@ -142,15 +183,9 @@ def extract_from_pdf_bytes(
                         "top_k": GEMINI_CONFIG["top_k"],
                         "max_output_tokens": GEMINI_CONFIG["max_output_tokens"],
                     },
-                    "finish_reason": str(getattr(response.candidates[0], "finish_reason", None))
-                    if response.candidates
-                    else None,
-                    "safety_ratings": [
-                        {"category": str(rating.category), "probability": str(rating.probability)}
-                        for rating in getattr(response.candidates[0], "safety_ratings", [])
-                    ]
-                    if response.candidates
-                    else [],
+                    "finish_reason": response.choices[0].finish_reason if response.choices else None,
+                    # No equivalent in the OpenAI chat-completions protocol.
+                    "safety_ratings": [],
                 }
 
                 with retry_path.open("w", encoding="utf-8") as f:
@@ -158,7 +193,7 @@ def extract_from_pdf_bytes(
 
                 logger.debug("Saved API response (attempt %d) to %s", attempt, retry_path)
 
-            result = prompt_module.parse_response(response.text)
+            result = prompt_module.parse_response(response_text)
             result["processed_successfully"] = True
 
             # Check if we found any NFs
@@ -177,22 +212,23 @@ def extract_from_pdf_bytes(
             logger.warning("RETRY: 0 NFs found on attempt %d, retrying...", attempt)
 
         except Exception as e:
+            detail = _error_detail(e)
             # Record failed API call
             elapsed = (time.time() - start_time) * 1000 if "start_time" in locals() else 0
-            tracker.record_call(api_type="extraction", duration_ms=elapsed, success=False, error_type=str(e))
+            tracker.record_call(api_type="extraction", duration_ms=elapsed, success=False, error_type=detail)
 
             # On error, only return if this is the last attempt
             if attempt == max_attempts:
                 return {
                     "processed_successfully": False,
-                    "error": str(e),
+                    "error": detail,
                     "possui_nota_fiscal": False,
                     "quantidade_notas_fiscais": 0,
                     "total_paginas": num_pages,
                     "notas_fiscais": [],
                 }
             # Otherwise, retry
-            logger.warning("ERROR on attempt %d: %s, retrying...", attempt, e)
+            logger.warning("ERROR on attempt %d: %s, retrying...", attempt, detail)
 
     # Should never reach here, but just in case
     return {
@@ -428,15 +464,20 @@ def _retry_with_fallback_model(
     """
     notas_fiscais = result.get("notas_fiscais", [])
 
-    # Skip fallback if already using gemini-2.5-flash-lite (prevent infinite loop)
+    # "vertex/" prefix — same model-id reasoning as GEMINI_CONFIG's model_name
+    # in extraction/config.py, kept in sync here (Bifrost's literal id for
+    # Google models on its OpenAI-compatible endpoint, not the bare Gemini name).
+    fallback_model_name = "vertex/gemini-2.5-flash-lite"
+
+    # Skip fallback if already using the fallback model (prevent infinite loop)
     if not (
         notas_fiscais
         and coalesce.has_suspicious_decimals(notas_fiscais)
-        and extractor.model_name != "gemini-2.5-flash-lite"
+        and extractor.model_name != fallback_model_name
     ):
         return result
 
-    logger.warning("Suspicious decimals detected (>2 decimal places). Retrying with gemini-2.5-flash-lite...")
+    logger.warning("Suspicious decimals detected (>2 decimal places). Retrying with %s...", fallback_model_name)
 
     # Delete cache file to force re-extraction
     if save_api_response and api_response_output_dir:
@@ -445,9 +486,9 @@ def _retry_with_fallback_model(
             api_response_path.unlink()
             logger.warning("Deleted cache to force re-extraction")
 
-    # Create fallback extractor with gemini-2.5-flash-lite
+    # Create fallback extractor with the fallback model
     fallback_extractor = type(extractor)(
-        model_name="gemini-2.5-flash-lite",
+        model_name=fallback_model_name,
         extraction_prompt=extractor.extraction_prompt,
     )
 

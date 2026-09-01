@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from prefect_rj_iplanrio.logging import get_logger
 
-from ..llm import build_gemini_model
+from ..llm import build_llm_client
 from ..prompts import EXTRACTION_PROMPT
 from .config import GEMINI_CONFIG
 
@@ -39,11 +39,15 @@ def initialize(
 
 
 def get_model(extractor: "NFExtractor"):
-    """Lazy-load the Bifrost-routed Gemini model for ``extractor``.
+    """Lazy-load the Bifrost-routed OpenAI-compatible client for ``extractor``.
+
+    Unlike the old Gemini-native model object, this client isn't bound to
+    ``extractor.model_name`` — the model id is passed per-call instead (see
+    ``api.py``), since that's how the OpenAI chat-completions protocol works.
 
     :param extractor: The ``NFExtractor`` instance.
-    :returns: A ``google.generativeai.GenerativeModel`` bound to ``extractor.model_name``.
+    :returns: An ``openai.OpenAI`` client routed through Bifrost.
     """
     if extractor._model is None:
-        extractor._model = build_gemini_model(extractor.model_name)
+        extractor._model = build_llm_client()
     return extractor._model

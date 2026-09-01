@@ -22,11 +22,12 @@ dependencies = [
     "pyyaml>=6.0.0",
     "python-dotenv>=1.0.0",
     "iplanrio-agent-toolkit",
+    "openai>=1.0.0",
     # Lógica de negócio migrada de agent-nf-validator para utils/ (move mecânico).
-    # google-generativeai fica de fora e é instalado isolado no Dockerfile: há um
-    # conflito de protobuf entre google-generativeai e grpcio-status. Pelo mesmo
-    # motivo o extra "gemini" do iplanrio-agent-toolkit NÃO é requisitado aqui —
-    # apenas os módulos base (rate limiter, gcs, bigquery, matching, credentials).
+    # LLM calls (classification + extraction) vão pelo Bifrost via protocolo
+    # OpenAI-compatible (não é a API nativa do Gemini) — ver utils/llm.py. O extra
+    # "gemini" do iplanrio-agent-toolkit NÃO é requisitado aqui — apenas os módulos
+    # base (rate limiter, gcs, bigquery, matching, credentials).
 ]
 
 [project.optional-dependencies]
