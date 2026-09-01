@@ -1283,6 +1283,32 @@ def save_csv_for_sftp(
     return csv_path, dispatch_date
 
 
+def host_key_algs_for_pinned_key(pinned_key: "asyncssh.SSHKey") -> List[str]:
+    """
+    Lista de algoritmos de host key a oferecer na negociação SSH, em ordem
+    de preferência, para uma chave já pinada.
+
+    `pinned_key.get_algorithm()` sozinho devolve só o tipo "base" da chave —
+    para RSA, sempre "ssh-rsa" (a variante assinada com SHA-1), mesmo que o
+    servidor aceite as variantes RSA-SHA2 (mais fortes). Usar isso direto em
+    `server_host_key_algs` travava a negociação em SHA-1 mesmo quando o
+    servidor oferece algo melhor (CHATA-140).
+
+    Para chaves RSA, prioriza rsa-sha2-512 e rsa-sha2-256 e só inclui
+    ssh-rsa como fallback de compatibilidade (necessário para servidores
+    legados, como o Globalscape EFT da Salesforce, que não suportam mais
+    nada). O pinning da chave (known_hosts) continua estrito de qualquer
+    forma: as três variantes assinam com a mesma chave pública fixada — só
+    muda o algoritmo de hash da assinatura, não a chave em si.
+
+    Para chaves não-RSA (ed25519, ecdsa) não há variante SHA-1/SHA-2 a
+    escolher, então o algoritmo próprio da chave é o único usado.
+    """
+    if pinned_key.get_algorithm() == "ssh-rsa":
+        return ["rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"]
+    return [pinned_key.get_algorithm()]
+
+
 @task
 def send_to_sftp(
     csv_path: str,
@@ -1306,13 +1332,20 @@ def send_to_sftp(
     sob a LGPD.
 
     Usamos asyncssh em vez de paramiko porque o servidor SFTP da Salesforce
-    (Globalscape EFT) só oferece o algoritmo de host key legado "ssh-rsa"
-    (SHA-1). O Paramiko 5.x removeu esse algoritmo da lista aceita por
-    padrão e não expõe uma forma pública de reabilitá-lo (só via monkey-patch
-    de atributos privados — o que essa função fazia antes, e que também
-    desligava a verificação de assinatura por completo). O asyncssh aceita
-    "ssh-rsa" via parâmetro documentado (server_host_key_algs) e continua
-    fazendo a verificação criptográfica real da assinatura do servidor.
+    (Globalscape EFT) pode não oferecer nada além do algoritmo de host key
+    legado "ssh-rsa" (SHA-1). O Paramiko 5.x removeu esse algoritmo da lista
+    aceita por padrão e não expõe uma forma pública de reabilitá-lo (só via
+    monkey-patch de atributos privados — o que essa função fazia antes, e
+    que também desligava a verificação de assinatura por completo). O
+    asyncssh aceita "ssh-rsa" via parâmetro documentado (server_host_key_algs)
+    e continua fazendo a verificação criptográfica real da assinatura do
+    servidor.
+
+    A lista de algoritmos oferecida na negociação (ver
+    `host_key_algs_for_pinned_key`) prioriza as variantes RSA-SHA2 (mais
+    fortes) e só cai para "ssh-rsa" como fallback — pinning da chave
+    continua estrito de qualquer forma, porque as três variantes assinam
+    com a mesma chave pública fixada.
 
     Args:
         csv_path: Caminho local do CSV a ser enviado
@@ -1352,7 +1385,7 @@ def send_to_sftp(
             port=sftp_port,
             username=sftp_user,
             password=sftp_password,
-            server_host_key_algs=[pinned_key.get_algorithm()],
+            server_host_key_algs=host_key_algs_for_pinned_key(pinned_key),
             # known_hosts espera (host_keys, ca_keys, revoked_keys); só
             # fixamos a chave de host, sem CA nem lista de revogação.
             known_hosts=([pinned_key], [], []),
