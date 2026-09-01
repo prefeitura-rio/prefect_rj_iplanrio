@@ -49,3 +49,14 @@ pipelines/**/*.egg-info/
 # despite the blanket "**/**/test*" ignore rule at the top of this file.
 !pipelines/rj_iplanrio__nf_agent/tests/
 !pipelines/rj_iplanrio__nf_agent/tests/**
+
+# scripts/run_local.py artifacts (local-only test runs, real fiscal PDFs +
+# their extracted/cached data — never meant to be committed):
+pipelines/rj_iplanrio__nf_agent/pdfs/
+pipelines/rj_iplanrio__nf_agent/__pypackages__/
+local_run_cache*.db
+local_run_output*.ndjson
+
+# The tests/ allowlist above re-includes everything under tests/, __pycache__
+# included — re-ignore it specifically.
+pipelines/rj_iplanrio__nf_agent/tests/__pycache__/
