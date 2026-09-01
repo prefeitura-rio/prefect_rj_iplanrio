@@ -462,7 +462,7 @@ deployments:
       # Multa SMTR PF
       - cron: "0 11 * * 1-5"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-smtr-multa-pf
         flow_run_name: smtr-multa-pf
         parameters:
