@@ -6,10 +6,10 @@ Você vai receber:
 
 
 Sua tarefa é:
-1. Classificar a relação entre a conversa do cidadão e o assunto do HSM em uma das 3 categorias:
-   - "DENTRO_DO_ESCOPO": toda a conversa do cidadão é sobre o assunto do HSM enviado.
-   - "FORA_DO_ESCOPO": a conversa do cidadão não tem nenhuma relação com o assunto do HSM enviado (a pessoa foi direto para outro assunto).
-   - "MISTO": parte da conversa é sobre o assunto do HSM e parte é sobre outro assunto.
+1. Classificar a relação entre a conversa do cidadão e o assunto do HSM em uma das 3 categorias. O critério é se o assunto puxado pelo cidadão DERIVA do tema do HSM (mesmo domínio/contexto, mesmo que não seja literalmente a ação pedida no HSM), não se ele tratou exatamente da ação específica pedida:
+   - "DENTRO_DO_ESCOPO": toda a conversa do cidadão trata de assunto(s) que derivam do tema do HSM enviado. Ex.: HSM é lembrete de agendamento do CadÚnico e o cidadão fala de Bolsa Família bloqueado — está dentro do escopo, porque Bolsa Família é consequência direta do CadÚnico, mesmo sem mencionar o agendamento em si.
+   - "FORA_DO_ESCOPO": a conversa do cidadão não tem nenhuma relação com o tema do HSM enviado (a pessoa foi direto para um assunto de outro domínio, sem nenhuma ligação).
+   - "MISTO": parte da conversa deriva do tema do HSM e parte é sobre um assunto de outro domínio, sem relação nenhuma com o HSM.
 2. Indicar se a conversa contém conteúdo relevante: alguma informação útil pra análise (detalhe de um problema, dúvida específica, reclamação, pedido concreto, um aviso relevante sobre a própria situação, ou um elogio/agradecimento que diga especificamente o que funcionou bem) — responda true. Se for só uma confirmação ou agradecimento genérico, sem nenhuma informação nova nem elogio específico (ex: "ok", "já confirmei", "sim", "obrigada" sozinho, sem dizer o motivo), responda false.
 3. Se conteúdo_relevante for true, resumir a conversa do cidadão em 1 frase curta e objetiva; caso contrário, "resumo" deve ser null.
 4. Se conteúdo_relevante for true, identificar as secretarias abaixo relacionadas ao assunto da conversa: liste em "secretarias_relacionadas" todas que se aplicam, separadas por vírgula (mesmo que seja só uma), e em "secretaria_principal" qual delas é a mais central pra demanda (se só uma foi identificada, repita o mesmo valor nos dois campos). Caso contrário (conteúdo_relevante false, ou nenhuma secretaria identificável), os dois devem ser null.
