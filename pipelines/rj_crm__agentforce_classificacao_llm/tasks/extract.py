@@ -50,17 +50,101 @@ def _extrai_titulos_botoes(botoes_json) -> list[str]:
 
 
 def _escolhe_hsm(grupo: pd.DataFrame) -> pd.Series:
-    """Escolhe 1 HSM por jornada quando há mais de uma candidata: prioriza a que não é
-    anacrônica (não veio depois de uma mudança de versão do template) e desempata por nome.
+    """Escolhe 1 linha do catálogo por (jornada_nome, hsm_nome) quando há mais de uma
+    candidata (ex.: template republicado) — só pra resolver hsm_botoes_json, já que
+    jornada_nome + hsm_nome (o par exato do disparo, não mais uma escolha por jornada
+    inteira) já veio resolvido de v2_chatbot_conversas. Prioriza a versão que não é
+    anacrônica (não veio depois de uma mudança de versão do template) e desempata por nome
+    de atividade.
 
-    Chamada via groupby("jornada_nome").apply() — no pandas >= 2.2 (obrigatório a partir do
-    3.0, ver caller) a coluna de agrupamento não é mais passada pra cá (include_groups=False
-    virou o único comportamento possível), então `grupo` aqui dentro NÃO tem jornada_nome.
-    Isso é ok: o pandas ainda usa o valor do grupo como índice do resultado, e o caller
-    recupera a coluna de lá com reset_index()."""
+    Chamada via groupby(["jornada_nome", "hsm_nome"]).apply() — no pandas >= 2.2
+    (obrigatório a partir do 3.0, ver caller) as colunas de agrupamento não são mais
+    passadas pra cá (include_groups=False virou o único comportamento possível), então
+    `grupo` aqui dentro NÃO tem jornada_nome/hsm_nome. Isso é ok: o pandas ainda usa o
+    valor do grupo (agora uma tupla) como índice do resultado, e o caller recupera as
+    colunas de lá com reset_index()."""
     nao_anacronico = grupo[grupo["template_pos_versao_indicador"] == False]  # noqa: E712
     candidatos = nao_anacronico if len(nao_anacronico) > 0 else grupo
     return candidatos.sort_values("atividade_nome").iloc[0]
+
+
+# ---------------------------------------------------------------------------
+# Renderização de hsm_texto — substitui ${variavel} pelos valores de hsm_variaveis_json
+# (JSON com as variáveis de personalização do disparo específico, ver hsm_candidatas em
+# extract_sessoes.sql). Sem isso, a LLM recebia o template cru (ex.: "sua solicitação de
+# ${solicitacao} foi finalizada") sem nenhuma pista de qual era o assunto de verdade —
+# tornando impossível avaliar relacao_hsm corretamente pra esses casos.
+# ---------------------------------------------------------------------------
+_PLACEHOLDER_HSM = re.compile(r"\$\{(\w+)\}")
+
+
+def _lcs_len(a: str, b: str) -> int:
+    """Tamanho da maior subsequência comum entre a e b (programação dinâmica clássica, uma
+    linha da matriz por vez). Usado por _busca_valor_fuzzy pra medir o quão parecida uma
+    chave do JSON é do nome do placeholder."""
+    anterior = [0] * (len(b) + 1)
+    for i in range(1, len(a) + 1):
+        atual = [0] * (len(b) + 1)
+        for j in range(1, len(b) + 1):
+            atual[j] = anterior[j - 1] + 1 if a[i - 1] == b[j - 1] else max(anterior[j], atual[j - 1])
+        anterior = atual
+    return anterior[len(b)]
+
+
+_LCS_RATIO_MINIMO = 0.7  # fração do tamanho do placeholder que o LCS precisa cobrir pra aceitar o match
+
+
+def _busca_valor_fuzzy(chave_placeholder: str, variaveis: dict):
+    """Quando a chave do placeholder não bate exatamente com nenhuma chave do JSON — ex.:
+    placeholder ${solicitacao}, chave real 'cc_wt_solicitacao' (prefixo de sistema variando
+    por campanha/canal, ex. cc_wt_*) — escolhe a chave do JSON com maior LCS (longest common
+    subsequence, comparação case-insensitive) em relação ao placeholder. Exige LCS >= 70% do
+    tamanho do placeholder pra aceitar, pra não casar com uma chave só remotamente parecida.
+    Retorna o valor da melhor candidata, ou None se nenhuma bater o suficiente."""
+    alvo = chave_placeholder.lower()
+    melhor_chave, melhor_score = None, 0
+    for chave in variaveis:
+        score = _lcs_len(alvo, str(chave).lower())
+        if score > melhor_score:
+            melhor_chave, melhor_score = chave, score
+    if melhor_chave is not None and melhor_score >= _LCS_RATIO_MINIMO * len(alvo):
+        return variaveis[melhor_chave]
+    return None
+
+
+def _renderiza_hsm(hsm_texto, hsm_variaveis_json):
+    """Substitui ${chave} em hsm_texto pelo valor correspondente em hsm_variaveis_json —
+    primeiro por match exato, senão pelo mais parecido via LCS (ver _busca_valor_fuzzy,
+    necessário porque as chaves reais do JSON costumam ter um prefixo de sistema que não
+    está no placeholder, ex. ${canal} -> 'cc_wt_canal'). Nem exato nem fuzzy encontrado:
+    mantém o placeholder original (melhor deixar visível que a variável não foi resolvida
+    do que assumir um valor errado). Sem hsm_texto, sem JSON, ou JSON inválido: retorna
+    hsm_texto como veio — inclui o caso de session_texto (Session, não Template), que já
+    chega completo, sem placeholder nenhum, e a substituição vira no-op."""
+    if hsm_texto is None or (isinstance(hsm_texto, float) and pd.isna(hsm_texto)):
+        return hsm_texto
+    if hsm_variaveis_json is None or (isinstance(hsm_variaveis_json, float) and pd.isna(hsm_variaveis_json)):
+        return hsm_texto
+
+    if isinstance(hsm_variaveis_json, dict):
+        variaveis = hsm_variaveis_json
+    elif isinstance(hsm_variaveis_json, str):
+        try:
+            variaveis = json.loads(hsm_variaveis_json)
+        except (TypeError, ValueError):
+            return hsm_texto
+    else:
+        return hsm_texto
+
+    if not isinstance(variaveis, dict):
+        return hsm_texto
+
+    def _substitui(match: re.Match) -> str:
+        chave = match.group(1)
+        valor = variaveis[chave] if chave in variaveis else _busca_valor_fuzzy(chave, variaveis)
+        return str(valor) if valor is not None else match.group(0)
+
+    return _PLACEHOLDER_HSM.sub(_substitui, hsm_texto)
 
 
 def _resposta_e_botao_atrasado(row) -> bool:
@@ -116,21 +200,29 @@ def enriquece_com_catalogo_hsm(
     project_id: str,
     hsm_catalog_table: str,
 ) -> pd.DataFrame:
-    """Junta cada sessão ao texto do HSM correspondente (via jornada_nome) e calcula a
-    flag resposta_atrasada_btn — sessão que só respondeu com o texto de um botão do HSM
-    fora da janela de 24h, e por isso não deve ir pra LLM (não carrega demanda real)."""
+    """Renderiza hsm_texto (substitui ${variavel} pelos valores de hsm_variaveis_json —
+    ambos já vieram de v2_chatbot_conversas, resolvidos por disparo específico, ver
+    hsm_candidatas em extract_sessoes.sql) e junta ao catálogo (jornada_nome + hsm_nome)
+    só pra pegar hsm_botoes_json — o único dado que não chega até v2_chatbot_conversas
+    (descartado no intermediate antes do mart, ver hsm_por_jornada.sql). Calcula a flag
+    resposta_atrasada_btn — sessão que só respondeu com o texto de um botão do HSM fora da
+    janela de 24h, e por isso não deve ir pra LLM (não carrega demanda real)."""
     if df_sessoes.empty:
-        df_sessoes["hsm_texto"] = pd.Series(dtype="object")
         df_sessoes["hsm_botoes_json"] = pd.Series(dtype="object")
         df_sessoes["resposta_atrasada_btn"] = pd.Series(dtype="bool")
         return df_sessoes
+
+    df_sessoes = df_sessoes.copy()
+    df_sessoes["hsm_texto"] = df_sessoes.apply(
+        lambda row: _renderiza_hsm(row["hsm_texto"], row.get("hsm_variaveis_json")), axis=1
+    )
+    df_sessoes = df_sessoes.drop(columns=["hsm_variaveis_json"])
 
     jornadas_distintas = df_sessoes["jornada_nome"].dropna()
     jornadas_distintas = jornadas_distintas[jornadas_distintas.astype(str).str.strip() != ""].unique()
 
     if len(jornadas_distintas) == 0:
-        print("[EXTRACT] Nenhuma jornada_nome preenchida no lote — pulando enriquecimento de HSM.")
-        df_sessoes["hsm_texto"] = None
+        print("[EXTRACT] Nenhuma jornada_nome preenchida no lote — pulando enriquecimento de botões.")
         df_sessoes["hsm_botoes_json"] = None
         df_sessoes["resposta_atrasada_btn"] = False
         return df_sessoes
@@ -145,27 +237,25 @@ def enriquece_com_catalogo_hsm(
     client = get_bq_client(project_id)
     df_hsm = client.query(query).to_dataframe()
 
-    hsm_por_jornada = df_hsm[df_hsm["hsm_texto"].notna()].drop_duplicates(
-        subset=["jornada_nome", "hsm_nome", "hsm_texto"]
-    )
-
-    if hsm_por_jornada.empty:
-        df_sessoes["hsm_texto"] = None
+    if df_hsm.empty:
         df_sessoes["hsm_botoes_json"] = None
         df_sessoes["resposta_atrasada_btn"] = False
         return df_sessoes
 
+    hsm_por_jornada_hsm = df_hsm.drop_duplicates(subset=["jornada_nome", "hsm_nome", "hsm_botoes_json"])
+
     hsm_lookup = (
-        hsm_por_jornada.groupby("jornada_nome", group_keys=False)
+        hsm_por_jornada_hsm.groupby(["jornada_nome", "hsm_nome"], group_keys=False)
         .apply(_escolhe_hsm)
-        # jornada_nome não vem mais como coluna (ver docstring de _escolhe_hsm), mas o
-        # pandas ainda usa o valor do grupo como índice do resultado — reset_index() sem
-        # drop transforma esse índice de volta em coluna antes de selecionar.
-        .reset_index()[["jornada_nome", "hsm_nome", "hsm_texto", "hsm_categoria", "hsm_botoes_json"]]
+        # jornada_nome/hsm_nome não vêm mais como coluna (ver docstring de _escolhe_hsm),
+        # mas o pandas ainda usa o valor do grupo (tupla) como índice do resultado —
+        # reset_index() sem drop transforma esse índice de volta em colunas antes de
+        # selecionar.
+        .reset_index()[["jornada_nome", "hsm_nome", "hsm_botoes_json"]]
         .reset_index(drop=True)
     )
 
-    df_enriquecido = df_sessoes.merge(hsm_lookup, on="jornada_nome", how="left")
+    df_enriquecido = df_sessoes.merge(hsm_lookup, on=["jornada_nome", "hsm_nome"], how="left")
     df_enriquecido["resposta_atrasada_btn"] = df_enriquecido.apply(_resposta_e_botao_atrasado, axis=1)
 
     n_atrasada = int(df_enriquecido["resposta_atrasada_btn"].sum())
