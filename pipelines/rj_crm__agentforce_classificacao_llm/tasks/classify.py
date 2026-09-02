@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 import time
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -256,6 +257,57 @@ def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     return df_prompts, df_pre_classificadas
 
 
+# ---------------------------------------------------------------------------
+# Validação dos rótulos que a LLM devolve — vistos em produção (2026-09-02): grafias
+# fora do catálogo oficial do prompt ("Solicitacao" sem acento, "Reclamacao" sem acento)
+# e até rótulo inventado, fora da lista inteira ("Dificuldade", nunca pedido no prompt).
+# As funções abaixo comparam sem acento/caixa contra o catálogo oficial — corrige a
+# grafia de volta pra canônica quando bate, descarta (fica de fora) quando não bate com
+# nada. Preferível a manter o valor bruto da LLM: um rótulo fora do catálogo quebraria
+# contagem/agrupamento por valor exato em qualquer análise a jusante, silenciosamente.
+# ---------------------------------------------------------------------------
+_RELACAO_HSM_VALIDAS = ["DENTRO_DO_ESCOPO", "FORA_DO_ESCOPO", "MISTO"]
+_NATUREZA_VALIDAS = ["Dúvida", "Problema", "Reclamação", "Elogio", "Solicitação", "Informação"]
+_SECRETARIAS_VALIDAS = ["SMTR", "Comlurb", "RioLuz", "Seconserva", "SMS", "SMAS", "SME"]
+
+
+def _normaliza_rotulo(texto) -> str:
+    """Baixa a caixa, remove acentos, trata '_' como espaço e colapsa espaços — mesmo
+    padrão de _normaliza em tasks/extract.py (mais o tratamento de '_'), usado aqui pra
+    comparar rótulo da LLM com o catálogo oficial sem falso negativo por acentuação/caixa/
+    separador (cobre tanto natureza/secretaria — "Dúvida", "RioLuz" — quanto relacao_hsm —
+    "DENTRO_DO_ESCOPO" — no mesmo código)."""
+    texto = str(texto).strip().lower().replace("_", " ")
+    texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", " ", texto)
+
+
+def _valida_rotulo_unico(valor, rotulos_validos: list[str]):
+    """Corrige a grafia de volta pra canônica se valor bater (sem acento/caixa) com algum
+    de rotulos_validos; retorna None se não bater com nenhum (rótulo fora do catálogo) ou
+    se valor já vier vazio."""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)) or not str(valor).strip():
+        return None
+    lookup = {_normaliza_rotulo(r): r for r in rotulos_validos}
+    return lookup.get(_normaliza_rotulo(valor))
+
+
+def _valida_multi_rotulo(valor, rotulos_validos: list[str]):
+    """Mesma ideia de _valida_rotulo_unico, mas pra campo multi-label separado por
+    vírgula (ex.: "Dúvida, Problema"): valida e corrige a grafia de cada rótulo
+    individualmente, descarta só os que não batem com o catálogo (mantém os outros),
+    remove duplicata. Sem nenhum rótulo válido sobrando, retorna None."""
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)) or not str(valor).strip():
+        return None
+    lookup = {_normaliza_rotulo(r): r for r in rotulos_validos}
+    validos = []
+    for bruto in str(valor).split(","):
+        canonico = lookup.get(_normaliza_rotulo(bruto))
+        if canonico is not None and canonico not in validos:
+            validos.append(canonico)
+    return ", ".join(validos) if validos else None
+
+
 @task(log_prints=True)
 def classifica_sessoes(
     df_prompts: pd.DataFrame,
@@ -334,8 +386,14 @@ def classifica_sessoes(
             # o prompt sem_hsm não pergunta "relacao_hsm" pra LLM (não há HSM pra
             # comparar escopo) — mas a coluna cobre toda sessão, então forçamos o
             # rótulo explícito aqui em vez de deixar null (null viraria "não
-            # classificado ainda", que é outra coisa)
-            relacao_hsm = classificacao_sem_hsm if tipo_prompt == "sem_hsm" else parsed.get("relacao_hsm")
+            # classificado ainda", que é outra coisa). Só o valor vindo da LLM
+            # (com_hsm) passa por validação — classificacao_sem_hsm já é uma
+            # constante conhecida-válida, não precisa.
+            relacao_hsm = (
+                classificacao_sem_hsm
+                if tipo_prompt == "sem_hsm"
+                else _valida_rotulo_unico(parsed.get("relacao_hsm"), _RELACAO_HSM_VALIDAS)
+            )
             # usageMetadata vem de graça na mesma resposta — sem chamada extra à API
             usage = response.get("usageMetadata", {})
             return {
@@ -344,9 +402,13 @@ def classifica_sessoes(
                 "relacao_hsm": relacao_hsm,
                 "conteudo_relevante": parsed.get("conteudo_relevante"),
                 "resumo": parsed.get("resumo"),
-                "secretarias_relacionadas": parsed.get("secretarias_relacionadas"),
-                "secretaria_principal": parsed.get("secretaria_principal"),
-                "natureza": parsed.get("natureza"),
+                "secretarias_relacionadas": _valida_multi_rotulo(
+                    parsed.get("secretarias_relacionadas"), _SECRETARIAS_VALIDAS
+                ),
+                "secretaria_principal": _valida_rotulo_unico(
+                    parsed.get("secretaria_principal"), _SECRETARIAS_VALIDAS
+                ),
+                "natureza": _valida_multi_rotulo(parsed.get("natureza"), _NATUREZA_VALIDAS),
                 "motivo": parsed.get("motivo"),
                 "justificativa": parsed.get("justificativa"),
                 "resposta_llm_bruta": texto_bruto,
