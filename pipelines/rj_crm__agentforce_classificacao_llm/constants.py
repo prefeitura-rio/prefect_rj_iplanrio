@@ -64,7 +64,7 @@ class ClassificacaoConstants(Enum):
     # histórico é reescaneado a cada execução. Sessão que fica sem classificar por mais de
     # LOOKBACK_DAYS (pipeline fora do ar por muito tempo) não é mais pega automaticamente —
     # risco aceito, mitigado por alerta de falha.
-    LOOKBACK_DAYS = 1
+    LOOKBACK_DAYS = 7
     # Janela de busca por HSM anterior à sessão (mesmo valor do notebook original)
     HSM_MAX_DIAS_ANTES = 7
 
