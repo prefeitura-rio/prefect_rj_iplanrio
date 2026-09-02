@@ -141,10 +141,25 @@ def _renderiza_hsm(hsm_texto, hsm_variaveis_json):
 
     def _substitui(match: re.Match) -> str:
         chave = match.group(1)
-        valor = variaveis[chave] if chave in variaveis else _busca_valor_fuzzy(chave, variaveis)
+        try:
+            valor = variaveis[chave] if chave in variaveis else _busca_valor_fuzzy(chave, variaveis)
+        except Exception as e:  # noqa: BLE001 — qualquer erro nessa chave específica não pode
+            # derrubar a renderização do texto inteiro; mantém o placeholder original e segue.
+            # Visto em produção (staging, 2026-09-01): KeyError numa chave específica, causa
+            # exata não confirmada (sem traceback disponível) — provavelmente algum formato
+            # de hsm_variaveis_json fora do esperado (dict aninhado, tipo de chave não-string
+            # etc.). Efeito é só esse placeholder ficar sem substituir, nada mais grave.
+            print(f"[HSM] Falha ao resolver '{chave}' em hsm_variaveis_json ({e!r}) — mantendo placeholder.")
+            return match.group(0)
         return str(valor) if valor is not None else match.group(0)
 
-    return _PLACEHOLDER_HSM.sub(_substitui, hsm_texto)
+    try:
+        return _PLACEHOLDER_HSM.sub(_substitui, hsm_texto)
+    except Exception as e:  # noqa: BLE001 — última rede de segurança: qualquer erro não previsto
+        # na renderização (ex.: hsm_texto não é str por algum motivo) não pode derrubar a task
+        # inteira — cai pro texto original, sem renderizar.
+        print(f"[HSM] Falha inesperada renderizando hsm_texto ({e!r}) — usando texto original.")
+        return hsm_texto
 
 
 def _resposta_e_botao_atrasado(row) -> bool:
