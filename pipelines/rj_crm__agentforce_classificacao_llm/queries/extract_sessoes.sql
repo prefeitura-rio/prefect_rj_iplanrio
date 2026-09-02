@@ -113,8 +113,13 @@ conversa_completa AS (
 -- um catálogo por jornada) — mensagens[0].texto já é o texto do template ou o de Session
 -- (ver template_match_tipo em int_chatbot_v2_mensagens_enviadas_enriquecidas.sql, repo
 -- queries-rj-crm-registry), e hsm.dados_disparo são as variáveis de personalização
--- daquele disparo específico. A substituição de ${variavel} em si acontece em Python (ver
--- tasks/extract.py:_renderiza_hsm) — mais simples que regex em SQL.
+-- daquele disparo específico. A substituição dos placeholders do template acontece em
+-- Python (ver tasks/extract.py:_renderiza_hsm) — mais simples que regex em SQL. CUIDADO:
+-- este arquivo passa por str.format() em Python (extract.py:extrai_sessoes_nao_classificadas)
+-- pra preencher lookback_days/hsm_max_dias_antes/source_table/destino_full_table_id — nunca
+-- escrever chaves soltas tipo chave-entre-chaves em comentário aqui, nem como exemplo:
+-- str.format() tenta resolver qualquer texto assim, mesmo dentro de comentário, e quebra
+-- com KeyError (foi exatamente isso que aconteceu, visto em staging 2026-09-02).
 hsm_candidatas AS (
     SELECT
         id_interacao AS id_disparo_hsm,
