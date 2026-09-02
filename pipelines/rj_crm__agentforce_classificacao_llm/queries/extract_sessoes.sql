@@ -1,7 +1,10 @@
 -- Sessões do Agentforce (WhatsApp) dos últimos {lookback_days} dias que AINDA NÃO têm
 -- classificação — extração incremental de janela fixa, sem watermark: a janela fixa
 -- limita o quanto reescaneamos a cada rodada. Traz também a HSM disparada mais próxima
--- (e anterior) ao início da sessão, com no máximo hsm_max_dias_antes dias de antecedência.
+-- (e anterior) ao início da sessão, com no máximo hsm_max_dias_antes dias de antecedência
+-- — já com hsm_texto/hsm_variaveis_json resolvidos do disparo específico (ver hsm_candidatas
+-- abaixo); enriquece_com_catalogo_hsm (tasks/extract.py) só busca hsm_botoes_json no
+-- catálogo por jornada agora, o texto não depende mais dele.
 -- Fonte: rj-crm-registry.rmi_conversas.v2_chatbot_conversas (fct_chatbot_v2) — já é a
 -- verdade consolidada por trás de ai_agent_session/ai_agent_interaction, e já carrega
 -- classificacao_llm_datahora via LEFT JOIN em ai_agent_session_classificacao (nossa
@@ -68,8 +71,55 @@ sessoes_usuario AS (
     GROUP BY id_sessao  -- grão da CTE: 1 linha por sessão, ver nota acima
 ),
 
--- candidatas a HSM: disparos (fonte = 'HSM') na janela de até
--- hsm_max_dias_antes dias antes do início do período analisado
+-- histórico completo da sessão (cidadão + agente), rotulado por quem falou — contexto
+-- extra pro prompt entender a que uma resposta curta do cidadão se refere (ex.: "Entulho"
+-- só faz sentido lendo a pergunta do agente logo antes). Não substitui
+-- mensagens_usuario_concatenadas (que continua só cidadão — usada pra detectar resposta
+-- atrasada a botão e como coluna física de auditoria): as classificações continuam exigidas
+-- só com base na fala do cidadão, ver prompt. CTE separada (não dá pra juntar com
+-- sessoes_usuario, que agrupa só AI_AGENT_CIDADAO) pra não misturar o grão.
+conversa_completa AS (
+    SELECT
+        id_interacao AS id_sessao,
+        STRING_AGG(
+            CONCAT(
+                IF(fonte = 'AI_AGENT_CIDADAO', 'CIDADÃO: ', 'AGENTE: '),
+                mensagens[SAFE_OFFSET(0)].texto
+            ),
+            '\n'
+            ORDER BY mensagem_sequencia
+        ) AS conversa_completa
+    FROM `{source_table}`
+    WHERE
+        fonte IN ('AI_AGENT_CIDADAO', 'AI_AGENT_AGENTE')
+        AND data_particao BETWEEN DATE(data_inicio) AND DATE(data_fim)
+        AND inicio_datahora BETWEEN data_inicio AND data_fim
+    GROUP BY id_sessao
+),
+
+-- candidatas a HSM: disparos com hsm.nome_hsm identificado, na janela de até
+-- hsm_max_dias_antes dias antes do início do período analisado. Filtro é
+-- fonte = 'HSM' AND hsm.nome_hsm IS NOT NULL — as duas condições, não só uma:
+--   - fonte = 'HSM' sozinho não basta: mensagens_hsm em fct_chatbot_v2.sql seta 'HSM'
+--     incondicionalmente pra toda linha da CTE, resolvida ou não (template_match_tipo pode
+--     ser 'nao_resolvido' e ainda assim fonte='HSM', com hsm.nome_hsm/hsm_texto NULL — um
+--     candidato inútil pra esse pareamento).
+--   - hsm.nome_hsm IS NOT NULL sozinho também não basta: uma linha fonte='CUSTOMER'
+--     (resposta de botão do cidadão) HERDA os dados de hsm quando pareada, incluindo
+--     hsm.nome_hsm preenchido — mas mensagens[0].texto nela é a resposta do cidadão, não o
+--     texto do template. Sem o fonte='HSM' também, essas linhas entrariam como candidatas
+--     com hsm_texto errado.
+-- hsm_texto e hsm_variaveis_json vêm resolvidos aqui mesmo, do disparo específico (não de
+-- um catálogo por jornada) — mensagens[0].texto já é o texto do template ou o de Session
+-- (ver template_match_tipo em int_chatbot_v2_mensagens_enviadas_enriquecidas.sql, repo
+-- queries-rj-crm-registry), e hsm.dados_disparo são as variáveis de personalização
+-- daquele disparo específico. A substituição dos placeholders do template acontece em
+-- Python (ver tasks/extract.py:_renderiza_hsm) — mais simples que regex em SQL. CUIDADO:
+-- este arquivo passa por str.format() em Python (extract.py:extrai_sessoes_nao_classificadas)
+-- pra preencher lookback_days/hsm_max_dias_antes/source_table/destino_full_table_id — nunca
+-- escrever chaves soltas tipo chave-entre-chaves em comentário aqui, nem como exemplo:
+-- str.format() tenta resolver qualquer texto assim, mesmo dentro de comentário, e quebra
+-- com KeyError (foi exatamente isso que aconteceu, visto em staging 2026-09-02).
 hsm_candidatas AS (
     SELECT
         id_interacao AS id_disparo_hsm,
@@ -80,10 +130,13 @@ hsm_candidatas AS (
         hsm.nome_campanha,
         jornada_nome,
         id_jornada,
-        hsm.criacao_envio_datahora AS hsm_envio_datahora
+        hsm.criacao_envio_datahora AS hsm_envio_datahora,
+        mensagens[SAFE_OFFSET(0)].texto AS hsm_texto,
+        hsm.dados_disparo AS hsm_variaveis_json
     FROM `{source_table}`
     WHERE
         fonte = 'HSM'
+        AND hsm.nome_hsm IS NOT NULL
         AND data_particao
         BETWEEN DATE_SUB(DATE(data_inicio), INTERVAL hsm_max_dias_antes DAY) AND DATE(data_fim)
         AND hsm.criacao_envio_datahora
@@ -100,6 +153,9 @@ sessoes_com_hsm AS (
         h.jornada_nome,
         h.id_jornada,
         h.hsm_envio_datahora,
+        h.nome_hsm AS hsm_nome,
+        h.hsm_texto,
+        h.hsm_variaveis_json,
         h.id_disparo_hsm IS NOT NULL AS teve_hsm_anterior_indicador
     FROM sessoes_usuario s
     LEFT JOIN
@@ -116,8 +172,9 @@ sessoes_com_hsm AS (
         = 1
 )
 
-SELECT sc.*
+SELECT sc.*, cc.conversa_completa
 FROM sessoes_com_hsm sc
+LEFT JOIN conversa_completa cc ON cc.id_sessao = sc.id_sessao
 LEFT JOIN
     `{destino_full_table_id}` d
     ON

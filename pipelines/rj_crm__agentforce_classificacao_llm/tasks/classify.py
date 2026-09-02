@@ -35,14 +35,19 @@ _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 # sobreviver até a tabela destino — tanto pras sessões que passam pela LLM quanto
 # pras pré-classificadas por regra. _processa (em classifica_sessoes) não as
 # recebe: ela só sabe o que a LLM devolveu, então elas voltam via merge por
-# id_sessao depois. mensagens_usuario_concatenadas/hsm_texto entram aqui pra
-# permitir validar a classificação (resumo/motivo/tema) lendo a conversa original
-# direto da tabela destino, sem precisar reconstruir a partir de prompt_enviado
-# (que é null nas sessões RESPOSTA_ATRASADA_BTN, decididas por regra sem LLM).
+# id_sessao depois. hsm_texto/conversa_completa entram aqui pra permitir validar a
+# classificação (resumo/motivo/tema) lendo a conversa original direto da tabela
+# destino, sem precisar reconstruir a partir de prompt_enviado (que é null nas
+# sessões RESPOSTA_ATRASADA_BTN, decididas por regra sem LLM). Note que
+# mensagens_usuario_concatenadas (só cidadão) NÃO está aqui — não persiste nem vai
+# pro prompt, é redundante com conversa_completa (cidadão + agente, rotulado), que a
+# substituiu como contexto pra LLM; mensagens_usuario_concatenadas continua existindo
+# só internamente em df_enriquecido, usada por _resposta_e_botao_atrasado e pelo
+# filtro tem_conversa em monta_prompts.
 _COLUNAS_METADADO_SESSAO = [
     "id_sessao", "telefone", "cpf", "nome_cidadao", "sessao_inicio_datahora",
     "sessao_fim_datahora", "jornada_nome", "id_jornada", "id_disparo_hsm", "hsm_envio_datahora",
-    "mensagens_usuario_concatenadas", "hsm_texto",
+    "hsm_texto", "conversa_completa",
 ]
 _TEMPLATE_COM_HSM = (_PROMPTS_DIR / "classificacao_hsm.txt").read_text()
 _TEMPLATE_SEM_HSM = (_PROMPTS_DIR / "classificacao_sem_hsm.txt").read_text()
@@ -219,15 +224,21 @@ def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
     df_com_hsm["tipo_prompt"] = "com_hsm"
     df_com_hsm["prompt"] = df_com_hsm.apply(
         lambda row: _render(
-            _TEMPLATE_COM_HSM, hsm_texto=row["hsm_texto"], conversa=row["mensagens_usuario_concatenadas"]
+            _TEMPLATE_COM_HSM,
+            hsm_texto=row["hsm_texto"],
+            conversa_completa=row["conversa_completa"],
         ),
         axis=1,
     )
 
     df_sem_hsm = df_enriquecido.loc[enviar_llm_sem_hsm].copy()
     df_sem_hsm["tipo_prompt"] = "sem_hsm"
-    df_sem_hsm["prompt"] = df_sem_hsm["mensagens_usuario_concatenadas"].apply(
-        lambda conversa: _render(_TEMPLATE_SEM_HSM, conversa=conversa)
+    df_sem_hsm["prompt"] = df_sem_hsm.apply(
+        lambda row: _render(
+            _TEMPLATE_SEM_HSM,
+            conversa_completa=row["conversa_completa"],
+        ),
+        axis=1,
     )
 
     df_prompts = pd.concat([df_com_hsm, df_sem_hsm], ignore_index=True)
