@@ -42,6 +42,20 @@ from pipelines.rj_crm__agentforce_classificacao_llm.utils.bigquery import get_bq
 _SECRETARIA_NAO_IDENTIFICADA = "Sem secretaria identificada"
 
 
+def _normaliza_resumo(texto: str) -> str:
+    """Baixa a caixa, remove acentos e colapsa espaços — mesma transformação de
+    clustering/modules/text_utils.py::normaliza. As regras em `taxonomia_regras` são
+    induzidas e validadas ali chamando a função sobre `normaliza(t)` (ver
+    modules/taxonomy.py::_imprime_categoria_e_regra), não sobre o texto cru — termos
+    como 'transferencia' (sem acento) só batem se o texto já estiver normalizado.
+    Sem este passo aqui, `regra["funcao"](resumo)` recebia o `resumo` cru (com acento,
+    caixa mista) e a taxa de match caía bem abaixo da medida na indução (ex.: regra
+    'Transferência escolar' medida em 18,2% da base na indução, ~1,5% em produção)."""
+    texto = str(texto).strip().lower()
+    texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"\s+", " ", texto)
+
+
 # ---------------------------------------------------------------------------
 # Sandbox — portado de clustering/modules/rules_sandbox.py, sem alteração de lógica
 # ---------------------------------------------------------------------------
@@ -195,11 +209,12 @@ def carrega_catalogo_regras(project_id: str, dataset_id: str, table_id: str, eta
 
 def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida: str, rotulo_etapa: str) -> pd.DataFrame:
     """Lógica compartilhada entre aplica_regras_tema e aplica_regras_causa: roda cada
-    regra do catálogo (já sandboxed) contra o `resumo` das sessões relevantes da
-    secretaria correspondente, e preenche `coluna_saida` com os nomes das categorias que
-    bateram (pode ser mais de uma — por isso a coluna é array). Sessão não relevante, sem
-    resumo, ou de secretaria sem regra no catálogo continua com `coluna_saida` vazio (já é
-    o default vindo de monta_dataframe_final).
+    regra do catálogo (já sandboxed) contra o `resumo` normalizado (ver
+    `_normaliza_resumo`) das sessões relevantes da secretaria correspondente, e preenche
+    `coluna_saida` com os nomes das categorias que bateram (pode ser mais de uma — por
+    isso a coluna é array). Sessão não relevante, sem resumo, ou de secretaria sem regra
+    no catálogo continua com `coluna_saida` vazio (já é o default vindo de
+    monta_dataframe_final).
 
     Regra que falha ao compilar (rejeitada pelo sandbox) ou ao rodar numa sessão específica
     é pulada e logada — nunca derruba a classificação da sessão nem do resto das regras."""
@@ -239,9 +254,10 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
         secretaria = row.get("secretaria_principal") or _SECRETARIA_NAO_IDENTIFICADA
         regras = regras_por_secretaria.get(secretaria, [])
         matches = []
+        resumo_norm = _normaliza_resumo(resumo)
         for regra in regras:
             try:
-                if regra["funcao"](resumo):
+                if regra["funcao"](resumo_norm):
                     matches.append(regra["nome_categoria"])
             except Exception as e:  # função individual não pode derrubar a sessão inteira
                 print(
