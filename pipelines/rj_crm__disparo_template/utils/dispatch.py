@@ -1283,6 +1283,62 @@ def save_csv_for_sftp(
     return csv_path, dispatch_date
 
 
+def host_key_algs_for_pinned_key(pinned_key: "asyncssh.SSHKey") -> List[str]:
+    """
+    Lista de algoritmos de host key a oferecer na negociação SSH, em ordem
+    de preferência, para uma chave já pinada.
+
+    `pinned_key.get_algorithm()` sozinho devolve só o tipo "base" da chave —
+    para RSA, sempre "ssh-rsa" (a variante assinada com SHA-1), mesmo que o
+    servidor aceite as variantes RSA-SHA2 (mais fortes). Usar isso direto em
+    `server_host_key_algs` travava a negociação em SHA-1 mesmo quando o
+    servidor oferece algo melhor (CHATA-140).
+
+    Para chaves RSA, prioriza rsa-sha2-512 e rsa-sha2-256 e só inclui
+    ssh-rsa como fallback de compatibilidade (necessário para servidores
+    legados, como o Globalscape EFT da Salesforce, que não suportam mais
+    nada). O pinning da chave (known_hosts) continua estrito de qualquer
+    forma: as três variantes assinam com a mesma chave pública fixada — só
+    muda o algoritmo de hash da assinatura, não a chave em si.
+
+    Para chaves não-RSA (ed25519, ecdsa) não há variante SHA-1/SHA-2 a
+    escolher, então o algoritmo próprio da chave é o único usado.
+    """
+    if pinned_key.get_algorithm() == "ssh-rsa":
+        return ["rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"]
+    return [pinned_key.get_algorithm()]
+
+
+# Tipos de chave SSH reconhecidos -- usado por normalize_host_key_value() pra
+# distinguir "primeiro campo é o tipo da chave" de "primeiro campo é hostname".
+_KNOWN_SSH_KEY_TYPE_PREFIXES = ("ssh-", "ecdsa-sha2-", "sk-ssh-", "sk-ecdsa-sha2-")
+
+
+def normalize_host_key_value(value: str) -> str:
+    """
+    Aceita tanto uma chave pública "crua" ("ssh-rsa AAAA...") quanto uma
+    linha completa de known_hosts/ssh-keyscan ("host ssh-rsa AAAA...",
+    opcionalmente com múltiplos hosts separados por vírgula ou porta entre
+    colchetes), e devolve sempre só "<tipo> <base64>" — o formato que
+    asyncssh.import_public_key() aceita (CHATA-140).
+
+    ssh-keyscan é a ferramenta padrão pra obter o host key de um servidor, e
+    o formato que ela produz por padrão inclui o hostname na frente da chave
+    -- exatamente o formato que import_public_key() rejeita com
+    KeyImportError. Sem essa normalização, colar a saída do ssh-keyscan
+    direto no secret (o passo mais natural numa rotação de chave) quebra o
+    disparo, mesmo seguindo a documentação à risca.
+    """
+    fields = value.strip().split()
+    if len(fields) >= 2 and not fields[0].startswith(_KNOWN_SSH_KEY_TYPE_PREFIXES):
+        # primeiro campo não é um tipo de chave conhecido -> é hostname
+        # (known_hosts/ssh-keyscan), não faz parte da chave em si
+        fields = fields[1:]
+    # mantém só tipo + base64; descarta comentário se houver (ex.: "user@host"
+    # no final de um arquivo .pub)
+    return " ".join(fields[:2])
+
+
 @task
 def send_to_sftp(
     csv_path: str,
@@ -1306,13 +1362,20 @@ def send_to_sftp(
     sob a LGPD.
 
     Usamos asyncssh em vez de paramiko porque o servidor SFTP da Salesforce
-    (Globalscape EFT) só oferece o algoritmo de host key legado "ssh-rsa"
-    (SHA-1). O Paramiko 5.x removeu esse algoritmo da lista aceita por
-    padrão e não expõe uma forma pública de reabilitá-lo (só via monkey-patch
-    de atributos privados — o que essa função fazia antes, e que também
-    desligava a verificação de assinatura por completo). O asyncssh aceita
-    "ssh-rsa" via parâmetro documentado (server_host_key_algs) e continua
-    fazendo a verificação criptográfica real da assinatura do servidor.
+    (Globalscape EFT) pode não oferecer nada além do algoritmo de host key
+    legado "ssh-rsa" (SHA-1). O Paramiko 5.x removeu esse algoritmo da lista
+    aceita por padrão e não expõe uma forma pública de reabilitá-lo (só via
+    monkey-patch de atributos privados — o que essa função fazia antes, e
+    que também desligava a verificação de assinatura por completo). O
+    asyncssh aceita "ssh-rsa" via parâmetro documentado (server_host_key_algs)
+    e continua fazendo a verificação criptográfica real da assinatura do
+    servidor.
+
+    A lista de algoritmos oferecida na negociação (ver
+    `host_key_algs_for_pinned_key`) prioriza as variantes RSA-SHA2 (mais
+    fortes) e só cai para "ssh-rsa" como fallback — pinning da chave
+    continua estrito de qualquer forma, porque as três variantes assinam
+    com a mesma chave pública fixada.
 
     Args:
         csv_path: Caminho local do CSV a ser enviado
@@ -1322,12 +1385,32 @@ def send_to_sftp(
         sftp_password: Senha SFTP
         sftp_port: Porta do servidor SFTP (padrão: 22)
         sftp_remote_path: Diretório remoto onde o arquivo será depositado
-        sftp_host_key: Chave pública do servidor, no formato "ssh-rsa AAAA..."
-            (mesmo formato de uma linha de known_hosts). Precisa ser
-            confirmada com a Salesforce por um canal separado da própria
-            conexão SSH (suporte, documentação oficial) antes de ser
+        sftp_host_key: Chave pública do servidor. Formato esperado: só o
+            tipo + a chave em base64 (ex.: "ssh-rsa AAAA..." — SEM hostname
+            ou prefixo de known_hosts na frente). Uma linha completa de
+            `ssh-keyscan`/known_hosts ("meuhost.com ssh-rsa AAAA...") também
+            é aceita — normalize_host_key_value() remove o hostname
+            automaticamente antes de importar a chave — mas o valor
+            recomendado a cadastrar no secret é só a chave, sem o hostname.
+            Precisa ser confirmada com a Salesforce por um canal separado da
+            própria conexão SSH (suporte, documentação oficial) antes de ser
             cadastrada — nunca aceitar só o que a primeira conexão apresentar.
+
+    Raises:
+        FileNotFoundError: se `csv_path` não existir ou não for um arquivo
+            regular — verificado antes de abrir qualquer conexão SFTP, pra
+            não reportar sucesso (nem gastar uma conexão) quando não há
+            nada de fato pra enviar (CHATA-140: essa checagem já existiu
+            uma vez, mas rodava DEPOIS da conexão aberta e só logava +
+            retornava silenciosamente, deixando o flow achar que o envio
+            tinha dado certo).
     """
+    if not os.path.isfile(csv_path):
+        raise FileNotFoundError(
+            f"csv_path não existe ou não é um arquivo regular: {csv_path}. "
+            "Abortando antes de abrir qualquer conexão SFTP -- nada foi enviado."
+        )
+
     if infisical_secret_path:
         sftp_host = sftp_host or getenv_or_action("sf_sftp_host")
         sftp_user = sftp_user or getenv_or_action("sf_sftp_user")
@@ -1343,7 +1426,7 @@ def send_to_sftp(
     remote_dir = sftp_remote_path.rstrip("/") if sftp_remote_path else ""
     remote_file = f"{remote_dir}/{filename}" if remote_dir else filename
 
-    pinned_key = asyncssh.import_public_key(sftp_host_key)
+    pinned_key = asyncssh.import_public_key(normalize_host_key_value(sftp_host_key))
 
     async def _upload() -> None:
         log(f"Conectando ao SFTP {sftp_host}:{sftp_port} como {sftp_user}")
@@ -1352,7 +1435,7 @@ def send_to_sftp(
             port=sftp_port,
             username=sftp_user,
             password=sftp_password,
-            server_host_key_algs=[pinned_key.get_algorithm()],
+            server_host_key_algs=host_key_algs_for_pinned_key(pinned_key),
             # known_hosts espera (host_keys, ca_keys, revoked_keys); só
             # fixamos a chave de host, sem CA nem lista de revogação.
             known_hosts=([pinned_key], [], []),
@@ -1360,10 +1443,6 @@ def send_to_sftp(
             keepalive_interval=SFTP_KEEPALIVE_SECONDS,
         ) as conn:
             log("Host key validada contra o fingerprint fixado. Conexão estabelecida com sucesso ao SFTP!")
-
-            if not os.path.exists(csv_path):
-                log(f"Arquivo não encontrado: {csv_path}")
-                return
 
             async with conn.start_sftp_client() as sftp:
                 log(f"Enviando {filename}...")
