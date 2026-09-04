@@ -13,7 +13,7 @@ from google.cloud import bigquery
 from google.cloud import storage
 from google.oauth2 import service_account
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 
 from pipelines.rj_cor__precipitacao_alertario_sftp import utils
