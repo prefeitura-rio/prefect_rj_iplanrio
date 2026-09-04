@@ -17,7 +17,7 @@ from google.cloud import storage
 
 from prefect.logging import get_logger
 
-logger = get_logger()
+logger = get_logger(__name__)
 
 
 def download_xml_files_from_gcs(
@@ -342,7 +342,7 @@ def save_pluviometric_and_meteorological_dataframes(
 
 def process_multiple_xml_files(
     xml_contents: list[str],
-) -> tuple[list[str], list[str]]:
+) -> tuple[Path, Path]:
     """Processa múltiplos XMLs e salva um arquivo de partição por timestamp.
 
     Pipeline que itera sobre cada arquivo XML, extrai registros pluviométricos
@@ -352,15 +352,21 @@ def process_multiple_xml_files(
     A função segue estes passos:
     1. Para cada XML: executa parse, transforma e salva em partição individual
     2. Coleta os caminhos de todos os arquivos gerados
-    3. Retorna listas de caminhos para dados pluviométricos e meteorológicos
+    3. Retorna caminhos dos diretórios raiz para dados pluviométricos e meteorológicos
 
     :param xml_contents: Lista com conteúdos XML como strings.
-    :returns: Tupla (lista de caminhos pluviométricos, lista de caminhos meteorológicos) como strings.
+    :returns: Tupla (Path para pluviométricos, Path para meteorológicos).
     :raises Exception: Se houver erro no parse de qualquer XML.
     """
-
-
     logger.info("Iniciando processamento de %d arquivo(s) XML", len(xml_contents))
+
+    # Inicializar paths padrão
+    pluviometric_path = Path("/tmp/pluviometric")
+    meteorological_path = Path("/tmp/meteorological")
+
+    if not xml_contents:
+        logger.warning("Lista de XMLs vazia, retornando diretórios padrão vazios")
+        return pluviometric_path, meteorological_path
 
     # Processa cada XML individualmente
     for xml_index, xml_content in enumerate(xml_contents, start=1):
@@ -397,6 +403,5 @@ def process_multiple_xml_files(
         except Exception as e:
             logger.error("Erro ao processar XML %d: %s", xml_index, str(e))
             raise
-
 
     return pluviometric_path, meteorological_path

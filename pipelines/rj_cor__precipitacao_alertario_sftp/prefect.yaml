@@ -1,5 +1,5 @@
 # register pipeline rj_cor__precipitacao_alertario_sftp
-# 04/09/2026 - 16:07
+# 04/09/2026 - 16:15
 name: rj_cor__precipitacao_alertario_sftp
 prefect-version: 3.4.3
 
