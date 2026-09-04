@@ -1,0 +1,15 @@
+[project]
+name = "rj_crm__relatorio_salesforce"
+version = "0.1.0"
+description = "Relatorio mensal de sessoes Agentforce/WhatsApp (Salesforce Data Cloud) para rj-crm-registry"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
+    "requests>=2.31.0",
+    "pandas>=2.2.3",
+    "pendulum==3.0.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
