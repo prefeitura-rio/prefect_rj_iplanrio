@@ -63,7 +63,11 @@ def sf_to_bq(
     date_columns: list[str] | None = None,
     duration_ns_columns: list[str] | None = None,
     staging_table: str | None = None,
-    chunk_size: int = 50_000,
+    chunk_size: int = 1_000,  # o servidor corta payload em ~1400-1700 linhas
+    # independente do LIMIT pedido (confirmado 04/09/2026) — 50_000 estourava
+    # esse teto e fazia extract_chunked_from_data_cloud parar cedo achando que
+    # tinha chegado na última página. Ver extract_data_cloud.py e
+    # extract_chunked.py para o histórico completo.
     api_version: str = "v59.0",
     skip_checkpoint: bool = False,
     clustering_fields: list[str] | None = None,
