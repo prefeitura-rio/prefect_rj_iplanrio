@@ -14,10 +14,10 @@ import dotenv
 import pandas as pd
 from defusedxml import ElementTree as ET
 from google.cloud import storage
-from google.oauth2 import service_account
-from prefect import get_run_logger
 
-logger = get_run_logger()
+from prefect.logging import get_logger
+
+logger = get_logger()
 
 
 def download_xml_files_from_gcs(
