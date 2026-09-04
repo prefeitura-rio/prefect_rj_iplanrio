@@ -251,7 +251,15 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
         if not resumo or (isinstance(resumo, float) and pd.isna(resumo)):
             return []
 
-        secretaria = row.get("secretaria_principal") or _SECRETARIA_NAO_IDENTIFICADA
+        # secretaria_principal NULL no BigQuery chega aqui como float('nan'), não None —
+        # e nan é truthy em Python (`nan or default` fica nan, não cai no default). Sem
+        # o pd.isna aqui, sessão sem secretaria virava secretaria=nan, não achava nada em
+        # regras_por_secretaria (indexado por string) e nunca recebia tema_nome/causa_nome
+        # (bug real observado em produção: 0/1467 sessões "sem secretaria" classificadas).
+        secretaria_bruta = row.get("secretaria_principal")
+        if pd.isna(secretaria_bruta):
+            secretaria_bruta = None
+        secretaria = secretaria_bruta or _SECRETARIA_NAO_IDENTIFICADA
         regras = regras_por_secretaria.get(secretaria, [])
         matches = []
         resumo_norm = _normaliza_resumo(resumo)
