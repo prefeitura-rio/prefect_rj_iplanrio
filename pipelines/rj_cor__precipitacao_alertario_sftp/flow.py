@@ -1,9 +1,8 @@
 """Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
 
-from prefect import flow
+from prefect import flow, get_run_logger
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect_rj_iplanrio.logging import get_logger
 from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
@@ -14,8 +13,8 @@ from tasks import (
     process_multiple_xml_files_task,
     download_xml_files_from_list_task
 )
-
-logger = get_logger(__name__)
+from prefect.logging import get_logger
+logger = get_run_logger()
 
 
 @flow(log_prints=True, name="rj-cor-precipitacao-alertario-sftp")
@@ -28,43 +27,82 @@ def rj_cor__precipitacao_alertario_sftp(
     project_id: str = "rj-iplanrio",
     max_date_bigquery: str | None = None
 ) -> None:
-    """Coleta dados de precipitação do AlertaRio via arquivos XML em GCS.
+    """Coleta e processa dados de precipitação do AlertaRio via SFTP.
 
-    Flow que processa arquivos XML depositados na landing zone GCS por
-    sistema SFTP. Extrai dados de precipitação e meteorologia, transforma
-    para formato padrão e carrega em tabelas BigQuery particionadas.
+    Flow orquestrado que coleta arquivos XML depositados via SFTP na landing zone
+    GCS, extrai dados de precipitação pluviométrica e meteorológica, aplica
+    transformações de limpeza e carrega os dados em tabelas BigQuery particionadas
+    por data (ano/mês/dia).
 
-    **Processo:**
-    1. Renomeia execução do flow
-    2. Injeta credenciais do banco de dados
-    3. Lista arquivos XML no bucket da landing zone
-    4. Para cada arquivo:
-        - Faz download do XML do GCS
-        - Faz parse e extrai dados pluviométricos e meteorológicos
-        - Transforma dados para formato padrão
-        - Salva dados como csv particionado
-        - Faz upload para BigQuery em tabelas separadas
+    **Fluxo de Execução:**
+
+    1. **Setup:** Renomeia a execução e injeta credenciais do banco de dados
+    2. **Descoberta:** Obtém a data máxima já processada no BigQuery (marca d'água)
+    3. **Filtragem:** Lista arquivos XML no bucket GCS com timestamp > marca d'água
+    4. **Download:** Baixa o conteúdo de todos os XMLs novos do GCS
+    5. **Processamento:** Para cada XML:
+        - Parse XML e extração de registros pluviométricos e meteorológicos
+        - Transformação: limpeza, deduplicação e seleção de colunas
+        - Particionamento: agrupa dados por ano/mês/dia
+        - Serialização: salva cada partição como arquivo CSV
+    6. **Ingestão:** Upload das partições para tabelas BigQuery respectivas
+
+    **Dados Extraídos:**
+
+    - **Pluviométricos:** Acumulados de chuva em intervalos (5min, 10min, 15min, 30min,
+      1h, 2h, 3h, 4h, 6h, 12h, 24h, 96h e acumulado mensal) por estação
+    - **Meteorológicos:** Temperatura, umidade, sensação térmica, pressão, ponto de
+      orvalho e velocidade/direção do vento por estação
 
     **Parâmetros:**
 
-    :param dataset_id_pluviometric: ID do dataset BigQuery para dados
-        pluviométricos (padrão: clima_pluviometro).
-    :param table_id_pluviometric: ID da tabela pluviométrica
-        (padrão: taxa_precipitacao_alertario_5min).
-    :param dataset_id_meteorological: ID do dataset BigQuery para dados
-        meteorológicos (padrão: clima_estacao_meteorologica).
-    :param table_id_meteorological: ID da tabela meteorológica
-        (padrão: meteorologia_alertario).
-    :param dump_mode: Modo de salvamento no BigQuery
-        (padrão: "append", alternativa: "overwrite").
-    :param project_id: ID do projeto Google Cloud
-        (padrão: rj-iplanrio).
-    :param max_date_bigquery: Data máxima para filtro de arquivos no formato string.
-        Se None, consulta automaticamente a data máxima do BigQuery
-        (padrão: None).
+    :param dataset_id_pluviometric:
+        ID do dataset BigQuery para armazenar dados pluviométricos.
+        Padrão: 'clima_pluviometro'
+    :param table_id_pluviometric:
+        ID da tabela pluviométrica (será particionada por data_medicao).
+        Padrão: 'taxa_precipitacao_alertario_5min'
+    :param dataset_id_meteorological:
+        ID do dataset BigQuery para armazenar dados meteorológicos.
+        Padrão: 'clima_estacao_meteorologica'
+    :param table_id_meteorological:
+        ID da tabela meteorológica (será particionada por data_medicao).
+        Padrão: 'meteorologia_alertario'
+    :param dump_mode:
+        Modo de inserção no BigQuery ('append' adiciona dados, 'overwrite' substitui).
+        Padrão: 'append'
+    :param project_id:
+        ID do projeto Google Cloud onde estão os datasets.
+        Padrão: 'rj-iplanrio'
+    :param max_date_bigquery:
+        Data máxima em formato ISO (YYYY-MM-DD HH:MM:SS) para filtrar arquivos.
+        Se None, consulta automaticamente a data máxima na tabela BigQuery.
+        Padrão: None
 
-    **Returns:**
-        None
+    :return: None
+
+    **Exemplo de Uso:**
+
+    .. code-block:: python
+
+        from pipelines.rj_cor__precipitacao_alertario_sftp.flow import (
+            rj_cor__precipitacao_alertario_sftp
+        )
+
+        # Execução com parâmetros padrão (recomendado para produção)
+        rj_cor__precipitacao_alertario_sftp()
+
+        # Execução com data inicial específica (útil para reprocessamento)
+        rj_cor__precipitacao_alertario_sftp(
+            max_date_bigquery="2026-07-01 00:00:00"
+        )
+
+        # Execução em modo sobrescrita (cuidado: substitui dados existentes)
+        rj_cor__precipitacao_alertario_sftp(
+            dump_mode="overwrite",
+            max_date_bigquery="2026-08-01 00:00:00"
+        )
+
     """
     # Setup
     rename_current_flow_run_task(new_name="precipitacao-alertario-sftp")

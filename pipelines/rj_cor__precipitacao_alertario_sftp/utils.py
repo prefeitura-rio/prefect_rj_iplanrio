@@ -9,15 +9,15 @@ em estrutura ano/mês/data no disco local.
 import os
 from pathlib import Path
 from typing import Any
-
+from datetime import datetime
 import dotenv
 import pandas as pd
 from defusedxml import ElementTree as ET
 from google.cloud import storage
 from google.oauth2 import service_account
-from prefect_rj_iplanrio.logging import get_logger
+from prefect import get_run_logger
 
-logger = get_logger(__name__)
+logger = get_run_logger()
 
 
 def download_xml_files_from_gcs(
@@ -240,6 +240,7 @@ def transform_meteorological_dataframe(dfr: pd.DataFrame) -> pd.DataFrame:
     ]
 
     dfr = dfr.drop_duplicates(subset=["id_estacao", "data_medicao"], keep="first")
+    dfr.drop(dfr[dfr['data_medicao'] > datetime.now().strftime('%Y-%m-%d %H:%M:%S')].index, inplace=True)
     dfr = dfr[keep_cols]
 
     logger.info("Dados meteorológicos transformados: %d registros", len(dfr))
