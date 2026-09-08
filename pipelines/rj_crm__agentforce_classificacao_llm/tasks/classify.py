@@ -269,6 +269,9 @@ def monta_prompts(df_enriquecido: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFr
 _RELACAO_HSM_VALIDAS = ["DENTRO_DO_ESCOPO", "FORA_DO_ESCOPO", "MISTO"]
 _NATUREZA_VALIDAS = ["Dúvida", "Problema", "Reclamação", "Elogio", "Solicitação", "Informação"]
 _SECRETARIAS_VALIDAS = ["SMTR", "Comlurb", "RioLuz", "Seconserva", "SMS", "SMAS", "SME"]
+# telefone_confirmacao_flag: item 8 do prompt com_hsm, ver docstring de monta_dataframe_final
+# pro caso RESPOSTA_ATRASADA_BTN e pra como telefone_confirmacao_datahora é preenchida.
+_TELEFONE_CONFIRMACAO_VALIDAS = ["PERTENCE", "INDEFINIDO", "NAO_PERTENCE"]
 
 
 def _normaliza_rotulo(texto) -> str:
@@ -394,12 +397,23 @@ def classifica_sessoes(
                 if tipo_prompt == "sem_hsm"
                 else _valida_rotulo_unico(parsed.get("relacao_hsm"), _RELACAO_HSM_VALIDAS)
             )
+            # telefone_confirmacao_flag (item 8 do prompt) só existe no com_hsm — sem HSM
+            # não há "assunto guiado pela HSM" pra avaliar se o cidadão confirmou o
+            # número (mesmo raciocínio que exclui SEM_HSM_ASSOCIADO no reprocessamento
+            # retroativo, ver quick/telefone_confirmacao_retroativo). Fica null no sem_hsm,
+            # não um valor tipo "não avaliado" — null já significa isso em toda a tabela.
+            telefone_confirmacao_flag = (
+                _valida_rotulo_unico(parsed.get("telefone_confirmacao_flag"), _TELEFONE_CONFIRMACAO_VALIDAS)
+                if tipo_prompt == "com_hsm"
+                else None
+            )
             # usageMetadata vem de graça na mesma resposta — sem chamada extra à API
             usage = response.get("usageMetadata", {})
             return {
                 "id_sessao": id_sessao,
                 "tipo_prompt": tipo_prompt,
                 "relacao_hsm": relacao_hsm,
+                "telefone_confirmacao_flag": telefone_confirmacao_flag,
                 "conteudo_relevante": parsed.get("conteudo_relevante"),
                 "resumo": parsed.get("resumo"),
                 "secretarias_relacionadas": _valida_multi_rotulo(
@@ -475,6 +489,11 @@ def monta_dataframe_final(
         df_pre_classificadas = df_pre_classificadas.copy()
         df_pre_classificadas["relacao_hsm"] = classificacao_resposta_atrasada
         df_pre_classificadas["justificativa"] = justificativa_resposta_atrasada
+        # RESPOSTA_ATRASADA_BTN: clicar num botão do HSM fora da janela de 24h já é
+        # engajamento com o assunto — mesma regra do reprocessamento retroativo (ver
+        # quick/telefone_confirmacao_retroativo/reprocessa_telefone_confirmacao.py),
+        # sem gastar chamada de LLM pra perguntar de novo.
+        df_pre_classificadas["telefone_confirmacao_flag"] = "PERTENCE"
         df_pre_classificadas["conteudo_relevante"] = None
         df_pre_classificadas["resumo"] = None
         df_pre_classificadas["secretarias_relacionadas"] = None
@@ -503,6 +522,18 @@ def monta_dataframe_final(
     df_final["classificado_em"] = agora
     df_final["data_particao"] = agora.date()
     df_final["prompt_versao"] = prompt_versao
+
+    # telefone_confirmacao_datahora: datahora da sessão (sessao_fim_datahora) que
+    # originou telefone_confirmacao_flag — não a datahora em que a classificação
+    # rodou (essa já é classificado_em). Fim, não início: fim_datahora preenchido é
+    # o próprio critério que torna a sessão "pronta pra classificar" na extração
+    # (ver SOURCE_TABLE em constants.py) — garantido não-nulo pra toda sessão que
+    # chega aqui, o que início não tem documentado. Fica null junto com a flag
+    # (sem_hsm), nunca sozinha. sessao_fim_datahora já está em df_final nos 2 casos
+    # (LLM e pré-classificada) — ver _COLUNAS_METADADO_SESSAO.
+    df_final["telefone_confirmacao_datahora"] = df_final["sessao_fim_datahora"].where(
+        df_final["telefone_confirmacao_flag"].notna()
+    )
 
     # Etapas 2/3 (tema, causa sistêmica) — reservadas, array vazio: esta pipeline só
     # faz a etapa 1. Quando a pipeline de tema/motivo existir, ela faz MERGE nesta

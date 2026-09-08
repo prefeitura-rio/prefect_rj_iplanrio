@@ -110,4 +110,10 @@ class ClassificacaoConstants(Enum):
     # avisava/justificava algo (ex.: "vou remarcar online", sem pedir nada à prefeitura)
     # virava Solicitação por engano. ~1713 sessões classificadas em v1 têm Solicitação no
     # sentimento e são candidatas a reclassificação (ver plano combinado com o time).
-    PROMPT_VERSAO = "v2"
+    # v3 (2026-09-08): item 8 novo no prompt com_hsm — telefone_confirmacao_flag
+    # (PERTENCE/INDEFINIDO/NAO_PERTENCE), se a resposta do cidadão indica que o número
+    # que recebeu o HSM é dele. Prompt validado antes num reprocessamento retroativo
+    # avulso (ver quick/telefone_confirmacao_retroativo, repo queries-rj-crm-registry) —
+    # essa pipeline só passa a preencher telefone_confirmacao_flag/_datahora pra sessão
+    # NOVA a partir daqui; o histórico já preenchido veio de lá, não desta pipeline.
+    PROMPT_VERSAO = "v3"
