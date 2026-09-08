@@ -94,6 +94,18 @@ SCHEMA: list[bigquery.SchemaField] = [
     bigquery.SchemaField("tema_nome", _STRING, mode="REPEATED"),
     bigquery.SchemaField("causa_nome", _STRING, mode="REPEATED"),
     bigquery.SchemaField("data_particao", _DATE, mode="REQUIRED"),
+    # Se a resposta do cidadão à HSM indica que o número que a recebeu é dele —
+    # PERTENCE | INDEFINIDO | NAO_PERTENCE, item 8 do prompt com_hsm (ver
+    # tasks/classify.py::_TELEFONE_CONFIRMACAO_VALIDAS e monta_dataframe_final).
+    # Null nas sessões sem_hsm (sem HSM não há assunto pra avaliar reação). Ordem
+    # física real: colunas adicionadas por ALTER TABLE depois que a tabela já
+    # existia em produção (ver quick/telefone_confirmacao_retroativo no repo
+    # queries-rj-crm-registry, que fez o backfill do histórico e fixou este
+    # contrato antes da pipeline diária passar a perguntar isso).
+    bigquery.SchemaField("telefone_confirmacao_flag", _STRING),
+    # Datahora da sessão (sessao_fim_datahora) que originou telefone_confirmacao_flag
+    # — não é classificado_em. Null junto com a flag, nunca sozinha.
+    bigquery.SchemaField("telefone_confirmacao_datahora", _TIMESTAMP),
 ]
 
 _COLUNAS = [f.name for f in SCHEMA]

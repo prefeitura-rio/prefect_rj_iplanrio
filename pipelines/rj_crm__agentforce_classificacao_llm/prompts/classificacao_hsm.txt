@@ -36,6 +36,18 @@ Sua tarefa é:
    - "já é a terceira vez que ligo e ninguém resolve, preciso que agendem logo" → Reclamação, Solicitação
 6. Se o CIDADÃO disser explicitamente o motivo/causa do que está sendo relatado, extraia em "motivo" a causa em 1 frase curta, sem repetir o assunto (que já está no resumo) — independente de qual(is) rótulo(s) a "natureza" tiver. Não infira — sem motivo explícito, "motivo" é null. Ex.: se o cidadão disser que não conseguiu agendar porque o site caiu, "motivo" seria "site fora do ar impediu o agendamento".
 7. Justificar em 1 frase o raciocínio das classificações acima como um todo (relação com o HSM, secretarias, natureza e motivo), com base no que o cidadão disse.
+8. Classificar em "telefone_confirmacao_flag" se o número que recebeu o HSM pertence ao cidadão que respondeu:
+   - "PERTENCE": o cidadão interage com o mesmo assunto do HSM — confirma, dá continuidade, ou faz qualquer pergunta/comentário sobre esse assunto.
+     Ex: HSM lembra agendamento no CRAS; cidadão responde "que horas mesmo é o atendimento?" → PERTENCE
+   - "INDEFINIDO": responde, mas sem se referir ao assunto do HSM — muda de assunto sem negar ser ele, resposta automática/comercial de terceiro (bot de empresa, divulgação de produto), resposta genérica, vazia ou incompreensível.
+     Ex: HSM avisa sobre Bolsa Família; cidadão responde "vocês têm informação sobre poda de árvore?" → INDEFINIDO
+   - "NAO_PERTENCE": nega explicitamente ser a pessoa certa/dona do número, ou terceiro informa que a pessoa não usa mais esse número. Também conta quando o cidadão:
+     (a) informa espontaneamente um nome e sobrenome claramente diferentes do HSM (não uma variação/apelido/erro de grafia do mesmo nome);
+     (b) sugere que o número/mensagem foi enviado(a) errado ou por engano — mesmo em tom de suposição ("deve ter colocado telefone errado", "acho que foi engano", "deve ter enviado errado").
+     Negar ter feito a AÇÃO específica do HSM ("não pedi nada", "não agendei isso") não conta sozinho — só nega a ação, não a identidade.
+     Ex: HSM avisa sobre Bolsa Família; cidadão responde "esse número era da minha mãe, ela faleceu" → NAO_PERTENCE
+     Ex: HSM diz "Oi, Luiz Rocha"; cidadão responde "Desculpa, meu nome é Luiz Carlos Egito Costa" → NAO_PERTENCE
+     Ex: HSM sobre débito de veículo; cidadão responde "Vc deve ter colocado telefone errado" → NAO_PERTENCE
 
 Secretarias:
 SMTR – Transportes: ônibus, táxi, van, transporte escolar, mobilidade urbana.
@@ -47,7 +59,7 @@ SMAS – Assistência social: CRAS, CadÚnico, benefícios, vulnerabilidade soci
 SME – Educação: creches e escolas municipais, ensino fundamental.
 
 Responda APENAS com um JSON válido, sem texto antes ou depois, no formato exato:
-{"relacao_hsm": "DENTRO_DO_ESCOPO" | "FORA_DO_ESCOPO" | "MISTO", "conteudo_relevante": true | false, "resumo": "resumo da conversa em 1 frase curta" | null, "secretarias_relacionadas": "uma ou mais de SMTR/Comlurb/RioLuz/Seconserva/SMS/SMAS/SME separadas por vírgula (ex.: \"SMAS, SMS\")" | null, "secretaria_principal": "SMTR" | "Comlurb" | "RioLuz" | "Seconserva" | "SMS" | "SMAS" | "SME" | null, "natureza": "um ou mais de Dúvida/Problema/Reclamação/Elogio/Solicitação/Informação separados por vírgula (ex.: \"Dúvida, Problema\")" | null, "motivo": "causa explícita, 1 frase curta" | null, "justificativa": "explicação em 1 frase curta"}
+{"relacao_hsm": "DENTRO_DO_ESCOPO" | "FORA_DO_ESCOPO" | "MISTO", "conteudo_relevante": true | false, "resumo": "resumo da conversa em 1 frase curta" | null, "secretarias_relacionadas": "uma ou mais de SMTR/Comlurb/RioLuz/Seconserva/SMS/SMAS/SME separadas por vírgula (ex.: \"SMAS, SMS\")" | null, "secretaria_principal": "SMTR" | "Comlurb" | "RioLuz" | "Seconserva" | "SMS" | "SMAS" | "SME" | null, "natureza": "um ou mais de Dúvida/Problema/Reclamação/Elogio/Solicitação/Informação separados por vírgula (ex.: \"Dúvida, Problema\")" | null, "motivo": "causa explícita, 1 frase curta" | null, "justificativa": "explicação em 1 frase curta", "telefone_confirmacao_flag": "PERTENCE" | "INDEFINIDO" | "NAO_PERTENCE"}
 
 --- HSM ENVIADO ---
 <<HSM_TEXTO>>
