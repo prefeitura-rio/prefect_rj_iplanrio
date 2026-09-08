@@ -2,31 +2,24 @@
 """
 Template genérico sf_to_bq — "receita de bolo" da pipeline Agentforce.
 
-Encapsula o ciclo completo:
-  1. Ler watermark
-  2. Extrair (Bulk API ou Data Cloud)
-  3. Transformar
-  4. Carregar no BigQuery
-  5. Validar contagem
-  6. Escrever watermark
+Extrai por janela de tempo com sobreposição intencional (ver tasks/janela.py:
+janela_hora()/janela_dia()), não por watermark forward-only — um watermark
+que só avança não se recupera sozinho de um tick perdido (schedule pausado,
+erro transitório, pico de volume); foi a causa raiz de um buraco de quase
+100% num dia inteiro, achado nesta investigação. A tabela de controle
+(watermarks/checkpoints) foi removida do pipeline em 2026-09-08 — não existe
+mais estado a ler no início nem a escrever no fim.
 
-Qualquer nova fonte é adicionada apenas em settings.yaml + um flow de 5 linhas
-que chama sf_to_bq com os parâmetros da tabela desejada.
+Ciclo: extrair (Data Cloud, Data Cloud chunked ou CRM REST) → transformar →
+carregar no BigQuery (staging + MERGE, sempre) → validar contagem.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 import pandas as pd
 
-from pipelines.rj_crm__salesforce_agentforce_api.tasks.checkpoint import (
-    read_watermark,
-    write_watermark,
-)
-from pipelines.rj_crm__salesforce_agentforce_api.tasks.extract_bulk_api import (
-    extract_via_bulk_api,
-)
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.extract_chunked import (
     extract_chunked_from_data_cloud,
 )
@@ -38,7 +31,6 @@ from pipelines.rj_crm__salesforce_agentforce_api.tasks.extract_data_cloud import
 )
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.load_bigquery import (
     load_chunk_to_staging,
-    load_to_bigquery,
     merge_staging_to_target,
 )
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.transform import transform_dataframe
@@ -49,27 +41,22 @@ def sf_to_bq(
     source: str,
     query_template: str,
     target_table: str,
+    staging_table: str,
     project_id: str,
     dataset_id: str,
-    control_dataset: str,
-    bulk_session: dict | None = None,
+    janela: tuple[str, str],
+    partition_date: date,
     dc_session: dict | None = None,
     crm_session: dict | None = None,
-    dc_conn=None,  # DEPRECATED: use dc_session
-    write_mode: str = "append",
     primary_key: str = "id",
-    partition_date: date | None = None,
     is_data_cloud: bool = False,
     date_columns: list[str] | None = None,
     duration_ns_columns: list[str] | None = None,
-    staging_table: str | None = None,
     chunk_size: int = 1_000,  # o servidor corta payload em ~1400-1700 linhas
     # independente do LIMIT pedido (confirmado 04/09/2026) — 50_000 estourava
     # esse teto e fazia extract_chunked_from_data_cloud parar cedo achando que
     # tinha chegado na última página. Ver extract_data_cloud.py e
     # extract_chunked.py para o histórico completo.
-    api_version: str = "v59.0",
-    skip_checkpoint: bool = False,
     clustering_fields: list[str] | None = None,
     output_value_text_action_step_only: bool = False,
 ) -> int:
@@ -77,93 +64,44 @@ def sf_to_bq(
     Executa o ciclo completo extract → transform → load para uma tabela.
 
     Args:
-        source            : 'bulk_api', 'data_cloud' ou 'data_cloud_chunked'.
-        query_template    : Query com placeholder {watermark} para substituição.
+        source            : 'data_cloud', 'data_cloud_chunked' ou 'crm_rest'.
+        query_template    : Query com {data_inicio}/{data_fim} — ambos os limites,
+                            vindos de `janela`.
         target_table      : Tabela destino no BigQuery.
+        staging_table     : Tabela staging (schema pré-cadastrado em ensure_tables.py) —
+                            sempre obrigatória, todo carregamento passa por staging+MERGE.
         project_id        : ID do projeto GCP.
         dataset_id        : Dataset de destino no BQ.
-        control_dataset   : Dataset de controle (watermarks).
-        bulk_session      : dict com 'access_token' e 'instance_url' (para bulk_api).
+        janela            : (data_inicio, data_fim) já formatados — vem de
+                            janela_hora()/janela_dia() (tasks/janela.py).
+        partition_date    : Data de partição — normalmente o 3º elemento do mesmo
+                            retorno de janela_hora()/janela_dia().
         dc_session        : dict com 'access_token', 'instance_url', 'dataspace'
-                            (retornado por get_data_cloud_session — para data_cloud).
-        dc_conn           : DEPRECATED. Ignorado. Use dc_session.
-        write_mode        : 'append', 'replace' ou 'merge'.
-        primary_key       : Campo de deduplicação (para merge).
-        partition_date    : Data de partição. Padrão: hoje.
+                            (retornado por get_data_cloud_session — para data_cloud
+                            e data_cloud_chunked).
+        crm_session       : dict com 'access_token' e 'instance_url' (para crm_rest —
+                            mesma credencial de dc_session, nome próprio por clareza).
+        primary_key       : Campo de deduplicação do MERGE.
         is_data_cloud     : Se True, remove prefixo ssot__ dos campos.
         date_columns      : Colunas para converter para datetime UTC (pós-normalização).
         duration_ns_columns: Colunas em ns para converter para ms.
-        staging_table     : Tabela staging (necessária para data_cloud_chunked + merge).
-        chunk_size        : Tamanho do chunk para extração paginada.
-        api_version       : Versão da Salesforce API.
-        skip_checkpoint   : Se True, não lê/escreve watermark (útil para backfill).
+        chunk_size        : Tamanho do chunk para extração paginada (data_cloud_chunked).
         clustering_fields : Campos de clustering da tabela destino no BQ (ex: ['id']).
                             Deve corresponder ao clustering definido na tabela — omitir
                             em tabelas sem clustering causaria erro 400 do BigQuery.
+        output_value_text_action_step_only: Zera output_value_text fora de ACTION_STEP
+                            (só ai_agent_interaction_step usa isso).
 
     Returns:
-        Total de linhas carregadas.
+        Total de linhas afetadas pelo MERGE.
     """
-    # Retrocompatibilidade: dc_conn era a interface antiga (DB-API cursor)
-    if dc_conn is not None and dc_session is None:
-        raise ValueError(
-            "[TEMPLATE] dc_conn está depreciado. Use dc_session (dict retornado por "
-            "get_data_cloud_session) no lugar."
-        )
-    if partition_date is None:
-        partition_date = date.today()
-
+    data_inicio, data_fim = janela
     partition_str = str(partition_date)
+    query = query_template.format(data_inicio=data_inicio, data_fim=data_fim)
+    print(f"[TEMPLATE] '{target_table}': janela=[{data_inicio}, {data_fim})")
 
-    # --- 1. Watermark ---
-    if skip_checkpoint:
-        watermark = f"{partition_date}T00:00:00Z"
-        print(f"[TEMPLATE] '{target_table}': skip_checkpoint=True, watermark={watermark}")
-    else:
-        watermark = read_watermark(
-            table_name=target_table,
-            project_id=project_id,
-            control_dataset=control_dataset,
-        )
-
-    # --- 2. Substituir watermark na query ---
-    query = query_template.format(watermark=watermark)
-
-    # --- 3. Extração ---
-    total_rows = 0
-
-    if source == "bulk_api":
-        assert bulk_session, "bulk_session é obrigatório para source='bulk_api'"
-        df = extract_via_bulk_api(
-            bulk_session=bulk_session,
-            soql=query,
-            api_version=api_version,
-        )
-        if df.empty:
-            print(f"[TEMPLATE] '{target_table}': sem dados — pulando carga.")
-            return 0
-
-        df = transform_dataframe(
-            df=df,
-            table_name=target_table,
-            is_data_cloud=False,
-            date_columns=date_columns,
-            duration_ns_columns=duration_ns_columns,
-            partition_date=partition_date,
-            output_value_text_action_step_only=output_value_text_action_step_only,
-        )
-
-        total_rows = load_to_bigquery(
-            df=df,
-            project_id=project_id,
-            dataset_id=dataset_id,
-            table_id=target_table,
-            write_mode=write_mode,
-            partition_field="data_particao",
-            clustering_fields=clustering_fields,
-        )
-
-    elif source == "data_cloud":
+    # --- Extração ---
+    if source == "data_cloud":
         assert dc_session, "dc_session é obrigatório para source='data_cloud'"
         df = extract_from_data_cloud(
             dc_session=dc_session,
@@ -183,20 +121,24 @@ def sf_to_bq(
             partition_date=partition_date,
             output_value_text_action_step_only=output_value_text_action_step_only,
         )
-
-        total_rows = load_to_bigquery(
-            df=df,
+        staged_rows = load_chunk_to_staging(
+            df_chunk=df,
             project_id=project_id,
             dataset_id=dataset_id,
-            table_id=target_table,
-            write_mode=write_mode,
+            staging_table_id=staging_table,
+            chunk_num=1,
+        )
+        total_rows = 0 if staged_rows == 0 else merge_staging_to_target(
+            project_id=project_id,
+            dataset_id=dataset_id,
+            staging_table_id=staging_table,
+            target_table_id=target_table,
+            primary_key=primary_key,
             partition_field="data_particao",
-            clustering_fields=clustering_fields,
         )
 
     elif source == "data_cloud_chunked":
         assert dc_session, "dc_session é obrigatório para source='data_cloud_chunked'"
-        assert staging_table, "staging_table é obrigatório para source='data_cloud_chunked'"
 
         chunks = extract_chunked_from_data_cloud(
             dc_session=dc_session,
@@ -218,17 +160,17 @@ def sf_to_bq(
                 duration_ns_columns=duration_ns_columns,
                 partition_date=partition_date,
             )
-            rows = load_chunk_to_staging(
+            load_chunk_to_staging(
                 df_chunk=df_chunk,
                 project_id=project_id,
                 dataset_id=dataset_id,
                 staging_table_id=staging_table,
                 chunk_num=i,
             )
-            total_rows += rows
 
-        # MERGE staging → target
-        merged_rows = merge_staging_to_target(
+        # linhas afetadas pelo MERGE (deduplicadas), não o total bruto da
+        # staging (que pode ter duplicata entre chunks)
+        total_rows = merge_staging_to_target(
             project_id=project_id,
             dataset_id=dataset_id,
             staging_table_id=staging_table,
@@ -236,9 +178,6 @@ def sf_to_bq(
             primary_key=primary_key,
             partition_field="data_particao",
         )
-        # Para validação, usar linhas afetadas pelo MERGE (deduplicadas),
-        # não o total bruto da staging que pode conter duplicatas.
-        total_rows = merged_rows
 
     elif source == "crm_rest":
         assert crm_session, "crm_session é obrigatório para source='crm_rest'"
@@ -259,75 +198,33 @@ def sf_to_bq(
             duration_ns_columns=duration_ns_columns,
             partition_date=partition_date,
         )
-
-        if write_mode == "merge":
-            # write_mode='replace' apaga a partição do dia inteiro a cada execução —
-            # seguro 1x/dia, mas destrutivo num schedule mais frequente (cada run
-            # apaga o que runs anteriores do mesmo dia já carregaram). merge evita
-            # isso: staging (append) + MERGE por primary_key, mesmo padrão da Fase 3
-            # (data_cloud_chunked), só que num chunk só (df inteiro de uma vez).
-            assert staging_table, "staging_table é obrigatório para write_mode='merge'"
-            staged_rows = load_chunk_to_staging(
-                df_chunk=df,
-                project_id=project_id,
-                dataset_id=dataset_id,
-                staging_table_id=staging_table,
-                chunk_num=1,
-            )
-            total_rows = 0 if staged_rows == 0 else merge_staging_to_target(
-                project_id=project_id,
-                dataset_id=dataset_id,
-                staging_table_id=staging_table,
-                target_table_id=target_table,
-                primary_key=primary_key,
-                partition_field="data_particao",
-            )
-        else:
-            total_rows = load_to_bigquery(
-                df=df,
-                project_id=project_id,
-                dataset_id=dataset_id,
-                table_id=target_table,
-                write_mode=write_mode,
-                partition_field="data_particao",
-                clustering_fields=clustering_fields,
-            )
-
-    else:
-        raise ValueError(f"[TEMPLATE] source inválido: '{source}'. Use 'bulk_api', 'data_cloud', 'data_cloud_chunked' ou 'crm_rest'.")
-
-    # --- 4. Validar ---
-    # Pulado em modo backfill (skip_checkpoint=True) pois a tabela pode ter dados
-    # de execuções anteriores na mesma partição, tornando a comparação inválida.
-    if not skip_checkpoint:
-        print(
-            f"[TEMPLATE][DIAG] chamando validate_row_count: "
-            f"table={target_table}, source={total_rows}, write_mode='{write_mode}'"
-        )
-        validate_row_count(
-            source_count=total_rows,
+        staged_rows = load_chunk_to_staging(
+            df_chunk=df,
             project_id=project_id,
             dataset_id=dataset_id,
-            table_id=target_table,
-            partition_date=partition_str,
-            write_mode=write_mode,
+            staging_table_id=staging_table,
+            chunk_num=1,
+        )
+        total_rows = 0 if staged_rows == 0 else merge_staging_to_target(
+            project_id=project_id,
+            dataset_id=dataset_id,
+            staging_table_id=staging_table,
+            target_table_id=target_table,
+            primary_key=primary_key,
+            partition_field="data_particao",
         )
 
-    # --- 5. Escrever watermark ---
-    if not skip_checkpoint and total_rows > 0:
-        # Usar o timestamp atual limitado ao fim da partição para não avançar
-        # o checkpoint para o futuro nem criar janelas perdidas entre execuções.
-        partition_end = datetime(
-            partition_date.year, partition_date.month, partition_date.day,
-            23, 59, 59, tzinfo=timezone.utc,
-        )
-        now_utc = datetime.now(tz=timezone.utc)
-        new_watermark = min(now_utc, partition_end).strftime("%Y-%m-%dT%H:%M:%SZ")
-        write_watermark(
-            table_name=target_table,
-            watermark=new_watermark,
-            project_id=project_id,
-            control_dataset=control_dataset,
-        )
+    else:
+        raise ValueError(f"[TEMPLATE] source inválido: '{source}'. Use 'data_cloud', 'data_cloud_chunked' ou 'crm_rest'.")
+
+    # --- Validar ---
+    validate_row_count(
+        source_count=total_rows,
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_id=target_table,
+        partition_date=partition_str,
+        write_mode="merge",
+    )
 
     return total_rows
