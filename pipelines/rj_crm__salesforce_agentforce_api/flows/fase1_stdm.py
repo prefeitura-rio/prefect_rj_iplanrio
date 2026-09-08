@@ -174,7 +174,6 @@ _CLUSTERING = {
 def fase1_stdm(
     project_id: str | None = None,
     dataset_id: str | None = None,
-    control_dataset: str | None = None,
     partition_date: date | None = None,
     modo: str = "hora",
     environment: str = "prod",
@@ -187,9 +186,6 @@ def fase1_stdm(
     Args:
         project_id      : ID do projeto GCP. Padrão: constante.
         dataset_id      : Dataset BQ de destino. Padrão: constante.
-        control_dataset : Dataset de controle. Não usado em modo janela (mantido
-                          na assinatura por compatibilidade — sf_to_bq em modo
-                          janela nem toca no checkpoint).
         partition_date  : Só relevante em modo='dia' — qual dia reconciliar.
                           Padrão: ontem (o dia que acabou de fechar).
         modo            : 'hora' (padrão, janela rolante de 1h — schedule de
@@ -202,7 +198,6 @@ def fase1_stdm(
     """
     project_id = project_id or AgentforceConstants.BQ_PROJECT_ID.value
     dataset_id = dataset_id or AgentforceConstants.DATASET_ID.value
-    control_dataset = control_dataset or AgentforceConstants.CONTROL_DATASET.value
 
     inject_bd_credentials_task(environment=environment)
 
@@ -224,12 +219,10 @@ def fase1_stdm(
         bq_args = dict(
             project_id=project_id,
             dataset_id=dataset_id,
-            control_dataset=control_dataset,
             dc_session=dc_session,
             source="data_cloud",
             is_data_cloud=True,
             date_columns=_DATE_COLS,
-            write_mode="merge",
             primary_key="id",
             partition_date=partition_date_efetivo,
             janela=(data_inicio, data_fim),

@@ -121,7 +121,6 @@ _F3_QUERY = """
 def agentforce_full_daily(
     project_id: str | None = None,
     dataset_id: str | None = None,
-    control_dataset: str | None = None,
     partition_date: date | None = None,
     modo: str = "hora",
     run_phases: list[int] | None = None,
@@ -133,8 +132,6 @@ def agentforce_full_daily(
     Args:
         project_id      : ID do projeto GCP.
         dataset_id      : Dataset BQ de destino.
-        control_dataset : Dataset de controle. Não usado em modo janela (F1/F2a/F3
-                          não tocam mais no checkpoint) — mantido por compatibilidade.
         partition_date  : Só relevante em modo='dia' — qual dia reconciliar.
                           Padrão: ontem.
         modo            : 'hora' (padrão, janela rolante de 1h — schedule de
@@ -149,7 +146,6 @@ def agentforce_full_daily(
     """
     project_id = project_id or AgentforceConstants.BQ_PROJECT_ID.value
     dataset_id = dataset_id or AgentforceConstants.DATASET_ID.value
-    control_dataset = control_dataset or AgentforceConstants.CONTROL_DATASET.value
     run_phases = run_phases or [1, 2, 3, 4]
 
     rename_current_flow_run_task(new_name="agentforce-full-daily")
@@ -172,9 +168,7 @@ def agentforce_full_daily(
     bq_base = dict(
         project_id=project_id,
         dataset_id=dataset_id,
-        control_dataset=control_dataset,
         partition_date=partition_date_efetivo,
-        write_mode="merge",
         janela=(data_inicio, data_fim),
     )
 
@@ -198,7 +192,6 @@ def agentforce_full_daily(
             f1_rows = fase1_stdm(
                 project_id=project_id,
                 dataset_id=dataset_id,
-                control_dataset=control_dataset,
                 partition_date=partition_date,
                 modo=modo,
                 environment=environment,

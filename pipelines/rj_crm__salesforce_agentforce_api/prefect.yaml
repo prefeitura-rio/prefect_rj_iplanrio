@@ -60,7 +60,6 @@ deployments:
         image_pull_policy: Always
     parameters:
       dataset_id: brutos_salesforce_staging
-      control_dataset: agentforce_control_staging
       environment: staging
     schedules:
       # Cadência de 15 em 15min foi um teste (2026-08-20) que ficou ligado — e foi
