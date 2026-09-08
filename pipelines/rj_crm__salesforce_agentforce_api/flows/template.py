@@ -2,16 +2,23 @@
 """
 Template genérico sf_to_bq — "receita de bolo" da pipeline Agentforce.
 
-Encapsula o ciclo completo:
-  1. Ler watermark
-  2. Extrair (Bulk API ou Data Cloud)
-  3. Transformar
-  4. Carregar no BigQuery
-  5. Validar contagem
-  6. Escrever watermark
+Dois modos de operação:
 
-Qualquer nova fonte é adicionada apenas em settings.yaml + um flow de 5 linhas
-que chama sf_to_bq com os parâmetros da tabela desejada.
+  - Modo janela (novo, 2026-09-08; recomendado — ver tasks/janela.py):
+    query com {data_inicio}/{data_fim}, ambos os limites vindos de
+    janela_hora()/janela_dia() (janelas com sobreposição intencional, se
+    auto-curam de falha pontual). Ignora o checkpoint por completo — não lê
+    nem escreve watermark. Exige write_mode='merge' (staging + MERGE), porque
+    a sobreposição entre janelas garante recaptura do mesmo registro mais de
+    uma vez de propósito.
+  - Modo watermark (legado, mantido pra backfill manual/skip_checkpoint):
+    query com {watermark} só, lê/escreve agentforce_control.pipeline_
+    checkpoints. Forward-only — não se recupera sozinho de um tick perdido
+    (foi a causa raiz do buraco de 02/09/2026 encontrado nesta investigação).
+
+Ciclo comum aos dois: extrair (Bulk API, Data Cloud ou CRM REST) → transformar
+→ carregar no BigQuery → validar contagem → (modo watermark) escrever
+checkpoint.
 """
 
 from __future__ import annotations
@@ -72,34 +79,50 @@ def sf_to_bq(
     skip_checkpoint: bool = False,
     clustering_fields: list[str] | None = None,
     output_value_text_action_step_only: bool = False,
+    janela: tuple[str, str] | None = None,
 ) -> int:
     """
     Executa o ciclo completo extract → transform → load para uma tabela.
 
     Args:
-        source            : 'bulk_api', 'data_cloud' ou 'data_cloud_chunked'.
-        query_template    : Query com placeholder {watermark} para substituição.
+        source            : 'bulk_api', 'data_cloud', 'data_cloud_chunked' ou 'crm_rest'.
+        query_template    : Query com {data_inicio}/{data_fim} (modo janela) ou
+                            {watermark} (modo legado), conforme o parâmetro `janela`.
         target_table      : Tabela destino no BigQuery.
         project_id        : ID do projeto GCP.
         dataset_id        : Dataset de destino no BQ.
-        control_dataset   : Dataset de controle (watermarks).
+        control_dataset   : Dataset de controle (watermarks — ignorado em modo janela).
         bulk_session      : dict com 'access_token' e 'instance_url' (para bulk_api).
         dc_session        : dict com 'access_token', 'instance_url', 'dataspace'
                             (retornado por get_data_cloud_session — para data_cloud).
         dc_conn           : DEPRECATED. Ignorado. Use dc_session.
-        write_mode        : 'append', 'replace' ou 'merge'.
+        write_mode        : 'append', 'replace' ou 'merge'. Em modo janela, só
+                            'merge' é aceito (ver docstring do módulo).
         primary_key       : Campo de deduplicação (para merge).
-        partition_date    : Data de partição. Padrão: hoje.
+        partition_date    : Data de partição. Em modo janela, normalmente vem do
+                            3º elemento do retorno de janela_hora()/janela_dia() —
+                            passe explicitamente, não é inferido daqui. Padrão
+                            (modo legado): hoje.
         is_data_cloud     : Se True, remove prefixo ssot__ dos campos.
         date_columns      : Colunas para converter para datetime UTC (pós-normalização).
         duration_ns_columns: Colunas em ns para converter para ms.
-        staging_table     : Tabela staging (necessária para data_cloud_chunked + merge).
+        staging_table     : Tabela staging (necessária pra data_cloud_chunked, crm_rest
+                            com merge, e data_cloud com merge — ou seja, sempre que
+                            write_mode='merge', que é obrigatório em modo janela).
         chunk_size        : Tamanho do chunk para extração paginada.
         api_version       : Versão da Salesforce API.
-        skip_checkpoint   : Se True, não lê/escreve watermark (útil para backfill).
+        skip_checkpoint   : Se True, não lê/escreve watermark (útil para backfill
+                            manual). Ignorado/irrelevante em modo janela (que já
+                            não toca no checkpoint).
         clustering_fields : Campos de clustering da tabela destino no BQ (ex: ['id']).
                             Deve corresponder ao clustering definido na tabela — omitir
                             em tabelas sem clustering causaria erro 400 do BigQuery.
+        janela            : (data_inicio, data_fim) já formatados — normalmente os
+                            dois primeiros elementos do retorno de
+                            janela_hora()/janela_dia() (tasks/janela.py). Quando
+                            fornecido, ativa o modo janela: ignora watermark por
+                            completo, formata a query com {data_inicio}/{data_fim},
+                            e exige write_mode='merge'.
 
     Returns:
         Total de linhas carregadas.
@@ -115,19 +138,27 @@ def sf_to_bq(
 
     partition_str = str(partition_date)
 
-    # --- 1. Watermark ---
-    if skip_checkpoint:
+    # --- 1. Watermark (só em modo legado — modo janela nem toca no checkpoint) ---
+    if janela is not None:
+        assert write_mode == "merge", (
+            "[TEMPLATE] modo janela exige write_mode='merge' — a sobreposição "
+            "entre janelas recaptura o mesmo registro de propósito, e só o MERGE "
+            "trata isso como upsert em vez de duplicata."
+        )
+        data_inicio, data_fim = janela
+        print(f"[TEMPLATE] '{target_table}': modo janela, [{data_inicio}, {data_fim})")
+        query = query_template.format(data_inicio=data_inicio, data_fim=data_fim)
+    elif skip_checkpoint:
         watermark = f"{partition_date}T00:00:00Z"
         print(f"[TEMPLATE] '{target_table}': skip_checkpoint=True, watermark={watermark}")
+        query = query_template.format(watermark=watermark)
     else:
         watermark = read_watermark(
             table_name=target_table,
             project_id=project_id,
             control_dataset=control_dataset,
         )
-
-    # --- 2. Substituir watermark na query ---
-    query = query_template.format(watermark=watermark)
+        query = query_template.format(watermark=watermark)
 
     # --- 3. Extração ---
     total_rows = 0
@@ -184,15 +215,36 @@ def sf_to_bq(
             output_value_text_action_step_only=output_value_text_action_step_only,
         )
 
-        total_rows = load_to_bigquery(
-            df=df,
-            project_id=project_id,
-            dataset_id=dataset_id,
-            table_id=target_table,
-            write_mode=write_mode,
-            partition_field="data_particao",
-            clustering_fields=clustering_fields,
-        )
+        if write_mode == "merge":
+            # Mesmo padrão de crm_rest com merge: staging (append) + MERGE por
+            # primary_key. Obrigatório em modo janela (ver docstring da função) —
+            # a sobreposição entre janelas recaptura o mesmo registro de propósito.
+            assert staging_table, "staging_table é obrigatório para write_mode='merge'"
+            staged_rows = load_chunk_to_staging(
+                df_chunk=df,
+                project_id=project_id,
+                dataset_id=dataset_id,
+                staging_table_id=staging_table,
+                chunk_num=1,
+            )
+            total_rows = 0 if staged_rows == 0 else merge_staging_to_target(
+                project_id=project_id,
+                dataset_id=dataset_id,
+                staging_table_id=staging_table,
+                target_table_id=target_table,
+                primary_key=primary_key,
+                partition_field="data_particao",
+            )
+        else:
+            total_rows = load_to_bigquery(
+                df=df,
+                project_id=project_id,
+                dataset_id=dataset_id,
+                table_id=target_table,
+                write_mode=write_mode,
+                partition_field="data_particao",
+                clustering_fields=clustering_fields,
+            )
 
     elif source == "data_cloud_chunked":
         assert dc_session, "dc_session é obrigatório para source='data_cloud_chunked'"
@@ -313,8 +365,8 @@ def sf_to_bq(
             write_mode=write_mode,
         )
 
-    # --- 5. Escrever watermark ---
-    if not skip_checkpoint and total_rows > 0:
+    # --- 5. Escrever watermark (modo legado só — modo janela não usa checkpoint) ---
+    if janela is None and not skip_checkpoint and total_rows > 0:
         # Usar o timestamp atual limitado ao fim da partição para não avançar
         # o checkpoint para o futuro nem criar janelas perdidas entre execuções.
         partition_end = datetime(

@@ -2,23 +2,33 @@
 """
 Fase 1 — STDM (Salesforce Trusted Data Model / Agentforce Data Model).
 
-Extrai as 5 DMOs principais do Agentforce via Data Cloud Query API:
+Extrai as 4 DMOs principais do Agentforce via Data Cloud Query API:
   - AiAgentSession
   - AiAgentInteraction
   - AiAgentInteractionStep
   - AiAgentInteractionMessage
-  - AiAgentInteractionParticipant
 
 DAG explícito:
-  session → interaction → (steps | messages | participant em paralelo)
+  session → interaction → (steps | messages em paralelo)
 
 A ordem é respeitada para garantir integridade referencial no BQ.
+
+Modo janela (desde 2026-09-08, ver tasks/janela.py): cada chamada extrai por
+janela de tempo com sobreposição intencional (não watermark forward-only) e
+faz staging + MERGE. `modo='hora'` (schedule de 15/15min) usa uma janela
+rolante de 1h — auto-cura de falha pontual, já que a próxima chamada
+reconsulta parte do que a anterior já pegou. `modo='dia'` (schedule 1x/dia)
+reconcilia o dia inteiro — pega o que nem a sobreposição de 1h alcançou (ex.:
+pipeline parado por mais de 1h seguida). Achado desta investigação (buraco de
+quase 100% em 02/09/2026 num pipeline que "roda de 15 em 15min") foi
+justamente a ausência desse segundo mecanismo — watermark simples não se
+recupera de um tick perdido sozinho.
 """
 
 from __future__ import annotations
 
 import time
-from datetime import date
+from datetime import date, timedelta
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from prefect import flow
@@ -26,16 +36,17 @@ from prefect import flow
 from pipelines.rj_crm__salesforce_agentforce_api.constants import AgentforceConstants
 from pipelines.rj_crm__salesforce_agentforce_api.flows.template import sf_to_bq
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.auth import (
-    get_bulk_api_session,
     get_data_cloud_session,
 )
+from pipelines.rj_crm__salesforce_agentforce_api.tasks.janela import janela_dia, janela_hora
 from pipelines.rj_crm__salesforce_agentforce_api.tasks.notify import (
     notify_phase_failure,
     notify_phase_success,
 )
 
 
-# Queries F1 — colunas explícitas, filtro de watermark via {watermark}
+# Queries F1 — colunas explícitas, filtro por janela via {data_inicio}/{data_fim}
+# (ambos os limites — diferente do watermark antigo, que só tinha piso).
 # Nomes de tabela: ssot__<Nome>__dlm  (prefixo ssot__ obrigatório)
 # Colunas verificadas via SELECT * LIMIT 1 em 2026-07-23
 _QUERIES = {
@@ -57,7 +68,8 @@ _QUERIES = {
             ssot__ExternalSourceId__c,
             ssot__VariableText__c
         FROM ssot__AiAgentSession__dlm
-        WHERE ssot__StartTimestamp__c >= '{watermark}'
+        WHERE ssot__StartTimestamp__c >= '{data_inicio}'
+          AND ssot__StartTimestamp__c <  '{data_fim}'
     """,
     "ai_agent_interaction": """
         SELECT
@@ -79,7 +91,8 @@ _QUERIES = {
             ssot__ExternalSourceId__c,
             ssot__AttributeText__c
         FROM ssot__AiAgentInteraction__dlm
-        WHERE ssot__StartTimestamp__c >= '{watermark}'
+        WHERE ssot__StartTimestamp__c >= '{data_inicio}'
+          AND ssot__StartTimestamp__c <  '{data_fim}'
     """,
     "ai_agent_interaction_step": """
         SELECT
@@ -105,7 +118,8 @@ _QUERIES = {
             SubType__c,
             ssot__OutputValueText__c
         FROM ssot__AiAgentInteractionStep__dlm
-        WHERE ssot__StartTimestamp__c >= '{watermark}'
+        WHERE ssot__StartTimestamp__c >= '{data_inicio}'
+          AND ssot__StartTimestamp__c <  '{data_fim}'
     """,
     "ai_agent_interaction_message": """
         SELECT
@@ -128,32 +142,32 @@ _QUERIES = {
             ssot__ExternalSourceId__c,
             Modality__c
         FROM ssot__AiAgentInteractionMessage__dlm
-        WHERE ssot__MessageSentTimestamp__c >= '{watermark}'
+        WHERE ssot__MessageSentTimestamp__c >= '{data_inicio}'
+          AND ssot__MessageSentTimestamp__c <  '{data_fim}'
     """,
-    # TODO: ai_agent_interaction_step_detail — tabela separada para input/output_value_text
-    # Desativada por ora: input_value_text (prompt LLM, até 20k chars) causa truncamento
-    # silencioso no DC mesmo com chunks de 5min. Requer chunks de 1min (~36k chamadas/backfill).
-    # Descomentar quando decidir habilitar:
-    # "ai_agent_interaction_step_detail": """
-    #     SELECT
-    #         ssot__Id__c,
-    #         ssot__AiAgentInteractionId__c,
-    #         ssot__AiAgentInteractionStepType__c,
-    #         SubType__c,
-    #         ssot__Name__c,
-    #         ssot__InputValueText__c,
-    #         ssot__OutputValueText__c,
-    #         ssot__StartTimestamp__c
-    #     FROM ssot__AiAgentInteractionStep__dlm
-    #     WHERE ssot__StartTimestamp__c >= '{watermark}'
-    #       AND ssot__InputValueText__c IS NOT NULL
-    #       AND ssot__InputValueText__c != 'NOT_SET'
-    # """,
     # AiAgentInteractionParticipant__dlm não existe neste org (verificado 2026-07-23)
 }
 
 _DATE_COLS = ["start_timestamp", "end_timestamp", "message_sent_timestamp",
               "message_start_timestamp", "message_end_timestamp"]
+
+# Staging table de cada uma — obrigatória em modo janela (write_mode='merge').
+_STAGING = {
+    "ai_agent_session": "ai_agent_session_staging",
+    "ai_agent_interaction": "ai_agent_interaction_staging",
+    "ai_agent_interaction_step": "ai_agent_interaction_step_staging",
+    "ai_agent_interaction_message": "ai_agent_interaction_message_staging",
+}
+
+# Clustering definido no DDL (sql/create_tables.sql). Deve ser informado no
+# LoadJobConfig para evitar erro 400 do BigQuery "Incompatible table
+# partitioning specification".
+_CLUSTERING = {
+    "ai_agent_session": ["id"],
+    "ai_agent_interaction": ["id", "ai_agent_session_id"],
+    "ai_agent_interaction_step": ["id", "ai_agent_interaction_id"],
+    "ai_agent_interaction_message": ["id", "ai_agent_interaction_id"],
+}
 
 
 @flow(name="agentforce-fase1-stdm", log_prints=True)
@@ -162,24 +176,29 @@ def fase1_stdm(
     dataset_id: str | None = None,
     control_dataset: str | None = None,
     partition_date: date | None = None,
-    skip_checkpoint: bool = False,
+    modo: str = "hora",
     environment: str = "prod",
 ) -> dict[str, int]:
     """
-    Flow da Fase 1 — extrai as 5 DMOs STDM do Agentforce.
+    Flow da Fase 1 — extrai as 4 DMOs STDM do Agentforce.
 
-    Pode ser chamado standalone ou pelo flow orquestrador (full_daily.py).
+    Pode ser chamado standalone ou pelo flow orquestrador (flow.py).
 
     Args:
         project_id      : ID do projeto GCP. Padrão: constante.
         dataset_id      : Dataset BQ de destino. Padrão: constante.
-        control_dataset : Dataset de controle (watermarks). Padrão: constante.
-        partition_date  : Data de partição. Padrão: hoje.
-        skip_checkpoint : Se True, não usa watermark (útil para backfill).
+        control_dataset : Dataset de controle. Não usado em modo janela (mantido
+                          na assinatura por compatibilidade — sf_to_bq em modo
+                          janela nem toca no checkpoint).
+        partition_date  : Só relevante em modo='dia' — qual dia reconciliar.
+                          Padrão: ontem (o dia que acabou de fechar).
+        modo            : 'hora' (padrão, janela rolante de 1h — schedule de
+                          15/15min) ou 'dia' (dia inteiro — schedule 1x/dia,
+                          reconciliação funda).
         environment     : Ambiente de execução ('prod' ou 'staging').
 
     Returns:
-        Dict {tabela: linhas_carregadas}.
+        Dict {tabela: linhas_afetadas}.
     """
     project_id = project_id or AgentforceConstants.BQ_PROJECT_ID.value
     dataset_id = dataset_id or AgentforceConstants.DATASET_ID.value
@@ -190,9 +209,16 @@ def fase1_stdm(
     t_start = time.time()
     rows_by_table: dict[str, int] = {}
 
+    if modo == "dia":
+        dia_alvo = partition_date or (date.today() - timedelta(days=1))
+        data_inicio, data_fim, partition_date_efetivo = janela_dia(dia_alvo)
+    else:
+        data_inicio, data_fim, partition_date_efetivo = janela_hora()
+
+    print(f"[F1] modo='{modo}' janela=[{data_inicio}, {data_fim}) partition_date={partition_date_efetivo}")
+
     try:
         # Auth — Data Cloud usa Client Credentials (sem username/password)
-        # bulk_session = get_bulk_api_session()
         dc_session = get_data_cloud_session()
 
         bq_args = dict(
@@ -203,29 +229,19 @@ def fase1_stdm(
             source="data_cloud",
             is_data_cloud=True,
             date_columns=_DATE_COLS,
-            write_mode="append",
-            partition_date=partition_date,
-            skip_checkpoint=skip_checkpoint,
+            write_mode="merge",
+            primary_key="id",
+            partition_date=partition_date_efetivo,
+            janela=(data_inicio, data_fim),
         )
-
-        # Clustering definido no DDL (sql/create_tables.sql).
-        # Deve ser informado no LoadJobConfig para evitar erro 400 do BigQuery
-        # "Incompatible table partitioning specification".
-        _CLUSTERING = {
-            "ai_agent_session": ["id"],
-            "ai_agent_interaction": ["id", "ai_agent_session_id"],
-            "ai_agent_interaction_step": ["id", "ai_agent_interaction_id"],
-            "ai_agent_interaction_message": ["id", "ai_agent_interaction_id"],
-            # "ai_agent_interaction_step_detail": ["id", "ai_agent_interaction_id"],  # TODO: ver query acima
-        }
 
         # DAG: session → interaction → (steps | messages)
         # Sequencial para garantir integridade referencial
-        # Nota: AiAgentInteractionParticipant__dlm não existe neste org.
 
         rows_by_table["ai_agent_session"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_session"],
             target_table="ai_agent_session",
+            staging_table=_STAGING["ai_agent_session"],
             clustering_fields=_CLUSTERING["ai_agent_session"],
             **bq_args,
         )
@@ -233,6 +249,7 @@ def fase1_stdm(
         rows_by_table["ai_agent_interaction"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_interaction"],
             target_table="ai_agent_interaction",
+            staging_table=_STAGING["ai_agent_interaction"],
             clustering_fields=_CLUSTERING["ai_agent_interaction"],
             **bq_args,
         )
@@ -243,6 +260,7 @@ def fase1_stdm(
         rows_by_table["ai_agent_interaction_step"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_interaction_step"],
             target_table="ai_agent_interaction_step",
+            staging_table=_STAGING["ai_agent_interaction_step"],
             clustering_fields=_CLUSTERING["ai_agent_interaction_step"],
             output_value_text_action_step_only=True,
             **bq_args,
@@ -251,17 +269,10 @@ def fase1_stdm(
         rows_by_table["ai_agent_interaction_message"] = sf_to_bq(
             query_template=_QUERIES["ai_agent_interaction_message"],
             target_table="ai_agent_interaction_message",
+            staging_table=_STAGING["ai_agent_interaction_message"],
             clustering_fields=_CLUSTERING["ai_agent_interaction_message"],
             **bq_args,
         )
-
-        # TODO: habilitar quando decidir sobre ai_agent_interaction_step_detail
-        # rows_by_table["ai_agent_interaction_step_detail"] = sf_to_bq(
-        #     query_template=_QUERIES["ai_agent_interaction_step_detail"],
-        #     target_table="ai_agent_interaction_step_detail",
-        #     clustering_fields=_CLUSTERING["ai_agent_interaction_step_detail"],
-        #     **bq_args,
-        # )
 
         elapsed = time.time() - t_start
         notify_phase_success(
