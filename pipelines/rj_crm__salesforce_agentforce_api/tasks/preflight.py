@@ -3,10 +3,9 @@
 Pre-flight checks para a pipeline Agentforce → BigQuery.
 
 Valida antes de cada execução:
-  1. Autenticação Bulk API 2.0
-  2. Autenticação Data Cloud (token válido)
-  3. DMOs esperadas existem no Data Cloud (query LIMIT 1)
-  4. Dataset de destino existe no BigQuery
+  1. Autenticação Data Cloud (token válido)
+  2. DMOs esperadas existem no Data Cloud (query LIMIT 1)
+  3. Dataset de destino existe no BigQuery
 
 Qualquer check crítico que falhar levanta RuntimeError e aborta o flow.
 Checks não-críticos (MCE, tracing, genai) logam warning e retornam False.
@@ -53,19 +52,6 @@ _OPTIONAL_DMOS = {
 # ---------------------------------------------------------------------------
 # Checks individuais (funções internas, não tasks)
 # ---------------------------------------------------------------------------
-
-
-def _check_bulk_api_auth(access_token: str, instance_url: str) -> bool:
-    """Valida que o token da Bulk API ainda é válido fazendo um request leve."""
-    url = f"{instance_url}/services/data/v59.0/limits"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        resp.raise_for_status()
-        return True
-    except Exception as exc:
-        print(f"[PREFLIGHT][BULK_AUTH] FAIL: {exc}")
-        return False
 
 
 def _check_dc_auth(dc_session: dict) -> bool:
@@ -148,7 +134,6 @@ def _check_bq_dataset(project_id: str, dataset_id: str) -> bool:
 
 @task(log_prints=True)
 def run_preflight_checks(
-    # bulk_session: dict,
     dc_session: dict,
     bq_project_id: str,
     bq_dataset_id: str,
@@ -157,7 +142,6 @@ def run_preflight_checks(
     Executa todos os pre-flight checks e retorna um dict com resultados.
 
     Checks críticos (levantam RuntimeError se falharem):
-      - bulk_auth    : token Bulk API válido
       - bq_dataset   : dataset BigQuery existe
       - dmos_f1      : todas as DMOs de F1 existem no Data Cloud
 
@@ -168,7 +152,6 @@ def run_preflight_checks(
       - dmos_genai   : DMOs de GenAI Audit disponíveis
 
     Args:
-        bulk_session : dict com 'access_token' e 'instance_url' (de get_bulk_api_session).
         dc_session   : dict com 'access_token', 'instance_url', 'dataspace'
                        (de get_data_cloud_session).
         bq_project_id: ID do projeto GCP.
@@ -183,15 +166,6 @@ def run_preflight_checks(
     results: dict[str, bool] = {}
 
     print("[PREFLIGHT] === Iniciando pre-flight checks ===")
-
-    # --- Crítico: Bulk API auth ---
-    print("[PREFLIGHT] Verificando autenticacao Bulk API...")
-    # results["bulk_auth"] = _check_bulk_api_auth(
-    #     access_token=bulk_session["access_token"],
-    #     instance_url=bulk_session["instance_url"],
-    # )
-    # if not results["bulk_auth"]:
-    #     raise RuntimeError("[PREFLIGHT] CRITICO: autenticacao Bulk API invalida. Abortando.")
 
     # --- Crítico: BigQuery dataset ---
     print(f"[PREFLIGHT] Verificando dataset BigQuery '{bq_dataset_id}'...")
