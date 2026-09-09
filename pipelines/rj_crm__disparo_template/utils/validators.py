@@ -292,6 +292,8 @@ def validate_campaign_name(
             ATENÇÃO: campaign_name='{campaign_name}' não encontrado na coluna hsm.nome_hsm
             da tabela rj-crm-registry.brutos_salesforce.jornada. Devido a isso os dados não
             aparecerão na tabela `status_disparo`.
+
+            {query}
         """
         log(message)
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
