@@ -158,8 +158,13 @@ def transform_agendamentos_data(
 
     agendamentos = []
     for data in agendamentos_data:
+        if len(agendamentos_data) < 10:
+            log(f"Poucos registros recebidos como string: {data}")
         try:
             if isinstance(data, str):
+                if not data.strip():
+                    log("Registro ignorado: string vazia recebida da API")
+                    continue
                 data = json.loads(data)
             agendamento = {
                 "id": data["id"],
