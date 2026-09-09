@@ -8,7 +8,7 @@
 # protocol instead, which both (a) isn't what Bifrost speaks for Google
 # models here, and (b) previously hit a real
 # `constraints/vertexai.allowedModels` Org Policy block when tried directly.
-DEFAULT_MODEL_NAME = "vertex/gemini-3.5-flash"
+DEFAULT_MODEL_NAME = "vertex/gemini-3.1-flash-lite"
 
 DEFAULT_GENERATION_CONFIG = {
     "temperature": 0.1,

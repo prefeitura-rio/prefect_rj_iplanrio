@@ -30,6 +30,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -135,27 +136,29 @@ def main() -> None:
     print(f"Processing {len(pdf_paths)} PDF(s) locally (no GCS/BQ) — cache: {args.db_path}")
     pdf_tasks = [{"pdf_name": p.stem} for p in pdf_paths]
     results: dict[str, dict] = {}
+    _t_run_start = time.time()
     for path in pdf_paths:
         print(f"  → {path.name}")
         results[path.stem] = processor.process_pdf(pdf_filename=path.stem, pdf_path=path)
+    total_elapsed_sec = time.time() - _t_run_start
 
     extracao_pagina_rows = metadata.build_extracao_pagina_rows(
         pdf_tasks=pdf_tasks,
         pdf_results=results,
         timestamp_geracao=metadata.utc_now_naive(),
         versao_pipeline=metadata.build_versao_pipeline(
+            processor,
             workers=1,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
         ),
-        versao_prompt=metadata.build_versao_prompt(processor),
     )
 
     with args.output.open("w", encoding="utf-8") as f:
         for row in extracao_pagina_rows:
             f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
 
-    _log_processing_summary(len(pdf_tasks), extracao_pagina_rows)
+    _log_processing_summary(len(pdf_tasks), extracao_pagina_rows, total_elapsed_sec=total_elapsed_sec)
     print(f"\nOutput (formato extracao_pagina) escrito em: {args.output}")
 
 

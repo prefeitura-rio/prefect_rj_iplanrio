@@ -138,6 +138,10 @@ class DatabaseManager(SQLiteCache):
         :param page_number: Page number (1-indexed).
         :returns: Dictionary with cached result if found, None otherwise:
             - category: The classification category
+            - justification: The classification justification
+            - usage_metadata: {"input_tokens", "output_tokens", "total_tokens"} for
+              this page's classification call (``{}`` for cache rows written before
+              this field existed).
             - cached_pdf_name: PDF name of the original cached entry
             - cached_page_num: Page number of the original cached entry
         """
@@ -155,6 +159,7 @@ class DatabaseManager(SQLiteCache):
         return {
             "category": response.get("categoria", ""),
             "justification": response.get("justificativa", ""),
+            "usage_metadata": response.get("usage_metadata") or {},
             "cached_pdf_name": cached["cached_item_key"],
             "cached_page_num": cached["cached_sub_key"],
         }

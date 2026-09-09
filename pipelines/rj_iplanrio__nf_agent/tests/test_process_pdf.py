@@ -78,7 +78,7 @@ class TestDownloadBranch:
         proc.check_extraction_cache = MagicMock(return_value=(None, None))
         proc.preprocess_classification_page = MagicMock(return_value=(1, True))
         # "Outro" -> no NF pages -> Steps 3/4 skip themselves, no further stubs needed.
-        proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None))
+        proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}))
 
         result = proc.process_pdf("some.pdf", pdf_path=None)
 
@@ -92,7 +92,7 @@ class TestDownloadBranch:
         proc.check_classification_cache = MagicMock(return_value=False)
         proc.check_extraction_cache = MagicMock(return_value=(None, None))
         proc.preprocess_classification_page = MagicMock(return_value=(1, True))
-        proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None))
+        proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}))
 
         result = proc.process_pdf("some.pdf", pdf_path=pdf_path)
 
@@ -106,7 +106,9 @@ class TestClassificationFastPath:
         pdf_path = make_pdf(n_pages=1, name="cached.pdf")
         proc = make_processor(temp_dir=tmp_path)
         proc.check_classification_cache = MagicMock(return_value=True)
-        proc.load_all_cached_classifications = MagicMock(return_value=({1: "NFS-e"}, {1: "justificativa"}))
+        proc.load_all_cached_classifications = MagicMock(
+            return_value=({1: "NFS-e"}, {1: "justificativa"}, {1: {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}})
+        )
         proc.check_extraction_cache = MagicMock(
             return_value=(
                 {"quantidade_notas_fiscais": 1, "notas_fiscais": [extracted_nf()]},
@@ -126,7 +128,9 @@ class TestClassificationFastPath:
         pdf_path = make_pdf(n_pages=1, name="no_nf.pdf")
         proc = make_processor(temp_dir=tmp_path)
         proc.check_classification_cache = MagicMock(return_value=True)
-        proc.load_all_cached_classifications = MagicMock(return_value=({1: "Outro"}, {1: ""}))
+        proc.load_all_cached_classifications = MagicMock(
+            return_value=({1: "Outro"}, {1: ""}, {1: {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}})
+        )
 
         result = proc.process_pdf("no_nf.pdf", pdf_path=pdf_path)
 
@@ -145,7 +149,7 @@ class TestFullSlowPathEndToEnd:
 
         def classify(_pdf_path_arg, page_number, _skip_api_call):
             category = "NFS-e" if page_number == 1 else "Outro"
-            return (category, f"just{page_number}", False, None, None)
+            return (category, f"just{page_number}", False, None, None, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
 
         proc.classify_page_from_cache = MagicMock(side_effect=classify)
         proc.preprocess_extraction_pdf = MagicMock(return_value=(10, True))
@@ -172,7 +176,7 @@ class TestFullSlowPathEndToEnd:
         proc.check_classification_cache = MagicMock(return_value=False)
         proc.check_extraction_cache = MagicMock(return_value=(None, None))
         proc.preprocess_classification_page = MagicMock(return_value=(1, True))
-        proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None))
+        proc.classify_page_from_cache = MagicMock(return_value=("Outro", "", False, None, None, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}))
         proc.preprocess_extraction_pdf = MagicMock()
 
         result = proc.process_pdf("slow.pdf", pdf_path=pdf_path)
@@ -200,7 +204,7 @@ class TestExceptionSurfacesPartialState:
         def classify(_pdf_path_arg, page_number, _skip_api_call):
             if page_number == 2:
                 raise RuntimeError("Gemini classification API call failed")
-            return ("Outro", "", False, None, None)
+            return ("Outro", "", False, None, None, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
 
         proc.classify_page_from_cache = MagicMock(side_effect=classify)
 
@@ -221,7 +225,7 @@ class TestExceptionSurfacesPartialState:
         proc.check_classification_cache = MagicMock(return_value=False)
         proc.check_extraction_cache = MagicMock(return_value=(None, None))
         proc.preprocess_classification_page = MagicMock(return_value=(1, True))
-        proc.classify_page_from_cache = MagicMock(return_value=("NFS-e", "just", False, None, None))
+        proc.classify_page_from_cache = MagicMock(return_value=("NFS-e", "just", False, None, None, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}))
         proc.preprocess_extraction_pdf = MagicMock(return_value=(10, True))
         proc.extract_nf_from_cache = MagicMock(side_effect=RuntimeError("Gemini extraction API call failed"))
 

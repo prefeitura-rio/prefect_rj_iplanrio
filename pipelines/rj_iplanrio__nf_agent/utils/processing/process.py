@@ -14,6 +14,7 @@ from prefect_rj_iplanrio.logging import get_logger
 from ..cache import DatabaseManager
 from ..classification.gemini_classifier import NF_CATEGORIES
 from ..nfst_fatura_merger import merge_nfst_with_fatura
+from .classification_cache import _normalize_usage_by_page
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
@@ -86,7 +87,7 @@ def process_pdf(
             # All pages classified! Load all classifications in 1 query
             logger.warning(f"  [Classification Fast Path] All {total_pages} pages already classified")
 
-            page_categories, page_justifications = processor.load_all_cached_classifications(pdf_path)
+            page_categories, page_justifications, page_usage = processor.load_all_cached_classifications(pdf_path)
 
             # Identify NF pages from cached classifications
             nf_pages = []
@@ -110,6 +111,7 @@ def process_pdf(
                     logger.warning(f"  [OK] Extracted {nf_count} NFs [cached]")
 
                     extracted_nfs = extraction_result.get("notas_fiscais", [])
+                    extraction_usage_by_page = _normalize_usage_by_page(extraction_result.get("usage_by_page"))
 
                     return {
                         "pdf_name": pdf_filename,
@@ -121,6 +123,8 @@ def process_pdf(
                         "extracted_nf_count": len(extracted_nfs),
                         "extracted_nfs": extracted_nfs,
                         "fast_path": True,
+                        "page_classification_usage": page_usage,
+                        "page_extraction_usage": extraction_usage_by_page,
                     }
                 # else: No extraction cache but has NF pages → continue to Step 4
             else:
@@ -135,6 +139,8 @@ def process_pdf(
                     "extracted_nf_count": 0,
                     "extracted_nfs": [],
                     "fast_path": True,
+                    "page_classification_usage": page_usage,
+                    "page_extraction_usage": {},
                 }
 
         # EXTRACTION FAST PATH: Check extraction cache FIRST before any preprocessing
@@ -151,12 +157,13 @@ def process_pdf(
             logger.warning(f"  [OK] Extracted {nf_count} NFs [cached]")
 
             extracted_nfs = extraction_result.get("notas_fiscais", [])
+            extraction_usage_by_page = _normalize_usage_by_page(extraction_result.get("usage_by_page"))
 
             # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
             extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
 
             # Load cached page categories and justifications from database
-            page_categories, page_justifications = processor.load_all_cached_classifications(pdf_path)
+            page_categories, page_justifications, page_usage = processor.load_all_cached_classifications(pdf_path)
 
             return {
                 "pdf_name": pdf_filename,
@@ -168,6 +175,8 @@ def process_pdf(
                 "extracted_nf_count": len(extracted_nfs),
                 "extracted_nfs": extracted_nfs,
                 "fast_path": True,  # Indicates we skipped classification
+                "page_classification_usage": page_usage,
+                "page_extraction_usage": extraction_usage_by_page,
             }
 
         # STEP 1: Preprocess Classification Inputs
@@ -186,6 +195,7 @@ def process_pdf(
         # STEP 2: Run Classification
         page_categories = {}
         page_justifications = {}  # ADDED: Store justifications for each page
+        page_classification_usage: dict[int, dict[str, int]] = {}
         nf_pages = []
 
         _max_inner_workers = processor.MAX_INTRA_PDF_WORKERS
@@ -204,9 +214,10 @@ def process_pdf(
             }
             for _future in as_completed(_futures):
                 pn = _futures[_future]
-                category, justification, from_cache, _, _ = _future.result()
+                category, justification, from_cache, _, _, usage = _future.result()
                 page_categories[pn] = category
                 page_justifications[pn] = justification
+                page_classification_usage[pn] = usage
                 if category in NF_CATEGORIES:
                     nf_pages.append(pn)
                 if not from_cache:
@@ -234,6 +245,7 @@ def process_pdf(
         # STEP 4: Run Extraction
 
         extracted_nfs = []
+        page_extraction_usage: dict[int, dict[str, int]] = {}
 
         if nf_pages:
             logger.warning("  [Step 4/5] Running extraction...")
@@ -253,6 +265,7 @@ def process_pdf(
             logger.warning(f"  [OK] Extracted {nf_count} NFs {cache_marker}")
 
             extracted_nfs = extraction_result.get("notas_fiscais", [])
+            page_extraction_usage = _normalize_usage_by_page(extraction_result.get("usage_by_page"))
 
             # Pós-processamento: vincula NFSTs a Faturas de telecom (cross-page merge)
             extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
@@ -274,6 +287,8 @@ def process_pdf(
             "page_justifications": page_justifications,  # ADDED: Include justifications
             "extracted_nf_count": len(extracted_nfs),
             "extracted_nfs": extracted_nfs,
+            "page_classification_usage": page_classification_usage,
+            "page_extraction_usage": page_extraction_usage,
             # Timing fields (None = not measured / all cache hits)
             "_t_preprocess_sec": _t_preprocess,
             "_t_classif_wall_sec": _t_classif_wall,
@@ -296,6 +311,8 @@ def process_pdf(
             "page_justifications": local_vars.get("page_justifications", {}),
             "nf_pages": local_vars.get("nf_pages", []),
             "extracted_nfs": local_vars.get("extracted_nfs", []),
+            "page_classification_usage": local_vars.get("page_classification_usage", {}),
+            "page_extraction_usage": local_vars.get("page_extraction_usage", {}),
             # Timing field — partial value from whatever was measured before the error
             "_t_preprocess_sec": local_vars.get("_t_preprocess"),
         }

@@ -25,6 +25,43 @@ logger = get_logger(__name__)
 # logger.info() quando o bug for corrigido.
 
 
+def _empty_usage() -> dict[str, Any]:
+    """Zeroed usage dict — used when no classification API call happened at all."""
+    return {"model_name": None, "input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+
+
+def _normalize_usage(usage_metadata: dict | None) -> dict[str, Any]:
+    """Coerce a cached ``usage_metadata`` dict (may be ``None``/``{}``/missing keys —
+    e.g. rows written before this field existed) into a well-formed dict.
+
+    ``model_name`` is ``None`` for cache rows written before this field
+    existed — that's the correct "unknown, page predates this tracking"
+    signal, distinct from "known to be unset".
+    """
+    usage_metadata = usage_metadata or {}
+    return {
+        "model_name": usage_metadata.get("model_name"),
+        "input_tokens": usage_metadata.get("input_tokens", 0) or 0,
+        "output_tokens": usage_metadata.get("output_tokens", 0) or 0,
+        "total_tokens": usage_metadata.get("total_tokens", 0) or 0,
+    }
+
+
+def _normalize_usage_by_page(usage_by_page: dict | None) -> dict[int, dict[str, int]]:
+    """Coerce a ``usage_by_page`` dict that just round-tripped through JSON
+    (as part of a cached extraction result's ``response_text``) back into the
+    int-keyed shape every consumer (``metadata.build_uso_field``) expects.
+
+    JSON object keys are always strings, so a dict like ``{5: {...}}`` becomes
+    ``{"5": {...}}`` after a ``json.dumps``/``json.loads`` round-trip — this
+    undoes that, and also tolerates the field being entirely absent (cache
+    rows written before ``usage_by_page`` existed).
+    """
+    if not usage_by_page:
+        return {}
+    return {int(page): usage for page, usage in usage_by_page.items()}
+
+
 def preprocess_classification_page(processor: "POCProcessor", pdf_path: Path, page_number: int) -> tuple[int, bool]:
     """
     Preprocess a single PDF page for classification (Step 1).
@@ -62,7 +99,7 @@ def classify_page_from_cache(
     pdf_path: Path,
     page_number: int,
     skip_api_call: bool = False,  # TODO: remove this parameter for simplicity
-) -> tuple[str | None, str | None, bool, str | None, int | None]:
+) -> tuple[str | None, str | None, bool, str | None, int | None, dict[str, int]]:
     """
     Classify using cached input, optionally calling API (Step 2).
 
@@ -70,12 +107,16 @@ def classify_page_from_cache(
     :param pdf_path: Path to PDF file.
     :param page_number: Page number to classify (1-indexed).
     :param skip_api_call: If True, only return cached results (don't call API).
-    :returns: Tuple of (category, justification, from_cache, cached_pdf_name, cached_page_num):
+    :returns: Tuple of (category, justification, from_cache, cached_pdf_name, cached_page_num, usage_metadata):
         - category: Page category or None if no cache and skip_api_call=True
         - justification: Classification justification or empty string
         - from_cache: True if using cached output, False if new API call
         - cached_pdf_name: PDF name of cached entry (None if new API call)
         - cached_page_num: Page number of cached entry (None if new API call)
+        - usage_metadata: {"input_tokens", "output_tokens", "total_tokens"} for THIS page's
+          classification call (the historical values when served from cache; 0s only
+          when the cache row predates this field's introduction, or when
+          ``skip_api_call=True`` and no cache exists yet).
     """
     pdf_name = pdf_path.name
 
@@ -91,6 +132,7 @@ def classify_page_from_cache(
             True,
             cached_result["cached_pdf_name"],
             cached_result["cached_page_num"],
+            _normalize_usage(cached_result.get("usage_metadata")),
         )
 
     # TODO: EFFICIENCY - Improve cache checking to avoid redundant PDF→PNG conversion.
@@ -122,10 +164,11 @@ def classify_page_from_cache(
         response_data = json.loads(cached_output["response_text"])
         category = response_data.get("categoria", "Nenhuma das Opções")
         justification = response_data.get("justificativa", "")
-        return (category, justification, True, cached_pdf_name, cached_page_num)
+        usage = _normalize_usage(response_data.get("usage_metadata"))
+        return (category, justification, True, cached_pdf_name, cached_page_num, usage)
 
     if skip_api_call:
-        return (None, "", False, None, None)
+        return (None, "", False, None, None, _empty_usage())
 
     # DEBUG: Check classifier before calling
     thread_id = threading.current_thread().ident
@@ -168,7 +211,7 @@ def classify_page_from_cache(
             usage_metadata={},
             elapsed_seconds=elapsed,
         )
-        return (error_result["categoria"], error_result["justificativa"], False, None, None)
+        return (error_result["categoria"], error_result["justificativa"], False, None, None, _empty_usage())
 
     logger.debug(f"[DEBUG Thread {thread_id}] Calling classify_page_with_model()...")
     api_result = classify_page_with_model(
@@ -201,14 +244,16 @@ def classify_page_from_cache(
 
     # Extract classification data and flatten to top level
     classification_data = api_result["classification"]
+    usage_metadata = {
+        "model_name": api_result.get("model_name"),
+        "input_tokens": api_result.get("input_tokens", 0),
+        "output_tokens": api_result.get("output_tokens", 0),
+        "total_tokens": api_result.get("total_tokens", 0),
+    }
     result = {
         "categoria": classification_data.get("categoria", "Nenhuma das Opções"),
         "justificativa": classification_data.get("justificativa", ""),
-        "usage_metadata": {
-            "input_tokens": api_result.get("input_tokens", 0),
-            "output_tokens": api_result.get("output_tokens", 0),
-            "total_tokens": api_result.get("total_tokens", 0),
-        },
+        "usage_metadata": usage_metadata,
     }
 
     # Save output
@@ -223,7 +268,7 @@ def classify_page_from_cache(
 
     category = result.get("categoria", "Nenhuma das Opções")
     justificativa = result.get("justificativa", "")
-    return (category, justificativa, False, None, None)
+    return (category, justificativa, False, None, None, _normalize_usage(usage_metadata))
 
 
 def preprocess_extraction_pdf(processor: "POCProcessor", pdf_path: Path, nf_pages: list[int]) -> tuple[int, bool]:
@@ -333,13 +378,16 @@ def extract_nf_from_cache(
             f"Gemini extraction API call failed for {pdf_path.name}: {result.get('error', 'Unknown error')}"
         )
 
-    # Save output
+    # Save output. `result["usage"]` (prompt/completion/total_tokens — see
+    # extraction/api.py) is the field actually populated by extract_from_pdf;
+    # `usage_metadata` here is just SQLiteCache's generic storage slot name,
+    # unrelated to the classification cache's own `usage_metadata` JSON shape.
     response_text = json.dumps(result, ensure_ascii=False)
     processor.db_manager.save_output(
         input_id=input_id,
         model_name=processor.extractor.model_name,
         response_text=response_text,
-        usage_metadata=result.get("usage_metadata", {}),
+        usage_metadata=result.get("usage", {}),
         elapsed_seconds=elapsed,
     )
 
@@ -428,19 +476,24 @@ def check_classification_cache(processor: "POCProcessor", pdf_path: Path, total_
     return cached_pages_count == total_pages
 
 
-def load_all_cached_classifications(processor: "POCProcessor", pdf_path: Path) -> tuple[dict[int, str], dict[int, str]]:
+def load_all_cached_classifications(
+    processor: "POCProcessor", pdf_path: Path
+) -> tuple[dict[int, str], dict[int, str], dict[int, dict[str, int]]]:
     """
     Load ALL cached page classifications with justifications in a single query (optimized).
 
     :param processor: The ``POCProcessor`` instance.
     :param pdf_path: Path to PDF file.
-    :returns: Tuple of (page_categories, page_justifications):
+    :returns: Tuple of (page_categories, page_justifications, page_usage):
         - page_categories: Dictionary mapping page_number -> category
         - page_justifications: Dictionary mapping page_number -> justificativa
+        - page_usage: Dictionary mapping page_number -> {"input_tokens", "output_tokens", "total_tokens"}
+          for that page's classification call (0s for cache rows written before this field existed).
     """
     pdf_name = pdf_path.name
     page_categories = {}
     page_justifications = {}
+    page_usage: dict[int, dict[str, int]] = {}
 
     # Lock + eager fetchall(): raw .conn.execute() — see DatabaseManager.lock's
     # docstring. fetchall() (rather than iterating the cursor below) keeps the
@@ -473,6 +526,7 @@ def load_all_cached_classifications(processor: "POCProcessor", pdf_path: Path) -
             justificativa = response.get("justificativa", "")
             page_categories[page_num] = category
             page_justifications[page_num] = justificativa
+            page_usage[page_num] = _normalize_usage(response.get("usage_metadata"))
         except Exception as exc:
             # Cache entry exists but its JSON is malformed (truncated write,
             # encoding corruption, etc.). Log and fall back to "Unknown" so
@@ -487,5 +541,6 @@ def load_all_cached_classifications(processor: "POCProcessor", pdf_path: Path) -
             )
             page_categories[page_num] = "Unknown"
             page_justifications[page_num] = ""
+            page_usage[page_num] = _empty_usage()
 
-    return page_categories, page_justifications
+    return page_categories, page_justifications, page_usage

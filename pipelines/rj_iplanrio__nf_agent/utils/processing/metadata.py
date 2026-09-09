@@ -6,6 +6,10 @@ from typing import TYPE_CHECKING, Any
 
 from prefect_rj_iplanrio.logging import get_logger
 
+from ..classification.config import DEFAULT_GENERATION_CONFIG as CLASSIFICATION_GENERATION_CONFIG
+from ..classification.config import DEFAULT_MODEL_NAME as CLASSIFICATION_MODEL_NAME
+from ..extraction.config import FALLBACK_MODEL_NAME, GEMINI_CONFIG
+
 if TYPE_CHECKING:
     from .processor import POCProcessor
 
@@ -55,6 +59,7 @@ def build_classification_detail(
 
 
 def build_versao_pipeline(
+    processor: "POCProcessor",
     workers: int,
     requests_per_minute: int,
     max_concurrent: int,
@@ -62,33 +67,50 @@ def build_versao_pipeline(
     """
     Monta o JSON de rastreabilidade de configuração da execução.
 
-    Inclui parâmetros operacionais e informações do repositório git para
-    permitir comparar resultados apenas entre execuções com a mesma config.
+    Unifica em um único dict tudo que é necessário para comparar/filtrar
+    resultados entre execuções: parâmetros operacionais, os modelos Gemini
+    configurados, as versões de prompt usadas e informações do repositório
+    git. Historicamente ``versao_pipeline`` (config operacional) e
+    ``versao_prompt`` (versões de prompt) eram dois campos separados no
+    output — foram unificados aqui para simplificar o schema.
+
+    Os nomes de modelo e os parâmetros de geração vêm diretamente dos módulos
+    de config (não de ``processor.classifier``/``processor.extractor``) para
+    não forçar a instanciação lazy do classifier/extractor apenas para montar
+    este campo. Isso reflete a configuração *estática* — os mesmos valores
+    para toda a run, inclusive quando o fallback de extração é acionado (o
+    fallback troca apenas o modelo, não os parâmetros de geração). O modelo
+    efetivamente usado em cada página (primário ou fallback) é registrado por
+    página em ``uso.extracao.modelo``/``uso.classificacao.modelo`` (ver
+    ``build_uso_field``).
+
+    :param processor: The ``POCProcessor`` instance (supplies prompt versions).
     """
     info: dict[str, Any] = {
         "extraction_batch_size": 1,
         "workers": workers,
         "requests_per_minute": requests_per_minute,
         "max_concurrent": max_concurrent,
+        "modelo_classificacao": CLASSIFICATION_MODEL_NAME,
+        "modelo_extracao": GEMINI_CONFIG["model_name"],
+        "modelo_extracao_fallback": FALLBACK_MODEL_NAME,
+        "parametros_classificacao": {
+            "temperature": CLASSIFICATION_GENERATION_CONFIG["temperature"],
+            "top_p": CLASSIFICATION_GENERATION_CONFIG["top_p"],
+            "top_k": CLASSIFICATION_GENERATION_CONFIG["top_k"],
+            "max_output_tokens": CLASSIFICATION_GENERATION_CONFIG["max_output_tokens"],
+        },
+        "parametros_extracao": {
+            "temperature": GEMINI_CONFIG["temperature"],
+            "top_p": GEMINI_CONFIG["top_p"],
+            "top_k": GEMINI_CONFIG["top_k"],
+            "max_output_tokens": GEMINI_CONFIG["max_output_tokens"],
+        },
+        "versao_prompt_classificacao": processor.prompt_versions.get("classification"),
+        "versao_prompt_extracao": processor.prompt_versions.get("extraction"),
     }
     info.update(get_git_info())
     return info
-
-
-def build_versao_prompt(processor: "POCProcessor") -> dict[str, Any]:
-    """
-    Monta o JSON de rastreabilidade de versões de prompt.
-
-    Permite filtrar/comparar resultados apenas entre execuções que usaram
-    exatamente os mesmos prompts e batch_size de extração.
-
-    :param processor: The ``POCProcessor`` instance (supplies prompt versions).
-    """
-    return {
-        "versao_prompt_classificacao": processor.prompt_versions.get("classification"),
-        "versao_prompt_extracao": processor.prompt_versions.get("extraction"),
-        "batch_size_extracao": 1,
-    }
 
 
 def get_git_info() -> dict[str, Any]:
@@ -125,6 +147,61 @@ def get_git_info() -> dict[str, Any]:
 # ------------------------------------------------------------------
 
 
+def _empty_uso_component() -> dict[str, int | str | None]:
+    return {"modelo": None, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+
+
+def build_uso_field(
+    page_num: int | None,
+    page_classification_usage: dict[int, dict[str, Any]],
+    page_extraction_usage: dict[int, dict[str, Any]],
+) -> dict[str, dict[str, int | str | None]]:
+    """
+    Build the per-page ``uso`` (token usage + modelo utilizado) output field.
+
+    :param page_num: The page number this row is about, or None for the
+        whole-PDF sentinel row (download failed before any page was processed).
+    :param page_classification_usage: ``process_pdf`` result's
+        ``page_classification_usage`` — page_num -> {"input_tokens",
+        "output_tokens", "total_tokens", "model_name"} for that page's
+        classification call.
+    :param page_extraction_usage: ``process_pdf`` result's ``page_extraction_usage``
+        — page_num -> {"prompt_tokens", "completion_tokens", "total_tokens",
+        "model_name"} for that page's extraction call (only present for pages
+        with an extracted document). ``model_name`` reflects the model
+        *actually used* for that page — the fallback model when the fallback
+        was triggered, the primary model otherwise.
+    :returns: ``{"classificacao": {...}, "extracao": {...}}``, each a dict with
+        ``modelo``/``prompt_tokens``/``completion_tokens``/``total_tokens`` —
+        zeroed/``None`` when no usage data is available for that page (page
+        not reached, cache predates usage tracking, or no document was
+        extracted from that page).
+    """
+    classificacao = _empty_uso_component()
+    if page_num is not None:
+        raw = page_classification_usage.get(page_num)
+        if raw:
+            classificacao = {
+                "modelo": raw.get("model_name"),
+                "prompt_tokens": raw.get("input_tokens", 0) or 0,
+                "completion_tokens": raw.get("output_tokens", 0) or 0,
+                "total_tokens": raw.get("total_tokens", 0) or 0,
+            }
+
+    extracao = _empty_uso_component()
+    if page_num is not None:
+        raw = page_extraction_usage.get(page_num)
+        if raw:
+            extracao = {
+                "modelo": raw.get("model_name"),
+                "prompt_tokens": raw.get("prompt_tokens", 0) or 0,
+                "completion_tokens": raw.get("completion_tokens", 0) or 0,
+                "total_tokens": raw.get("total_tokens", 0) or 0,
+            }
+
+    return {"classificacao": classificacao, "extracao": extracao}
+
+
 def empty_json_item(  # noqa: PLR0913, PLR0917
     # 5 call sites, all within this module (build_extracao_pagina_rows) —
     # each param maps 1:1 to an independent output column, not a reusable
@@ -156,6 +233,7 @@ def empty_json_item(  # noqa: PLR0913, PLR0917
         "valores_encontrados": None,
         "cnpjs_encontrados": None,
         "observacao_extracao": None,
+        "uso": {"classificacao": _empty_uso_component(), "extracao": _empty_uso_component()},
     }
 
 
@@ -164,7 +242,6 @@ def build_extracao_pagina_rows(
     pdf_results: dict[str, dict],
     timestamp_geracao: datetime | None = None,
     versao_pipeline: dict | None = None,
-    versao_prompt: dict | None = None,
 ) -> list[dict]:
     """
     Build the per-page ``extracao_pagina`` row list.
@@ -212,16 +289,19 @@ def build_extracao_pagina_rows(
         "valores_encontrados":       dict | null,
         "cnpjs_encontrados":         dict | null,
         "observacao_extracao":       str | null,
+        "uso": {
+            "classificacao": {"modelo": str | null, "prompt_tokens": int, "completion_tokens": int, "total_tokens": int},
+            "extracao":      {"modelo": str | null, "prompt_tokens": int, "completion_tokens": int, "total_tokens": int},
+        },
         "timestamp_geracao":         str (ISO-8601 UTC),
         "versao_pipeline":           dict | null,
-        "versao_prompt":             dict | null,
     }
 
     :param pdf_tasks: list of task dicts produced in process_database.
     :param pdf_results: mapping pdf_name -> result dict from process_pdf.
     :param timestamp_geracao: UTC timestamp of this pipeline run (auto-generated if None).
-    :param versao_pipeline: dict with pipeline config params for traceability.
-    :param versao_prompt: dict with prompt versions and batch_size for traceability.
+    :param versao_pipeline: dict with pipeline config params, model names, and prompt
+        versions for traceability (see ``build_versao_pipeline``).
     :returns: List of per-page dicts ready for json.dump / NDJSON write.
     """
     # Garante que timestamp_geracao é sempre gerado automaticamente pela pipeline.
@@ -240,6 +320,8 @@ def build_extracao_pagina_rows(
         total_pages = result.get("total_pages")
         page_categories = result.get("page_categories") or {}
         page_justifications = result.get("page_justifications") or {}
+        page_classification_usage = result.get("page_classification_usage") or {}
+        page_extraction_usage = result.get("page_extraction_usage") or {}
         extracted_nfs = result.get("extracted_nfs") or []
         pipeline_ok = result.get("success", True)
         error_msg = result.get("error") if not pipeline_ok else None
@@ -258,7 +340,7 @@ def build_extracao_pagina_rows(
             )
             item["timestamp_geracao"] = ts_iso
             item["versao_pipeline"] = versao_pipeline
-            item["versao_prompt"] = versao_prompt
+            item["uso"] = build_uso_field(None, page_classification_usage, page_extraction_usage)
             output_items.append(item)
             continue
 
@@ -274,7 +356,7 @@ def build_extracao_pagina_rows(
                 )
                 item["timestamp_geracao"] = ts_iso
                 item["versao_pipeline"] = versao_pipeline
-                item["versao_prompt"] = versao_prompt
+                item["uso"] = build_uso_field(page_num, page_classification_usage, page_extraction_usage)
                 output_items.append(item)
                 continue
 
@@ -300,7 +382,7 @@ def build_extracao_pagina_rows(
                 )
                 item["timestamp_geracao"] = ts_iso
                 item["versao_pipeline"] = versao_pipeline
-                item["versao_prompt"] = versao_prompt
+                item["uso"] = build_uso_field(page_num, page_classification_usage, page_extraction_usage)
                 output_items.append(item)
                 continue
 
@@ -317,7 +399,7 @@ def build_extracao_pagina_rows(
                 )
                 item["timestamp_geracao"] = ts_iso
                 item["versao_pipeline"] = versao_pipeline
-                item["versao_prompt"] = versao_prompt
+                item["uso"] = build_uso_field(page_num, page_classification_usage, page_extraction_usage)
                 output_items.append(item)
                 continue
 
@@ -345,7 +427,7 @@ def build_extracao_pagina_rows(
                     "observacao_extracao": nf.get("observacao"),
                     "timestamp_geracao": ts_iso,
                     "versao_pipeline": versao_pipeline,
-                    "versao_prompt": versao_prompt,
+                    "uso": build_uso_field(page_num, page_classification_usage, page_extraction_usage),
                 }
             )
             output_items.append(item)

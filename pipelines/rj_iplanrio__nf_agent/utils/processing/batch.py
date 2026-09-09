@@ -104,13 +104,13 @@ def process_database(
         pdf_results=parallel.results,
         timestamp_geracao=metadata.utc_now_naive(),
         versao_pipeline=metadata.build_versao_pipeline(
+            processor,
             workers=max_workers,
             requests_per_minute=requests_per_minute,
             max_concurrent=max_concurrent,
         ),
-        versao_prompt=metadata.build_versao_prompt(processor),
     )
-    _log_processing_summary(total_pdfs, extracao_pagina_rows)
+    _log_processing_summary(total_pdfs, extracao_pagina_rows, total_elapsed_sec=download.wall_sec + parallel.wall_sec)
     _log_cache_statistics(processor)
     _cleanup_downloaded_pdfs(processor, download.downloaded_paths)
 
@@ -395,8 +395,19 @@ def _validate_page_consistency(pdf_tasks: list[dict], results: dict[str, dict]) 
         logger.warning(f"  ... and {len(inconsistencies) - MAX_INCONSISTENCIES_TO_LOG} more")
 
 
-def _log_processing_summary(total_pdfs: int, extracao_pagina_rows: list[dict]) -> None:
-    """Log the final '# Processing Complete' block with ok/error counts."""
+def _log_processing_summary(
+    total_pdfs: int, extracao_pagina_rows: list[dict], total_elapsed_sec: float | None = None
+) -> None:
+    """Log the final '# Processing Complete' block with ok/error counts.
+
+    :param total_pdfs: Number of PDFs submitted to this run (includes failures).
+    :param extracao_pagina_rows: Per-page output rows — see ``metadata.build_extracao_pagina_rows``.
+    :param total_elapsed_sec: Wall-clock duration of the whole run, in seconds.
+        When given, also logs total/avg-per-PDF/avg-per-page timing. ``None``
+        (the default) skips the timing block entirely — used by callers that
+        don't track overall wall time (there are none left as of this change,
+        but keeps this function usable standalone, e.g. from tests).
+    """
     ok_with_doc = sum(
         1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"]
     )
@@ -417,6 +428,16 @@ def _log_processing_summary(total_pdfs: int, extracao_pagina_rows: list[dict]) -
         f"\n[SUCCESS] Built {len(extracao_pagina_rows)} páginas ({ok_with_doc} com documento, "
         f"{ok_without_doc} sem documento, {erro} com erro de processamento)"
     )
+
+    if total_elapsed_sec is not None:
+        n_pages = len(extracao_pagina_rows)
+        avg_per_pdf = total_elapsed_sec / total_pdfs if total_pdfs else 0.0
+        avg_per_page = total_elapsed_sec / n_pages if n_pages else 0.0
+        logger.warning(
+            f"\n[Timing] Tempo total: {total_elapsed_sec:.1f}s | "
+            f"Média por PDF: {avg_per_pdf:.1f}s | "
+            f"Média por página: {avg_per_page:.1f}s"
+        )
 
 
 def _log_cache_statistics(processor: "POCProcessor") -> None:

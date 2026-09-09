@@ -15,7 +15,7 @@ from prefect_rj_iplanrio.logging import get_logger
 
 from . import coalesce
 from . import prompt as prompt_module
-from .config import GEMINI_CONFIG
+from .config import FALLBACK_MODEL_NAME, GEMINI_CONFIG
 
 if TYPE_CHECKING:
     from .extractor import NFExtractor
@@ -92,6 +92,21 @@ def extract_from_pdf_bytes(
             result = prompt_module.parse_response(response_text)
             result["processed_successfully"] = True
             result["cached"] = True  # Mark as using cached response
+            # File-based cache doesn't retain per-call usage info; 0 tokens spent
+            # (no API call made). "model" was saved in the cache file itself
+            # (see api_response_data below) — use it when present so
+            # ``uso.extracao.modelo`` reflects the model that produced this
+            # cached response, falling back to the current extractor's model
+            # for cache files written before "model" was saved.
+            result.setdefault(
+                "usage",
+                {
+                    "model_name": cached_response.get("model") or extractor.model_name,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+            )
 
             return result
 
@@ -195,6 +210,21 @@ def extract_from_pdf_bytes(
 
             result = prompt_module.parse_response(response_text)
             result["processed_successfully"] = True
+            # Token usage for this single API call — always captured (not just
+            # when save_api_response=True), so it can be aggregated per-page
+            # by _extract_with_batching/_extract_single_call and surfaced in
+            # the pipeline's per-page "uso" output field. ``model_name`` here
+            # is ``extractor.model_name`` — the model that ACTUALLY answered
+            # this call. When a fallback retry happens (see
+            # ``_retry_with_fallback_model``), the fallback runs through a
+            # brand-new ``NFExtractor(model_name=FALLBACK_MODEL_NAME)``, so
+            # this always reflects the real model used, not the primary one.
+            result["usage"] = {
+                "model_name": extractor.model_name,
+                "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+            }
 
             # Check if we found any NFs
             nf_count = result.get("quantidade_notas_fiscais", 0)
@@ -226,6 +256,12 @@ def extract_from_pdf_bytes(
                     "quantidade_notas_fiscais": 0,
                     "total_paginas": num_pages,
                     "notas_fiscais": [],
+                    "usage": {
+                        "model_name": extractor.model_name,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                    },
                 }
             # Otherwise, retry
             logger.warning("ERROR on attempt %d: %s, retrying...", attempt, detail)
@@ -238,6 +274,12 @@ def extract_from_pdf_bytes(
         "quantidade_notas_fiscais": 0,
         "total_paginas": num_pages,
         "notas_fiscais": [],
+        "usage": {
+            "model_name": extractor.model_name,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
     }
 
 
@@ -317,6 +359,13 @@ def _extract_with_batching(
 
     all_nfs = []
     batch_details = []  # Track each batch's details
+    total_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    # Per-page usage, keyed by original-PDF page number. Meaningful (1 entry per
+    # page) only when extractor.batch_size == 1 (always true in production —
+    # see extraction/auth.py — which makes every batch exactly one page); with
+    # batch_size > 1 a batch's usage can't be attributed to a single page, so
+    # it's just omitted from this dict (total_usage above still has it).
+    usage_by_page: dict[int, dict[str, int]] = {}
 
     for batch_idx, batch_pages in enumerate(batches, 1):
         logger.warning(
@@ -356,6 +405,17 @@ def _extract_with_batching(
 
         all_nfs.extend(batch_nfs)
 
+        batch_usage = batch_result.get("usage") or {}
+        for key in total_usage:
+            total_usage[key] += batch_usage.get(key, 0) or 0
+        if len(batch_pages) == 1:
+            usage_by_page[batch_pages[0]] = {
+                "model_name": batch_usage.get("model_name"),
+                "prompt_tokens": batch_usage.get("prompt_tokens", 0) or 0,
+                "completion_tokens": batch_usage.get("completion_tokens", 0) or 0,
+                "total_tokens": batch_usage.get("total_tokens", 0) or 0,
+            }
+
         # Track this batch's details INCLUDING raw API response
         batch_details.append(
             {
@@ -392,6 +452,8 @@ def _extract_with_batching(
         "batch_details": batch_details,  # Include batch information with raw responses
         "nfs_before_coalesce": len(all_nfs),
         "nfs_after_coalesce": len(coalesced_nfs),
+        "usage": total_usage,
+        "usage_by_page": usage_by_page,
     }
 
 
@@ -435,6 +497,11 @@ def _extract_single_call(
     if pages:  # Only if specific pages were requested
         _remap_batch_page_numbers(result.get("notas_fiscais", []), pages, batch_idx=None)
 
+    # Attribute this single call's usage to its one page, mirroring
+    # _extract_with_batching's usage_by_page (same batch_size=1 assumption).
+    if pages and len(pages) == 1:
+        result["usage_by_page"] = {pages[0]: result.get("usage") or {}}
+
     return result
 
 
@@ -464,20 +531,15 @@ def _retry_with_fallback_model(
     """
     notas_fiscais = result.get("notas_fiscais", [])
 
-    # "vertex/" prefix — same model-id reasoning as GEMINI_CONFIG's model_name
-    # in extraction/config.py, kept in sync here (Bifrost's literal id for
-    # Google models on its OpenAI-compatible endpoint, not the bare Gemini name).
-    fallback_model_name = "vertex/gemini-2.5-flash-lite"
-
     # Skip fallback if already using the fallback model (prevent infinite loop)
     if not (
         notas_fiscais
         and coalesce.has_suspicious_decimals(notas_fiscais)
-        and extractor.model_name != fallback_model_name
+        and extractor.model_name != FALLBACK_MODEL_NAME
     ):
         return result
 
-    logger.warning("Suspicious decimals detected (>2 decimal places). Retrying with %s...", fallback_model_name)
+    logger.warning("Suspicious decimals detected (>2 decimal places). Retrying with %s...", FALLBACK_MODEL_NAME)
 
     # Delete cache file to force re-extraction
     if save_api_response and api_response_output_dir:
@@ -488,7 +550,7 @@ def _retry_with_fallback_model(
 
     # Create fallback extractor with the fallback model
     fallback_extractor = type(extractor)(
-        model_name=fallback_model_name,
+        model_name=FALLBACK_MODEL_NAME,
         extraction_prompt=extractor.extraction_prompt,
     )
 
@@ -561,6 +623,18 @@ def extract_from_pdf(
             result["processed_successfully"] = True
             result["cached"] = True  # Mark as using cached response
             result["pdf_name"] = pdf_path.name
+            # File-based cache doesn't retain per-call usage info; 0 tokens spent
+            # (no API call made). See the twin block in extract_from_pdf_bytes
+            # above for why "model" (saved in the cache file) is preferred here.
+            result.setdefault(
+                "usage",
+                {
+                    "model_name": cached_response.get("model") or extractor.model_name,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                },
+            )
 
             logger.warning("Loaded from cache")
             logger.warning(

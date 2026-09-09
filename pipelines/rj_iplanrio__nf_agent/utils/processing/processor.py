@@ -75,7 +75,7 @@ class POCProcessor:
 
     def classify_page_from_cache(
         self, pdf_path: Path, page_number: int, skip_api_call: bool = False
-    ) -> tuple[str | None, str | None, bool, str | None, int | None]:
+    ) -> tuple[str | None, str | None, bool, str | None, int | None, dict[str, int]]:
         """See ``classification_cache.classify_page_from_cache``."""
         return classification_cache.classify_page_from_cache(self, pdf_path, page_number, skip_api_call)
 
@@ -101,7 +101,9 @@ class POCProcessor:
         """See ``classification_cache.check_classification_cache``."""
         return classification_cache.check_classification_cache(self, pdf_path, total_pages)
 
-    def load_all_cached_classifications(self, pdf_path: Path) -> tuple[dict[int, str], dict[int, str]]:
+    def load_all_cached_classifications(
+        self, pdf_path: Path
+    ) -> tuple[dict[int, str], dict[int, str], dict[int, dict[str, int]]]:
         """See ``classification_cache.load_all_cached_classifications``."""
         return classification_cache.load_all_cached_classifications(self, pdf_path)
 
