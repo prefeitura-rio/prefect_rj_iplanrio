@@ -21,7 +21,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pipelines.rj_iplanrio__nf_agent.utils.extraction import auth, coalesce
+from pipelines.rj_iplanrio__nf_agent.utils.extraction import coalesce
 from pipelines.rj_iplanrio__nf_agent.utils.extraction.extractor import NFExtractor
 
 
@@ -87,21 +87,17 @@ class TestCachedResponsePath:
         extractor.model.chat.completions.create.assert_not_called()
 
 
-class TestRetryOnZeroNfs:
-    def test_retries_once_when_first_attempt_finds_zero_nfs(self):
+class TestExtractionSingleAttempt:
+    def test_zero_nfs_found_returns_directly_without_retry(self):
         extractor = make_extractor()
-        extractor.model.chat.completions.create.side_effect = [
-            FakeChatCompletion(nf_payload(0)),
-            FakeChatCompletion(nf_payload(1, [{"numero_nf": "42", "pagina": 1}])),
-        ]
+        extractor.model.chat.completions.create.return_value = FakeChatCompletion(nf_payload(0))
 
         result = extractor._extract_from_pdf_bytes(b"fake-pdf-bytes", num_pages=1)
 
-        assert extractor.model.chat.completions.create.call_count == 2
-        assert result["quantidade_notas_fiscais"] == 1
-        assert result["notas_fiscais"][0]["numero_nf"] == "42"
+        assert extractor.model.chat.completions.create.call_count == 1
+        assert result["quantidade_notas_fiscais"] == 0
 
-    def test_does_not_retry_when_first_attempt_finds_nfs(self):
+    def test_nfs_found_returns_result(self):
         extractor = make_extractor()
         extractor.model.chat.completions.create.return_value = FakeChatCompletion(
             nf_payload(1, [{"numero_nf": "1", "pagina": 1}])
@@ -112,22 +108,13 @@ class TestRetryOnZeroNfs:
         assert extractor.model.chat.completions.create.call_count == 1
         assert result["quantidade_notas_fiscais"] == 1
 
-    def test_gives_up_after_max_attempts_still_zero(self):
-        extractor = make_extractor()
-        extractor.model.chat.completions.create.return_value = FakeChatCompletion(nf_payload(0))
-
-        result = extractor._extract_from_pdf_bytes(b"fake-pdf-bytes", num_pages=1)
-
-        assert extractor.model.chat.completions.create.call_count == 2
-        assert result["quantidade_notas_fiscais"] == 0
-
-    def test_api_error_on_last_attempt_returns_failure_dict_not_raise(self):
+    def test_api_error_returns_failure_dict_not_raise(self):
         extractor = make_extractor()
         extractor.model.chat.completions.create.side_effect = RuntimeError("quota exceeded")
 
         result = extractor._extract_from_pdf_bytes(b"fake-pdf-bytes", num_pages=1)
 
-        assert extractor.model.chat.completions.create.call_count == 2
+        assert extractor.model.chat.completions.create.call_count == 1
         assert result["processed_successfully"] is False
         assert "quota exceeded" in result["error"]
         assert result["notas_fiscais"] == []
@@ -171,54 +158,7 @@ class TestBatchingAndPageRemapping:
         assert result["notas_fiscais"][0]["pagina"] == 5
 
 
-class TestSuspiciousDecimalFallback:
-    def test_fallback_model_triggered_and_result_returned(self, monkeypatch: pytest.MonkeyPatch):
-        extractor = make_extractor(model_name="vertex/gemini-3.5-flash", batch_size=5, prompt="PROMPT")
-        # Patch at the class level (not just this instance): the suspicious-decimal
-        # path constructs a brand-new `type(self)(...)` fallback extractor internally,
-        # so the stub must apply to that new instance too.
-        monkeypatch.setattr(NFExtractor, "_create_filtered_pdf", lambda _self, _pdf_path, _pages: b"fake-bytes")
-        # Suspicious: more than 2 decimal places.
-        extractor.model.chat.completions.create.return_value = FakeChatCompletion(
-            nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12345}])
-        )
-
-        fallback_calls = []
-
-        def fake_init(extractor, model_name=None, extraction_prompt=None, batch_size=5):
-            fallback_calls.append(model_name)
-            extractor.model_name = model_name
-            extractor.extraction_prompt = extraction_prompt
-            extractor.batch_size = batch_size
-            extractor._model = MagicMock()
-            extractor._model.chat.completions.create.return_value = FakeChatCompletion(
-                nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12}])
-            )
-
-        monkeypatch.setattr(auth, "initialize", fake_init)
-
-        result = extractor.extract_from_pdf(pdf_path=Path("suspicious.pdf"), pages=[1])
-
-        assert fallback_calls == ["vertex/gemini-2.5-flash-lite"]
-        assert result["notas_fiscais"][0]["valor_total"] == 12.12
-
-    def test_no_fallback_when_already_on_fallback_model(self, monkeypatch: pytest.MonkeyPatch):
-        extractor = make_extractor(model_name="vertex/gemini-2.5-flash-lite", batch_size=5, prompt="PROMPT")
-        monkeypatch.setattr(extractor, "_create_filtered_pdf", lambda _pdf_path, _pages: b"fake-bytes")
-        extractor.model.chat.completions.create.return_value = FakeChatCompletion(
-            nf_payload(1, [{"numero_nf": "S", "pagina": 1, "valor_total": 12.12345}])
-        )
-
-        init_spy = MagicMock()
-        monkeypatch.setattr(auth, "initialize", init_spy)
-
-        result = extractor.extract_from_pdf(pdf_path=Path("suspicious.pdf"), pages=[1])
-
-        init_spy.assert_not_called()
-        assert result["notas_fiscais"][0]["valor_total"] == 12.12345
-
-
-class TestCoalesceAndDecimalHelpers:
+class TestCoalesceHelpers:
     def test_split_pages_into_batches(self):
         assert coalesce.split_pages_into_batches([1, 2, 3], batch_size=5) == [[1, 2, 3]]
         assert coalesce.split_pages_into_batches(list(range(1, 8)), batch_size=3) == [
@@ -226,11 +166,6 @@ class TestCoalesceAndDecimalHelpers:
             [4, 5, 6],
             [7],
         ]
-
-    def test_has_suspicious_decimals(self):
-        assert coalesce.has_suspicious_decimals([{"valor_total": 12.12}]) is False
-        assert coalesce.has_suspicious_decimals([{"valor_total": 12.12345}]) is True
-        assert coalesce.has_suspicious_decimals([{"valor_total": 0.0}]) is False
 
     def test_coalesce_merges_duplicate_numero_and_prefers_largest_value(self):
         all_nfs = [

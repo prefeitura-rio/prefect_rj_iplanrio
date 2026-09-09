@@ -8,7 +8,7 @@ from prefect_rj_iplanrio.logging import get_logger
 
 from ..classification.config import DEFAULT_GENERATION_CONFIG as CLASSIFICATION_GENERATION_CONFIG
 from ..classification.config import DEFAULT_MODEL_NAME as CLASSIFICATION_MODEL_NAME
-from ..extraction.config import FALLBACK_MODEL_NAME, GEMINI_CONFIG
+from ..extraction.config import GEMINI_CONFIG
 
 if TYPE_CHECKING:
     from .processor import POCProcessor
@@ -78,10 +78,8 @@ def build_versao_pipeline(
     de config (não de ``processor.classifier``/``processor.extractor``) para
     não forçar a instanciação lazy do classifier/extractor apenas para montar
     este campo. Isso reflete a configuração *estática* — os mesmos valores
-    para toda a run, inclusive quando o fallback de extração é acionado (o
-    fallback troca apenas o modelo, não os parâmetros de geração). O modelo
-    efetivamente usado em cada página (primário ou fallback) é registrado por
-    página em ``uso.extracao.modelo``/``uso.classificacao.modelo`` (ver
+    para toda a run. O modelo efetivamente usado em cada página é registrado
+    por página em ``uso.extracao.modelo``/``uso.classificacao.modelo`` (ver
     ``build_uso_field``).
 
     :param processor: The ``POCProcessor`` instance (supplies prompt versions).
@@ -93,7 +91,6 @@ def build_versao_pipeline(
         "max_concurrent": max_concurrent,
         "modelo_classificacao": CLASSIFICATION_MODEL_NAME,
         "modelo_extracao": GEMINI_CONFIG["model_name"],
-        "modelo_extracao_fallback": FALLBACK_MODEL_NAME,
         "parametros_classificacao": {
             "temperature": CLASSIFICATION_GENERATION_CONFIG["temperature"],
             "top_p": CLASSIFICATION_GENERATION_CONFIG["top_p"],

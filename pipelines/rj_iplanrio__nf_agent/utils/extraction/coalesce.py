@@ -1,14 +1,10 @@
-"""NF coalescing and decimal sanity checks for ``NFExtractor``."""
+"""NF coalescing helpers for ``NFExtractor``."""
 
 from collections import defaultdict
 
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
-
-# Brazilian currency values have at most 2 decimal places; more than that on
-# valor_total is a sign the model hallucinated digits (see has_suspicious_decimals).
-MAX_SANE_DECIMAL_PLACES = 2
 
 
 def split_pages_into_batches(pages: list[int], batch_size: int = 5) -> list[list[int]]:
@@ -114,41 +110,3 @@ def coalesce_nfs_by_numero(all_nfs: list[dict]) -> list[dict]:
             coalesced.append(merged)
 
     return coalesced
-
-
-def count_decimals(value: float) -> int:
-    """
-    Count number of decimal places in a float.
-
-    :param value: Float value to check.
-    :returns: Number of decimal places.
-    """
-    if value == 0:
-        return 0
-
-    # Convert to string with high precision and strip trailing zeros
-    value_str = f"{value:.10f}".rstrip("0")
-
-    # If no decimal point, return 0
-    if "." not in value_str:
-        return 0
-
-    # Count digits after decimal point
-    return len(value_str.split(".")[1])
-
-
-def has_suspicious_decimals(notas_fiscais: list[dict]) -> bool:
-    """
-    Check if any extracted valor has more than 2 decimal places.
-    Brazilian currency only uses 2 decimals, so more indicates an error.
-
-    :param notas_fiscais: List of extracted NF dictionaries.
-    :returns: True if suspicious decimals detected.
-    """
-    for nf in notas_fiscais:
-        # Check valor_total
-        valor_total = nf.get("valor_total", 0.0)
-        if valor_total and count_decimals(valor_total) > MAX_SANE_DECIMAL_PLACES:
-            return True
-
-    return False

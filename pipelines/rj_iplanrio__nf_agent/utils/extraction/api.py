@@ -15,7 +15,7 @@ from prefect_rj_iplanrio.logging import get_logger
 
 from . import coalesce
 from . import prompt as prompt_module
-from .config import FALLBACK_MODEL_NAME, GEMINI_CONFIG
+from .config import GEMINI_CONFIG
 
 if TYPE_CHECKING:
     from .extractor import NFExtractor
@@ -64,8 +64,6 @@ def extract_from_pdf_bytes(
 ) -> dict:
     """
     Extract NF data from PDF bytes.
-
-    Retry strategy: if 0 NFs are extracted on the first attempt, retry once more.
 
     :param extractor: The ``NFExtractor`` instance (supplies the model and prompt).
     :param pdf_bytes: PDF file as bytes.
@@ -118,8 +116,6 @@ def extract_from_pdf_bytes(
                 e,
             )
 
-    max_attempts = 2  # Retry once if 0 NFs found (That's because of occasional llm negligence)
-
     # Use the resolved prompt (with classification hint substituted), falling back to
     # extractor.extraction_prompt with the placeholder removed if nothing was provided.
     effective_prompt = (
@@ -128,159 +124,110 @@ def extract_from_pdf_bytes(
         else extractor.extraction_prompt.replace("{classification_hint}", "")
     )
 
-    for attempt in range(1, max_attempts + 1):
+    try:
+        # Build prompt with PDF. OpenAI-protocol "file" content-part (see
+        # classification/page_classification.py's matching NOTE — same
+        # Bifrost adapter, not independently verified against a real
+        # response yet) — always base64, unlike the old Gemini-native
+        # inline_data part which took raw bytes.
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        content_parts = [
+            {"type": "text", "text": effective_prompt},
+            {
+                "type": "file",
+                "file": {"filename": "extraction.pdf", "file_data": f"data:application/pdf;base64,{pdf_b64}"},
+            },
+        ]
+
+        start_time = time.time()
+
+        # Rate limiting: acquire permission to make API call
+        rate_limiter = get_rate_limiter()
+        rate_limiter.acquire()
+
         try:
-            # Build prompt with PDF. OpenAI-protocol "file" content-part (see
-            # classification/page_classification.py's matching NOTE — same
-            # Bifrost adapter, not independently verified against a real
-            # response yet) — always base64, unlike the old Gemini-native
-            # inline_data part which took raw bytes.
-            pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
-            content_parts = [
-                {"type": "text", "text": effective_prompt},
-                {
-                    "type": "file",
-                    "file": {"filename": "extraction.pdf", "file_data": f"data:application/pdf;base64,{pdf_b64}"},
+            api_call_start = time.time()
+            response = extractor.model.chat.completions.create(
+                model=extractor.model_name,
+                messages=[{"role": "user", "content": content_parts}],
+                temperature=GEMINI_CONFIG["temperature"],
+                top_p=GEMINI_CONFIG["top_p"],
+                max_tokens=GEMINI_CONFIG["max_output_tokens"],
+                response_format={"type": "json_object"},
+            )
+            api_call_duration = (time.time() - api_call_start) * 1000  # Convert to ms
+            elapsed_time = time.time() - start_time
+
+            # Record successful API call
+            tracker.record_call(api_type="extraction", duration_ms=api_call_duration, success=True)
+        finally:
+            # Always release rate limiter, even if error
+            rate_limiter.release()
+
+        response_text = _extract_response_text(response)
+        usage = response.usage
+
+        # Save full API response if requested
+        if save_api_response and api_response_path:
+            api_response_data = {
+                "model": extractor.model_name,
+                "elapsed_seconds": elapsed_time,
+                "raw_text": response_text,
+                "usage_metadata": {
+                    "prompt_token_count": getattr(usage, "prompt_tokens", None),
+                    "candidates_token_count": getattr(usage, "completion_tokens", None),
+                    "total_token_count": getattr(usage, "total_tokens", None),
                 },
-            ]
-
-            start_time = time.time()
-
-            # Rate limiting: acquire permission to make API call
-            rate_limiter = get_rate_limiter()
-            rate_limiter.acquire()
-
-            try:
-                api_call_start = time.time()
-                response = extractor.model.chat.completions.create(
-                    model=extractor.model_name,
-                    messages=[{"role": "user", "content": content_parts}],
-                    temperature=GEMINI_CONFIG["temperature"],
-                    top_p=GEMINI_CONFIG["top_p"],
-                    max_tokens=GEMINI_CONFIG["max_output_tokens"],
-                    response_format={"type": "json_object"},
-                )
-                api_call_duration = (time.time() - api_call_start) * 1000  # Convert to ms
-                elapsed_time = time.time() - start_time
-
-                # Record successful API call
-                tracker.record_call(api_type="extraction", duration_ms=api_call_duration, success=True)
-            finally:
-                # Always release rate limiter, even if error
-                rate_limiter.release()
-
-            response_text = _extract_response_text(response)
-            usage = response.usage
-
-            # Save full API response if requested
-            if save_api_response and api_response_path:
-                # Add attempt number to filename if retry
-                if attempt > 1:
-                    # Modify path to include attempt number
-                    path_obj = Path(api_response_path)
-                    retry_path = path_obj.parent / f"{path_obj.stem}_attempt{attempt}{path_obj.suffix}"
-                else:
-                    retry_path = api_response_path
-
-                api_response_data = {
-                    "model": extractor.model_name,
-                    "attempt": attempt,
-                    "elapsed_seconds": elapsed_time,
-                    "raw_text": response_text,
-                    "usage_metadata": {
-                        "prompt_token_count": getattr(usage, "prompt_tokens", None),
-                        "candidates_token_count": getattr(usage, "completion_tokens", None),
-                        "total_token_count": getattr(usage, "total_tokens", None),
-                    },
-                    "generation_config": {
-                        "temperature": GEMINI_CONFIG["temperature"],
-                        "top_p": GEMINI_CONFIG["top_p"],
-                        "top_k": GEMINI_CONFIG["top_k"],
-                        "max_output_tokens": GEMINI_CONFIG["max_output_tokens"],
-                    },
-                    "finish_reason": response.choices[0].finish_reason if response.choices else None,
-                    # No equivalent in the OpenAI chat-completions protocol.
-                    "safety_ratings": [],
-                }
-
-                with retry_path.open("w", encoding="utf-8") as f:
-                    json.dump(api_response_data, f, indent=2, ensure_ascii=False)
-
-                logger.debug("Saved API response (attempt %d) to %s", attempt, retry_path)
-
-            result = prompt_module.parse_response(response_text)
-            result["processed_successfully"] = True
-            # Token usage for this single API call — always captured (not just
-            # when save_api_response=True), so it can be aggregated per-page
-            # by _extract_with_batching/_extract_single_call and surfaced in
-            # the pipeline's per-page "uso" output field. ``model_name`` here
-            # is ``extractor.model_name`` — the model that ACTUALLY answered
-            # this call. When a fallback retry happens (see
-            # ``_retry_with_fallback_model``), the fallback runs through a
-            # brand-new ``NFExtractor(model_name=FALLBACK_MODEL_NAME)``, so
-            # this always reflects the real model used, not the primary one.
-            result["usage"] = {
-                "model_name": extractor.model_name,
-                "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
-                "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
-                "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+                "generation_config": {
+                    "temperature": GEMINI_CONFIG["temperature"],
+                    "top_p": GEMINI_CONFIG["top_p"],
+                    "top_k": GEMINI_CONFIG["top_k"],
+                    "max_output_tokens": GEMINI_CONFIG["max_output_tokens"],
+                },
+                "finish_reason": response.choices[0].finish_reason if response.choices else None,
+                # No equivalent in the OpenAI chat-completions protocol.
+                "safety_ratings": [],
             }
 
-            # Check if we found any NFs
-            nf_count = result.get("quantidade_notas_fiscais", 0)
+            with api_response_path.open("w", encoding="utf-8") as f:
+                json.dump(api_response_data, f, indent=2, ensure_ascii=False)
 
-            # If we found NFs OR this is the last attempt, return the result
-            if nf_count > 0 or attempt == max_attempts:
-                if attempt > 1:
-                    if nf_count > 0:
-                        logger.warning("RETRY SUCCESS: Found %d NFs on attempt %d", nf_count, attempt)
-                    else:
-                        logger.warning("RETRY FAILED: Still found 0 NFs after %d attempts", attempt)
-                return result
+            logger.debug("Saved API response to %s", api_response_path)
 
-            # No NFs found on first attempt - retry
-            logger.warning("RETRY: 0 NFs found on attempt %d, retrying...", attempt)
-
-        except Exception as e:
-            detail = _error_detail(e)
-            # Record failed API call
-            elapsed = (time.time() - start_time) * 1000 if "start_time" in locals() else 0
-            tracker.record_call(api_type="extraction", duration_ms=elapsed, success=False, error_type=detail)
-
-            # On error, only return if this is the last attempt
-            if attempt == max_attempts:
-                return {
-                    "processed_successfully": False,
-                    "error": detail,
-                    "possui_nota_fiscal": False,
-                    "quantidade_notas_fiscais": 0,
-                    "total_paginas": num_pages,
-                    "notas_fiscais": [],
-                    "usage": {
-                        "model_name": extractor.model_name,
-                        "prompt_tokens": 0,
-                        "completion_tokens": 0,
-                        "total_tokens": 0,
-                    },
-                }
-            # Otherwise, retry
-            logger.warning("ERROR on attempt %d: %s, retrying...", attempt, detail)
-
-    # Should never reach here, but just in case
-    return {
-        "processed_successfully": False,
-        "error": "Max retry attempts reached",
-        "possui_nota_fiscal": False,
-        "quantidade_notas_fiscais": 0,
-        "total_paginas": num_pages,
-        "notas_fiscais": [],
-        "usage": {
+        result = prompt_module.parse_response(response_text)
+        result["processed_successfully"] = True
+        # Token usage for this single API call — always captured (not just
+        # when save_api_response=True), so it can be aggregated per-page
+        # by _extract_with_batching/_extract_single_call and surfaced in
+        # the pipeline's per-page "uso" output field.
+        result["usage"] = {
             "model_name": extractor.model_name,
-            "prompt_tokens": 0,
-            "completion_tokens": 0,
-            "total_tokens": 0,
-        },
-    }
+            "prompt_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+            "completion_tokens": getattr(usage, "completion_tokens", 0) or 0,
+            "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+        }
+        return result
+
+    except Exception as e:
+        detail = _error_detail(e)
+        # Record failed API call
+        elapsed = (time.time() - start_time) * 1000 if "start_time" in locals() else 0
+        tracker.record_call(api_type="extraction", duration_ms=elapsed, success=False, error_type=detail)
+
+        return {
+            "processed_successfully": False,
+            "error": detail,
+            "possui_nota_fiscal": False,
+            "quantidade_notas_fiscais": 0,
+            "total_paginas": num_pages,
+            "notas_fiscais": [],
+            "usage": {
+                "model_name": extractor.model_name,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+            },
+        }
 
 
 def _remap_batch_page_numbers(nfs: list[dict], batch_pages: list[int], batch_idx: int | None) -> None:
@@ -505,76 +452,6 @@ def _extract_single_call(
     return result
 
 
-def _retry_with_fallback_model(
-    extractor: "NFExtractor",
-    result: dict,
-    pdf_path: Path,
-    pages: list[int] | None,
-    save_api_response: bool,
-    api_response_output_dir: Path | None,
-    page_classifications: dict[int, str] | None,
-) -> dict:
-    """
-    Retry extraction with the ``gemini-2.5-flash-lite`` fallback model if suspicious decimals were found.
-
-    Brazilian currency only uses 2 decimal places; more than that in an extracted
-    ``valor_total`` usually indicates the primary model misread a number.
-
-    :param extractor: The ``NFExtractor`` instance whose extraction just completed.
-    :param result: The just-completed extraction result (already has ``pdf_name``/``total_paginas`` set).
-    :param pdf_path: Path to the source PDF (for re-extraction and cache invalidation).
-    :param pages: Page numbers originally requested.
-    :param save_api_response: Whether to persist API responses (also controls cache invalidation).
-    :param api_response_output_dir: Directory holding cached API responses.
-    :param page_classifications: Optional per-page classification hints.
-    :returns: The fallback extraction result, or the original ``result`` unchanged if no retry was needed.
-    """
-    notas_fiscais = result.get("notas_fiscais", [])
-
-    # Skip fallback if already using the fallback model (prevent infinite loop)
-    if not (
-        notas_fiscais
-        and coalesce.has_suspicious_decimals(notas_fiscais)
-        and extractor.model_name != FALLBACK_MODEL_NAME
-    ):
-        return result
-
-    logger.warning("Suspicious decimals detected (>2 decimal places). Retrying with %s...", FALLBACK_MODEL_NAME)
-
-    # Delete cache file to force re-extraction
-    if save_api_response and api_response_output_dir:
-        api_response_path = Path(api_response_output_dir) / f"{pdf_path.stem}_api_response.json"
-        if api_response_path.exists():
-            api_response_path.unlink()
-            logger.warning("Deleted cache to force re-extraction")
-
-    # Create fallback extractor with the fallback model
-    fallback_extractor = type(extractor)(
-        model_name=FALLBACK_MODEL_NAME,
-        extraction_prompt=extractor.extraction_prompt,
-    )
-
-    # Retry extraction (will go through entire method again)
-    fallback_result = fallback_extractor.extract_from_pdf(
-        pdf_path=pdf_path,
-        pages=pages,
-        save_api_response=save_api_response,
-        api_response_output_dir=api_response_output_dir,
-        page_classifications=page_classifications,
-    )
-
-    # Log the change
-    logger.warning(
-        "Fallback complete. Original model: %s (%d NFs). Fallback model: %s (%d NFs).",
-        extractor.model_name,
-        len(notas_fiscais),
-        fallback_extractor.model_name,
-        len(fallback_result.get("notas_fiscais", [])),
-    )
-
-    return fallback_result
-
-
 def extract_from_pdf(
     extractor: "NFExtractor",
     pdf_path: Path,
@@ -691,7 +568,4 @@ def extract_from_pdf(
     else:
         logger.error("Extraction failed: %s", result.get("error", "Unknown error"))
 
-    # Check for suspicious decimals and retry with fallback model if needed
-    return _retry_with_fallback_model(
-        extractor, result, pdf_path, pages, save_api_response, api_response_output_dir, page_classifications
-    )
+    return result
