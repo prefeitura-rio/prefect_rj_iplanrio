@@ -131,6 +131,10 @@ def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[
 
         response.raise_for_status()
 
+        if not response.text or not response.text.strip():
+            log(f"Aviso: API retornou body vazio. Retornando lista vazia.")
+            return []
+
         agendamentos_data = response.json()
         log(f"Recuperados {len(agendamentos_data)} agendamentos")
 
