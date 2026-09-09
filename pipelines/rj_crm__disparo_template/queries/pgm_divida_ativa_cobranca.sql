@@ -208,9 +208,14 @@ FROM (
     FROM tmp_grupos
 )
 WHERE rn <= (
-    -- dias úteis desde start_date (inclusivo: start_date = dia 1)
-    DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-08-19'), DAY)
-    - DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-08-19'), WEEK)        -- remove domingos
-    - DATE_DIFF(DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 1 DAY), DATE_ADD(DATE('2026-08-19'), INTERVAL 1 DAY), WEEK)  -- remove sábados
-    + 1  -- start_date conta como dia 1
-) * 100;
+    -- sobe 100 por semana desde 2026-08-15 (inclusive)
+    DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-08-15'), WEEK) + 1
+
+    -- -- sobe 100 por dia útil desde 2026-09-01 (inclusive)
+    -- -- dias úteis desde start_date (inclusivo: start_date = dia 1)
+    -- DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-09-01'), DAY)
+    -- - DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-09-01'), WEEK)        -- remove domingos
+    -- - DATE_DIFF(DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 1 DAY), DATE_ADD(DATE('2026-08-19'), INTERVAL 1 DAY), WEEK)  -- remove sábados
+    -- + 1  -- start_date conta como dia 1
+) * 100
+LIMIT cast({limit_placeholder} as int64);
