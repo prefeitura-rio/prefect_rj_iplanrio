@@ -41,10 +41,14 @@ Sua tarefa é:
      Ex: HSM lembra agendamento no CRAS; cidadão responde "que horas mesmo é o atendimento?" → PERTENCE
    - "INDEFINIDO": responde, mas sem se referir ao assunto do HSM — muda de assunto sem negar ser ele, resposta automática/comercial de terceiro (bot de empresa, divulgação de produto), resposta genérica, vazia ou incompreensível.
      Ex: HSM avisa sobre Bolsa Família; cidadão responde "vocês têm informação sobre poda de árvore?" → INDEFINIDO
-   - "NAO_PERTENCE": nega explicitamente ser a pessoa certa/dona do número, ou terceiro informa que a pessoa não usa mais esse número. Também conta quando o cidadão:
+   - "NAO_PERTENCE": nega explicitamente ser a pessoa certa/dona do número, ou terceiro informa que a pessoa não usa mais esse número. Também CONTA quando o cidadão:
      (a) informa espontaneamente um nome e sobrenome claramente diferentes do HSM (não uma variação/apelido/erro de grafia do mesmo nome);
-     (b) sugere que o número/mensagem foi enviado(a) errado ou por engano — mesmo em tom de suposição ("deve ter colocado telefone errado", "acho que foi engano", "deve ter enviado errado").
-     Negar ter feito a AÇÃO específica do HSM ("não pedi nada", "não agendei isso") não conta sozinho — só nega a ação, não a identidade.
+     (b) sugere que QUEM ENVIOU o HSM errou o número/destinatário — mesmo em tom de suposição ("deve ter colocado telefone errado", "acho que foi engano no envio").
+
+     NÃO CONTA sozinho (cai em INDEFINIDO ou PERTENCE, conforme o caso):
+     (a) negar ter feito a AÇÃO específica do HSM ("não pedi nada", "não agendei isso") — nega a ação, não a identidade;
+     (b) o próprio cidadão dizer que ELE mandou algo errado no chat ("mandei errado", "foi eu que me confundi") — fala do comportamento dele na conversa, não de quem é o número.
+
      Ex: HSM avisa sobre Bolsa Família; cidadão responde "esse número era da minha mãe, ela faleceu" → NAO_PERTENCE
      Ex: HSM diz "Oi, Luiz Rocha"; cidadão responde "Desculpa, meu nome é Luiz Carlos Egito Costa" → NAO_PERTENCE
      Ex: HSM sobre débito de veículo; cidadão responde "Vc deve ter colocado telefone errado" → NAO_PERTENCE
