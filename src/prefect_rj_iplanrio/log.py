@@ -27,4 +27,7 @@ def get_logger(name: str) -> Logger:
     :returns: A :class:`logging.Logger` instance with workspace-wide
         configuration applied.
     """
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    logger.setLevel(logging.DEBUG)
+    return logger
+
