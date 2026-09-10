@@ -7,6 +7,7 @@ Flow to dispatch templated messages via Salesforce SFTP
 """
 import os
 import time
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
 
@@ -193,7 +194,10 @@ def rj_crm__disparo_template_sf(
     query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
     billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
 
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")  # pylint: disable=unused-variable
+    run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rename_current_flow_run_task(
+            new_name=f"crm_disparo_{campaign_name}_{flow_environment}_{run_timestamp}"
+        )
     crd = inject_bd_credentials_task(environment="prod")  # noqa  # pylint: disable=unused-variable
 
     flow_status = check_flow_status(
