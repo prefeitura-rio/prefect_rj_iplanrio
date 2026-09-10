@@ -51,10 +51,12 @@ jobs:
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
+          GITHUB_HEAD: ${{ github.ref_name }}
         run: |
           pr_count=$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --head "${{ github.ref_name }}" \
+            --repo "$GITHUB_REPO" \
+            --head "$GITHUB_HEAD" \
             --base master \
             --state open \
             --json number \
@@ -64,7 +66,7 @@ jobs:
             echo "has_open_pr=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_open_pr=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::No open PR from '${{ github.ref_name }}' targeting 'master' was found. Skipping staging deploy."
+            echo "::notice::No open PR from '$GITHUB_HEAD' targeting 'master' was found. Skipping staging deploy."
           fi
 
       - name: Checkout repository
