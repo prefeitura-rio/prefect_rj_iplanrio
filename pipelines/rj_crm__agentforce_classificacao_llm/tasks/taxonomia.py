@@ -11,8 +11,10 @@ de API extra.
 
 Catálogo (`taxonomia_regras`) é dado, não código: promovido manualmente pra lá depois da
 validação de precisão (não existe promoção automática — função gerada por LLM não vira
-produção sem humano no meio). Mesma tabela serve tema e motivo (coluna `etapa`); hoje só
-tema tem linha.
+produção sem humano no meio). Mesma tabela serve tema e motivo (coluna `etapa`) — motivo
+tem `categoria_pai` preenchido (o tema ao qual pertence) e só é avaliado em sessão que já
+tenha aquele tema em `tema_nome` (ver filtro por categoria_pai em `_aplica_regras`); tema
+tem `categoria_pai` nulo (é top-level, não pertence a nada).
 
 `RulesSandbox` portado de clustering/modules/rules_sandbox.py — mesma lógica, sem mudança
 de comportamento: valida o código via AST antes de compilar (bloqueia import fora de
@@ -216,6 +218,19 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
     no catálogo continua com `coluna_saida` vazio (já é o default vindo de
     monta_dataframe_final).
 
+    Regra com `categoria_pai` preenchido (etapa='motivo', ver carrega_catalogo_regras) só
+    é avaliada em sessão cujo `tema_nome` (já calculado por aplica_regras_tema, que roda
+    antes — ver flow.py) contenha aquele tema: motivo é sub-categoria DENTRO de um tema
+    específico, não um rótulo livre pra secretaria inteira. Regra de tema (categoria_pai
+    nulo) continua sem essa restrição — é ela quem decide tema_nome, não faz sentido
+    condicioná-la a um tema que ainda não existe nesse ponto do pipeline.
+
+    Sem essa checagem, uma sessão classificada num tema (ex.: "Remoção de Entulho e
+    Resíduos de Obras") podia receber um motivo cuja regra bateu no resumo mas que
+    pertence a OUTRO tema da mesma secretaria (ex.: um motivo de "Poda ou Remoção de
+    Árvores") — bug real observado em produção: causa_nome vinha com motivo de cluster ao
+    qual a sessão não pertence.
+
     Regra que falha ao compilar (rejeitada pelo sandbox) ou ao rodar numa sessão específica
     é pulada e logada — nunca derruba a classificação da sessão nem do resto das regras."""
     if df_final.empty or df_regras.empty:
@@ -231,9 +246,10 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
             n_rejeitadas += 1
             print(f"[TAXONOMIA] regra '{row.nome_funcao}' (secretaria={row.secretaria}) rejeitada pelo sandbox: {e}")
             continue
+        categoria_pai = None if pd.isna(row.categoria_pai) else row.categoria_pai
         for info in compiladas.values():
             regras_por_secretaria.setdefault(row.secretaria, []).append(
-                {"nome_categoria": row.nome, "funcao": info["funcao"]}
+                {"nome_categoria": row.nome, "categoria_pai": categoria_pai, "funcao": info["funcao"]}
             )
 
     if not regras_por_secretaria:
@@ -261,9 +277,21 @@ def _aplica_regras(df_final: pd.DataFrame, df_regras: pd.DataFrame, coluna_saida
             secretaria_bruta = None
         secretaria = secretaria_bruta or _SECRETARIA_NAO_IDENTIFICADA
         regras = regras_por_secretaria.get(secretaria, [])
+        if not regras:
+            return []
+
+        # tema(s) já atribuído(s) à sessão nesta mesma passada (aplica_regras_tema roda
+        # antes de aplica_regras_causa — ver flow.py). Ausente/vazio pra quem ainda não
+        # passou por essa etapa (ex.: quando esta função é chamada PARA a própria etapa
+        # de tema) — nesse caso não há regra com categoria_pai preenchido no catálogo
+        # mesmo, então o filtro abaixo nunca exclui nada.
+        temas_da_sessao = set(row.get("tema_nome") or [])
+
         matches = []
         resumo_norm = _normaliza_resumo(resumo)
         for regra in regras:
+            if regra["categoria_pai"] is not None and regra["categoria_pai"] not in temas_da_sessao:
+                continue  # motivo de um tema que esta sessão não tem — fora de escopo
             try:
                 if regra["funcao"](resumo_norm):
                     matches.append(regra["nome_categoria"])
@@ -295,13 +323,14 @@ def aplica_regras_tema(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.Da
 @task(log_prints=True)
 def aplica_regras_causa(df_final: pd.DataFrame, df_regras: pd.DataFrame) -> pd.DataFrame:
     """Etapa 3 (causa sistêmica/motivo) — mesma lógica de aplica_regras_tema (mesmo
-    sandbox, mesmo escopo por secretaria, mesma avaliação contra `resumo`), só que
-    escreve em causa_nome e filtra o catálogo por etapa='motivo' (ver
-    TAXONOMIA_ETAPA_MOTIVO em constants.py). Hoje o catálogo não tem nenhuma regra
-    dessa etapa — chamar esta função com df_regras vazio é seguro e não altera
-    causa_nome (early-return em _aplica_regras). Assume o mesmo modelo de escopo do
-    tema (por secretaria); se a indução de causa acabar sendo escopada dentro do tema
-    em vez de por secretaria, revisar aqui quando a primeira regra real for promovida."""
+    sandbox, mesma avaliação contra `resumo`), só que escreve em causa_nome e filtra o
+    catálogo por etapa='motivo' (ver TAXONOMIA_ETAPA_MOTIVO em constants.py). Diferente
+    do tema, motivo é escopado DENTRO do tema (categoria_pai em taxonomia_regras) — uma
+    regra de motivo só é avaliada em sessão cujo tema_nome (calculado por
+    aplica_regras_tema, chamada antes desta no flow.py) já contenha aquele tema (ver
+    filtro por categoria_pai em _aplica_regras). df_final PRECISA vir com tema_nome já
+    preenchido — chamar esta função antes de aplica_regras_tema faz toda regra de motivo
+    ser descartada (nenhum tema bate)."""
     return _aplica_regras(df_final, df_regras, coluna_saida="causa_nome", rotulo_etapa="motivo")
 
 
