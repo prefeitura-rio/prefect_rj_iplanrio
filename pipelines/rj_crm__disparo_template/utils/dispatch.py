@@ -1266,7 +1266,7 @@ def save_csv_for_sftp(
     filename = f"{data_extension_filename}_{timestamp}.csv"
 
     if de_columns is not None:
-        keep_columns = [col for col in ["telefone", "SubscriberKey", *de_columns] if col in df.columns]
+        keep_columns = [col for col in dict.fromkeys(["telefone", "SubscriberKey", *de_columns]) if col in df.columns]
         csv_df = df[keep_columns].copy()
     else:
         csv_df = df.drop(columns=["others"], errors="ignore")
