@@ -38,10 +38,15 @@ on:
         required: false
         type: string
 
+permissions: {}
+
 jobs:
   deploy-prefect-prod-flows:
     name: Deploy Prefect prod flows
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
