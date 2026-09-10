@@ -172,9 +172,9 @@ def rj_crm__agentforce_classificacao_llm(
 
     # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
     #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)
-    #    precisam dele. Catálogo ausente ou sem regra pra secretaria da sessão:
-    #    tema_nome/causa_nome ficam vazios, não bloqueia nada. Hoje só tema tem regra
-    #    no catálogo (motivo vem sempre vazio) — ver aplica_regras_causa.
+    #    precisam dele. Catálogo ausente ou sem regra pra secretaria/tema da sessão:
+    #    tema_nome/causa_nome ficam vazios, não bloqueia nada — ver aplica_regras_causa
+    #    (motivo só é aplicado dentro do tema ao qual pertence, via categoria_pai).
     df_regras_tema = carrega_catalogo_regras(
         project_id=project_id,
         dataset_id=dest_dataset_id,
