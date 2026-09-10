@@ -41,6 +41,24 @@ deployments:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
     schedules:
+      # Disparo infrequência escolar (SME)
+      - cron: "0 15 * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: oneshot-disparo-infrequencia-escolar
+        flow_run_name: disparo-infrequencia-escolar
+        parameters:
+          flow_environment: staging
+          campaign_name: sme_infrequencia_v1
+          dataset_id: brutos_salesforce
+          table_id: disparos_efetuados
+          data_extension_filename: whatsapp_sme_infrequencia_escolar
+          de_columns: ["telefone", "nome_responsavel", "nome_aluno", "nome_aluno_2", "telefone_escola", "matricula"]
+          filter_duplicated_phones: false
+          filter_duplicated_cpfs: false
+          filter_failed_phones: true
+          query_file: queries/sme_infrequencia_escolar.sql
+
       # Disparo emergencial (ex: ventos fortes)
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
