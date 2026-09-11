@@ -138,7 +138,7 @@ deployments:
       # Divida ativa cobrança
       - cron: "30 13 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-pgm-divida-ativa-prod
         flow_run_name: pgm-divida-ativa
         parameters:
