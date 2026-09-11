@@ -545,6 +545,7 @@ def rj_crm__disparo_template_sf(
                 initial_wait_minutes=materialization_sleep_minutes if not test_mode else 2,
                 check_interval_minutes=monitor_check_interval_minutes if not test_mode else 2,
                 max_wait_minutes=monitor_max_wait_minutes if not test_mode else 8,
+                total_dispatched=sum(len(d) for d in all_log_dfs),
             )
             if dispatch_confirmed:
                 send_dispatch_success_notification(
