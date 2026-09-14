@@ -7,20 +7,26 @@
 -- catálogo por jornada agora, o texto não depende mais dele.
 -- Fonte: rj-crm-registry.rmi_conversas.v2_chatbot_conversas (fct_chatbot_v2) — já é a
 -- verdade consolidada por trás de ai_agent_session/ai_agent_interaction, e já carrega
--- classificacao_llm_datahora via LEFT JOIN em ai_agent_session_classificacao (nossa
--- própria tabela destino, ver fct_chatbot_v2.sql no repo queries-rj-crm-registry).
+-- llm.classificacao_datahora via LEFT JOIN em ai_agent_session_classificacao (nossa
+-- própria tabela destino, ver fct_chatbot_v2.sql no repo queries-rj-crm-registry). Toda
+-- coluna de classificação mora dentro do struct `llm` nessa fonte (ver comentário no
+-- .sql referenciado) — não são colunas soltas.
 --
 -- DOIS filtros de "já classificada", de propósito, não um só:
---   1. classificacao_llm_datahora IS NULL (abaixo, em sessoes_usuario) — pré-filtro barato,
---      direto na leitura de source_table, sem join adicional aqui. Corta a esmagadora
---      maioria antes do agrupamento/pareamento com HSM, mas pode estar desatualizado até
---      15min (fct_chatbot_v2 roda quarter_hourly) — não é garantia sozinho.
+--   1. llm.classificacao_datahora IS NULL (abaixo, em sessoes_usuario) — pré-filtro
+--      barato, direto na leitura de source_table, sem join adicional aqui. Corta a
+--      esmagadora maioria antes do agrupamento/pareamento com HSM, mas pode estar
+--      desatualizado até 15min (fct_chatbot_v2 roda quarter_hourly) — não é garantia
+--      sozinho.
 --   2. Anti-join contra a tabela destino, no final — é o que garante correção de verdade:
 --      cobre a janela de desincronismo entre a nossa gravação e o fct_chatbot_v2 ainda não
 --      ter reprocessado a partição, sem o que reclassificaríamos sessão já feita há pouco.
--- Usa classificacao_llm_datahora e não escopo_hsm_tipo pro filtro 1: esse último pode
+-- Usa llm.classificacao_datahora e não llm.relacao_hsm_tipo pro filtro 1: esse último pode
 -- ficar null mesmo numa sessão já processada (JSON incompleto da LLM, nullable de
--- propósito pra não travar a carga do lote — ver tasks/load.py).
+-- propósito pra não travar a carga do lote — ver tasks/load.py). Também não usa
+-- `llm IS NULL` (o struct inteiro): daria o mesmo resultado hoje, mas amarraria o
+-- filtro à presença do struct inteiro em vez do campo que efetivamente marca "já
+-- classificada".
 --
 -- O anti-join (filtro 2) também tem corte de data_particao no destino (dentro do ON, não
 -- do WHERE — no WHERE quebraria a semântica de anti-join, viraria INNER JOIN de fato).
@@ -67,7 +73,7 @@ sessoes_usuario AS (
         AND data_particao BETWEEN DATE(data_inicio) AND DATE(data_fim)
         AND inicio_datahora BETWEEN data_inicio AND data_fim
         AND fim_datahora IS NOT NULL  -- só sessão encerrada
-        AND classificacao_llm_datahora IS NULL  -- ainda não classificada (ver cabeçalho)
+        AND llm.classificacao_datahora IS NULL  -- ainda não classificada (ver cabeçalho)
     GROUP BY id_sessao  -- grão da CTE: 1 linha por sessão, ver nota acima
 ),
 

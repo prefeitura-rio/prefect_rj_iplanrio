@@ -3,7 +3,7 @@
 Flow diário — Classificação inicial por LLM das sessões do Agentforce (WhatsApp).
 
 Extrai sessões dos últimos LOOKBACK_DAYS dias ainda não classificadas (dois filtros: um
-pré-filtro barato por classificacao_llm_datahora na fonte, mais o anti-join de sempre
+pré-filtro barato por llm.classificacao_datahora na fonte, mais o anti-join de sempre
 contra a tabela destino como garantia final — ver queries/extract_sessoes.sql), classifica
 via Bifrost/Gemini (ou por regra, quando é resposta atrasada a botão), aplica o catálogo
 de regras de tema e grava em rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao
@@ -147,7 +147,7 @@ def rj_crm__agentforce_classificacao_llm(
         tmp_table_id=dest_tmp_table_id,
     )
 
-    # 2. Extrai sessões pendentes (janela fixa + pré-filtro por classificacao_llm_datahora
+    # 2. Extrai sessões pendentes (janela fixa + pré-filtro por llm.classificacao_datahora
     #    + anti-join final contra o destino) e enriquece com HSM
     df_sessoes = extrai_sessoes_nao_classificadas(
         project_id=project_id,
