@@ -531,11 +531,13 @@ def rj_crm__disparo_template_sf(
         # ------------------------------------------------------------------
         # PÓS-BATCHES: monitor / materialize (uma única vez por attempt)
         # ------------------------------------------------------------------
+        dispatch_confirmed = False
+
         if monitor_after_sftp:
             github_token = getenv_or_action("GITHUB_TOKEN")
             git_repository_path = f"https://{github_token}@github.com/prefeitura-rio/queries-rj-crm-registry.git"
 
-            monitor_dispatch_status(
+            dispatch_confirmed = monitor_dispatch_status(
                 campaign_name=campaign_name,
                 billing_project_id=billing_project_id,
                 dispatch_date=last_dispatch_date,
@@ -543,7 +545,19 @@ def rj_crm__disparo_template_sf(
                 initial_wait_minutes=materialization_sleep_minutes if not test_mode else 2,
                 check_interval_minutes=monitor_check_interval_minutes if not test_mode else 2,
                 max_wait_minutes=monitor_max_wait_minutes if not test_mode else 8,
+                total_dispatched=sum(len(d) for d in all_log_dfs),
             )
+            if dispatch_confirmed:
+                send_dispatch_success_notification(
+                    total_dispatches=len(current_df),
+                    dispatch_date=last_dispatch_date,
+                    campaign_name=campaign_name,
+                    total_batches=n_batches,
+                    sample_destination=(current_df.iloc[0].to_dict() if not current_df.empty else None),
+                    test_mode=test_mode,
+                    attempt_number=i + 1,
+                    total_attempt_number=max_dispatch_retries + 1,
+                )
 
         elif materialize_after_sftp:
             print(f"⏳ Aguardando {materialization_sleep_minutes if not test_mode else 5} minutos antes de materializar o modelo dbt int_crm_status_disparo...")
@@ -560,17 +574,6 @@ def rj_crm__disparo_template_sf(
         # PÓS-BATCHES: notificação e log BQ consolidados
         # ------------------------------------------------------------------
         if not test_mode:
-            send_dispatch_success_notification(
-                total_dispatches=len(current_df),
-                dispatch_date=last_dispatch_date,
-                campaign_name=campaign_name,
-                total_batches=n_batches,
-                sample_destination=(current_df.iloc[0].to_dict() if not current_df.empty else None),
-                test_mode=test_mode,
-                attempt_number=i + 1,
-                total_attempt_number=max_dispatch_retries + 1,
-            )
-
             if all_log_dfs:
                 print(f"Sample dispatched destination: {current_df.iloc[:5].to_dict()}")
                 # Log para BQ: schema fixo com coluna `data` em JSON para camada bronze
