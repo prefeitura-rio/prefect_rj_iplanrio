@@ -58,7 +58,7 @@ class ClassificacaoConstants(Enum):
     # --- Extração incremental ---
     # Janela fixa de busca — sem parametrização/watermark por decisão de projeto: dois
     # filtros de "já classificada" garantem idempotência (pré-filtro barato por
-    # classificacao_llm_datahora na fonte + anti-join contra a tabela destino como garantia
+    # llm.classificacao_datahora na fonte + anti-join contra a tabela destino como garantia
     # final, que cobre o desincronismo de até 15min entre nossa gravação e o fct_chatbot_v2
     # reprocessar — ver queries/extract_sessoes.sql); a janela fixa só limita quanto
     # histórico é reescaneado a cada execução. Sessão que fica sem classificar por mais de

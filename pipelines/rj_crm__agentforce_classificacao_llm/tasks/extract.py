@@ -190,7 +190,7 @@ def extrai_sessoes_nao_classificadas(
     hsm_max_dias_antes: int,
 ) -> pd.DataFrame:
     """Roda a query de extração incremental — janela fixa + DOIS filtros de "já
-    classificada": classificacao_llm_datahora IS NULL na fonte (pré-filtro barato, pode
+    classificada": llm.classificacao_datahora IS NULL na fonte (pré-filtro barato, pode
     estar até 15min desatualizado) e o anti-join contra a tabela destino (garantia final,
     cobre esse desincronismo — ver cabeçalho da query). Retorna 1 linha por sessão pendente
     de classificação, com o ponteiro pra HSM disparada (se houver) — o texto do HSM em si
