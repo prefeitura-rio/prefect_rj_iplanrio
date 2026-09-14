@@ -442,7 +442,16 @@ def propaga_tema_causa_chatbot(
 
     Mesma lógica de MERGE parcial de atualiza_tema_causa, só que a fonte aqui já é a
     tabela auxiliar (não precisa de tmp: não é um load de DataFrame, é MERGE direto
-    entre 2 tabelas que já existem no BigQuery)."""
+    entre 2 tabelas que já existem no BigQuery).
+
+    tema_nome/causa_nome moram dentro do struct `llm` nessas tabelas (repo
+    queries-rj-crm-registry, models/mart/chatbot/{v1,v2}) — BigQuery aceita SET num
+    subcampo de struct direto (t.llm.tema_nome = ...), sem precisar reconstruir o
+    struct inteiro. Só funciona se `llm` já não for NULL na linha alvo: como esta
+    função só roda pra sessão já classificada (id_interacao = id_sessao casado com
+    uma linha da tabela auxiliar), llm já foi preenchido pela carga original
+    (carrega_classificacoes/monta_dataframe_final), então essa premissa vale na
+    prática."""
     client = get_bq_client(project_id)
     linhas_total = 0
     for table_id in (chatbot_v1_table_id, chatbot_v2_table_id):
@@ -452,7 +461,7 @@ def propaga_tema_causa_chatbot(
             USING `{aux_full_table_id}` AS s
             ON t.id_interacao = s.id_sessao
             WHEN MATCHED THEN
-                UPDATE SET t.tema_nome = s.tema_nome, t.causa_nome = s.causa_nome
+                UPDATE SET t.llm.tema_nome = s.tema_nome, t.llm.causa_nome = s.causa_nome
         """
         merge_job = client.query(merge_sql)
         merge_job.result()
