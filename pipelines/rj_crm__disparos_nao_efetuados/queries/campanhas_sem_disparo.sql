@@ -33,10 +33,17 @@ with
     ),
 
     -- 2. Disparos efetuados hoje (fuso horário de Brasília)
+    -- Usa envio_datahora ou falha_datahora para garantir que houve um evento de envio
+    -- ou falha originado hoje — evitando falsos positivos de webhooks tardios de
+    -- delivered/read chegando nos dias seguintes com data_particao atualizada.
     disparos_hoje as (
         select distinct nome_hsm
         from `rj-crm-registry.brutos_salesforce.status_disparo`
-        where date(data_particao) = current_date('America/Sao_Paulo')
+        where data_particao = current_date('America/Sao_Paulo')
+          and (
+              date(envio_datahora) = current_date('America/Sao_Paulo')
+              or date(falha_datahora) = current_date('America/Sao_Paulo')
+          )
     ),
 
     -- 3. Campanhas ativas sem disparo hoje
