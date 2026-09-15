@@ -76,6 +76,22 @@ runs:
       with:
         python-version-file: pyproject.toml
 
+    - name: Configure git for HTTPS access to private repo dependencies
+      shell: bash
+      # Some pipelines (e.g. rj_iplanrio__nf_agent) pull a workspace
+      # dependency straight from a private GitHub repo via git+ssh (see
+      # that pipeline's pyproject.toml [tool.uv.sources]). This runner is
+      # an ephemeral GitHub-hosted VM with no SSH key/known_hosts set up
+      # for that at all, so `uv sync`'s git fetch fails with "Host key
+      # verification failed" — this has never actually succeeded via CI.
+      # Rewriting ssh://git@ssh.github.com:443/ and ssh://git@github.com/
+      # to an HTTPS URL authenticated with the token this action already
+      # has (used above for the ghcr.io login) sidesteps needing a new SSH
+      # key/secret entirely.
+      run: |
+        git config --global url."https://x-access-token:${{ inputs.gh_token }}@github.com/".insteadOf "ssh://git@ssh.github.com:443/"
+        git config --global url."https://x-access-token:${{ inputs.gh_token }}@github.com/".insteadOf "ssh://git@github.com/"
+
     - name: Deploy Prefect flows
       shell: bash
       env:
