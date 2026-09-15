@@ -1,4 +1,4 @@
-"""Build and submit a Vertex AI Batch Prediction job for NF extraction.
+"""Build and submit a Bifrost Batch API job for NF extraction.
 
 Mirrors the synchronous path's single-page extraction call
 (``utils/extraction/api.py::extract_from_pdf_bytes`` with
@@ -14,20 +14,19 @@ import) for the same reason ``classification_submit.py`` reads
 ``CLASSIFICATION_PROMPT`` lazily — see that module's docstring.
 """
 
+import base64
 from dataclasses import dataclass
 from pathlib import Path
-
-from google.cloud import bigquery
 
 from prefect_rj_iplanrio.logging import get_logger
 
 from .. import prompts
+from ..classification.page_extraction import extract_page_as_bytes
 from ..extraction.prompt import build_prompt_with_hint
-from ..gcs import GCSDownloader
-from .client import build_vertex_batch_client
+from .bifrost_batch import BatchSubmitResult, submit_jsonl_batch
+from .custom_id import encode_custom_id
 from .job_tracking import PHASE_EXTRACTION, BatchJobEvent, append_job_event
 from .model_config import BATCH_MODEL_NAME, EXTRACTION_GENERATION_CONFIG
-from .scratch_gcs import upload_page_pdf
 
 logger = get_logger(__name__)
 
@@ -47,8 +46,8 @@ def _resolved_extraction_prompt(classification_hint: str | None) -> str:
     Delegates to the same ``build_prompt_with_hint`` helper the synchronous
     path uses, via a throwaway object exposing just the one attribute that
     function reads (``extraction_prompt``) — avoids constructing a full
-    ``NFExtractor`` (which would build a Bifrost client this path never
-    uses) just to reach this pure string-formatting helper.
+    ``NFExtractor`` (which would build a Bifrost client this path doesn't
+    need one instance of) just to reach this pure string-formatting helper.
 
     :param classification_hint: Document type identified by the
         classification batch job for this page, or ``None``.
@@ -61,31 +60,34 @@ def _resolved_extraction_prompt(classification_hint: str | None) -> str:
     return build_prompt_with_hint(_PromptHolder(), classification_hint)
 
 
-def _build_extraction_request(page_uri: str, classification_hint: str | None) -> dict:
-    """Build the ``request`` column payload for one extraction candidate page.
+def _build_extraction_body(page_pdf_bytes: bytes, classification_hint: str | None) -> dict:
+    """Build the OpenAI chat-completions ``body`` for one extraction candidate page.
 
-    :param page_uri: ``gs://...`` URI of the single-page PDF to extract from.
+    :param page_pdf_bytes: Single-page PDF bytes.
     :param classification_hint: Document type identified during
         classification (injected into the prompt), or ``None``.
-    :returns: A JSON-serializable dict matching the batch input schema's
-        ``request`` column.
+    :returns: A JSON-serializable dict matching ``utils/extraction/api.py``'s
+        live request shape, for the JSONL row's ``body`` field.
     """
+    page_b64 = base64.b64encode(page_pdf_bytes).decode("utf-8")
     return {
-        "contents": [
+        "model": BATCH_MODEL_NAME,
+        "messages": [
             {
                 "role": "user",
-                "parts": [
-                    {"text": _resolved_extraction_prompt(classification_hint)},
-                    {"fileData": {"fileUri": page_uri, "mimeType": "application/pdf"}},
+                "content": [
+                    {"type": "text", "text": _resolved_extraction_prompt(classification_hint)},
+                    {
+                        "type": "file",
+                        "file": {"filename": "extraction.pdf", "file_data": f"data:application/pdf;base64,{page_b64}"},
+                    },
                 ],
             }
         ],
-        "generationConfig": {
-            "temperature": EXTRACTION_GENERATION_CONFIG["temperature"],
-            "topP": EXTRACTION_GENERATION_CONFIG["top_p"],
-            "maxOutputTokens": EXTRACTION_GENERATION_CONFIG["max_output_tokens"],
-            "responseMimeType": EXTRACTION_GENERATION_CONFIG["response_mime_type"],
-        },
+        "temperature": EXTRACTION_GENERATION_CONFIG["temperature"],
+        "top_p": EXTRACTION_GENERATION_CONFIG["top_p"],
+        "max_tokens": EXTRACTION_GENERATION_CONFIG["max_tokens"],
+        "response_format": {"type": "json_object"},
     }
 
 
@@ -93,63 +95,37 @@ def _build_extraction_request(page_uri: str, classification_hint: str | None) ->
 class ExtractionSubmitResult:
     """Outcome of submitting an extraction batch job for one session."""
 
-    vertex_job_name: str
-    input_table: str
-    output_table: str
+    bifrost_batch_id: str
+    input_file_id: str
     row_count: int
 
 
-def _load_extraction_input_table(bq_client: bigquery.Client, table_ref: str, rows: list[dict]) -> None:
-    """Load extraction input rows into ``table_ref`` (create/replace).
-
-    :param bq_client: Authenticated BigQuery client.
-    :param table_ref: Fully-qualified destination table.
-    :param rows: Rows to load — see :func:`build_extraction_rows`.
-    """
-    schema = [
-        bigquery.SchemaField("pdf_name", "STRING"),
-        bigquery.SchemaField("page_number", "INT64"),
-        bigquery.SchemaField("session_id", "STRING"),
-        bigquery.SchemaField("request", "JSON"),
-    ]
-    job_config = bigquery.LoadJobConfig(schema=schema, write_disposition="WRITE_TRUNCATE")
-    load_job = bq_client.load_table_from_json(rows, table_ref, job_config=job_config)
-    load_job.result()
-    logger.warning("Loaded %d extraction input rows into %s", len(rows), table_ref)
-
-
 def build_extraction_rows(
-    gcs_downloader: GCSDownloader,
     pdf_paths: dict[str, Path],
     candidates: list[ExtractionCandidate],
     session_id: str,
 ) -> list[dict]:
-    """Render every NF-classified page and build extraction input rows.
+    """Render every NF-classified page and build extraction JSONL rows.
 
-    :param gcs_downloader: Used only for its already-resolved ``.bucket``.
     :param pdf_paths: Mapping of pdf_name -> local downloaded path for every
         PDF referenced by ``candidates``.
     :param candidates: Pages to extract, one row each — see
         :class:`ExtractionCandidate`.
-    :param session_id: Current batch session UUID (scopes the scratch prefix).
-    :returns: List of row dicts ready for :func:`_load_extraction_input_table`.
+    :param session_id: Current batch session UUID (encoded into every row's
+        ``custom_id``).
+    :returns: List of JSONL row dicts ready for :func:`bifrost_batch.submit_jsonl_batch`.
     """
     rows: list[dict] = []
     for candidate in candidates:
         pdf_path = pdf_paths[candidate.pdf_name]
-        page_uri = upload_page_pdf(
-            bucket=gcs_downloader.bucket,
-            pdf_path=pdf_path,
-            page_number=candidate.page_number,
-            session_id=session_id,
-            phase=PHASE_EXTRACTION,
-        )
+        page_pdf_bytes = extract_page_as_bytes(pdf_path, candidate.page_number - 1, as_pdf=True)
+        custom_id = encode_custom_id(PHASE_EXTRACTION, session_id, candidate.pdf_name, candidate.page_number)
         rows.append(
             {
-                "pdf_name": candidate.pdf_name,
-                "page_number": candidate.page_number,
-                "session_id": session_id,
-                "request": _build_extraction_request(page_uri, candidate.classification_hint),
+                "custom_id": custom_id,
+                "method": "POST",
+                "url": "/v1/chat/completions",
+                "body": _build_extraction_body(page_pdf_bytes, candidate.classification_hint),
             }
         )
 
@@ -157,20 +133,17 @@ def build_extraction_rows(
 
 
 def submit_extraction_job(
-    bq_project: str,
-    bq_dataset: str,
+    client,
     nf_batch_jobs_table: str,
-    gcs_downloader: GCSDownloader,
     pdf_paths: dict[str, Path],
     candidates: list[ExtractionCandidate],
     session_id: str,
 ) -> ExtractionSubmitResult:
-    """Build the extraction input table and submit the Vertex AI batch job.
+    """Build the extraction JSONL input and submit the Bifrost batch job.
 
-    :param bq_project: GCP project hosting the batch input/output tables.
-    :param bq_dataset: BigQuery dataset hosting the batch input/output tables.
+    :param client: ``openai.OpenAI`` client routed through Bifrost (see
+        ``utils/llm.py::build_llm_client``).
     :param nf_batch_jobs_table: Fully-qualified ``nf_batch_jobs`` tracking table.
-    :param gcs_downloader: Used to resolve the scratch bucket.
     :param pdf_paths: Mapping of pdf_name -> local downloaded path.
     :param candidates: NF-classified pages to extract (from the
         classification job's output — see ``poll.py``).
@@ -178,43 +151,24 @@ def submit_extraction_job(
     :returns: The submitted job's identifying info, recorded in
         ``nf_batch_jobs`` before returning.
     """
-    bq_client = bigquery.Client(project=bq_project)
-    input_table = f"{bq_project}.{bq_dataset}.nf_batch_extraction_input_{session_id}"
-    output_table = f"{bq_project}.{bq_dataset}.nf_batch_extraction_output_{session_id}"
-
-    rows = build_extraction_rows(gcs_downloader, pdf_paths, candidates, session_id)
-    _load_extraction_input_table(bq_client, input_table, rows)
-
-    client = build_vertex_batch_client()
-    job = client.batches.create(
-        model=BATCH_MODEL_NAME,
-        src=f"bq://{input_table}",
-        config={"dest": f"bq://{output_table}"},
-    )
-    logger.warning(
-        "Submitted extraction batch job %s (%d rows, input=%s, output=%s)",
-        job.name,
-        len(rows),
-        input_table,
-        output_table,
-    )
+    rows = build_extraction_rows(pdf_paths, candidates, session_id)
+    result: BatchSubmitResult = submit_jsonl_batch(client, rows, session_id, PHASE_EXTRACTION)
 
     append_job_event(
         nf_batch_jobs_table,
         BatchJobEvent(
             session_id=session_id,
             phase=PHASE_EXTRACTION,
-            vertex_job_name=job.name,
-            state=str(job.state),
-            input_table=f"bq://{input_table}",
-            output_table=f"bq://{output_table}",
-            row_count=len(rows),
+            bifrost_batch_id=result.bifrost_batch_id,
+            state="validating",
+            input_file_id=result.input_file_id,
+            output_file_id=None,
+            row_count=result.row_count,
         ),
     )
 
     return ExtractionSubmitResult(
-        vertex_job_name=job.name,
-        input_table=input_table,
-        output_table=output_table,
-        row_count=len(rows),
+        bifrost_batch_id=result.bifrost_batch_id,
+        input_file_id=result.input_file_id,
+        row_count=result.row_count,
     )

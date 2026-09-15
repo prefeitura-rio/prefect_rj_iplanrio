@@ -1,10 +1,10 @@
 """Prefect task wrappers for the NF Agent pipeline.
 
 Covers both execution modes of the single ``rj_iplanrio__nf_agent`` flow —
-sync (Bifrost/OpenAI-protocol, per-request) and batch (Vertex AI Batch
-Prediction). Each task is still a thin wrapper delegating to a plain
-function in ``utils.orchestration`` (sync) or ``utils.batch`` (batch), so
-the pattern in STYLEGUIDE.md §4.2 holds for both.
+sync and batch, both routed through Bifrost (see ``utils/llm.py``). Each
+task is still a thin wrapper delegating to a plain function in
+``utils.orchestration`` (sync) or ``utils.batch`` (batch), so the pattern in
+STYLEGUIDE.md §4.2 holds for both.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from openai import OpenAI
 from prefect import task
 
 from .utils import orchestration
@@ -111,7 +112,7 @@ def trigger_next_batch_if_pending_task(
     )
 
 
-# ── Batch mode (Vertex AI Batch Prediction) ─────────────────────────────────
+# ── Batch mode (Bifrost Batch API) ──────────────────────────────────────────
 
 
 @task
@@ -134,20 +135,16 @@ def select_session_pdfs_task(pdf_paths: dict[str, Path], max_rows: int) -> Batch
 
 @task
 def submit_classification_job_task(
-    bq_project: str,
-    bq_dataset: str,
+    client: OpenAI,
     nf_batch_jobs_table: str,
-    gcs_downloader: GCSDownloader,
     pdf_paths: dict[str, Path],
     selection: BatchSessionSelection,
     session_id: str,
 ) -> ClassificationSubmitResult:
-    """Build the classification input table and submit the Vertex AI batch job."""
+    """Build the classification JSONL input and submit the Bifrost batch job."""
     return submit_classification_job(
-        bq_project=bq_project,
-        bq_dataset=bq_dataset,
+        client=client,
         nf_batch_jobs_table=nf_batch_jobs_table,
-        gcs_downloader=gcs_downloader,
         pdf_paths=pdf_paths,
         selection=selection,
         session_id=session_id,
@@ -155,6 +152,6 @@ def submit_classification_job_task(
 
 
 @task
-def poll_active_sessions_task(config: PollConfig) -> list[str]:
-    """Check every active session's Vertex job state and advance/finish it."""
-    return poll_once(config)
+def poll_active_sessions_task(client: OpenAI, config: PollConfig) -> list[str]:
+    """Check every active session's Bifrost batch status and advance/finish it."""
+    return poll_once(client, config)

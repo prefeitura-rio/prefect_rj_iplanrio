@@ -5,17 +5,19 @@ The NF business logic lives in this package (migrated from agent-nf-validator by
 mechanical move).
 
 One flow, two execution modes (``execution_mode`` parameter, default
-``"batch"``):
+``"batch"``), both routed through the Bifrost gateway with the same
+``BIFROST_API_KEY``/``BIFROST_BASE_URL`` (see ``utils/llm.py``):
 
-- ``"batch"`` (default, what production runs on a schedule): Vertex AI
-  Batch Prediction — classifies and extracts fields in bulk at 50% of the
-  online-inference cost. Every run polls active sessions and, once idle
-  with pending PDFs, submits the next one — see ``utils/batch/__init__.py``
-  for the full architecture and ``_run_batch_mode`` below.
+- ``"batch"`` (default, what production runs on a schedule): Bifrost's
+  Batch API (mirrors OpenAI's own Batch API shape) — classifies and
+  extracts fields in bulk at a lower cost than per-request inference.
+  Every run polls active sessions and, once idle with pending PDFs,
+  submits the next one — see ``utils/batch/__init__.py`` for the full
+  architecture and ``_run_batch_mode`` below.
 - ``"sync"``: the original per-request path, one Gemini call per page via
-  the Bifrost OpenAI-compatible gateway (see ``utils/llm.py``). Kept
-  available for small/fast or on-demand runs (not scheduled) rather than
-  removed outright — see ``_run_sync_mode`` below.
+  Bifrost's OpenAI-compatible endpoint. Kept available for small/fast or
+  on-demand runs (not scheduled) rather than removed outright — see
+  ``_run_sync_mode`` below.
 
 Both modes are one flow in one directory (not two pipelines) because
 STYLEGUIDE.md §4.1 requires exactly one ``@flow`` per pipeline directory,
@@ -31,13 +33,13 @@ import cleanly with zero setup — verified directly, no ``PROMPT_*`` env vars
 set. Exactly one import stays deferred to a function body: ``POCProcessor``
 inside ``utils/pipeline.py::nf_processing_flow`` (sync mode only).
 
-Sync mode's LLM calls (classification + extraction) go through the ``openai``
-SDK routed at Bifrost's OpenAI-compatible endpoint (see ``utils/llm.py``) — a
-normal ``uv`` dependency, no protobuf/grpc conflict, no isolated install.
-Batch mode talks to Vertex AI directly via the ``google-genai`` SDK (see
-``utils/batch/client.py``) since there is no batch-prediction route through
-Bifrost — already resolved workspace-wide without a protobuf/grpc conflict
-(see ``pyproject.toml``).
+Both modes' LLM calls go through the ``openai`` SDK routed at Bifrost's
+OpenAI-compatible endpoint (see ``utils/llm.py``) — a normal ``uv``
+dependency, no protobuf/grpc conflict, no isolated install. Batch mode used
+to talk to Vertex AI directly via the ``google-genai`` SDK instead — moved
+to Bifrost's own Batch API (see ``utils/batch/__init__.py``) specifically
+to keep all LLM traffic observable/governed through the company's gateway,
+even at the cost of giving up Vertex's native BigQuery-sourced batch I/O.
 
 What still forces the deferral above: prompt env vars. `classification/gemini_classifier.py`
 does `from ..prompts import CLASSIFICATION_PROMPT` at module level, which reads
@@ -89,7 +91,8 @@ from .tasks import (
 from .utils.batch.poll import PollConfig
 from .utils.batch.row_counting import MAX_CLASSIFICATION_ROWS_DEFAULT
 from .utils.gcs import GCSDownloader
-from .utils.orchestration import BatchRunParams, parse_project_and_dataset
+from .utils.llm import build_llm_client
+from .utils.orchestration import BatchRunParams
 
 logger = get_logger(__name__)
 
@@ -219,7 +222,7 @@ def _run_sync_mode(
 
 
 def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
-    """Poll active Vertex AI batch sessions, then submit the next one if idle and PDFs are pending.
+    """Poll active Bifrost batch sessions, then submit the next one if idle and PDFs are pending.
 
     :param max_classification_rows: Row budget for a new classification job —
         see ``utils/batch/row_counting.py`` for why this is a page count,
@@ -241,11 +244,9 @@ def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
     if not gcs_output_base_path:
         raise ValueError("GCS_OUTPUT_BASE_PATH env var is required.")
 
-    bq_project, bq_dataset = parse_project_and_dataset(nf_batch_jobs_table)
+    client = build_llm_client()
 
     poll_config = PollConfig(
-        bq_project=bq_project,
-        bq_dataset=bq_dataset,
         nf_batch_jobs_table=nf_batch_jobs_table,
         gcs_bucket=gcs_bucket,
         pdfs_base_path=pdfs_base_path,
@@ -254,7 +255,7 @@ def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
         requests_per_minute=0,
         max_concurrent=0,
     )
-    finished_sessions = poll_active_sessions_task(poll_config)
+    finished_sessions = poll_active_sessions_task(client, poll_config)
     if finished_sessions:
         logger.info("Sessions finished this run: %s", finished_sessions)
 
@@ -285,10 +286,8 @@ def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
 
         selected_paths = {name: pdf_paths[name] for name in selection.selected_pdf_names}
         result = submit_classification_job_task(
-            bq_project=bq_project,
-            bq_dataset=bq_dataset,
+            client=client,
             nf_batch_jobs_table=nf_batch_jobs_table,
-            gcs_downloader=gcs_downloader,
             pdf_paths=selected_paths,
             selection=selection,
             session_id=session_id,
@@ -296,7 +295,7 @@ def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
 
     logger.info(
         "Submitted classification batch job %s (%d rows, session=%s)",
-        result.vertex_job_name,
+        result.bifrost_batch_id,
         result.row_count,
         session_id,
     )

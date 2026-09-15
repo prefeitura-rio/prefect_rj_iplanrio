@@ -1,15 +1,23 @@
-"""Page-count-based session sizing for Vertex AI Batch Prediction jobs.
+"""Page-count-based session sizing for Bifrost Batch API jobs.
 
-Vertex AI Batch Prediction caps a single job at 200,000 requests (documented
-for the Cloud-Storage-sourced path; not confirmed identical for the
-BigQuery-sourced path used here, so treated as the same working limit with a
-safety margin — see ``MAX_CLASSIFICATION_ROWS_DEFAULT`` below).
+Bifrost's own docs (https://docs.getbifrost.ai) don't state a row-count or
+file-size limit for a batch job — unlike the old direct-Vertex
+implementation, which at least had Vertex's documented (if not
+BigQuery-path-confirmed) 200,000-request cap to size against (see this
+module's git history). ``MAX_CLASSIFICATION_ROWS_DEFAULT`` below is
+therefore a much more conservative starting guess, not a value derived from
+a documented limit — it needs empirical validation against a real Bifrost
+batch submission (the first staging run) before being trusted at any larger
+size. It's also a *file-size* concern now, not just a row-count one: each
+JSONL row inlines a full base64-encoded single PDF page (see
+``classification_submit.py``), so this pipeline's rows are far heavier than
+a typical short-prompt batch row.
 
 The synchronous pipeline sizes a batch by PDF count (``batch_size``/
 ``max_pdfs``), which doesn't translate directly here: the classification job
 submits **one row per page**, and a PDF's page count is unknown until the
 file is actually opened. Selecting PDFs "count of PDFs" therefore risks
-building an input table with far more (or fewer) rows than intended.
+building an input file with far more (or fewer) rows than intended.
 Instead, this module selects PDFs by *accumulating actual page counts*,
 stopping as soon as the running total would exceed the configured budget.
 """
@@ -23,13 +31,12 @@ from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
 
-# Vertex AI's documented Cloud-Storage-path limit is 200,000 requests/job.
-# Default budget here is set well below that as a safety margin, since the
-# equivalent limit for the BigQuery-sourced path used by this pipeline is not
-# documented — better to run more (smaller, cheaper-to-retry) sessions than
-# to risk a rejected/truncated job. Override via BatchSessionBudget if a
-# tighter or looser limit is confirmed later.
-MAX_CLASSIFICATION_ROWS_DEFAULT = 150_000
+# Conservative starting guess — see module docstring. Deliberately close to
+# the synchronous pipeline's own default batch_size (1000 PDFs, see
+# flow.py), on the assumption that "roughly as much data as one synchronous
+# batch already handles" is a safe starting point, not a proven Bifrost
+# limit. Override via BatchSessionBudget once a real limit is confirmed.
+MAX_CLASSIFICATION_ROWS_DEFAULT = 1_000
 
 
 @dataclass(frozen=True)

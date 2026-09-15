@@ -1,10 +1,11 @@
 """Tests for ``utils/batch/result_adapter.py``.
 
-These exercise pure parsing/reshaping logic against hand-built BigQuery
-output rows — no BigQuery/Vertex AI/GCS calls are made. Row shapes mirror
-what the Vertex AI Batch Prediction for BigQuery docs show for a
-``GenerateContentResponse``-shaped ``response`` JSON column (see
-``result_adapter.py``'s module docstring for the exact reference).
+These exercise pure parsing/reshaping logic against hand-built Bifrost
+Batch API result lines — no Bifrost/BigQuery/GCS calls are made. Row shapes
+mirror https://docs.getbifrost.ai/api-reference/batch/get-batch-results
+(``custom_id`` + ``response.body`` shaped like a standard OpenAI
+chat-completions response), same as OpenAI's own Batch API — see
+``result_adapter.py``'s module docstring for the exact reference.
 """
 
 from __future__ import annotations
@@ -12,24 +13,31 @@ from __future__ import annotations
 import json
 
 from pipelines.rj_iplanrio__nf_agent.utils.batch import result_adapter
+from pipelines.rj_iplanrio__nf_agent.utils.batch.custom_id import encode_custom_id
 
 
-def _response_row(pdf_name: str, page_number: int, text_payload: dict, usage: dict | None = None) -> dict:
-    """Build a successful batch-output row with an embedded model text payload."""
-    usage = usage or {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15}
+def _response_row(
+    pdf_name: str, page_number: int, text_payload: dict, phase: str = "classification", usage: dict | None = None
+) -> dict:
+    """Build a successful batch-result line with an embedded model text payload."""
+    usage = usage or {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
     return {
-        "pdf_name": pdf_name,
-        "page_number": page_number,
-        "status": "",
+        "custom_id": encode_custom_id(phase, "sess-1", pdf_name, page_number),
         "response": {
-            "candidates": [{"content": {"parts": [{"text": json.dumps(text_payload)}], "role": "model"}}],
-            "usageMetadata": usage,
+            "status_code": 200,
+            "body": {
+                "choices": [{"message": {"role": "assistant", "content": json.dumps(text_payload)}}],
+                "usage": usage,
+            },
         },
     }
 
 
-def _failed_row(pdf_name: str, page_number: int, status: str) -> dict:
-    return {"pdf_name": pdf_name, "page_number": page_number, "status": status, "response": None}
+def _failed_row(pdf_name: str, page_number: int, message: str, phase: str = "classification") -> dict:
+    return {
+        "custom_id": encode_custom_id(phase, "sess-1", pdf_name, page_number),
+        "error": {"code": "provider_error", "message": message},
+    }
 
 
 class TestParseClassificationOutputRows:
@@ -57,12 +65,10 @@ class TestParseClassificationOutputRows:
 
     def test_malformed_json_response_is_treated_as_error_not_raised(self):
         row = {
-            "pdf_name": "doc.pdf",
-            "page_number": 3,
-            "status": "",
+            "custom_id": encode_custom_id("classification", "sess-1", "doc.pdf", 3),
             "response": {
-                "candidates": [{"content": {"parts": [{"text": "not valid json {{{"}]}}],
-                "usageMetadata": {},
+                "status_code": 200,
+                "body": {"choices": [{"message": {"content": "not valid json {{{"}}], "usage": {}},
             },
         }
 
@@ -71,20 +77,22 @@ class TestParseClassificationOutputRows:
         assert results[0].category is None
         assert "Failed to parse" in results[0].error
 
-    def test_response_json_column_as_string_is_tolerated(self):
-        """Some BigQuery client versions round-trip JSON columns as raw strings."""
-        row = _response_row("doc.pdf", 1, {"categoria": "Fatura", "justificativa": ""})
-        row["response"] = json.dumps(row["response"])
+    def test_non_200_status_code_is_treated_as_error(self):
+        row = {
+            "custom_id": encode_custom_id("classification", "sess-1", "doc.pdf", 1),
+            "response": {"status_code": 429, "body": {}},
+        }
 
         results = result_adapter.parse_classification_output_rows([row])
 
-        assert results[0].category == "Fatura"
+        assert results[0].category is None
+        assert "429" in results[0].error
 
 
 class TestParseExtractionOutputRows:
     def test_successful_extraction_row(self):
         payload = {"possui_nota_fiscal": True, "quantidade_notas_fiscais": 1, "notas_fiscais": [{"numero_nf": "123"}]}
-        row = _response_row("doc.pdf", 5, payload)
+        row = _response_row("doc.pdf", 5, payload, phase="extraction")
 
         results = result_adapter.parse_extraction_output_rows([row])
 
@@ -92,7 +100,7 @@ class TestParseExtractionOutputRows:
         assert results[0].error is None
 
     def test_failed_extraction_row(self):
-        row = _failed_row("doc.pdf", 5, "quota exceeded")
+        row = _failed_row("doc.pdf", 5, "quota exceeded", phase="extraction")
 
         results = result_adapter.parse_extraction_output_rows([row])
 
@@ -119,6 +127,17 @@ class TestNfPagesFromClassification:
         by_pdf = result_adapter.nf_pages_from_classification(rows)
 
         assert by_pdf == {}
+
+
+class TestTotalPagesByPdfFromClassification:
+    def test_counts_distinct_pages_per_pdf(self):
+        rows = [
+            result_adapter.ClassificationOutputRow("a.pdf", 1, "NF-e", "", {}, None),
+            result_adapter.ClassificationOutputRow("a.pdf", 2, "Nenhuma das Opções", "", {}, None),
+            result_adapter.ClassificationOutputRow("b.pdf", 1, "Fatura", "", {}, None),
+        ]
+
+        assert result_adapter.total_pages_by_pdf_from_classification(rows) == {"a.pdf": 2, "b.pdf": 1}
 
 
 class TestBuildPdfResultsFromBatch:
@@ -157,7 +176,7 @@ class TestBuildPdfResultsFromBatch:
 
     def test_classification_error_marks_pdf_as_failed(self):
         classification_rows = [
-            result_adapter.ClassificationOutputRow("a.pdf", 1, None, "", {}, "Vertex error: timeout"),
+            result_adapter.ClassificationOutputRow("a.pdf", 1, None, "", {}, "Bifrost error: timeout"),
         ]
 
         pdf_results = result_adapter.build_pdf_results_from_batch(
@@ -166,7 +185,7 @@ class TestBuildPdfResultsFromBatch:
 
         result = pdf_results["a.pdf"]
         assert result["success"] is False
-        assert "Vertex error: timeout" in result["error"]
+        assert "Bifrost error: timeout" in result["error"]
 
     def test_pdf_absent_from_classification_rows_still_gets_an_entry(self):
         # total_pages_by_pdf is the source of truth for which PDFs exist in

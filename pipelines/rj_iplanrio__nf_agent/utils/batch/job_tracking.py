@@ -1,11 +1,11 @@
-"""Session/job tracking for the Vertex AI Batch Prediction path.
+"""Session/job tracking for the Bifrost-routed batch path.
 
 Replaces the synchronous pipeline's self-trigger mechanism (see
 ``utils/orchestration.py::trigger_next_batch_if_pending``): since a batch job
 can take minutes to hours to finish, no single flow-run can just "keep
-processing and re-trigger at the end" — submit and poll run as separate,
-short-lived flow-runs, and the *only* thing connecting them across time is
-this tracking table.
+processing and re-trigger at the end" — this pipeline's ``flow.py`` polls
+active sessions at the start of every scheduled run, and the *only* thing
+connecting one run to the next across that time gap is this tracking table.
 
 Modeled as an **append-only event log**, not a row that gets mutated in
 place: BigQuery's streaming-insert buffer (``insert_rows_json``, what this
@@ -21,19 +21,19 @@ only ever streams inserts, matching ``BigQueryWriter.write_run_summary``'s
 existing "must pre-exist" contract):
 
     CREATE TABLE `<project>.<dataset>.nf_batch_jobs` (
-        session_id       STRING,
-        phase            STRING,   -- 'classification' | 'extraction'
-        vertex_job_name  STRING,   -- e.g. 'projects/.../batchPredictionJobs/123...'
-        state            STRING,   -- raw Vertex JobState string (e.g.
-                                    -- 'JOB_STATE_RUNNING'), or one of this
-                                    -- module's own terminal sentinels
-                                    -- ('done', 'failed') once poll finishes
-                                    -- post-processing for that phase.
-        input_table      STRING,   -- bq://project.dataset.table used as `src`
-        output_table     STRING,   -- bq://project.dataset.table used as `dest`
-        row_count        INT64,
-        created_at       TIMESTAMP,
-        error            STRING
+        session_id        STRING,
+        phase             STRING,   -- 'classification' | 'extraction'
+        bifrost_batch_id  STRING,   -- e.g. 'batch_xyz789' (Bifrost Batch API job id)
+        state             STRING,   -- raw Bifrost batch status string (e.g.
+                                     -- 'validating', 'in_progress'), or one of
+                                     -- this module's own terminal sentinels
+                                     -- ('done', 'failed') once poll finishes
+                                     -- post-processing for that phase.
+        input_file_id     STRING,   -- Bifrost file id used as `input_file_id`
+        output_file_id    STRING,   -- Bifrost file id holding batch results
+        row_count         INT64,
+        created_at        TIMESTAMP,
+        error             STRING
     );
 """
 
@@ -52,8 +52,8 @@ PHASE_EXTRACTION = "extraction"
 
 # Our own bookkeeping sentinels, written by poll.py once it has finished all
 # post-processing for a phase (or given up on it) — distinct from the raw
-# Vertex `JobState` strings (e.g. "JOB_STATE_SUCCEEDED") stored in `state`
-# while a job is still in flight through Vertex's own lifecycle.
+# Bifrost batch status strings (e.g. "completed") stored in `state` while a
+# job is still in flight through Bifrost's own lifecycle.
 STATE_DONE = "done"
 STATE_FAILED = "failed"
 TERMINAL_STATES = frozenset({STATE_DONE, STATE_FAILED})
@@ -65,10 +65,10 @@ class BatchJobEvent:
 
     session_id: str
     phase: str
-    vertex_job_name: str | None
+    bifrost_batch_id: str | None
     state: str
-    input_table: str | None = None
-    output_table: str | None = None
+    input_file_id: str | None = None
+    output_file_id: str | None = None
     row_count: int | None = None
     error: str | None = None
 
@@ -99,21 +99,21 @@ def append_job_event(nf_batch_jobs_table: str, event: BatchJobEvent) -> None:
     row = {
         "session_id": event.session_id,
         "phase": event.phase,
-        "vertex_job_name": event.vertex_job_name,
+        "bifrost_batch_id": event.bifrost_batch_id,
         "state": event.state,
-        "input_table": event.input_table,
-        "output_table": event.output_table,
+        "input_file_id": event.input_file_id,
+        "output_file_id": event.output_file_id,
         "row_count": event.row_count,
         "created_at": datetime.now(timezone.utc),
         "error": event.error,
     }
     writer.insert_row(nf_batch_jobs_table, row)
     logger.warning(
-        "nf_batch_jobs: session=%s phase=%s state=%s job=%s",
+        "nf_batch_jobs: session=%s phase=%s state=%s batch=%s",
         event.session_id,
         event.phase,
         event.state,
-        event.vertex_job_name,
+        event.bifrost_batch_id,
     )
 
 
@@ -131,10 +131,10 @@ def get_latest_events(nf_batch_jobs_table: str) -> list[BatchJobEvent]:
             SELECT
                 session_id,
                 phase,
-                vertex_job_name,
+                bifrost_batch_id,
                 state,
-                input_table,
-                output_table,
+                input_file_id,
+                output_file_id,
                 row_count,
                 error,
                 ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY created_at DESC) AS rn
@@ -150,10 +150,10 @@ def get_latest_events(nf_batch_jobs_table: str) -> list[BatchJobEvent]:
         BatchJobEvent(
             session_id=row["session_id"],
             phase=row["phase"],
-            vertex_job_name=row["vertex_job_name"],
+            bifrost_batch_id=row["bifrost_batch_id"],
             state=row["state"],
-            input_table=row["input_table"],
-            output_table=row["output_table"],
+            input_file_id=row["input_file_id"],
+            output_file_id=row["output_file_id"],
             row_count=None if row["row_count"] is None else int(row["row_count"]),
             error=row["error"],
         )
@@ -173,8 +173,8 @@ def get_active_sessions(nf_batch_jobs_table: str) -> list[BatchJobEvent]:
 def has_active_session(nf_batch_jobs_table: str) -> bool:
     """Return whether any session is currently in flight (non-terminal).
 
-    Used by the submit flow to avoid starting a new session while a previous
-    one hasn't finished — sessions are processed one at a time, matching the
+    Used by the flow to avoid starting a new session while a previous one
+    hasn't finished — sessions are processed one at a time, matching the
     synchronous pipeline's self-trigger behaviour (one batch completes fully
     before the next begins).
 

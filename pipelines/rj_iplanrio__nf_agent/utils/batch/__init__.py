@@ -1,12 +1,12 @@
-"""Vertex AI Batch Prediction path for the NF Agent pipeline.
+"""Batch Prediction path for the NF Agent pipeline, routed through Bifrost.
 
 This package is an *alternative* execution mode of the single
 ``rj_iplanrio__nf_agent`` flow (``execution_mode="batch"``, the default) —
 it does not replace the synchronous mode (``execution_mode="sync"``,
-Bifrost/OpenAI-protocol, per-request), which stays available for small/fast
-or on-demand runs. It exists to process large backlogs at 50% of the
-online-inference cost by submitting Vertex AI Batch Prediction jobs instead
-of making one Gemini call per page.
+per-request, also via Bifrost), which stays available for small/fast or
+on-demand runs. It exists to process large backlogs at a lower cost than
+per-request inference by submitting Bifrost Batch API jobs (which mirror
+OpenAI's own Batch API shape) instead of making one Gemini call per page.
 
 Both modes live in one pipeline directory/one ``@flow`` (see ``flow.py``'s
 module docstring for why — briefly, one flow per directory per
@@ -16,34 +16,45 @@ paths rather than running two pipelines). Modules here freely import from
 prompts, page rendering) since it's genuinely shared with the synchronous
 mode, not batch-specific, and a copy would drift.
 
+Both modes now go through Bifrost with the *same* ``BIFROST_API_KEY``/
+``BIFROST_BASE_URL`` (see ``utils/llm.py``) — this replaced an earlier
+version of this package that talked to Vertex AI directly via the
+``google-genai`` SDK. That direct-Vertex version was abandoned specifically
+to keep all LLM traffic observable/governed through the company's Bifrost
+gateway, even though it meant giving up Vertex's native BigQuery-sourced
+batch I/O (passthrough ``pdf_name``/``page_number``/``session_id`` columns)
+for Bifrost's JSONL-file-plus-``custom_id`` shape instead — see
+``custom_id.py`` for how per-page identity is now carried.
+
 Key architectural differences from the synchronous mode (see each module's
 docstring for details):
 
-- LLM calls go straight to Vertex AI (``google-genai`` SDK, ``enterprise=True``)
-  instead of through the Bifrost gateway — there is no batch route through
-  Bifrost. This reintroduces a direct Vertex AI dependency that the
-  synchronous mode deliberately avoids (see ``utils/llm.py``'s docstring for
-  why); batch jobs may hit the same ``constraints/vertexai.allowedModels``
-  Org Policy block that motivated that avoidance — this is a known, accepted
-  risk, not yet validated against the real GCP project.
 - Classification and extraction are two separate, sequential batch jobs (the
   set of pages to extract is only known after classification results are
   in) — see ``poll.py`` for the state machine that walks a session through
   both phases, plus the next session's submit, all within one flow run
-  without any blocking/sleeping while waiting on Vertex AI.
-- BigQuery (not Cloud Storage/JSONL) is used as the batch job's input/output
-  — this lets extra tracking columns (``pdf_name``, ``page_number``,
-  ``session_id``) pass through untouched into the output table, which is how
-  each output row is matched back to the page that produced it (the
-  Cloud-Storage-source path has no documented per-row identifier).
+  without any blocking/sleeping while waiting on Bifrost.
+- Batch input/output is JSONL (one line per page, ``custom_id`` +
+  request/response body) uploaded and retrieved as Bifrost *files* — not
+  BigQuery tables. Each page's PDF bytes are inlined as base64 directly in
+  its JSONL row's request body (same ``file_data: data:application/pdf;base64,...``
+  shape the synchronous path already sends live — see
+  ``utils/extraction/api.py``), so there is no GCS scratch upload step
+  (unlike the old direct-Vertex version, which needed one because Vertex's
+  BigQuery-sourced batch requires a ``fileData.fileUri`` pointing at Cloud
+  Storage).
 - The per-run SQLite cache (``utils/cache.py::DatabaseManager``, used by
   sync mode) is not used on this path — dedup relies solely on
   ``utils.bigquery.PageStatusReader`` (already-done pages in
   ``extracao_pagina`` at the current pipeline version).
-- Row-count budgeting: Vertex AI Batch Prediction caps a single job at
-  200,000 requests (undocumented whether this cap is identical for the
-  BigQuery-sourced path — treated as the working assumption, with margin).
-  Since a PDF's page count is unknown until it is opened, session sizing is
-  done by accumulating actual page counts across candidate PDFs (see
-  ``row_counting.py``), not by capping the number of PDFs.
+- Session/job tracking (``job_tracking.py``) still uses BigQuery
+  (``nf_batch_jobs``, append-only event log) — this part of the
+  architecture is unaffected by the Vertex-direct -> Bifrost move; only
+  what gets tracked per event changed (``bifrost_batch_id``/
+  ``input_file_id``/``output_file_id`` instead of ``vertex_job_name``/
+  ``input_table``/``output_table``).
+- Row-count budgeting: unlike Vertex AI's at-least-partially-documented
+  200,000-request cap, Bifrost's own docs state no row or file-size limit
+  for a batch job — see ``row_counting.py`` for why its default budget is
+  now a conservative, unvalidated guess rather than a documented number.
 """

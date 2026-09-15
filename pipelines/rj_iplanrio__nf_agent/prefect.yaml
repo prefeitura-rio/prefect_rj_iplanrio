@@ -3,17 +3,15 @@ prefect-version: 3.4.3
 
 # Secrets: the k3s `secretName` below is mounted as env vars into the job pod.
 # This pipeline has two execution modes (`execution_mode` flow parameter,
-# default `"batch"` below — see `flow.py`), so the secret must provide both
-# modes' requirements:
-#   - Batch mode (Vertex AI Batch Prediction, what's scheduled below):
-#     `GOOGLE_CLOUD_PROJECT` / `GOOGLE_CLOUD_LOCATION` (read directly by the
-#     `google-genai` SDK — see `utils/batch/client.py`) and
-#     `NF_BATCH_JOBS_TABLE` (fully-qualified `project.dataset.nf_batch_jobs`
-#     tracking table — DDL in `utils/batch/job_tracking.py`'s module
-#     docstring; must already exist, streams-inserts-only contract).
-#   - Sync mode (per-request via Bifrost, not scheduled — see
-#     `execution_mode` below): `BIFROST_API_KEY` / `BIFROST_BASE_URL` (see
-#     `utils/llm.py::build_gemini_model`).
+# default `"batch"` below — see `flow.py`), both routed through Bifrost with
+# the SAME `BIFROST_API_KEY` / `BIFROST_BASE_URL` (see `utils/llm.py`) — no
+# separate Vertex AI credential is needed for batch mode (that was true of
+# an earlier version of this package that talked to Vertex AI directly; see
+# `utils/batch/__init__.py` for why that was abandoned).
+# Batch mode additionally needs `NF_BATCH_JOBS_TABLE` (fully-qualified
+# `project.dataset.nf_batch_jobs` tracking table — DDL in
+# `utils/batch/job_tracking.py`'s module docstring; must already exist,
+# streams-inserts-only contract).
 # GCP creds for GCS/BigQuery (both modes) come from `RJ_NF_AGENT_CREDENTIALS`
 # (see flow.py).
 #
@@ -74,7 +72,7 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
-      max_classification_rows: 150000
+      max_classification_rows: 1000
       workers: 200
     # No `schedules:` in staging — see STYLEGUIDE.md §9.3.
 
@@ -90,13 +88,13 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
-      max_classification_rows: 150000
+      max_classification_rows: 1000
       workers: 200
     schedules:
-      # Vertex AI batch jobs take minutes to hours (target 24h processing,
-      # up to 72h queued) — a 15-minute interval is frequent enough to
-      # advance sessions promptly (poll) and start the next one (submit)
-      # without hammering the Vertex API for status. See flow.py.
+      # Batch jobs can take minutes to hours to finish — a 15-minute
+      # interval is frequent enough to advance sessions promptly (poll) and
+      # start the next one (submit) without hammering Bifrost for status.
+      # See flow.py.
       - interval: 900 # 15 minutes
         anchor_date: "2025-01-01T00:00:00"
         timezone: America/Sao_Paulo

@@ -65,8 +65,9 @@ def test_empty_input_returns_empty_selection():
     assert selection.unreadable_pdf_names == []
 
 
-def test_default_budget_constant_is_below_vertex_documented_limit():
-    # Vertex AI's documented Cloud-Storage-path limit is 200,000 requests/job
-    # (undocumented for the BigQuery-sourced path used by this pipeline) —
-    # the default must stay safely below that.
-    assert row_counting.MAX_CLASSIFICATION_ROWS_DEFAULT < 200_000
+def test_default_budget_constant_matches_synchronous_pipeline_batch_size():
+    # Bifrost publishes no documented row/file-size limit for a batch job
+    # (see row_counting.py's module docstring) — the default is deliberately
+    # set close to the synchronous pipeline's own default batch_size (1000
+    # PDFs, see flow.py) as a conservative, unvalidated starting guess.
+    assert row_counting.MAX_CLASSIFICATION_ROWS_DEFAULT == 1_000

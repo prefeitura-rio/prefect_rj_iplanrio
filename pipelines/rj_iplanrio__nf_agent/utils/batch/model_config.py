@@ -1,37 +1,47 @@
-"""Model names and generation config for the Vertex AI Batch Prediction path.
+"""Model name, provider hint, and generation config for the Bifrost-routed batch path.
 
-Deliberately separate from ``utils/classification/config.py`` /
-``utils/extraction/config.py``: those hold the ``"vertex/"``-prefixed model
-id required by *Bifrost's* OpenAI-compatible endpoint for the synchronous
-path (see their docstrings) — a prefix that is Bifrost-specific routing
-syntax, not a real Vertex AI model id. Batch jobs talk to Vertex AI directly
-via the ``google-genai`` SDK, which expects the bare model name instead (see
-the Vertex AI Batch Prediction docs' Python sample:
-``model="gemini-3.5-flash"``, no prefix).
+Reuses the exact same model id sync mode already calls successfully through
+Bifrost (``utils/classification/config.py::DEFAULT_MODEL_NAME`` /
+``utils/extraction/config.py::GEMINI_CONFIG["model_name"]``) — no separate
+"batch model id" exists; Bifrost's Batch API's ``model`` field takes the
+same ``provider/model`` string as a live chat-completions call.
+
+``BIFROST_BATCH_PROVIDER`` is this deployment's provider name for the
+Files/Batch API's ``extra_body={"provider": ...}`` hint — inferred from the
+``vertex/`` prefix already confirmed live in ``utils/llm.py``'s model ids
+(there is no per-call provider hint on the sync path since the model id
+prefix alone is enough to route there; the Batch/Files endpoints need it
+explicitly since ``files.create`` has no ``model`` argument to infer from).
+**Not yet validated against a real Bifrost batch call** — Bifrost's public
+docs (https://docs.getbifrost.ai) show a generic ``"gemini"`` provider in
+their own example, not ``"vertex"``; this repo's Bifrost deployment names
+Google's virtual provider ``vertex`` (confirmed for the synchronous
+endpoint against https://docs.dados.rio/ferramentas/opencode-usuario — see
+``utils/llm.py``'s docstring), so ``"vertex"`` is the working assumption
+here until proven otherwise by an actual batch submission.
 """
 
-# Bare model id, no "vertex/" prefix — see module docstring. Kept in sync
-# manually with utils/extraction/config.py::GEMINI_CONFIG["model_name"] and
-# utils/classification/config.py::DEFAULT_MODEL_NAME (both currently
-# "vertex/gemini-3.1-flash-lite" once the prefix is stripped), so the batch
-# path uses the same model as the synchronous path.
-BATCH_MODEL_NAME = "gemini-3.1-flash-lite"
+BIFROST_BATCH_PROVIDER = "vertex"
 
-# Mirrors utils/classification/config.py::DEFAULT_GENERATION_CONFIG, minus
-# "top_k" (dropped by the synchronous path too — no equivalent forwarded to
-# the API; kept only there as a historical record).
+# Same id as utils/classification/config.py::DEFAULT_MODEL_NAME /
+# utils/extraction/config.py::GEMINI_CONFIG["model_name"] — kept in sync
+# manually, see those modules' docstrings for the "vertex/" prefix reasoning.
+BATCH_MODEL_NAME = "vertex/gemini-3.1-flash-lite"
+
+# Mirrors utils/classification/config.py::DEFAULT_GENERATION_CONFIG minus
+# "top_k" (no OpenAI chat-completions equivalent — see that module). Field
+# names match the OpenAI chat-completions request shape used by the JSONL
+# batch input rows (classification_submit.py/extraction_submit.py), not the
+# camelCase Vertex-native shape the old direct-Vertex implementation used.
 CLASSIFICATION_GENERATION_CONFIG: dict[str, float | int | str] = {
     "temperature": 0.1,
     "top_p": 0.95,
-    "max_output_tokens": 8192,
-    "response_mime_type": "application/json",
+    "max_tokens": 8192,
 }
 
-# Mirrors utils/extraction/config.py::GEMINI_CONFIG, same fields kept as
-# CLASSIFICATION_GENERATION_CONFIG above.
+# Mirrors utils/extraction/config.py::GEMINI_CONFIG, same fields as above.
 EXTRACTION_GENERATION_CONFIG: dict[str, float | int | str] = {
     "temperature": 0.1,
     "top_p": 0.95,
-    "max_output_tokens": 8192,
-    "response_mime_type": "application/json",
+    "max_tokens": 8192,
 }

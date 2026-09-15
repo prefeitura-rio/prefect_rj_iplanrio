@@ -1,5 +1,5 @@
-"""Adapt Vertex AI Batch Prediction output rows into the synchronous
-pipeline's in-memory result shape.
+"""Adapt Bifrost Batch API result rows into the synchronous pipeline's
+in-memory result shape.
 
 The whole point of this module is to let ``poll.py`` reuse
 ``utils/processing/metadata.py::build_extracao_pagina_rows``,
@@ -8,22 +8,27 @@ The whole point of this module is to let ``poll.py`` reuse
 unmodified — those functions were written against the ``pdf_results`` dict
 shape produced by ``utils/processing/process.py::process_pdf`` (per-PDF
 ``page_categories``/``page_justifications``/``extracted_nfs``/etc.). This
-module reads BigQuery batch *output* rows (per-page, one row per
-classification or extraction request) and rebuilds that same per-PDF shape.
+module reads Bifrost batch *result* JSONL lines (one per classification or
+extraction request) and rebuilds that same per-PDF shape.
 
-Output row shape (per the Vertex AI Batch Prediction for BigQuery docs):
-input columns pass through unchanged, plus ``response`` (JSON, populated on
-success) and ``status`` (STRING, populated on failure — empty/null on
-success). ``response`` mirrors a ``GenerateContentResponse``:
-``candidates[0].content.parts[0].text`` holds the model's raw text (the same
-JSON-as-text payload the synchronous path parses via
-``iplanrio_agent_toolkit.gemini.response_parsing.parse_json_response``), and
-``usageMetadata`` holds token counts.
+Result line shape (per https://docs.getbifrost.ai/api-reference/batch/get-batch-results,
+mirroring OpenAI's own Batch API): ``{"custom_id": ..., "response":
+{"status_code": 200, "body": {...chat-completion...}}}`` on success, or
+``{"custom_id": ..., "error": {"code": ..., "message": ...}}`` on failure.
+``custom_id`` is decoded via ``custom_id.py`` back into
+``pdf_name``/``page_number`` (there is no passthrough-columns mechanism
+here the way the old direct-Vertex-via-BigQuery implementation had). The
+``body`` is a standard OpenAI chat-completions response — same shape
+``utils/extraction/api.py``'s live call already gets back — so
+``choices[0].message.content`` holds the raw JSON-as-text payload the
+synchronous path parses via
+``iplanrio_agent_toolkit.gemini.response_parsing.parse_json_response``, and
+``usage`` holds token counts (already ``prompt_tokens``/``completion_tokens``/
+``total_tokens`` — no field-name translation needed, unlike the old
+Vertex-native ``usageMetadata`` shape).
 """
 
-import json
 from dataclasses import dataclass
-from typing import Any
 
 from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
@@ -31,84 +36,70 @@ from prefect_rj_iplanrio.logging import get_logger
 
 from ..classification.categories import NF_CATEGORIES
 from ..extraction.prompt import parse_response as parse_extraction_response
+from .custom_id import decode_custom_id
 
 logger = get_logger(__name__)
 
+_EMPTY_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+_HTTP_OK = 200
 
-def _coerce_json_column(value: Any) -> Any:
-    """Normalize a BigQuery ``JSON`` column value read back via ``to_dataframe()``.
 
-    Depending on the BigQuery client/storage-API version, a ``JSON`` column
-    can round-trip as a Python ``dict``/``list`` (already parsed) or as a raw
-    JSON string — this tolerates both rather than assuming one.
+def _extract_text_and_usage(raw_row: dict) -> tuple[str | None, dict[str, int], str | None]:
+    """Pull the model's raw text, token usage, and any error out of one result line.
 
-    :param value: Raw value from a ``to_dataframe()`` row for a JSON column.
-    :returns: The parsed Python value (dict/list/scalar), or ``None`` for
-        BigQuery NULL (``None``/``NaN``/empty string).
+    :param raw_row: One decoded JSONL result line (see module docstring).
+    :returns: ``(raw_text, usage, error)`` — exactly one of ``raw_text``/
+        ``error`` is non-``None``. ``usage`` is always well-formed (zeroed
+        when unavailable).
     """
-    if value is None:
-        return None
-    if isinstance(value, (dict, list)):
-        return value
-    if isinstance(value, float):
-        # pandas represents SQL NULL as NaN in object columns in some paths.
-        return None
-    if isinstance(value, str):
-        stripped = value.strip()
-        if not stripped:
-            return None
-        return json.loads(stripped)
-    return value
+    if raw_row.get("error"):
+        error = raw_row["error"]
+        message = error.get("message") if isinstance(error, dict) else str(error)
+        return None, dict(_EMPTY_USAGE), message or "Bifrost batch row reported an error"
 
+    response = raw_row.get("response") or {}
+    status_code = response.get("status_code")
+    body = response.get("body") or {}
 
-def _extract_text_and_usage(response: dict | None) -> tuple[str | None, dict[str, int]]:
-    """Pull the model's raw text and token-usage counts out of a batch ``response`` value.
+    if status_code is not None and status_code != _HTTP_OK:
+        return None, dict(_EMPTY_USAGE), f"Bifrost batch row returned status_code={status_code}"
 
-    :param response: The (already JSON-decoded) ``response`` column value, or
-        ``None`` if the row failed (see ``status`` instead).
-    :returns: ``(raw_text, usage)`` — ``raw_text`` is ``None`` if the response
-        has no usable candidate/text; ``usage`` is always a well-formed dict
-        (zeroed when unavailable).
-    """
-    empty_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    if not response:
-        return None, empty_usage
-
-    candidates = response.get("candidates") or []
+    choices = body.get("choices") or []
     text = None
-    if candidates:
-        parts = ((candidates[0].get("content") or {}).get("parts")) or []
-        for part in parts:
-            if part.get("text"):
-                text = part["text"]
-                break
+    if choices:
+        message = choices[0].get("message") or {}
+        text = message.get("content")
 
-    usage_metadata = response.get("usageMetadata") or {}
+    usage_raw = body.get("usage") or {}
     usage = {
-        "prompt_tokens": usage_metadata.get("promptTokenCount", 0) or 0,
-        "completion_tokens": usage_metadata.get("candidatesTokenCount", 0) or 0,
-        "total_tokens": usage_metadata.get("totalTokenCount", 0) or 0,
+        "prompt_tokens": usage_raw.get("prompt_tokens", 0) or 0,
+        "completion_tokens": usage_raw.get("completion_tokens", 0) or 0,
+        "total_tokens": usage_raw.get("total_tokens", 0) or 0,
     }
-    return text, usage
+
+    if text is None:
+        return None, usage, "Bifrost batch row had no usable response text"
+
+    return text, usage, None
 
 
 @dataclass(frozen=True)
 class ClassificationOutputRow:
-    """One parsed row from a classification batch output table."""
+    """One parsed row from a classification batch result."""
 
     pdf_name: str
     page_number: int
     category: str | None  # None if this row failed
     justification: str
     usage: dict[str, int]
-    error: str | None  # non-None only when the row failed (status column set)
+    error: str | None  # non-None only when the row failed
 
 
 def parse_classification_output_rows(raw_rows: list[dict]) -> list[ClassificationOutputRow]:
-    """Parse raw BigQuery classification-output rows into structured results.
+    """Parse raw Bifrost classification-batch result lines into structured results.
 
-    :param raw_rows: Rows as returned by ``bigquery.Client.query(...).to_dataframe().to_dict("records")``
-        against a ``nf_batch_classification_output_*`` table.
+    :param raw_rows: One dict per JSONL line, already ``json.loads``-parsed —
+        see :func:`bifrost_batch.download_batch_results` / ``poll.py``.
     :returns: One :class:`ClassificationOutputRow` per input row. Rows whose
         model response couldn't be parsed as JSON are returned with
         ``category=None`` and ``error`` set — same "silent-error-becomes-a-
@@ -118,20 +109,14 @@ def parse_classification_output_rows(raw_rows: list[dict]) -> list[Classificatio
         exception, since batch results are read back in bulk.
     """
     results: list[ClassificationOutputRow] = []
-    for row in raw_rows:
-        status = row.get("status") or None
-        response = _coerce_json_column(row.get("response"))
-        text, usage = _extract_text_and_usage(response)
+    for raw_row in raw_rows:
+        identity = decode_custom_id(raw_row["custom_id"])
+        text, usage, error = _extract_text_and_usage(raw_row)
 
         category: str | None = None
         justification = ""
-        error = status
 
-        if status:
-            error = status
-        elif text is None:
-            error = "Vertex batch row had no usable response text"
-        else:
+        if error is None:
             try:
                 parsed = parse_json_response(text)
                 category = parsed.get("categoria", "Nenhuma das Opções")
@@ -141,8 +126,8 @@ def parse_classification_output_rows(raw_rows: list[dict]) -> list[Classificatio
 
         results.append(
             ClassificationOutputRow(
-                pdf_name=row["pdf_name"],
-                page_number=int(row["page_number"]),
+                pdf_name=identity.pdf_name,
+                page_number=identity.page_number,
                 category=category,
                 justification=justification,
                 usage=usage,
@@ -155,7 +140,7 @@ def parse_classification_output_rows(raw_rows: list[dict]) -> list[Classificatio
 
 @dataclass(frozen=True)
 class ExtractionOutputRow:
-    """One parsed row from an extraction batch output table."""
+    """One parsed row from an extraction batch result."""
 
     pdf_name: str
     page_number: int
@@ -165,25 +150,19 @@ class ExtractionOutputRow:
 
 
 def parse_extraction_output_rows(raw_rows: list[dict]) -> list[ExtractionOutputRow]:
-    """Parse raw BigQuery extraction-output rows into structured results.
+    """Parse raw Bifrost extraction-batch result lines into structured results.
 
-    :param raw_rows: Rows from a ``nf_batch_extraction_output_*`` table.
+    :param raw_rows: One dict per JSONL line, already ``json.loads``-parsed.
     :returns: One :class:`ExtractionOutputRow` per input row.
     """
     results: list[ExtractionOutputRow] = []
-    for row in raw_rows:
-        status = row.get("status") or None
-        response = _coerce_json_column(row.get("response"))
-        text, usage = _extract_text_and_usage(response)
+    for raw_row in raw_rows:
+        identity = decode_custom_id(raw_row["custom_id"])
+        text, usage, error = _extract_text_and_usage(raw_row)
 
         extracted: dict | None = None
-        error = status
 
-        if status:
-            error = status
-        elif text is None:
-            error = "Vertex batch row had no usable response text"
-        else:
+        if error is None:
             try:
                 extracted = parse_extraction_response(text)
             except Exception as exc:
@@ -191,8 +170,8 @@ def parse_extraction_output_rows(raw_rows: list[dict]) -> list[ExtractionOutputR
 
         results.append(
             ExtractionOutputRow(
-                pdf_name=row["pdf_name"],
-                page_number=int(row["page_number"]),
+                pdf_name=identity.pdf_name,
+                page_number=identity.page_number,
                 extracted=extracted,
                 usage=usage,
                 error=error,
@@ -220,6 +199,27 @@ def nf_pages_from_classification(rows: list[ClassificationOutputRow]) -> dict[st
     return by_pdf
 
 
+def total_pages_by_pdf_from_classification(rows: list[ClassificationOutputRow]) -> dict[str, int]:
+    """Recover each PDF's total page count from its classification results.
+
+    One classification row exists per page submitted (see
+    ``classification_submit.build_classification_rows``), so
+    ``COUNT(DISTINCT page_number)`` per ``pdf_name`` reconstructs the page
+    count — replaces the old direct-Vertex implementation's BigQuery
+    ``COUNT(DISTINCT page_number) ... GROUP BY pdf_name`` query
+    (``poll.py::_total_pages_by_pdf``) now that there's no BigQuery input
+    table to query; the classification results themselves are the only
+    record of which pages were submitted.
+
+    :param rows: All parsed classification output rows for a session (all PDFs).
+    :returns: Mapping ``pdf_name -> total_pages``.
+    """
+    pages_by_pdf: dict[str, set[int]] = {}
+    for row in rows:
+        pages_by_pdf.setdefault(row.pdf_name, set()).add(row.page_number)
+    return {pdf_name: len(pages) for pdf_name, pages in pages_by_pdf.items()}
+
+
 def build_pdf_results_from_batch(
     classification_rows: list[ClassificationOutputRow],
     extraction_rows: list[ExtractionOutputRow],
@@ -238,9 +238,8 @@ def build_pdf_results_from_batch(
         this session (all PDFs).
     :param extraction_rows: All parsed extraction output rows for this
         session (all PDFs) — only NF-classified pages are present here.
-    :param total_pages_by_pdf: Page count per PDF (from
-        ``row_counting``/session selection — known upfront, since it's what
-        sized the classification job).
+    :param total_pages_by_pdf: Page count per PDF — see
+        :func:`total_pages_by_pdf_from_classification`.
     :returns: ``{pdf_name: pdf_result_dict}``, ready for
         ``metadata.build_extracao_pagina_rows(pdf_tasks=[...], pdf_results=this)``.
     """
