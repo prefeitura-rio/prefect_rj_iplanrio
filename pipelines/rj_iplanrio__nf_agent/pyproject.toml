@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__nf_agent"
 version = "1.0.0"
-description = "Extracts and classifies fields from Rio de Janeiro fiscal-note (NF) PDFs with an LLM (via the Bifrost gateway) and loads the structured results into BigQuery and GCS for the CGM expense-auditing workflow."
+description = "Extracts and classifies fields from Rio de Janeiro fiscal-note (NF) PDFs with an LLM and loads the structured results into BigQuery and GCS for the CGM expense-auditing workflow. Two execution modes: Vertex AI Batch Prediction (default, 50% cheaper) and per-request via the Bifrost gateway."
 dependencies = [
     "prefect>=3.4.9",
     "prefect-docker>=0.6.5",
@@ -22,12 +22,20 @@ dependencies = [
     "pyyaml>=6.0.0",
     "python-dotenv>=1.0.0",
     "iplanrio-agent-toolkit",
+    # Sync mode: LLM calls (classification + extraction) go through Bifrost via
+    # the OpenAI-compatible protocol (não é a API nativa do Gemini) — ver
+    # utils/llm.py. O extra "gemini" do iplanrio-agent-toolkit NÃO é
+    # requisitado aqui — apenas os módulos base (rate limiter, gcs, bigquery,
+    # matching, credentials).
     "openai>=1.0.0",
+    # Batch mode: Vertex AI Batch Prediction jobs are submitted directly
+    # against Vertex AI (no route through Bifrost for batch) via
+    # GOOGLE_GENAI_USE_ENTERPRISE=True — see utils/batch/client.py. Already
+    # resolved workspace-wide (dbt-bigquery -> google-cloud-aiplatform ->
+    # google-genai) with protobuf/grpcio pinned by the root pyproject.toml's
+    # override-dependencies — no conflict with sync mode's openai dependency.
+    "google-genai>=1.75.0",
     # Lógica de negócio migrada de agent-nf-validator para utils/ (move mecânico).
-    # LLM calls (classification + extraction) vão pelo Bifrost via protocolo
-    # OpenAI-compatible (não é a API nativa do Gemini) — ver utils/llm.py. O extra
-    # "gemini" do iplanrio-agent-toolkit NÃO é requisitado aqui — apenas os módulos
-    # base (rate limiter, gcs, bigquery, matching, credentials).
 ]
 
 [project.optional-dependencies]

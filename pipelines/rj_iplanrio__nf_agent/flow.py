@@ -4,20 +4,42 @@ Prefect entrypoint for the NF (Nota Fiscal) validation pipeline.
 The NF business logic lives in this package (migrated from agent-nf-validator by
 mechanical move).
 
+One flow, two execution modes (``execution_mode`` parameter, default
+``"batch"``):
+
+- ``"batch"`` (default, what production runs on a schedule): Vertex AI
+  Batch Prediction — classifies and extracts fields in bulk at 50% of the
+  online-inference cost. Every run polls active sessions and, once idle
+  with pending PDFs, submits the next one — see ``utils/batch/__init__.py``
+  for the full architecture and ``_run_batch_mode`` below.
+- ``"sync"``: the original per-request path, one Gemini call per page via
+  the Bifrost OpenAI-compatible gateway (see ``utils/llm.py``). Kept
+  available for small/fast or on-demand runs (not scheduled) rather than
+  removed outright — see ``_run_sync_mode`` below.
+
+Both modes are one flow in one directory (not two pipelines) because
+STYLEGUIDE.md §4.1 requires exactly one ``@flow`` per pipeline directory,
+named after that directory — a second flow/pipeline for the batch mode
+would either violate that or force the two modes' genuinely-shared utils
+(GCS downloader, NF merge/coalesce, ``extracao_pagina`` row building,
+prompts) to be duplicated or imported cross-package. Branching on
+``execution_mode`` to call one of two task sequences is orchestration, not
+business logic, so it stays within what §4.1 allows in ``flow.py``.
+
 ``flow.py``/``tasks.py``/``utils/orchestration.py``/``utils/pipeline.py`` all
 import cleanly with zero setup — verified directly, no ``PROMPT_*`` env vars
 set. Exactly one import stays deferred to a function body: ``POCProcessor``
-inside ``utils/pipeline.py::nf_processing_flow``.
+inside ``utils/pipeline.py::nf_processing_flow`` (sync mode only).
 
-LLM calls (classification + extraction) go through the ``openai`` SDK routed
-at Bifrost's OpenAI-compatible endpoint (see ``utils/llm.py``) — a normal
-``uv`` dependency, no protobuf/grpc conflict, no isolated install. (This
-package used to also route through ``google-generativeai`` directly, which
-*did* have such a conflict with the workspace's `grpcio-status` override;
-that's gone now that Bifrost's Google-model route turned out to be
-OpenAI-compatible, not native Gemini `generateContent`.)
+Sync mode's LLM calls (classification + extraction) go through the ``openai``
+SDK routed at Bifrost's OpenAI-compatible endpoint (see ``utils/llm.py``) — a
+normal ``uv`` dependency, no protobuf/grpc conflict, no isolated install.
+Batch mode talks to Vertex AI directly via the ``google-genai`` SDK (see
+``utils/batch/client.py``) since there is no batch-prediction route through
+Bifrost — already resolved workspace-wide without a protobuf/grpc conflict
+(see ``pyproject.toml``).
 
-What still forces the deferral: prompt env vars. `classification/gemini_classifier.py`
+What still forces the deferral above: prompt env vars. `classification/gemini_classifier.py`
 does `from ..prompts import CLASSIFICATION_PROMPT` at module level, which reads
 the `PROMPT_CLASSIFICATION_V*` env var (an Infisical secret) the moment
 the module is imported — not lazily, despite `utils/prompts.py`'s
@@ -27,6 +49,10 @@ never has it (confirmed against
 `.github/actions/deploy-prefect-flows/action.yaml` — that step's env has
 only 10 non-secret vars, no Infisical secrets at all). So importing
 `POCProcessor` at module level here would break every `prefect deploy`.
+Batch mode's classification/extraction submit modules read the same prompts
+lazily already (function-body, not module-level import — see
+`utils/batch/classification_submit.py`'s docstring), so they don't need this
+deferral.
 
 Fixing this (make `gemini_classifier.py`/`extraction/auth.py` read the
 prompt lazily, at construction time instead of at import time) would let this
@@ -36,46 +62,111 @@ LLM call path; flagged as a follow-up, not attempted in a lint pass.
 
 from __future__ import annotations
 
+import os
+import tempfile
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
 from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 from prefect import flow
 
+from prefect_rj_iplanrio.logging import get_logger
+
 from .tasks import (
+    discover_pending_files_task,
+    has_active_session_task,
     log_batch_summary_task,
     new_or_continued_session_task,
+    poll_active_sessions_task,
     run_nf_pipeline_task,
+    select_session_pdfs_task,
+    submit_classification_job_task,
     summarize_batch_task,
     trigger_next_batch_if_pending_task,
     write_run_summary_task,
 )
-from .utils.orchestration import BatchRunParams
+from .utils.batch.poll import PollConfig
+from .utils.batch.row_counting import MAX_CLASSIFICATION_ROWS_DEFAULT
+from .utils.gcs import GCSDownloader
+from .utils.orchestration import BatchRunParams, parse_project_and_dataset
+
+logger = get_logger(__name__)
+
+VALID_EXECUTION_MODES = frozenset({"sync", "batch"})
 
 
 @flow(log_prints=True)
 def rj_iplanrio__nf_agent(
-    # --- BigQuery / GCS ---
-    bq_extracao_pagina_table: str | None = None,
+    execution_mode: str = "batch",
+    # --- Modo batch (Vertex AI Batch Prediction) ---
+    max_classification_rows: int = MAX_CLASSIFICATION_ROWS_DEFAULT,
+    workers: int = 200,
+    # --- Modo sync (Bifrost, por página) ---
     db_path: str = "/tmp/nf_pipeline_cache.db",
-    gcs_bucket: str | None = None,
-    gcs_output_base_path: str = "staging/brutos_cgm_poc_osinfo_ia_pipeline/extracao_pagina",
-    pipeline_runs_table: str | None = None,
-    # --- Execução ---
     batch_size: int = 1000,
     max_concurrent: int = 50,
     max_pdfs: int | None = None,
     requests_per_minute: int = 600,
-    workers: int = 200,
-    # --- Sessão (self-trigger) ---
+    # --- Sessão (self-trigger, modo sync) ---
     session_id: str | None = None,
     session_pdfs_done: int = 0,
 ) -> None:
-    """Run one batch of the NF extraction/validation pipeline and self-trigger the next one."""
+    """Run the NF extraction/validation pipeline in batch (default) or sync mode.
 
-    # Inject GCP credentials from Infisical before any GCP client is created.
-    # (GCS_BUCKET is a plain bucket-name string, not a base64 credential blob —
-    # it already arrives as a plain env var via the k8s secret, no injection needed.)
+    :param execution_mode: ``"batch"`` (Vertex AI Batch Prediction, what
+        production schedules run) or ``"sync"`` (per-request via Bifrost,
+        kept for small/fast or on-demand runs — not scheduled).
+    """
+    if execution_mode not in VALID_EXECUTION_MODES:
+        raise ValueError(f"Invalid execution_mode: {execution_mode!r}. Must be one of {sorted(VALID_EXECUTION_MODES)}")
+
     inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
+
+    if execution_mode == "batch":
+        _run_batch_mode(max_classification_rows=max_classification_rows, workers=workers)
+    else:
+        _run_sync_mode(
+            db_path=db_path,
+            batch_size=batch_size,
+            max_concurrent=max_concurrent,
+            max_pdfs=max_pdfs,
+            requests_per_minute=requests_per_minute,
+            workers=workers,
+            session_id=session_id,
+            session_pdfs_done=session_pdfs_done,
+        )
+
+
+def _run_sync_mode(
+    db_path: str,
+    batch_size: int,
+    max_concurrent: int,
+    max_pdfs: int | None,
+    requests_per_minute: int,
+    workers: int,
+    session_id: str | None,
+    session_pdfs_done: int,
+) -> None:
+    """Run one batch of the per-request (Bifrost) pipeline and self-trigger the next one.
+
+    GCS/BigQuery resource identifiers (bucket, paths, table refs) come
+    exclusively from Infisical-managed env vars — NOT from Prefect deployment
+    parameters. This is a deliberate single-source-of-truth choice: having
+    both a flow parameter default AND an env var fallback for the same
+    value created two places that could silently disagree (e.g. a stale
+    prefect.yaml still pointing at a decommissioned bucket while the env
+    var already points at the new one). Changing where the pipeline reads
+    PDFs from or writes results to is now purely an Infisical secret
+    change — no redeploy needed. See `.env` for the full list of required
+    vars (GCS_BUCKET, PDFS_BASE_PATH, GCS_OUTPUT_BASE_PATH,
+    BQ_EXTRACAO_PAGINA_TABLE, PIPELINE_RUNS_TABLE).
+    """
+    bq_extracao_pagina_table = os.getenv("BQ_EXTRACAO_PAGINA_TABLE")
+    gcs_bucket = os.getenv("GCS_BUCKET")
+    pdfs_base_path = os.getenv("PDFS_BASE_PATH", "pdfs")
+    gcs_output_base_path = os.getenv("GCS_OUTPUT_BASE_PATH")
+    pipeline_runs_table = os.getenv("PIPELINE_RUNS_TABLE")
 
     session_id = new_or_continued_session_task(session_id)
     params = BatchRunParams(
@@ -85,6 +176,7 @@ def rj_iplanrio__nf_agent(
         gcs_output_base_path=gcs_output_base_path,
         db_path=db_path,
         gcs_bucket=gcs_bucket,
+        pdfs_base_path=pdfs_base_path,
         workers=workers,
         requests_per_minute=requests_per_minute,
         max_concurrent=max_concurrent,
@@ -123,4 +215,88 @@ def rj_iplanrio__nf_agent(
         session_id=session_id,
         total_in_session=summary.total_in_session,
         batch_did_work=summary.batch_did_work,
+    )
+
+
+def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
+    """Poll active Vertex AI batch sessions, then submit the next one if idle and PDFs are pending.
+
+    :param max_classification_rows: Row budget for a new classification job —
+        see ``utils/batch/row_counting.py`` for why this is a page count,
+        not a PDF count. Unused if no new session is submitted this run.
+    :param workers: Concurrency for the pre-download step (page counts
+        require opening each candidate PDF locally; also passed through to
+        ``PollConfig`` for ``versao_pipeline`` traceability).
+    """
+    bq_extracao_pagina_table = os.getenv("BQ_EXTRACAO_PAGINA_TABLE")
+    nf_batch_jobs_table = os.getenv("NF_BATCH_JOBS_TABLE")
+    gcs_bucket = os.getenv("GCS_BUCKET")
+    pdfs_base_path = os.getenv("PDFS_BASE_PATH", "pdfs")
+    gcs_output_base_path = os.getenv("GCS_OUTPUT_BASE_PATH")
+
+    if not bq_extracao_pagina_table:
+        raise ValueError("BQ_EXTRACAO_PAGINA_TABLE env var is required.")
+    if not nf_batch_jobs_table:
+        raise ValueError("NF_BATCH_JOBS_TABLE env var is required.")
+    if not gcs_output_base_path:
+        raise ValueError("GCS_OUTPUT_BASE_PATH env var is required.")
+
+    bq_project, bq_dataset = parse_project_and_dataset(nf_batch_jobs_table)
+
+    poll_config = PollConfig(
+        bq_project=bq_project,
+        bq_dataset=bq_dataset,
+        nf_batch_jobs_table=nf_batch_jobs_table,
+        gcs_bucket=gcs_bucket,
+        pdfs_base_path=pdfs_base_path,
+        gcs_output_base_path=gcs_output_base_path,
+        workers=workers,
+        requests_per_minute=0,
+        max_concurrent=0,
+    )
+    finished_sessions = poll_active_sessions_task(poll_config)
+    if finished_sessions:
+        logger.info("Sessions finished this run: %s", finished_sessions)
+
+    # Submitting is a guarded no-op if a session is still active (checked
+    # again here, after polling, since polling may have just advanced a
+    # session to extraction rather than finished it) — see module docstring.
+    if has_active_session_task(nf_batch_jobs_table):
+        logger.info("A batch session is still active after polling — nothing to submit this run.")
+        return
+
+    gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket, base_path=pdfs_base_path)
+    pending_files, _current_commit = discover_pending_files_task(bq_extracao_pagina_table, gcs_downloader)
+    if not pending_files:
+        logger.info("No pending files found. Nothing to submit.")
+        return
+
+    session_id = str(uuid.uuid4())
+
+    with tempfile.TemporaryDirectory(prefix=f"nf-batch-submit-{session_id}-") as temp_dir:
+        pdf_paths = gcs_downloader.download_pdfs_batch(
+            pdf_names=sorted(pending_files), local_dir=Path(temp_dir), batch_size=workers
+        )
+        selection = select_session_pdfs_task(pdf_paths, max_classification_rows)
+
+        if not selection.selected_pdf_names:
+            logger.info("No PDFs fit within the row budget (or all were unreadable) — nothing submitted.")
+            return
+
+        selected_paths = {name: pdf_paths[name] for name in selection.selected_pdf_names}
+        result = submit_classification_job_task(
+            bq_project=bq_project,
+            bq_dataset=bq_dataset,
+            nf_batch_jobs_table=nf_batch_jobs_table,
+            gcs_downloader=gcs_downloader,
+            pdf_paths=selected_paths,
+            selection=selection,
+            session_id=session_id,
+        )
+
+    logger.info(
+        "Submitted classification batch job %s (%d rows, session=%s)",
+        result.vertex_job_name,
+        result.row_count,
+        session_id,
     )

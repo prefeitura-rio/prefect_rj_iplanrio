@@ -81,7 +81,8 @@ class BatchRunParams:
     bq_extracao_pagina_table: str | None
     db_path: str
     gcs_bucket: str | None
-    gcs_output_base_path: str
+    pdfs_base_path: str
+    gcs_output_base_path: str | None
     pipeline_runs_table: str | None
     # --- Execução ---
     batch_size: int
@@ -347,7 +348,9 @@ def trigger_next_batch_if_pending(
         return
 
     # ADC only — see utils/pipeline.py::nf_processing_flow's credentials comment.
-    gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=params.gcs_bucket)
+    gcs_downloader = GCSDownloader(
+        credentials_path=None, bucket_name=params.gcs_bucket, base_path=params.pdfs_base_path
+    )
     pending_files, current_commit = discover_pending_files(gcs_downloader, params.bq_extracao_pagina_table)
     pending = len(pending_files)
     logger.warning("%d files still pending after this batch (commit %s)", pending, current_commit)
@@ -373,15 +376,16 @@ def trigger_next_batch_if_pending(
     from prefect.deployments import run_deployment  # noqa: PLC0415
 
     logger.warning("Triggering next batch (deployment_id=%s)", deployment_id)
+    # GCS/BigQuery resource identifiers (bucket, paths, table refs) are NOT
+    # forwarded here — the triggered flow run reads them straight from its own
+    # env vars (same k8s secret, same pod template), see flow.py's module
+    # docstring for why those are env-var-only now. Only execution/session
+    # parameters, which vary per batch, need to be passed explicitly.
     run_deployment(
         name=deployment_id,
         parameters={
-            "bq_extracao_pagina_table": params.bq_extracao_pagina_table,
-            "pipeline_runs_table": params.pipeline_runs_table,
             "batch_size": params.batch_size,
-            "gcs_output_base_path": params.gcs_output_base_path,
             "db_path": params.db_path,
-            "gcs_bucket": params.gcs_bucket,
             "workers": params.workers,
             "requests_per_minute": params.requests_per_minute,
             "max_concurrent": params.max_concurrent,
@@ -406,6 +410,7 @@ def run_nf_pipeline(params: BatchRunParams) -> dict[str, Any]:
         gcs_output_base_path=params.gcs_output_base_path,
         db_path=params.db_path,
         gcs_bucket=params.gcs_bucket,
+        pdfs_base_path=params.pdfs_base_path,
         workers=params.workers,
         requests_per_minute=params.requests_per_minute,
         max_concurrent=params.max_concurrent,

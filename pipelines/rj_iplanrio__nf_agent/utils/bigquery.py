@@ -108,21 +108,43 @@ class BigQueryWriter(BigQueryClient):
         """
         Append one row to the pipeline_runs tracking table via streaming insert.
 
-        The table must exist. Create it once with:
-            CREATE TABLE `<pipeline_runs_table>` (
+        The table must exist — this method only does a streaming insert
+        (``insert_rows_json``), it never creates or alters the table.
+
+        Create it once (adjust project/dataset to your target environment) with:
+            CREATE TABLE `<project>.<dataset>.pipeline_runs` (
                 session_id        STRING,
                 flow_run_id       STRING,
                 started_at        TIMESTAMP,
                 finished_at       TIMESTAMP,
                 duration_seconds  FLOAT64,
                 pdfs_processed    INT64,
+                docs_processed    INT64,  -- actually counts pages, not docs — see orchestration.py comment
                 pdfs_failed       INT64,
-                pending_after     INT64,
+                docs_failed       INT64,  -- actually counts pages, not docs
+                pending_pdfs      INT64,
+                pending_docs      INT64,  -- actually counts pages, not docs
                 avg_sec_per_pdf   FLOAT64,
+                avg_sec_per_doc   FLOAT64,  -- actually per page, not doc
                 batch_size        INT64,
                 workers           INT64,
                 requests_per_minute INT64,
-                max_concurrent    INT64
+                max_concurrent    INT64,
+                wall_sec_download_gcs FLOAT64,
+                wall_sec_core     FLOAT64,
+                wall_sec_escrita  FLOAT64,
+                avg_cpu_sec_preprocess_por_pdf FLOAT64,
+                avg_cpu_sec_classificacao_por_pagina FLOAT64,
+                avg_cpu_sec_extracao_por_declaracao FLOAT64,
+                avg_cpu_sec_validacao_por_pdf FLOAT64
             );
+
+        This schema must stay in sync with the ``row={...}`` dict built in
+        ``orchestration.py::write_run_summary`` — every key there needs a
+        matching column here. A mismatch doesn't raise: ``insert_row``
+        (``BigQueryClient.insert_row``) only logs a warning on a failed
+        streaming insert, it never propagates the error — so a stale schema
+        here silently drops entire run-summary rows in production instead of
+        failing loudly.
         """
         self.insert_row(pipeline_runs_table, row)

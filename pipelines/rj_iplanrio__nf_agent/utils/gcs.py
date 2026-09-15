@@ -3,8 +3,8 @@ PDF-specific GCS downloader.
 
 Thin subclass of ``iplanrio_agent_toolkit.gcs.GCSDownloader`` that restores the
 PDF-domain conveniences the generic toolkit class deliberately dropped
-(automatic ``.pdf`` extension inference, ``pdfs``-prefixed default base path,
-and ``*.pdf``-only local cleanup) — see ``MIGRATION_PLAN.md`` in
+(automatic ``.pdf`` extension inference, a configurable-but-``pdfs``-by-default
+base path, and ``*.pdf``-only local cleanup) — see ``MIGRATION_PLAN.md`` in
 iplanrio-agent-toolkit for why those stayed out of the generic class.
 
 ``download_pdfs_batch`` cannot simply delegate to the toolkit's
@@ -32,15 +32,26 @@ _MAX_FAILURES_LOGGED = 5
 class GCSDownloader(_BaseGCSDownloader):
     """Downloads PDF files from a Google Cloud Storage bucket."""
 
-    def __init__(self, credentials_path: Path | None, bucket_name: str | None = None) -> None:
+    def __init__(
+        self,
+        credentials_path: Path | None,
+        bucket_name: str | None = None,
+        base_path: str = "pdfs",
+    ) -> None:
         """
         Initialize GCS client.
 
         :param credentials_path: Path to GCS service account JSON file (None = use ADC).
         :param bucket_name: Name of the GCS bucket (e.g., 'my-gcs-bucket').
+        :param base_path: Default prefix under which PDFs are listed/downloaded
+            (e.g. ``"pdfs"`` or ``"staging/brutos_osinfo_mongo/files_pdfs"``).
+            Must match whatever prefix the runtime service account's GCS IAM
+            grant is actually scoped to — a mismatch here fails with 403s that
+            look like a credentials problem but are really a wrong-prefix
+            problem (see the ``prefect.yaml`` IAM-condition comment).
         """
         super().__init__(credentials_path=credentials_path, bucket_name=bucket_name)
-        self.default_base_path = "pdfs"
+        self.default_base_path = base_path
 
     def download_pdf_by_name(self, pdf_name: str, local_dir: Path, base_path: str | None = None) -> Path:
         """
@@ -140,13 +151,17 @@ class GCSDownloader(_BaseGCSDownloader):
 
         return results
 
-    def get_available_pdf_filenames(self, prefix: str = "pdfs/") -> set[str]:
+    def get_available_pdf_filenames(self, prefix: str | None = None) -> set[str]:
         """
         Get set of all available PDF filenames (without path prefix).
 
-        :param prefix: Prefix to filter blobs (default: 'pdfs/').
+        :param prefix: Prefix to filter blobs. Defaults to ``self.default_base_path``
+            (with a trailing slash) — i.e. the same base path used for downloads,
+            so listing and downloading always agree on where PDFs live in the bucket.
         :returns: Set of filenames.
         """
+        if prefix is None:
+            prefix = f"{self.default_base_path}/" if self.default_base_path else ""
         return self.get_available_filenames(prefix=prefix)
 
     def get_available_pdf_filenames_from_csv(self, csv_path: Path | None = None) -> set[str]:

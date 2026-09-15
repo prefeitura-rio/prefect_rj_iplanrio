@@ -40,15 +40,11 @@ def build_llm_client() -> OpenAI:
     """
     api_key = os.environ.get(constants.BIFROST_API_KEY_ENV)
     if not api_key:
-        raise RuntimeError(
-            f"{constants.BIFROST_API_KEY_ENV} is not set — required to reach the Bifrost LLM gateway"
-        )
+        raise RuntimeError(f"{constants.BIFROST_API_KEY_ENV} is not set — required to reach the Bifrost LLM gateway")
 
     base_url = os.environ.get(constants.BIFROST_BASE_URL_ENV)
     if not base_url:
-        raise RuntimeError(
-            f"{constants.BIFROST_BASE_URL_ENV} is not set — required to reach the Bifrost LLM gateway"
-        )
+        raise RuntimeError(f"{constants.BIFROST_BASE_URL_ENV} is not set — required to reach the Bifrost LLM gateway")
 
     logger.warning("OpenAI-compatible client configured via Bifrost (%s)", base_url)
     return OpenAI(api_key=api_key, base_url=base_url)

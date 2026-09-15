@@ -38,9 +38,7 @@ logger = get_logger(__name__)
 # logger.info() quando o bug for corrigido.
 
 
-def discover_pending_files(
-    gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str
-) -> tuple[set[str], str]:
+def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str) -> tuple[set[str], str]:
     """
     List every PDF in the GCS bucket and return the ones still pending —
     excluding files already fully done (every known page has a row) at the
@@ -58,9 +56,7 @@ def discover_pending_files(
         )
 
     available_pdfs = gcs_downloader.get_available_pdf_filenames()
-    candidate_filenames = {
-        name[:-4] if name.lower().endswith(".pdf") else name for name in available_pdfs
-    }
+    candidate_filenames = {name[:-4] if name.lower().endswith(".pdf") else name for name in available_pdfs}
     logger.warning("GCS: found %d PDFs in bucket", len(candidate_filenames))
 
     pending_files = PageStatusReader().find_pending_files(
@@ -83,14 +79,12 @@ class NfProcessingFlowConfig:
     """
 
     # --- BigQuery / GCS ---
-    bq_extracao_pagina_table: str | None = (
-        None  # project.dataset.extracao_pagina; required
-    )
+    bq_extracao_pagina_table: str | None = None  # project.dataset.extracao_pagina; required
     db_path: str = "cache.db"  # SQLite cache path
     gcs_bucket: str | None = None  # default: GCS_BUCKET env var
-    gcs_output_base_path: str | None = (
-        None  # per-page NDJSON prefix; required (only write path)
-    )
+    pdfs_base_path: str = "pdfs"  # prefix PDFs are listed/downloaded from — must
+    # match the runtime service account's GCS IAM grant (see prefect.yaml)
+    gcs_output_base_path: str | None = None  # per-page NDJSON prefix; required (only write path)
     # --- Execução ---
     batch_size: int = 1000  # cap on pending files per run, when max_pdfs isn't set
     max_concurrent: int = 50  # rate limiter: max in-flight LLM requests
@@ -132,6 +126,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     max_pdfs_per_session = config.max_pdfs
     gcs_output_base_path = config.gcs_output_base_path
     gcs_bucket = config.gcs_bucket
+    pdfs_base_path = config.pdfs_base_path
     prompt_versions = config.prompt_versions
     temp_dir = Path(config.temp_dir)
     db_path = Path(config.db_path)
@@ -145,17 +140,13 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
     # Discover pending work: list every PDF in the GCS bucket, then exclude
     # files already fully done at the current pipeline version (git commit).
-    gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket)
-    pending_files, current_commit = discover_pending_files(
-        gcs_downloader, bq_extracao_pagina_table
-    )
+    gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket, base_path=pdfs_base_path)
+    pending_files, current_commit = discover_pending_files(gcs_downloader, bq_extracao_pagina_table)
     if not pending_files:
         logger.warning("No pending files found. Nothing to do.")
         return None
 
-    effective_cap = (
-        max_pdfs_per_session if max_pdfs_per_session is not None else batch_size
-    )
+    effective_cap = max_pdfs_per_session if max_pdfs_per_session is not None else batch_size
     pdf_names = sorted(pending_files)
     if effective_cap is not None:
         pdf_names = pdf_names[:effective_cap]
@@ -187,9 +178,7 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
     )
 
     # Initialize rate limiter with flow parameters
-    initialize_rate_limiter(
-        max_concurrent=max_concurrent, requests_per_minute=requests_per_minute
-    )
+    initialize_rate_limiter(max_concurrent=max_concurrent, requests_per_minute=requests_per_minute)
     logger.warning(
         "RateLimiter enabled: max_concurrent=%d, rpm=%d (%.1f RPS)",
         max_concurrent,
@@ -202,12 +191,13 @@ def nf_processing_flow(config: NfProcessingFlowConfig) -> dict | None:
 
     logger.warning(
         "Pipeline config: pending_files=%d | bq_extracao_pagina=%s | "
-        "gcs_out=%s | cache=%s | bucket=%s | workers=%d | quiet=%s",
+        "gcs_out=%s | cache=%s | bucket=%s | pdfs_base_path=%s | workers=%d | quiet=%s",
         len(pdf_names),
         bq_extracao_pagina_table,
         gcs_output_base_path,
         db_path,
         gcs_bucket,
+        pdfs_base_path,
         workers,
         quiet,
     )

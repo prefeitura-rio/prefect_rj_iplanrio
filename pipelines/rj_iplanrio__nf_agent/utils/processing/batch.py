@@ -408,9 +408,7 @@ def _log_processing_summary(
         don't track overall wall time (there are none left as of this change,
         but keeps this function usable standalone, e.g. from tests).
     """
-    ok_with_doc = sum(
-        1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"]
-    )
+    ok_with_doc = sum(1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok" and i["tipo_documento_extracao"])
     ok_without_doc = sum(
         1 for i in extracao_pagina_rows if i["pipeline_status"] == "ok" and not i["tipo_documento_extracao"]
     )

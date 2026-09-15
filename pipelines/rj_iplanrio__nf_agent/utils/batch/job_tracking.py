@@ -1,0 +1,184 @@
+"""Session/job tracking for the Vertex AI Batch Prediction path.
+
+Replaces the synchronous pipeline's self-trigger mechanism (see
+``utils/orchestration.py::trigger_next_batch_if_pending``): since a batch job
+can take minutes to hours to finish, no single flow-run can just "keep
+processing and re-trigger at the end" — submit and poll run as separate,
+short-lived flow-runs, and the *only* thing connecting them across time is
+this tracking table.
+
+Modeled as an **append-only event log**, not a row that gets mutated in
+place: BigQuery's streaming-insert buffer (``insert_rows_json``, what this
+pipeline already uses for ``pipeline_runs`` — see ``utils/bigquery.py``)
+does not support near-real-time ``UPDATE``/``MERGE`` against just-inserted
+rows, so a session's current status is derived by querying the *latest*
+event row for its ``session_id`` rather than updating a single row's state
+column in place. Every phase transition (classification submitted -> running
+-> succeeded -> extraction submitted -> ... -> done) is its own new row.
+
+Table schema (create manually; not created by this pipeline — this module
+only ever streams inserts, matching ``BigQueryWriter.write_run_summary``'s
+existing "must pre-exist" contract):
+
+    CREATE TABLE `<project>.<dataset>.nf_batch_jobs` (
+        session_id       STRING,
+        phase            STRING,   -- 'classification' | 'extraction'
+        vertex_job_name  STRING,   -- e.g. 'projects/.../batchPredictionJobs/123...'
+        state            STRING,   -- raw Vertex JobState string (e.g.
+                                    -- 'JOB_STATE_RUNNING'), or one of this
+                                    -- module's own terminal sentinels
+                                    -- ('done', 'failed') once poll finishes
+                                    -- post-processing for that phase.
+        input_table      STRING,   -- bq://project.dataset.table used as `src`
+        output_table     STRING,   -- bq://project.dataset.table used as `dest`
+        row_count        INT64,
+        created_at       TIMESTAMP,
+        error            STRING
+    );
+"""
+
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+from google.cloud import bigquery
+from iplanrio_agent_toolkit.bigquery import BigQueryClient
+
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
+
+PHASE_CLASSIFICATION = "classification"
+PHASE_EXTRACTION = "extraction"
+
+# Our own bookkeeping sentinels, written by poll.py once it has finished all
+# post-processing for a phase (or given up on it) — distinct from the raw
+# Vertex `JobState` strings (e.g. "JOB_STATE_SUCCEEDED") stored in `state`
+# while a job is still in flight through Vertex's own lifecycle.
+STATE_DONE = "done"
+STATE_FAILED = "failed"
+TERMINAL_STATES = frozenset({STATE_DONE, STATE_FAILED})
+
+
+@dataclass(frozen=True)
+class BatchJobEvent:
+    """One row of the ``nf_batch_jobs`` append-only event log."""
+
+    session_id: str
+    phase: str
+    vertex_job_name: str | None
+    state: str
+    input_table: str | None = None
+    output_table: str | None = None
+    row_count: int | None = None
+    error: str | None = None
+
+
+def _parse_project_and_dataset(bq_table_ref: str) -> tuple[str, str]:
+    """Split a ``project.dataset.table`` reference into ``(project, dataset)``.
+
+    :param bq_table_ref: Fully-qualified BigQuery table reference.
+    :returns: ``(project, dataset)`` tuple.
+    :raises ValueError: If the reference has fewer than three dot-separated parts.
+    """
+    parts = bq_table_ref.split(".")
+    min_parts = 3
+    if len(parts) < min_parts:
+        raise ValueError(f"Expected a fully-qualified 'project.dataset.table' reference, got: {bq_table_ref!r}")
+    return parts[0], parts[1]
+
+
+def append_job_event(nf_batch_jobs_table: str, event: BatchJobEvent) -> None:
+    """Append one state-transition row to the ``nf_batch_jobs`` tracking table.
+
+    :param nf_batch_jobs_table: Fully-qualified table reference, e.g.
+        ``'project.dataset.nf_batch_jobs'``.
+    :param event: The event to record.
+    """
+    project, dataset = _parse_project_and_dataset(nf_batch_jobs_table)
+    writer = BigQueryClient(project_id=project, dataset_id=dataset)
+    row = {
+        "session_id": event.session_id,
+        "phase": event.phase,
+        "vertex_job_name": event.vertex_job_name,
+        "state": event.state,
+        "input_table": event.input_table,
+        "output_table": event.output_table,
+        "row_count": event.row_count,
+        "created_at": datetime.now(timezone.utc),
+        "error": event.error,
+    }
+    writer.insert_row(nf_batch_jobs_table, row)
+    logger.warning(
+        "nf_batch_jobs: session=%s phase=%s state=%s job=%s",
+        event.session_id,
+        event.phase,
+        event.state,
+        event.vertex_job_name,
+    )
+
+
+def get_latest_events(nf_batch_jobs_table: str) -> list[BatchJobEvent]:
+    """Return the most recent tracked event for every session in the table.
+
+    :param nf_batch_jobs_table: Fully-qualified table reference.
+    :returns: One :class:`BatchJobEvent` per distinct ``session_id`` — its
+        latest row by ``created_at``. Empty list if the table has never been
+        written to.
+    """
+    client = bigquery.Client()
+    query = f"""
+        SELECT * EXCEPT(rn) FROM (
+            SELECT
+                session_id,
+                phase,
+                vertex_job_name,
+                state,
+                input_table,
+                output_table,
+                row_count,
+                error,
+                ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY created_at DESC) AS rn
+            FROM `{nf_batch_jobs_table}`
+        )
+        WHERE rn = 1
+    """
+    df = client.query(query).to_dataframe()
+    if df.empty:
+        return []
+
+    return [
+        BatchJobEvent(
+            session_id=row["session_id"],
+            phase=row["phase"],
+            vertex_job_name=row["vertex_job_name"],
+            state=row["state"],
+            input_table=row["input_table"],
+            output_table=row["output_table"],
+            row_count=None if row["row_count"] is None else int(row["row_count"]),
+            error=row["error"],
+        )
+        for row in df.to_dict("records")
+    ]
+
+
+def get_active_sessions(nf_batch_jobs_table: str) -> list[BatchJobEvent]:
+    """Return the latest event for every session still in flight (non-terminal).
+
+    :param nf_batch_jobs_table: Fully-qualified table reference.
+    :returns: Latest events whose ``state`` is not one of :data:`TERMINAL_STATES`.
+    """
+    return [event for event in get_latest_events(nf_batch_jobs_table) if event.state not in TERMINAL_STATES]
+
+
+def has_active_session(nf_batch_jobs_table: str) -> bool:
+    """Return whether any session is currently in flight (non-terminal).
+
+    Used by the submit flow to avoid starting a new session while a previous
+    one hasn't finished — sessions are processed one at a time, matching the
+    synchronous pipeline's self-trigger behaviour (one batch completes fully
+    before the next begins).
+
+    :param nf_batch_jobs_table: Fully-qualified table reference.
+    :returns: ``True`` if at least one session's latest event is non-terminal.
+    """
+    return len(get_active_sessions(nf_batch_jobs_table)) > 0
