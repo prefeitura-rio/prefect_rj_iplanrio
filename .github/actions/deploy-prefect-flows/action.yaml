@@ -76,21 +76,25 @@ runs:
       with:
         python-version-file: pyproject.toml
 
-    - name: Configure git for HTTPS access to private repo dependencies
+    - name: Configure git HTTPS auth for private repo dependencies
       shell: bash
       # Some pipelines (e.g. rj_iplanrio__nf_agent) pull a workspace
-      # dependency straight from a private GitHub repo via git+ssh (see
-      # that pipeline's pyproject.toml [tool.uv.sources]). This runner is
-      # an ephemeral GitHub-hosted VM with no SSH key/known_hosts set up
-      # for that at all, so `uv sync`'s git fetch fails with "Host key
-      # verification failed" — this has never actually succeeded via CI.
-      # Rewriting ssh://git@ssh.github.com:443/ and ssh://git@github.com/
-      # to an HTTPS URL authenticated with the token this action already
-      # has (used above for the ghcr.io login) sidesteps needing a new SSH
-      # key/secret entirely.
+      # dependency straight from a private GitHub repo over HTTPS (see
+      # that pipeline's pyproject.toml [tool.uv.sources] — it used to be
+      # git+ssh, but this runner is an ephemeral GitHub-hosted VM with no
+      # SSH key/known_hosts set up at all, so that always failed with
+      # "Host key verification failed"; a `git config --global
+      # url.insteadOf` rewrite from ssh to an authenticated https URL was
+      # tried and confirmed NOT to work either — `uv`'s git fetcher
+      # doesn't honor it). A `.netrc` entry is the auth mechanism that
+      # actually reaches `uv`'s underlying git/HTTP client.
       run: |
-        git config --global url."https://x-access-token:${{ inputs.gh_token }}@github.com/".insteadOf "ssh://git@ssh.github.com:443/"
-        git config --global url."https://x-access-token:${{ inputs.gh_token }}@github.com/".insteadOf "ssh://git@github.com/"
+        cat <<EOF >> "$HOME/.netrc"
+        machine github.com
+        login x-access-token
+        password ${{ inputs.gh_token }}
+        EOF
+        chmod 600 "$HOME/.netrc"
 
     - name: Deploy Prefect flows
       shell: bash

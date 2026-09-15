@@ -39,7 +39,16 @@ dev = [
 
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
-"iplanrio-agent-toolkit" = { git = "ssh://git@ssh.github.com:443/prefeitura-rio/iplanrio-agent-toolkit.git" }
+# HTTPS, not git+ssh: `uv`'s git fetcher does not honor `git config
+# url.<base>.insteadOf` rewrites (confirmed — a CI-side rewrite from
+# ssh://git@ssh.github.com:443/ to an authenticated HTTPS URL had no
+# effect on the actual `git fetch` uv ran), so a CI runner with no SSH
+# key/known_hosts configured for ssh.github.com can never fetch this over
+# SSH. HTTPS works locally via `gh`'s registered git credential helper
+# (`gh auth setup-git` / already-configured `credential.https://github.com.helper`)
+# and in CI via a `.netrc` written from the deploy action's GH_TOKEN — see
+# `.github/actions/deploy-prefect-flows/action.yaml`.
+"iplanrio-agent-toolkit" = { git = "https://github.com/prefeitura-rio/iplanrio-agent-toolkit.git" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
