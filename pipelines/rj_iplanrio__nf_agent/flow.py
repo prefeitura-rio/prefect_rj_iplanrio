@@ -117,9 +117,9 @@ def rj_iplanrio__nf_agent(
 ) -> None:
     """Run the NF extraction/validation pipeline in batch (default) or sync mode.
 
-    :param execution_mode: ``"batch"`` (Vertex AI Batch Prediction, what
-        production schedules run) or ``"sync"`` (per-request via Bifrost,
-        kept for small/fast or on-demand runs — not scheduled).
+    :param execution_mode: ``"batch"`` (Bifrost Batch API, what production
+        schedules run) or ``"sync"`` (per-request via Bifrost, kept for
+        small/fast or on-demand runs — not scheduled).
     """
     if execution_mode not in VALID_EXECUTION_MODES:
         raise ValueError(f"Invalid execution_mode: {execution_mode!r}. Must be one of {sorted(VALID_EXECUTION_MODES)}")
