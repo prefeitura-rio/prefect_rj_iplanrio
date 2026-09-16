@@ -1,4 +1,6 @@
 -- Passos do agente de IA em que alguma URL foi redigida, na janela [$start_datetime, $end_datetime).
+-- Fonte em `$project.$dataset_id.$table_id`: vem dos replacements do deployment (§7.5 do
+-- styleguide), não de literal no SQL, para que o arquivo descreva o recorte e não o ambiente.
 -- Intervalo semiaberto: o fim de uma janela é o início da próxima, sem lacuna nem sobreposição.
 -- inicio_datahora é DATETIME em hora-parede de São Paulo, por isso a comparação usa DATETIME()
 -- e a janela precisa ser calculada em America/Sao_Paulo.
@@ -11,7 +13,7 @@ WITH passos AS (
         inicio_datahora,
         ingestao_datahora,
         passo_atributos_json.redacted_urls AS redacted_urls
-    FROM `rj-crm-registry.brutos_salesforce.ai_agent_interaction_step`
+    FROM `$project.$dataset_id.$table_id`
     WHERE saida_valor_texto LIKE '%URL_Redacted%'
       AND inicio_datahora >= DATETIME('$start_datetime')
       AND inicio_datahora < DATETIME('$end_datetime')

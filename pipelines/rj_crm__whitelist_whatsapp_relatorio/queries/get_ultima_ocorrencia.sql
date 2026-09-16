@@ -1,4 +1,6 @@
 -- Instante da ocorrência mais recente com URL identificada, em toda a tabela.
+-- Fonte em `$project.$dataset_id.$table_id`: mesmos replacements da query da janela (§7.5),
+-- para que as duas não possam apontar para tabelas diferentes por descuido.
 -- Deliberadamente sem recorte de janela: o valor serve para desambiguar o período vazio.
 -- Sem ele, "não houve ocorrência" e "a fonte parou de gerar ocorrências" são
 -- indistinguíveis, e o relatório pode ficar verde e vazio indefinidamente.
@@ -8,6 +10,6 @@
 -- Só é executada em dia sem ocorrências, então a varredura extra não incide nos dias em
 -- que o relatório tem conteúdo.
 SELECT MAX(inicio_datahora) AS ultima_ocorrencia
-FROM `rj-crm-registry.brutos_salesforce.ai_agent_interaction_step`
+FROM `$project.$dataset_id.$table_id`
 WHERE saida_valor_texto LIKE '%URL_Redacted%'
   AND passo_atributos_json.redacted_urls IS NOT NULL

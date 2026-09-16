@@ -32,10 +32,35 @@ Só o deployment de produção tem agendamento; o de staging roda sob demanda.
 `saida_valor_texto` contém `URL_Redacted` **e** o atributo `redacted_urls` está
 preenchido. Passo sem o atributo está fora de escopo: não é acionável.
 
+O endereço da tabela não é literal no SQL: os arquivos em `queries/` trazem
+`$project.$dataset_id.$table_id` e os valores chegam pelos `replacements` do deployment
+(§7.5 do styleguide). Apontar a pipeline para outra tabela é mexer no `prefect.yaml`, sem
+tocar em `.sql` nem em Python.
+
+## Parâmetros do deployment
+
+| Parâmetro | Conteúdo |
+| --- | --- |
+| `environment` | `staging` ou `prod` — só rotula a execução e a mensagem; não troca a service account |
+| `query_ocorrencias` | `name: get_redacted_urls` + `replacements` da fonte |
+| `query_ultima_ocorrencia` | `name: get_ultima_ocorrencia` + `replacements` da fonte |
+| `start_datetime` / `end_datetime` | recorte manual, ver *Reprocessar uma janela* |
+
+`name` é o arquivo em `queries/` sem extensão; `replacements` são os `$placeholder` do
+template. Nenhum SQL trafega pelo `prefect.yaml`. A janela (`start_datetime` /
+`end_datetime`) é calculada em runtime e entra por cima dos `replacements` — cadastrá-la
+no YAML não tem efeito.
+
+As chaves de `replacements` têm que cobrir exatamente os `$placeholder` do arquivo: falta
+uma e `load_query` levanta `KeyError` na hora, antes de qualquer consulta.
+
 ## Variáveis de ambiente
 
-Todas obrigatórias, validadas na primeira task. Faltando qualquer uma, o flow falha
-antes de qualquer envio, nomeando o que falta.
+Todas obrigatórias, lidas com `getenv_or_action` (`iplanrio`) do que o Infisical injeta
+no container. São validadas na primeira task: faltando qualquer uma, o flow falha antes
+de qualquer envio, nomeando **todas** as que faltam de uma vez — a validação usa
+`action="ignore"` justamente para juntar as ausências, e rejeita também variável definida
+com valor vazio. Nos pontos de uso a leitura é `action="raise"`.
 
 | Variável | Conteúdo |
 | --- | --- |

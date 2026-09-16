@@ -9,13 +9,12 @@ Credencial explícita não é redundância: o docstring de
 dentro do pod do work pool, lendo `brutos_salesforce` — a mesma fonte deste relatório.
 """
 
-from os import getenv
 from time import sleep
 
 import pandas as pd
 from google.auth.credentials import Credentials
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
+from iplanrio.pipelines_utils.env import get_bd_credentials_from_env, getenv_or_action
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils.log import logger_da_pipeline
 
@@ -55,9 +54,12 @@ vamos ler deixaria a exceção estourar no meio do flow.
 def credenciais_ausentes() -> list[str]:
     """Aponta o que falta para usar a service account do ambiente.
 
+    ``action="ignore"`` porque aqui a ausência é resposta, não erro: quem decide o que
+    fazer com ela é o chamador, e em execução local ela é o caminho esperado (D35).
+
     :returns: Nomes das variáveis ausentes; vazio quando a service account está completa.
     """
-    return [nome for nome in VARIAVEIS_CREDENCIAIS if not getenv(nome)]
+    return [nome for nome in VARIAVEIS_CREDENCIAIS if not getenv_or_action(nome, action="ignore")]
 
 
 def resolver_credenciais() -> Credentials | None:

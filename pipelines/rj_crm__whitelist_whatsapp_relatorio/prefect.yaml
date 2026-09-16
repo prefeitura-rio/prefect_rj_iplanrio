@@ -44,6 +44,18 @@ deployments:
           PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_crm__whitelist_whatsapp_relatorio
     parameters:
       environment: staging
+      query_ocorrencias:
+        name: get_redacted_urls
+        replacements:
+          project: rj-crm-registry
+          dataset_id: brutos_salesforce
+          table_id: ai_agent_interaction_step
+      query_ultima_ocorrencia:
+        name: get_ultima_ocorrencia
+        replacements:
+          project: rj-crm-registry
+          dataset_id: brutos_salesforce
+          table_id: ai_agent_interaction_step
 
   - name: rj-crm--whitelist-whatsapp-relatorio--prod
     tags:
@@ -65,6 +77,18 @@ deployments:
           PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_crm__whitelist_whatsapp_relatorio
     parameters:
       environment: prod
+      query_ocorrencias:
+        name: get_redacted_urls
+        replacements:
+          project: rj-crm-registry
+          dataset_id: brutos_salesforce
+          table_id: ai_agent_interaction_step
+      query_ultima_ocorrencia:
+        name: get_ultima_ocorrencia
+        replacements:
+          project: rj-crm-registry
+          dataset_id: brutos_salesforce
+          table_id: ai_agent_interaction_step
     schedules:
       - cron: "0 9 * * *"
         timezone: America/Sao_Paulo

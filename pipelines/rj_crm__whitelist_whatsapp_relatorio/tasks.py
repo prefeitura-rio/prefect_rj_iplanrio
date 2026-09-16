@@ -3,12 +3,17 @@
 Fronteira entre o Prefect e o Python puro (§4.2 do styleguide): cada task lê o que só o
 ambiente de execução sabe — variáveis de ambiente e contexto do flow run — e delega o
 trabalho para ``utils``. Nenhuma regra de negócio mora aqui.
+
+Variável de ambiente se lê com ``getenv_or_action`` (API pública do ``iplanrio``), que é
+como o repo lê o que o Infisical injeta no container. ``action="raise"`` nos pontos de
+uso e ``action="ignore"`` na validação, que precisa juntar todas as ausências antes de
+falhar em vez de morrer na primeira.
 """
 
 from datetime import datetime
-from os import getenv
+from typing import TypedDict
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials
+from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from prefect import task
 from prefect.runtime import deployment, flow_run
 
@@ -39,8 +44,31 @@ ENV_OBRIGATORIAS = (
 )
 """Variáveis sem as quais o relatório não tem como ser entregue."""
 
-QUERY_OCORRENCIAS = "get_redacted_urls"
-QUERY_ULTIMA_OCORRENCIA = "get_ultima_ocorrencia"
+
+class QueryParam(TypedDict):
+    """Parâmetro estruturado de query, no formato do §7.5 do styleguide.
+
+    ``name`` é o arquivo em ``queries/`` sem a extensão; ``replacements`` são os valores
+    dos ``$placeholder`` do template. Nenhum SQL trafega pelo ``prefect.yaml``.
+    """
+
+    name: str
+    replacements: dict[str, object]
+
+
+FONTE_PADRAO: dict[str, object] = {
+    "project": "rj-crm-registry",
+    "dataset_id": "brutos_salesforce",
+    "table_id": "ai_agent_interaction_step",
+}
+"""Fonte usada quando o flow roda fora de um deployment.
+
+Em staging e prod estes valores vêm do ``prefect.yaml``; aqui eles só existem para que
+uma execução local não precise repetir a configuração inteira na mão.
+"""
+
+QUERY_OCORRENCIAS_PADRAO: QueryParam = {"name": "get_redacted_urls", "replacements": FONTE_PADRAO}
+QUERY_ULTIMA_OCORRENCIA_PADRAO: QueryParam = {"name": "get_ultima_ocorrencia", "replacements": FONTE_PADRAO}
 
 
 @task
@@ -50,9 +78,15 @@ def validar_configuracao_task() -> None:
     Validar antes de qualquer envio evita o caso ruim: descobrir que falta destinatário
     depois de a mensagem do Discord já ter saído.
 
+    A leitura usa ``action="ignore"`` de propósito: ``action="raise"`` pararia na
+    primeira ausência, e a mensagem precisa nomear todas de uma vez. A checagem de
+    conteúdo continua em ``variaveis_ausentes`` porque ``getenv_or_action`` só reage a
+    variável **não definida** — string vazia passa por ela.
+
     :raises ValueError: Se alguma variável obrigatória estiver ausente ou vazia.
     """
-    ausentes = variaveis_ausentes({nome: getenv(nome) for nome in ENV_OBRIGATORIAS})
+    lidas = {nome: getenv_or_action(nome, action="ignore") for nome in ENV_OBRIGATORIAS}
+    ausentes = variaveis_ausentes(lidas)
     if ausentes:
         raise ValueError(f"Variáveis de ambiente ausentes: {', '.join(ausentes)}")
     logger.info("Configuração validada")
@@ -113,23 +147,27 @@ def resolver_janela_task(start_datetime: str | None, end_datetime: str | None) -
 
 
 @task(retries=2, retry_delay_seconds=60)
-def buscar_ocorrencias_task(janela: Janela) -> list[Ocorrencia]:
+def buscar_ocorrencias_task(query: QueryParam, janela: Janela) -> list[Ocorrencia]:
     """Consulta o BigQuery e normaliza as ocorrências do período.
 
+    Os ``replacements`` do deployment descrevem a fonte; a janela é runtime e entra por
+    cima. Nessa ordem, um ``start_datetime`` cadastrado por engano no ``prefect.yaml``
+    é sobrescrito pelo recorte real em vez de virar argumento duplicado.
+
+    :param query: Nome do arquivo ``.sql`` e valores dos ``$placeholder`` da fonte.
     :param janela: Recorte do relatório.
     :returns: Ocorrências encontradas, possivelmente vazia.
     """
-    query = load_query(
-        __file__,
-        QUERY_OCORRENCIAS,
-        start_datetime=janela.inicio_sql,
-        end_datetime=janela.fim_sql,
-    )
-    return normalizar(bigquery.baixar(query=query))
+    replacements = {
+        **query["replacements"],
+        "start_datetime": janela.inicio_sql,
+        "end_datetime": janela.fim_sql,
+    }
+    return normalizar(bigquery.baixar(query=load_query(__file__, query["name"], **replacements)))
 
 
 @task
-def buscar_ultima_ocorrencia_task(ocorrencias: list[Ocorrencia]) -> datetime | None:
+def buscar_ultima_ocorrencia_task(query: QueryParam, ocorrencias: list[Ocorrencia]) -> datetime | None:
     """Descobre quando foi a última ocorrência conhecida, quando o período volta vazio.
 
     Só consulta o BigQuery em dia sem ocorrência: é o único dia em que o número importa,
@@ -140,6 +178,7 @@ def buscar_ultima_ocorrencia_task(ocorrencias: list[Ocorrencia]) -> datetime | N
     mensagem diária que o diagnóstico existe para qualificar. Sem ela o relatório sai
     igual, só sem a linha de contexto.
 
+    :param query: Nome do arquivo ``.sql`` e valores dos ``$placeholder`` da fonte.
     :param ocorrencias: Ocorrências do período.
     :returns: Instante da última ocorrência conhecida; ``None`` quando houve ocorrência
         no período, quando a fonte nunca registrou nenhuma ou quando a consulta falhou.
@@ -148,7 +187,7 @@ def buscar_ultima_ocorrencia_task(ocorrencias: list[Ocorrencia]) -> datetime | N
         return None
 
     try:
-        dados = bigquery.baixar(query=load_query(__file__, QUERY_ULTIMA_OCORRENCIA))
+        dados = bigquery.baixar(query=load_query(__file__, query["name"], **query["replacements"]))
     except Exception:
         logger.warning("Não foi possível consultar a última ocorrência conhecida", exc_info=True)
         return None
@@ -167,16 +206,17 @@ def enviar_email_task(janela: Janela, ocorrencias: list[Ocorrencia]) -> list[str
     :param janela: Recorte do relatório.
     :param ocorrencias: Ocorrências do período.
     :returns: Destinatários que receberam o relatório; vazio quando não houve envio.
+    :raises ValueError: Se alguma das variáveis do Data Relay não estiver definida.
     """
     if not ocorrencias:
         logger.info("Sem ocorrências no período: e-mail não será enviado")
         return []
 
-    destinatarios = ler_destinatarios(getenv(ENV_DATA_RELAY_TO_ADDRESSES))
+    destinatarios = ler_destinatarios(getenv_or_action(ENV_DATA_RELAY_TO_ADDRESSES))
     mailman.enviar_relatorio(
         conexao=mailman.ConexaoDataRelay(
-            url=getenv(ENV_DATA_RELAY_URL, ""),
-            api_key=getenv(ENV_DATA_RELAY_API_KEY, ""),
+            url=str(getenv_or_action(ENV_DATA_RELAY_URL)),
+            api_key=str(getenv_or_action(ENV_DATA_RELAY_API_KEY)),
         ),
         destinatarios=destinatarios,
         janela=janela,
@@ -204,6 +244,7 @@ def enviar_discord_task(
     :param destinatarios: Quem recebeu o e-mail detalhado.
     :param ambiente: Ambiente de execução, ``staging`` ou ``prod``.
     :param ultima_ocorrencia: Última ocorrência conhecida na fonte, mostrada em dia vazio.
+    :raises ValueError: Se a variável do webhook não estiver definida.
     """
     mensagem = discord.montar_mensagem(
         janela=janela,
@@ -212,4 +253,4 @@ def enviar_discord_task(
         contexto=discord.Contexto(ambiente=ambiente, run_url=flow_run.ui_url or ""),
         ultima_ocorrencia=ultima_ocorrencia,
     )
-    discord.enviar(webhook_url=getenv(ENV_DISCORD_WEBHOOK, ""), mensagem=mensagem)
+    discord.enviar(webhook_url=str(getenv_or_action(ENV_DISCORD_WEBHOOK)), mensagem=mensagem)
