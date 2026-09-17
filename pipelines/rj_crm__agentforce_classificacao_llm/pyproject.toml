@@ -1,0 +1,17 @@
+[project]
+name = "rj_crm__agentforce_classificacao_llm"
+version = "0.1.0"
+description = "Classificação inicial por LLM (Bifrost/Gemini) das sessões do Agentforce (WhatsApp) -> BigQuery"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-bigquery>=3.11.0",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
+    "requests>=2.31.0",
+    "pandas>=2.0.0",
+    "discord-py==2.5.2",
+    "aiohttp>=3.9.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

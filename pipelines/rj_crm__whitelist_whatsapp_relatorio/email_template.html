@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>Relatório diário — URLs redigidas</title>
+<style>
+  body, table, td, p, div { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+  table { border-collapse:collapse; }
+  img { border:0; line-height:100%; outline:none; }
+
+  @media only screen and (max-width:600px) {
+    .wrap        { padding:12px 8px !important; }
+    .hero        { padding:20px 18px !important; }
+    .hero-num    { font-size:36px !important; }
+    .hero-sub    { font-size:13px !important; }
+    .card        { padding:20px 16px !important; }
+    .pre         { font-size:12px !important; padding:12px !important; line-height:1.9 !important; }
+    .copy-title  { font-size:12px !important; }
+
+    /* tabela de detalhe: empilha data acima da URL */
+    .cel         { display:block !important; width:100% !important; box-sizing:border-box !important; }
+    .cel-quando  { padding:8px 12px 0 !important; font-size:11.5px !important; color:#a1a1aa !important; }
+    .cel-url     { padding:2px 12px 9px !important; }
+
+    /* frequência: número abaixo da URL */
+    .freq-url    { display:block !important; width:100% !important; padding:8px 0 0 !important; border-bottom:0 !important; }
+    .freq-num    { display:block !important; width:100% !important; text-align:left !important; padding:2px 0 8px !important; }
+  }
+
+  /* Impressão: fundo branco e hero sem chapado de tinta. */
+  @media print {
+    body, .canvas { background:#ffffff !important; }
+    .wrap         { padding:0 !important; }
+    .hero-wrap    { background:#ffffff !important; border:1px solid #e4e4e7 !important; }
+    .hero-num, .hero-sub, .hero-kicker, .hero-janela { color:#18181b !important; }
+    .card         { border:1px solid #e4e4e7 !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="canvas" style="background:#f4f4f5;">
+<tr><td class="wrap" align="center" style="padding:24px 12px;">
+
+<!--[if mso]><table role="presentation" width="660" cellpadding="0" cellspacing="0"><tr><td><![endif]-->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:660px;margin:0 auto;">
+
+  <tr>
+    <td style="padding:0 0 18px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="hero-wrap" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);background-color:#4f46e5;border-radius:10px;">
+        <tr>
+          <td class="hero" style="padding:26px 28px;">
+            <div class="hero-kicker" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#c7d2fe;">Relatório diário &middot; {{ data_relatorio }}</div>
+            <div class="hero-num" style="margin-top:14px;font-size:44px;line-height:1;font-weight:700;color:#ffffff;">{{ total_ocorrencias }}</div>
+            <div class="hero-sub" style="margin-top:6px;font-size:14px;color:#e0e7ff;">ocorrências de URL redigida &middot; {{ total_urls }} endereços distintos</div>
+            <div class="hero-janela" style="margin-top:14px;font-size:12px;color:#c7d2fe;">{{ janela_inicio }} &rarr; {{ janela_fim }}</div>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <tr>
+    <td class="card" style="background:#ffffff;border-radius:10px;padding:26px 28px;">
+
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.6;color:#3f3f46;">
+        O agente substituiu estes endereços por <code style="background:#f4f4f5;padding:1px 5px;border-radius:3px;font-size:12.5px;">URL_Redacted</code> por não estarem na whitelist.
+        Encaminhe a lista abaixo para liberação.
+      </p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #4f46e5;border-radius:8px;">
+        <tr>
+          <td style="padding:14px 16px 10px;background:#eef2ff;border-radius:6px 6px 0 0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td class="copy-title" style="font-size:13px;font-weight:700;color:#3730a3;">Copiar para o responsável</td>
+                <td align="right" style="white-space:nowrap;padding-left:10px;">
+                  <span style="display:inline-block;font-size:11px;font-weight:700;color:#4f46e5;background:#ffffff;padding:3px 9px;border-radius:20px;">{{ total_urls }} URLs</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 16px;">
+<pre class="pre" style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.8;color:#18181b;white-space:pre-wrap;word-break:break-all;">{{ urls | join('\n') }}</pre>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:0 16px 14px;">
+            <div style="font-size:11px;color:#6b7280;">Confira se as {{ total_urls }} chegaram ao destinatário final.</div>
+          </td>
+        </tr>
+      </table>
+
+      <div style="margin:26px 0 6px;font-size:13px;font-weight:600;color:#18181b;">Frequência por endereço</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+        {%- for item in frequencias %}
+          <tr>
+            <td class="freq-url" style="padding:8px 0;border-bottom:1px solid #f4f4f5;font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#18181b;word-break:break-all;">{{ item.url }}</td>
+            <td class="freq-num" align="right" style="padding:8px 0 8px 12px;border-bottom:1px solid #f4f4f5;font-size:11px;color:#a1a1aa;white-space:nowrap;vertical-align:top;">{{ item.total }}&times;</td>
+          </tr>
+        {%- endfor %}
+      </table>
+
+      <div style="margin:26px 0 10px;font-size:13px;font-weight:600;color:#18181b;">Linha a linha</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e4e4e7;border-radius:6px;overflow:hidden;">
+        <tr style="background:#f4f4f5;">
+          <th align="left" style="padding:9px 12px;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:.05em;">Quando</th>
+          <th align="left" style="padding:9px 12px;font-size:11px;color:#71717a;text-transform:uppercase;letter-spacing:.05em;">URL</th>
+        </tr>
+        {%- for oc in ocorrencias %}
+          <tr style="background:{{ '#ffffff' if loop.index0 % 2 == 0 else '#fafafa' }};">
+            <td class="cel cel-quando" style="padding:9px 12px;color:#52525b;font-size:12.5px;white-space:nowrap;vertical-align:top;">{{ oc.datahora }}</td>
+            <td class="cel cel-url" style="padding:9px 12px;font-size:12.5px;color:#18181b;word-break:break-all;">{{ oc.url }}</td>
+          </tr>
+        {%- endfor %}
+      </table>
+
+      <p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e4e4e7;font-size:12px;line-height:1.7;color:#71717a;">
+        {% if tem_anexo %}CSV completo em anexo &middot; {% endif %}<a href="{{ run_url }}" style="color:#4f46e5;text-decoration:none;font-weight:600;">ver execução no Prefect</a>
+      </p>
+
+    </td>
+  </tr>
+</table>
+<!--[if mso]></td></tr></table><![endif]-->
+
+</td></tr>
+</table>
+</body>
+</html>

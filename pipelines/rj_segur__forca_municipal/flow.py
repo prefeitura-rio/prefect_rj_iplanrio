@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para extrair dados da API CIVITAS/CORIO (Força Municipal) e enviar para BigQuery.
 

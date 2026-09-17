@@ -17,12 +17,15 @@ members = [
     "rj-cor-meteorologia-redemet",
     "rj-cor-meteorologia-redemet-estacoes",
     "rj-cor-precipitacao-alertario",
+    "rj-cor-precipitacao-alertario-sftp",
     "rj-cor-precipitacao-cemaden",
     "rj-cor-precipitacao-inea",
     "rj-cor-precipitacao-websirene",
+    "rj-crm-agentforce-classificacao-llm",
     "rj-crm-api-wetalkie",
     "rj-crm-callcenter-attendances-weekly",
     "rj-crm-disparo-template",
+    "rj-crm-disparos-nao-efetuados",
     "rj-crm-geolocalizacao-residencia",
     "rj-crm-get-history-data",
     "rj-crm-relatorio-cvl",
@@ -36,6 +39,7 @@ members = [
     "rj-crm-wetalkie-api-hsm-info",
     "rj-crm-wetalkie-atualiza-contato",
     "rj-crm-whitelist-whatsapp",
+    "rj-crm-whitelist-whatsapp-relatorio",
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
     "rj-iplanrio-1746-seconverva-salesforce-poc",
@@ -3631,6 +3635,29 @@ requires-dist = [
 ]
 
 [[package]]
+name = "rj-cor-precipitacao-alertario-sftp"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_cor__precipitacao_alertario_sftp" }
+dependencies = [
+    { name = "defusedxml" },
+    { name = "google-cloud-storage" },
+    { name = "pandas" },
+    { name = "pendulum" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "defusedxml", specifier = ">=0.0.1" },
+    { name = "google-cloud-storage", specifier = ">=2.10.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
+    { name = "pendulum", specifier = ">=3.0.0" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "pyarrow", specifier = ">=12.0.0" },
+]
+
+[[package]]
 name = "rj-cor-precipitacao-cemaden"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cor__precipitacao_cemaden" }
@@ -3674,6 +3701,33 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-crm-agentforce-classificacao-llm"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_crm__agentforce_classificacao_llm" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "discord-py" },
+    { name = "google-cloud-bigquery" },
+    { name = "pandas" },
+    { name = "prefect" },
+    { name = "prefect-docker" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.9.0" },
+    { name = "discord-py", specifier = "==2.5.2" },
+    { name = "google-cloud-bigquery", specifier = ">=3.11.0" },
+    { name = "pandas", specifier = ">=2.0.0" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests", specifier = ">=2.31.0" },
+]
 
 [[package]]
 name = "rj-crm-api-wetalkie"
@@ -3800,6 +3854,55 @@ requires-dist = [
     { name = "mutagen", specifier = "==1.47.0" },
     { name = "opencage", specifier = "==3.0.4" },
     { name = "openlocationcode", specifier = "==1.0.1" },
+    { name = "pendulum", specifier = "==3.0.0" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "prefeitura-rio", extras = ["actions"], git = "https://github.com/prefeitura-rio/prefeitura-rio?rev=54593ddff444158b0ecbab5514c5cde4d44012c0" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "python-dotenv", specifier = "==1.0.1" },
+    { name = "ruamel-yaml", specifier = "==0.18.6" },
+    { name = "simplejson", specifier = "==3.20.1" },
+    { name = "unidecode", specifier = "==1.3.8" },
+]
+
+[[package]]
+name = "rj-crm-disparos-nao-efetuados"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_crm__disparos_nao_efetuados" }
+dependencies = [
+    { name = "asyncssh" },
+    { name = "dbt-bigquery" },
+    { name = "dbt-core" },
+    { name = "discord-py" },
+    { name = "gitpython" },
+    { name = "google-cloud-speech" },
+    { name = "google-cloud-storage" },
+    { name = "marshmallow" },
+    { name = "mutagen" },
+    { name = "pendulum" },
+    { name = "prefect" },
+    { name = "prefect-docker" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "prefeitura-rio", extra = ["actions"] },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "ruamel-yaml" },
+    { name = "simplejson" },
+    { name = "unidecode" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncssh", specifier = ">=2.20.0" },
+    { name = "dbt-bigquery", specifier = ">=1.6.1" },
+    { name = "dbt-core", specifier = ">=1.8.0" },
+    { name = "discord-py", specifier = "==2.5.2" },
+    { name = "gitpython", specifier = "==3.1.44" },
+    { name = "google-cloud-speech", specifier = "==2.32.0" },
+    { name = "google-cloud-storage", specifier = "==2.10.0" },
+    { name = "marshmallow", specifier = "==3.26.1" },
+    { name = "mutagen", specifier = "==1.47.0" },
     { name = "pendulum", specifier = "==3.0.0" },
     { name = "prefect", specifier = "==3.4.9" },
     { name = "prefect-docker", specifier = ">=0.6.5" },
@@ -4201,6 +4304,25 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-crm-whitelist-whatsapp-relatorio"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_crm__whitelist_whatsapp_relatorio" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "jinja2" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.25.0" },
+    { name = "jinja2", specifier = ">=3.1.2" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests", specifier = ">=2.31.0" },
+]
 
 [[package]]
 name = "rj-cvl-arquivo-virtual"

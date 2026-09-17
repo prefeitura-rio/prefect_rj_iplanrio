@@ -6,8 +6,7 @@ WITH segmentacao_original AS (
         nome_maternidade_alta AS maternidade,
         data_alta_internacao,
         telefones_gestante
-    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
-    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+    FROM `rj-sms.projeto_whatsapp.alta_maternidade`
     WHERE cpf is not null
         and cpf != '00000000000'
     AND CURRENT_DATE('America/Sao_Paulo') in

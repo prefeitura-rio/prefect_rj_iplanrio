@@ -60,7 +60,6 @@ deployments:
         image_pull_policy: Always
     parameters:
       dataset_id: brutos_salesforce_staging
-      control_dataset: agentforce_control_staging
       environment: staging
     schedules:
       # Cadência de 15 em 15min foi um teste (2026-08-20) que ficou ligado — e foi
@@ -102,12 +101,37 @@ deployments:
       # O deployment de staging (QA) usa esse mesmo dataset_id — sem ele aqui, prod
       # escreveria num dataset órfão que o dbt nunca lê.
       dataset_id: brutos_salesforce_staging
+    # Impede a passada diária (modo='dia', reconciliação funda) de escrever na
+    # mesma tabela ao mesmo tempo que um tick de 15min (modo='hora') — mesmo
+    # padrão já usado em rj_crm__run_dbt (ver prefect.yaml de lá) pro mesmo
+    # tipo de risco: dois MERGE concorrentes no mesmo modelo incremental. Com
+    # ENQUEUE, quem colidir espera a vez em vez de rodar em paralelo.
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
     schedules:
-      # Nunca teve schedule — só rodava sob demanda (explica o checkpoint de prod,
-      # agentforce_control.pipeline_checkpoints, estar vazio). De 15 em 15min, mesma
-      # cadência que staging usava — só é seguro agora com write_mode='merge' (ver
-      # flow.py); com o 'replace' antigo, essa frequência destruiria dado a cada run.
+      # Passe quente — janela rolante de 1h a cada 15min (ver tasks/janela.py).
+      # Nunca teve schedule antes de 2026-08-27 — só rodava sob demanda (explica
+      # o checkpoint de prod, agentforce_control.pipeline_checkpoints, ter ficado
+      # vazio por tanto tempo). Migrado de watermark forward-only pra modo janela
+      # em 2026-09-08: um tick perdido (schedule pausado, erro transitório, pico
+      # de volume) não se recuperava sozinho — achado concreto: buraco de quase
+      # 100% em 02/09/2026, só resolvido com backfill manual. A sobreposição de
+      # 1h entre ticks consecutivos cobre isso — um tick perdido é reconsultado
+      # pelos 3 seguintes dentro da mesma hora.
       - cron: "*/15 * * * *"
         timezone: America/Sao_Paulo
         active: true
         slug: agentforce-producao-15min
+        parameters:
+          modo: hora
+      # Passe frio — reconciliação do dia inteiro, 1x/dia às 00:15 (SP), pra
+      # pegar o que nem a sobreposição de 1h do passe quente alcançou (ex.:
+      # pipeline parado por mais de 1h seguida). Reconcilia o dia que acabou de
+      # fechar (partition_date default = ontem, ver flow.py/janela_dia).
+      - cron: "15 0 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: agentforce-producao-diaria
+        parameters:
+          modo: dia

@@ -1,16 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Carregamento de DataFrames no BigQuery.
-
-Modos suportados:
-  - append  : adiciona linhas sem remover existentes (padrão para ingestão incremental)
-  - replace : substitui a partição inteira do dia
-  - merge   : MERGE com deduplicação por chave primária e filtro de partição
-              (evita duplicatas em caso de re-execução)
-
-Para tabelas grandes (F3 — Platform Tracing), use load_bigquery_chunk que
-carrega chunks incrementalmente via streaming insert em staging table,
-seguido de MERGE na tabela final.
+Carregamento de DataFrames no BigQuery: staging (tabela fixa, uma por tabela
+final — ex.: 'ai_agent_session_staging', schema em ensure_tables.py) + MERGE
+por chave primária, sempre. A staging é limpa (TRUNCATE) só depois de um
+MERGE bem-sucedido — se o MERGE falhar, ela fica suja pra próxima execução
+herdar por cima. Foi assim que aconteceu com messaging_end_user_staging nesta
+investigação (erro "UPDATE/MERGE must match at most one source row", nunca
+limpo, piorando a cada tentativa) — resolvido dedupando a origem antes do
+MERGE, não trocando o mecanismo de staging em si.
 """
 
 from __future__ import annotations
@@ -19,10 +16,7 @@ import pandas as pd
 from google.cloud import bigquery
 from prefect import task
 
-from pipelines.rj_crm__salesforce_agentforce_api.tasks.ensure_tables import (
-    PARTITIONED_TABLES,
-    SCHEMAS,
-)
+from pipelines.rj_crm__salesforce_agentforce_api.tasks.ensure_tables import SCHEMAS
 
 
 # ---------------------------------------------------------------------------
@@ -48,114 +42,6 @@ def _full_table_id(project_id: str, dataset_id: str, table_id: str) -> str:
     retries=3,
     retry_delay_seconds=[30, 60, 120],
 )
-def load_to_bigquery(
-    df: pd.DataFrame,
-    project_id: str,
-    dataset_id: str,
-    table_id: str,
-    write_mode: str = "append",
-    partition_field: str = "data_particao",
-    clustering_fields: list[str] | None = None,
-) -> int:
-    """
-    Carrega um DataFrame no BigQuery.
-
-    Args:
-        df               : DataFrame a carregar (já transformado).
-        project_id       : ID do projeto GCP.
-        dataset_id       : Dataset de destino.
-        table_id         : Tabela de destino.
-        write_mode       : 'append', 'replace' ou 'truncate'.
-                           'replace' → WRITE_TRUNCATE apenas na partição do dia
-                           (usa decorator $YYYYMMDD no table ID).
-                           'append'  → WRITE_APPEND.
-        partition_field  : Campo usado para particionamento. Padrão: 'data_particao'.
-        clustering_fields: Lista de campos de clustering. Deve corresponder ao
-                           clustering definido na tabela destino (ex: ['id']).
-                           Se None, nenhum clustering é especificado no job — use
-                           apenas para tabelas sem clustering definido.
-
-    Returns:
-        Número de linhas carregadas.
-    """
-    if df.empty:
-        print(f"[BQ] '{table_id}': DataFrame vazio — nada a carregar.")
-        return 0
-
-    # Garantir que data_particao seja dtype datetime.date para o BQ inferir DATE
-    if "data_particao" in df.columns:
-        df = df.copy()
-        df["data_particao"] = pd.to_datetime(df["data_particao"]).dt.date
-
-    client = _get_bq_client(project_id)
-    full_id = _full_table_id(project_id, dataset_id, table_id)
-
-    # Para replace: apaga apenas a(s) partição(ões) afetada(s) antes de inserir, evitando
-    # WRITE_TRUNCATE que apagaria a tabela inteira. O decorator $YYYYMMDD NÃO
-    # funciona para tabelas particionadas por coluna (só por ingestão).
-    if write_mode in ("replace", "truncate") and partition_field in df.columns:
-        unique_dates = df[partition_field].dropna().unique()
-        if len(unique_dates) > 0:
-            dates_formatted = ", ".join(f"'{d}'" for d in unique_dates)
-            delete_sql = f"""
-                DELETE FROM `{full_id}`
-                WHERE {partition_field} IN ({dates_formatted})
-            """
-            print(f"[BQ] Apagando partição(ões) {dates_formatted} de '{table_id}' antes do replace...")
-            client.query(delete_sql).result()
-
-    # Schema explícito: evita autodetect inferir tipos errados (ex: None → FLOAT).
-    # Usa o schema centralizado em ensure_tables.py; cai em autodetect só se a
-    # tabela não estiver mapeada (não deve acontecer em operação normal).
-    schema = SCHEMAS.get(table_id)
-    if schema is None:
-        print(f"[BQ] WARN: schema não encontrado para '{table_id}' — usando autodetect.")
-
-    # Alinhar dtypes do pandas com os tipos esperados pelo schema do BigQuery
-    if schema is not None:
-        df = df.copy()
-        for field in schema:
-            col = field.name
-            if col in df.columns:
-                field_type_str = str(field.field_type).upper()
-                if "STRING" in field_type_str and pd.api.types.is_bool_dtype(df[col]):
-                    df[col] = df[col].astype(str).replace({"True": "true", "False": "false", "nan": None, "None": None})
-                elif ("BOOL" in field_type_str or "BOOLEAN" in field_type_str) and not pd.api.types.is_bool_dtype(df[col]):
-                    df[col] = df[col].astype(bool)
-
-    # Se clustering_fields não for informado explicitamente, obtém do mapeamento centralizado
-    if clustering_fields is None:
-        clustering_fields = PARTITIONED_TABLES.get(table_id)
-
-    job_config = bigquery.LoadJobConfig(
-        write_disposition=bigquery.WriteDisposition.WRITE_APPEND,
-        schema=schema,
-        autodetect=schema is None,
-        ignore_unknown_values=True,
-        time_partitioning=bigquery.TimePartitioning(
-            type_=bigquery.TimePartitioningType.DAY,
-            field=partition_field,
-        ),
-        clustering_fields=clustering_fields,
-    )
-
-    print(f"[BQ] Carregando {len(df)} linhas em '{full_id}' (modo: {write_mode})...")
-    job = client.load_table_from_dataframe(df, full_id, job_config=job_config)
-    job.result()  # aguarda conclusão
-
-    if job.errors:
-        raise RuntimeError(f"[BQ] Erros ao carregar '{full_id}': {job.errors}")
-
-    rows_loaded = len(df)
-    print(f"[BQ] '{table_id}': {rows_loaded} linhas carregadas com sucesso.")
-    return rows_loaded
-
-
-@task(
-    log_prints=True,
-    retries=3,
-    retry_delay_seconds=[30, 60, 120],
-)
 def load_chunk_to_staging(
     df_chunk: pd.DataFrame,
     project_id: str,
@@ -164,14 +50,15 @@ def load_chunk_to_staging(
     chunk_num: int = 1,
 ) -> int:
     """
-    Carrega um chunk em uma staging table (append).
-    Usado pela Fase 3 (Platform Tracing) para carga incremental.
+    Carrega um chunk na staging table (append — várias chamadas acumulam até
+    o MERGE final esvaziá-la).
 
     Args:
         df_chunk        : DataFrame do chunk.
         project_id      : ID do projeto GCP.
         dataset_id      : Dataset de staging.
-        staging_table_id: Nome da tabela staging (ex: 'telemetry_trace_span_staging').
+        staging_table_id: Nome da tabela staging (ex: 'ai_agent_session_staging'),
+                          schema pré-cadastrado em ensure_tables.py.
         chunk_num       : Número do chunk (para logs).
 
     Returns:

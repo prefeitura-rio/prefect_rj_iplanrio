@@ -1,4 +1,6 @@
 {
   "secretaria": "sec",
-  "pipeline": "example"
+  "pipeline": "example",
+  "severidade": "high",
+  "code_owner": "github_account"
 }

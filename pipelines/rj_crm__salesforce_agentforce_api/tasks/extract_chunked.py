@@ -18,7 +18,13 @@ import requests
 from prefect import task
 
 
-_DEFAULT_CHUNK_SIZE = 50_000
+_DEFAULT_CHUNK_SIZE = 1_000  # ver nota em extract_data_cloud.py: o servidor
+# corta o payload em ~1400-1700 linhas por resposta, independente do LIMIT
+# pedido (confirmado em 04/09/2026 contra ai_agent_session, mesma API/endpoint).
+# Um chunk_size acima disso faz o loop parar cedo achando que chegou na
+# última página (len(rows) < chunk_size), quando na verdade só bateu no teto
+# do servidor — era 50_000 antes, quase certamente truncando silenciosamente
+# em produção, já que esta tabela tem ~200k+ registros/dia.
 _DEFAULT_MAX_ROWS = 5_000_000  # limite de segurança para evitar loop infinito
 
 
@@ -33,14 +39,19 @@ def _query_page(
     dataspace: str,
     offset: int,
     chunk_size: int,
-) -> tuple[list[list], list[str], str | None]:
+    order_by_col: str,
+) -> tuple[list[list], list[str]]:
     """
-    Executa uma query SQL no Data Cloud com LIMIT/OFFSET e retorna (rows, col_names, next_url).
+    Executa uma query SQL no Data Cloud com LIMIT/OFFSET e retorna (rows, col_names).
 
     O Data Cloud REST não suporta jobs assíncronos com cursor — usa LIMIT/OFFSET diretamente
-    na query SQL para paginar.
+    na query SQL para paginar. Não existe 'nextPageUrl' real na resposta desta API (era lido
+    aqui antes mas nunca usado por quem chama — removido; ver extract_data_cloud.py para o
+    histórico de por que esse campo não existe de verdade). order_by_col garante ordem
+    estável entre chamadas — sem ORDER BY, OFFSET não tem garantia de não pular/repetir
+    linha de uma página pra outra.
     """
-    paged_sql = f"{sql.rstrip(';')} LIMIT {chunk_size} OFFSET {offset}"
+    paged_sql = f"{sql.rstrip(';')} ORDER BY {order_by_col} LIMIT {chunk_size} OFFSET {offset}"
     url = f"{instance_url}{_QUERY_ENDPOINT}?dataspace={dataspace}&workloadName={_WORKLOAD}"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -55,9 +66,8 @@ def _query_page(
 
     col_names = [c["name"] for c in data.get("metadata", [])]
     rows = data.get("data", [])
-    next_url = data.get("nextPageUrl")
 
-    return rows, col_names, next_url
+    return rows, col_names
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +86,7 @@ def extract_chunked_from_data_cloud(
     table_name: str = "desconhecida",
     chunk_size: int = _DEFAULT_CHUNK_SIZE,
     max_rows: int = _DEFAULT_MAX_ROWS,
+    order_by_col: str = "ssot__Id__c",
 ) -> list[pd.DataFrame]:
     """
     Extrai uma tabela grande do Data Cloud em chunks via LIMIT/OFFSET.
@@ -87,10 +98,15 @@ def extract_chunked_from_data_cloud(
     Args:
         dc_session  : dict com 'access_token', 'instance_url', 'dataspace'
                       (retornado por get_data_cloud_session).
-        query       : SQL com filtro de watermark e SEM LIMIT/OFFSET (o chunking adiciona).
+        query       : SQL com filtro de watermark e SEM LIMIT/OFFSET/ORDER BY
+                      (o chunking adiciona os três).
         table_name  : Nome da tabela (para logs).
-        chunk_size  : Linhas por chunk. Padrão: 50.000.
+        chunk_size  : Linhas por chunk. Padrão: 1.000 (ver nota em
+                      _DEFAULT_CHUNK_SIZE — o servidor corta o payload nesse
+                      teto independente do que for pedido).
         max_rows    : Limite de segurança. Padrão: 5.000.000.
+        order_by_col: Coluna estável pra paginação determinística. Default
+                      'ssot__Id__c' — vale pra query deste pipeline.
 
     Returns:
         Lista de DataFrames, um por chunk. Lista vazia se não houver dados.
@@ -108,13 +124,14 @@ def extract_chunked_from_data_cloud(
 
     while offset < max_rows:
         print(f"[CHUNKED] '{table_name}' — chunk {chunk_num} | offset={offset}")
-        rows, col_names, _ = _query_page(
+        rows, col_names = _query_page(
             instance_url=instance_url,
             access_token=access_token,
             sql=query,
             dataspace=dataspace,
             offset=offset,
             chunk_size=chunk_size,
+            order_by_col=order_by_col,
         )
 
         if not rows:

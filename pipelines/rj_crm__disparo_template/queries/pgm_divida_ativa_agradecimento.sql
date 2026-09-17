@@ -6,17 +6,19 @@ WITH
 -- agregação abaixo não precisa saber de qual fonte cada disparo veio.
 disparos_divida_ativa as (
     -- quem recebeu os disparos de whatsapp sem erros (via Salesforce/SFTP)
-    select distinct cpf,
+    select distinct sd.cpf,
     contato_telefone as celular_disparo,
     DATE(processado_datahora) as data_disparo,
     nome_hsm as id_hsm,
     falha_datahora as failedDate
-    from `rj-crm-registry.brutos_salesforce.status_disparo`
+    from `rj-crm-registry.brutos_salesforce.status_disparo` sd
+        left join `rj-crm-registry.brutos_salesforce_staging.telefones_teste` tt on contato_telefone = tt.telefone
     where nome_hsm in (
         '{nome_hsm_cobranca_placeholder}',
         '{nome_hsm_lembrete_placeholder}',
         '{nome_hsm_agradecimento_placeholder}'
     )
+    and tt.telefone is null
 
     UNION ALL
 
