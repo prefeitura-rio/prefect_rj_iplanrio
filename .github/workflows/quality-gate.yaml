@@ -1,0 +1,16 @@
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gate:
+    uses: prefeitura-rio/actions/.github/workflows/quality-gate.yml@quality-gate-latest
+    with:
+      project-name: prefect_rj_iplanrio
+      working-directory: .
