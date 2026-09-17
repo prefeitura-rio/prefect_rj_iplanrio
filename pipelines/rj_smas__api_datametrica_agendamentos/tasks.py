@@ -6,7 +6,10 @@ Tasks migradas do Prefect 1.4 para 3.0 - SMAS API Datametrica Agendamentos
 # pylint: disable=invalid-name
 # flake8: noqa: E501
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
+from zoneinfo import ZoneInfo
+
+import json
 
 import pandas as pd
 import requests
@@ -20,17 +23,22 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 
 @task
-def calculate_target_date() -> str:
+def calculate_target_date() -> str | None:
     """
     Calcula a data target baseada na regra de negócio:
+    - Sábado (5) ou Domingo (6): retorna None (flow deve ser encerrado)
     - Dias normais: 2 dias à frente
-    - Quinta-feira (4) e Sexta-feira (5): 4 dias à frente
+    - Quinta-feira (3) e Sexta-feira (4): 4 dias à frente
 
     Returns:
-        str: Data no formato YYYY-MM-DD
+        str: Data no formato YYYY-MM-DD, ou None se for sábado ou domingo
     """
-    today = datetime.now()
+    today = datetime.now(ZoneInfo("America/Sao_Paulo"))
     weekday = today.weekday()  # 0=Monday, 1=Tuesday, ..., 6=Sunday
+
+    if weekday in [5, 6]:  # Saturday or Sunday
+        log(f"(calculate_target_date) - Fim de semana detectado (weekday={weekday}) - encerrando flow")
+        return None
 
     # Quinta-feira (3) e Sexta-feira (4) em Python weekday (0-indexed, Monday=0)
     if weekday in [3, 4]:  # Thursday and Friday
@@ -83,32 +91,25 @@ def get_datametrica_credentials(
 
 
 @task
-def fetch_agendamentos_from_api(credentials: Dict[str, str], date: Optional[str] = None) -> List[Dict[str, Any]]:
+def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[Dict[str, Any]]:
     """
     Busca os agendamentos da API da Datametrica usando proxy brasileiro.
 
     Args:
         credentials: Dict com 'url', 'token', 'proxy_url' e 'proxy_token'
-        date: Data no formato YYYY-MM-DD. Se None, usa lógica padrão (dia seguinte - DEPRECATED, usar calculate_target_date).
+        date: Data no formato YYYY-MM-DD. Sempre obrigatória — use calculate_target_date() para obter a data correta.
 
     Returns:
         Lista de dicionários com os dados dos agendamentos
     """
     # Build Datametrica URL
     base_url = credentials["url"].rstrip("/")
-    if date is None:
-        from datetime import datetime, timedelta
-
-        date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
     datametrica_url = f"{base_url}/{date}"
 
     # Build proxy URL
     proxy_url = f"{credentials['proxy_url'].rstrip('/')}/?url={datametrica_url}"
 
     log("Buscando agendamentos via proxy brasileiro")
-    log(f"Datametrica URL: {datametrica_url}")
-    log(f"Proxy URL: {proxy_url}")
-    log(f"Token (primeiros 10 chars): {credentials['token'][:10]}...")
 
     # Headers incluindo o token do proxy e os headers originais da Datametrica
     headers = {
@@ -120,7 +121,7 @@ def fetch_agendamentos_from_api(credentials: Dict[str, str], date: Optional[str]
     }
 
     try:
-        response = requests.get(proxy_url, headers=headers, timeout=30, verify=False)
+        response = requests.get(proxy_url, headers=headers, timeout=30)
 
         # Log response details for debugging
         log(f"Status code: {response.status_code}")
@@ -129,6 +130,10 @@ def fetch_agendamentos_from_api(credentials: Dict[str, str], date: Optional[str]
             log(f"Response body: {response.text[:500]}")  # First 500 chars
 
         response.raise_for_status()
+
+        if not response.text or not response.text.strip():
+            log(f"Aviso: API retornou body vazio. Retornando lista vazia.")
+            return []
 
         agendamentos_data = response.json()
         log(f"Recuperados {len(agendamentos_data)} agendamentos")
@@ -157,7 +162,14 @@ def transform_agendamentos_data(
 
     agendamentos = []
     for data in agendamentos_data:
+        if len(agendamentos_data) < 10:
+            log(f"Poucos registros recebidos como string: {data}")
         try:
+            if isinstance(data, str):
+                if not data.strip():
+                    log("Registro ignorado: string vazia recebida da API")
+                    continue
+                data = json.loads(data)
             agendamento = {
                 "id": data["id"],
                 "id_capacidade": data["id_capacidade"],
@@ -226,3 +238,4 @@ def convert_agendamentos_to_dataframe(
     log(f"DataFrame criado com {len(df)} registros e {len(df.columns)} colunas")
 
     return df
+

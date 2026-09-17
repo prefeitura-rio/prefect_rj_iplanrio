@@ -1,0 +1,10 @@
+[project]
+name = "rj_cetrio__transporte_rodoviario_radar_transito"
+version = "0.1.0"
+description = "Pipeline transporte_rodoviario_radar_transito da secretaria cetrio"
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }

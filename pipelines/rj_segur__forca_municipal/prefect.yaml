@@ -1,0 +1,131 @@
+name: rj_segur__forca_municipal
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_segur__forca_municipal-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_segur__forca_municipal/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj_segur--forca_municipal--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_segur__forca_municipal/flow.py:rj_segur__forca_municipal
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_segur__forca_municipal -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  - name: rj_segur--forca_municipal--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_segur__forca_municipal/flow.py:rj_segur__forca_municipal
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_segur__forca_municipal -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+      # ── Alta frequência (snapshot de estado atual) ───────────────────────
+      - interval: 300
+        anchor_date: "2025-01-01T00:00:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: ocorrencias_ativas_v2
+        parameters:
+          table_id: ocorrencias_ativas_v2
+          dump_mode: append
+
+
+      # ── Históricos (lentos, sem dependentes, primeira janela) ──────────────
+      - interval: 86400
+        anchor_date: "2025-01-01T01:00:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: unidades_historico
+        parameters:
+          table_id: unidades_historico
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T01:20:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: qmd
+        parameters:
+          table_id: qmd
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T01:25:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: ocorrencias_historico
+        parameters:
+          table_id: ocorrencias_historico
+          dump_mode: append
+
+      # ── Sem dependências (pequenos, 5 min de intervalo) ───────────────────
+      - interval: 86400
+        anchor_date: "2025-01-01T01:45:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_servicos
+        parameters:
+          table_id: qmd_servicos
+          dump_mode: append
+
+      - interval: 86400
+        anchor_date: "2025-01-01T01:50:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_plano
+        parameters:
+          table_id: qmd_plano
+          dump_mode: append
+
+      # ── Downstream (dependem de upstream acima, janela mín. 2h) ──────────
+      # unit_positions depende de unidades_historico (01:00 → 03:00 = 2h)
+      - interval: 86400
+        anchor_date: "2025-01-01T03:00:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: unit_positions
+        parameters:
+          table_id: unit_positions
+          dump_mode: append
+          # data_inicio e data_fim omitidos → resolve D-1 automaticamente
+
+      # qmd_detalhes depende de qmd (01:20 → 03:20 = 2h)
+      - interval: 86400
+        anchor_date: "2025-01-01T03:20:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_detalhes
+        parameters:
+          table_id: qmd_detalhes
+          dump_mode: append
+
+      # qmd_kml depende de qmd (01:20 → 03:40 = 2h20)
+      - interval: 86400
+        anchor_date: "2025-01-01T03:40:00-03:00"
+        timezone: America/Sao_Paulo
+        slug: qmd_kml
+        parameters:
+          table_id: qmd_kml
+          dump_mode: append

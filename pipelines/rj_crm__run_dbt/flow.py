@@ -53,10 +53,10 @@ def get_current_flow_info():
 @task()
 def add_token_github_repo(repository_url: str) -> str:
     """
-    Add the GitHub token to the repository URL.Getting it from infisical variable GITHUB_TOKEN
+    Add the GitHub token to the repository URL.Getting it from infisical variable GITHUB_TOKEN.
 
     repository_url: str: The URL of the GitHub repository. This variable must be
-        somethintg like https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
+        somethintg like https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git.
 
     Returns:
         str: The repository URL with the GitHub token added if it's a private repository.
@@ -65,7 +65,6 @@ def add_token_github_repo(repository_url: str) -> str:
         log("Adding GitHub token to the repository URL from infisical variable GITHUB_TOKEN")
         token = getenv_or_action("GITHUB_TOKEN")
         repository_url = repository_url.replace("GITHUB_TOKEN", token)
-        log(f"after token {repository_url}")
     return repository_url
 
 
@@ -93,7 +92,7 @@ def download_repository(git_repository_path: str):
     # Download repository
     try:
         git.Repo.clone_from(git_repository_path, repository_path)
-        log(f"Repository downloaded: {git_repository_path}", level="info")
+        log("Repository downloaded successfully", level="info")
     except git.GitCommandError as e:
         raise Exception(f"Error when downloading repository: {e}")
 

@@ -1,0 +1,12 @@
+[project]
+name = "rj_cor__meteorologia_inmet"
+version = "0.1.0"
+description = "Pipeline para coleta de dados meteorológicos do INMET - COR"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "pendulum>=3.0.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
+

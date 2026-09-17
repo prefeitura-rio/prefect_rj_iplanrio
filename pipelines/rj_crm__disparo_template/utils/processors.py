@@ -14,7 +14,7 @@ from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 
 
-def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -> str:
+def process_skip_weekends_on_query(query: str = None, replacements: dict = None) -> str:
     """
     Processes query by substituting dynamic values.
     If no query provided, uses the one from constants.
@@ -29,6 +29,9 @@ def process_skip_weekends_on_query(query: str = None, replacements: dict = {}) -
     Raises:
         ValueError: If {days_ahead_placeholder} placeholder is not found in query
     """
+    if replacements is None:
+        replacements = {}
+
     # Use query from constants if none provided
     if query is None:
         query = TemplateConstants.QUERY.value

@@ -3,7 +3,7 @@ name = "prefect_rj_iplanrio"
 version = "0.1.0"
 description = "Prefect pipelines for the Rio de Janeiro City Hall."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
   "idna>=3.10",
   "iplanrio",
@@ -16,7 +16,7 @@ dependencies = [
 
 [tool.uv]
 link-mode = "copy"
-override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0"]
+override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0", "click>=8.3.0,<9.0"]
 
 [tool.uv.sources]
 iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }

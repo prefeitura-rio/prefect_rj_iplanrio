@@ -1,0 +1,69 @@
+name: rj_smfp__adm_instrumentos_firmados
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_smfp__adm_instrumentos_firmados-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_smfp__adm_instrumentos_firmados/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # Deployment de staging para testes
+  - name: rj-smfp--adm-instrumentos-firmados--staging
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_smfp__adm_instrumentos_firmados/flow.py:rj_smfp__adm_instrumentos_firmados
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__adm_instrumentos_firmados -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+  # Deployment de produção com schedule diário
+  - name: rj-smfp--adm-instrumentos-firmados--prod
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_smfp__adm_instrumentos_firmados/flow.py:rj_smfp__adm_instrumentos_firmados
+    work_pool:
+      name: k3s-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_smfp__adm_instrumentos_firmados -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+
+    schedules:
+    # ========================================
+    # TABELA: instrumento_firmado
+    # ========================================
+
+    # Tabela: instrumento_firmado
+    # Descrição: Instrumentos jurídicos firmados pela administração municipal
+    # Fonte: DW_IGAA.dbo.VINSTRUMENTOS_JURIDICOS_ESCRITORIO_GBP
+    # Frequência: Diária (a cada 24 horas)
+    # Modo: Overwrite (substitui dados completos diariamente)
+    # Campos: 24 campos incluindo dados do instrumento, favorecido, valores e datas
+    - interval: 86400  # 1 dia em segundos (24 * 60 * 60)
+      anchor_date: "2022-03-21T23:00:00" # UTC: 23:00hrs / BRT: 20:00hrs
+      timezone: America/Sao_Paulo
+      slug: instrumento-firmado-daily
+      parameters:
+        table_id: instrumento_firmado

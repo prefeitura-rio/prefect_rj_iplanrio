@@ -56,7 +56,7 @@ def download_repository(git_repository_path: str, branch: str = "master") -> str
     try:
         repo = git.Repo.clone_from(git_repository_path, repository_path, branch=branch)
         log(
-            f"Repository downloaded: {git_repository_path} (branch: {branch})",
+            f"Repository downloaded successfully (branch: {branch})",
             level="info",
         )
         log(f"Current branch: {repo.active_branch.name}", level="info")

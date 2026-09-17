@@ -125,3 +125,34 @@ deployments:
         execute_query: |
           SELECT *
           FROM vigiaurbano.TratamentoFator
+
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: Chamado # slug do schedule
+      parameters:
+        table_id: Chamado # Nome da tabela no BigQuery
+        dbt_model_name: raw_vigia_urbano__chamado # Nome do modelo no dbt
+        execute_query: |
+          SELECT *
+          FROM vigiaurbano.Chamado
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: EncaminhamentoOrgao # slug do schedule
+      parameters:
+        table_id: EncaminhamentoOrgao # Nome da tabela no BigQuery
+        dbt_model_name: raw_vigia_urbano__encaminhamento_orgao # Nome do modelo no dbt
+        execute_query: |
+          SELECT *
+          FROM vigiaurbano.EncaminhamentoOrgao
+    - interval: 3600 # executa a cada 1 hora
+      anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+      timezone: America/Sao_Paulo
+      slug: ArquivoEncaminhamento # slug do schedule
+      parameters:
+        table_id: ArquivoEncaminhamento # Nome da tabela no BigQuery
+        dbt_model_name: raw_vigia_urbano__arquivo_encaminhamento # Nome do modelo no dbt
+        execute_query: |
+          SELECT *
+          FROM vigiaurbano.ArquivoEncaminhamento

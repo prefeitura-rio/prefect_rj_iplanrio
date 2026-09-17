@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-This flow is used to dump the database to the BIGQUERY
-"""
-
-from typing import Optional
+"""Flow for rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}."""
 
 from iplanrio.pipelines_templates.dump_db.tasks import (
     dump_upload_batch_task,
@@ -22,18 +17,18 @@ def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
     db_host: str = "host",
     db_port: str = "port",
     db_type: str = "db_type",
-    db_charset: Optional[str] = "utf8",
+    db_charset: str | None = "utf8",
     execute_query: str = "execute_query",
     dataset_id: str = "dataset_id",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-secret_path",
     dump_mode: str = "overwrite",
     partition_date_format: str = "%Y-%m-%d",
-    partition_columns: Optional[str] = None,
-    lower_bound_date: Optional[str] = None,
-    break_query_frequency: Optional[str] = None,
-    break_query_start: Optional[str] = None,
-    break_query_end: Optional[str] = None,
+    partition_columns: str | None = None,
+    lower_bound_date: str | None = None,
+    break_query_frequency: str | None = None,
+    break_query_start: str | None = None,
+    break_query_end: str | None = None,
     retry_dump_upload_attempts: int = 2,
     batch_size: int = 50000,
     batch_data_type: str = "csv",
@@ -42,7 +37,7 @@ def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
     max_concurrency: int = 1,
     only_staging_dataset: bool = False,
     add_timestamp_column: bool = True,
-):
+) -> None:
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
     secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)

@@ -1,0 +1,83 @@
+# Classificação inicial por LLM — Agentforce (WhatsApp) -> BigQuery
+#
+# Entrypoint: flow.py:rj_crm__agentforce_classificacao_llm
+#
+# Roda 1x/dia às 15h (America/Sao_Paulo): extrai sessões dos últimos 14 dias ainda não
+# classificadas (anti-join contra rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao),
+# classifica via Bifrost/Gemini e grava via staging + MERGE (idempotente).
+#
+# Credenciais necessárias no secret do work pool (mesmo secretName usado por
+# rj_crm__salesforce_agentforce_api, já que escreve no mesmo dataset):
+#   BF_KEY                                        : API key do gateway Bifrost
+#   DISCORD_WEBHOOK_URL_AGENTFORCE_CLASSIFICACAO   : (opcional) resumo diário
+#   DISCORD_WEBHOOK_URL_ERRORS                     : (opcional) alerta de falha crítica
+
+name: rj_crm__agentforce_classificacao_llm
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__agentforce_classificacao_llm-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__agentforce_classificacao_llm/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # -----------------------------------------------------------------------
+  # Deployment de staging (QA) — sem schedule ativo, roda sob demanda até validar
+  # volume/custo, igual foi feito com o agentforce_api. DIFERENTE do agentforce_api:
+  # não tem dataset _staging separado pra esta tabela — grava na MESMA
+  # brutos_salesforce.ai_agent_session_classificacao que a prod usa. Não dá pra
+  # espelhar o padrão do agentforce_api aqui: o join em fct_chatbot_v2.sql (repo
+  # queries-rj-crm-registry) é fixo em brutos_salesforce, não parametrizado por
+  # ambiente — uma cópia em brutos_salesforce_staging nunca apareceria lá, e rodar
+  # staging só pra alimentar uma tabela que ninguém lê não testa nada de verdade.
+  # -----------------------------------------------------------------------
+  - name: rj-crm--agentforce-classificacao-llm--staging
+    tags: [staging]
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__agentforce_classificacao_llm/flow.py:rj_crm__agentforce_classificacao_llm
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__agentforce_classificacao_llm -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+
+  # -----------------------------------------------------------------------
+  # Deployment de produção — cron diário às 15h (America/Sao_Paulo)
+  # -----------------------------------------------------------------------
+  - name: rj-crm--agentforce-classificacao-llm--prod
+    tags: [prod]
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__agentforce_classificacao_llm/flow.py:rj_crm__agentforce_classificacao_llm
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__agentforce_classificacao_llm -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    schedules:
+      - cron: "0 15 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: agentforce-classificacao-llm-diario-15h

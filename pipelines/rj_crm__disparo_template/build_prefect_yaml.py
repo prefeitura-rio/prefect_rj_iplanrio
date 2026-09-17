@@ -30,7 +30,7 @@ args = parser.parse_args()
 
 # Caminhos relativos
 base_path = Path("prefect.yaml")
-sched_path = Path("scheduler.yaml")
+sched_path = Path("scheduler_sf.yaml")
 out_path = Path("prefect.yaml")
 
 # Inicializa ruamel.yaml
@@ -44,6 +44,20 @@ with base_path.open() as f:
     base = yaml.load(f)
 with sched_path.open() as f:
     sched = yaml.load(f)
+
+
+def resolve_query_files(schedules, base_dir):
+    """Substitui 'query_file: <caminho>' pelo conteúdo literal do arquivo em 'query'."""
+    for schedule in schedules:
+        params = schedule.get("parameters")
+        if not params or "query_file" not in params:
+            continue
+        query_path = base_dir / params["query_file"]
+        params["query"] = query_path.read_text()
+        del params["query_file"]
+
+
+resolve_query_files(sched.get("schedules", []), sched_path.parent)
 
 # Aplica scheduler e parâmetros aos deployments com base no argumento --env
 for dep in base.get("deployments", []):
