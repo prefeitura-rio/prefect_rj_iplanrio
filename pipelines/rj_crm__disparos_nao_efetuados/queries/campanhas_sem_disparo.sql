@@ -25,7 +25,7 @@ with
             limite_disparo_data,
             ingestao_datahora,
             case when dispara_durante_fds_indicador is false and EXTRACT(DAYOFWEEK FROM current_date("America/Sao_Paulo")) IN (1, 7) then false else true end as permitido_disparo_fds
-        from `rj-crm-registry.brutos_salesforce.raw_disparos_ativos`
+        from `rj-crm-registry.brutos_salesforce.disparos_ativos`
         where
             ativo_indicador is true
             and (id_wetalkie_hsm = 0 or id_wetalkie_hsm is null)
