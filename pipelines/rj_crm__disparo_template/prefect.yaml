@@ -420,7 +420,7 @@ deployments:
       # SMAS - Carta PIC - Evento
       - cron: "10 09 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-smas-cartaopic-evento
         flow_run_name: smas-cartaopic-evento
         parameters:
