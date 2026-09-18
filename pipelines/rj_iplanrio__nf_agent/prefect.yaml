@@ -71,6 +71,13 @@ deployments:
         command: uv run --package rj_iplanrio__nf_agent -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
+        env:
+          # The deployed image has no `.git` checkout (see `.dockerignore`) —
+          # `get_git_info()` (utils/processing/metadata.py) can't run `git
+          # rev-parse` at runtime to tag rows with the pipeline version.
+          # Thread through the same commit `get-commit-hash` already
+          # computed at build time instead.
+          GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
     parameters:
       max_classification_rows: 1000
       workers: 200
@@ -87,6 +94,12 @@ deployments:
         command: uv run --package rj_iplanrio__nf_agent -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+        env:
+          # Same as staging above: the deployed image has no `.git`
+          # checkout, so `get_git_info()` reads the deploy-time commit
+          # from `GIT_COMMIT_SHA` (computed by `get-commit-hash` at build
+          # time) instead of running `git rev-parse` at runtime.
+          GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
     parameters:
       max_classification_rows: 1000
       workers: 200

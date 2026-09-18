@@ -1,5 +1,6 @@
 """Metadata and JSON output builders for ``POCProcessor``."""
 
+import os
 import subprocess
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -114,7 +115,21 @@ def get_git_info() -> dict[str, Any]:
     """
     Get Git repository information (commit, branch, dirty status).
 
-    :returns: Dictionary with git info, or empty dict if not in a git repo.
+    The deployed image never contains a ``.git`` checkout — the Dockerfile
+    only copies source files, and ``.dockerignore`` excludes ``.git/``
+    repo-wide (a deliberate choice for every pipeline in this monorepo, not
+    just this one, so it isn't changed here). ``git rev-parse`` therefore
+    always fails inside the running pod, unlike in local dev (a real git
+    checkout) or `prefect deploy` in CI (also a real checkout, which is why
+    ``prefect.yaml``'s own ``get-commit-hash`` build step works fine there).
+    ``GIT_COMMIT_SHA`` is the runtime fallback for exactly that gap: the
+    same commit ``prefect.yaml``'s ``get-commit-hash`` step already computed
+    at build time, threaded through as a job env var (see
+    ``job_variables.env`` in ``prefect.yaml``) so the pod can read it back
+    without needing its own git checkout.
+
+    :returns: Dictionary with git info, or empty dict if neither git nor
+        ``GIT_COMMIT_SHA`` is available.
     """
     try:
         # Get current commit hash
@@ -135,8 +150,12 @@ def get_git_info() -> dict[str, Any]:
 
         return {"commit": commit, "branch": branch, "dirty": dirty}
     except (subprocess.CalledProcessError, FileNotFoundError):
-        # Not in a git repo or git not available
-        return {}
+        # Not in a git repo (e.g. running inside the deployed image) — fall
+        # back to the commit baked in at deploy time, if present. No
+        # `branch`/`dirty` in this case: neither is derivable without a
+        # real checkout, and guessing would be misleading.
+        commit = os.environ.get("GIT_COMMIT_SHA")
+        return {"commit": commit} if commit else {}
 
 
 # ------------------------------------------------------------------
