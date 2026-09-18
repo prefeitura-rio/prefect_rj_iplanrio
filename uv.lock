@@ -42,6 +42,7 @@ members = [
     "rj-crm-whitelist-whatsapp-relatorio",
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
+    "rj-cvl-osinfo-mongo",
     "rj-iplanrio-1746-seconverva-salesforce-poc",
     "rj-iplanrio-1746-ticket-capture",
     "rj-iplanrio-alertario-previsao-24h",
@@ -4345,6 +4346,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-cvl-osinfo-mongo"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_cvl__osinfo_mongo" }
+dependencies = [
+    { name = "pymongo" },
+    { name = "tenacity" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pymongo", specifier = ">=4.0" },
+    { name = "tenacity", specifier = ">=9.1.4" },
+]
 
 [[package]]
 name = "rj-iplanrio-1746-seconverva-salesforce-poc"

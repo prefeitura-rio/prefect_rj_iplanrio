@@ -1,0 +1,8 @@
+[project]
+name = "rj_cvl__osinfo_mongo"
+version = "0.1.0"
+description = "Download and reconstruct PDFs from OSINFO MongoDB, partitioned by mes_envio, into GCS."
+dependencies = [
+    "pymongo>=4.0",
+    "tenacity>=9.1.4",
+]
