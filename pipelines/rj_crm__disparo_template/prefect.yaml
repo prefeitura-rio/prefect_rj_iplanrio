@@ -418,7 +418,7 @@ deployments:
           query_file: queries/cadunico_confirma_agendamento.sql
 
       # SMAS - Carta PIC - Evento
-      - cron: "10 16 * * *"
+      - cron: "30 17 * * *"
         timezone: America/Sao_Paulo
         active: true
         slug: daily-smas-cartaopic-evento
