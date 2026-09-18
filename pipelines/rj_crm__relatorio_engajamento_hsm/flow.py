@@ -2,20 +2,126 @@
 """
 Flow diário — Relatório de Engajamento por HSM.
 
-Setup necessário (ver docstring de utils/drive.py::confirma_pasta_raiz):
-  1. Pasta raiz já criada no Drive da prefeitura — ID fixo em config.DRIVE_PASTA_RAIZ_ID
-     (https://drive.google.com/drive/folders/1wpZzSMv6dQ5Y50qWIooqRikpkVCh5u2f). Achar
-     por ID em vez de por nome evita pegar outra pasta com nome igual por engano.
-  2. Compartilhar essa pasta (Editor) com a service account de BASEDOSDADOS_CREDENTIALS_PROD
-     do secret do work pool (mesma usada pra BQ — historicamente
-     prefect-dbt@rj-crm-registry.iam.gserviceaccount.com).
+OBJETIVO
+--------
+Mede como os cidadãos responderam a um disparo de WhatsApp (HSM/template) da
+Prefeitura: classifica por LLM o assunto de cada resposta, audita essa
+classificação com uma segunda LLM ("juiz") e publica um relatório com volume e
+precisão por categoria de assunto — pra quem enviou o HSM entender do que os
+cidadãos trataram e o quanto confiar nessa classificação automática.
+
+FREQUÊNCIA
+----------
+1x por dia, às 8h (America/Sao_Paulo) — ver schedule de produção em prefect.yaml.
+
+GATILHO — o que o flow observa na tabela de disparos
+-----------------------------------------------------
+Tabela: `rj-crm-registry.brutos_salesforce_staging.disparos_ativos` (planilha
+Google Sheets importada no BigQuery, preenchida manualmente pelo time de CRM).
+A cada execução, processa toda linha que tiver as 3 colunas abaixo preenchidas:
+  - nome_campanha: identifica o HSM (mesmo valor de hsm.nome_hsm em
+    rmi_conversas.chatbot — é o que o flow usa pra filtrar as conversas).
+  - relatorio_engajamento_data_geracao: dispara o processamento quando essa
+    data bate com a data de referência da execução (por padrão, hoje).
+  - relatorio_engajamento_data_disparo: data a partir da qual o flow busca as
+    conversas desse HSM.
+
+RESULTADOS E ONDE FICAM
+------------------------
+Publicados no Google Drive, pasta "Relatórios de Engajamento":
+https://drive.google.com/drive/folders/1wpZzSMv6dQ5Y50qWIooqRikpkVCh5u2f
+— numa subpasta por HSM. Cada rodada (1 HSM + 1 data de geração) gera 3
+arquivos, e é idempotente: rodar de novo no mesmo dia pro mesmo HSM não duplica
+nada (só uma nova data de geração produz uma rodada nova).
+  - relatorio_engajamento_<hsm>__geracao_<data>.docx — o relatório em si.
+  - categorias_<...>.csv — 1 linha por categoria de assunto encontrada.
+  - classificacoes_<...>.csv — 1 linha por conversa classificada.
+
+COMO OS RESULTADOS SÃO PRODUZIDOS
+-----------------------------------
+1. Extração (tasks/extract.py): busca em rmi_conversas.chatbot todas as
+   sessões que receberam o HSM desde a data de disparo e reconstrói cada uma
+   como 1 conversa (falas do CIDADÃO e do AGENTE de IA, em ordem cronológica)
+   — só entram sessões com pelo menos 1 resposta do cidadão.
+2. Descoberta de categoria — LLM, passada 1 (tasks/discovery.py): olha uma
+   amostra ALEATÓRIA das conversas e descobre quais assuntos aparecem,
+   montando um catálogo (nome + descrição por categoria). Só esta etapa pode
+   criar categoria nova — existe pra evitar viés de ordem (ninguém fica preso
+   a um catálogo incompleto de quem foi classificado primeiro).
+3. Classificação — LLM, passada 2 (tasks/classify.py): classifica CADA
+   conversa numa categoria JÁ EXISTENTE no catálogo (nunca cria uma nova),
+   com resumo de 1 frase e justificativa.
+4. Julgamento / LLM como juiz (tasks/judge.py): uma segunda chamada de LLM
+   audita uma amostra da classificação (100% se a categoria é pequena, uma
+   fração se é grande — ver parâmetro limiar_julga_tudo) e diz se concorda
+   (CORRETO/INCORRETO). Isso alimenta a precisão por categoria (com margem de
+   erro, intervalo de confiança de 95%) mostrada no relatório.
+5. Geração e publicação (tasks/report.py): monta o .docx e os 2 CSVs com o
+   resultado acima e sobe tudo pro Drive.
+
+O QUE O RELATÓRIO (.docx) MOSTRA
+----------------------------------
+  - Cabeçalho: nome do HSM, campanha, eixo, data de geração.
+  - Resumo: total de disparos, quantos tiveram resposta do cidadão (taxa de
+    engajamento), quantos foram classificados, quantos foram avaliados pelo
+    juiz, e a precisão média da classificação (com margem de erro).
+  - Texto do HSM enviado (contexto do disparo).
+  - Observações importantes: é uma análise pontual do disparo (não é
+    monitoramento contínuo); é gerado por LLM e pode conter erro; os 2 CSVs
+    anexos na mesma pasta usam ";" (ponto e vírgula) como separador de coluna.
+  - A query SQL usada pra extrair as conversas (pra reprodutibilidade).
+  - Tabela com todas as categorias: nome, quantidade, % do engajamento,
+    precisão (do juiz).
+  - Por categoria: descrição, métricas, e até N exemplos reais de conversa
+    (com o resumo gerado pela LLM) — N é o parâmetro n_exemplos_por_categoria.
+
+COLUNAS DO CSV categorias_<...>.csv (1 linha por categoria)
+--------------------------------------------------------------
+  - categoria: nome da categoria.
+  - descricao: descrição da categoria (definida na descoberta).
+  - qtd: quantas conversas caíram nessa categoria.
+  - pct_do_engajamento: % que a categoria representa do total de conversas
+    classificadas nesse disparo.
+  - n_avaliadas_juiz: quantas conversas dessa categoria foram auditadas pelo
+    juiz LLM.
+  - precisao: fração de veredito "CORRETO" entre as avaliadas pelo juiz
+    (0 a 1; vazio se nenhuma foi avaliada).
+  - margem_erro_wilson_95: margem de erro (intervalo de confiança de 95%,
+    Wilson com correção de população finita) dessa precisão.
+
+COLUNAS DO CSV classificacoes_<...>.csv (1 linha por conversa classificada)
+-------------------------------------------------------------------------------
+  - id_sessao_48h: identificador da sessão de conversa no chatbot.
+  - cpf, telefone: identificação do cidadão que respondeu.
+  - categoria: categoria atribuída pela LLM na classificação.
+  - categoria_justificativa: explicação da LLM pra essa categoria.
+  - resumo_gerado: resumo em 1 frase do que o cidadão pediu/tratou.
+  - juiz_veredito: "CORRETO", "INCORRETO", ou vazio se essa conversa não foi
+    sorteada pra auditoria do juiz.
+  - juiz_categoria_esperada: preenchido só se juiz_veredito = INCORRETO — a
+    categoria que o juiz considera correta.
+  - juiz_justificativa: explicação do juiz pra esse veredito.
+
+PARÂMETROS DO FLOW
+--------------------
+Ver a docstring (seção Args) da função rj_crm__relatorio_engajamento_hsm logo
+abaixo — é o mesmo texto que a UI do Prefect exibe como descrição de cada
+parâmetro na tela de "Run".
+
+SETUP NECESSÁRIO (ver docstring de utils/drive.py::confirma_pasta_raiz)
+---------------------------------------------------------------------------
+  1. Pasta raiz já criada no Drive da prefeitura — ID fixo em
+     config.DRIVE_PASTA_RAIZ_ID (link acima). Achar por ID em vez de por nome
+     evita pegar outra pasta com nome igual por engano.
+  2. Compartilhar essa pasta (Editor) com a service account de
+     BASEDOSDADOS_CREDENTIALS_PROD do secret do work pool (mesma usada pra BQ
+     — historicamente prefect-dbt@rj-crm-registry.iam.gserviceaccount.com).
   3. BF_KEY precisa estar no mesmo secret do work pool (mesmo padrão de
      rj_crm__agentforce_classificacao_llm).
 
 Sem estado em disco entre execuções (diferente do script original em
-quick/relatorio_engajamento_hsm): cada disparo é processado do início ao fim num único
-flow run, em memória — ver docstring da função do flow abaixo pro comportamento e os
-parâmetros (também é o texto que aparece na UI do Prefect).
+quick/relatorio_engajamento_hsm): cada disparo é processado do início ao fim
+num único flow run, em memória.
 """
 
 from __future__ import annotations
