@@ -417,25 +417,23 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/cadunico_confirma_agendamento.sql
 
-      # Confirmação evento Cartao PIC
-      - cron: "0 12 * * *"
+      # SMAS - Carta PIC - Evento
+      - cron: "30 17 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-smas-cartaopic-evento
         flow_run_name: smas-cartaopic-evento
         parameters:
           flow_environment: staging
-          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27",
+          query_replacements: {"nome_hsm_placeholder": "'smascartaoprimeirainfanciaprodv27','smas_cartaoprimeirainfancia_prod_v10'",
             "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
           campaign_name: smascartaoprimeirainfanciaprodv27
           data_extension_filename: whatsapp_smas_cartaopic_evento
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
-          filter_dispatched_phones_or_cpfs:
-          filter_duplicated_cpfs: false
-          whitelist_percentage: 0
-          whitelist_environment: "production"
+          filter_dispatched_phones_or_cpfs: false
+          filter_duplicated_cpfs: true
           filter_failed_phones: false
           query_file: queries/smas_cartaopic_evento.sql
 
@@ -451,11 +449,10 @@ deployments:
             "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
-          de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
+          de_columns: ["nome_sobrenome", "endereco", "dia", "horario"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
-          filter_dispatched_phones_or_cpfs:
-          filter_duplicated_cpfs: false
+          filter_duplicated_cpfs: true
           query_file: queries/smas_cartaopic_lembrete.sql
 
   - name: rj-crm--disparo-template-sf--prod
@@ -801,26 +798,26 @@ deployments:
           query_file: queries/cadunico_confirma_agendamento.sql          
 
       # SMAS - Carta PIC - Evento
-      - cron: "0 12 * * *"
+      - cron: "10 09 * * *"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-smas-cartaopic-evento
         flow_run_name: smas-cartaopic-evento
         parameters:
           flow_environment: production
-          query_replacements: {"nome_hsm_placeholder": "smascartaoprimeirainfanciaprodv27",
+          query_replacements: {"nome_hsm_placeholder": "'smascartaoprimeirainfanciaprodv27','smas_cartaoprimeirainfancia_prod_v10'",
             "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 184}
           campaign_name: smascartaoprimeirainfanciaprodv27
           data_extension_filename: whatsapp_smas_cartaopic_evento
           de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
-          filter_dispatched_phones_or_cpfs:
-          filter_duplicated_cpfs: false
+          filter_dispatched_phones_or_cpfs: false
+          filter_duplicated_cpfs: true
           filter_failed_phones: false
           query_file: queries/smas_cartaopic_evento.sql
 
-      # SMAS - Carta PIC - Lembrete
+      # SMAS - Cartao PIC - Lembrete
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -832,9 +829,8 @@ deployments:
             "intervalo_filtro_disparados": 150, "id_hsm_legado_placeholder": 185}
           campaign_name: smascartaoprimeirainfancialembreteprodv4
           data_extension_filename: whatsapp_smas_cartaopic_lembrete
-          de_columns: ["nome_sobrenome", "endereco", "data", "horario"]
+          de_columns: ["nome_sobrenome", "endereco", "dia", "horario"]
           dataset_id: brutos_salesforce
           table_id: disparos_efetuados
-          filter_dispatched_phones_or_cpfs:
-          filter_duplicated_cpfs: false
+          filter_duplicated_cpfs: true
           query_file: queries/smas_cartaopic_lembrete.sql
