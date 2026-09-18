@@ -101,27 +101,6 @@ COLUNAS DO CSV classificacoes_<...>.csv (1 linha por conversa classificada)
   - juiz_categoria_esperada: preenchido só se juiz_veredito = INCORRETO — a
     categoria que o juiz considera correta.
   - juiz_justificativa: explicação do juiz pra esse veredito.
-
-PARÂMETROS DO FLOW
---------------------
-Ver a docstring (seção Args) da função rj_crm__relatorio_engajamento_hsm logo
-abaixo — é o mesmo texto que a UI do Prefect exibe como descrição de cada
-parâmetro na tela de "Run".
-
-SETUP NECESSÁRIO (ver docstring de utils/drive.py::confirma_pasta_raiz)
----------------------------------------------------------------------------
-  1. Pasta raiz já criada no Drive da prefeitura — ID fixo em
-     config.DRIVE_PASTA_RAIZ_ID (link acima). Achar por ID em vez de por nome
-     evita pegar outra pasta com nome igual por engano.
-  2. Compartilhar essa pasta (Editor) com a service account de
-     BASEDOSDADOS_CREDENTIALS_PROD do secret do work pool (mesma usada pra BQ
-     — historicamente prefect-dbt@rj-crm-registry.iam.gserviceaccount.com).
-  3. BF_KEY precisa estar no mesmo secret do work pool (mesmo padrão de
-     rj_crm__agentforce_classificacao_llm).
-
-Sem estado em disco entre execuções (diferente do script original em
-quick/relatorio_engajamento_hsm): cada disparo é processado do início ao fim
-num único flow run, em memória.
 """
 
 from __future__ import annotations
