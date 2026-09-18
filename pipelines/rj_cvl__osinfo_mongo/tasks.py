@@ -68,7 +68,8 @@ def process_batch_task(
 ) -> dict[str, int]:
     """Process a batch of files with a single Mongo $in query + parallel GCS uploads.
 
-    Architecture (validated in production, commit bff7549b, iplanrio rev 3c977bfd):
+    Architecture (mirrors the batching/concurrency pattern validated in production,
+    commit bff7549b, using pymongo directly instead of the iplanrio Mongo wrapper):
     - Phase 0 (pre-filter, no Mongo access): Check GCS for already-processed files
       (pdf_exists_in_gcs) and exclude them from the Mongo query entirely.
     - Phase 1 (single query): Fetch chunks for ALL remaining files_id in this batch
@@ -125,11 +126,11 @@ def process_batch_task(
         return batch_stats
 
     # ===== PHASE 1: Single MongoDB $in query for the whole batch =====
-    db = get_mongo_connection(mongo_config)
+    client = get_mongo_connection(mongo_config)
     try:
-        chunks_df = fetch_chunks_batch(db, files_ids_to_fetch)
+        chunks_df = fetch_chunks_batch(client, mongo_config.database, files_ids_to_fetch)
     finally:
-        close_mongo_connection(db)
+        close_mongo_connection(client)
 
     if chunks_df.empty:
         logger.warning(f"Batch {batch_idx + 1}: no chunks found for any of {len(files_ids_to_fetch)} files_id")

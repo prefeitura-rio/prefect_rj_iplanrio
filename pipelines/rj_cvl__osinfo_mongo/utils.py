@@ -7,16 +7,16 @@ Pure functions for:
 - Uploading to GCS
 - Refreshing metadata cache
 
-MongoDB access uses the iplanrio `database_get_db()` wrapper (validated in production),
-NOT the native pymongo driver directly. The wrapper API is:
-    db.execute_query("COLLECTION|{json filter}")  # sets up a cursor
-    db.fetch_batch(n) / db.fetch_all()             # returns list[list], paginated
-    db.get_columns()                                # column names matching row order
-This wrapper already converts ObjectId -> str and bytes -> base64 str internally.
+MongoDB access uses pymongo directly (pymongo.MongoClient), NOT the iplanrio
+database_get_db()/MongoDB wrapper. That wrapper only exists on an unmerged
+branch of iplanrio (mongo-db) that is pinned to basedosdados==2.0.0b23, which
+conflicts with other pipelines in this workspace that require
+basedosdados==2.0.3 (a single uv workspace cannot resolve two versions at
+once). Using pymongo directly avoids this dependency conflict entirely while
+keeping the exact same batching/retry/concurrency behavior.
 """
 
 import base64
-import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,8 +24,9 @@ from string import Template
 from typing import Any
 
 import pandas as pd
+from bson import ObjectId
 from google.cloud import bigquery, storage
-from iplanrio.pipelines_templates.dump_db.utils import database_get_db
+from pymongo import MongoClient
 from pymongo.errors import AutoReconnect, NetworkTimeout
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -53,57 +54,32 @@ class MongoConnectionConfig:
     auth_source: str = "OSINFO_FILES"
 
 
-def get_mongo_connection(mongo_config: MongoConnectionConfig) -> Any:
-    """Open a MongoDB connection using the iplanrio database_get_db wrapper.
+def get_mongo_connection(mongo_config: MongoConnectionConfig) -> MongoClient:
+    """Open a MongoDB connection using pymongo directly.
 
     Args:
         mongo_config: MongoDB connection configuration.
 
     Returns:
-        A MongoDB Database wrapper instance (iplanrio.pipelines_utils.database_sql.MongoDB).
+        A pymongo.MongoClient instance connected to the target database.
     """
-    return database_get_db(
-        database_type="mongodb",
-        hostname=mongo_config.hostname,
-        port=int(mongo_config.port),
-        user=mongo_config.user,
-        password=mongo_config.password,
-        database=mongo_config.database,
-        auth_source=mongo_config.auth_source,
+    connection_string = (
+        f"mongodb://{mongo_config.user}:{mongo_config.password}@"
+        f"{mongo_config.hostname}:{mongo_config.port}/{mongo_config.database}"
+        f"?authSource={mongo_config.auth_source}"
     )
+    client: MongoClient = MongoClient(connection_string, serverSelectionTimeoutMS=5000)
+    client.server_info()  # force connection check (fail fast on bad credentials/network)
+    return client
 
 
-def close_mongo_connection(db: Any) -> None:
-    """Close a MongoDB connection if the wrapper exposes a close() method.
-
-    The iplanrio MongoDB wrapper does not currently expose a public close()
-    method (validated against production commit). This is a defensive no-op
-    matching the pattern used in the previously validated pipeline code.
-
-    Args:
-        db: MongoDB Database wrapper instance.
-    """
-    if hasattr(db, "close"):
-        db.close()
-
-
-def build_mongo_filter_query(collection: str, field: str, values: list[str]) -> str:
-    """Build a MongoDB query string with an $in filter (iplanrio wrapper format).
-
-    The iplanrio MongoDB wrapper's execute_query() expects a string in the form
-    "COLLECTION|{json filter}". This mirrors the pattern validated in production
-    (build_batch_query in the previous pipeline implementation).
+def close_mongo_connection(client: MongoClient) -> None:
+    """Close a MongoDB connection.
 
     Args:
-        collection: MongoDB collection name (e.g., "FILES.chunks").
-        field: Field name to filter on (e.g., "files_id" or "filename").
-        values: List of values for the $in filter.
-
-    Returns:
-        Query string in the format "COLLECTION|{\"field\": {\"$in\": [...]}}".
+        client: pymongo.MongoClient instance to close.
     """
-    values_json = json.dumps(values)
-    return f'{collection}|{{"{field}": {{"$in": {values_json}}}}}'
+    client.close()
 
 
 def load_query(package_path: str, query_name: str) -> str:
@@ -176,9 +152,7 @@ def map_filenames_to_files_ids(
     """Map filenames to MongoDB files_id.
 
     Sequential lookup (no parallelism) to avoid overwhelming the MongoDB server.
-    Process in batches of 2000 filenames per $in query. Uses the iplanrio
-    database_get_db wrapper API (execute_query + fetch_all + get_columns),
-    matching the pattern validated in production.
+    Process in batches of 2000 filenames per $in query, using pymongo directly.
 
     Args:
         filenames: List of filenames to look up.
@@ -193,41 +167,43 @@ def map_filenames_to_files_ids(
 
     logger.info(f"Mapping {len(filenames)} filenames to files_id in MongoDB (sequential, batched)")
 
-    db = get_mongo_connection(mongo_config)
+    client = get_mongo_connection(mongo_config)
     result: dict[str, list[str]] = {}
 
     try:
+        db = client[mongo_config.database]
+        collection = db["FILES.files"]
         batches = chunk_list(filenames, 2000)
 
         for batch_idx, batch_filenames in enumerate(batches):
             logger.info(f"Processing filename batch {batch_idx + 1}/{len(batches)} ({len(batch_filenames)} files)")
 
-            query = build_mongo_filter_query("FILES.files", "filename", batch_filenames)
-            db.execute_query(query)
+            query = {"filename": {"$in": batch_filenames}}
+            documents = list(collection.find(query, {"_id": 1, "filename": 1}))
 
-            rows = db.fetch_all()
-            columns = db.get_columns()
-
-            for row in rows:
-                doc = dict(zip(columns, row))
+            for doc in documents:
                 filename = doc.get("filename")
-                files_id = doc.get("_id")  # wrapper already converts ObjectId -> str
+                files_id = str(doc["_id"])
 
-                if filename is None or files_id is None:
+                if filename is None:
                     continue
 
                 result.setdefault(filename, []).append(files_id)
 
-            logger.info(f"Batch {batch_idx + 1}: found {len(rows)} documents")
+            logger.info(f"Batch {batch_idx + 1}: found {len(documents)} documents")
     finally:
-        close_mongo_connection(db)
+        close_mongo_connection(client)
 
     logger.info(f"Total unique filenames mapped: {len(result)}")
     return result
 
 
 def _decode_base64_data(value: Any) -> Any:
-    """Decode base64 string to bytes (iplanrio wrapper encodes bytes as base64).
+    """Decode base64 string to bytes, if needed.
+
+    pymongo returns BSON binary fields as native bytes, so this is mostly a
+    defensive no-op. Kept in case any chunk stores its "data" field as a
+    base64-encoded string instead of native BSON binary.
 
     Args:
         value: Value from MongoDB chunk data column (may be str, bytes, or other).
@@ -250,7 +226,7 @@ def _decode_base64_data(value: Any) -> Any:
     wait=wait_exponential(multiplier=1, min=1, max=2),
     retry=retry_if_exception_type((AutoReconnect, NetworkTimeout)),
 )
-def fetch_chunks_batch(db: Any, files_ids: list[str], mongo_batch_size: int = 20000) -> pd.DataFrame:
+def fetch_chunks_batch(client: MongoClient, database: str, files_ids: list[str]) -> pd.DataFrame:
     """Fetch chunk documents for a batch of files_id from MongoDB in a single query.
 
     Uses a single $in query for the whole batch (validated production pattern),
@@ -258,37 +234,40 @@ def fetch_chunks_batch(db: Any, files_ids: list[str], mongo_batch_size: int = 20
     MongoDB connection errors.
 
     Args:
-        db: MongoDB Database wrapper instance (already connected, reused across batch).
+        client: pymongo.MongoClient instance (already connected, reused across batch).
+        database: MongoDB database name.
         files_ids: List of files_id (as strings) to fetch chunks for.
-        mongo_batch_size: Page size for MongoDB cursor pagination via fetch_batch.
 
     Returns:
-        DataFrame with all chunk rows for the given files_ids (columns include at
-        least: n, data, files_id). Empty DataFrame if no chunks found.
+        DataFrame with all chunk rows for the given files_ids (columns: n, data,
+        files_id). Empty DataFrame if no chunks found.
     """
     if not files_ids:
         return pd.DataFrame(columns=["n", "data", "files_id"])
 
-    query = build_mongo_filter_query("FILES.chunks", "files_id", files_ids)
-    db.execute_query(query)
+    db = client[database]
+    collection = db["FILES.chunks"]
 
-    all_rows = []
-    while True:
-        batch = db.fetch_batch(mongo_batch_size)
-        if not batch:
-            break
-        all_rows.extend(batch)
+    files_ids_obj = [ObjectId(fid) for fid in files_ids]
+    query = {"files_id": {"$in": files_ids_obj}}
+    documents = list(collection.find(query))
 
-    columns = db.get_columns()
-
-    if not all_rows:
+    if not documents:
         logger.warning(f"No chunks found for {len(files_ids)} files_id in this batch")
         return pd.DataFrame(columns=["n", "data", "files_id"])
 
-    df = pd.DataFrame(data=all_rows, columns=columns)
+    rows = []
+    for doc in documents:
+        rows.append(
+            {
+                "n": doc.get("n"),
+                "data": doc.get("data"),
+                "files_id": str(doc.get("files_id")),
+            }
+        )
 
-    if "data" in df.columns:
-        df["data"] = df["data"].apply(_decode_base64_data)
+    df = pd.DataFrame(rows)
+    df["data"] = df["data"].apply(_decode_base64_data)
 
     logger.info(f"Fetched {len(df)} total chunk rows for {len(files_ids)} files_id")
     return df

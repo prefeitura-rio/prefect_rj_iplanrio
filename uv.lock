@@ -42,6 +42,7 @@ members = [
     "rj-crm-whitelist-whatsapp-relatorio",
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
+    "rj-cvl-osinfo-mongo",
     "rj-iplanrio-1746-seconverva-salesforce-poc",
     "rj-iplanrio-1746-ticket-capture",
     "rj-iplanrio-alertario-previsao-24h",
@@ -1697,7 +1698,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#3c977bfdadab52dbf47d0a93d8ea8e646a61121d" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git#fda88406e677516f5a2d7d511930b89b7c0357bb" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -4345,6 +4346,21 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-cvl-osinfo-mongo"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_cvl__osinfo_mongo" }
+dependencies = [
+    { name = "pymongo" },
+    { name = "tenacity" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pymongo", specifier = ">=4.0" },
+    { name = "tenacity", specifier = ">=9.1.4" },
+]
 
 [[package]]
 name = "rj-iplanrio-1746-seconverva-salesforce-poc"
