@@ -17,13 +17,13 @@ from openai import OpenAI
 from prefect import task
 
 from .utils import orchestration
-from .utils.batch import job_tracking, row_counting
+from .utils.batch import job_tracking
 from .utils.batch.classification_submit import ClassificationSubmitResult, submit_classification_job
 from .utils.batch.poll import PollConfig, poll_once
 from .utils.batch.row_counting import BatchSessionSelection
 from .utils.gcs import GCSDownloader
 from .utils.orchestration import BatchRunParams, BatchSummary, PipelineRunConfig, RunContext
-from .utils.pipeline import discover_pending_files
+from .utils.pipeline import prepare_session_pdfs
 
 
 @task
@@ -116,21 +116,31 @@ def trigger_next_batch_if_pending_task(
 
 
 @task
-def discover_pending_files_task(bq_extracao_pagina_table: str, gcs_downloader: GCSDownloader) -> tuple[set[str], str]:
-    """Return pending PDF filenames and the current pipeline version (git commit)."""
-    return discover_pending_files(gcs_downloader, bq_extracao_pagina_table)
-
-
-@task
 def has_active_session_task(nf_batch_jobs_table: str) -> bool:
     """Return whether a batch session is already in flight."""
     return job_tracking.has_active_session(nf_batch_jobs_table)
 
 
 @task
-def select_session_pdfs_task(pdf_paths: dict[str, Path], max_rows: int) -> BatchSessionSelection:
-    """Select the page-count-bounded subset of downloaded PDFs for this session."""
-    return row_counting.select_pdfs_within_row_budget(pdf_paths, max_rows=max_rows)
+def prepare_session_pdfs_task(
+    gcs_downloader: GCSDownloader,
+    bq_extracao_pagina_table: str,
+    max_rows: int,
+    local_dir: str,
+    workers: int,
+) -> tuple[dict[str, Path], BatchSessionSelection]:
+    """BQ-check and download just enough pending PDFs to fill the row budget.
+
+    Incremental replacement for the old download-everything-then-select
+    sequence — see ``utils.pipeline.prepare_session_pdfs``.
+    """
+    return prepare_session_pdfs(
+        gcs_downloader=gcs_downloader,
+        bq_extracao_pagina_table=bq_extracao_pagina_table,
+        max_rows=max_rows,
+        local_dir=Path(local_dir),
+        workers=workers,
+    )
 
 
 @task

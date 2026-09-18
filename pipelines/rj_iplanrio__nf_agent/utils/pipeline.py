@@ -14,6 +14,7 @@ from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
 from prefect_rj_iplanrio.logging import get_logger
 
+from .batch.row_counting import BatchSessionSelection, select_pdfs_within_row_budget
 from .bigquery import PageStatusReader
 from .cache import DatabaseManager
 from .gcs import GCSDownloader
@@ -65,6 +66,121 @@ def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_tab
         current_commit=current_commit,
     )
     return pending_files, current_commit
+
+
+# How many GCS filenames are BQ-checked + downloaded per iteration of
+# ``prepare_session_pdfs`` below. Bounds both the BigQuery request size
+# (the ``pending_files`` query inlines the names twice — a full-bucket
+# listing of 100k+ names in one query fails with HTTP 413) and the
+# download waste: only the final slice can contain PDFs downloaded but
+# not selected, so at most this many files are ever downloaded
+# unnecessarily per session.
+_SESSION_PREP_SLICE_SIZE = 200
+
+
+def prepare_session_pdfs(
+    gcs_downloader: GCSDownloader,
+    bq_extracao_pagina_table: str,
+    max_rows: int,
+    local_dir: Path,
+    workers: int,
+) -> tuple[dict[str, Path], BatchSessionSelection]:
+    """Download just enough pending PDFs to fill one session's row budget.
+
+    Incremental replacement for the old download-everything-then-select
+    sequence (list all pending → download all pending → pick a prefix that
+    fits): with a full bucket listing that meant downloading 100k+ PDFs to
+    use ~50. Instead, walk the sorted GCS listing in slices, BQ-checking
+    and downloading one slice at a time, and stop as soon as the running
+    page total would overflow ``max_rows`` — mirroring
+    ``select_pdfs_within_row_budget``'s no-skip prefix semantics (files
+    after the first overflow stay pending for a later session; they are
+    never skipped in favor of a smaller later file).
+
+    :param gcs_downloader: Downloader scoped to the PDFs bucket/prefix.
+    :param bq_extracao_pagina_table: Full BQ table ID used to derive
+        "already done" (see :class:`PageStatusReader`).
+    :param max_rows: Maximum total page count (= classification request
+        rows) for this session.
+    :param local_dir: Directory to download into (caller-owned, e.g. the
+        flow's per-session temp dir) — only selected PDFs' paths are
+        returned, but the final slice may leave a few extra downloaded
+        files behind in this dir (bounded by ``_SESSION_PREP_SLICE_SIZE``);
+        harmless, the dir is throwaway.
+    :param workers: Concurrency for each slice's batch download.
+    :returns: ``(selected_paths, selection)`` where ``selected_paths`` maps
+        pdf_name -> local path for exactly the selected PDFs, and
+        ``selection`` is the combined :class:`BatchSessionSelection`.
+    :raises RuntimeError: If the current git commit can't be determined
+        (same contract as :func:`discover_pending_files` — the commit tags
+        every output row's pipeline version).
+    """
+    current_commit = get_git_info().get("commit")
+    if not current_commit:
+        raise RuntimeError(
+            "Could not determine the current git commit — required to track pipeline "
+            "version in extracao_pagina (ADC-only `git rev-parse` failed; is this running "
+            "inside a git checkout?)."
+        )
+
+    available = gcs_downloader.get_available_pdf_filenames()
+    names = sorted(
+        name[:-4] if name.lower().endswith(".pdf") else name for name in available
+    )
+    logger.warning("GCS: found %d PDFs in bucket", len(names))
+
+    status_reader = PageStatusReader()
+    selected_paths: dict[str, Path] = {}
+    selected_names: list[str] = []
+    unreadable: list[str] = []
+    total_pages = 0
+    remaining = max_rows
+
+    for i in range(0, len(names), _SESSION_PREP_SLICE_SIZE):
+        chunk = set(names[i : i + _SESSION_PREP_SLICE_SIZE])
+        pending = status_reader.find_pending_files(
+            candidate_filenames=chunk,
+            extracao_pagina_table=bq_extracao_pagina_table,
+            current_commit=current_commit,
+        )
+        if not pending:
+            continue
+
+        downloaded = gcs_downloader.download_pdfs_batch(
+            pdf_names=sorted(pending), local_dir=local_dir, batch_size=workers
+        )
+        # download_pdfs_batch returns entries in completion order — sort
+        # for deterministic prefix selection (see row_counting's contract).
+        selection = select_pdfs_within_row_budget(
+            dict(sorted(downloaded.items())), max_rows=remaining
+        )
+        for name in selection.selected_pdf_names:
+            selected_paths[name] = downloaded[name]
+        selected_names.extend(selection.selected_pdf_names)
+        unreadable.extend(selection.unreadable_pdf_names)
+        total_pages += selection.total_pages
+        remaining -= selection.total_pages
+
+        if selection.skipped_pdf_names:
+            # First overflow: budget is full — later slices stay pending
+            # for the next session (no-skip semantics, same as before).
+            break
+        if remaining <= 0:
+            break
+
+    logger.warning(
+        "Session prep: %d PDFs selected (%d pages, budget=%d) | %d unreadable",
+        len(selected_names),
+        total_pages,
+        max_rows,
+        len(unreadable),
+    )
+    return selected_paths, BatchSessionSelection(
+        selected_pdf_names=selected_names,
+        total_pages=total_pages,
+        skipped_pdf_names=[],
+        unreadable_pdf_names=unreadable,
+    )
 
 
 @dataclass(frozen=True)

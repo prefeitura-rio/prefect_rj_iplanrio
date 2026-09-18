@@ -38,6 +38,15 @@ logger = get_logger(__name__)
 class PageStatusReader:
     """Reads ``extracao_pagina`` to determine which candidate files still need processing."""
 
+    # Max candidate filenames inlined per ``pending_files`` query. The query
+    # splices the candidate list into the SQL text twice (two ``IN``
+    # clauses), so the request size grows ~130 bytes per filename — with a
+    # full-bucket listing (100k+ PDFs) a single query blows past the
+    # BigQuery ``jobs.insert`` request limit and fails with HTTP 413
+    # (Request Entity Too Large). Chunking keeps each request at ~260KB,
+    # well under the limit. See ``find_pending_files``.
+    _PENDING_FILES_CHUNK_SIZE = 2000
+
     def __init__(
         self,
         project_id: str | None = None,
@@ -78,17 +87,35 @@ class PageStatusReader:
         # any stray quote defensively before splicing into the query text —
         # this module uses plain string.Template substitution, not real
         # BigQuery query parameters (see prefect_rj_iplanrio.sql.load_query).
-        quoted = ", ".join("'" + name.replace("'", "") + "'" for name in candidate_filenames)
-
-        query = load_query(
-            __file__,
-            "pending_files",
-            extracao_pagina_table=extracao_pagina_table,
-            candidate_filenames=quoted,
-            current_commit=current_commit.replace("'", ""),
-        )
-        df = self.client.query(query).to_dataframe()
-        done = set(df["nome_arquivo"]) if "nome_arquivo" in df.columns and not df.empty else set()
+        #
+        # The candidate list is sent in chunks (see
+        # ``_PENDING_FILES_CHUNK_SIZE``): inlining the whole bucket listing
+        # into one query exceeds the BigQuery API request size limit
+        # (HTTP 413).
+        current_commit = current_commit.replace("'", "")
+        done: set[str] = set()
+        names = sorted(candidate_filenames)
+        total_chunks = (len(names) + self._PENDING_FILES_CHUNK_SIZE - 1) // self._PENDING_FILES_CHUNK_SIZE
+        for i in range(0, len(names), self._PENDING_FILES_CHUNK_SIZE):
+            chunk = names[i : i + self._PENDING_FILES_CHUNK_SIZE]
+            quoted = ", ".join("'" + name.replace("'", "") + "'" for name in chunk)
+            query = load_query(
+                __file__,
+                "pending_files",
+                extracao_pagina_table=extracao_pagina_table,
+                candidate_filenames=quoted,
+                current_commit=current_commit,
+            )
+            df = self.client.query(query).to_dataframe()
+            if "nome_arquivo" in df.columns and not df.empty:
+                done.update(df["nome_arquivo"])
+            if total_chunks > 1:
+                logger.warning(
+                    "extracao_pagina: chunk %d/%d checked (%d done so far)",
+                    i // self._PENDING_FILES_CHUNK_SIZE + 1,
+                    total_chunks,
+                    len(done),
+                )
         pending = candidate_filenames - done
 
         logger.warning(

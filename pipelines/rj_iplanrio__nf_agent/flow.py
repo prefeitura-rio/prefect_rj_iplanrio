@@ -68,7 +68,6 @@ import os
 import tempfile
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
 from iplanrio_agent_toolkit.credentials import inject_credentials_from_env
 from prefect import flow
@@ -76,13 +75,12 @@ from prefect import flow
 from prefect_rj_iplanrio.logging import get_logger
 
 from .tasks import (
-    discover_pending_files_task,
     has_active_session_task,
     log_batch_summary_task,
     new_or_continued_session_task,
     poll_active_sessions_task,
+    prepare_session_pdfs_task,
     run_nf_pipeline_task,
-    select_session_pdfs_task,
     submit_classification_job_task,
     summarize_batch_task,
     trigger_next_batch_if_pending_task,
@@ -267,24 +265,25 @@ def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
         return
 
     gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket, base_path=pdfs_base_path)
-    pending_files, _current_commit = discover_pending_files_task(bq_extracao_pagina_table, gcs_downloader)
-    if not pending_files:
-        logger.info("No pending files found. Nothing to submit.")
-        return
 
     session_id = str(uuid.uuid4())
 
     with tempfile.TemporaryDirectory(prefix=f"nf-batch-submit-{session_id}-") as temp_dir:
-        pdf_paths = gcs_downloader.download_pdfs_batch(
-            pdf_names=sorted(pending_files), local_dir=Path(temp_dir), batch_size=workers
+        # BQ-checks and downloads incrementally (slice by slice, in sorted
+        # order) and stops once the row budget is full — never downloads
+        # the whole pending set. See utils.pipeline.prepare_session_pdfs.
+        selected_paths, selection = prepare_session_pdfs_task(
+            gcs_downloader=gcs_downloader,
+            bq_extracao_pagina_table=bq_extracao_pagina_table,
+            max_rows=max_classification_rows,
+            local_dir=temp_dir,
+            workers=workers,
         )
-        selection = select_session_pdfs_task(pdf_paths, max_classification_rows)
 
         if not selection.selected_pdf_names:
             logger.info("No PDFs fit within the row budget (or all were unreadable) — nothing submitted.")
             return
 
-        selected_paths = {name: pdf_paths[name] for name in selection.selected_pdf_names}
         result = submit_classification_job_task(
             client=client,
             nf_batch_jobs_table=nf_batch_jobs_table,
