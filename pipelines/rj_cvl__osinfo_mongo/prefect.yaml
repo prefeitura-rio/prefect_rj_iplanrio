@@ -27,6 +27,10 @@ deployments:
   - name: rj-cvl--osinfo-mongo--staging
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cvl__osinfo_mongo/flow.py:rj_cvl__osinfo_mongo
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:fernandascovino
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -38,6 +42,10 @@ deployments:
   - name: rj-cvl--osinfo-mongo--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cvl__osinfo_mongo/flow.py:rj_cvl__osinfo_mongo
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:fernandascovino
     work_pool:
       name: k3s-pool
       work_queue_name: default
