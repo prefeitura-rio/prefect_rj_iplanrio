@@ -14,7 +14,11 @@ from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
 from prefect_rj_iplanrio.logging import get_logger
 
-from .batch.row_counting import BatchSessionSelection, select_pdfs_within_row_budget
+from .batch.row_counting import (
+    BatchSessionSelection,
+    SessionBudget,
+    select_pdfs_within_row_budget,
+)
 from .bigquery import PageStatusReader
 from .cache import DatabaseManager
 from .gcs import GCSDownloader
@@ -81,18 +85,18 @@ _SESSION_PREP_SLICE_SIZE = 200
 def prepare_session_pdfs(
     gcs_downloader: GCSDownloader,
     bq_extracao_pagina_table: str,
-    max_rows: int,
+    budget: SessionBudget,
     local_dir: Path,
     workers: int,
 ) -> tuple[dict[str, Path], BatchSessionSelection]:
-    """Download just enough pending PDFs to fill one session's row budget.
+    """Download just enough pending PDFs to fill one session's row/byte budget.
 
     Incremental replacement for the old download-everything-then-select
     sequence (list all pending → download all pending → pick a prefix that
     fits): with a full bucket listing that meant downloading 100k+ PDFs to
     use ~50. Instead, walk the sorted GCS listing in slices, BQ-checking
     and downloading one slice at a time, and stop as soon as the running
-    page total would overflow ``max_rows`` — mirroring
+    page total or estimated byte size would overflow its budget — mirroring
     ``select_pdfs_within_row_budget``'s no-skip prefix semantics (files
     after the first overflow stay pending for a later session; they are
     never skipped in favor of a smaller later file).
@@ -100,8 +104,10 @@ def prepare_session_pdfs(
     :param gcs_downloader: Downloader scoped to the PDFs bucket/prefix.
     :param bq_extracao_pagina_table: Full BQ table ID used to derive
         "already done" (see :class:`PageStatusReader`).
-    :param max_rows: Maximum total page count (= classification request
-        rows) for this session.
+    :param budget: Row-count and byte-size limits for this session — see
+        :class:`SessionBudget` and ``row_counting.MAX_CLASSIFICATION_BYTES_DEFAULT``
+        for why both exist (Bifrost rejects uploads above ~100MB
+        regardless of row count).
     :param local_dir: Directory to download into (caller-owned, e.g. the
         flow's per-session temp dir) — only selected PDFs' paths are
         returned, but the final slice may leave a few extra downloaded
@@ -134,7 +140,9 @@ def prepare_session_pdfs(
     selected_names: list[str] = []
     unreadable: list[str] = []
     total_pages = 0
-    remaining = max_rows
+    total_bytes_estimate = 0
+    remaining_rows = budget.max_rows
+    remaining_bytes = budget.max_bytes
 
     for i in range(0, len(names), _SESSION_PREP_SLICE_SIZE):
         chunk = set(names[i : i + _SESSION_PREP_SLICE_SIZE])
@@ -152,32 +160,37 @@ def prepare_session_pdfs(
         # download_pdfs_batch returns entries in completion order — sort
         # for deterministic prefix selection (see row_counting's contract).
         selection = select_pdfs_within_row_budget(
-            dict(sorted(downloaded.items())), max_rows=remaining
+            dict(sorted(downloaded.items())), max_rows=remaining_rows, max_bytes=remaining_bytes
         )
         for name in selection.selected_pdf_names:
             selected_paths[name] = downloaded[name]
         selected_names.extend(selection.selected_pdf_names)
         unreadable.extend(selection.unreadable_pdf_names)
         total_pages += selection.total_pages
-        remaining -= selection.total_pages
+        total_bytes_estimate += selection.total_bytes_estimate
+        remaining_rows -= selection.total_pages
+        remaining_bytes -= selection.total_bytes_estimate
 
         if selection.skipped_pdf_names:
-            # First overflow: budget is full — later slices stay pending
-            # for the next session (no-skip semantics, same as before).
+            # First overflow (row or byte budget): full — later slices stay
+            # pending for the next session (no-skip semantics, same as before).
             break
-        if remaining <= 0:
+        if remaining_rows <= 0 or remaining_bytes <= 0:
             break
 
     logger.warning(
-        "Session prep: %d PDFs selected (%d pages, budget=%d) | %d unreadable",
+        "Session prep: %d PDFs selected (%d pages, ~%.1fMB / budget=%d rows, %.1fMB) | %d unreadable",
         len(selected_names),
         total_pages,
-        max_rows,
+        total_bytes_estimate / 1_000_000,
+        budget.max_rows,
+        budget.max_bytes / 1_000_000,
         len(unreadable),
     )
     return selected_paths, BatchSessionSelection(
         selected_pdf_names=selected_names,
         total_pages=total_pages,
+        total_bytes_estimate=total_bytes_estimate,
         skipped_pdf_names=[],
         unreadable_pdf_names=unreadable,
     )

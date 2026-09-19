@@ -20,7 +20,7 @@ from .utils import orchestration
 from .utils.batch import job_tracking
 from .utils.batch.classification_submit import ClassificationSubmitResult, submit_classification_job
 from .utils.batch.poll import PollConfig, poll_once
-from .utils.batch.row_counting import BatchSessionSelection
+from .utils.batch.row_counting import BatchSessionSelection, SessionBudget
 from .utils.gcs import GCSDownloader
 from .utils.orchestration import BatchRunParams, BatchSummary, PipelineRunConfig, RunContext
 from .utils.pipeline import prepare_session_pdfs
@@ -125,11 +125,11 @@ def has_active_session_task(nf_batch_jobs_table: str) -> bool:
 def prepare_session_pdfs_task(
     gcs_downloader: GCSDownloader,
     bq_extracao_pagina_table: str,
-    max_rows: int,
+    budget: SessionBudget,
     local_dir: str,
     workers: int,
 ) -> tuple[dict[str, Path], BatchSessionSelection]:
-    """BQ-check and download just enough pending PDFs to fill the row budget.
+    """BQ-check and download just enough pending PDFs to fill the row/byte budget.
 
     Incremental replacement for the old download-everything-then-select
     sequence — see ``utils.pipeline.prepare_session_pdfs``.
@@ -137,7 +137,7 @@ def prepare_session_pdfs_task(
     return prepare_session_pdfs(
         gcs_downloader=gcs_downloader,
         bq_extracao_pagina_table=bq_extracao_pagina_table,
-        max_rows=max_rows,
+        budget=budget,
         local_dir=Path(local_dir),
         workers=workers,
     )

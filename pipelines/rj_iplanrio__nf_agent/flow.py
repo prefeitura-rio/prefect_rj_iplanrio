@@ -87,7 +87,11 @@ from .tasks import (
     write_run_summary_task,
 )
 from .utils.batch.poll import PollConfig
-from .utils.batch.row_counting import MAX_CLASSIFICATION_ROWS_DEFAULT
+from .utils.batch.row_counting import (
+    MAX_CLASSIFICATION_BYTES_DEFAULT,
+    MAX_CLASSIFICATION_ROWS_DEFAULT,
+    SessionBudget,
+)
 from .utils.gcs import GCSDownloader
 from .utils.llm import build_llm_client
 from .utils.orchestration import BatchRunParams
@@ -102,6 +106,7 @@ def rj_iplanrio__nf_agent(
     execution_mode: str = "batch",
     # --- Modo batch (Vertex AI Batch Prediction) ---
     max_classification_rows: int = MAX_CLASSIFICATION_ROWS_DEFAULT,
+    max_classification_bytes: int = MAX_CLASSIFICATION_BYTES_DEFAULT,
     workers: int = 200,
     # --- Modo sync (Bifrost, por página) ---
     db_path: str = "/tmp/nf_pipeline_cache.db",
@@ -125,7 +130,11 @@ def rj_iplanrio__nf_agent(
     inject_credentials_from_env("RJ_NF_AGENT_CREDENTIALS")
 
     if execution_mode == "batch":
-        _run_batch_mode(max_classification_rows=max_classification_rows, workers=workers)
+        _run_batch_mode(
+            max_classification_rows=max_classification_rows,
+            max_classification_bytes=max_classification_bytes,
+            workers=workers,
+        )
     else:
         _run_sync_mode(
             db_path=db_path,
@@ -219,12 +228,17 @@ def _run_sync_mode(
     )
 
 
-def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
+def _run_batch_mode(max_classification_rows: int, max_classification_bytes: int, workers: int) -> None:
     """Poll active Bifrost batch sessions, then submit the next one if idle and PDFs are pending.
 
     :param max_classification_rows: Row budget for a new classification job —
         see ``utils/batch/row_counting.py`` for why this is a page count,
         not a PDF count. Unused if no new session is submitted this run.
+    :param max_classification_bytes: Estimated JSONL byte-size budget for a
+        new classification job — see ``utils/batch/row_counting.py`` for
+        why this exists alongside the row budget (Bifrost rejects uploads
+        above ~100MB regardless of row count). Unused if no new session is
+        submitted this run.
     :param workers: Concurrency for the pre-download step (page counts
         require opening each candidate PDF locally; also passed through to
         ``PollConfig`` for ``versao_pipeline`` traceability).
@@ -275,7 +289,7 @@ def _run_batch_mode(max_classification_rows: int, workers: int) -> None:
         selected_paths, selection = prepare_session_pdfs_task(
             gcs_downloader=gcs_downloader,
             bq_extracao_pagina_table=bq_extracao_pagina_table,
-            max_rows=max_classification_rows,
+            budget=SessionBudget(max_rows=max_classification_rows, max_bytes=max_classification_bytes),
             local_dir=temp_dir,
             workers=workers,
         )
