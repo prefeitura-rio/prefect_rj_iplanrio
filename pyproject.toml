@@ -23,6 +23,7 @@ iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
 
 [tool.uv.workspace]
 members = ["pipelines/*"]
+exclude = ["pipelines/rj_cvl__osinfo_mongo"]
 
 [dependency-groups]
 dev = ["prefect-docker>=0.6.5"]
