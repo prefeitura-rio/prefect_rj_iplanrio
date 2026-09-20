@@ -11,6 +11,7 @@ from prefect import task
 
 from .utils import (
     MongoConnectionConfig,
+    check_mongo_indexes,
     chunk_list,
     close_mongo_connection,
     fetch_chunks_batch,
@@ -25,6 +26,19 @@ from .utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@task
+def check_mongo_indexes_task(mongo_config: MongoConnectionConfig) -> dict[str, dict]:
+    """Diagnostic task: connect to MongoDB and return index metadata.
+
+    Args:
+        mongo_config: MongoDB connection configuration.
+
+    Returns:
+        Dictionary mapping collection name -> index_information() result.
+    """
+    return check_mongo_indexes(mongo_config)
 
 
 @task

@@ -12,6 +12,7 @@ from prefect import flow
 from prefect.task_runners import ConcurrentTaskRunner
 
 from .tasks import (
+    check_mongo_indexes_task,
     dump_files_to_gcs_task,
     get_pendentes_task,
     map_filenames_to_files_ids_task,
@@ -22,7 +23,7 @@ from .utils import MongoConnectionConfig
 
 @flow(log_prints=True, task_runner=ConcurrentTaskRunner())
 def rj_cvl__osinfo_mongo(
-    meses_envio: list[str],
+    meses_envio: list[str] | None = None,
     db_host: str = "187.111.98.189",
     db_port: str = "27017",
     db_database: str = "OSINFO_FILES",
@@ -33,12 +34,14 @@ def rj_cvl__osinfo_mongo(
     files_id_batch_size: int = 500,
     batch_workers: int = 5,
     upload_max_workers: int = 50,
+    check_indexes_only: bool = False,
 ) -> None:
     """Download and reconstruct PDFs from OSINFO MongoDB by mes_envio.
 
     Args:
         meses_envio: List of months to process in YYYY-MM-DD format
-            (e.g., ["2021-11-01", "2021-12-01"]).
+            (e.g., ["2021-11-01", "2021-12-01"]). Required unless
+            check_indexes_only=True.
         db_host: MongoDB hostname.
         db_port: MongoDB port.
         db_database: MongoDB database name.
@@ -49,10 +52,9 @@ def rj_cvl__osinfo_mongo(
         files_id_batch_size: Number of files per batch.
         batch_workers: Number of concurrent batches.
         upload_max_workers: Max workers for parallel uploads.
+        check_indexes_only: If True, only run the MongoDB connectivity/index
+            check (FILES.chunks and FILES.files).
     """
-    # Rename flow run to show months
-    rename_current_flow_run_task(new_name=",".join(meses_envio))
-
     # Get DB credentials from Infisical
     secrets = get_database_username_and_password_from_secret_task(
         infisical_secret_path=infisical_secret_path
@@ -67,6 +69,17 @@ def rj_cvl__osinfo_mongo(
         database=db_database,
         auth_source=db_auth_source,
     )
+
+    if check_indexes_only:
+        rename_current_flow_run_task(new_name="check_mongo_indexes")
+        check_mongo_indexes_task(mongo_config=mongo_config)
+        return
+
+    if not meses_envio:
+        raise ValueError("meses_envio is required unless check_indexes_only=True")
+
+    # Rename flow run to show months
+    rename_current_flow_run_task(new_name=",".join(meses_envio))
 
     # Get pending files from BigQuery
     pendentes = get_pendentes_task(meses_envio=meses_envio)

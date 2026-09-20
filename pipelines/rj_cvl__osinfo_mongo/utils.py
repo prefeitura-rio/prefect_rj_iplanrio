@@ -82,6 +82,31 @@ def close_mongo_connection(client: MongoClient) -> None:
     client.close()
 
 
+def check_mongo_indexes(mongo_config: MongoConnectionConfig) -> dict[str, dict]:
+    """Connect to MongoDB and return index metadata for FILES.chunks and FILES.files.
+
+    Args:
+        mongo_config: MongoDB connection configuration.
+
+    Returns:
+        Dictionary mapping collection name -> index_information() result.
+    """
+    client = get_mongo_connection(mongo_config)
+    try:
+        db = client[mongo_config.database]
+        indexes = {
+            "FILES.chunks": db["FILES.chunks"].index_information(),
+            "FILES.files": db["FILES.files"].index_information(),
+        }
+    finally:
+        close_mongo_connection(client)
+
+    for collection, index_info in indexes.items():
+        logger.info(f"Indexes on {collection}: {index_info}")
+
+    return indexes
+
+
 def load_query(package_path: str, query_name: str) -> str:
     """Load SQL query from file.
 
@@ -146,9 +171,7 @@ def chunk_list(items: list, chunk_size: int) -> list[list]:
     wait=wait_exponential(multiplier=1, min=1, max=2),
     retry=retry_if_exception_type((AutoReconnect, NetworkTimeout)),
 )
-def map_filenames_to_files_ids(
-    filenames: list[str], mongo_config: MongoConnectionConfig
-) -> dict[str, list[str]]:
+def map_filenames_to_files_ids(filenames: list[str], mongo_config: MongoConnectionConfig) -> dict[str, list[str]]:
     """Map filenames to MongoDB files_id.
 
     Sequential lookup (no parallelism) to avoid overwhelming the MongoDB server.
