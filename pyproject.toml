@@ -16,14 +16,23 @@ dependencies = [
 
 [tool.uv]
 link-mode = "copy"
-override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0", "click>=8.3.0,<9.0"]
+override-dependencies = [
+  "grpcio==1.78.0",
+  "grpcio-status==1.78.0",
+  "click>=8.3.0,<9.0",
+]
+conflicts = [
+  [
+    { package = "rj_cvl__osinfo_mongo" },
+    { package = "rj_iplanrio__taxirio" },
+  ],
+]
 
 [tool.uv.sources]
 iplanrio = { git = "https://github.com/prefeitura-rio/iplanrio.git" }
 
 [tool.uv.workspace]
 members = ["pipelines/*"]
-exclude = ["pipelines/rj_cvl__osinfo_mongo"]
 
 [dependency-groups]
 dev = ["prefect-docker>=0.6.5"]
