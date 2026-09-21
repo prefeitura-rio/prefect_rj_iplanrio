@@ -573,9 +573,9 @@ def rj_ssm__run_dbt(
     download_repository_task = download_repository(git_repository_path=github_repo_)
 
     # Download dbt artifacts
-    download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(
-        environment=target, gcs_buckets=gcs_buckets
-    )
+    # download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(
+    #     environment=target, gcs_buckets=gcs_buckets
+    # )
 
     # Install dbt packages
     install_dbt_packages = install_dbt_dependencies()
@@ -587,7 +587,7 @@ def rj_ssm__run_dbt(
         select=select,
         exclude=exclude,
         flag=flag,
-        state=download_dbt_artifacts_task,
+        # state=download_dbt_artifacts_task,
     )
 
     # Create summary report
