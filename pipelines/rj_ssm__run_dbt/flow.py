@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ruff: disable=C0301,PTH118,PTH109,PTH110,PTH103,B904,B904,PTH118,PTH112
 """
-Migrated DBT Transform Flow from Prefect 1.4 to 3.0..
+DBT materialization flow for SSM....
 """
 
 import os
@@ -56,7 +56,7 @@ def add_token_github_repo(repository_url: str) -> str:
     Add the GitHub token to the repository URL.Getting it from infisical variable GITHUB_TOKEN.
 
     repository_url: str: The URL of the GitHub repository. This variable must be
-        somethintg like https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git.
+        somethintg like https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm-registry.git.
 
     Returns:
         str: The repository URL with the GitHub token added if it's a private repository.
@@ -523,7 +523,7 @@ def upload_dbt_artifacts_to_gcs(environment: str, gcs_buckets: GcsBucket) -> boo
 
 
 @flow(log_prints=True, flow_run_name="DBT {command} {target}")
-def rj_crm__run_dbt(
+def rj_ssm__run_dbt(
     # Flow parameters
     send_discord_report: bool = False,
     # DBT parameters
@@ -532,7 +532,7 @@ def rj_crm__run_dbt(
     exclude: str = "",
     flag: str = "",
     github_repo: str = None,
-    bigquery_project: str = "rj-crm",
+    bigquery_project: str = "rj-ssm",
     target: str = "dev",
     # GCP parameters
     gcs_buckets: GcsBucket = None,
@@ -573,7 +573,9 @@ def rj_crm__run_dbt(
     download_repository_task = download_repository(git_repository_path=github_repo_)
 
     # Download dbt artifacts
-    # download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(environment=target, gcs_buckets=gcs_buckets)
+    # download_dbt_artifacts_task = download_dbt_artifacts_from_gcs(
+    #     environment=target, gcs_buckets=gcs_buckets
+    # )
 
     # Install dbt packages
     install_dbt_packages = install_dbt_dependencies()
