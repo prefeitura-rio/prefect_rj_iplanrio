@@ -88,6 +88,7 @@ deployments:
           gcs_buckets:
             prod: "rj-ssm"
             dev: "rj-ssm-dev"
+
       # Schedule 2: Daily build with daily and freshness tags
       - interval: 86400
         anchor_date: "2023-01-01T10:15:00"
@@ -103,6 +104,22 @@ deployments:
           gcs_buckets:
             prod: "rj-ssm"
             dev: "rj-ssm-dev"
+
+      # Schedule 6: run 4x a day (09h, 12h, 15h, 18h) with fatores tag
+      - cron: "0 9,12,15,18 * * *"
+        timezone: America/Sao_Paulo
+        slug: dbt_fatores_build
+        parameters:
+          command: "build"
+          select: "tag:fatores"
+          send_discord_report: true
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
+          bigquery_project: "rj-ssm"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-ssm"
+            dev: "rj-ssm-dev"
+
       # Weekly schedules (604800 seconds = 7 days)
       # Schedule 3: Weekly build with weekly tags
       - interval: 604800
@@ -119,50 +136,39 @@ deployments:
           gcs_buckets:
             prod: "rj-ssm"
             dev: "rj-ssm-dev"
+
       # Quarterly hour update last 7 days
       # Schedule 4: run each 12 h
-      - interval: 43200
-        anchor_date: "2024-03-17T09:15:00"
-        timezone: America/Sao_Paulo
-        slug: dbt_12h_build
-        parameters:
-          command: "build"
-          select: "tag:quarter_hourly"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
-          bigquery_project: "rj-ssm"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-ssm"
-            dev: "rj-ssm-dev"
+      # - interval: 43200
+      #   anchor_date: "2024-03-17T09:15:00"
+      #   timezone: America/Sao_Paulo
+      #   slug: dbt_12h_build
+      #   parameters:
+      #     command: "build"
+      #     select: "tag:quarter_hourly"
+      #     send_discord_report: true
+      #     github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
+      #     bigquery_project: "rj-ssm"
+      #     target: "prod"
+      #     gcs_buckets:
+      #       prod: "rj-ssm"
+      #       dev: "rj-ssm-dev"
+      
       # Quarterly hour (900 seconds = 15 minutes) As execuções a cada 15 min passam a reescrever apenas os dois últimos dias e sem rodar os testes (passe quente)
       # Schedule 5: run each 15 minutes updating only last 2 days
-      - interval: 900
-        anchor_date: "2024-03-17T09:15:00"
-        timezone: America/Sao_Paulo
-        slug: dbt_quarter_hourly_build
-        parameters:
-          command: "build"
-          select: >-
-            tag:quarter_hourly --vars '{passe: quente}'
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
-          bigquery_project: "rj-ssm"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-ssm"
-            dev: "rj-ssm-dev"
-      # Schedule 6: run 4x a day (09h, 12h, 15h, 18h) with fatores tag
-      - cron: "0 9,12,15,18 * * *"
-        timezone: America/Sao_Paulo
-        slug: dbt_fatores_build
-        parameters:
-          command: "build"
-          select: "tag:fatores"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
-          bigquery_project: "rj-ssm"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-ssm"
-            dev: "rj-ssm-dev"
+      # - interval: 900
+      #   anchor_date: "2024-03-17T09:15:00"
+      #   timezone: America/Sao_Paulo
+      #   slug: dbt_quarter_hourly_build
+      #   parameters:
+      #     command: "build"
+      #     select: >-
+      #       tag:quarter_hourly --vars '{passe: quente}'
+      #     send_discord_report: true
+      #     github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
+      #     bigquery_project: "rj-ssm"
+      #     target: "prod"
+      #     gcs_buckets:
+      #       prod: "rj-ssm"
+      #       dev: "rj-ssm-dev"
+
