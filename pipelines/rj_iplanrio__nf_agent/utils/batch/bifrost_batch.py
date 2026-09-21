@@ -9,21 +9,28 @@ repeats it. Uses the standard ``openai`` Python SDK's ``files``/``batches``
 resources (not a bespoke Bifrost client) — see ``utils/llm.py`` for why
 Bifrost is reached this way already on the synchronous path.
 
-``storage_config.gcs`` on the file upload: unlike ``openai``/``gemini``
-(native file storage, no config needed), Bifrost's ``vertex`` provider maps
-to real Vertex AI Batch Prediction under the hood, which requires a GCS
-bucket as I/O transport — this is a Vertex AI characteristic, not a Bifrost
-or pipeline design choice (confirmed against
+GCS is required in TWO different shapes across the two calls, both
+consequences of Bifrost's ``vertex`` provider mapping to real Vertex AI
+Batch Prediction under the hood — a Vertex AI characteristic, not a
+Bifrost or pipeline design choice (confirmed against
 https://docs.getbifrost.ai/integrations/openai-sdk/files-and-batch, whose
-provider table doesn't even list ``vertex``; discovered empirically via a
-403 from vertex FileUpload asking for ``storage_config.gcs``, then bisecting
-the accepted shape — ``{"gcs": {"bucket": ..., "prefix": ...}}`` — directly
-against staging on 2026-09-19). Uses a dedicated bucket
-(``BIFROST_GCS_BUCKET``), separate from ``GCS_BUCKET`` (the pipeline's own
-PDFs/results bucket) — deliberately, so the Bifrost gateway's own GCP
-service account (``bifrost@<project>.iam.gserviceaccount.com``, distinct
-from this pipeline's own credentials) only ever needs GCS write access to
-this transport-only bucket, never to the bucket holding actual PDF/NF data.
+provider table doesn't even list ``vertex``). Both shapes were discovered
+empirically by bisecting against staging on 2026-09-19:
+
+- ``files.create``: needs ``extra_body["storage_config"] = {"gcs": {"bucket":
+  ..., "prefix": ...}}`` — without it, fails with "gcs_bucket is required
+  for Vertex FileUpload".
+- ``batches.create``: needs ``extra_body["output_folder"] = {"url": "gs://..."}``
+  (a full ``gs://`` URI, not the structured ``storage_config`` shape) —
+  without it, fails with "output_folder.url (gs:// prefix) is required for
+  Vertex batch API". ``storage_config`` is NOT accepted/needed here.
+
+Both point at a dedicated bucket (``BIFROST_GCS_BUCKET``), separate from
+``GCS_BUCKET`` (the pipeline's own PDFs/results bucket) — deliberately, so
+the Bifrost gateway's own GCP service account
+(``bifrost@<project>.iam.gserviceaccount.com``, distinct from this
+pipeline's own credentials) only ever needs GCS write access to this
+transport-only bucket, never to the bucket holding actual PDF/NF data.
 """
 
 import json
@@ -34,7 +41,7 @@ from openai import OpenAI
 
 from prefect_rj_iplanrio.logging import get_logger
 
-from .model_config import BATCH_MODEL_NAME, BIFROST_BATCH_PROVIDER
+from .model_config import BATCH_CREATE_MODEL_NAME, BIFROST_BATCH_PROVIDER
 
 logger = get_logger(__name__)
 
@@ -60,11 +67,9 @@ _VERTEX_STORAGE_PREFIX = "bifrost-batch-io"
 BIFROST_GCS_BUCKET_ENV = "BIFROST_GCS_BUCKET"
 
 
-def _vertex_storage_config() -> dict:
-    """Build the ``storage_config`` Bifrost's ``vertex`` provider requires for file uploads.
+def _bifrost_gcs_bucket() -> str:
+    """Return the dedicated GCS bucket for Bifrost's vertex-provider transport files.
 
-    :returns: ``{"gcs": {"bucket": ..., "prefix": ...}}`` shape — see module
-        docstring for why this is required and how the shape was confirmed.
     :raises RuntimeError: If ``BIFROST_GCS_BUCKET`` isn't set.
     """
     gcs_bucket = os.environ.get(BIFROST_GCS_BUCKET_ENV)
@@ -72,7 +77,28 @@ def _vertex_storage_config() -> dict:
         raise RuntimeError(
             f"{BIFROST_GCS_BUCKET_ENV} is not set — required for Bifrost's vertex-provider batch file storage"
         )
+    return gcs_bucket
+
+
+def _vertex_storage_config(gcs_bucket: str) -> dict:
+    """Build the ``storage_config`` Bifrost's ``vertex`` provider requires for file uploads.
+
+    :param gcs_bucket: See :func:`_bifrost_gcs_bucket`.
+    :returns: ``{"gcs": {"bucket": ..., "prefix": ...}}`` shape — see module
+        docstring for why this is required (``files.create`` only) and how
+        the shape was confirmed.
+    """
     return {"gcs": {"bucket": gcs_bucket, "prefix": _VERTEX_STORAGE_PREFIX}}
+
+
+def _vertex_output_folder(gcs_bucket: str) -> dict:
+    """Build the ``output_folder`` Bifrost's ``vertex`` provider requires for batch creation.
+
+    :param gcs_bucket: See :func:`_bifrost_gcs_bucket`.
+    :returns: ``{"url": "gs://..."}`` shape — see module docstring for why
+        this (not ``storage_config``) is required on ``batches.create``.
+    """
+    return {"url": f"gs://{gcs_bucket}/{_VERTEX_STORAGE_PREFIX}/output"}
 
 
 @dataclass(frozen=True)
@@ -97,19 +123,23 @@ def submit_jsonl_batch(client: OpenAI, rows: list[dict], session_id: str, phase:
     :returns: The created batch job's identifying info.
     """
     jsonl_bytes = "\n".join(json.dumps(row, separators=(",", ":")) for row in rows).encode("utf-8")
-    storage_config = _vertex_storage_config()
+    gcs_bucket = _bifrost_gcs_bucket()
 
     uploaded_file = client.files.create(
         file=(f"nf-batch-{phase}-{session_id}.jsonl", jsonl_bytes, "application/jsonl"),
         purpose="batch",
-        extra_body={"provider": BIFROST_BATCH_PROVIDER, "storage_config": storage_config},
+        extra_body={"provider": BIFROST_BATCH_PROVIDER, "storage_config": _vertex_storage_config(gcs_bucket)},
     )
 
     batch = client.batches.create(
         input_file_id=uploaded_file.id,
         endpoint="/v1/chat/completions",
         completion_window=BATCH_COMPLETION_WINDOW,
-        extra_body={"provider": BIFROST_BATCH_PROVIDER, "model": BATCH_MODEL_NAME, "storage_config": storage_config},
+        extra_body={
+            "provider": BIFROST_BATCH_PROVIDER,
+            "model": BATCH_CREATE_MODEL_NAME,
+            "output_folder": _vertex_output_folder(gcs_bucket),
+        },
     )
 
     logger.warning(

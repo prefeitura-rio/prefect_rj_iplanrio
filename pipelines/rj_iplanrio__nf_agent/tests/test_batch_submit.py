@@ -139,7 +139,20 @@ class TestSubmitClassificationJob:
         create_batch_kwargs = fake_client.batches.create.call_args.kwargs
         assert create_batch_kwargs["input_file_id"] == "file-abc123"
         assert create_batch_kwargs["endpoint"] == "/v1/chat/completions"
-        assert create_batch_kwargs["extra_body"]["storage_config"] == create_file_storage_config
+        # batches.create needs output_folder (a gs:// URI), NOT
+        # storage_config — Vertex's native BatchPredictionJob API rejects
+        # storage_config there; confirmed against staging on 2026-09-19
+        # (see bifrost_batch.py's module docstring).
+        create_batch_extra_body = create_batch_kwargs["extra_body"]
+        assert create_batch_extra_body["output_folder"]["url"] == (
+            "gs://rj-agent-cgm-triagem-nf-bifrost/bifrost-batch-io/output"
+        )
+        assert "storage_config" not in create_batch_extra_body
+        # The batch-level model id must be unprefixed ("vertex/" stripped)
+        # — Vertex's native API rejects the prefixed form there with
+        # "Invalid Model resource name" (confirmed against staging); the
+        # prefixed form is still correct inside each JSONL row's body.model.
+        assert create_batch_extra_body["model"] == "gemini-3.1-flash-lite"
 
         fake_append.assert_called_once()
         event = fake_append.call_args.args[1]
