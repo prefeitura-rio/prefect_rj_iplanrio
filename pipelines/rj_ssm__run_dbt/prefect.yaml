@@ -122,20 +122,20 @@ deployments:
 
       # Weekly schedules (604800 seconds = 7 days)
       # Schedule 3: Weekly build with weekly tags
-      - interval: 604800
-        anchor_date: "2024-03-17T09:15:00"
-        timezone: America/Sao_Paulo
-        slug: dbt_weekly_build
-        parameters:
-          command: "build"
-          select: "+tag:weekly"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
-          bigquery_project: "rj-ssm"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-ssm"
-            dev: "rj-ssm-dev"
+      # - interval: 604800
+      #   anchor_date: "2024-03-17T09:15:00"
+      #   timezone: America/Sao_Paulo
+      #   slug: dbt_weekly_build
+      #   parameters:
+      #     command: "build"
+      #     select: "+tag:weekly"
+      #     send_discord_report: true
+      #     github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
+      #     bigquery_project: "rj-ssm"
+      #     target: "prod"
+      #     gcs_buckets:
+      #       prod: "rj-ssm"
+      #       dev: "rj-ssm-dev"
 
       # Quarterly hour update last 7 days
       # Schedule 4: run each 12 h
