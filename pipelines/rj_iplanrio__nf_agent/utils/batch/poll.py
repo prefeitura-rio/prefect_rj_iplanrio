@@ -92,11 +92,19 @@ def _download_batch_results(client: OpenAI, output_file_id: str) -> list[dict]:
 
     :param client: ``openai.OpenAI`` client routed through Bifrost.
     :param output_file_id: The batch job's ``output_file_id`` (from
-        ``client.batches.retrieve(...)``).
+        ``client.batches.retrieve(...)`` — for the ``vertex`` provider this
+        is a ``gs://...`` GCS URI, not an opaque file id, per Vertex's own
+        Batch Prediction I/O contract; see ``bifrost_batch.py``'s module
+        docstring for why ``vertex`` needs GCS at all).
     :returns: One dict per JSONL line (``custom_id`` + ``response``/``error`` —
         see ``result_adapter.py``'s module docstring).
     """
-    content = client.files.content(output_file_id, extra_body={"provider": BIFROST_BATCH_PROVIDER})
+    # GET request: the provider hint must go in extra_query, not extra_body
+    # — extra_body is silently ignored by the OpenAI SDK on GET requests,
+    # which made this fall through to a nonexistent "openai" provider
+    # default (confirmed empirically against staging on 2026-09-19, the
+    # same bug pattern as batches.retrieve below).
+    content = client.files.content(output_file_id, extra_query={"provider": BIFROST_BATCH_PROVIDER})
     text = content.text if hasattr(content, "text") else content.read().decode("utf-8")
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
@@ -270,7 +278,9 @@ def poll_once(client: OpenAI, config: PollConfig) -> list[str]:
             continue
 
         try:
-            batch = client.batches.retrieve(event.bifrost_batch_id, extra_body={"provider": BIFROST_BATCH_PROVIDER})
+            # GET request: provider hint goes in extra_query, not extra_body
+            # — see _download_batch_results' comment on the same bug pattern.
+            batch = client.batches.retrieve(event.bifrost_batch_id, extra_query={"provider": BIFROST_BATCH_PROVIDER})
             status = batch.status
         except Exception as exc:
             # Transient Bifrost API error (auth/network) — don't fail the

@@ -94,6 +94,11 @@ class TestBuildExtractionRows:
 
 class TestSubmitClassificationJob:
     def test_submit_uploads_file_and_creates_batch(self, make_pdf, monkeypatch):
+        # GCS_BUCKET is required for the vertex provider's storage_config
+        # (see bifrost_batch.py's module docstring for why) — reuses the
+        # same bucket the rest of the pipeline reads/writes.
+        monkeypatch.setenv("GCS_BUCKET", "rj-agent-cgm-triagem-nf")
+
         fake_client = MagicMock()
         fake_uploaded_file = SimpleNamespace(id="file-abc123")
         fake_client.files.create.return_value = fake_uploaded_file
@@ -122,11 +127,18 @@ class TestSubmitClassificationJob:
         fake_client.files.create.assert_called_once()
         create_file_kwargs = fake_client.files.create.call_args.kwargs
         assert create_file_kwargs["purpose"] == "batch"
+        # storage_config.gcs is required for the vertex provider's file
+        # upload (Vertex AI Batch Prediction's own GCS I/O requirement, not
+        # a Bifrost or pipeline choice — see bifrost_batch.py) — confirmed
+        # against staging on 2026-09-19.
+        create_file_storage_config = create_file_kwargs["extra_body"]["storage_config"]
+        assert create_file_storage_config["gcs"]["bucket"] == "rj-agent-cgm-triagem-nf"
 
         fake_client.batches.create.assert_called_once()
         create_batch_kwargs = fake_client.batches.create.call_args.kwargs
         assert create_batch_kwargs["input_file_id"] == "file-abc123"
         assert create_batch_kwargs["endpoint"] == "/v1/chat/completions"
+        assert create_batch_kwargs["extra_body"]["storage_config"] == create_file_storage_config
 
         fake_append.assert_called_once()
         event = fake_append.call_args.args[1]

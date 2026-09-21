@@ -8,9 +8,28 @@ upload-file-then-create-batch sequence, factored here so neither module
 repeats it. Uses the standard ``openai`` Python SDK's ``files``/``batches``
 resources (not a bespoke Bifrost client) — see ``utils/llm.py`` for why
 Bifrost is reached this way already on the synchronous path.
+
+``storage_config.gcs`` on the file upload: unlike ``openai``/``gemini``
+(native file storage, no config needed), Bifrost's ``vertex`` provider maps
+to real Vertex AI Batch Prediction under the hood, which requires a GCS
+bucket as I/O transport — this is a Vertex AI characteristic, not a Bifrost
+or pipeline design choice (confirmed against
+https://docs.getbifrost.ai/integrations/openai-sdk/files-and-batch, whose
+provider table doesn't even list ``vertex``; discovered empirically via a
+403 from vertex FileUpload asking for ``storage_config.gcs``, then bisecting
+the accepted shape — ``{"gcs": {"bucket": ..., "prefix": ...}}`` — directly
+against staging on 2026-09-19). Reuses the same ``GCS_BUCKET`` the pipeline
+already reads PDFs from/writes results to (see ``flow.py``), under a
+dedicated prefix so Bifrost's transport-only intermediate files don't mix
+with the pipeline's own input/output data. The Bifrost gateway's own GCP
+service account (``bifrost@<project>.iam.gserviceaccount.com`, distinct
+from this pipeline's own credentials) needs GCS write access to that
+bucket/prefix for this to work — a separate IAM grant from everything else
+this pipeline's own service account needs.
 """
 
 import json
+import os
 from dataclasses import dataclass
 
 from openai import OpenAI
@@ -23,10 +42,32 @@ logger = get_logger(__name__)
 
 # Bifrost's own docs don't state a row/file-size limit for batch input
 # (unlike Vertex AI's documented 200k-request cap the old direct-Vertex
-# implementation sized against — see row_counting.py). Not yet validated
-# against a real submission; the first live run in staging is what actually
-# proves this.
+# implementation sized against — see row_counting.py). Empirically confirmed
+# to be ~100MB regardless of row count — see row_counting.py's module
+# docstring — which is why session sizing tracks estimated byte size too.
 BATCH_COMPLETION_WINDOW = "24h"
+
+# Prefix under GCS_BUCKET for Bifrost's own vertex-provider transport files
+# (JSONL input/output for Batch Prediction) — separate from the pipeline's
+# own PDFS_BASE_PATH/GCS_OUTPUT_BASE_PATH so Bifrost-managed intermediate
+# files don't mix with pipeline input/output data. Bifrost manages the
+# contents of this prefix itself (uploads, and presumably cleans up); the
+# pipeline never reads from or writes to it directly.
+_VERTEX_STORAGE_PREFIX = "bifrost-batch-io"
+
+
+def _vertex_storage_config() -> dict:
+    """Build the ``storage_config`` Bifrost's ``vertex`` provider requires for file uploads.
+
+    :returns: ``{"gcs": {"bucket": ..., "prefix": ...}}`` shape — see module
+        docstring for why this is required and how the shape was confirmed.
+    :raises RuntimeError: If ``GCS_BUCKET`` isn't set — same bucket the rest
+        of the pipeline already requires (see ``flow.py``).
+    """
+    gcs_bucket = os.environ.get("GCS_BUCKET")
+    if not gcs_bucket:
+        raise RuntimeError("GCS_BUCKET is not set — required for Bifrost's vertex-provider batch file storage")
+    return {"gcs": {"bucket": gcs_bucket, "prefix": _VERTEX_STORAGE_PREFIX}}
 
 
 @dataclass(frozen=True)
@@ -51,18 +92,19 @@ def submit_jsonl_batch(client: OpenAI, rows: list[dict], session_id: str, phase:
     :returns: The created batch job's identifying info.
     """
     jsonl_bytes = "\n".join(json.dumps(row, separators=(",", ":")) for row in rows).encode("utf-8")
+    storage_config = _vertex_storage_config()
 
     uploaded_file = client.files.create(
         file=(f"nf-batch-{phase}-{session_id}.jsonl", jsonl_bytes, "application/jsonl"),
         purpose="batch",
-        extra_body={"provider": BIFROST_BATCH_PROVIDER},
+        extra_body={"provider": BIFROST_BATCH_PROVIDER, "storage_config": storage_config},
     )
 
     batch = client.batches.create(
         input_file_id=uploaded_file.id,
         endpoint="/v1/chat/completions",
         completion_window=BATCH_COMPLETION_WINDOW,
-        extra_body={"provider": BIFROST_BATCH_PROVIDER, "model": BATCH_MODEL_NAME},
+        extra_body={"provider": BIFROST_BATCH_PROVIDER, "model": BATCH_MODEL_NAME, "storage_config": storage_config},
     )
 
     logger.warning(
