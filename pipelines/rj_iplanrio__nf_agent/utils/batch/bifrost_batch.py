@@ -18,14 +18,12 @@ https://docs.getbifrost.ai/integrations/openai-sdk/files-and-batch, whose
 provider table doesn't even list ``vertex``; discovered empirically via a
 403 from vertex FileUpload asking for ``storage_config.gcs``, then bisecting
 the accepted shape — ``{"gcs": {"bucket": ..., "prefix": ...}}`` — directly
-against staging on 2026-09-19). Reuses the same ``GCS_BUCKET`` the pipeline
-already reads PDFs from/writes results to (see ``flow.py``), under a
-dedicated prefix so Bifrost's transport-only intermediate files don't mix
-with the pipeline's own input/output data. The Bifrost gateway's own GCP
-service account (``bifrost@<project>.iam.gserviceaccount.com`, distinct
-from this pipeline's own credentials) needs GCS write access to that
-bucket/prefix for this to work — a separate IAM grant from everything else
-this pipeline's own service account needs.
+against staging on 2026-09-19). Uses a dedicated bucket
+(``BIFROST_GCS_BUCKET``), separate from ``GCS_BUCKET`` (the pipeline's own
+PDFs/results bucket) — deliberately, so the Bifrost gateway's own GCP
+service account (``bifrost@<project>.iam.gserviceaccount.com``, distinct
+from this pipeline's own credentials) only ever needs GCS write access to
+this transport-only bucket, never to the bucket holding actual PDF/NF data.
 """
 
 import json
@@ -47,13 +45,19 @@ logger = get_logger(__name__)
 # docstring — which is why session sizing tracks estimated byte size too.
 BATCH_COMPLETION_WINDOW = "24h"
 
-# Prefix under GCS_BUCKET for Bifrost's own vertex-provider transport files
-# (JSONL input/output for Batch Prediction) — separate from the pipeline's
-# own PDFS_BASE_PATH/GCS_OUTPUT_BASE_PATH so Bifrost-managed intermediate
-# files don't mix with pipeline input/output data. Bifrost manages the
-# contents of this prefix itself (uploads, and presumably cleans up); the
-# pipeline never reads from or writes to it directly.
+# Prefix under BIFROST_GCS_BUCKET for the vertex provider's transport files
+# (JSONL input/output for Batch Prediction). Bifrost manages the contents of
+# this prefix itself (uploads, and presumably cleans up); the pipeline never
+# reads from or writes to it directly — it's Bifrost's own scratch space,
+# not pipeline input/output data.
 _VERTEX_STORAGE_PREFIX = "bifrost-batch-io"
+
+# Env var for the dedicated GCS bucket Bifrost's vertex provider writes
+# batch transport files to. Deliberately NOT the same as GCS_BUCKET (the
+# pipeline's own PDFs/results bucket) — see module docstring for why: it
+# keeps the Bifrost gateway's GCP service account's write access scoped to
+# a bucket holding no actual PDF/NF data.
+BIFROST_GCS_BUCKET_ENV = "BIFROST_GCS_BUCKET"
 
 
 def _vertex_storage_config() -> dict:
@@ -61,12 +65,13 @@ def _vertex_storage_config() -> dict:
 
     :returns: ``{"gcs": {"bucket": ..., "prefix": ...}}`` shape — see module
         docstring for why this is required and how the shape was confirmed.
-    :raises RuntimeError: If ``GCS_BUCKET`` isn't set — same bucket the rest
-        of the pipeline already requires (see ``flow.py``).
+    :raises RuntimeError: If ``BIFROST_GCS_BUCKET`` isn't set.
     """
-    gcs_bucket = os.environ.get("GCS_BUCKET")
+    gcs_bucket = os.environ.get(BIFROST_GCS_BUCKET_ENV)
     if not gcs_bucket:
-        raise RuntimeError("GCS_BUCKET is not set — required for Bifrost's vertex-provider batch file storage")
+        raise RuntimeError(
+            f"{BIFROST_GCS_BUCKET_ENV} is not set — required for Bifrost's vertex-provider batch file storage"
+        )
     return {"gcs": {"bucket": gcs_bucket, "prefix": _VERTEX_STORAGE_PREFIX}}
 
 

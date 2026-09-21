@@ -11,7 +11,11 @@ prefect-version: 3.4.3
 # Batch mode additionally needs `NF_BATCH_JOBS_TABLE` (fully-qualified
 # `project.dataset.nf_batch_jobs` tracking table — DDL in
 # `utils/batch/job_tracking.py`'s module docstring; must already exist,
-# streams-inserts-only contract).
+# streams-inserts-only contract) and `BIFROST_GCS_BUCKET` (a bucket
+# DEDICATED to Bifrost's own vertex-provider batch transport files —
+# deliberately separate from `GCS_BUCKET` below so the Bifrost gateway's
+# GCP service account never needs write access to the bucket holding real
+# PDF/NF data; see `utils/batch/bifrost_batch.py`).
 # GCP creds for GCS/BigQuery (both modes) come from `RJ_NF_AGENT_CREDENTIALS`
 # (see flow.py).
 #

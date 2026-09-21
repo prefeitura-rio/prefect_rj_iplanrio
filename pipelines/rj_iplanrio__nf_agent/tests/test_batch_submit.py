@@ -94,10 +94,11 @@ class TestBuildExtractionRows:
 
 class TestSubmitClassificationJob:
     def test_submit_uploads_file_and_creates_batch(self, make_pdf, monkeypatch):
-        # GCS_BUCKET is required for the vertex provider's storage_config
-        # (see bifrost_batch.py's module docstring for why) — reuses the
-        # same bucket the rest of the pipeline reads/writes.
-        monkeypatch.setenv("GCS_BUCKET", "rj-agent-cgm-triagem-nf")
+        # BIFROST_GCS_BUCKET is required for the vertex provider's
+        # storage_config (see bifrost_batch.py's module docstring for why)
+        # — a dedicated bucket, deliberately separate from the pipeline's
+        # own GCS_BUCKET (PDFs/results).
+        monkeypatch.setenv("BIFROST_GCS_BUCKET", "rj-agent-cgm-triagem-nf-bifrost")
 
         fake_client = MagicMock()
         fake_uploaded_file = SimpleNamespace(id="file-abc123")
@@ -132,7 +133,7 @@ class TestSubmitClassificationJob:
         # a Bifrost or pipeline choice — see bifrost_batch.py) — confirmed
         # against staging on 2026-09-19.
         create_file_storage_config = create_file_kwargs["extra_body"]["storage_config"]
-        assert create_file_storage_config["gcs"]["bucket"] == "rj-agent-cgm-triagem-nf"
+        assert create_file_storage_config["gcs"]["bucket"] == "rj-agent-cgm-triagem-nf-bifrost"
 
         fake_client.batches.create.assert_called_once()
         create_batch_kwargs = fake_client.batches.create.call_args.kwargs
