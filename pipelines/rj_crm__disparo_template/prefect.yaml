@@ -438,9 +438,9 @@ deployments:
           query_file: queries/smas_cartaopic_evento.sql
 
       # Lembrete evento Cartao PIC
-      - cron: "0 12 * * *"
+      - cron: "20 12 * * *"
         timezone: America/Sao_Paulo
-        active: false
+        active: true
         slug: daily-smas-cartaopic-lembrete
         flow_run_name: smas-cartaopic-lembrete
         parameters:
