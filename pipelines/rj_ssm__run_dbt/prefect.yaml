@@ -152,3 +152,17 @@ deployments:
           gcs_buckets:
             prod: "rj-ssm"
             dev: "rj-ssm-dev"
+      # Schedule 6: run 4x a day (09h, 12h, 15h, 18h) with fatores tag
+      - cron: "0 9,12,15,18 * * *"
+        timezone: America/Sao_Paulo
+        slug: dbt_fatores_build
+        parameters:
+          command: "build"
+          select: "tag:fatores"
+          send_discord_report: true
+          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
+          bigquery_project: "rj-ssm"
+          target: "prod"
+          gcs_buckets:
+            prod: "rj-ssm"
+            dev: "rj-ssm-dev"
