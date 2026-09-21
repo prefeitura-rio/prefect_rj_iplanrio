@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ruff: disable=C0301,PTH118,PTH109,PTH110,PTH103,B904,B904,PTH118,PTH112
 """
-Migrated DBT Transform Flow from Prefect 1.4 to 3.0..
+Migrated DBT Transform Flow from Prefect 1.4 to 3.0...
 """
 
 import os
