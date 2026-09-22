@@ -23,7 +23,7 @@ from .utils.batch.poll import PollConfig, poll_once
 from .utils.batch.row_counting import BatchSessionSelection, SessionBudget
 from .utils.gcs import GCSDownloader
 from .utils.orchestration import BatchRunParams, BatchSummary, PipelineRunConfig, RunContext
-from .utils.pipeline import prepare_session_pdfs
+from .utils.pipeline import prepare_session_pdfs, resolve_submit_budget
 
 
 @task
@@ -119,6 +119,29 @@ def trigger_next_batch_if_pending_task(
 def has_active_session_task(nf_batch_jobs_table: str) -> bool:
     """Return whether a batch session is already in flight."""
     return job_tracking.has_active_session(nf_batch_jobs_table)
+
+
+@task
+def check_submit_allowed_task(
+    nf_batch_jobs_table: str,
+    bq_extracao_pagina_table: str,
+    budget: SessionBudget,
+    max_total_pages: int | None,
+    force_submit: bool,
+) -> SessionBudget | None:
+    """Decide whether a new session may be submitted, and with what budget.
+
+    Thin wrapper over ``utils.pipeline.resolve_submit_budget`` (failure
+    gate + global page cap) — see that function for the full contract.
+    ``None`` means "don't submit now" (already logged inside).
+    """
+    return resolve_submit_budget(
+        nf_batch_jobs_table=nf_batch_jobs_table,
+        bq_extracao_pagina_table=bq_extracao_pagina_table,
+        budget=budget,
+        max_total_pages=max_total_pages,
+        force_submit=force_submit,
+    )
 
 
 @task

@@ -75,6 +75,7 @@ from prefect import flow
 from prefect_rj_iplanrio.logging import get_logger
 
 from .tasks import (
+    check_submit_allowed_task,
     has_active_session_task,
     log_batch_summary_task,
     new_or_continued_session_task,
@@ -111,6 +112,9 @@ def rj_iplanrio__nf_agent(
     workers: int = 200,
     # --- Escopo de entrada (ambos os modos) ---
     mes_envio: str | None = None,
+    # --- Limites de submissão (modo batch) ---
+    max_total_pages: int | None = None,
+    force_submit: bool = False,
     # --- Modo sync (Bifrost, por página) ---
     db_path: str = "/tmp/nf_pipeline_cache.db",
     batch_size: int = 1000,
@@ -130,6 +134,13 @@ def rj_iplanrio__nf_agent(
         that month's ``mes_envio=<date>/`` GCS subfolder (see
         ``utils.pipeline.resolve_month_base_path``). ``None`` (default)
         reads the whole ``PDFS_BASE_PATH`` as before.
+    :param max_total_pages: Optional cap on total pages processed across
+        sessions (this pipeline version) — once reached, runs stop
+        submitting new sessions (see ``utils.pipeline.resolve_submit_budget``).
+        ``None`` (default) means uncapped continuous drain.
+    :param force_submit: Bypass the submit-failure gate for one run — the
+        manual recovery path after fixing whatever broke the last session
+        (see ``utils.pipeline.resolve_submit_budget``).
     """
     if execution_mode not in VALID_EXECUTION_MODES:
         raise ValueError(f"Invalid execution_mode: {execution_mode!r}. Must be one of {sorted(VALID_EXECUTION_MODES)}")
@@ -142,6 +153,8 @@ def rj_iplanrio__nf_agent(
             max_classification_bytes=max_classification_bytes,
             workers=workers,
             mes_envio=mes_envio,
+            max_total_pages=max_total_pages,
+            force_submit=force_submit,
         )
     else:
         _run_sync_mode(
@@ -239,13 +252,19 @@ def _run_sync_mode(
 
 
 def _run_batch_mode(
-    max_classification_rows: int, max_classification_bytes: int, workers: int, mes_envio: str | None
+    max_classification_rows: int,
+    max_classification_bytes: int,
+    workers: int,
+    mes_envio: str | None,
+    max_total_pages: int | None,
+    force_submit: bool,
 ) -> None:
     """Poll active Bifrost batch sessions, then submit the next one if idle and PDFs are pending.
 
     :param max_classification_rows: Row budget for a new classification job —
         see ``utils/batch/row_counting.py`` for why this is a page count,
         not a PDF count. Unused if no new session is submitted this run.
+        Shrunk against ``max_total_pages`` when the cap is nearly reached.
     :param max_classification_bytes: Estimated JSONL byte-size budget for a
         new classification job — see ``utils/batch/row_counting.py`` for
         why this exists alongside the row budget (Bifrost rejects uploads
@@ -259,6 +278,11 @@ def _run_batch_mode(
         ``utils.pipeline.resolve_month_base_path``). Applies to both the
         submit path and ``PollConfig`` (extraction-phase re-downloads must
         read from the same subfolder).
+    :param max_total_pages: Optional cap on total pages processed across
+        sessions (this pipeline version) — see
+        ``utils.pipeline.resolve_submit_budget``.
+    :param force_submit: Bypass the submit-failure gate for one run — see
+        ``utils.pipeline.resolve_submit_budget``.
     """
     bq_extracao_pagina_table = os.getenv("BQ_EXTRACAO_PAGINA_TABLE")
     nf_batch_jobs_table = os.getenv("NF_BATCH_JOBS_TABLE")
@@ -295,6 +319,21 @@ def _run_batch_mode(
         logger.info("A batch session is still active after polling — nothing to submit this run.")
         return
 
+    # Failure gate + global page cap — see resolve_submit_budget. Checked
+    # BEFORE any listing/downloading so capped/locked runs stay cheap
+    # no-ops (poll above still runs: in-flight sessions must keep being
+    # advanced even when no new session may start).
+    session_budget = check_submit_allowed_task(
+        nf_batch_jobs_table=nf_batch_jobs_table,
+        bq_extracao_pagina_table=bq_extracao_pagina_table,
+        budget=SessionBudget(max_rows=max_classification_rows, max_bytes=max_classification_bytes),
+        max_total_pages=max_total_pages,
+        force_submit=force_submit,
+    )
+    if session_budget is None:
+        logger.info("Submission not allowed this run (failure gate or page cap) — nothing to submit.")
+        return
+
     gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket, base_path=pdfs_base_path)
 
     session_id = str(uuid.uuid4())
@@ -306,7 +345,7 @@ def _run_batch_mode(
         selected_paths, selection = prepare_session_pdfs_task(
             gcs_downloader=gcs_downloader,
             bq_extracao_pagina_table=bq_extracao_pagina_table,
-            budget=SessionBudget(max_rows=max_classification_rows, max_bytes=max_classification_bytes),
+            budget=session_budget,
             local_dir=temp_dir,
             workers=workers,
         )

@@ -182,3 +182,41 @@ def has_active_session(nf_batch_jobs_table: str) -> bool:
     :returns: ``True`` if at least one session's latest event is non-terminal.
     """
     return len(get_active_sessions(nf_batch_jobs_table)) > 0
+
+
+def get_most_recent_event(nf_batch_jobs_table: str) -> BatchJobEvent | None:
+    """Return the single most recent event across all sessions, if any.
+
+    Used by the submit-failure gate (see ``utils.pipeline.resolve_submit_budget``):
+    when the newest activity in the table is a failed session, auto-submitting
+    another one would just burn money retrying a systematically broken setup
+    (this exact loop ran ~15 doomed sessions in staging before the gate
+    existed) — so submission pauses until a human overrides it.
+
+    :param nf_batch_jobs_table: Fully-qualified table reference.
+    :returns: The latest :class:`BatchJobEvent` by ``created_at``, or
+        ``None`` if the table has never been written to.
+    """
+    client = bigquery.Client()
+    query = f"""
+        SELECT session_id, phase, bifrost_batch_id, state,
+               input_file_id, output_file_id, row_count, error
+        FROM `{nf_batch_jobs_table}`
+        ORDER BY created_at DESC
+        LIMIT 1
+    """
+    df = client.query(query).to_dataframe()
+    if df.empty:
+        return None
+
+    row = df.iloc[0]
+    return BatchJobEvent(
+        session_id=row["session_id"],
+        phase=row["phase"],
+        bifrost_batch_id=row["bifrost_batch_id"],
+        state=row["state"],
+        input_file_id=row["input_file_id"],
+        output_file_id=row["output_file_id"],
+        row_count=None if row["row_count"] is None else int(row["row_count"]),
+        error=row["error"],
+    )

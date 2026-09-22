@@ -15,6 +15,7 @@ from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter
 
 from prefect_rj_iplanrio.logging import get_logger
 
+from .batch.job_tracking import STATE_FAILED, get_most_recent_event
 from .batch.row_counting import (
     BatchSessionSelection,
     SessionBudget,
@@ -72,6 +73,87 @@ def resolve_month_base_path(base_path: str, mes_envio: str | None) -> str:
             f"Invalid mes_envio: {mes_envio!r}. Expected YYYY-MM-DD (matching the mes_envio=YYYY-MM-DD subfolders)."
         )
     return f"{base_path.rstrip('/')}/mes_envio={mes_envio}"
+
+
+def resolve_submit_budget(
+    nf_batch_jobs_table: str,
+    bq_extracao_pagina_table: str,
+    budget: SessionBudget,
+    max_total_pages: int | None,
+    force_submit: bool,
+) -> SessionBudget | None:
+    """Decide whether a new batch session may be submitted, and with what budget.
+
+    Two independent gates, both returning ``None`` (don't submit) when tripped:
+
+    1. Submit-failure gate: if the single most recent event in
+       ``nf_batch_jobs`` is a failed session and ``force_submit`` is not set,
+       submission pauses. Without this, a systematically broken setup
+       resubmits a doomed session on every run (this exact loop burned ~15
+       sessions in staging before the gate existed). Recovery is one manual
+       run with ``force_submit=True`` — once it submits, the newest event is
+       no longer a failure and auto-submission resumes on its own.
+    2. Global page cap: if ``max_total_pages`` is set, pages already written
+       to ``extracao_pagina`` at the current pipeline version count toward
+       it, and the session budget is shrunk to the remainder (row budget
+       only — the byte budget is per-upload by nature and stays as-is).
+       ``None`` (default) means uncapped, preserving the continuous-drain
+       behavior production relies on.
+
+    Polling is intentionally NOT gated here — in-flight sessions must keep
+    being polled/advanced even when no new session may start (e.g. right
+    after the cap is reached with a session still running).
+
+    :param nf_batch_jobs_table: Fully-qualified tracking table for the
+        failure gate.
+    :param bq_extracao_pagina_table: Full BQ table ID for the page cap.
+    :param budget: Per-session row/byte budget to shrink against the cap.
+    :param max_total_pages: Global page cap across sessions (this pipeline
+        version), or ``None`` for no cap.
+    :param force_submit: Bypass the failure gate for one run (manual
+        recovery after fixing whatever broke the last session).
+    :returns: The effective :class:`SessionBudget` for this session, or
+        ``None`` when submission must not happen now.
+    """
+    latest = get_most_recent_event(nf_batch_jobs_table)
+    if latest is not None and latest.state == STATE_FAILED and not force_submit:
+        logger.warning(
+            "Latest session %s failed (%s) — pausing auto-submission. "
+            "Fix the cause, then run once with force_submit=True to resume.",
+            latest.session_id,
+            latest.error,
+        )
+        return None
+
+    if max_total_pages is None:
+        return budget
+
+    current_commit = get_git_info().get("commit")
+    if not current_commit:
+        raise RuntimeError(
+            "Could not determine the current git commit — required to track pipeline "
+            "version in extracao_pagina (ADC-only `git rev-parse` failed; is this running "
+            "inside a git checkout?)."
+        )
+    processed = PageStatusReader().count_pages_at_commit(bq_extracao_pagina_table, current_commit)
+    if processed >= max_total_pages:
+        logger.warning(
+            "Global page cap reached: %d pages processed at commit %s (cap=%d) — nothing to submit.",
+            processed,
+            current_commit,
+            max_total_pages,
+        )
+        return None
+
+    remaining = max_total_pages - processed
+    if remaining < budget.max_rows:
+        logger.warning(
+            "Global page cap nearly reached: %d pages processed (cap=%d) — shrinking this session to %d rows.",
+            processed,
+            max_total_pages,
+            remaining,
+        )
+    return SessionBudget(max_rows=min(budget.max_rows, remaining), max_bytes=budget.max_bytes)
 
 
 def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str) -> tuple[set[str], str]:

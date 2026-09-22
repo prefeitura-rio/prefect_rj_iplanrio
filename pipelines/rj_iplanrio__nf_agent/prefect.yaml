@@ -85,6 +85,10 @@ deployments:
     parameters:
       max_classification_rows: 1000
       workers: 200
+      # TEMPORARY bounded validation run: stop submitting new sessions once
+      # 1000 pages total have been processed (see max_total_pages in
+      # flow.py). Remove (back to uncapped) when promoting to prod.
+      max_total_pages: 1000
     # TEMPORARY deviation from STYLEGUIDE.md §9.3 ("No schedules: in
     # staging"): batch mode's classification/extraction round trip through
     # Vertex takes longer than a person can practically babysit with manual

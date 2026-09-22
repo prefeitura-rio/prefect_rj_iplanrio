@@ -127,6 +127,33 @@ class PageStatusReader:
         )
         return pending
 
+    def count_pages_at_commit(self, extracao_pagina_table: str, current_commit: str) -> int:
+        """Count distinct pages already processed at the given pipeline version.
+
+        Used by the global page cap (see ``utils.pipeline.resolve_submit_budget``):
+        the cap is enforced against pages actually written to ``extracao_pagina``
+        at ``current_commit`` — the same version key ``find_pending_files``
+        uses, so "processed" means exactly what the pending check considers
+        done. Counts distinct ``(nome_arquivo, pagina)`` pairs rather than
+        raw rows, so any accidental duplicate writes can't inflate the total.
+
+        :param extracao_pagina_table: Full BQ table ID, e.g.
+            ``'project.dataset.extracao_pagina'``.
+        :param current_commit: Short git commit hash identifying this run's
+            pipeline code version (see ``processing.metadata.get_git_info``).
+        :returns: Number of distinct pages with a row at ``current_commit``.
+        """
+        query = load_query(
+            __file__,
+            "count_pages_at_commit",
+            extracao_pagina_table=extracao_pagina_table,
+            current_commit=current_commit.replace("'", ""),
+        )
+        df = self.client.query(query).to_dataframe()
+        if df.empty:
+            return 0
+        return int(df.iloc[0]["total_pages"])
+
 
 class BigQueryWriter(BigQueryClient):
     """Write per-run summary metrics to BigQuery (``pipeline_runs``)."""
