@@ -1,11 +1,22 @@
 """Build and submit a Bifrost Batch API job for page classification.
 
-Mirrors the synchronous path's classification call
-(``utils/classification/page_classification.py::_call_gemini_for_classification``)
-request-shape-for-request-shape — same model id, same OpenAI chat-completions
-``content`` parts (text + base64-inline ``file``), same generation params —
-just wrapped one-per-line in a JSONL file instead of made live. See
-``utils/batch/__init__.py`` for the overall architecture.
+Each JSONL row carries the page's prompt + PDF in Vertex AI's *native*
+``generateContent`` request shape (``{"request": {"contents": ...,
+"generationConfig": ...}}``) — NOT the OpenAI chat-completions shape the
+synchronous path uses. This is required, not stylistic: Bifrost's
+``vertex`` provider maps to real Vertex AI Batch Prediction under the hood,
+whose native API rejects the OpenAI-style ``{"method": ..., "url": ...,
+"body": ...}`` row shape with 'The lines in the specified input JSONL file
+must contain the "request" property'. Confirmed empirically against
+staging on 2026-09-19: a real batch job with the native shape ran to
+``completed`` and returned a valid classification of an inline PDF page.
+
+Identity plumbing (``custom_id``) is preserved as an EXTRA top-level field
+on each row — Vertex ignores (and echoes back) fields it doesn't
+recognize, and ``result_adapter.py`` keys parsing on exactly that echo, so
+page<->response correlation keeps working unchanged. See
+``utils/batch/__init__.py`` for the overall architecture and
+``custom_id.py`` for the encoding.
 
 ``CLASSIFICATION_PROMPT`` is read lazily (function-body, not module-level
 import) — ``from ..prompts import CLASSIFICATION_PROMPT`` at module scope
@@ -29,42 +40,45 @@ from ..classification.page_extraction import extract_page_as_bytes
 from .bifrost_batch import BatchSubmitResult, submit_jsonl_batch
 from .custom_id import encode_custom_id
 from .job_tracking import PHASE_CLASSIFICATION, BatchJobEvent, append_job_event
-from .model_config import BATCH_MODEL_NAME, CLASSIFICATION_GENERATION_CONFIG
+from .model_config import CLASSIFICATION_GENERATION_CONFIG
 from .row_counting import BatchSessionSelection
 
 logger = get_logger(__name__)
 
 
-def _build_classification_body(page_pdf_bytes: bytes) -> dict:
-    """Build the OpenAI chat-completions ``body`` for one page.
+def _build_classification_request(page_pdf_bytes: bytes) -> dict:
+    """Build the Vertex-native ``request`` payload for one page.
+
+    Mirrors the synchronous path's classification call
+    (``utils/classification/page_classification.py::_call_gemini_for_classification``)
+    content-for-content — same prompt text, same PDF inlined base64 — but in
+    Gemini's native ``generateContent`` shape (``contents``/``parts`` with
+    ``inlineData``, ``generationConfig`` with camelCase keys), not the
+    OpenAI chat-completions shape (``messages``/``content`` with
+    ``{"type": "file", ...}``) the sync path uses. See module docstring for
+    why the native shape is required here.
 
     :param page_pdf_bytes: Single-page PDF bytes (already extracted — see
         :func:`build_classification_rows`).
-    :returns: A JSON-serializable dict matching ``utils/extraction/api.py``'s
-        live request shape, for the JSONL row's ``body`` field.
+    :returns: A JSON-serializable dict for the JSONL row's ``request``
+        field.
     """
     page_b64 = base64.b64encode(page_pdf_bytes).decode("utf-8")
     return {
-        "model": BATCH_MODEL_NAME,
-        "messages": [
+        "contents": [
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": prompts.CLASSIFICATION_PROMPT},
-                    {
-                        "type": "file",
-                        "file": {
-                            "filename": "classification.pdf",
-                            "file_data": f"data:application/pdf;base64,{page_b64}",
-                        },
-                    },
+                "parts": [
+                    {"text": prompts.CLASSIFICATION_PROMPT},
+                    {"inlineData": {"mimeType": "application/pdf", "data": page_b64}},
                 ],
             }
         ],
-        "temperature": CLASSIFICATION_GENERATION_CONFIG["temperature"],
-        "top_p": CLASSIFICATION_GENERATION_CONFIG["top_p"],
-        "max_tokens": CLASSIFICATION_GENERATION_CONFIG["max_tokens"],
-        "response_format": {"type": "json_object"},
+        "generationConfig": {
+            "temperature": CLASSIFICATION_GENERATION_CONFIG["temperature"],
+            "topP": CLASSIFICATION_GENERATION_CONFIG["top_p"],
+            "maxOutputTokens": CLASSIFICATION_GENERATION_CONFIG["max_tokens"],
+        },
     }
 
 
@@ -103,10 +117,12 @@ def build_classification_rows(
             custom_id = encode_custom_id(PHASE_CLASSIFICATION, session_id, pdf_name, page_number)
             rows.append(
                 {
+                    # Vertex-native row shape — see module docstring.
+                    # custom_id is extra (not part of Vertex's contract),
+                    # echoed back untouched on each output row so
+                    # result_adapter can correlate responses to pages.
                     "custom_id": custom_id,
-                    "method": "POST",
-                    "url": "/v1/chat/completions",
-                    "body": _build_classification_body(page_pdf_bytes),
+                    "request": _build_classification_request(page_pdf_bytes),
                 }
             )
 

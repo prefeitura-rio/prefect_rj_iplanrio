@@ -26,7 +26,7 @@ from ..extraction.prompt import build_prompt_with_hint
 from .bifrost_batch import BatchSubmitResult, submit_jsonl_batch
 from .custom_id import encode_custom_id
 from .job_tracking import PHASE_EXTRACTION, BatchJobEvent, append_job_event
-from .model_config import BATCH_MODEL_NAME, EXTRACTION_GENERATION_CONFIG
+from .model_config import EXTRACTION_GENERATION_CONFIG
 
 logger = get_logger(__name__)
 
@@ -60,34 +60,37 @@ def _resolved_extraction_prompt(classification_hint: str | None) -> str:
     return build_prompt_with_hint(_PromptHolder(), classification_hint)
 
 
-def _build_extraction_body(page_pdf_bytes: bytes, classification_hint: str | None) -> dict:
-    """Build the OpenAI chat-completions ``body`` for one extraction candidate page.
+def _build_extraction_request(page_pdf_bytes: bytes, classification_hint: str | None) -> dict:
+    """Build the Vertex-native ``request`` payload for one extraction candidate page.
+
+    Same content as the synchronous path's extraction call — same resolved
+    prompt (with classification hint), same PDF inlined base64 — but in
+    Gemini's native ``generateContent`` shape, not the OpenAI
+    chat-completions shape. See ``classification_submit.py``'s module
+    docstring for why the native shape is required on this path.
 
     :param page_pdf_bytes: Single-page PDF bytes.
     :param classification_hint: Document type identified during
         classification (injected into the prompt), or ``None``.
-    :returns: A JSON-serializable dict matching ``utils/extraction/api.py``'s
-        live request shape, for the JSONL row's ``body`` field.
+    :returns: A JSON-serializable dict for the JSONL row's ``request``
+        field.
     """
     page_b64 = base64.b64encode(page_pdf_bytes).decode("utf-8")
     return {
-        "model": BATCH_MODEL_NAME,
-        "messages": [
+        "contents": [
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": _resolved_extraction_prompt(classification_hint)},
-                    {
-                        "type": "file",
-                        "file": {"filename": "extraction.pdf", "file_data": f"data:application/pdf;base64,{page_b64}"},
-                    },
+                "parts": [
+                    {"text": _resolved_extraction_prompt(classification_hint)},
+                    {"inlineData": {"mimeType": "application/pdf", "data": page_b64}},
                 ],
             }
         ],
-        "temperature": EXTRACTION_GENERATION_CONFIG["temperature"],
-        "top_p": EXTRACTION_GENERATION_CONFIG["top_p"],
-        "max_tokens": EXTRACTION_GENERATION_CONFIG["max_tokens"],
-        "response_format": {"type": "json_object"},
+        "generationConfig": {
+            "temperature": EXTRACTION_GENERATION_CONFIG["temperature"],
+            "topP": EXTRACTION_GENERATION_CONFIG["top_p"],
+            "maxOutputTokens": EXTRACTION_GENERATION_CONFIG["max_tokens"],
+        },
     }
 
 
@@ -122,10 +125,10 @@ def build_extraction_rows(
         custom_id = encode_custom_id(PHASE_EXTRACTION, session_id, candidate.pdf_name, candidate.page_number)
         rows.append(
             {
+                # Vertex-native row shape — see classification_submit.py's
+                # module docstring; custom_id is extra, echoed back untouched.
                 "custom_id": custom_id,
-                "method": "POST",
-                "url": "/v1/chat/completions",
-                "body": _build_extraction_body(page_pdf_bytes, candidate.classification_hint),
+                "request": _build_extraction_request(page_pdf_bytes, candidate.classification_hint),
             }
         )
 

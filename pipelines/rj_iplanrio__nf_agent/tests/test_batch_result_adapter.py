@@ -2,10 +2,11 @@
 
 These exercise pure parsing/reshaping logic against hand-built Bifrost
 Batch API result lines — no Bifrost/BigQuery/GCS calls are made. Row shapes
-mirror https://docs.getbifrost.ai/api-reference/batch/get-batch-results
-(``custom_id`` + ``response.body`` shaped like a standard OpenAI
-chat-completions response), same as OpenAI's own Batch API — see
-``result_adapter.py``'s module docstring for the exact reference.
+mirror the Vertex-native result lines actually returned by Bifrost's
+``vertex`` provider (see ``result_adapter.py``'s module docstring):
+``custom_id`` (our own extra field, echoed back) + Vertex ``response``
+(``candidates``/``usageMetadata``), or a non-empty ``status`` string on
+failure — confirmed against a real completed batch on staging.
 """
 
 from __future__ import annotations
@@ -20,15 +21,13 @@ def _response_row(
     pdf_name: str, page_number: int, text_payload: dict, phase: str = "classification", usage: dict | None = None
 ) -> dict:
     """Build a successful batch-result line with an embedded model text payload."""
-    usage = usage or {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+    usage = usage or {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15}
     return {
         "custom_id": encode_custom_id(phase, "sess-1", pdf_name, page_number),
+        "status": "",
         "response": {
-            "status_code": 200,
-            "body": {
-                "choices": [{"message": {"role": "assistant", "content": json.dumps(text_payload)}}],
-                "usage": usage,
-            },
+            "candidates": [{"content": {"parts": [{"text": json.dumps(text_payload)}], "role": "model"}}],
+            "usageMetadata": usage,
         },
     }
 
@@ -36,7 +35,7 @@ def _response_row(
 def _failed_row(pdf_name: str, page_number: int, message: str, phase: str = "classification") -> dict:
     return {
         "custom_id": encode_custom_id(phase, "sess-1", pdf_name, page_number),
-        "error": {"code": "provider_error", "message": message},
+        "status": message,
     }
 
 
@@ -61,14 +60,15 @@ class TestParseClassificationOutputRows:
         results = result_adapter.parse_classification_output_rows([row])
 
         assert results[0].category is None
-        assert results[0].error == "Bad Request: invalid role"
+        assert "Bad Request: invalid role" in results[0].error
 
     def test_malformed_json_response_is_treated_as_error_not_raised(self):
         row = {
             "custom_id": encode_custom_id("classification", "sess-1", "doc.pdf", 3),
+            "status": "",
             "response": {
-                "status_code": 200,
-                "body": {"choices": [{"message": {"content": "not valid json {{{"}}], "usage": {}},
+                "candidates": [{"content": {"parts": [{"text": "not valid json {{{"}], "role": "model"}}],
+                "usageMetadata": {},
             },
         }
 
@@ -77,16 +77,17 @@ class TestParseClassificationOutputRows:
         assert results[0].category is None
         assert "Failed to parse" in results[0].error
 
-    def test_non_200_status_code_is_treated_as_error(self):
+    def test_nonempty_status_is_treated_as_error(self):
         row = {
             "custom_id": encode_custom_id("classification", "sess-1", "doc.pdf", 1),
-            "response": {"status_code": 429, "body": {}},
+            "status": "RESOURCE_EXHAUSTED: quota exceeded",
+            "response": {},
         }
 
         results = result_adapter.parse_classification_output_rows([row])
 
         assert results[0].category is None
-        assert "429" in results[0].error
+        assert "RESOURCE_EXHAUSTED" in results[0].error
 
 
 class TestParseExtractionOutputRows:
@@ -105,7 +106,7 @@ class TestParseExtractionOutputRows:
         results = result_adapter.parse_extraction_output_rows([row])
 
         assert results[0].extracted is None
-        assert results[0].error == "quota exceeded"
+        assert "quota exceeded" in results[0].error
 
 
 class TestNfPagesFromClassification:

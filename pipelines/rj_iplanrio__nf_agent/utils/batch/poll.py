@@ -87,25 +87,51 @@ class PollConfig:
     max_concurrent: int
 
 
+def _download_gcs_text(gcs_uri: str) -> str:
+    """Download a text object from GCS via ADC (no Bifrost involved).
+
+    :param gcs_uri: Full ``gs://bucket/path`` URI.
+    :returns: Decoded file content.
+    """
+    from google.cloud import storage
+
+    if not gcs_uri.startswith("gs://"):
+        raise ValueError(f"Expected a gs:// URI, got: {gcs_uri!r}")
+    bucket_name, _, blob_path = gcs_uri[len("gs://") :].partition("/")
+    return storage.Client().bucket(bucket_name).blob(blob_path).download_as_text()
+
+
 def _download_batch_results(client: OpenAI, output_file_id: str) -> list[dict]:
     """Download and parse a completed batch job's JSONL result file.
 
     :param client: ``openai.OpenAI`` client routed through Bifrost.
     :param output_file_id: The batch job's ``output_file_id`` (from
         ``client.batches.retrieve(...)`` — for the ``vertex`` provider this
-        is a ``gs://...`` GCS URI, not an opaque file id, per Vertex's own
-        Batch Prediction I/O contract; see ``bifrost_batch.py``'s module
-        docstring for why ``vertex`` needs GCS at all).
-    :returns: One dict per JSONL line (``custom_id`` + ``response``/``error`` —
-        see ``result_adapter.py``'s module docstring).
+        is a ``gs://...`` GCS output *directory* URI, not an opaque file id,
+        per Vertex's own Batch Prediction I/O contract; the actual results
+        live in ``{output_file_id}/predictions.jsonl`` inside it — see
+        ``bifrost_batch.py``'s module docstring for why ``vertex`` needs GCS
+        at all).
+    :returns: One dict per JSONL line (``custom_id`` + Vertex-native
+        ``response``/``status`` — see ``result_adapter.py``'s module
+        docstring).
     """
-    # GET request: the provider hint must go in extra_query, not extra_body
-    # — extra_body is silently ignored by the OpenAI SDK on GET requests,
-    # which made this fall through to a nonexistent "openai" provider
-    # default (confirmed empirically against staging on 2026-09-19, the
-    # same bug pattern as batches.retrieve below).
-    content = client.files.content(output_file_id, extra_query={"provider": BIFROST_BATCH_PROVIDER})
-    text = content.text if hasattr(content, "text") else content.read().decode("utf-8")
+    if output_file_id.startswith("gs://"):
+        # Vertex writes results to GCS itself — read them straight from
+        # the bucket via ADC (this pipeline's own GCP credentials already
+        # cover the BIFROST_GCS_BUCKET it was told to use) instead of going
+        # back through Bifrost's files.content, whose SDK path-template
+        # URL-encodes the gs:// slashes and breaks server-side parsing
+        # (confirmed empirically against staging on 2026-09-19).
+        text = _download_gcs_text(f"{output_file_id.rstrip('/')}/predictions.jsonl")
+    else:
+        # GET request: the provider hint must go in extra_query, not
+        # extra_body — extra_body is silently ignored by the OpenAI SDK on
+        # GET requests, which made this fall through to a nonexistent
+        # "openai" provider default (confirmed empirically against staging
+        # on 2026-09-19, the same bug pattern as batches.retrieve below).
+        content = client.files.content(output_file_id, extra_query={"provider": BIFROST_BATCH_PROVIDER})
+        text = content.text if hasattr(content, "text") else content.read().decode("utf-8")
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 

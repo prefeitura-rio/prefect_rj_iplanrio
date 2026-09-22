@@ -11,21 +11,24 @@ shape produced by ``utils/processing/process.py::process_pdf`` (per-PDF
 module reads Bifrost batch *result* JSONL lines (one per classification or
 extraction request) and rebuilds that same per-PDF shape.
 
-Result line shape (per https://docs.getbifrost.ai/api-reference/batch/get-batch-results,
-mirroring OpenAI's own Batch API): ``{"custom_id": ..., "response":
-{"status_code": 200, "body": {...chat-completion...}}}`` on success, or
-``{"custom_id": ..., "error": {"code": ..., "message": ...}}`` on failure.
-``custom_id`` is decoded via ``custom_id.py`` back into
-``pdf_name``/``page_number`` (there is no passthrough-columns mechanism
-here the way the old direct-Vertex-via-BigQuery implementation had). The
-``body`` is a standard OpenAI chat-completions response — same shape
-``utils/extraction/api.py``'s live call already gets back — so
-``choices[0].message.content`` holds the raw JSON-as-text payload the
-synchronous path parses via
-``iplanrio_agent_toolkit.gemini.response_parsing.parse_json_response``, and
-``usage`` holds token counts (already ``prompt_tokens``/``completion_tokens``/
-``total_tokens`` — no field-name translation needed, unlike the old
-Vertex-native ``usageMetadata`` shape).
+Result line shape (Vertex-native, since Bifrost's ``vertex`` provider
+maps to real Vertex AI Batch Prediction — see ``bifrost_batch.py``):
+``{"custom_id": ..., "request": {...echo...}, "status": "",
+"response": {"candidates": [{"content": {"parts": [{"text":
+"...model JSON-as-text payload..."}]}}], "usageMetadata": {...}}, ...}``
+on success. ``custom_id`` is our own extra field (not part of Vertex's
+contract) — Vertex ignores it on input and echoes it back untouched, and
+it's decoded via ``custom_id.py`` back into ``pdf_name``/``page_number``
+(there is no passthrough-columns mechanism here the way the old
+direct-Vertex-via-BigQuery implementation had). The model's raw output
+text is at ``response.candidates[0].content.parts[0].text`` — same
+JSON-as-text payload the synchronous path parses via
+``iplanrio_agent_toolkit.gemini.response_parsing.parse_json_response`` —
+and ``usageMetadata`` holds token counts in Vertex-native names
+(``promptTokenCount``/``candidatesTokenCount``/``totalTokenCount``),
+translated here to the sync path's ``prompt_tokens``/``completion_tokens``/
+``total_tokens`` names. A failed row surfaces as a non-empty ``status``
+string with an empty/missing ``response``.
 """
 
 from dataclasses import dataclass
@@ -41,44 +44,44 @@ from .custom_id import decode_custom_id
 logger = get_logger(__name__)
 
 _EMPTY_USAGE = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-_HTTP_OK = 200
 
 
 def _extract_text_and_usage(raw_row: dict) -> tuple[str | None, dict[str, int], str | None]:
     """Pull the model's raw text, token usage, and any error out of one result line.
+
+    Parses the Vertex-native result shape (see module docstring):
+    non-empty ``status`` means the row failed; otherwise the text is at
+    ``response.candidates[0].content.parts[0].text`` and usage at
+    ``response.usageMetadata`` (Vertex-native token field names, translated
+    to the sync path's names here).
 
     :param raw_row: One decoded JSONL result line (see module docstring).
     :returns: ``(raw_text, usage, error)`` — exactly one of ``raw_text``/
         ``error`` is non-``None``. ``usage`` is always well-formed (zeroed
         when unavailable).
     """
-    if raw_row.get("error"):
-        error = raw_row["error"]
-        message = error.get("message") if isinstance(error, dict) else str(error)
-        return None, dict(_EMPTY_USAGE), message or "Bifrost batch row reported an error"
+    status = raw_row.get("status")
+    if status:
+        return None, dict(_EMPTY_USAGE), f"Vertex batch row failed: {status}"
 
     response = raw_row.get("response") or {}
-    status_code = response.get("status_code")
-    body = response.get("body") or {}
-
-    if status_code is not None and status_code != _HTTP_OK:
-        return None, dict(_EMPTY_USAGE), f"Bifrost batch row returned status_code={status_code}"
-
-    choices = body.get("choices") or []
+    candidates = response.get("candidates") or []
     text = None
-    if choices:
-        message = choices[0].get("message") or {}
-        text = message.get("content")
+    if candidates:
+        content = candidates[0].get("content") or {}
+        parts = content.get("parts") or []
+        if parts:
+            text = parts[0].get("text")
 
-    usage_raw = body.get("usage") or {}
+    usage_raw = response.get("usageMetadata") or {}
     usage = {
-        "prompt_tokens": usage_raw.get("prompt_tokens", 0) or 0,
-        "completion_tokens": usage_raw.get("completion_tokens", 0) or 0,
-        "total_tokens": usage_raw.get("total_tokens", 0) or 0,
+        "prompt_tokens": usage_raw.get("promptTokenCount", 0) or 0,
+        "completion_tokens": usage_raw.get("candidatesTokenCount", 0) or 0,
+        "total_tokens": usage_raw.get("totalTokenCount", 0) or 0,
     }
 
     if text is None:
-        return None, usage, "Bifrost batch row had no usable response text"
+        return None, usage, "Vertex batch row had no usable response text"
 
     return text, usage, None
 

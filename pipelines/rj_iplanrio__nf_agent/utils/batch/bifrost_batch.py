@@ -116,7 +116,9 @@ def submit_jsonl_batch(client: OpenAI, rows: list[dict], session_id: str, phase:
     :param client: ``openai.OpenAI`` client routed through Bifrost (see
         ``utils/llm.py::build_llm_client``).
     :param rows: One dict per JSONL line — each already shaped as
-        ``{"custom_id": ..., "method": "POST", "url": "/v1/chat/completions", "body": {...}}``.
+        ``{"custom_id": ..., "request": {...}}`` (Vertex-native request
+        envelope; see ``classification_submit.py``'s module docstring for
+        why ``request`` — not OpenAI-style ``method``/``url``/``body``).
     :param session_id: Current batch session UUID (only used for the
         uploaded file's name and log lines).
     :param phase: ``"classification"`` or ``"extraction"`` (same).

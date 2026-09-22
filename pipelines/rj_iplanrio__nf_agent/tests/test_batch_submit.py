@@ -39,12 +39,16 @@ class TestBuildClassificationRows:
             identity = decode_custom_id(row["custom_id"])
             assert identity.session_id == "sess-1"
             assert identity.phase == "classification"
-            assert row["method"] == "POST"
-            assert row["url"] == "/v1/chat/completions"
-            content_parts = row["body"]["messages"][0]["content"]
-            assert content_parts[0]["type"] == "text"
-            file_part = content_parts[1]["file"]
-            assert file_part["file_data"].startswith("data:application/pdf;base64,")
+            # Vertex-native row shape — no OpenAI-style method/url/body;
+            # custom_id rides along as an extra, echoed back on output rows.
+            assert "method" not in row and "url" not in row and "body" not in row
+            request = row["request"]
+            content_parts = request["contents"][0]["parts"]
+            assert content_parts[0] == {"text": request["contents"][0]["parts"][0]["text"]}
+            file_part = content_parts[1]["inlineData"]
+            assert file_part["mimeType"] == "application/pdf"
+            assert len(file_part["data"]) > 0  # base64-encoded page bytes
+            assert "generationConfig" in request
 
     def test_only_selected_pdfs_are_included(self, make_pdf):
         pdf_paths = {
@@ -73,7 +77,7 @@ class TestBuildExtractionRows:
         rows = extraction_submit.build_extraction_rows(pdf_paths, candidates, session_id="sess-1")
 
         assert len(rows) == 1
-        prompt_text = rows[0]["body"]["messages"][0]["content"][0]["text"]
+        prompt_text = rows[0]["request"]["contents"][0]["parts"][0]["text"]
         assert "NFS-e" in prompt_text  # hint was substituted into the prompt
         identity = decode_custom_id(rows[0]["custom_id"])
         assert identity.pdf_name == "a"
@@ -88,7 +92,7 @@ class TestBuildExtractionRows:
 
         rows = extraction_submit.build_extraction_rows(pdf_paths, candidates, session_id="sess-1")
 
-        prompt_text = rows[0]["body"]["messages"][0]["content"][0]["text"]
+        prompt_text = rows[0]["request"]["contents"][0]["parts"][0]["text"]
         assert "PRÉ-CLASSIFICAÇÃO" not in prompt_text
 
 
