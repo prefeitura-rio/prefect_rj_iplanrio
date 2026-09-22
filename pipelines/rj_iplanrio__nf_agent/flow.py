@@ -95,6 +95,7 @@ from .utils.batch.row_counting import (
 from .utils.gcs import GCSDownloader
 from .utils.llm import build_llm_client
 from .utils.orchestration import BatchRunParams
+from .utils.pipeline import resolve_month_base_path
 
 logger = get_logger(__name__)
 
@@ -108,6 +109,8 @@ def rj_iplanrio__nf_agent(
     max_classification_rows: int = MAX_CLASSIFICATION_ROWS_DEFAULT,
     max_classification_bytes: int = MAX_CLASSIFICATION_BYTES_DEFAULT,
     workers: int = 200,
+    # --- Escopo de entrada (ambos os modos) ---
+    mes_envio: str | None = None,
     # --- Modo sync (Bifrost, por página) ---
     db_path: str = "/tmp/nf_pipeline_cache.db",
     batch_size: int = 1000,
@@ -123,6 +126,10 @@ def rj_iplanrio__nf_agent(
     :param execution_mode: ``"batch"`` (Bifrost Batch API, what production
         schedules run) or ``"sync"`` (per-request via Bifrost, kept for
         small/fast or on-demand runs — not scheduled).
+    :param mes_envio: Optional ``YYYY-MM-DD`` date restricting PDF input to
+        that month's ``mes_envio=<date>/`` GCS subfolder (see
+        ``utils.pipeline.resolve_month_base_path``). ``None`` (default)
+        reads the whole ``PDFS_BASE_PATH`` as before.
     """
     if execution_mode not in VALID_EXECUTION_MODES:
         raise ValueError(f"Invalid execution_mode: {execution_mode!r}. Must be one of {sorted(VALID_EXECUTION_MODES)}")
@@ -134,6 +141,7 @@ def rj_iplanrio__nf_agent(
             max_classification_rows=max_classification_rows,
             max_classification_bytes=max_classification_bytes,
             workers=workers,
+            mes_envio=mes_envio,
         )
     else:
         _run_sync_mode(
@@ -145,6 +153,7 @@ def rj_iplanrio__nf_agent(
             workers=workers,
             session_id=session_id,
             session_pdfs_done=session_pdfs_done,
+            mes_envio=mes_envio,
         )
 
 
@@ -157,6 +166,7 @@ def _run_sync_mode(
     workers: int,
     session_id: str | None,
     session_pdfs_done: int,
+    mes_envio: str | None,
 ) -> None:
     """Run one batch of the per-request (Bifrost) pipeline and self-trigger the next one.
 
@@ -174,7 +184,7 @@ def _run_sync_mode(
     """
     bq_extracao_pagina_table = os.getenv("BQ_EXTRACAO_PAGINA_TABLE")
     gcs_bucket = os.getenv("GCS_BUCKET")
-    pdfs_base_path = os.getenv("PDFS_BASE_PATH", "pdfs")
+    pdfs_base_path = resolve_month_base_path(os.getenv("PDFS_BASE_PATH", "pdfs"), mes_envio)
     gcs_output_base_path = os.getenv("GCS_OUTPUT_BASE_PATH")
     pipeline_runs_table = os.getenv("PIPELINE_RUNS_TABLE")
 
@@ -228,7 +238,9 @@ def _run_sync_mode(
     )
 
 
-def _run_batch_mode(max_classification_rows: int, max_classification_bytes: int, workers: int) -> None:
+def _run_batch_mode(
+    max_classification_rows: int, max_classification_bytes: int, workers: int, mes_envio: str | None
+) -> None:
     """Poll active Bifrost batch sessions, then submit the next one if idle and PDFs are pending.
 
     :param max_classification_rows: Row budget for a new classification job —
@@ -242,11 +254,16 @@ def _run_batch_mode(max_classification_rows: int, max_classification_bytes: int,
     :param workers: Concurrency for the pre-download step (page counts
         require opening each candidate PDF locally; also passed through to
         ``PollConfig`` for ``versao_pipeline`` traceability).
+    :param mes_envio: Optional ``YYYY-MM-DD`` restricting PDF input to that
+        month's ``mes_envio=<date>/`` subfolder (see
+        ``utils.pipeline.resolve_month_base_path``). Applies to both the
+        submit path and ``PollConfig`` (extraction-phase re-downloads must
+        read from the same subfolder).
     """
     bq_extracao_pagina_table = os.getenv("BQ_EXTRACAO_PAGINA_TABLE")
     nf_batch_jobs_table = os.getenv("NF_BATCH_JOBS_TABLE")
     gcs_bucket = os.getenv("GCS_BUCKET")
-    pdfs_base_path = os.getenv("PDFS_BASE_PATH", "pdfs")
+    pdfs_base_path = resolve_month_base_path(os.getenv("PDFS_BASE_PATH", "pdfs"), mes_envio)
     gcs_output_base_path = os.getenv("GCS_OUTPUT_BASE_PATH")
 
     if not bq_extracao_pagina_table:

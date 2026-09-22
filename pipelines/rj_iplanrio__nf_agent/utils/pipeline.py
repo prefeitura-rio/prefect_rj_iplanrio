@@ -5,6 +5,7 @@
 """
 
 import os
+import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +42,36 @@ logger = get_logger(__name__)
 # (bug em investigação). Workaround temporário: usamos logger.warning()
 # nos lugares que logicamente seriam logger.info() abaixo. Reverter para
 # logger.info() quando o bug for corrigido.
+
+
+def resolve_month_base_path(base_path: str, mes_envio: str | None) -> str:
+    """Scope a GCS base path to one month's ``mes_envio=YYYY-MM-DD`` subfolder, if requested.
+
+    The bucket holds both loose PDFs directly under ``base_path`` and one
+    ``mes_envio=YYYY-MM-DD/`` subfolder per month. Passing ``mes_envio``
+    restricts listing/downloading to that month's subfolder only; candidate
+    filenames stay bare (relative to the returned base), matching the
+    ``nome_arquivo`` convention already stored in ``extracao_pagina``
+    (478 existing rows, all bare names — verified 2026-09-22), so the
+    already-processed check keeps working unchanged.
+
+    :param base_path: The month-independent prefix (e.g. ``PDFS_BASE_PATH``).
+    :param mes_envio: Date in ``YYYY-MM-DD`` format selecting the
+        ``mes_envio=<date>/`` subfolder, or ``None`` for the whole base.
+    :returns: ``base_path`` unchanged, or ``base_path/mes_envio=<date>``.
+    :raises ValueError: If ``mes_envio`` isn't in ``YYYY-MM-DD`` format.
+    """
+    if mes_envio is None:
+        return base_path
+    # Range-checked (month 01-12, day 01-31) but deliberately not
+    # calendar-exact (Feb 30 passes): a nonexistent date simply matches no
+    # GCS subfolder, which surfaces gracefully downstream as "no pending
+    # files" rather than a crash here.
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])", mes_envio):
+        raise ValueError(
+            f"Invalid mes_envio: {mes_envio!r}. Expected YYYY-MM-DD (matching the mes_envio=YYYY-MM-DD subfolders)."
+        )
+    return f"{base_path.rstrip('/')}/mes_envio={mes_envio}"
 
 
 def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str) -> tuple[set[str], str]:
