@@ -89,6 +89,11 @@ deployments:
       # 1000 pages total have been processed (see max_total_pages in
       # flow.py). Remove (back to uncapped) when promoting to prod.
       max_total_pages: 1000
+      # TEMPORARY fan-out for validation: plan up to 5 disjoint sessions
+      # per run for parallel Vertex processing (see max_sessions_per_run
+      # in flow.py). Start small, raise once end-to-end stability + Vertex
+      # concurrent-job quota allow. Prod keeps the default of 1.
+      max_sessions_per_run: 5
     # TEMPORARY deviation from STYLEGUIDE.md §9.3 ("No schedules: in
     # staging"): batch mode's classification/extraction round trip through
     # Vertex takes longer than a person can practically babysit with manual

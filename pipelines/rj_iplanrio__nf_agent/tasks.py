@@ -128,12 +128,13 @@ def check_submit_allowed_task(
     budget: SessionBudget,
     max_total_pages: int | None,
     force_submit: bool,
-) -> SessionBudget | None:
-    """Decide whether a new session may be submitted, and with what budget.
+) -> tuple[SessionBudget | None, int | None]:
+    """Decide whether new sessions may be submitted, and with what budget.
 
     Thin wrapper over ``utils.pipeline.resolve_submit_budget`` (failure
     gate + global page cap) — see that function for the full contract.
-    ``None`` means "don't submit now" (already logged inside).
+    Returns ``(effective_budget, total_remaining)``; ``(None, None)`` means
+    "don't submit now" (already logged inside).
     """
     return resolve_submit_budget(
         nf_batch_jobs_table=nf_batch_jobs_table,
@@ -151,11 +152,15 @@ def prepare_session_pdfs_task(
     budget: SessionBudget,
     local_dir: str,
     workers: int,
-) -> tuple[dict[str, Path], BatchSessionSelection]:
-    """BQ-check and download just enough pending PDFs to fill the row/byte budget.
+    *,
+    max_sessions: int = 1,
+    total_max_rows: int | None = None,
+) -> tuple[dict[str, Path], list[BatchSessionSelection]]:
+    """BQ-check and download pending PDFs, split into session groups.
 
-    Incremental replacement for the old download-everything-then-select
-    sequence — see ``utils.pipeline.prepare_session_pdfs``.
+    Thin wrapper over ``utils.pipeline.prepare_session_pdfs`` — see that
+    function for the full contract. Returns all selected paths plus one
+    :class:`BatchSessionSelection` per session group to submit.
     """
     return prepare_session_pdfs(
         gcs_downloader=gcs_downloader,
@@ -163,6 +168,8 @@ def prepare_session_pdfs_task(
         budget=budget,
         local_dir=Path(local_dir),
         workers=workers,
+        max_sessions=max_sessions,
+        total_max_rows=total_max_rows,
     )
 
 

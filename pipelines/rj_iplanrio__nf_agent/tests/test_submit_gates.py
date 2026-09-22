@@ -114,27 +114,32 @@ class TestResolveSubmitBudget:
             return pipeline_mod.resolve_submit_budget(**params)
 
     def test_no_history_submits_full_budget(self):
-        assert self._resolve(None, 0) == SessionBudget(max_rows=1000, max_bytes=60_000_000)
+        assert self._resolve(None, 0) == (SessionBudget(max_rows=1000, max_bytes=60_000_000), None)
 
     def test_latest_failed_blocks_without_force(self):
-        assert self._resolve(STATE_FAILED, 0) is None
+        assert self._resolve(STATE_FAILED, 0) == (None, None)
 
     def test_latest_failed_with_force_submits(self):
-        assert self._resolve(STATE_FAILED, 0, force_submit=True) == SessionBudget(
-            max_rows=1000, max_bytes=60_000_000
+        assert self._resolve(STATE_FAILED, 0, force_submit=True) == (
+            SessionBudget(max_rows=1000, max_bytes=60_000_000),
+            None,
         )
 
     def test_latest_done_submits(self):
-        assert self._resolve(STATE_DONE, 0) == SessionBudget(max_rows=1000, max_bytes=60_000_000)
+        assert self._resolve(STATE_DONE, 0) == (SessionBudget(max_rows=1000, max_bytes=60_000_000), None)
 
     def test_cap_reached_returns_none(self):
-        assert self._resolve(STATE_DONE, 1000, max_total_pages=1000) is None
-        assert self._resolve(STATE_DONE, 1500, max_total_pages=1000) is None
+        assert self._resolve(STATE_DONE, 1000, max_total_pages=1000) == (None, None)
+        assert self._resolve(STATE_DONE, 1500, max_total_pages=1000) == (None, None)
 
     def test_cap_shrinks_session_budget_to_remainder(self):
-        result = self._resolve(STATE_DONE, 800, max_total_pages=1000)
-        assert result == SessionBudget(max_rows=200, max_bytes=60_000_000)
+        assert self._resolve(STATE_DONE, 800, max_total_pages=1000) == (
+            SessionBudget(max_rows=200, max_bytes=60_000_000),
+            200,
+        )
 
     def test_cap_not_yet_binding_keeps_full_budget(self):
-        result = self._resolve(STATE_DONE, 0, max_total_pages=1000)
-        assert result == SessionBudget(max_rows=1000, max_bytes=60_000_000)
+        assert self._resolve(STATE_DONE, 0, max_total_pages=1000) == (
+            SessionBudget(max_rows=1000, max_bytes=60_000_000),
+            1000,
+        )

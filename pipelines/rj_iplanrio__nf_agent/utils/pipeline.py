@@ -19,7 +19,8 @@ from .batch.job_tracking import STATE_FAILED, get_most_recent_event
 from .batch.row_counting import (
     BatchSessionSelection,
     SessionBudget,
-    select_pdfs_within_row_budget,
+    _count_pages,
+    _estimate_jsonl_bytes,
 )
 from .bigquery import PageStatusReader
 from .cache import DatabaseManager
@@ -81,8 +82,8 @@ def resolve_submit_budget(
     budget: SessionBudget,
     max_total_pages: int | None,
     force_submit: bool,
-) -> SessionBudget | None:
-    """Decide whether a new batch session may be submitted, and with what budget.
+) -> tuple[SessionBudget | None, int | None]:
+    """Decide whether new batch sessions may be submitted, and with what budget.
 
     Two independent gates, both returning ``None`` (don't submit) when tripped:
 
@@ -112,8 +113,10 @@ def resolve_submit_budget(
         version), or ``None`` for no cap.
     :param force_submit: Bypass the failure gate for one run (manual
         recovery after fixing whatever broke the last session).
-    :returns: The effective :class:`SessionBudget` for this session, or
-        ``None`` when submission must not happen now.
+    :returns: ``(effective_budget, total_remaining)`` — the shrunk
+        per-session :class:`SessionBudget` and how many pages are still
+        allowed in total (``None`` when uncapped), or ``(None, None)`` when
+        submission must not happen now.
     """
     latest = get_most_recent_event(nf_batch_jobs_table)
     if latest is not None and latest.state == STATE_FAILED and not force_submit:
@@ -123,10 +126,10 @@ def resolve_submit_budget(
             latest.session_id,
             latest.error,
         )
-        return None
+        return None, None
 
     if max_total_pages is None:
-        return budget
+        return budget, None
 
     current_commit = get_git_info().get("commit")
     if not current_commit:
@@ -143,17 +146,17 @@ def resolve_submit_budget(
             current_commit,
             max_total_pages,
         )
-        return None
+        return None, None
 
     remaining = max_total_pages - processed
     if remaining < budget.max_rows:
         logger.warning(
-            "Global page cap nearly reached: %d pages processed (cap=%d) — shrinking this session to %d rows.",
+            "Global page cap nearly reached: %d pages processed (cap=%d) — shrinking sessions to %d rows.",
             processed,
             max_total_pages,
             remaining,
         )
-    return SessionBudget(max_rows=min(budget.max_rows, remaining), max_bytes=budget.max_bytes)
+    return SessionBudget(max_rows=min(budget.max_rows, remaining), max_bytes=budget.max_bytes), remaining
 
 
 def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_table: str) -> tuple[set[str], str]:
@@ -186,12 +189,12 @@ def discover_pending_files(gcs_downloader: GCSDownloader, bq_extracao_pagina_tab
 
 
 # How many GCS filenames are BQ-checked + downloaded per iteration of
-# ``prepare_session_pdfs`` below. Bounds both the BigQuery request size
-# (the ``pending_files`` query inlines the names twice — a full-bucket
-# listing of 100k+ names in one query fails with HTTP 413) and the
-# download waste: only the final slice can contain PDFs downloaded but
-# not selected, so at most this many files are ever downloaded
-# unnecessarily per session.
+# ``prepare_session_pdfs`` below. Bounds the BigQuery request size (the
+# ``pending_files`` query inlines the names twice — a full-bucket listing
+# of 100k+ names in one query fails with HTTP 413). Per-slice download
+# waste is bounded too: a slice is only ever downloaded to fill groups
+# that still have room, so files downloaded but never selected stay within
+# roughly one slice past the last full group.
 _SESSION_PREP_SLICE_SIZE = 200
 
 
@@ -201,23 +204,34 @@ def prepare_session_pdfs(
     budget: SessionBudget,
     local_dir: Path,
     workers: int,
-) -> tuple[dict[str, Path], BatchSessionSelection]:
-    """Download just enough pending PDFs to fill one session's row/byte budget.
+    *,
+    max_sessions: int = 1,
+    total_max_rows: int | None = None,
+) -> tuple[dict[str, Path], list[BatchSessionSelection]]:
+    """Download pending PDFs and split them into budget-fitting session groups.
 
     Incremental replacement for the old download-everything-then-select
     sequence (list all pending → download all pending → pick a prefix that
     fits): with a full bucket listing that meant downloading 100k+ PDFs to
     use ~50. Instead, walk the sorted GCS listing in slices, BQ-checking
-    and downloading one slice at a time, and stop as soon as the running
-    page total or estimated byte size would overflow its budget — mirroring
-    ``select_pdfs_within_row_budget``'s no-skip prefix semantics (files
-    after the first overflow stay pending for a later session; they are
-    never skipped in favor of a smaller later file).
+    and downloading one slice at a time, assigning files to consecutive
+    groups in order. A group closes as soon as the next file would overflow
+    its row/byte budget; files after a closed group start the next one
+    (same no-skip prefix semantics ``select_pdfs_within_row_budget`` uses
+    within a group — a file is never skipped in favor of a smaller later
+    file). Unselected files simply stay pending for a later session, since
+    pending-ness is derived from BigQuery, not from what this function
+    returns.
+
+    With ``max_sessions=1`` (default) this yields at most one group and
+    stops downloading at the first overflow — the same submission behavior
+    as the old single-session path, except a file too big for a whole
+    session alone is skipped (stays pending) instead of stalling the run.
 
     :param gcs_downloader: Downloader scoped to the PDFs bucket/prefix.
     :param bq_extracao_pagina_table: Full BQ table ID used to derive
         "already done" (see :class:`PageStatusReader`).
-    :param budget: Row-count and byte-size limits for this session — see
+    :param budget: Per-group row-count and byte-size limits — see
         :class:`SessionBudget` and ``row_counting.MAX_CLASSIFICATION_BYTES_DEFAULT``
         for why both exist (Bifrost rejects uploads above ~100MB
         regardless of row count).
@@ -227,9 +241,18 @@ def prepare_session_pdfs(
         files behind in this dir (bounded by ``_SESSION_PREP_SLICE_SIZE``);
         harmless, the dir is throwaway.
     :param workers: Concurrency for each slice's batch download.
-    :returns: ``(selected_paths, selection)`` where ``selected_paths`` maps
-        pdf_name -> local path for exactly the selected PDFs, and
-        ``selection`` is the combined :class:`BatchSessionSelection`.
+    :param max_sessions: Maximum session groups to form this run. ``1``
+        preserves the old one-session-per-run behavior; higher values fan
+        out independent sessions (disjoint PDF sets by construction, since
+        groups are consecutive runs of one sorted walk) for parallel
+        Vertex processing.
+    :param total_max_rows: Optional cap on total pages across all groups
+        this run (the remainder of a global page cap — see
+        :func:`resolve_submit_budget`). ``None`` means no total cap.
+    :returns: ``(selected_paths, groups)`` where ``selected_paths`` maps
+        pdf_name -> local path for exactly the selected PDFs across all
+        groups, and ``groups`` holds one :class:`BatchSessionSelection`
+        per session to submit (empty when nothing fit).
     :raises RuntimeError: If the current git commit can't be determined
         (same contract as :func:`discover_pending_files` — the commit tags
         every output row's pipeline version).
@@ -250,14 +273,33 @@ def prepare_session_pdfs(
 
     status_reader = PageStatusReader()
     selected_paths: dict[str, Path] = {}
-    selected_names: list[str] = []
+    groups: list[BatchSessionSelection] = []
     unreadable: list[str] = []
-    total_pages = 0
-    total_bytes_estimate = 0
-    remaining_rows = budget.max_rows
-    remaining_bytes = budget.max_bytes
+    total_all_pages = 0
+    cur_names: list[str] = []
+    cur_pages = 0
+    cur_bytes = 0
+    stopped = False
+
+    def _close_current_group() -> None:
+        nonlocal cur_names, cur_pages, cur_bytes
+        if cur_names:
+            groups.append(
+                BatchSessionSelection(
+                    selected_pdf_names=cur_names,
+                    total_pages=cur_pages,
+                    total_bytes_estimate=cur_bytes,
+                    skipped_pdf_names=[],
+                    unreadable_pdf_names=[],
+                )
+            )
+            cur_names, cur_pages, cur_bytes = [], 0, 0
 
     for i in range(0, len(names), _SESSION_PREP_SLICE_SIZE):
+        if stopped or len(groups) >= max_sessions:
+            break
+        if total_max_rows is not None and total_all_pages >= total_max_rows:
+            break
         chunk = set(names[i : i + _SESSION_PREP_SLICE_SIZE])
         pending = status_reader.find_pending_files(
             candidate_filenames=chunk,
@@ -270,43 +312,69 @@ def prepare_session_pdfs(
         downloaded = gcs_downloader.download_pdfs_batch(
             pdf_names=sorted(pending), local_dir=local_dir, batch_size=workers
         )
-        # download_pdfs_batch returns entries in completion order — sort
-        # for deterministic prefix selection (see row_counting's contract).
-        selection = select_pdfs_within_row_budget(
-            dict(sorted(downloaded.items())), max_rows=remaining_rows, max_bytes=remaining_bytes
-        )
-        for name in selection.selected_pdf_names:
+        # download_pdfs_batch returns entries in completion order — walk
+        # them sorted so group membership is deterministic across runs.
+        for name in sorted(downloaded):
+            if len(groups) >= max_sessions:
+                stopped = True
+                break
+            if total_max_rows is not None and total_all_pages >= total_max_rows:
+                stopped = True
+                break
+            page_count = _count_pages(downloaded[name])
+            if page_count is None:
+                unreadable.append(name)
+                continue
+            est_bytes = _estimate_jsonl_bytes(downloaded[name])
+            if total_max_rows is not None and total_all_pages + page_count > total_max_rows:
+                stopped = True
+                break
+            if cur_pages + page_count > budget.max_rows or cur_bytes + est_bytes > budget.max_bytes:
+                if cur_names:
+                    _close_current_group()
+                    if len(groups) >= max_sessions:
+                        stopped = True
+                        break
+                    # Fresh group below — re-evaluate this file against it.
+                else:
+                    # Doesn't fit even an empty group: can never be part of
+                    # any session under this budget. Skip it (stays pending)
+                    # but keep planning the rest — stalling everything on
+                    # one oversized file would strand all later files.
+                    logger.warning(
+                        "Session prep: %s exceeds a full session budget alone — skipping, stays pending.",
+                        name,
+                    )
+                    continue
+                if page_count > budget.max_rows or est_bytes > budget.max_bytes:
+                    logger.warning(
+                        "Session prep: %s exceeds a full session budget alone — skipping, stays pending.",
+                        name,
+                    )
+                    continue
+            cur_names.append(name)
             selected_paths[name] = downloaded[name]
-        selected_names.extend(selection.selected_pdf_names)
-        unreadable.extend(selection.unreadable_pdf_names)
-        total_pages += selection.total_pages
-        total_bytes_estimate += selection.total_bytes_estimate
-        remaining_rows -= selection.total_pages
-        remaining_bytes -= selection.total_bytes_estimate
+            cur_pages += page_count
+            cur_bytes += est_bytes
+            total_all_pages += page_count
+        if stopped:
+            break
 
-        if selection.skipped_pdf_names:
-            # First overflow (row or byte budget): full — later slices stay
-            # pending for the next session (no-skip semantics, same as before).
-            break
-        if remaining_rows <= 0 or remaining_bytes <= 0:
-            break
+    # Trailing open group. groups can only be at max_sessions here with an
+    # empty cur (adding stops the moment the cap is hit), so this never
+    # exceeds max_sessions — the len() guard is strictly defensive.
+    if cur_names and len(groups) < max_sessions:
+        _close_current_group()
 
     logger.warning(
-        "Session prep: %d PDFs selected (%d pages, ~%.1fMB / budget=%d rows, %.1fMB) | %d unreadable",
-        len(selected_names),
-        total_pages,
-        total_bytes_estimate / 1_000_000,
-        budget.max_rows,
-        budget.max_bytes / 1_000_000,
+        "Session prep: %d session group(s), %d PDFs selected (%d pages, ~%.1fMB) | %d unreadable",
+        len(groups),
+        len(selected_paths),
+        total_all_pages,
+        sum(g.total_bytes_estimate for g in groups) / 1_000_000,
         len(unreadable),
     )
-    return selected_paths, BatchSessionSelection(
-        selected_pdf_names=selected_names,
-        total_pages=total_pages,
-        total_bytes_estimate=total_bytes_estimate,
-        skipped_pdf_names=[],
-        unreadable_pdf_names=unreadable,
-    )
+    return selected_paths, groups
 
 
 @dataclass(frozen=True)

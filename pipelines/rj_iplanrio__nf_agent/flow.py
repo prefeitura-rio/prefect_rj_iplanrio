@@ -115,6 +115,7 @@ def rj_iplanrio__nf_agent(
     # --- Limites de submissão (modo batch) ---
     max_total_pages: int | None = None,
     force_submit: bool = False,
+    max_sessions_per_run: int = 1,
     # --- Modo sync (Bifrost, por página) ---
     db_path: str = "/tmp/nf_pipeline_cache.db",
     batch_size: int = 1000,
@@ -141,6 +142,11 @@ def rj_iplanrio__nf_agent(
     :param force_submit: Bypass the submit-failure gate for one run — the
         manual recovery path after fixing whatever broke the last session
         (see ``utils.pipeline.resolve_submit_budget``).
+    :param max_sessions_per_run: Maximum batch sessions to submit in one
+        run (default ``1`` = old behavior). Higher values fan out disjoint
+        session groups — planned from a single sorted walk, so groups never
+        overlap — for parallel Vertex processing (see
+        ``utils.pipeline.prepare_session_pdfs``).
     """
     if execution_mode not in VALID_EXECUTION_MODES:
         raise ValueError(f"Invalid execution_mode: {execution_mode!r}. Must be one of {sorted(VALID_EXECUTION_MODES)}")
@@ -155,6 +161,7 @@ def rj_iplanrio__nf_agent(
             mes_envio=mes_envio,
             max_total_pages=max_total_pages,
             force_submit=force_submit,
+            max_sessions_per_run=max_sessions_per_run,
         )
     else:
         _run_sync_mode(
@@ -258,15 +265,16 @@ def _run_batch_mode(
     mes_envio: str | None,
     max_total_pages: int | None,
     force_submit: bool,
+    max_sessions_per_run: int,
 ) -> None:
-    """Poll active Bifrost batch sessions, then submit the next one if idle and PDFs are pending.
+    """Poll active Bifrost batch sessions, then submit new ones if idle and PDFs are pending.
 
-    :param max_classification_rows: Row budget for a new classification job —
+    :param max_classification_rows: Row budget per classification job —
         see ``utils/batch/row_counting.py`` for why this is a page count,
         not a PDF count. Unused if no new session is submitted this run.
         Shrunk against ``max_total_pages`` when the cap is nearly reached.
-    :param max_classification_bytes: Estimated JSONL byte-size budget for a
-        new classification job — see ``utils/batch/row_counting.py`` for
+    :param max_classification_bytes: Estimated JSONL byte-size budget per
+        classification job — see ``utils/batch/row_counting.py`` for
         why this exists alongside the row budget (Bifrost rejects uploads
         above ~100MB regardless of row count). Unused if no new session is
         submitted this run.
@@ -283,6 +291,12 @@ def _run_batch_mode(
         ``utils.pipeline.resolve_submit_budget``.
     :param force_submit: Bypass the submit-failure gate for one run — see
         ``utils.pipeline.resolve_submit_budget``.
+    :param max_sessions_per_run: Maximum sessions to submit in one run
+        (default ``1``). Higher values fan out disjoint session groups —
+        planned from a single sorted walk, so groups never overlap — for
+        parallel Vertex processing. Planning only happens when no session
+        is active (guard above), so two runs can never plan over the same
+        snapshot.
     """
     bq_extracao_pagina_table = os.getenv("BQ_EXTRACAO_PAGINA_TABLE")
     nf_batch_jobs_table = os.getenv("NF_BATCH_JOBS_TABLE")
@@ -323,7 +337,7 @@ def _run_batch_mode(
     # BEFORE any listing/downloading so capped/locked runs stay cheap
     # no-ops (poll above still runs: in-flight sessions must keep being
     # advanced even when no new session may start).
-    session_budget = check_submit_allowed_task(
+    session_budget, total_remaining = check_submit_allowed_task(
         nf_batch_jobs_table=nf_batch_jobs_table,
         bq_extracao_pagina_table=bq_extracao_pagina_table,
         budget=SessionBudget(max_rows=max_classification_rows, max_bytes=max_classification_bytes),
@@ -336,35 +350,39 @@ def _run_batch_mode(
 
     gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket, base_path=pdfs_base_path)
 
-    session_id = str(uuid.uuid4())
+    run_id = str(uuid.uuid4())
 
-    with tempfile.TemporaryDirectory(prefix=f"nf-batch-submit-{session_id}-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix=f"nf-batch-submit-{run_id}-") as temp_dir:
         # BQ-checks and downloads incrementally (slice by slice, in sorted
-        # order) and stops once the row budget is full — never downloads
-        # the whole pending set. See utils.pipeline.prepare_session_pdfs.
-        selected_paths, selection = prepare_session_pdfs_task(
+        # order), splitting pending PDFs into up to max_sessions_per_run
+        # disjoint budget-fitting groups — never downloads the whole
+        # pending set. See utils.pipeline.prepare_session_pdfs.
+        selected_paths, groups = prepare_session_pdfs_task(
             gcs_downloader=gcs_downloader,
             bq_extracao_pagina_table=bq_extracao_pagina_table,
             budget=session_budget,
             local_dir=temp_dir,
             workers=workers,
+            max_sessions=max_sessions_per_run,
+            total_max_rows=total_remaining,
         )
 
-        if not selection.selected_pdf_names:
+        if not groups:
             logger.info("No PDFs fit within the row budget (or all were unreadable) — nothing submitted.")
             return
 
-        result = submit_classification_job_task(
-            client=client,
-            nf_batch_jobs_table=nf_batch_jobs_table,
-            pdf_paths=selected_paths,
-            selection=selection,
-            session_id=session_id,
-        )
-
-    logger.info(
-        "Submitted classification batch job %s (%d rows, session=%s)",
-        result.bifrost_batch_id,
-        result.row_count,
-        session_id,
-    )
+        for selection in groups:
+            session_id = str(uuid.uuid4())
+            result = submit_classification_job_task(
+                client=client,
+                nf_batch_jobs_table=nf_batch_jobs_table,
+                pdf_paths={name: selected_paths[name] for name in selection.selected_pdf_names},
+                selection=selection,
+                session_id=session_id,
+            )
+            logger.info(
+                "Submitted classification batch job %s (%d rows, session=%s)",
+                result.bifrost_batch_id,
+                result.row_count,
+                session_id,
+            )
