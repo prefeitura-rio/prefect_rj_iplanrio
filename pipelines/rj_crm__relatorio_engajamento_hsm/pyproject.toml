@@ -1,0 +1,17 @@
+[project]
+name = "rj_crm__relatorio_engajamento_hsm"
+version = "0.1.0"
+description = "Relatório de engajamento por HSM (classificação + julgamento por LLM, .docx) publicado no Google Drive"
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-bigquery>=3.25.0",
+    "google-api-python-client>=2.100.0",
+    "prefect==3.4.9",
+    "prefect-docker>=0.6.5",
+    "requests>=2.32.4",
+    "pandas>=2.3.1",
+    "python-docx>=1.1.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
