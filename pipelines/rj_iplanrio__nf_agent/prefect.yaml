@@ -85,7 +85,21 @@ deployments:
     parameters:
       max_classification_rows: 1000
       workers: 200
-    # No `schedules:` in staging — see STYLEGUIDE.md §9.3.
+    # TEMPORARY deviation from STYLEGUIDE.md §9.3 ("No schedules: in
+    # staging"): batch mode's classification/extraction round trip through
+    # Vertex takes longer than a person can practically babysit with manual
+    # `workflow_dispatch` runs (each poll/submit is one flow-run — see
+    # flow.py's module docstring), so a schedule here lets a session
+    # actually progress to completion while validating the newly-fixed
+    # submit+poll path end-to-end in staging. REMOVE once that validation
+    # is done — either back to no schedule (manual-only) or promote
+    # straight to the prod deployment below, which already has this same
+    # schedule as its permanent, intended one.
+    schedules:
+      - interval: 900 # 15 minutes
+        anchor_date: "2025-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: poll-submit-15min-TEMP
 
   - name: rj-iplanrio--nf-agent--prod
     version: "{{ get-commit-hash.stdout }}"
