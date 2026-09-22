@@ -2,9 +2,12 @@
 #
 # Entrypoint: flow.py:rj_crm__relatorio_engajamento_hsm
 #
-# Roda 1x/dia às 8h (America/Sao_Paulo): olha brutos_salesforce_staging.disparos_ativos
-# procurando disparo(s) com relatorio_engajamento_data_geracao == hoje, classifica as
-# conversas do HSM por LLM e publica o relatório (.docx + 2 csv) no Drive.
+# Roda 2x/dia, às 8h e às 18h (America/Sao_Paulo): olha
+# brutos_salesforce_staging.disparos_ativos procurando disparo(s) com
+# relatorio_engajamento_data_geracao == hoje, classifica as conversas do HSM por LLM e
+# publica o relatório (.docx + 2 csv) no Drive. A rodada da tarde é idempotente com a da
+# manhã (ja_existe_relatorio checa por data de geração, não por horário) — só pega HSM
+# que ainda não tinha relatório publicado hoje.
 #
 # Credenciais necessárias no secret do work pool (mesmo secretName usado por
 # rj_crm__agentforce_classificacao_llm):
@@ -61,7 +64,7 @@ deployments:
         image_pull_policy: Always
 
   # -----------------------------------------------------------------------
-  # Deployment de produção — cron diário às 8h (America/Sao_Paulo)
+  # Deployment de produção — cron 2x/dia, 8h e 18h (America/Sao_Paulo)
   # -----------------------------------------------------------------------
   - name: rj-crm--relatorio-engajamento-hsm--prod
     tags:
@@ -83,3 +86,7 @@ deployments:
         timezone: America/Sao_Paulo
         active: true
         slug: relatorio-engajamento-hsm-diario-8h
+      - cron: "0 18 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: relatorio-engajamento-hsm-diario-18h
