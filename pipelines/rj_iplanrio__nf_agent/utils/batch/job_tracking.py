@@ -209,7 +209,12 @@ def get_most_recent_event(nf_batch_jobs_table: str) -> BatchJobEvent | None:
     if df.empty:
         return None
 
-    row = df.iloc[0]
+    # NOTE: read via to_dict("records"), not df.iloc[0] — to_dict converts
+    # NULLs to plain None, while iloc preserves pandas' pd.NA, for which
+    # `is None` is False and int() explodes with TypeError. The latest event
+    # is very often a failed one, and failed events are recorded with
+    # row_count=NULL — exactly what crashed the first gated run in staging.
+    row = df.to_dict("records")[0]
     return BatchJobEvent(
         session_id=row["session_id"],
         phase=row["phase"],

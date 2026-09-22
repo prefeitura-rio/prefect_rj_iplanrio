@@ -56,6 +56,31 @@ class TestGetMostRecentEvent:
         assert event.error == "boom"
         assert event.row_count == 10
 
+    def test_null_row_count_from_bq_comes_back_as_none_not_crash(self):
+        # Regression test: failed events are recorded with row_count=NULL,
+        # which BigQuery returns as pd.NA (nullable Int64) — NOT None.
+        # `pd.NA is None` is False, so int() on it raised TypeError and
+        # crashed the first gated run in staging. to_dict("records")
+        # normalizes NA back to None.
+        df = pd.DataFrame(
+            {
+                "session_id": ["sess-1"],
+                "phase": ["classification"],
+                "bifrost_batch_id": ["batch-1"],
+                "state": [STATE_FAILED],
+                "input_file_id": ["file-1"],
+                "output_file_id": [None],
+                "row_count": pd.array([None], dtype="Int64"),
+                "error": ["boom"],
+            }
+        )
+        with patch.object(job_tracking.bigquery, "Client", return_value=_mock_bq_client(df)):
+            event = job_tracking.get_most_recent_event("proj.ds.nf_batch_jobs")
+
+        assert event is not None
+        assert event.state == STATE_FAILED
+        assert event.row_count is None
+
     def test_empty_table_returns_none(self):
         df = _df(
             [

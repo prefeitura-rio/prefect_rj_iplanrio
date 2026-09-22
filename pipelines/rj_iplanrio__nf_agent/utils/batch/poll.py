@@ -414,7 +414,10 @@ def _find_classification_event(nf_batch_jobs_table: str, session_id: str) -> Bat
     if df.empty:
         return None
 
-    row = df.iloc[0]
+    # NOTE: to_dict("records"), not df.iloc[0] — see job_tracking's
+    # get_most_recent_event comment on why iloc + `is None` explodes on
+    # NULL row_count (pd.NA).
+    row = df.to_dict("records")[0]
     return BatchJobEvent(
         session_id=row["session_id"],
         phase=row["phase"],
