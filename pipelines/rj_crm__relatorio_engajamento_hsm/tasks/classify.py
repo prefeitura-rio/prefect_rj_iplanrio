@@ -6,6 +6,7 @@ descoberta terminar de estabilizar o catálogo pra esse disparo."""
 from __future__ import annotations
 
 import json
+import math
 from collections import Counter
 from pathlib import Path
 
@@ -96,11 +97,13 @@ def classifica_conversas(
     max_output_tokens = max_output_tokens_para(tamanho_lote_classificacao)
     resultados_totais: list[dict] = []
     falhas_totais: Counter = Counter()
-    for i in range(0, len(df_sessoes), tamanho_lote_classificacao):
+    n_lotes = math.ceil(len(df_sessoes) / tamanho_lote_classificacao)
+    for n, i in enumerate(range(0, len(df_sessoes), tamanho_lote_classificacao), start=1):
         lote = df_sessoes.iloc[i : i + tamanho_lote_classificacao]
         resultados, falhas_lote = _classifica_lote(lote, bifrost, catalogo, max_output_tokens)
         resultados_totais.extend(resultados)
         falhas_totais.update(falhas_lote)
+        log(f"[CLASSIFICACAO] lote {n}/{n_lotes}: {len(resultados)} classificada(s), {sum(falhas_lote.values())} falha(s).")
 
     detalhe_falhas = ", ".join(f"{motivo}={qtd}" for motivo, qtd in falhas_totais.most_common()) or "nenhuma"
     log(f"[CLASSIFICACAO] {len(resultados_totais)} classificada(s), {sum(falhas_totais.values())} falha(s) [{detalhe_falhas}].")

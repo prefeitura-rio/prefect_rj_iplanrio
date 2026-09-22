@@ -283,7 +283,13 @@ def ja_existe_relatorio(nome_hsm: str, data_referencia: date, drive_pasta_raiz_i
         return False
     prefixo = _slug_geracao(nome_hsm, data_referencia)
     query = f"name contains '{prefixo}' and '{pasta_id}' in parents and trashed = false"
-    resultado = drive.files().list(q=query, fields="files(id, name)", spaces="drive").execute()
+    resultado = drive.files().list(
+        q=query,
+        fields="files(id, name)",
+        spaces="drive",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+    ).execute()
     return len(resultado.get("files", [])) > 0
 
 
