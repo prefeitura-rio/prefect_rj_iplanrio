@@ -21,6 +21,7 @@ MUNICIPIO_RIO_DE_JANEIRO: Final = 3304557
 
 # Paginação da API de features.
 DEFAULT_PAGE_SIZE: Final = 2000
+MAX_CONCURRENT_REQUESTS: Final = 5
 
 MESES_ABREV: Final[dict[int, str]] = {
     1: "jan",

@@ -21,6 +21,7 @@ from constants import (
     COUNT_TIMEOUT,
     DEFAULT_PAGE_SIZE,
     DOMAIN_TIMEOUT,
+    MAX_CONCURRENT_REQUESTS,
     QUERY_TIMEOUT,
 )
 
@@ -136,6 +137,7 @@ class IspGeoClient:
     async def _fetch_page_async(
         self,
         session: aiohttp.ClientSession,
+        sem: asyncio.Semaphore,
         where: str,
         offset: int,
         page_size: int,
@@ -145,6 +147,7 @@ class IspGeoClient:
         """Busca uma única página de features de forma assíncrona.
 
         :param session: Sessão aiohttp compartilhada.
+        :param sem: Semáforo que limita requisições simultâneas.
         :param where: Cláusula ``WHERE`` no dialeto SQL da API ArcGIS.
         :param offset: Índice do primeiro registro da página.
         :param page_size: Quantidade de registros por página.
@@ -157,7 +160,6 @@ class IspGeoClient:
         params = {
             "where": where,
             "outFields": "*",
-            # "orderByFields": "class_geocode DESC, datf ASC",
             "returnGeometry": "false",
             "resultOffset": offset,
             "resultRecordCount": page_size,
@@ -165,26 +167,23 @@ class IspGeoClient:
             "token": self._token,
         }
 
-        async with session.get(
-            url,
-            params=params,
-            timeout=aiohttp.ClientTimeout(total=QUERY_TIMEOUT),
-        ) as resp:
-
-            resp.raise_for_status()
-            data = await resp.json(content_type=None)
+        async with sem:
+            async with session.get(
+                url,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=QUERY_TIMEOUT),
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json(content_type=None)
 
         if "error" in data:
             raise RuntimeError(f"Erro na consulta ao ISP-GEO (offset={offset}): {data['error']}")
 
         features = [f["attributes"] for f in data.get("features", [])]
         pct = round(page_num / total_pages * 100)
-        print(
-            f"[página {page_num}/{total_pages}"
-            f"({pct}%), pageSize={page_size}] → {len(features)} itens"
+        logger.info(
+            f"GET {url} [página {page_num}/{total_pages} ({pct}%), pageSize={page_size}] → {len(features)} itens"
         )
-
-
         return features
 
     async def _fetch_all_async(
@@ -192,27 +191,30 @@ class IspGeoClient:
         where: str,
         total: int,
         page_size: int,
+        max_concurrent_requests: int,
     ) -> list[dict]:
         """Busca todas as páginas de forma assíncrona e em paralelo.
 
-        Divide o total de registros em offsets e dispara todas as requisições
-        simultaneamente usando ``aiohttp``.
+        Limita a concorrência via semáforo, evitando sobrecarregar o servidor.
 
         :param where: Cláusula ``WHERE`` no dialeto SQL da API ArcGIS.
         :param total: Total de registros esperados (retornado por :meth:`count_records`).
         :param page_size: Quantidade de registros por página.
+        :param max_concurrent_requests: Número máximo de requisições simultâneas.
         :returns: Lista completa de dicts de atributos, na ordem dos offsets.
         """
         offsets = list(range(0, total, page_size))
         total_pages = len(offsets)
-        print(
-            f"Buscando {total} registros em {total_pages} página(s) assíncronas (pageSize={page_size})."
+        logger.info(
+            f"Buscando {total} registros em {total_pages} página(s) "
+            f"(pageSize={page_size}, concorrência={max_concurrent_requests})."
         )
 
+        sem = asyncio.Semaphore(max_concurrent_requests)
         async with aiohttp.ClientSession() as session:
             tasks = [
                 self._fetch_page_async(
-                    session, where, offset, page_size,
+                    session, sem, where, offset, page_size,
                     page_num=i + 1,
                     total_pages=total_pages,
                 )
@@ -226,7 +228,10 @@ class IspGeoClient:
         return features
 
     def fetch_features(
-        self, where: str, page_size: int = DEFAULT_PAGE_SIZE
+        self,
+        where: str,
+        page_size: int = DEFAULT_PAGE_SIZE,
+        max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
     ) -> list[dict]:
         """Busca todas as features que batem com ``where``, paginando de forma assíncrona.
 
@@ -235,12 +240,18 @@ class IspGeoClient:
 
         :param where: Cláusula ``WHERE`` no dialeto SQL da API ArcGIS.
         :param page_size: Quantidade de registros por página.
+        :param max_concurrent_requests: Número máximo de requisições simultâneas.
         :returns: Lista de dicts de atributos (``attributes``) de cada feature.
         :raises RuntimeError: Se a API retornar um erro em alguma página.
         """
         total = self.count_records(where=where)
         if total == 0:
-            print(f"Nenhum registro encontrado para o filtro informado.")
+            logger.info(f"Nenhum registro encontrado para o filtro informado.")
             return []
 
-        return asyncio.run(self._fetch_all_async(where=where, total=total, page_size=page_size))
+        return asyncio.run(self._fetch_all_async(
+            where=where,
+            total=total,
+            page_size=page_size,
+            max_concurrent_requests=max_concurrent_requests,
+        ))

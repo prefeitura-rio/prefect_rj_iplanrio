@@ -6,7 +6,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
-from constants import MUNICIPIO_RIO_DE_JANEIRO
+from constants import MUNICIPIO_RIO_DE_JANEIRO, MAX_CONCURRENT_REQUESTS
 from task import fetch_ocorrencias_task, upload_ocorrencias_task, resolve_dates
 from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
@@ -23,6 +23,7 @@ def rj_ssm__isp(
     data_fim: str | None = None,
     todos: bool = True,
     municipio: int = MUNICIPIO_RIO_DE_JANEIRO,
+    max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
 ) -> None:
     """Extrai ocorrências da camada de microdados do ISP-GEO e carrega no BigQuery.
 
@@ -38,6 +39,8 @@ def rj_ssm__isp(
     :param data_fim: Data de fim (``YYYY-MM-DD``). Sobrescreve o default da fase.
     :param todos: Se ``True``, ignora o filtro de tipos de delito e traz tudo.
     :param municipio: Código IBGE do município do fato.
+    :param max_concurrent_requests: Número máximo de requisições assíncronas simultâneas
+        ao buscar páginas. Default: ``MAX_CONCURRENT_REQUESTS``.
     """
     data_inicio, data_fim = resolve_dates(fase, data_inicio, data_fim)
 
@@ -48,6 +51,7 @@ def rj_ssm__isp(
         data_fim=data_fim,
         todos=todos,
         municipio=municipio,
+        max_concurrent_requests=max_concurrent_requests,
     )
 
     upload_ocorrencias_task(

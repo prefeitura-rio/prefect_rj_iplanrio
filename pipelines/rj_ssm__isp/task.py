@@ -15,6 +15,7 @@ from tenacity import retry
 from client import IspGeoClient
 from constants import (
     DEFAULT_CRIME_TITLES,
+    MAX_CONCURRENT_REQUESTS,
     MUNICIPIO_RIO_DE_JANEIRO,
     TMP_BASE,
     SP_TZ
@@ -30,6 +31,7 @@ def fetch_ocorrencias_task(
     data_fim: str,
     todos: bool = False,
     municipio: int = MUNICIPIO_RIO_DE_JANEIRO,
+    max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
 ) -> pd.DataFrame:
     """Extrai ocorrências do ISP-GEO para o período e filtro informados.
 
@@ -41,6 +43,7 @@ def fetch_ocorrencias_task(
     :param data_fim: Data de fim (``YYYY-MM-DD``), inclusive.
     :param todos: Se ``True``, ignora o filtro de tipo de delito.
     :param municipio: Código IBGE do município do fato.
+    :param max_concurrent_requests: Número máximo de requisições assíncronas simultâneas.
     :returns: DataFrame com uma linha por ocorrência, colunas nomeadas para o BigQuery.
     """
     with IspGeoClient() as client:
@@ -69,7 +72,7 @@ def fetch_ocorrencias_task(
 
         total_no_servidor = client.count_records(where=where)
         log(f"Registros no servidor (returnCountOnly): {total_no_servidor}")
-        raw_rows = client.fetch_features(where=where)
+        raw_rows = client.fetch_features(where=where, max_concurrent_requests=max_concurrent_requests)
         log(f"{len(raw_rows)} ocorrências baixadas.")
 
         if len(raw_rows) != total_no_servidor:
