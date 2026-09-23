@@ -7,7 +7,10 @@ dependencies = [
     "db-dtypes>=1.3.0",
     "google-api-python-client>=2.100.0",
     "google-cloud-bigquery[bqstorage]>=3.25.0",
-    "google-cloud-storage>=2.18.0",
+    # >=2.10.0, não >=2.18.0: várias pipelines do workspace fixam ==2.10.0 exato
+    # (rj_crm__api_wetalkie e outras), e o uv.lock é um só pro repo inteiro — a API que
+    # usamos (storage.Client, bucket/blob, upload/download) já existe nessa versão.
+    "google-cloud-storage>=2.10.0",
     "lightgbm>=4.5.0",
     "matplotlib>=3.8.0",
     "numpy>=2.0",
