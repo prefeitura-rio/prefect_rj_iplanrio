@@ -99,6 +99,10 @@ from .utils.orchestration import BatchRunParams
 from .utils.pipeline import resolve_month_base_path
 
 logger = get_logger(__name__)
+# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
+# (bug em investigação). Workaround temporário: usamos logger.warning()
+# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
+# logger.info() quando o bug for corrigido.
 
 VALID_EXECUTION_MODES = frozenset({"sync", "batch"})
 
@@ -324,13 +328,13 @@ def _run_batch_mode(
     )
     finished_sessions = poll_active_sessions_task(client, poll_config)
     if finished_sessions:
-        logger.info("Sessions finished this run: %s", finished_sessions)
+        logger.warning("Sessions finished this run: %s", finished_sessions)
 
     # Submitting is a guarded no-op if a session is still active (checked
     # again here, after polling, since polling may have just advanced a
     # session to extraction rather than finished it) — see module docstring.
     if has_active_session_task(nf_batch_jobs_table):
-        logger.info("A batch session is still active after polling — nothing to submit this run.")
+        logger.warning("A batch session is still active after polling — nothing to submit this run.")
         return
 
     # Failure gate + global page cap — see resolve_submit_budget. Checked
@@ -345,7 +349,7 @@ def _run_batch_mode(
         force_submit=force_submit,
     )
     if session_budget is None:
-        logger.info("Submission not allowed this run (failure gate or page cap) — nothing to submit.")
+        logger.warning("Submission not allowed this run (failure gate or page cap) — nothing to submit.")
         return
 
     gcs_downloader = GCSDownloader(credentials_path=None, bucket_name=gcs_bucket, base_path=pdfs_base_path)
@@ -368,7 +372,7 @@ def _run_batch_mode(
         )
 
         if not groups:
-            logger.info("No PDFs fit within the row budget (or all were unreadable) — nothing submitted.")
+            logger.warning("No PDFs fit within the row budget (or all were unreadable) — nothing submitted.")
             return
 
         for selection in groups:
@@ -380,7 +384,7 @@ def _run_batch_mode(
                 selection=selection,
                 session_id=session_id,
             )
-            logger.info(
+            logger.warning(
                 "Submitted classification batch job %s (%d rows, session=%s)",
                 result.bifrost_batch_id,
                 result.row_count,

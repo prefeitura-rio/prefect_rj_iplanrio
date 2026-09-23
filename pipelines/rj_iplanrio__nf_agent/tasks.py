@@ -15,6 +15,7 @@ from typing import Any
 
 from openai import OpenAI
 from prefect import task
+from prefect.cache_policies import NO_CACHE
 
 from .utils import orchestration
 from .utils.batch import job_tracking
@@ -173,7 +174,7 @@ def prepare_session_pdfs_task(
     )
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def submit_classification_job_task(
     client: OpenAI,
     nf_batch_jobs_table: str,
@@ -181,7 +182,13 @@ def submit_classification_job_task(
     selection: BatchSessionSelection,
     session_id: str,
 ) -> ClassificationSubmitResult:
-    """Build the classification JSONL input and submit the Bifrost batch job."""
+    """Build the classification JSONL input and submit the Bifrost batch job.
+
+    Never result-cached (``NO_CACHE``): the ``OpenAI`` client input is not
+    serializable so Prefect can't hash it (noisy HashError on every run),
+    and — more importantly — this task has side effects (submits a real
+    batch job, writes tracking rows) that must execute on every run.
+    """
     return submit_classification_job(
         client=client,
         nf_batch_jobs_table=nf_batch_jobs_table,
@@ -191,7 +198,12 @@ def submit_classification_job_task(
     )
 
 
-@task
+@task(cache_policy=NO_CACHE)
 def poll_active_sessions_task(client: OpenAI, config: PollConfig) -> list[str]:
-    """Check every active session's Bifrost batch status and advance/finish it."""
+    """Check every active session's Bifrost batch status and advance/finish it.
+
+    Never result-cached (``NO_CACHE``): same two reasons as
+    ``submit_classification_job_task`` — unserializable client input, and
+    polling must actually execute every run (it advances sessions).
+    """
     return poll_once(client, config)
