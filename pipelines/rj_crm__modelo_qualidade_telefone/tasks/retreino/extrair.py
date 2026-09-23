@@ -10,6 +10,7 @@ from prefect_rj_iplanrio.sql import load_query
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import calcula_cobertura
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.features import renderiza_features_sql
 
 logger = get_logger(__name__)
@@ -71,6 +72,7 @@ def extrai_treino(environment: str) -> pd.DataFrame:
     logger.info(
         "Treino extraído: %d linhas, %.1f%% HighDelivery.", len(df), 100 * df["high_delivery"].mean()
     )
+    logger.info("Cobertura das features (treino):\n%s", calcula_cobertura(df).to_string(index=False))
     return df
 
 

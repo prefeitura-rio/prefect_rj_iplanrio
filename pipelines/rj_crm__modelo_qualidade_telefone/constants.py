@@ -61,13 +61,33 @@ FEATURES_NUMERICAS = [
 ]
 
 # Dummies calculadas em queries/features_telefone.sql (as categorias fixas moram lá).
-FEATURES_DUMMIES = [
-    *[f"ddd_{d}" for d in ["11", "21", "22", "24", "83", "outros"]],
-    *[f"qualidade_{q}" for q in ["INVALIDO", "SUSPEITO", "VALIDO"]],
-]
+# Agrupadas por origem (não só a lista achatada) — usado pelo relatório de cobertura
+# (tasks/retreino/relatorio.py::gera_csv_cobertura): "telefone tem DDD preenchido" é 1
+# pergunta sobre as 6 colunas ddd_*, não 6 perguntas separadas.
+GRUPOS_DUMMIES = {
+    "ddd_categoria": [f"ddd_{d}" for d in ["11", "21", "22", "24", "83", "outros"]],
+    "telefone_qualidade": [f"qualidade_{q}" for q in ["INVALIDO", "SUSPEITO", "VALIDO"]],
+}
+FEATURES_DUMMIES = [coluna for colunas in GRUPOS_DUMMIES.values() for coluna in colunas]
 
 # Features fracionárias (FLOAT64 na query); todas as outras são contagens/dias/dummies (INT64).
 FEATURES_FLOAT = ["taxa_sucesso_anterior", "concentracao_familiar", "pct_cpfs_menor_idade"]
+
+# Sentinela -1 ("sem dado") usada por essas features numéricas (ver COALESCE(..., -1) em
+# queries/features_telefone.sql) — as demais features numéricas usam 0 como valor REAL de
+# cold start, não sentinela de dado faltante. Mesma lista de
+# qualidade_telefone_modelo/src/qualidade_telefone_modelo/config.py, conferida contra o SQL.
+FEATURES_COM_SENTINELA = [
+    "taxa_sucesso_anterior",
+    "dias_desde_ultimo_disparo",
+    "dias_desde_ultimo_disparo_sucesso",
+    "dias_desde_ultima_resposta",
+    *[f"dias_desde_atualizacao_{s}" for s in SISTEMAS],
+    "dias_desde_primeiro_registro",
+    "qtd_telefones_cpf_recente",
+    "concentracao_familiar",
+    "pct_cpfs_menor_idade",
+]
 
 # Ordem que o modelo espera: o LightGBM em formato nativo prediz por posição, então o
 # código sempre seleciona `df[FEATURES]` antes de prever, nunca confia na ordem do SQL.

@@ -8,6 +8,7 @@ Ver TODO do projeto pra detalhe de cada parte.
 """
 
 from datetime import date
+from typing import Literal, get_args
 
 from prefect import flow
 from prefect_rj_iplanrio.logging import get_logger
@@ -30,12 +31,15 @@ from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.publica_tabela impo
 
 logger = get_logger(__name__)
 
-MODOS_VALIDOS = ("score", "retreino")
+# Literal (não str solto): o Prefect gera o formulário da UI a partir do schema do tipo —
+# com Literal, "modo" vira um dropdown de 2 opções em vez de campo de texto livre.
+Modo = Literal["score", "retreino"]
+MODOS_VALIDOS = get_args(Modo)
 
 
 @flow(log_prints=True)
 def rj_crm__modelo_qualidade_telefone(
-    modo: str = "score",
+    modo: Modo = "score",
     environment: str = "prod",
     dataset_id: str = constants.DATASET_ID,
     table_id_score: str = constants.TABLE_ID_SCORE,
@@ -122,7 +126,7 @@ def rj_crm__modelo_qualidade_telefone(
         tabela_avaliacao, environment=environment, dataset_id=dataset_id, table_id=table_id_avaliacao
     )
     publica_relatorio_task(
-        resultado_treino, versao, drive_pasta_raiz_id, environment, resultado_simulacao, decisao
+        resultado_treino, versao, drive_pasta_raiz_id, environment, resultado_simulacao, decisao, df_treino
     )
 
     logger.info("Retreino %s concluído: promovido=%s (motivos: %s).", versao, decisao.promovido, decisao.motivos)

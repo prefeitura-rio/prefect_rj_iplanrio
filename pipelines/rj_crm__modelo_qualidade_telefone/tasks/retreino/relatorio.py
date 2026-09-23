@@ -10,6 +10,7 @@ import csv
 import io
 
 import matplotlib
+import pandas as pd
 
 matplotlib.use("Agg")  # sem display — só gera a imagem em memória
 import matplotlib.pyplot as plt
@@ -18,6 +19,7 @@ from prefect import task
 from prefect_rj_iplanrio.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import calcula_cobertura
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import ResultadoSimulacao
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import DecisaoGate
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.treinar import ResultadoTreino
@@ -127,6 +129,20 @@ def gera_texto_gate(decisao: DecisaoGate) -> bytes:
     return ("\n".join(linhas) + "\n").encode("utf-8")
 
 
+def gera_csv_cobertura(df_treino: pd.DataFrame) -> bytes:
+    """CSV com o % de linhas preenchidas por feature (``tasks/cobertura.py``), calculado
+    sobre o DataFrame CRU do treino — antes de virar ``X`` pro modelo, pra pegar fonte
+    quebrada (uma feature virando sentinela/0 pra quase todo mundo não aparece só olhando
+    o modelo já treinado).
+
+    :param df_treino: Saída de ``tasks/retreino/extrair.py::extrai_treino`` (antes do split
+        held-out/fit final — a cobertura é sobre o dataset inteiro).
+    """
+    buffer = io.StringIO()
+    calcula_cobertura(df_treino).to_csv(buffer, index=False)
+    return buffer.getvalue().encode("utf-8")
+
+
 def publica_relatorio(
     resultado_treino: ResultadoTreino,
     versao: str,
@@ -134,10 +150,12 @@ def publica_relatorio(
     environment: str,
     resultado_simulacao: ResultadoSimulacao | None = None,
     decisao: DecisaoGate | None = None,
+    df_treino: pd.DataFrame | None = None,
 ) -> None:
     """Sobe os artefatos do retreino pra subpasta ``versao`` da pasta raiz: sempre os 4 de
-    treino/SHAP; simulação e gate entram quando fornecidos (o retreino sempre passa os 2 —
-    os parâmetros são opcionais só pra permitir montar/testar o relatório de treino sozinho).
+    treino/SHAP; simulação, gate e cobertura entram quando fornecidos (o retreino sempre
+    passa os 3 — os parâmetros são opcionais só pra permitir montar/testar o relatório de
+    treino sozinho).
 
     :param resultado_treino: Saída de ``treinar.treina``.
     :param versao: Nome da subpasta (a data do treino — mesma versão publicada no GCS).
@@ -146,6 +164,8 @@ def publica_relatorio(
     :param environment: ``"prod"`` ou ``"staging"``.
     :param resultado_simulacao: Saída de ``avaliar_simulacao.avalia_simulacao``.
     :param decisao: Saída de ``promover.avalia_gate``.
+    :param df_treino: Saída de ``extrair.extrai_treino`` (o DataFrame cru, não o
+        ``ResultadoTreino``) — pra ``gera_csv_cobertura``.
     :raises RuntimeError: Se a pasta raiz não existir/não estiver acessível.
     """
     servico = drive.get_drive_service(environment)
@@ -166,6 +186,8 @@ def publica_relatorio(
         drive.upload_bytes(servico, pasta_id, "simulacao.csv", gera_csv_simulacao(resultado_simulacao), "text/csv")
     if decisao is not None:
         drive.upload_bytes(servico, pasta_id, "gate.txt", gera_texto_gate(decisao), "text/plain")
+    if df_treino is not None:
+        drive.upload_bytes(servico, pasta_id, "cobertura.csv", gera_csv_cobertura(df_treino), "text/csv")
 
     logger.info("Relatório da versão %s publicado no Drive (pasta %s).", versao, pasta_id)
 
@@ -178,6 +200,9 @@ def publica_relatorio_task(
     environment: str,
     resultado_simulacao: ResultadoSimulacao | None = None,
     decisao: DecisaoGate | None = None,
+    df_treino: pd.DataFrame | None = None,
 ) -> None:
     """Task-wrapper fina de :func:`publica_relatorio`."""
-    publica_relatorio(resultado_treino, versao, drive_pasta_raiz_id, environment, resultado_simulacao, decisao)
+    publica_relatorio(
+        resultado_treino, versao, drive_pasta_raiz_id, environment, resultado_simulacao, decisao, df_treino
+    )

@@ -20,6 +20,7 @@ import pyarrow.parquet as pq
 from prefect_rj_iplanrio.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES, FEATURES_FLOAT
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import AcumuladorCobertura
 
 logger = get_logger(__name__)
 
@@ -87,6 +88,7 @@ def gera_parquet_scores(
     caminho.parent.mkdir(parents=True, exist_ok=True)
     probs: list[np.ndarray] = []
     n_linhas = 0
+    cobertura = AcumuladorCobertura()
     escritor: pq.ParquetWriter | None = None
     try:
         for i, lote in enumerate(lotes, start=1):
@@ -97,6 +99,7 @@ def gera_parquet_scores(
             escritor.write_table(tabela)
             probs.append(prob)
             n_linhas += tabela.num_rows
+            cobertura.atualiza(lote)  # acumula só contadores — não guarda o lote
             logger.info("Lote %d pontuado (%d telefones, %d pares)", i, len(lote), tabela.num_rows)
     finally:
         if escritor is not None:
@@ -104,6 +107,10 @@ def gera_parquet_scores(
 
     if not probs:
         raise ValueError("nenhuma linha para pontuar")
+    # cobertura sai no fim da rodada (não logo após "extrair"): aqui extração e pontuação
+    # acontecem juntas, lote a lote — não materializamos o universo inteiro (~9M linhas) de
+    # uma vez, então não existe um momento único "extraído, ainda não pontuado".
+    logger.info("Cobertura das features (scoring):\n%s", cobertura.tabela().to_string(index=False))
     todas = np.concatenate(probs)
     return EstatisticasScores(
         n_telefones=len(todas),
