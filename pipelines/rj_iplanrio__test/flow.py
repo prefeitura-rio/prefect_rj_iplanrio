@@ -5,7 +5,6 @@ sensores, aplica validação e cálculo estatístico, e publica o resultado nos
 logs do Prefect — servindo de referência de arquitetura para novas pipelines.
 """
 
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from prefect_rj_iplanrio.log import get_logger
@@ -40,8 +39,6 @@ def rj_iplanrio__test(
     :param desvio: Desvio padrão da distribuição (padrão: ``3.0``).
     :param unidade: Unidade de medida dos valores (padrão: ``"°C"``).
     """
-    rename_current_flow_run_task(new_name=f"test--{sensor_id}")
-
     logger.debug(
         "[flow] DEBUG — parâmetros recebidos: sensor=%s, n=%d, media=%.1f, desvio=%.1f, unidade=%s",
         sensor_id,
@@ -76,5 +73,3 @@ def rj_iplanrio__test(
     publicar_relatorio_task(relatorio=relatorio)
 
     logger.info("[flow] INFO — pipeline de teste finalizada com sucesso.")
-
-rj_iplanrio__test()
