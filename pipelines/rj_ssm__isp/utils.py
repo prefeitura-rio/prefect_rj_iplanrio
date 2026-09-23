@@ -195,6 +195,10 @@ def decode_row(attrs: dict, domains: dict[str, dict[int, str]]) -> dict:
     """
     row = dict(attrs)
     ffaixa_code = attrs.get("ffaixa")
+    # Renomeia o campo "fase" da API para "fase_divulgacao" para liberar
+    # a chave "fase" para o label de fase do pipeline.
+    if "fase" in row:
+        row["fase_divulgacao"] = row.pop("fase")
     for field in DATE_FIELDS:
         row[field] = format_date(attrs.get(field))
     for field, mapping in domains.items():

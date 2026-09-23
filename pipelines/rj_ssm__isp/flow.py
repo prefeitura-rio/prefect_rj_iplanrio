@@ -46,6 +46,7 @@ def rj_ssm__isp(
     dataframe = fetch_ocorrencias_task(
         data_inicio=data_inicio,
         data_fim=data_fim,
+        fase=fase,
         todos=todos,
         municipio=municipio,
         max_concurrent_requests=max_concurrent_requests,
@@ -56,10 +57,7 @@ def rj_ssm__isp(
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
-        fase=fase
-
     )
 
 rj_ssm__isp(
-
 )

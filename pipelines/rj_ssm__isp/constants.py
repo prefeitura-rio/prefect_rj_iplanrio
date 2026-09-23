@@ -9,6 +9,12 @@ SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
 # Diretório base para arquivos temporários
 TMP_BASE: Final = "/tmp/rj_ssm__isp"
 
+# Fases de disponibilidade dos dados
+FASE_LABEL: dict[str, str] = {
+    "parcial": "Parcial",
+    "consolidados": "Consolidado",
+    "errata": "Errata",
+}
 
 # Timeouts HTTP (segundos)
 AUTH_TIMEOUT: Final = 30.0
@@ -99,6 +105,7 @@ DATE_FIELDS: Final[list[str]] = ["datc", "datf"]
 # coluna no BigQuery.
 CSV_COLUMNS: Final[list[tuple[str, str]]] = [
     ("id_hash", "id_hash"),
+    ("fase", "fase"),
     ("objectid", "objectid"),
     ("distancia_focoespecial", "distancia_area_foco_especial"),
     ("target_fid", "target_fid"),
@@ -109,7 +116,7 @@ CSV_COLUMNS: Final[list[tuple[str, str]]] = [
     ("delito_do", "titulo_do"),
     ("sim", "indicador_estrategico"),
     ("total_rbft", "total_rbft"),
-    ("fase", "fase_divulgacao"),
+    ("fase_divulgacao", "fase_divulgacao"),
     ("ano", "ano_registro"),
     ("mes", "mes_registro"),
     ("datc", "data_registro"),

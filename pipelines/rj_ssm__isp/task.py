@@ -18,7 +18,8 @@ from constants import (
     MAX_CONCURRENT_REQUESTS,
     MUNICIPIO_RIO_DE_JANEIRO,
     TMP_BASE,
-    SP_TZ
+    SP_TZ,
+    FASE_LABEL
 )
 from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre, _add_id_hash
 
@@ -32,6 +33,7 @@ def fetch_ocorrencias_task(
     todos: bool = False,
     municipio: int = MUNICIPIO_RIO_DE_JANEIRO,
     max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
+    fase: Literal["consolidados", "errata", "parcial"] = "parcial",
 ) -> pd.DataFrame:
     """Extrai ocorrências do ISP-GEO para o período e filtro informados.
 
@@ -44,6 +46,7 @@ def fetch_ocorrencias_task(
     :param todos: Se ``True``, ignora o filtro de tipo de delito.
     :param municipio: Código IBGE do município do fato.
     :param max_concurrent_requests: Número máximo de requisições assíncronas simultâneas.
+    :param fase: Fase de disponibilidade dos dados.
     :returns: DataFrame com uma linha por ocorrência, colunas nomeadas para o BigQuery.
     """
     with IspGeoClient() as client:
@@ -92,6 +95,9 @@ def fetch_ocorrencias_task(
                 f"{len(codigos_nao_mapeados)} código(s) de delito_do sem nome no domínio da camada: {', '.join(str(c) for c in codigos_nao_mapeados)}",
             )
 
+        fase_label = FASE_LABEL[fase]
+        for row in raw_rows:
+            row["fase"] = fase_label
         _add_id_hash(raw_rows)
         rows = [decode_row(r, domains) for r in raw_rows]
     return build_dataframe(rows)
@@ -142,7 +148,6 @@ def upload_ocorrencias_task(
     dataset_id: str,
     table_id: str,
     dump_mode: str,
-    fase : str,
 ) -> Optional[str]:
     """Particiona por data do fato e envia o DataFrame para o BigQuery via GCS.
 
@@ -157,7 +162,6 @@ def upload_ocorrencias_task(
         return None
 
     df = dataframe.astype("string")
-    df["fase"] = fase
     df['update_at'] = datetime.now(tz=SP_TZ).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
     df, _ = parse_date_columns(
         dataframe=df, partition_date_column="data_fato"
@@ -174,7 +178,7 @@ def upload_ocorrencias_task(
     )
 
     log(f"{len(df)} linha(s), {len(df.columns)} coluna(s) → enviando...")
-
+    breakpoint()
     create_table_and_upload_to_gcs(
         data_path=savepath,
         dataset_id=dataset_id,
