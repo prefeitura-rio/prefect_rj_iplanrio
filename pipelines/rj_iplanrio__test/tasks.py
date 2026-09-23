@@ -8,7 +8,7 @@ from prefect import task
 
 from prefect_rj_iplanrio.log import get_logger
 
-from utils import (
+from pipelines.rj_iplanrio__test.utils import (
     Medicao,
     Relatorio,
     calcular_relatorio,

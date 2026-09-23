@@ -25,6 +25,10 @@ pull:
 
 deployments:
   - name: rj-iplanrio--test--staging
+    tags:
+      - environment:staging
+      - severity:low
+      - code_owner:tricktx
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__test/flow.py:rj_iplanrio__test
     work_pool:
@@ -35,3 +39,5 @@ deployments:
         command: uv run --package rj_iplanrio__test -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+        env:
+          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_iplanrio__test

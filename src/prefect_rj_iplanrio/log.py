@@ -3,11 +3,20 @@
 Todo módulo (flow, task ou utilitário) deve obter seu logger via :func:`get_logger`
 em vez de chamar diretamente ``logging.getLogger`` ou ``prefect.get_run_logger``.
 
-Quando executado dentro de um flow ou task do Prefect, o logger retornado integra-se
-automaticamente com o sistema de logging do Prefect (exibe na UI, propaga para o
-``PREFECT_LOGGING_EXTRA_LOGGERS``, etc.). Quando chamado fora de qualquer contexto
-de execução (ex: testes unitários, scripts avulsos), cai de volta para o logger
-padrão do Python sem lançar exceções.
+## Como os logs chegam à UI do Prefect
+
+O Prefect captura logs de loggers externos via a variável de ambiente
+``PREFECT_LOGGING_EXTRA_LOGGERS``. Quando esse valor está definido, o Prefect
+adiciona seus handlers (que enviam logs para a API) em cada logger listado.
+Todo logger filho de um logger registrado propaga automaticamente para cima.
+
+Portanto, o mecanismo correto é:
+
+1. Cada pipeline declara ``PREFECT_LOGGING_EXTRA_LOGGERS`` no ``prefect.yaml``
+   apontando para o nome-raiz dos seus módulos (ex: ``flow,tasks,utils``).
+2. ``get_logger(__name__)`` retorna um ``logging.Logger`` padrão com
+   ``propagate=True`` (padrão do Python), permitindo que o handler do Prefect
+   capture todos os logs via hierarquia.
 
 Uso::
 
@@ -23,33 +32,29 @@ Uso::
 import logging
 from logging import Logger
 
-from prefect.context import FlowRunContext, TaskRunContext
-
 
 def get_logger(name: str) -> Logger:
     """Retorna um logger pré-configurado para o módulo chamador.
 
-    Dentro de um flow ou task do Prefect, delega para ``prefect.get_run_logger``
-    a fim de integrar com a UI e o sistema de observabilidade do Prefect.
-    Fora de qualquer contexto de execução (testes, scripts, imports em tempo de
-    definição), retorna um ``logging.Logger`` padrão do Python para evitar
-    ``MissingContextError``.
+    Retorna um :class:`logging.Logger` padrão do Python com nível ``DEBUG``
+    e ``propagate=True``. Quando ``PREFECT_LOGGING_EXTRA_LOGGERS`` está
+    configurado no deployment, o Prefect instala seus handlers no logger-raiz
+    do módulo e todos os logs passam a aparecer na UI automaticamente.
+
+    Fora de contexto Prefect (testes, scripts), adiciona um
+    :class:`logging.StreamHandler` com formato legível apenas se não houver
+    nenhum handler configurado na hierarquia — evitando duplicação.
 
     :param name: Nome do módulo — passe ``__name__`` a partir do módulo chamador.
-    :returns: Uma instância de :class:`logging.Logger` com configuração
-        aplicada ao workspace.
+    :returns: Uma instância de :class:`logging.Logger`.
     """
-    in_prefect_context = (
-        FlowRunContext.get() is not None or TaskRunContext.get() is not None
-    )
-
-    if in_prefect_context:
-        from prefect import get_run_logger  # importação lazy para evitar overhead
-
-        return get_run_logger()
-
     logger = logging.getLogger(name)
-    if not logger.handlers and not logging.root.handlers:
+    logger.setLevel(logging.DEBUG)
+
+    # Adiciona handler de fallback somente quando não há nenhum handler
+    # configurado na hierarquia inteira (ex: fora de um deployment Prefect).
+    root = logging.getLogger()
+    if not root.handlers and not logger.handlers:
         handler = logging.StreamHandler()
         handler.setFormatter(
             logging.Formatter(
@@ -60,5 +65,4 @@ def get_logger(name: str) -> Logger:
         logger.addHandler(handler)
         logger.propagate = False
 
-    logger.setLevel(logging.DEBUG)
     return logger

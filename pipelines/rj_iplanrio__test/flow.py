@@ -9,7 +9,7 @@ from prefect import flow
 
 from prefect_rj_iplanrio.log import get_logger
 
-from tasks import (
+from pipelines.rj_iplanrio__test.tasks import (
     calcular_relatorio_task,
     gerar_medicoes_task,
     publicar_relatorio_task,
