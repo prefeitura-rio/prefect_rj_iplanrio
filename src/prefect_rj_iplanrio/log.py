@@ -18,11 +18,17 @@ Portanto, o mecanismo correto é:
    ``propagate=True`` (padrão do Python), permitindo que o handler do Prefect
    capture todos os logs via hierarquia.
 
-Uso::
+Uso em ``tasks.py`` e ``utils.py`` (importados como pacote — ``__name__`` correto)::
 
     from prefect_rj_iplanrio.log import get_logger
 
-    logger = get_logger(__name__)
+    logger = get_logger(__name__)  # ex: "pipelines.rj_sec__pipe.tasks"
+
+Uso em ``flow.py`` (carregado pelo Prefect como ``__main__`` — nome explícito obrigatório)::
+
+    from prefect_rj_iplanrio.log import get_logger
+
+    logger = get_logger("pipelines.rj_sec__pipe.flow")
 
     logger.info("Processando %d registros", count)
     logger.warning("Tentando novamente após erro transitório")

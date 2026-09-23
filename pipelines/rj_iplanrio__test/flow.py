@@ -16,7 +16,10 @@ from pipelines.rj_iplanrio__test.tasks import (
     validar_medicoes_task,
 )
 
-logger = get_logger(__name__)
+# O Prefect carrega flow.py como __main__, então __name__ seria "__main__" e
+# os logs não seriam capturados pelo PREFECT_LOGGING_EXTRA_LOGGERS. O nome
+# explícito garante que este logger seja filho de pipelines.rj_iplanrio__test.
+logger = get_logger("pipelines.rj_iplanrio__test.flow")
 
 
 @flow(log_prints=True)
