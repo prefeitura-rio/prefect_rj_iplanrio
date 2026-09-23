@@ -50,10 +50,11 @@ def rj_crm__modelo_qualidade_telefone(
 ) -> None:
     """Roda o modo ``score`` (a cada 3 dias) ou ``retreino`` (mensal) da pipeline.
 
-    ``score``: carrega o champion do GCS, calcula a probabilidade de HighDelivery de cada
-    telefone do universo elegível (CPFs com 2+ telefones — ver ``queries/amostra_agora.sql``)
-    e publica a tabela do dia com truncate atômico. Se a rodada falhar a validação (sem
-    linha, probabilidade inválida, volume fora do esperado), a tabela de ontem fica intacta.
+    ``score``: carrega o champion do GCS, calcula a probabilidade de HighDelivery de todo
+    telefone elegível associado a um CPF vivo (~6,75M telefones, ~9,4M pares — ver
+    ``queries/amostra_agora.sql``) e publica a tabela do dia com truncate atômico. Se a
+    rodada falhar a validação (sem linha, probabilidade inválida, volume fora do esperado),
+    a tabela de ontem fica intacta.
 
     ``retreino``: treina um LightGBM novo (Optuna semeado pelos hiperparâmetros do champion,
     se houver), simula a escolha de telefone em disparos recentes comparando modelo novo x
