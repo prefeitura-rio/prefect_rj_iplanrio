@@ -241,6 +241,7 @@ OPTIONS (
 CREATE TABLE IF NOT EXISTS `rj-crm-registry.brutos_salesforce.messaging_session`
 (
     id                      STRING,
+    conversation_id         STRING,
     status                  STRING,
     start_time              TIMESTAMP,
     end_time                TIMESTAMP,

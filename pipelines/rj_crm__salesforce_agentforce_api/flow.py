@@ -82,7 +82,7 @@ _F2A_CRM_QUERIES = {
         "staging_table": "messaging_end_user_staging",
     },
     "messaging_session": {
-        "soql": "SELECT Id, Status, StartTime, EndTime, MessagingChannelId, MessagingEndUserId, Origin, CreatedDate, LastModifiedDate FROM MessagingSession WHERE LastModifiedDate >= {data_inicio} AND LastModifiedDate < {data_fim} ORDER BY CreatedDate ASC",
+        "soql": "SELECT Id, ConversationId, Status, StartTime, EndTime, MessagingChannelId, MessagingEndUserId, Origin, CreatedDate, LastModifiedDate FROM MessagingSession WHERE LastModifiedDate >= {data_inicio} AND LastModifiedDate < {data_fim} ORDER BY CreatedDate ASC",
         "date_columns": ["start_time", "end_time", "created_date", "last_modified_date"],
         "clustering_fields": ["id"],
         "staging_table": "messaging_session_staging",
