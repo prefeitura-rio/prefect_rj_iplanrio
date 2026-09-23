@@ -17,6 +17,7 @@ Usage::
 """
 
 import logging
+import sys
 from logging import Logger
 
 
@@ -27,4 +28,32 @@ def get_logger(name: str) -> Logger:
     :returns: A :class:`logging.Logger` instance with workspace-wide
         configuration applied.
     """
-    return logging.getLogger(name)
+    logger = logging.getLogger(name)
+    _ensure_stderr_handler(logger)
+    return logger
+
+
+# TEMPORARY HACK — DO NOT MERGE TO MAIN. Revert this whole block before
+# opening any PR targeting master; the infra team owns the real fix.
+#
+# Why this exists: records logged through these loggers never reached the
+# Prefect worker log streams (neither flow- nor task-level pages showed
+# anything — not even WARNING). The shared module configured nothing, so
+# output depended entirely on whatever handlers the worker process happens
+# to have, which in the k3s-pool worker means these records go nowhere.
+# Attaching an explicit stderr handler makes records visible wherever the
+# worker captures subprocess stderr, independent of worker logging config.
+#
+# What was already tried and ruled out: setting the logger *level* does
+# NOT fix this (staging commit dd19eed9 tried setLevel(DEBUG), reverted
+# the same day in a0faca86 without reaching main) — the default level
+# already passes WARNING, yet warnings didn't show either. The problem is
+# destination/handlers, not level, so this hack deliberately does NOT call
+# setLevel: INFO suppression remains as-is for infra to fix properly.
+def _ensure_stderr_handler(logger: Logger) -> None:
+    """Attach a stderr handler once per logger (idempotent)."""
+    if logger.handlers:
+        return
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(handler)
