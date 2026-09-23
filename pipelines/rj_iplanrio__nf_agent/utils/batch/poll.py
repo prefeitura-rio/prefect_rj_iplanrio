@@ -288,6 +288,17 @@ def poll_once(client: OpenAI, config: PollConfig) -> list[str]:
     :returns: Session ids that reached a terminal state (``done`` or
         ``failed``) during this call — used by the caller to decide whether
         to submit the next session.
+    :raises RuntimeError: If advancing any session that already reached a
+        terminal Bifrost status failed. Raised AFTER all sessions have been
+        polled (one bad session never blocks the others), aggregating every
+        failure. Deliberately loud instead of warning-and-continue: a failed
+        advance means a finished Vertex job whose results can't be consumed
+        (permissions, download, parse, or follow-up submit), and that class
+        of problem never heals by itself — it needs a human. Failing the
+        run makes it visible (task Failed state + exception traceback, the
+        channels proven to render) instead of looping silently every 15
+        minutes. Nothing is lost: sessions stay active in the tracking
+        table and the next run retries them.
     """
     active = get_active_sessions(config.nf_batch_jobs_table)
     if not active:
@@ -295,6 +306,7 @@ def poll_once(client: OpenAI, config: PollConfig) -> list[str]:
         return []
 
     finished_sessions: list[str] = []
+    advance_errors: list[str] = []
 
     for event in active:
         if event.bifrost_batch_id is None:
@@ -349,7 +361,8 @@ def poll_once(client: OpenAI, config: PollConfig) -> list[str]:
         # "completed" from here on. Per-session try/except: a failure
         # advancing one session (download error, extraction submit error)
         # must not prevent the remaining sessions from being polled in this
-        # same run.
+        # same run — errors are collected and raised together at the end
+        # (see below).
         try:
             if event.phase == PHASE_CLASSIFICATION:
                 event_with_output = BatchJobEvent(
@@ -383,8 +396,19 @@ def poll_once(client: OpenAI, config: PollConfig) -> list[str]:
                 )
                 finished_sessions.append(event.session_id)
         except Exception as exc:
+            # Kept as warning for environments where logging works, but the
+            # real visibility comes from the aggregated raise below — logger
+            # output alone has proven insufficient to surface these.
             logger.warning("Session %s (%s): advance failed: %s", event.session_id, event.phase, exc)
+            advance_errors.append(f"session {event.session_id} ({event.phase}): {exc}")
             continue
+
+    if advance_errors:
+        raise RuntimeError(
+            f"Failed to advance {len(advance_errors)} completed session(s); "
+            "sessions stay active and will be retried next run, but the "
+            f"underlying errors need attention:\n" + "\n".join(f"- {e}" for e in advance_errors)
+        )
 
     return finished_sessions
 
