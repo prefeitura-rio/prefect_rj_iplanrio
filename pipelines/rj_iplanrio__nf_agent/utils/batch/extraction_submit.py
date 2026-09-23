@@ -106,7 +106,6 @@ class ExtractionSubmitResult:
 def build_extraction_rows(
     pdf_paths: dict[str, Path],
     candidates: list[ExtractionCandidate],
-    session_id: str,
 ) -> list[dict]:
     """Render every NF-classified page and build extraction JSONL rows.
 
@@ -114,15 +113,13 @@ def build_extraction_rows(
         PDF referenced by ``candidates``.
     :param candidates: Pages to extract, one row each — see
         :class:`ExtractionCandidate`.
-    :param session_id: Current batch session UUID (encoded into every row's
-        ``custom_id``).
     :returns: List of JSONL row dicts ready for :func:`bifrost_batch.submit_jsonl_batch`.
     """
     rows: list[dict] = []
     for candidate in candidates:
         pdf_path = pdf_paths[candidate.pdf_name]
         page_pdf_bytes = extract_page_as_bytes(pdf_path, candidate.page_number - 1, as_pdf=True)
-        custom_id = encode_custom_id(PHASE_EXTRACTION, session_id, candidate.pdf_name, candidate.page_number)
+        custom_id = encode_custom_id(candidate.pdf_name, candidate.page_number)
         rows.append(
             {
                 # Vertex-native row shape — see classification_submit.py's
@@ -154,7 +151,7 @@ def submit_extraction_job(
     :returns: The submitted job's identifying info, recorded in
         ``nf_batch_jobs`` before returning.
     """
-    rows = build_extraction_rows(pdf_paths, candidates, session_id)
+    rows = build_extraction_rows(pdf_paths, candidates)
     result: BatchSubmitResult = submit_jsonl_batch(client, rows, session_id, PHASE_EXTRACTION)
 
     append_job_event(

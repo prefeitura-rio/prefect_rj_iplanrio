@@ -28,7 +28,7 @@ class TestBuildClassificationRows:
             selected_pdf_names=["a", "b"], total_pages=3, skipped_pdf_names=[], unreadable_pdf_names=[]
         )
 
-        rows = classification_submit.build_classification_rows(pdf_paths, selection, session_id="sess-1")
+        rows = classification_submit.build_classification_rows(pdf_paths, selection)
 
         assert len(rows) == 3
         identities = {
@@ -36,12 +36,12 @@ class TestBuildClassificationRows:
         }
         assert identities == {("a", 1), ("a", 2), ("b", 1)}
         for row in rows:
-            identity = decode_custom_id(row["custom_id"])
-            assert identity.session_id == "sess-1"
-            assert identity.phase == "classification"
+            decode_custom_id(row["custom_id"])  # must parse (asserted in detail below)
             # Vertex-native row shape — no OpenAI-style method/url/body;
             # custom_id rides along as an extra, echoed back on output rows.
-            assert "method" not in row and "url" not in row and "body" not in row
+            assert "method" not in row
+            assert "url" not in row
+            assert "body" not in row
             request = row["request"]
             content_parts = request["contents"][0]["parts"]
             assert content_parts[0] == {"text": request["contents"][0]["parts"][0]["text"]}
@@ -60,7 +60,7 @@ class TestBuildClassificationRows:
             selected_pdf_names=["a"], total_pages=1, skipped_pdf_names=["b"], unreadable_pdf_names=[]
         )
 
-        rows = classification_submit.build_classification_rows(pdf_paths, selection, session_id="sess-1")
+        rows = classification_submit.build_classification_rows(pdf_paths, selection)
 
         assert {decode_custom_id(r["custom_id"]).pdf_name for r in rows} == {"a"}
 
@@ -74,7 +74,7 @@ class TestBuildExtractionRows:
             ExtractionCandidate(pdf_name="a", page_number=2, classification_hint="NFS-e"),
         ]
 
-        rows = extraction_submit.build_extraction_rows(pdf_paths, candidates, session_id="sess-1")
+        rows = extraction_submit.build_extraction_rows(pdf_paths, candidates)
 
         assert len(rows) == 1
         prompt_text = rows[0]["request"]["contents"][0]["parts"][0]["text"]
@@ -82,7 +82,6 @@ class TestBuildExtractionRows:
         identity = decode_custom_id(rows[0]["custom_id"])
         assert identity.pdf_name == "a"
         assert identity.page_number == 2
-        assert identity.phase == "extraction"
 
     def test_no_hint_when_classification_hint_is_none(self, make_pdf, monkeypatch):
         monkeypatch.setattr(extraction_submit.prompts, "EXTRACTION_PROMPT", "Extract this. {classification_hint} End.")
@@ -90,7 +89,7 @@ class TestBuildExtractionRows:
         pdf_paths = {"a": make_pdf(n_pages=1, name="a.pdf")}
         candidates = [ExtractionCandidate(pdf_name="a", page_number=1, classification_hint=None)]
 
-        rows = extraction_submit.build_extraction_rows(pdf_paths, candidates, session_id="sess-1")
+        rows = extraction_submit.build_extraction_rows(pdf_paths, candidates)
 
         prompt_text = rows[0]["request"]["contents"][0]["parts"][0]["text"]
         assert "PRÉ-CLASSIFICAÇÃO" not in prompt_text

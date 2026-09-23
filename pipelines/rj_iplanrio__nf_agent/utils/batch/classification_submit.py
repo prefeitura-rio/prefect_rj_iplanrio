@@ -92,17 +92,13 @@ class ClassificationSubmitResult:
     selection: BatchSessionSelection
 
 
-def build_classification_rows(
-    pdf_paths: dict[str, Path], selection: BatchSessionSelection, session_id: str
-) -> list[dict]:
+def build_classification_rows(pdf_paths: dict[str, Path], selection: BatchSessionSelection) -> list[dict]:
     """Render every page of every selected PDF and build classification JSONL rows.
 
     :param pdf_paths: Mapping of pdf_name -> local downloaded path (superset
         of ``selection.selected_pdf_names`` is fine; extras are ignored).
     :param selection: Output of :func:`row_counting.select_pdfs_within_row_budget`
         — determines which PDFs (and therefore which pages) are included.
-    :param session_id: Current batch session UUID (encoded into every row's
-        ``custom_id`` — see ``custom_id.py``).
     :returns: List of JSONL row dicts ready for :func:`bifrost_batch.submit_jsonl_batch`.
     """
     rows: list[dict] = []
@@ -114,7 +110,7 @@ def build_classification_rows(
 
         for page_number in range(1, total_pages + 1):
             page_pdf_bytes = extract_page_as_bytes(pdf_path, page_number - 1, as_pdf=True)
-            custom_id = encode_custom_id(PHASE_CLASSIFICATION, session_id, pdf_name, page_number)
+            custom_id = encode_custom_id(pdf_name, page_number)
             rows.append(
                 {
                     # Vertex-native row shape — see module docstring.
@@ -148,7 +144,7 @@ def submit_classification_job(
     :returns: The submitted job's identifying info, recorded in
         ``nf_batch_jobs`` before returning.
     """
-    rows = build_classification_rows(pdf_paths, selection, session_id)
+    rows = build_classification_rows(pdf_paths, selection)
     result: BatchSubmitResult = submit_jsonl_batch(client, rows, session_id, PHASE_CLASSIFICATION)
 
     append_job_event(

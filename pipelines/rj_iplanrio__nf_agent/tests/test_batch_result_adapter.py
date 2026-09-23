@@ -18,12 +18,12 @@ from pipelines.rj_iplanrio__nf_agent.utils.batch.custom_id import encode_custom_
 
 
 def _response_row(
-    pdf_name: str, page_number: int, text_payload: dict, phase: str = "classification", usage: dict | None = None
+    pdf_name: str, page_number: int, text_payload: dict, usage: dict | None = None
 ) -> dict:
     """Build a successful batch-result line with an embedded model text payload."""
     usage = usage or {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15}
     return {
-        "custom_id": encode_custom_id(phase, "sess-1", pdf_name, page_number),
+        "custom_id": encode_custom_id(pdf_name, page_number),
         "status": "",
         "response": {
             "candidates": [{"content": {"parts": [{"text": json.dumps(text_payload)}], "role": "model"}}],
@@ -32,9 +32,9 @@ def _response_row(
     }
 
 
-def _failed_row(pdf_name: str, page_number: int, message: str, phase: str = "classification") -> dict:
+def _failed_row(pdf_name: str, page_number: int, message: str) -> dict:
     return {
-        "custom_id": encode_custom_id(phase, "sess-1", pdf_name, page_number),
+        "custom_id": encode_custom_id(pdf_name, page_number),
         "status": message,
     }
 
@@ -64,7 +64,7 @@ class TestParseClassificationOutputRows:
 
     def test_malformed_json_response_is_treated_as_error_not_raised(self):
         row = {
-            "custom_id": encode_custom_id("classification", "sess-1", "doc.pdf", 3),
+            "custom_id": encode_custom_id("doc.pdf", 3),
             "status": "",
             "response": {
                 "candidates": [{"content": {"parts": [{"text": "not valid json {{{"}], "role": "model"}}],
@@ -79,7 +79,7 @@ class TestParseClassificationOutputRows:
 
     def test_nonempty_status_is_treated_as_error(self):
         row = {
-            "custom_id": encode_custom_id("classification", "sess-1", "doc.pdf", 1),
+            "custom_id": encode_custom_id("doc.pdf", 1),
             "status": "RESOURCE_EXHAUSTED: quota exceeded",
             "response": {},
         }
@@ -93,7 +93,7 @@ class TestParseClassificationOutputRows:
 class TestParseExtractionOutputRows:
     def test_successful_extraction_row(self):
         payload = {"possui_nota_fiscal": True, "quantidade_notas_fiscais": 1, "notas_fiscais": [{"numero_nf": "123"}]}
-        row = _response_row("doc.pdf", 5, payload, phase="extraction")
+        row = _response_row("doc.pdf", 5, payload)
 
         results = result_adapter.parse_extraction_output_rows([row])
 
@@ -101,7 +101,7 @@ class TestParseExtractionOutputRows:
         assert results[0].error is None
 
     def test_failed_extraction_row(self):
-        row = _failed_row("doc.pdf", 5, "quota exceeded", phase="extraction")
+        row = _failed_row("doc.pdf", 5, "quota exceeded")
 
         results = result_adapter.parse_extraction_output_rows([row])
 
