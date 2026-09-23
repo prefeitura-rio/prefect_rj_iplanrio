@@ -158,7 +158,7 @@ def upload_ocorrencias_task(
 
     df = dataframe.astype("string")
     df["fase"] = fase
-    df['update_at'] = datetime.now(tz=SP_TZ).replace(tzinfo=None)
+    df['update_at'] = datetime.now(tz=SP_TZ).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
     df, _ = parse_date_columns(
         dataframe=df, partition_date_column="data_fato"
     )

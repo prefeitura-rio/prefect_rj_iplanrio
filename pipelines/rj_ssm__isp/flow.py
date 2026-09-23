@@ -28,7 +28,7 @@ def rj_ssm__isp(
     :param table_id: Tabela do BigQuery.
     :param dump_mode: ``"append"`` para acumular dados, ``"overwrite"`` para substituir.
     :param fase: Fase de disponibilidade dos dados.
-
+        - ``"parcial"`` (Fase 1): dados do dia anterior; janela padrão de 1 dia (D-1 a D-1).
         - ``"consolidados"`` (Fase 2): dados do mês anterior; janela padrão de 30 dias (D-30 a D-1).
         - ``"errata"`` (Fase 3): dados definitivos; janela padrão do último trimestre completo.
 
