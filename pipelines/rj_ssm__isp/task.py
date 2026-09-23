@@ -178,7 +178,7 @@ def upload_ocorrencias_task(
     )
 
     log(f"{len(df)} linha(s), {len(df.columns)} coluna(s) → enviando...")
-    breakpoint()
+
     create_table_and_upload_to_gcs(
         data_path=savepath,
         dataset_id=dataset_id,
