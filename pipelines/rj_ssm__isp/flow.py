@@ -8,17 +8,14 @@ from prefect import flow
 
 from constants import MUNICIPIO_RIO_DE_JANEIRO, MAX_CONCURRENT_REQUESTS
 from task import fetch_ocorrencias_task, upload_ocorrencias_task, resolve_dates
-from iplanrio.pipelines_utils.bd import (
-    create_table_and_upload_to_gcs_task,
-)
 
 
 @flow(log_prints=True)
 def rj_ssm__isp(
-    dataset_id: str = "brutos_isp",
+    dataset_id: str = "brutos_ispgeo",
     table_id: str = "ocorrencias",
     dump_mode: str = "append",
-    fase: Literal["consolidados", "errata"] = "consolidados",
+    fase: Literal["consolidados", "errata", "parcial"] = "parcial",
     data_inicio: str | None = None,
     data_fim: str | None = None,
     todos: bool = True,
@@ -63,3 +60,6 @@ def rj_ssm__isp(
 
     )
 
+rj_ssm__isp(
+
+)

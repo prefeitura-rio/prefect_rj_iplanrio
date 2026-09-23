@@ -173,6 +173,7 @@ class IspGeoClient:
                 params=params,
                 timeout=aiohttp.ClientTimeout(total=QUERY_TIMEOUT),
             ) as resp:
+
                 resp.raise_for_status()
                 data = await resp.json(content_type=None)
 
@@ -221,6 +222,8 @@ class IspGeoClient:
                 for i, offset in enumerate(offsets)
             ]
             pages = await asyncio.gather(*tasks)
+
+
 
         features: list[dict] = []
         for page in pages:

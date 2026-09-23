@@ -20,7 +20,7 @@ from constants import (
     TMP_BASE,
     SP_TZ
 )
-from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre
+from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre, _add_id_hash
 
 
 
@@ -92,12 +92,13 @@ def fetch_ocorrencias_task(
                 f"{len(codigos_nao_mapeados)} código(s) de delito_do sem nome no domínio da camada: {', '.join(str(c) for c in codigos_nao_mapeados)}",
             )
 
+        _add_id_hash(raw_rows)
         rows = [decode_row(r, domains) for r in raw_rows]
     return build_dataframe(rows)
 
 @task
 def resolve_dates(
-    fase: Literal["consolidados", "errata"],
+    fase: Literal["consolidados", "errata", "parcial"],
     data_inicio: Optional[str],
     data_fim: Optional[str],
 ) -> tuple[str, str]:
@@ -105,6 +106,7 @@ def resolve_dates(
 
     - ``"consolidados"``: janela dos últimos 30 dias (D-30 até D-1).
     - ``"errata"``: janela do último trimestre completo.
+    - ``"parcial"``: janela do dia anterior.
 
     :param fase: Fase de disponibilidade dos dados (``"consolidados"`` ou ``"errata"``).
     :param data_inicio: Data de início explícita, ou ``None`` para usar o default da fase.
@@ -114,7 +116,11 @@ def resolve_dates(
     """
     now = datetime.now(tz=SP_TZ)
 
-    if fase == "consolidados":
+    if fase == "parcial":
+        if data_inicio is None and data_fim is None:
+            data_inicio = data_fim = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+
+    elif fase == "consolidados":
         if data_inicio is None:
             data_inicio = (now - timedelta(days=30)).strftime("%Y-%m-%d")
         if data_fim is None:
@@ -126,9 +132,10 @@ def resolve_dates(
         if data_fim is None:
             data_fim = fim_tri
     else:
-        raise ValueError(f"Fase inválida: {fase!r}. Use 'consolidados' ou 'errata'.")
+        raise ValueError(f"Fase inválida: {fase!r}. Use 'consolidados' ou 'errata', 'parcial'.")
 
     return data_inicio, data_fim
+
 @task
 def upload_ocorrencias_task(
     dataframe: pd.DataFrame,
@@ -151,6 +158,7 @@ def upload_ocorrencias_task(
 
     df = dataframe.astype("string")
     df["fase"] = fase
+    df['update_at'] = datetime.now(tz=SP_TZ).replace(tzinfo=None)
     df, _ = parse_date_columns(
         dataframe=df, partition_date_column="data_fato"
     )
@@ -160,12 +168,12 @@ def upload_ocorrencias_task(
 
     to_partitions(
         data=df,
-        partition_columns=["fase", "ano_particao", "mes_particao", "data_particao"],
+        partition_columns=["ano_particao", "mes_particao", "data_particao", "fase"],
         savepath=savepath,
         data_type="parquet",
     )
 
-    print(f"{len(df)} linha(s), {len(df.columns)} coluna(s) → enviando...")
+    log(f"{len(df)} linha(s), {len(df.columns)} coluna(s) → enviando...")
 
     create_table_and_upload_to_gcs(
         data_path=savepath,
