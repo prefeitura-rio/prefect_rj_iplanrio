@@ -39,6 +39,8 @@ deployments:
       command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
+      env:
+        PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
 - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--prod
   tags:
   - environment:prod
@@ -54,6 +56,8 @@ deployments:
       command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
+      env:
+        PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
 
   schedules:
   # Exemplo de schedule overwrite
