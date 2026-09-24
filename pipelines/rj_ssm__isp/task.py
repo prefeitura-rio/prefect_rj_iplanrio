@@ -104,9 +104,9 @@ def fetch_ocorrencias_task(
 
 @task
 def resolve_dates(
-    fase: Literal["consolidados", "errata", "parcial"],
     data_inicio: Optional[str],
     data_fim: Optional[str],
+    fase: Literal["consolidados", "errata", "parcial"] = "parcial",
 ) -> tuple[str, str]:
     """Resolve ``data_inicio`` e ``data_fim`` conforme a fase, quando não fornecidos.
 

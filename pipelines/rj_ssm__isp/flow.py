@@ -31,7 +31,6 @@ def rj_ssm__isp(
         - ``"parcial"`` (Fase 1): dados do dia anterior; janela padrão de 1 dia (D-1 a D-1).
         - ``"consolidados"`` (Fase 2): dados do mês anterior; janela padrão de 30 dias (D-30 a D-1).
         - ``"errata"`` (Fase 3): dados definitivos; janela padrão do último trimestre completo.
-
     :param data_inicio: Data de início (``YYYY-MM-DD``). Sobrescreve o default da fase.
     :param data_fim: Data de fim (``YYYY-MM-DD``). Sobrescreve o default da fase.
     :param todos: Se ``True``, ignora o filtro de tipos de delito e traz tudo.
