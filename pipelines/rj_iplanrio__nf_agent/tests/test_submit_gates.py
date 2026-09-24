@@ -81,6 +81,73 @@ class TestGetMostRecentEvent:
         assert event.state == STATE_FAILED
         assert event.row_count is None
 
+    def test_float_nan_nulls_become_none_not_crash(self):
+        # Regression test for the production crash: narrow/single-row
+        # results can come back float64, where BigQuery NULLs survive
+        # to_dict("records") as float('nan') — and `nan is None` is False,
+        # so output_file_id.startswith crashed with AttributeError. This is
+        # exactly what killed every poll for hours: classification events
+        # carry output_file_id=NULL (only set in-memory on completion).
+        df = pd.DataFrame(
+            {
+                "session_id": ["sess-1"],
+                "phase": ["classification"],
+                "bifrost_batch_id": ["batch-1"],
+                "state": ["validating"],
+                "input_file_id": ["file-1"],
+                "output_file_id": [float("nan")],
+                "row_count": [float("nan")],
+                "error": [float("nan")],
+            }
+        )
+        with patch.object(job_tracking.bigquery, "Client", return_value=_mock_bq_client(df)):
+            event = job_tracking.get_most_recent_event("proj.ds.nf_batch_jobs")
+
+        assert event is not None
+        assert event.output_file_id is None
+        assert event.row_count is None
+        assert event.error is None
+
+    def test_coalesce_nulls_unit(self):
+        row = {
+            "a": None,
+            "b": pd.NA,
+            "c": float("nan"),
+            "d": "gs://bucket/file",
+            "e": 10,
+            "f": 0,
+            "g": "",
+        }
+        assert job_tracking.coalesce_nulls(row) == {
+            "a": None,
+            "b": None,
+            "c": None,
+            "d": "gs://bucket/file",
+            "e": 10,
+            "f": 0,
+            "g": "",
+        }
+
+    def test_get_latest_events_survives_float_nan_nulls(self):
+        df = pd.DataFrame(
+            {
+                "session_id": ["sess-1"],
+                "phase": ["classification"],
+                "bifrost_batch_id": ["batch-1"],
+                "state": ["validating"],
+                "input_file_id": ["file-1"],
+                "output_file_id": [float("nan")],
+                "row_count": [251.0],
+                "error": [float("nan")],
+            }
+        )
+        with patch.object(job_tracking.bigquery, "Client", return_value=_mock_bq_client(df)):
+            events = job_tracking.get_latest_events("proj.ds.nf_batch_jobs")
+
+        assert len(events) == 1
+        assert events[0].output_file_id is None
+        assert events[0].row_count == 251
+
     def test_empty_table_returns_none(self):
         df = _df(
             [

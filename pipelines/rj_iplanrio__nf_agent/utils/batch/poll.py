@@ -48,6 +48,7 @@ from .job_tracking import (
     STATE_FAILED,
     BatchJobEvent,
     append_job_event,
+    coalesce_nulls,
     get_active_sessions,
 )
 from .model_config import BIFROST_BATCH_PROVIDER
@@ -444,10 +445,11 @@ def _find_classification_event(nf_batch_jobs_table: str, session_id: str) -> Bat
     if df.empty:
         return None
 
-    # NOTE: to_dict("records"), not df.iloc[0] — see job_tracking's
-    # get_most_recent_event comment on why iloc + `is None` explodes on
-    # NULL row_count (pd.NA).
-    row = df.to_dict("records")[0]
+    # NOTE: to_dict("records") + coalesce_nulls, not df.iloc[0] — see
+    # job_tracking's get_most_recent_event comment on why iloc + `is None`
+    # explodes on NULLs (pd.NA), and why to_dict alone still isn't enough
+    # (it preserves float-nan NULLs on float64 columns).
+    row = coalesce_nulls(df.to_dict("records")[0])
     return BatchJobEvent(
         session_id=row["session_id"],
         phase=row["phase"],

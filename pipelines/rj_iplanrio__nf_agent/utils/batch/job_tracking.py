@@ -39,7 +39,9 @@ existing "must pre-exist" contract):
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any
 
+import pandas as pd
 from google.cloud import bigquery
 from iplanrio_agent_toolkit.bigquery import BigQueryClient
 
@@ -57,6 +59,28 @@ PHASE_EXTRACTION = "extraction"
 STATE_DONE = "done"
 STATE_FAILED = "failed"
 TERMINAL_STATES = frozenset({STATE_DONE, STATE_FAILED})
+
+
+def coalesce_nulls(row: dict[str, Any]) -> dict[str, Any]:
+    """Normalize every NULL-ish value in a BigQuery result row to plain ``None``.
+
+    BigQuery NULLs reach this code in different shapes depending on the
+    query, the data, and which download path ``to_dataframe()`` took:
+    ``None`` (object dtype), ``pd.NA`` (nullable ``Int64``/``string``
+    dtypes), or ``float('nan')`` (``float64`` dtype — typical for
+    single-row results like ``LIMIT 1``). Only the first compares true
+    with ``is None``, so bare ``is None`` checks (and bare ``int()`` calls)
+    crash on the other two — this exact bug killed a production poll run
+    with ``AttributeError: 'float' object has no attribute 'startswith'``
+    on a NULL ``output_file_id`` that survived ``to_dict("records")`` as
+    ``nan``. ``pd.isna`` catches all three shapes uniformly. All values in
+    these rows are BQ scalars, for which ``pd.isna`` always returns a plain
+    bool (never an array).
+
+    :param row: One decoded result row (e.g. from ``df.to_dict("records")``).
+    :returns: The same mapping with every null-ish value replaced by ``None``.
+    """
+    return {key: (None if pd.isna(value) else value) for key, value in row.items()}
 
 
 @dataclass(frozen=True)
@@ -157,7 +181,9 @@ def get_latest_events(nf_batch_jobs_table: str) -> list[BatchJobEvent]:
             row_count=None if row["row_count"] is None else int(row["row_count"]),
             error=row["error"],
         )
-        for row in df.to_dict("records")
+        # coalesce_nulls: to_dict preserves float-nan NULLs on float64
+        # columns (typical for narrow/single-row results) — see helper.
+        for row in (coalesce_nulls(r) for r in df.to_dict("records"))
     ]
 
 
@@ -209,12 +235,15 @@ def get_most_recent_event(nf_batch_jobs_table: str) -> BatchJobEvent | None:
     if df.empty:
         return None
 
-    # NOTE: read via to_dict("records"), not df.iloc[0] — to_dict converts
-    # NULLs to plain None, while iloc preserves pandas' pd.NA, for which
-    # `is None` is False and int() explodes with TypeError. The latest event
-    # is very often a failed one, and failed events are recorded with
-    # row_count=NULL — exactly what crashed the first gated run in staging.
-    row = df.to_dict("records")[0]
+    # NOTE: read via to_dict("records"), not df.iloc[0] — iloc preserves
+    # pandas' pd.NA, for which `is None` is False and int() explodes. And
+    # coalesce_nulls on top, because to_dict itself preserves float-nan
+    # NULLs on float64 columns (typical for narrow/single-row results) —
+    # that exact shape crashed a production poll with
+    # "'float' object has no attribute 'startswith'" on a NULL
+    # output_file_id. The latest event is very often a failed one, and
+    # failed events are recorded with row_count=NULL.
+    row = coalesce_nulls(df.to_dict("records")[0])
     return BatchJobEvent(
         session_id=row["session_id"],
         phase=row["phase"],
