@@ -107,6 +107,40 @@ class TestAdvanceErrorsAreLoud:
         with patch.object(poll_mod, "get_active_sessions", return_value=[_active_event("s1")]):
             assert poll_mod.poll_once(client, _config()) == []
 
+    def test_extraction_finish_reads_classification_output_from_vertex(self):
+        # Regression: the tracked classification row only ever holds the
+        # submit-time output_file_id=NULL; reading it crashed every finish.
+        batches = {
+            "batch-s1-extraction": SimpleNamespace(status="completed", output_file_id="gs://b/extr", errors=None),
+            "batch-s1": SimpleNamespace(status="completed", output_file_id="gs://b/class", errors=None),
+        }
+        client = MagicMock()
+        client.batches.retrieve.side_effect = lambda batch_id, **_: batches[batch_id]
+        extraction_event = BatchJobEvent(
+            session_id="s1", phase="extraction", bifrost_batch_id="batch-s1-extraction", state="validating"
+        )
+        with (
+            patch.object(poll_mod, "get_active_sessions", return_value=[extraction_event]),
+            patch.object(poll_mod, "_find_classification_event", return_value=_active_event("s1")),
+            patch.object(poll_mod, "_download_batch_results", return_value=[]) as download,
+            patch.object(poll_mod, "_finish_session") as finish,
+        ):
+            assert poll_mod.poll_once(client, _config()) == ["s1"]
+        assert [c.args[1] for c in download.call_args_list] == ["gs://b/class", "gs://b/extr"]
+        finish.assert_called_once()
+
+    def test_extraction_finish_without_classification_event_raises(self):
+        with (
+            patch.object(poll_mod, "get_active_sessions", return_value=[_active_event("s1", phase="extraction")]),
+            patch.object(poll_mod, "_find_classification_event", return_value=None),
+        ):
+            with pytest.raises(RuntimeError, match=r"s1.*no classification batch id"):
+                poll_mod.poll_once(_client_ok(), _config())
+
+    def test_download_rejects_missing_output_file_id(self):
+        with pytest.raises(ValueError, match="no output_file_id"):
+            poll_mod._download_batch_results(MagicMock(), None)
+
     def test_extraction_advance_failure_also_aggregates(self):
         event = _active_event("s1", phase="extraction")
         with (

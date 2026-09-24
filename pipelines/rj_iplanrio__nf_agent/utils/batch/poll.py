@@ -118,6 +118,8 @@ def _download_batch_results(client: OpenAI, output_file_id: str) -> list[dict]:
         ``response``/``status`` — see ``result_adapter.py``'s module
         docstring).
     """
+    if not output_file_id:
+        raise ValueError(f"Batch has no output_file_id to download: {output_file_id!r}")
     if output_file_id.startswith("gs://"):
         # Vertex writes results to GCS itself — read them straight from
         # the bucket via ADC (this pipeline's own GCP credentials already
@@ -380,13 +382,14 @@ def poll_once(client: OpenAI, config: PollConfig) -> list[str]:
                 # submitted), so it's not added to finished_sessions.
             elif event.phase == PHASE_EXTRACTION:
                 classification_event = _find_classification_event(config.nf_batch_jobs_table, event.session_id)
-                if classification_event is None:
-                    logger.error(
-                        "Session %s: extraction succeeded but no classification event found — cannot finish session",
-                        event.session_id,
-                    )
-                    continue
-                classification_raw_rows = _download_batch_results(client, classification_event.output_file_id)
+                if classification_event is None or classification_event.bifrost_batch_id is None:
+                    raise RuntimeError(f"Session {event.session_id}: no classification batch id recorded")
+                # The tracking table never stores the classification output
+                # location — ask Vertex for it instead of trusting a copy.
+                classification_batch = client.batches.retrieve(
+                    classification_event.bifrost_batch_id, extra_query={"provider": BIFROST_BATCH_PROVIDER}
+                )
+                classification_raw_rows = _download_batch_results(client, classification_batch.output_file_id)
                 classification_rows = parse_classification_output_rows(classification_raw_rows)
                 extraction_raw_rows = _download_batch_results(client, batch.output_file_id)
                 extraction_rows = parse_extraction_output_rows(extraction_raw_rows)
