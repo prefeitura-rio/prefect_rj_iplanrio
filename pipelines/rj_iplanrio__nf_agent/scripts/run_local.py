@@ -68,7 +68,11 @@ def run(pdf_paths: list[Path], output_path: Path, client: OpenAI) -> int:
     pdfs, classifications, extractions = [], [], []
     for path in pdf_paths:
         logger.info("Processando %s", path.name)
-        result = process_pdf_direct(client, path.stem, path.read_bytes(), prompts)
+        try:
+            result = process_pdf_direct(client, path.stem, path.read_bytes(), prompts)
+        except ValueError as exc:
+            logger.warning("Pulando %s: %s", path.name, exc)
+            continue
         pdfs.append(PdfPages(path.stem, result.total_pages))
         classifications.extend(result.classifications)
         extractions.extend(result.extractions)
