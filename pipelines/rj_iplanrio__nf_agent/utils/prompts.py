@@ -105,36 +105,3 @@ def extraction_prompt_with_hint(template: str, classification_hint: str | None) 
     """
     hint = HINT_TEMPLATE.format(hint=classification_hint) if classification_hint else ""
     return template.replace("{classification_hint}", hint)
-
-
-def __getattr__(name: str) -> str:
-    """Mantém ``prompts.CLASSIFICATION_PROMPT``/``EXTRACTION_PROMPT`` para o código antigo até a Task 12.
-
-    :param name: Atributo acessado.
-    :returns: Texto da versão mais recente.
-    :raises AttributeError: Para qualquer outro nome.
-    """
-    if name == "CLASSIFICATION_PROMPT":
-        return load_prompt("classification", None)[1]
-    if name == "EXTRACTION_PROMPT":
-        return load_prompt("extraction", None)[1]
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-def list_available_versions(prompt_type: str) -> list[str]:
-    """Alias temporário de :func:`list_versions` para o código antigo (removido na Task 12).
-
-    :param prompt_type: ``"classification"`` ou ``"extraction"``.
-    :returns: Versões disponíveis.
-    """
-    return list_versions(prompt_type)
-
-
-def load_prompt_version(prompt_type: str, version: str) -> str:
-    """Alias temporário para o código antigo (removido na Task 12).
-
-    :param prompt_type: ``"classification"`` ou ``"extraction"``.
-    :param version: Versão.
-    :returns: Texto do prompt.
-    """
-    return load_prompt(prompt_type, version)[1]

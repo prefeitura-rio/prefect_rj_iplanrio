@@ -32,6 +32,7 @@ deployments:
       - code_owner:fkhouri
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
+    concurrency_limit: 1
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -43,12 +44,6 @@ deployments:
         env:
           # A imagem não tem .git; o commit vai por variável para rastrear a versão nas linhas de saída.
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
-    parameters:
-      max_classification_rows: 1000
-      workers: 200
-      mes_envio: "2021-11-01"
-      max_total_pages: 1000
-      max_sessions_per_run: 5
 
   - name: rj-iplanrio--nf-agent--prod
     tags:
@@ -57,6 +52,7 @@ deployments:
       - code_owner:fkhouri
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
+    concurrency_limit: 1
     work_pool:
       name: k3s-pool
       work_queue_name: default
@@ -67,11 +63,8 @@ deployments:
         image_pull_policy: Always
         env:
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
-    parameters:
-      max_classification_rows: 1000
-      workers: 200
     schedules:
       - interval: 900
         anchor_date: "2025-01-01T00:00:00"
         timezone: America/Sao_Paulo
-        slug: poll-submit-15min
+        slug: acompanhar-sessoes

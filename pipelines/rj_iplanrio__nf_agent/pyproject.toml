@@ -1,35 +1,16 @@
 [project]
 name = "rj_iplanrio__nf_agent"
 version = "1.0.0"
-description = "Extracts and classifies fields from Rio de Janeiro fiscal-note (NF) PDFs with an LLM routed through the Bifrost gateway and loads the structured results into BigQuery and GCS for the CGM expense-auditing workflow. Two execution modes: Bifrost's Batch API (default, lower cost) and per-request (on-demand)."
+description = "Classifies pages of expense-report PDFs and extracts fiscal-note (NF) fields in batch through the Bifrost gateway, writing per-page results to GCS for CGM's expense auditing."
 dependencies = [
     "prefect>=3.4.9",
     "prefect-docker>=0.6.5",
     "prefect_rj_iplanrio",
-    "numpy>=1.24.0",
-    "pillow>=10.0.0",
     "PyMuPDF>=1.23.0",
-    "pdf2image>=1.16.0",
-    "pypdf",
-    "google-auth>=2.0.0",
     "google-cloud-bigquery>=3.0.0",
-    "db-dtypes>=1.0.0",
     "google-cloud-storage>=2.0.0",
-    "google-cloud-vision>=3.4.0",
-    "pandas>=2.0.0",
-    "openpyxl",
-    "tqdm>=4.66.0",
-    "pyyaml>=6.0.0",
-    "python-dotenv>=1.0.0",
-    "iplanrio-agent-toolkit",
-    # Both execution modes' LLM calls (classification + extraction, sync or
-    # batch) go through Bifrost via the OpenAI-compatible protocol (não é a
-    # API nativa do Gemini) — ver utils/llm.py e utils/batch/bifrost_batch.py.
-    # O extra "gemini" do iplanrio-agent-toolkit NÃO é requisitado aqui —
-    # apenas os módulos base (rate limiter, gcs, bigquery, matching,
-    # credentials).
     "openai>=1.0.0",
-    # Lógica de negócio migrada de agent-nf-validator para utils/ (move mecânico).
+    "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -39,21 +20,8 @@ dev = [
 
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
-# HTTPS, not git+ssh: `uv`'s git fetcher does not honor `git config
-# url.<base>.insteadOf` rewrites (confirmed — a CI-side rewrite from
-# ssh://git@ssh.github.com:443/ to an authenticated HTTPS URL had no
-# effect on the actual `git fetch` uv ran), so a CI runner with no SSH
-# key/known_hosts configured for ssh.github.com can never fetch this over
-# SSH. HTTPS works locally via `gh`'s registered git credential helper
-# (`gh auth setup-git` / already-configured `credential.https://github.com.helper`)
-# and in CI via a `.netrc` written from the deploy action's GH_TOKEN — see
-# `.github/actions/deploy-prefect-flows/action.yaml`.
-"iplanrio-agent-toolkit" = { git = "https://github.com/prefeitura-rio/iplanrio-agent-toolkit.git" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
-# Repo root (two levels up from this pyproject.toml) so `pipelines.rj_iplanrio__nf_agent.*`
-# imports resolve the same way they do for the rest of the codebase/CI, without needing
-# `__init__.py` files or a src-layout change just for tests.
 pythonpath = ["../.."]

@@ -76,26 +76,6 @@ runs:
       with:
         python-version-file: pyproject.toml
 
-    - name: Configure git HTTPS auth for private repo dependencies
-      shell: bash
-      # Some pipelines (e.g. rj_iplanrio__nf_agent) pull a workspace
-      # dependency straight from a private GitHub repo over HTTPS (see
-      # that pipeline's pyproject.toml [tool.uv.sources] — it used to be
-      # git+ssh, but this runner is an ephemeral GitHub-hosted VM with no
-      # SSH key/known_hosts set up at all, so that always failed with
-      # "Host key verification failed"; a `git config --global
-      # url.insteadOf` rewrite from ssh to an authenticated https URL was
-      # tried and confirmed NOT to work either — `uv`'s git fetcher
-      # doesn't honor it). A `.netrc` entry is the auth mechanism that
-      # actually reaches `uv`'s underlying git/HTTP client.
-      run: |
-        cat <<EOF >> "$HOME/.netrc"
-        machine github.com
-        login x-access-token
-        password ${{ inputs.gh_token }}
-        EOF
-        chmod 600 "$HOME/.netrc"
-
     - name: Deploy Prefect flows
       shell: bash
       env:
