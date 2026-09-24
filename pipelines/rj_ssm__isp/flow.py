@@ -45,6 +45,7 @@ def rj_ssm__isp(
     dates = resolve_dates_task(fase, data_inicio, data_fim)
     data_inicio = dates["data_inicio"]
     data_fim = dates["data_fim"]
+
     dataframe = fetch_ocorrencias_task(
         data_inicio=data_inicio,
         data_fim=data_fim,

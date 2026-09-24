@@ -105,7 +105,7 @@ DATE_FIELDS: Final[list[str]] = ["datc", "datf"]
 # coluna no BigQuery.
 CSV_COLUMNS: Final[list[tuple[str, str]]] = [
     ("id_hash", "id_hash"),
-    ("fase", "fase"),
+    ("fase_particao", "fase_particao"),
     ("objectid", "objectid"),
     ("distancia_focoespecial", "distancia_area_foco_especial"),
     ("target_fid", "target_fid"),
@@ -116,7 +116,7 @@ CSV_COLUMNS: Final[list[tuple[str, str]]] = [
     ("delito_do", "titulo_do"),
     ("sim", "indicador_estrategico"),
     ("total_rbft", "total_rbft"),
-    ("fase_divulgacao", "fase_divulgacao"),
+    ("fase", "fase_divulgacao"),
     ("ano", "ano_registro"),
     ("mes", "mes_registro"),
     ("datc", "data_registro"),

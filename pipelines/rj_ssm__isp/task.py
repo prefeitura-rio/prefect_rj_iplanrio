@@ -96,9 +96,11 @@ def fetch_ocorrencias_task(
             )
 
         fase_label = FASE_LABEL[fase]
+
         for row in raw_rows:
-            row["fase"] = fase_label
+            row["fase_particao"] = fase_label
         _add_id_hash(raw_rows)
+
         rows = [decode_row(r, domains) for r in raw_rows]
     return build_dataframe(rows)
 
@@ -151,23 +153,13 @@ def upload_ocorrencias_task(
 
     to_partitions(
         data=df,
-        partition_columns=["ano_particao", "mes_particao", "data_particao", "fase"],
+        partition_columns=["ano_particao", "mes_particao", "data_particao", "fase_particao"],
         savepath=savepath,
         data_type="parquet",
     )
 
     log(f"{len(df)} linha(s), {len(df.columns)} coluna(s) → enviando...")
 
-    create_table_and_upload_to_gcs(
-        data_path=savepath,
-        dataset_id=dataset_id,
-        table_id=table_id,
-        dump_mode=dump_mode,
-        biglake_table=True,
-        source_format="parquet",
-        only_staging_dataset=True,
-        project_id="rj-ssm",
-    )
 
     shutil.rmtree(savepath, ignore_errors=True)
     log("Upload concluído.", level='info')
