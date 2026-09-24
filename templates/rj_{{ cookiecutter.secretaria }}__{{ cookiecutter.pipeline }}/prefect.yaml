@@ -32,7 +32,7 @@ deployments:
   version: "{% raw %}{{ build-image.tag }}{% endraw %}"
   entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
   work_pool:
-    name: k3s-pool
+    name: onprem-pool
     work_queue_name: default
     job_variables:
       image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
@@ -49,7 +49,7 @@ deployments:
   version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
   entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
   work_pool:
-    name: k3s-pool
+    name: onprem-pool
     work_queue_name: default
     job_variables:
       image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
