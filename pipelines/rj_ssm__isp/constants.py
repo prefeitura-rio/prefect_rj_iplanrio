@@ -104,7 +104,6 @@ DATE_FIELDS: Final[list[str]] = ["datc", "datf"]
 # snake_case (sem espaço/acento) para poderem ser usados direto como nome de
 # coluna no BigQuery.
 CSV_COLUMNS: Final[list[tuple[str, str]]] = [
-    ("id_hash", "id_hash"),
     ("fase_particao", "fase_particao"),
     ("objectid", "objectid"),
     ("distancia_focoespecial", "distancia_area_foco_especial"),

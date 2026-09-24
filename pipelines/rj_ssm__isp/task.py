@@ -21,9 +21,7 @@ from constants import (
     SP_TZ,
     FASE_LABEL
 )
-from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre, _add_id_hash, resolve_dates as _resolve_dates
-
-
+from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre, resolve_dates as _resolve_dates
 
 
 @task(retry_delay_seconds=5, retries=3)
@@ -99,8 +97,6 @@ def fetch_ocorrencias_task(
 
         for row in raw_rows:
             row["fase_particao"] = fase_label
-        _add_id_hash(raw_rows)
-
         rows = [decode_row(r, domains) for r in raw_rows]
     return build_dataframe(rows)
 
@@ -160,6 +156,16 @@ def upload_ocorrencias_task(
 
     log(f"{len(df)} linha(s), {len(df.columns)} coluna(s) → enviando...")
 
+    create_table_and_upload_to_gcs(
+        data_path=savepath,
+        dataset_id=dataset_id,
+        table_id=table_id,
+        dump_mode=dump_mode,
+        biglake_table=True,
+        source_format="parquet",
+        only_staging_dataset=True,
+        project_id="rj-ssm",
+    )
 
     shutil.rmtree(savepath, ignore_errors=True)
     log("Upload concluído.", level='info')

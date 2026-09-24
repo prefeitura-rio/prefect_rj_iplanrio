@@ -1,7 +1,5 @@
 """Utilitários gerais do pipeline rj_ssm__isp."""
 
-import hashlib
-import json
 import unicodedata
 from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
@@ -246,22 +244,6 @@ def decode_row(attrs: dict, domains: dict[str, dict[int, str]]) -> dict:
             row[field] = mapping[row[field]]
     return enrich_row(row, ffaixa_code)
 
-
-def _add_id_hash(data: list[dict]) -> list[dict]:
-    """Adiciona id_hash a cada row com base nos dados brutos da API.
-
-    Hasheado antes da criação do DataFrame para evitar inconsistências de dtype
-    inference do pandas (ex: coluna inferida como int64 num run e float64 em outro
-    quando None aparece). json.dumps com sort_keys garante representação canônica
-    e determinística independente de tipo ou ordem de chaves.
-
-    Usa os 32 chars do MD5 (128 bits) — suficiente para o volume dessa API.
-    """
-    for row in data:
-        row["id_hash"] = hashlib.md5(
-            json.dumps(row, sort_keys=True, ensure_ascii=False).encode()
-        ).hexdigest()
-    return data
 
 
 def build_dataframe(rows: list[dict]) -> pd.DataFrame:
