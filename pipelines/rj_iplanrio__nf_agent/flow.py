@@ -8,8 +8,6 @@ from prefect import flow
 
 from .tasks import inject_credentials_task, poll_task, submit_task
 
-ACOES = ("submeter", "acompanhar")
-
 
 @flow(log_prints=True)
 def rj_iplanrio__nf_agent(
@@ -18,8 +16,6 @@ def rj_iplanrio__nf_agent(
     max_paginas: int | None = None,
     versao_processamento: str | None = None,
 ) -> None:
-    if acao not in ACOES:
-        raise ValueError(f"acao inválida: {acao!r}. Use uma de {ACOES}.")
     credentials = inject_credentials_task()
     if acao == "submeter":
         submit_task(
@@ -28,5 +24,7 @@ def rj_iplanrio__nf_agent(
             versao_processamento=versao_processamento,
             wait_for=[credentials],
         )
-    else:
+    elif acao == "acompanhar":
         poll_task(wait_for=[credentials])
+    else:
+        raise ValueError(f"acao inválida: {acao!r}. Use 'submeter' ou 'acompanhar'.")
