@@ -34,7 +34,7 @@ deployments:
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     concurrency_limit: 1
     work_pool:
-      name: k3s-pool
+      name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -54,7 +54,7 @@ deployments:
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     concurrency_limit: 1
     work_pool:
-      name: k3s-pool
+      name: default-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
