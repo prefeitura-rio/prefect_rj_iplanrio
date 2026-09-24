@@ -29,6 +29,7 @@ from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.publicar import 
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.relatorio import publica_relatorio_task
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.pontua_telefones import pontua_telefones_task
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.publica_tabela import publica_scores_task
+from pipelines.rj_crm__modelo_qualidade_telefone.utils.logging_fix import garante_logging_visivel
 
 logger = get_logger(__name__)
 
@@ -89,6 +90,7 @@ def rj_crm__modelo_qualidade_telefone(
         (modo ``retreino``) — precisa estar compartilhada (Editor) com a service account.
     :raises ValueError: Se ``modo`` não for ``"score"`` nem ``"retreino"``.
     """
+    garante_logging_visivel()  # ver utils/logging_fix.py — LightGBM/Optuna/SHAP abafam o INFO
     if modo not in MODOS_VALIDOS:
         raise ValueError(f"modo inválido: {modo!r} (esperado um de {MODOS_VALIDOS})")
 
