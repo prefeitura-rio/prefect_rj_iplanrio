@@ -76,3 +76,21 @@ def _disable_real_rate_limiter():
     limiter.set_enabled(False)
     yield
     reset_rate_limiter()
+
+
+@pytest.fixture(autouse=True)
+def _restore_google_application_credentials():
+    """Restore ``GOOGLE_APPLICATION_CREDENTIALS`` after each test.
+
+    ``settings.inject_gcp_credentials`` writes this var straight to
+    ``os.environ`` (not through ``monkeypatch``), since that's its whole
+    job in production. Left alone, it would leak from
+    ``test_settings.py`` into every test that runs after it in the same
+    process, including ones that rely on ambient ADC.
+    """
+    original = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    yield
+    if original is None:
+        os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+    else:
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = original

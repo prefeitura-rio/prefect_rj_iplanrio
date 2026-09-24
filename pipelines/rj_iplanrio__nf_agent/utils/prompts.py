@@ -1,122 +1,158 @@
-"""
-Prompts module - Contains all prompts used by the NF processing pipeline.
+"""Prompts de classificação e extração, lidos de variáveis de ambiente ``PROMPT_{TIPO}_{VERSAO}``.
 
-Prompt text is not committed to the repo (it's not public) — each version
-is an env var, injected at runtime from Infisical the same way
-``RJ_NF_AGENT_CREDENTIALS``/``BIFROST_API_KEY`` already are (k8s secret,
-one Infisical environment per deployment — teste/prod).
-
-Versioning:
-    Env var naming convention: ``PROMPT_{TIPO}_{VERSAO}`` (uppercase), e.g.
-    ``PROMPT_CLASSIFICATION_V8``, ``PROMPT_EXTRACTION_V9``.
-    ``list_available_versions`` discovers versions by scanning ``os.environ``
-    for that prefix — adding a new version means adding a new secret with
-    the right name, no code change needed.
+O texto dos prompts não é versionado no repositório; cada versão é um segredo do Infisical.
 """
 
 import os
+import re
+from dataclasses import dataclass
 
-_ENV_PREFIX = "PROMPT"
+PROMPT_TYPES = ("classification", "extraction")
+
+HINT_TEMPLATE = (
+    "<<<\n"
+    "NOTA DE PRÉ-CLASSIFICAÇÃO (inserida automaticamente pelo pipeline):\n"
+    "O classificador automático identificou esta página como um possível "
+    "documento do tipo **{hint}**. Use como referência inicial, "
+    "mas confirme visualmente antes de extrair — a classificação pode estar incorreta.\n"
+    ">>>\n\n"
+)
 
 
-def _env_var_name(prompt_type: str, version: str) -> str:
-    return f"{_ENV_PREFIX}_{prompt_type.upper()}_{version.upper()}"
+@dataclass(frozen=True)
+class PromptSet:
+    """Versões e textos dos dois prompts usados numa sessão."""
+
+    classification_version: str
+    classification_text: str
+    extraction_version: str
+    extraction_text: str
 
 
-def load_prompt_version(prompt_type: str, version: str) -> str:
+def env_var_name(prompt_type: str, version: str) -> str:
+    """Monta o nome da variável de ambiente de um prompt.
+
+    :param prompt_type: ``"classification"`` ou ``"extraction"``.
+    :param version: Versão, ex. ``"v9"``.
+    :returns: Ex. ``"PROMPT_EXTRACTION_V9"``.
     """
-    Load a specific version of a prompt from its Infisical-injected env var.
+    return f"PROMPT_{prompt_type.upper()}_{version.upper()}"
 
-    :param prompt_type: Type of prompt ('classification' or 'extraction').
-    :param version: Version string (e.g., 'v1', 'v2', 'v3').
-    :returns: Prompt text content.
-    :raises FileNotFoundError: If the env var for that version isn't set
-        (Infisical secret missing from the deployment's environment).
-    :raises ValueError: If prompt_type is invalid.
+
+def version_sort_key(version: str) -> tuple[int, str]:
+    """Ordena ``v2`` antes de ``v10``; versões fora do padrão ``vN`` vêm primeiro.
+
+    :param version: Versão em minúsculas.
+    :returns: Chave de ordenação.
     """
-    if prompt_type not in ["classification", "extraction"]:
-        raise ValueError(f"Invalid prompt_type: {prompt_type}. Must be 'classification' or 'extraction'")
-
-    env_var = _env_var_name(prompt_type, version)
-    value = os.environ.get(env_var)
-    if value is None:
-        raise FileNotFoundError(
-            f"Prompt version not found: env var {env_var} is not set "
-            f"(check the Infisical secret for this deployment's environment)."
-        )
-    return value.strip()
+    match = re.fullmatch(r"v(\d+)", version)
+    return (int(match.group(1)), "") if match else (-1, version)
 
 
-def list_available_versions(prompt_type: str) -> list[str]:
+def list_versions(prompt_type: str) -> list[str]:
+    """Lista as versões disponíveis de um tipo de prompt, em ordem crescente.
+
+    :param prompt_type: ``"classification"`` ou ``"extraction"``.
+    :returns: Versões em minúsculas, ex. ``["v8", "v9", "v10"]``.
     """
-    List all available versions of a prompt type, by scanning env vars.
+    prefix = f"PROMPT_{prompt_type.upper()}_"
+    versions = [key[len(prefix) :].lower() for key in os.environ if key.startswith(prefix)]
+    return sorted(versions, key=version_sort_key)
 
-    :param prompt_type: Type of prompt ('classification' or 'extraction').
-    :returns: List of version strings (e.g., ['v1', 'v2']), sorted.
+
+def load_prompt(prompt_type: str, version: str | None) -> tuple[str, str]:
+    """Carrega uma versão de prompt (a mais recente se ``version`` for ``None``).
+
+    :param prompt_type: ``"classification"`` ou ``"extraction"``.
+    :param version: Versão desejada ou ``None``.
+    :returns: ``(versão, texto)``.
+    :raises ValueError: Se ``prompt_type`` for inválido.
+    :raises RuntimeError: Se não houver versão disponível ou o texto estiver ausente/vazio.
     """
-    prefix = f"{_ENV_PREFIX}_{prompt_type.upper()}_"
-    return sorted(key[len(prefix) :].lower() for key in os.environ if key.startswith(prefix))
-
-
-def get_extraction_prompt(version: str | None = None) -> str:
-    """
-    Load the NF data extraction prompt (for NFExtractor).
-
-    :param version: Specific version to load (e.g., 'v1', 'v2'). If None,
-        loads latest version.
-    :returns: Extraction prompt text.
-    """
+    if prompt_type not in PROMPT_TYPES:
+        raise ValueError(f"Tipo de prompt inválido: {prompt_type!r}")
     if version is None:
-        # Load latest version
-        versions = list_available_versions("extraction")
-        version = versions[-1] if versions else "v1"
-    return load_prompt_version("extraction", version)
+        versions = list_versions(prompt_type)
+        if not versions:
+            raise RuntimeError(f"Nenhuma variável PROMPT_{prompt_type.upper()}_V* definida ({prompt_type}).")
+        version = versions[-1]
+    env_var = env_var_name(prompt_type, version)
+    text = os.environ.get(env_var, "").strip()
+    if not text:
+        raise RuntimeError(f"Prompt ausente ou vazio: {env_var}")
+    return version.lower(), text
 
 
-def get_classification_prompt(version: str | None = None) -> str:
+def load_prompts(classification_version: str | None = None, extraction_version: str | None = None) -> PromptSet:
+    """Carrega os prompts de classificação e extração.
+
+    :param classification_version: Versão fixa ou ``None`` para a mais recente.
+    :param extraction_version: Versão fixa ou ``None`` para a mais recente.
+    :returns: Conjunto de prompts.
+    :raises RuntimeError: Se algum prompt estiver indisponível.
     """
-    Load the page classification prompt (for GeminiClassifier).
+    class_version, class_text = load_prompt("classification", classification_version)
+    extr_version, extr_text = load_prompt("extraction", extraction_version)
+    return PromptSet(class_version, class_text, extr_version, extr_text)
 
-    :param version: Specific version to load (e.g., 'v1', 'v2'). If None,
-        loads latest version.
-    :returns: Classification prompt text.
+
+def extraction_prompt_with_hint(template: str, classification_hint: str | None) -> str:
+    """Substitui ``{classification_hint}`` no prompt de extração.
+
+    :param template: Texto do prompt de extração.
+    :param classification_hint: Categoria vinda da classificação, ou ``None``.
+    :returns: Prompt pronto para envio.
     """
-    if version is None:
-        # Load latest version
-        versions = list_available_versions("classification")
-        version = versions[-1] if versions else "v1"
-
-    return load_prompt_version("classification", version)
+    hint = HINT_TEMPLATE.format(hint=classification_hint) if classification_hint else ""
+    return template.replace("{classification_hint}", hint)
 
 
 def __getattr__(name: str) -> str:
-    """Resolve ``EXTRACTION_PROMPT`` / ``CLASSIFICATION_PROMPT`` lazily.
+    """Mantém ``prompts.CLASSIFICATION_PROMPT``/``EXTRACTION_PROMPT`` para o código antigo até a Task 12.
 
-    Module-level constants would read the environment at import time
-    (forbidden by the styleguide); this defers the read to first access
-    while keeping the ``from .prompts import EXTRACTION_PROMPT`` call sites
-    unchanged.
-
-    :param name: Attribute being accessed.
-    :returns: The rendered prompt text.
-    :raises AttributeError: For any other attribute name.
+    :param name: Atributo acessado.
+    :returns: Texto da versão mais recente.
+    :raises AttributeError: Para qualquer outro nome.
     """
-    if name == "EXTRACTION_PROMPT":
-        return get_extraction_prompt()
     if name == "CLASSIFICATION_PROMPT":
-        return get_classification_prompt()
+        return load_prompt("classification", None)[1]
+    if name == "EXTRACTION_PROMPT":
+        return load_prompt("extraction", None)[1]
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-# Lazily provided by ``__getattr__`` above (annotation-only: no import-time read).
-CLASSIFICATION_PROMPT: str
-EXTRACTION_PROMPT: str
+def list_available_versions(prompt_type: str) -> list[str]:
+    """Alias temporário de :func:`list_versions` para o código antigo (removido na Task 12).
 
-__all__ = [
-    "CLASSIFICATION_PROMPT",
-    "EXTRACTION_PROMPT",
-    "get_classification_prompt",
-    "get_extraction_prompt",
-    "list_available_versions",
-    "load_prompt_version",
-]
+    :param prompt_type: ``"classification"`` ou ``"extraction"``.
+    :returns: Versões disponíveis.
+    """
+    return list_versions(prompt_type)
+
+
+def get_classification_prompt(version: str | None = None) -> str:
+    """Alias temporário para o código antigo (removido na Task 12).
+
+    :param version: Versão ou ``None``.
+    :returns: Texto do prompt.
+    """
+    return load_prompt("classification", version)[1]
+
+
+def get_extraction_prompt(version: str | None = None) -> str:
+    """Alias temporário para o código antigo (removido na Task 12).
+
+    :param version: Versão ou ``None``.
+    :returns: Texto do prompt.
+    """
+    return load_prompt("extraction", version)[1]
+
+
+def load_prompt_version(prompt_type: str, version: str) -> str:
+    """Alias temporário para o código antigo (removido na Task 12).
+
+    :param prompt_type: ``"classification"`` ou ``"extraction"``.
+    :param version: Versão.
+    :returns: Texto do prompt.
+    """
+    return load_prompt(prompt_type, version)[1]
