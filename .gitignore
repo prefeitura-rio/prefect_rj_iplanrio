@@ -61,3 +61,10 @@ local_run_output*.ndjson
 # The tests/ allowlist above re-includes everything under tests/, __pycache__
 # included — re-ignore it specifically.
 pipelines/rj_iplanrio__nf_agent/tests/__pycache__/
+
+# Local artifacts from rj_iplanrio__nf_agent (results and test PDFs never go into the repo)
+pipelines/rj_iplanrio__nf_agent/*.ndjson
+pipelines/rj_iplanrio__nf_agent/*.db
+pipelines/rj_iplanrio__nf_agent/*.csv
+pipelines/rj_iplanrio__nf_agent/pdf*/
+pipelines/rj_iplanrio__nf_agent/calc_tokens.py

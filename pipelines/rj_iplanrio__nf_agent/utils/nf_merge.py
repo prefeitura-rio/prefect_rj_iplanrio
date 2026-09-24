@@ -60,9 +60,7 @@ def normalize_numero_conta(conta: str | None) -> str | None:
     """
     if not conta:
         return None
-    # Remove tudo que não é dígito
     digits = re.sub(r"\D", "", conta)
-    # Remove zeros à esquerda
     return digits.lstrip("0") or digits  # mantém "0" se só zeros
 
 
@@ -151,7 +149,6 @@ def find_fatura_for_nfst(
         logger.warning(f"NFST pág.{nfst.get('pagina')} sem numero_conta — merge impossível")
         return None, None
 
-    # Candidatas com mesmo numero_conta
     candidatas = [f for f in faturas if normalize_numero_conta(f.get("numero_conta")) == nfst_conta]
 
     if not candidatas:
@@ -292,56 +289,43 @@ def coalesce_nfs_by_numero(all_nfs: list[dict]) -> list[dict]:
     if not all_nfs:
         return []
 
-    # Group by same_nf_key
     nf_groups = defaultdict(list)
 
     for nf in all_nfs:
         key = same_nf_key(nf) or ("sem-chave", str(id(nf)))
         nf_groups[key].append(nf)
 
-    # Coalesce each group
     coalesced = []
     for group in nf_groups.values():
         if len(group) == 1:
-            # Single NF, no coalescing needed
             coalesced.append(group[0])
         else:
-            # Multiple NFs with same key - MERGE
             merged = {}
             conflicts = []
 
             for nf in group:
                 for field, value in nf.items():
-                    # Skip null/empty values
                     if value is None or value in ("", "-"):
                         continue
 
-                    # Field not in merged yet - add it
                     if field not in merged:
                         merged[field] = value
-
-                    # Field exists but is null - replace
                     elif merged[field] is None or merged[field] == "" or merged[field] == "-":
                         merged[field] = value
-
-                    # SPECIAL: For valor_total field, prefer MAIOR valor
                     elif field == "valor_total":
+                        # Multiple pages of the same NF: keep the larger valor_total.
                         if isinstance(value, (int, float)) and isinstance(merged[field], (int, float)):
                             if value > merged[field]:
                                 old_val = merged[field]
                                 merged[field] = value
                                 conflicts.append(f"{field}: {old_val} → {value}")
-
-                    # SPECIAL: For pagina, use earliest (menor número)
                     elif field == "pagina":
                         if isinstance(value, int) and isinstance(merged[field], int):
                             merged[field] = min(merged[field], value)
-
-                    # For other fields, if different, log conflict but keep first value
                     elif merged[field] != value:
+                        # Keep the first value seen; record the disagreement for manual review.
                         conflicts.append(f"{field}: '{merged[field]}' vs '{value}'")
 
-            # Add conflict info to observacao if any
             if conflicts:
                 existing_obs = merged.get("observacao", "")
                 conflict_note = f"[MERGE: {'; '.join(conflicts)}]"

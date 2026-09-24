@@ -3,8 +3,7 @@
 # Minimum similarity score for fuzzy category matching (see normalize_category below).
 FUZZY_MATCH_THRESHOLD = 0.7
 
-# Valid Page Classification Categories (must match prompt v3)
-# Aligned with extraction categories - no more "Nota Fiscal" generic, now specific types
+# Must match the categories used in the classification prompt.
 PAGE_CATEGORIES = [
     "NF-e",  # Nota Fiscal Eletrônica (produtos/mercadorias)
     "NFS-e",  # Nota Fiscal de Serviços Eletrônica
@@ -17,8 +16,7 @@ PAGE_CATEGORIES = [
     "Nenhuma das Opções",  # Página sem documento fiscal
 ]
 
-# Categories that are considered NF (Nota Fiscal) documents
-# ALL categories except "Nenhuma das Opções" are considered fiscal documents
+# All categories except "Nenhuma das Opções" count as fiscal documents.
 NF_CATEGORIES = [
     "NF-e",
     "NFS-e",
@@ -213,24 +211,20 @@ def normalize_category(raw_category: str) -> str:
     if not raw_category:
         return "Nenhuma das Opções"
 
-    # Clean and lowercase for comparison
     cleaned = raw_category.strip().lower()
 
-    # Direct match (case-insensitive)
     for valid_cat in PAGE_CATEGORIES:
         if cleaned == valid_cat.lower():
             return valid_cat
 
-    # Check aliases
     if cleaned in CATEGORY_ALIASES:
         return CATEGORY_ALIASES[cleaned]
 
-    # Partial match - check if any alias is contained in the response
+    # Partial match: response contains (or is contained by) a known alias.
     for alias, valid_cat in CATEGORY_ALIASES.items():
         if alias in cleaned or cleaned in alias:
             return valid_cat
 
-    # Fuzzy match using similarity (Levenshtein-like)
     best_match = None
     best_score = 0
 
@@ -243,7 +237,6 @@ def normalize_category(raw_category: str) -> str:
     if best_match:
         return best_match
 
-    # Default fallback
     return "Nenhuma das Opções"
 
 
@@ -255,7 +248,6 @@ def similarity_score(s1: str, s2: str) -> float:
     if not s1 or not s2:
         return 0.0
 
-    # Simple character overlap ratio
     s1_set = set(s1.lower())
     s2_set = set(s2.lower())
 
@@ -266,11 +258,7 @@ def similarity_score(s1: str, s2: str) -> float:
         return 0.0
 
     jaccard = intersection / union
-
-    # Also consider length similarity
     len_ratio = min(len(s1), len(s2)) / max(len(s1), len(s2))
-
-    # Combined score
     return (jaccard + len_ratio) / 2
 
 
