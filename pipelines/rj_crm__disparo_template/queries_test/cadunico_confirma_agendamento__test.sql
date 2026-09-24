@@ -73,7 +73,7 @@ filtra_disparados AS (
     LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
         ON sd.cpf = segmentacao_original.cpf
         AND sd.nome_hsm = 'confirma_agendamento_cadunico_prod_v2'
-        AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY)
+        AND sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 15 DAY)
         AND sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 15 DAY)
         AND sd.indicador_quarentena = FALSE
     LEFT JOIN `rj-crm-registry.crm_whatsapp.telefone_disparado` td

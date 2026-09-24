@@ -484,13 +484,7 @@ def get_already_dispatched_data(billing_project_id: str, dispatch_interval_days:
         SELECT DISTINCT cpf , contato_telefone as telefone, status_disparo as status, nome_hsm as nome_campanha, data_particao
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-          AND (
-            envio_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-              OR
-            entrega_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-              OR
-            falha_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
-            )
+          AND processado_datahora >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL {dispatch_interval_days} DAY)
     """
     log(f"Buscando disparos já realizados hoje e na campanha para evitar duplicidade:\n{query}")
     try:
@@ -857,6 +851,7 @@ def check_flow_status(
     if not is_ativo:
         log(f"\n⚠️  Flow is not active for {row.get('nome_campanha')} in environment={flow_environment}.")
         message = f"""
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run desativado em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
     💻 **Ambiente:** {flow_environment}
@@ -882,6 +877,7 @@ def check_flow_status(
     if expiration_date is not None and expiration_date < current_date:
         log(f"\n⚠️  Flow for campaign_name={campaign_name} in environment={flow_environment} has expired on {expiration_date}.")
         message = f"""
+    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
     Prefect flow run atingiu a data limite em https://docs.google.com/spreadsheets/d/1O-noD696ZjIr9X_Vl4ZKyFDyg0q9KHe9jacExdAp4ck/!
     📋 **Campanha:** {row.get("nome_campanha")}
     💻 **Ambiente:** {flow_environment}
@@ -998,7 +994,7 @@ def get_failed_cpfs(billing_project_id: str, campaign_name: str,) -> set:
         SELECT DISTINCT cpf
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE indicador_quarentena = TRUE
-        AND envio_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
+        AND processado_datahora >= datetime_sub(current_datetime("America/Sao_Paulo"), INTERVAL 4 hour)
         AND data_particao >= date_sub(current_date("America/Sao_Paulo"), INTERVAL 1 day)
         {campaign_filter}
     """
@@ -1027,28 +1023,41 @@ def check_campaign_success(
     billing_project_id: str,
     campaign_name: str,
     dispatch_date: str,
+    total_dispatched: int,
 ) -> bool:
     """
-    Verifica se já existe pelo menos um disparo com sucesso confirmado (entrega_datahora
-    preenchida, sem falha/quarentena) para a campanha desde o horário do disparo (dispatch_date).
+    Verifica se já existe webhook de envio ou falha para pelo menos 20% dos registros
+    disparados (total_dispatched) no dia do disparo (dispatch_date) para a campanha.
+
+    Usa envio_datahora ou falha_datahora >= dispatch_date para garantir que o evento
+    ocorreu hoje — e não um webhook tardio de delivered/read de campanha anterior
+    chegando nos dias seguintes.
 
     Usada pelo monitoramento pós-SFTP para decidir se deve alertar no Discord por falta
-    de confirmação de entrega.
+    de confirmação de disparo.
     """
     query = f"""
         SELECT COUNT(*) AS total_sucesso
         FROM `rj-crm-registry.brutos_salesforce.status_disparo`
         WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
-          AND (envio_datahora >= '{dispatch_date}' or falha_datahora >= '{dispatch_date}')
-          AND data_particao >= DATE('{dispatch_date}')
+          AND data_particao = DATE('{dispatch_date}')
+          AND (
+              envio_datahora >= '{dispatch_date}'
+              OR falha_datahora >= '{dispatch_date}'
+          )
     """
     try:
         df = download_data_from_bigquery(
             query=query, billing_project_id=billing_project_id, bucket_name=billing_project_id
         )
         total = int(df.iloc[0]["total_sucesso"]) if not df.empty else 0
-        log(f"check_campaign_success: {total} disparo(s) com recebimento de webhook confirmado para '{campaign_name}' desde {dispatch_date}.")
-        return total > 0
+        threshold = total_dispatched * 0.2
+        log(
+            f"check_campaign_success: {total} disparo(s) com envio_datahora ou falha_datahora "
+            f"preenchidos hoje para '{campaign_name}' (dispatch_date={dispatch_date}). "
+            f"Threshold 20%: {threshold:.0f} de {total_dispatched} disparados."
+        )
+        return total >= threshold
     except Exception as e:
         log(f"Erro ao verificar sucesso do disparo: {e}", level="warning")
         return False
@@ -1063,15 +1072,17 @@ def monitor_dispatch_status(
     initial_wait_minutes: int,
     check_interval_minutes: int,
     max_wait_minutes: int,
+    total_dispatched: int = 0,
 ) -> bool:
     """
     Aguarda initial_wait_minutes, depois materializa int_crm_status_disparo e checa se há
     sucesso confirmado para a campanha a cada check_interval_minutes, até max_wait_minutes.
-    Sai assim que encontrar sucesso. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
+    Considera sucesso quando pelo menos 20% de total_dispatched tiverem envio_datahora ou
+    falha_datahora preenchidos. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
     sucesso for confirmado dentro do prazo.
 
     Returns:
-        bool: True se algum sucesso foi confirmado, False caso contrário.
+        bool: True se sucesso confirmado (>= 20% dos disparados), False caso contrário.
     """
     print(f"⏳ Aguardando {initial_wait_minutes} minutos antes da primeira materialização/checagem de sucesso...")
     time.sleep(initial_wait_minutes * 60)
@@ -1090,6 +1101,7 @@ def monitor_dispatch_status(
             billing_project_id=billing_project_id,
             campaign_name=campaign_name,
             dispatch_date=dispatch_date,
+            total_dispatched=total_dispatched,
         )
         print(f"🔍 Checagem em {elapsed_minutes} min: {'✅ sucesso encontrado' if campaign_found else '⚠️  nenhum sucesso ainda'}.")
 
@@ -1103,6 +1115,7 @@ def monitor_dispatch_status(
     if not campaign_found:
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
         message = f"""
+<@821121576455634955> <@1458456241683824744> <@302518123066556426>
 🚨 **Nenhum webhook de sucesso recebido!**
 📋 **Campanha:** {campaign_name}
 ⏱️ **Prazo monitorado:** {max_wait_minutes} minutos após o envio via SFTP.
@@ -1269,7 +1282,7 @@ def save_csv_for_sftp(
     filename = f"{data_extension_filename}_{timestamp}.csv"
 
     if de_columns is not None:
-        keep_columns = [col for col in ["telefone", "SubscriberKey", *de_columns] if col in df.columns]
+        keep_columns = [col for col in dict.fromkeys(["telefone", "SubscriberKey", *de_columns]) if col in df.columns]
         csv_df = df[keep_columns].copy()
     else:
         csv_df = df.drop(columns=["others"], errors="ignore")

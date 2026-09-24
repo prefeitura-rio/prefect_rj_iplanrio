@@ -3,22 +3,23 @@ WITH segmentacao_original AS (
     SELECT
         lpad(cast(cpf as string) , 11, '0') as cpf,
         nome,
+        nome_maternidade_alta AS maternidade,
         data_alta_internacao,
         telefones_gestante
-    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
-    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+    FROM `rj-sms.projeto_whatsapp.alta_maternidade`
     WHERE cpf is not null
         and cpf != '00000000000'
     AND CURRENT_DATE('America/Sao_Paulo') in
         (
         {datas_internacao}
         )
-        and nome_maternidade_alta like '%MARIA AMELIA%'
+        and nome_maternidade_alta in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')
 ),
 telefones as (
 select
     lpad(cast(cpf as string) , 11, '0') as cpf,
     nome,
+    MAX(maternidade) as maternidade,
     MAX(data_alta_internacao) as data_alta_internacao,
     MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
     MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
@@ -57,7 +58,7 @@ status_final_telefone AS (
     FROM `rj-crm-registry.brutos_salesforce.status_disparo`
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY contato_telefone
-        ORDER BY envio_datahora DESC
+        ORDER BY processado_datahora DESC
     ) = 1
 ),
 filtra_falhas AS (
@@ -99,7 +100,7 @@ filtra_recebeu_primeira_hsm as (
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
             on sd.cpf = filtra_falhas.cpf
             and sd.nome_hsm = '{nome_hsm_anterior_placeholder}'
-            and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)
+            and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 50 DAY)
             and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 51 DAY)
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
             on fl.targetexternalid = filtra_falhas.cpf
@@ -117,7 +118,7 @@ filtra_disparados as (
     left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
             on sd.cpf = filtra_recebeu_primeira_hsm.cpf
             and sd.nome_hsm = '{nome_hsm_placeholder}'
-            and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
+            and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
             and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
             and sd.indicador_quarentena = FALSE
     left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
@@ -145,6 +146,7 @@ SELECT
             nome
         )
     ) AS nome,
+    maternidade,
     CAST(DATE_DIFF(CURRENT_DATE('America/Sao_Paulo'), DATE(data_alta_internacao), DAY) AS STRING) AS numero_dias,
     ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
 from final

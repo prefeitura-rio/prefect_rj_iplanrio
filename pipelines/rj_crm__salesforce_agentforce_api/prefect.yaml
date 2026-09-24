@@ -1,0 +1,137 @@
+# Salesforce Data Cloud — Agentforce Pipeline
+#
+# Entrypoint: flows/full_daily.py:agentforce_full_daily
+#
+# Fases:
+#   F1 — STDM (obrigatória): ai_agent_session, ai_agent_interaction,
+#                             ai_agent_interaction_step, ai_agent_interaction_message
+#   F2a — Messaging (opcional): messaging_session, conversation_entry
+#   F2b — MCE (opcional): mce_sent, mce_open, mce_click, mce_bounce, mce_unsub, mce_subscriber
+#   F3  — Platform Tracing (opcional): telemetry_trace_span
+#   F4  — GenAI Audit (opcional): genai_gateway_request, genai_generation, genai_quality, genai_feedback
+#
+# Credenciais necessárias no Infisical (path: /salesforce_crm):
+#   SF_DC_CLIENT_ID      : Client ID da Connected App DataCloud_Integration
+#   SF_DC_CLIENT_SECRET  : Client Secret da Connected App
+#   SF_DC_USERNAME       : datacloud-integration@prefeitura.rio
+#   SF_DC_INSTANCE_URL   : https://prefeitura-rio.my.salesforce.com
+#   SF_DC_DATASPACE      : default
+#
+# OAuth token endpoint:
+#   POST https://prefeitura-rio.my.salesforce.com/services/oauth2/token
+#   grant_type=client_credentials&client_id=...&client_secret=...
+
+name: rj_crm__salesforce_agentforce_api
+prefect-version: 3.4.3
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__salesforce_agentforce_api-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__salesforce_agentforce_api/Dockerfile
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: '{{ build-image.image_name }}'
+      tag: '{{ build-image.tag }}'
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+deployments:
+
+  # -----------------------------------------------------------------------
+  # Deployment de staging (QA)
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-agentforce-api--staging
+    version: '{{ build-image.tag }}'
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+    parameters:
+      dataset_id: brutos_salesforce_staging
+      environment: staging
+    schedules:
+      # Cadência de 15 em 15min foi um teste (2026-08-20) que ficou ligado — e foi
+      # exatamente o que expôs o bug do write_mode='replace' em messaging_session/
+      # messaging_end_user (cada execução apagava a partição do dia inteiro e
+      # recarregava só a fatia de 15min, perdendo o que runs anteriores do mesmo dia
+      # já tinham carregado — corrigido pra write_mode='merge', ver flow.py).
+      # Desativado agora que produção tem schedule próprio — staging volta a ser
+      # só sob demanda (QA), não uma cadência contínua paralela à de prod.
+      - cron: "*/15 * * * *"
+        timezone: America/Sao_Paulo
+        active: false
+        slug: agentforce-teste-15min
+
+  # -----------------------------------------------------------------------
+  # Deployment de producao
+  # -----------------------------------------------------------------------
+  - name: rj-crm--salesforce-agentforce-api--prod
+    version: '{{ get-commit-hash.stdout }}'
+    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
+        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    parameters:
+      environment: prod
+      # dataset_id NÃO é o default (AgentforceConstants.DATASET_ID = "brutos_salesforce")
+      # de propósito: todo o dbt (queries-rj-crm-registry, source "brutos_salesforce_
+      # staging" — mesma convenção usada por TODAS as áreas de raw Salesforce do
+      # monorepo, não só Agentforce) lê de brutos_salesforce_staging, não de
+      # brutos_salesforce (esse é reservado a saída de pipeline própria, ex.:
+      # ai_agent_session_classificacao). "staging" aqui é a zona de pouso pré-dbt
+      # (convenção ELT), não o ambiente do Prefect — os dois nomes coincidem por
+      # acaso e quase causaram um desligamento do pipeline real (ver commit).
+      # O deployment de staging (QA) usa esse mesmo dataset_id — sem ele aqui, prod
+      # escreveria num dataset órfão que o dbt nunca lê.
+      dataset_id: brutos_salesforce_staging
+    # Impede a passada diária (modo='dia', reconciliação funda) de escrever na
+    # mesma tabela ao mesmo tempo que um tick de 15min (modo='hora') — mesmo
+    # padrão já usado em rj_crm__run_dbt (ver prefect.yaml de lá) pro mesmo
+    # tipo de risco: dois MERGE concorrentes no mesmo modelo incremental. Com
+    # ENQUEUE, quem colidir espera a vez em vez de rodar em paralelo.
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
+    schedules:
+      # Passe quente — janela rolante de 1h a cada 15min (ver tasks/janela.py).
+      # Nunca teve schedule antes de 2026-08-27 — só rodava sob demanda (explica
+      # o checkpoint de prod, agentforce_control.pipeline_checkpoints, ter ficado
+      # vazio por tanto tempo). Migrado de watermark forward-only pra modo janela
+      # em 2026-09-08: um tick perdido (schedule pausado, erro transitório, pico
+      # de volume) não se recuperava sozinho — achado concreto: buraco de quase
+      # 100% em 02/09/2026, só resolvido com backfill manual. A sobreposição de
+      # 1h entre ticks consecutivos cobre isso — um tick perdido é reconsultado
+      # pelos 3 seguintes dentro da mesma hora.
+      - cron: "*/15 * * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: agentforce-producao-15min
+        parameters:
+          modo: hora
+      # Passe frio — reconciliação do dia inteiro, 1x/dia às 00:15 (SP), pra
+      # pegar o que nem a sobreposição de 1h do passe quente alcançou (ex.:
+      # pipeline parado por mais de 1h seguida). Reconcilia o dia que acabou de
+      # fechar (partition_date default = ontem, ver flow.py/janela_dia).
+      - cron: "15 0 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: agentforce-producao-diaria
+        parameters:
+          modo: dia

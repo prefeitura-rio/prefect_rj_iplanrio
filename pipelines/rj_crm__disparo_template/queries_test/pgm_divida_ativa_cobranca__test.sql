@@ -151,7 +151,7 @@ FROM celulares_validos
 LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
     ON sd.cpf = celulares_validos.cpf
     AND sd.nome_hsm = 'pgm_divida_ativa_prod_v2'
-    AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 150 DAY)
+    AND sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 150 DAY)
     AND sd.data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 151 DAY)
 LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
     ON fl.targetexternalid = celulares_validos.cpf

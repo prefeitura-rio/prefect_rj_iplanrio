@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
 """
 Flow para coleta e processamento de dados de precipitação do AlertaRio - COR.
 
-Migrado de Prefect 1.4 para Prefect 3.0.
+Migrado de Prefect 1.4 para Prefect 3.0..
 """
 from typing import Optional
 

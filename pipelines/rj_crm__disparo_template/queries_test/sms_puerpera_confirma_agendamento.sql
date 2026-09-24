@@ -97,7 +97,7 @@ WITH segmentacao_original AS (
     FROM `rj-crm-registry.brutos_salesforce.status_disparo`
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY contato_telefone
-        ORDER BY envio_datahora DESC
+        ORDER BY processado_datahora DESC
     ) = 1
     ),
 
@@ -142,7 +142,7 @@ WITH segmentacao_original AS (
         left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
                 on sd.cpf = filtra_falhas.cpf
                 and sd.nome_hsm = '_sms_puerpera_disp1_gestantev2'
-                and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY)
+                and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 1 DAY)
                 and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
                 and sd.indicador_quarentena = FALSE
         left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl

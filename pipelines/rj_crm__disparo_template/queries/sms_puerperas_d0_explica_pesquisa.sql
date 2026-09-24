@@ -2,20 +2,21 @@ WITH segmentacao_original AS (
     SELECT
         lpad(cast(cpf as string) , 11, '0') as cpf,
         nome,
+        nome_maternidade_alta AS maternidade,
         data_alta_internacao,
         telefones_gestante,
-    FROM `rj-sms.projeto_whatsapp.sisare_alta_maternidade`
-    -- from `rj-crm-registry-dev.brutos_sms.sisare_alta_maternidade_teste`
+    FROM `rj-sms.projeto_whatsapp.alta_maternidade`
     WHERE cpf is not null
         and cpf != '00000000000'
     AND DATE(data_alta_internacao) between
             DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 2 DAY) and CURRENT_DATE('America/Sao_Paulo')
-            and nome_maternidade_alta like '%MARIA AMELIA%' -- todo: remover comentario
+            and nome_maternidade_alta in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')
     ),
     telefones as (
-    select 
+    select
         lpad(cast(cpf as string) , 11, '0') as cpf,
         nome,
+        MAX(maternidade) as maternidade,
         MAX(data_alta_internacao) as data_alta_internacao,
         MAX(IF(telefone.prioridade = '1', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_1,
         MAX(IF(telefone.prioridade = '2', telefone.telefone_valido_whatsapp, NULL)) AS celular_disparo_2,
@@ -50,7 +51,7 @@ WITH segmentacao_original AS (
     FROM `rj-crm-registry.brutos_salesforce.status_disparo`
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY contato_telefone
-        ORDER BY envio_datahora DESC
+        ORDER BY processado_datahora DESC
     ) = 1
     ),
 
@@ -94,7 +95,7 @@ WITH segmentacao_original AS (
         left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
                 on sd.cpf = filtra_falhas.cpf
                 and sd.nome_hsm = '{nome_hsm_placeholder}'
-                and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY) -- pessoa só recebe essa mensagem cerca de uma vez por ano podendo pegar mais de uma gravidez
+                and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY) -- pessoa só recebe essa mensagem cerca de uma vez por ano podendo pegar mais de uma gravidez
                 and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
                 and sd.indicador_quarentena = FALSE
         left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
@@ -120,6 +121,7 @@ WITH segmentacao_original AS (
                 nome
             )
         ) AS nome,
+        maternidade,
         ARRAY(SELECT x FROM UNNEST([celular_disparo_2, celular_disparo_3]) AS x WHERE x IS NOT NULL AND x != celular_disparo) AS others
     from final
     where celular_disparo is not null

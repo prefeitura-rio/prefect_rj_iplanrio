@@ -23,7 +23,7 @@ SELECT
 FROM `rj-crm-registry.rmi_dados_mestres.pessoa_fisica` pf
 WHERE pf.telefone.principal.qualidade = 'VALIDO'
     AND pf.telefone.principal.estrategia_envio != "NÃO ENVIAR"
-    AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR", "EVITAR")
+    AND pf.telefone.principal.estrategia_envio in ("ENVIAR", "TESTAR")
     AND pf.telefone.principal.tipo = "CELULAR"
     AND pf.telefone.principal.valor IS NOT NULL
     AND pf.menor_idade IS FALSE
@@ -39,8 +39,8 @@ SELECT celulares_validos.*
 FROM celulares_validos
 LEFT JOIN `rj-crm-registry.brutos_salesforce.status_disparo` sd
     ON sd.cpf = celulares_validos.cpf
-    AND sd.nome_hsm = '{nome_hsm_cobranca_placeholder}'
-    AND sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 150 DAY)
+    AND sd.nome_hsm IN ({nome_hsm_cobranca_placeholder})
+    AND sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME("America/Sao_Paulo"), INTERVAL 150 DAY)
     AND sd.data_particao >= DATE_SUB(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 151 DAY)
 LEFT JOIN `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl
     ON fl.targetexternalid = celulares_validos.cpf
@@ -186,6 +186,7 @@ FROM tmp_grupos;
 -- ===================== 3) Estrutura dados para o disparo =====================
 -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por
 -- CPF) e é descartado do CSV pelo de_columns antes do envio à Data Extension.
+-- O limite cresce 100 por dia útil.
 SELECT
     celular_disparo AS telefone,
     CAST(cpf AS STRING) AS SubscriberKey,
@@ -200,6 +201,21 @@ SELECT
             nome
         )
     ) AS nome_sobrenome
-FROM tmp_grupos
-ORDER BY ordem_sorteio
+FROM (
+    SELECT
+        *,
+        ROW_NUMBER() OVER (ORDER BY ordem_sorteio) AS rn
+    FROM tmp_grupos
+)
+-- WHERE rn <= (
+--     -- sobe 100 por semana desde 2026-08-15 (inclusive)
+--     DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-08-15'), WEEK) + 1
+
+--     -- -- sobe 100 por dia útil desde 2026-09-01 (inclusive)
+--     -- -- dias úteis desde start_date (inclusivo: start_date = dia 1)
+--     -- DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-09-01'), DAY)
+--     -- - DATE_DIFF(CURRENT_DATE("America/Sao_Paulo"), DATE('2026-09-01'), WEEK)        -- remove domingos
+--     -- - DATE_DIFF(DATE_ADD(CURRENT_DATE("America/Sao_Paulo"), INTERVAL 1 DAY), DATE_ADD(DATE('2026-08-19'), INTERVAL 1 DAY), WEEK)  -- remove sábados
+--     -- + 1  -- start_date conta como dia 1
+-- ) * 100
 LIMIT cast({limit_placeholder} as int64);

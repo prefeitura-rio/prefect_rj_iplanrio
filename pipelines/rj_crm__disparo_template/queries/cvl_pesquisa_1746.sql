@@ -112,7 +112,7 @@ WITH tabela_global AS (
     LEFT JOIN rj-segovi.adm_central_atendimento_1746.origem_ocorrencia t5
         ON t1.id_origem_ocorrencia = CAST(t5.id_origem_ocorrencia AS STRING)
     WHERE 1=1
-        AND t1.data_inicio >= '2025-01-01 00:00:00.000' -- Considera somente chamados a partir de Jan/25
+        AND t1.data_particao >= '2025-01-01' -- Considera somente chamados a partir de Jan/25
         AND (
             -- Aceitam qualquer categoria
             t1.id_subtipo IN ('5899', '3366')
@@ -166,7 +166,7 @@ WITH tabela_global AS (
                     WHEN 'ATENDIDA' THEN '{nome_hsm_com_solucao_placeholder}'
                     WHEN 'SEM_RESOLUCAO' THEN '{nome_hsm_sem_resolucao_placeholder}'
                 END
-            and DATE(sd.envio_datahora) = CURRENT_DATE("America/Sao_Paulo")
+            and DATE(sd.processado_datahora) = CURRENT_DATE("America/Sao_Paulo")
             and sd.data_particao = CURRENT_DATE("America/Sao_Paulo")
             and sd.indicador_quarentena = FALSE
     WHERE fl.flattarget is null

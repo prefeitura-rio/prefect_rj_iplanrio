@@ -18,7 +18,7 @@ WITH segmentacao_original AS (
         AND time(data_hora_agendamento_visita_maternidade) != '00:00:00'
         AND DATE(data_hora_criacao_agendamento) =
             DATE_SUB(CURRENT_DATE('America/Sao_Paulo'), INTERVAL 1 DAY)
-            and nome_maternidade_agendada like '%MARIA AMELIA%'
+            and nome_maternidade_agendada in ('HOSPITAL MATERNIDADE HERCULANO PINHEIRO', 'HOSPITAL MATERNIDADE MARIA AMELIA B DE HOLLANDA')
     GROUP BY
         cpf,
         nome,
@@ -53,7 +53,7 @@ WITH segmentacao_original AS (
     FROM `rj-crm-registry.brutos_salesforce.status_disparo`
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY contato_telefone
-        ORDER BY envio_datahora DESC
+        ORDER BY processado_datahora DESC
     ) = 1
     ),
 
@@ -97,7 +97,7 @@ WITH segmentacao_original AS (
         left join `rj-crm-registry.brutos_salesforce.status_disparo` sd
                 on sd.cpf = filtra_falhas.cpf
                 and sd.nome_hsm = '{nome_hsm_placeholder}'
-                and sd.envio_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
+                and sd.processado_datahora >= DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL {intervalo_filtro_disparados} DAY)
                 and sd.data_particao >= DATE_SUB(CURRENT_DATE(), INTERVAL {intervalo_filtro_disparados} DAY)
                 and sd.indicador_quarentena = FALSE
         left join `rj-crm-registry.brutos_wetalkie_staging.fluxo_atendimento_*` fl

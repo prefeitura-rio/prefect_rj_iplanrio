@@ -221,7 +221,7 @@ WITH tabela_global AS (
                     WHEN 'ATENDIDA' THEN 'cvl_pesquisa_1746_prod_v1'
                     WHEN 'SEM_RESOLUCAO' THEN 'cvl_pesquisa_1746_sem_resolucao_prod_v1'
                 END
-            and DATE(sd.envio_datahora) = CURRENT_DATE("America/Sao_Paulo")
+            and DATE(sd.processado_datahora) = CURRENT_DATE("America/Sao_Paulo")
             and sd.data_particao = CURRENT_DATE("America/Sao_Paulo")
             and sd.indicador_quarentena = FALSE
     WHERE fl.flattarget is null
