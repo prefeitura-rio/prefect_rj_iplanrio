@@ -209,11 +209,15 @@ def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
             continue
 
         if batch.status in FAILURE_STATES:
-            append_event(
-                settings.nf_batch_jobs_table,
-                JobEvent(event.session_id, event.phase, event.batch_id, STATE_FAILED,
-                         error=str(getattr(batch, "errors", None) or batch.status)),
-            )
+            try:
+                append_event(
+                    settings.nf_batch_jobs_table,
+                    JobEvent(event.session_id, event.phase, event.batch_id, STATE_FAILED,
+                             error=str(getattr(batch, "errors", None) or batch.status)),
+                )
+            except Exception as exc:
+                errors.append(f"sessão {event.session_id} ({event.phase}): {exc}\n{traceback.format_exc()}")
+                continue
             summary.failed.append(event.session_id)
             continue
         if batch.status != SUCCESS_STATE:

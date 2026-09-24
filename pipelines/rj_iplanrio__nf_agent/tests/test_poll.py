@@ -64,6 +64,18 @@ def test_failed_batch_marks_session_failed(io):
     assert io.appended[0].state == STATE_FAILED
 
 
+def test_failed_write_error_is_aggregated_without_blocking_other_sessions(io):
+    other = JobEvent("s2", PHASE_CLASSIFICATION, "b2", STATE_SUBMITTED)
+    io.active.return_value = [START, other]
+    io.retrieve.side_effect = [batch("expired"), batch("in_progress")]
+    with (
+        patch.object(poll, "append_event", side_effect=RuntimeError("bq indisponível")),
+        pytest.raises(RuntimeError, match=r"(?s)s1.*bq indisponível"),
+    ):
+        poll.poll_sessions(MagicMock(), SETTINGS)
+    assert [call.args[1] for call in io.retrieve.call_args_list] == ["cls-batch", "b2"]
+
+
 def test_classification_done_submits_extraction_from_echoed_pages(io):
     io.active.return_value = [START]
     io.retrieve.return_value = batch("completed")
