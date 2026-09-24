@@ -91,18 +91,22 @@ def check_mongo_indexes(mongo_config: MongoConnectionConfig) -> dict[str, dict]:
     Returns:
         Dictionary mapping collection name -> index_information() result.
     """
+    logger.info(f"Connecting to MongoDB at {mongo_config.hostname}:{mongo_config.port}/{mongo_config.database}")
     client = get_mongo_connection(mongo_config)
+    logger.info("MongoDB connection established successfully")
     try:
         db = client[mongo_config.database]
+        logger.info("Retrieving index information for FILES.chunks and FILES.files collections")
         indexes = {
             "FILES.chunks": db["FILES.chunks"].index_information(),
             "FILES.files": db["FILES.files"].index_information(),
         }
+        logger.info("Successfully retrieved index information from both collections")
     finally:
         close_mongo_connection(client)
 
     for collection, index_info in indexes.items():
-        logger.warning(f"Indexes on {collection}: {index_info}")
+        logger.info(f"Indexes on {collection}: {index_info}")
 
     return indexes
 
