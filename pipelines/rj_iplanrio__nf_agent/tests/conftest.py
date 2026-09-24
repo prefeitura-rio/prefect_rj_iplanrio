@@ -100,3 +100,35 @@ def restore_google_application_credentials():
 def pdf_bytes():
     """Fábrica de PDFs válidos em memória com N páginas."""
     return make_pdf_bytes
+
+
+def make_vertex_row(custom_id: str, text: str | None, page_b64: str = "QUJD", status: str = "") -> dict:
+    """Monta uma linha de output do Vertex Batch Prediction como a que chega em predictions.jsonl."""
+    response = {}
+    if text is not None:
+        response = {
+            "candidates": [{"content": {"parts": [{"text": text}]}}],
+            "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5, "totalTokenCount": 15},
+        }
+    return {
+        "custom_id": custom_id,
+        "request": {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": "prompt"},
+                        {"inlineData": {"mimeType": "application/pdf", "data": page_b64}},
+                    ],
+                }
+            ]
+        },
+        "status": status,
+        "response": response,
+    }
+
+
+@pytest.fixture
+def vertex_row():
+    """Fábrica de linhas de output do Vertex."""
+    return make_vertex_row

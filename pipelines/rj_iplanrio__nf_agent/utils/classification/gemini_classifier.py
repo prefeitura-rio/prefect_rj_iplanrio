@@ -19,9 +19,7 @@ from __future__ import annotations
 
 from prefect_rj_iplanrio.logging import get_logger
 
-from ..llm import build_llm_client
-from ..prompts import CLASSIFICATION_PROMPT
-from .categories import (  # noqa: F401  (re-exported; public API)
+from ..categories import (  # noqa: F401  (re-exported; public API)
     CATEGORY_ALIASES,
     NF_CATEGORIES,
     PAGE_CATEGORIES,
@@ -29,6 +27,8 @@ from .categories import (  # noqa: F401  (re-exported; public API)
     normalize_category,
     similarity_score,
 )
+from ..llm import build_llm_client
+from ..prompts import CLASSIFICATION_PROMPT
 from .config import DEFAULT_GENERATION_CONFIG, DEFAULT_MODEL_NAME
 from .page_classification import (
     ClassificationOptions,  # noqa: F401  (re-exported; public API)

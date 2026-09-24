@@ -37,7 +37,7 @@ from iplanrio_agent_toolkit.gemini.response_parsing import parse_json_response
 
 from prefect_rj_iplanrio.logging import get_logger
 
-from ..classification.categories import NF_CATEGORIES
+from ..categories import NF_CATEGORIES
 from ..extraction.prompt import parse_response as parse_extraction_response
 from .custom_id import decode_custom_id
 
