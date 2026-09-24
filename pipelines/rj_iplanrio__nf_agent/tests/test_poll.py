@@ -41,7 +41,8 @@ def io(vertex_row):
         patch.object(poll, "session_start", return_value=START),
         patch.object(poll, "load_prompts", return_value=PROMPTS) as load_prompts,
         patch.object(poll, "submit_jsonl", return_value=SubmittedBatch("ext-batch", "ext-file")) as submit_jsonl,
-        patch.object(poll, "append_event", side_effect=lambda table, event: appended.append(event)),
+        # Mirrors append_event's signature exactly since it's used as its side_effect.
+        patch.object(poll, "append_event", side_effect=lambda table, event: appended.append(event)),  # noqa: ARG005
         patch.object(poll, "write_ndjson", return_value="gs://out-bkt/x.ndjson") as write,
     ):
         yield SimpleNamespace(active=active, retrieve=retrieve, read=read, load_prompts=load_prompts,
@@ -93,7 +94,12 @@ def test_classification_done_submits_extraction_from_echoed_pages(io):
     assert "**NFS-e**" in parts[0]["text"]
     assert parts[1]["inlineData"]["data"] == "UDI="
     event = io.appended[0]
-    assert (event.phase, event.batch_id, event.state, event.row_count) == (PHASE_EXTRACTION, "ext-batch", STATE_SUBMITTED, 1)
+    assert (event.phase, event.batch_id, event.state, event.row_count) == (
+        PHASE_EXTRACTION,
+        "ext-batch",
+        STATE_SUBMITTED,
+        1,
+    )
 
 
 def test_classification_without_nf_finishes_directly(io):
@@ -112,12 +118,16 @@ def test_classification_without_nf_finishes_directly(io):
 
 def test_extraction_done_reads_classification_output_from_vertex(io):
     io.active.return_value = [JobEvent("s1", PHASE_EXTRACTION, "ext-batch", STATE_SUBMITTED)]
-    io.retrieve.side_effect = lambda client, batch_id: {
+    # Mirrors retrieve_batch's signature exactly since it's used as its side_effect.
+    io.retrieve.side_effect = lambda client, batch_id: {  # noqa: ARG005
         "ext-batch": batch("completed", "gs://bkt/out/ext"),
         "cls-batch": batch("completed", "gs://bkt/out/cls"),
     }[batch_id]
     io.read.side_effect = lambda uri: {
-        "gs://bkt/out/cls": [io.row("doc:1", '{"categoria": "Nenhuma das Opções"}'), io.row("doc:2", '{"categoria": "NFS-e"}')],
+        "gs://bkt/out/cls": [
+            io.row("doc:1", '{"categoria": "Nenhuma das Opções"}'),
+            io.row("doc:2", '{"categoria": "NFS-e"}'),
+        ],
         "gs://bkt/out/ext": [io.row("doc:2", '{"notas_fiscais": [{"numero_nf": "77"}]}')],
     }[uri]
     summary = poll.poll_sessions(MagicMock(), SETTINGS)

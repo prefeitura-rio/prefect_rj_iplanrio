@@ -9,7 +9,8 @@ def test_find_done_pdfs_chunks_and_unions(monkeypatch):
     monkeypatch.setattr(pending, "CHUNK_SIZE", 2)
     calls = []
 
-    def fake_query(caller_file, name, table, params):
+    # Mirrors run_query's signature exactly since it's used as its side_effect.
+    def fake_query(caller_file, name, table, params):  # noqa: ARG001
         names = next(p for p in params if p.name == "nomes").values
         calls.append(names)
         return [{"nome_arquivo": n} for n in names if n != "b"]

@@ -9,8 +9,9 @@ from pipelines.rj_iplanrio__nf_agent.utils.pdf import split_pdf_pages
 
 
 def test_split_returns_one_single_page_pdf_per_page(pdf_bytes):
-    pages = split_pdf_pages(pdf_bytes(3))
-    assert len(pages) == 3
+    page_count = 3
+    pages = split_pdf_pages(pdf_bytes(page_count))
+    assert len(pages) == page_count
     for encoded in pages:
         doc = fitz.open(stream=base64.b64decode(encoded), filetype="pdf")
         assert doc.page_count == 1

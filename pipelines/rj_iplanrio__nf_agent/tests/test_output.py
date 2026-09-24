@@ -6,7 +6,9 @@ from pipelines.rj_iplanrio__nf_agent.utils.output import RunMetadata, build_extr
 from pipelines.rj_iplanrio__nf_agent.utils.results import PdfResult
 
 USAGE = {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}
-META = RunMetadata({"versao_processamento": "auto-abc", "commit": "x"}, datetime(2026, 9, 24, 12, 0, 0))
+# Naive datetime on purpose: build_extracao_pagina_rows uses utc_now_naive() + isoformat() + "Z",
+# not a tz-aware ISO string, so this mirrors production instead of an accidental omission.
+META = RunMetadata({"versao_processamento": "auto-abc", "commit": "x"}, datetime(2026, 9, 24, 12, 0, 0))  # noqa: DTZ001
 
 
 def result(**overrides) -> PdfResult:
@@ -34,7 +36,7 @@ def test_one_row_per_page_with_version_fields():
     assert rows[0]["pipeline_status"] == "ok"
     assert rows[0]["numero_documento"] is None
     assert rows[1]["numero_documento"] == "10"
-    assert rows[1]["uso"]["extracao"]["total_tokens"] == 3
+    assert rows[1]["uso"]["extracao"]["total_tokens"] == USAGE["total_tokens"]
     assert rows[2]["pipeline_status"] == "erro_processamento"
     assert rows[2]["pipeline_erro"] == "Página não processada"
 

@@ -297,44 +297,50 @@ def coalesce_nfs_by_numero(all_nfs: list[dict]) -> list[dict]:
 
     coalesced = []
     for group in nf_groups.values():
-        if len(group) == 1:
-            coalesced.append(group[0])
-        else:
-            merged = {}
-            conflicts = []
-
-            for nf in group:
-                for field, value in nf.items():
-                    if value is None or value in ("", "-"):
-                        continue
-
-                    if field not in merged:
-                        merged[field] = value
-                    elif merged[field] is None or merged[field] == "" or merged[field] == "-":
-                        merged[field] = value
-                    elif field == "valor_total":
-                        # Multiple pages of the same NF: keep the larger valor_total.
-                        if isinstance(value, (int, float)) and isinstance(merged[field], (int, float)):
-                            if value > merged[field]:
-                                old_val = merged[field]
-                                merged[field] = value
-                                conflicts.append(f"{field}: {old_val} → {value}")
-                    elif field == "pagina":
-                        if isinstance(value, int) and isinstance(merged[field], int):
-                            merged[field] = min(merged[field], value)
-                    elif merged[field] != value:
-                        # Keep the first value seen; record the disagreement for manual review.
-                        conflicts.append(f"{field}: '{merged[field]}' vs '{value}'")
-
-            if conflicts:
-                existing_obs = merged.get("observacao", "")
-                conflict_note = f"[MERGE: {'; '.join(conflicts)}]"
-
-                if existing_obs:
-                    merged["observacao"] = f"{existing_obs} {conflict_note}"
-                else:
-                    merged["observacao"] = conflict_note
-
-            coalesced.append(merged)
+        coalesced.append(group[0] if len(group) == 1 else merge_group(group))
 
     return coalesced
+
+
+def merge_group(group: list[dict]) -> dict:
+    """Merge NF dicts that share the same :func:`same_nf_key` into one.
+
+    Non-null values fill gaps first; on conflict, ``valor_total`` keeps the
+    larger value, ``pagina`` keeps the earliest, and any other field keeps
+    its first value while the disagreement is recorded in ``observacao``.
+
+    :param group: Two or more NF dicts with the same fiscal-note identity.
+    :returns: A single merged NF dict.
+    """
+    merged = {}
+    conflicts = []
+
+    for nf in group:
+        for field, value in nf.items():
+            if value is None or value in ("", "-"):
+                continue
+
+            if field not in merged:
+                merged[field] = value
+            elif merged[field] is None or merged[field] == "" or merged[field] == "-":
+                merged[field] = value
+            elif field == "valor_total":
+                # Multiple pages of the same NF: keep the larger valor_total.
+                both_numeric = isinstance(value, (int, float)) and isinstance(merged[field], (int, float))
+                if both_numeric and value > merged[field]:
+                    old_val = merged[field]
+                    merged[field] = value
+                    conflicts.append(f"{field}: {old_val} → {value}")
+            elif field == "pagina":
+                if isinstance(value, int) and isinstance(merged[field], int):
+                    merged[field] = min(merged[field], value)
+            elif merged[field] != value:
+                # Keep the first value seen; record the disagreement for manual review.
+                conflicts.append(f"{field}: '{merged[field]}' vs '{value}'")
+
+    if conflicts:
+        existing_obs = merged.get("observacao", "")
+        conflict_note = f"[MERGE: {'; '.join(conflicts)}]"
+        merged["observacao"] = f"{existing_obs} {conflict_note}" if existing_obs else conflict_note
+
+    return merged

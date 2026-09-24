@@ -28,7 +28,7 @@ def test_load_settings_reads_env(monkeypatch):
 def test_load_settings_lists_every_missing_var(monkeypatch):
     for key in ENV:
         monkeypatch.delenv(key, raising=False)
-    with pytest.raises(RuntimeError, match="BIFROST_GCS_BUCKET.*NF_BATCH_JOBS_TABLE"):
+    with pytest.raises(RuntimeError, match=r"BIFROST_GCS_BUCKET.*NF_BATCH_JOBS_TABLE"):
         settings.load_settings()
 
 

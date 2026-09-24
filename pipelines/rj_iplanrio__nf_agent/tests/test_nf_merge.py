@@ -20,7 +20,7 @@ def test_merges_only_the_same_note():
     ])
     assert len(merged) == 1
     assert merged[0]["pagina"] == 1
-    assert merged[0]["valor_total"] == 50.0
+    assert merged[0]["valor_total"] == 50.0  # noqa: PLR2004 -- the fixture's valor_total, clearest as a literal here
 
 
 def test_same_number_from_different_issuers_is_not_merged():
@@ -28,14 +28,14 @@ def test_same_number_from_different_issuers_is_not_merged():
         nf("10", "11111111000111", "01/02/2025", 1),
         nf("10", "22222222000122", "01/02/2025", 2),
     ])
-    assert len(merged) == 2
+    assert len(merged) == 2  # noqa: PLR2004 -- 2 inputs stay unmerged, clearest as a literal here
 
 
 def test_same_number_on_different_dates_is_not_merged():
     merged = coalesce_nfs_by_numero([nf("10", "111", "01/02/2025", 1), nf("10", "111", "01/03/2025", 2)])
-    assert len(merged) == 2
+    assert len(merged) == 2  # noqa: PLR2004 -- 2 inputs stay unmerged, clearest as a literal here
 
 
 def test_incomplete_nfs_are_never_merged():
     merged = coalesce_nfs_by_numero([nf("10", None, "01/02/2025", 1), nf("10", None, "01/02/2025", 2)])
-    assert len(merged) == 2
+    assert len(merged) == 2  # noqa: PLR2004 -- 2 inputs stay unmerged, clearest as a literal here

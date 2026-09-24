@@ -1,6 +1,6 @@
 """Tests for GCS helpers."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -38,7 +38,11 @@ def test_write_ndjson_uses_partition_and_stem():
     client.bucket.return_value.blob.return_value = blob
     with patch.object(storage.storage, "Client", return_value=client):
         uri = storage.write_ndjson(
-            "out", "staging/extracao_pagina", [{"a": 1}, {"b": "ç"}], "extracao_pagina_s1", datetime(2026, 9, 24, 12)
+            "out",
+            "staging/extracao_pagina",
+            [{"a": 1}, {"b": "ç"}],
+            "extracao_pagina_s1",
+            datetime(2026, 9, 24, 12, tzinfo=timezone.utc),
         )
     assert uri == "gs://out/staging/extracao_pagina/data_geracao=2026-09-24/extracao_pagina_s1.ndjson"
     payload = blob.upload_from_string.call_args.args[0].decode("utf-8")

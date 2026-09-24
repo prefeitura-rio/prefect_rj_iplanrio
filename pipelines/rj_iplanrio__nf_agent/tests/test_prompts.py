@@ -48,7 +48,7 @@ def test_load_prompts_rejects_missing_or_empty(monkeypatch):
         prompts.load_prompts(classification_version="v1", extraction_version="v7")
 
 
-def test_load_prompts_without_any_version_fails(monkeypatch):
+def test_load_prompts_without_any_version_fails():
     with pytest.raises(RuntimeError, match="classification"):
         prompts.load_prompts()
 

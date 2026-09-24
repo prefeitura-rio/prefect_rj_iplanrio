@@ -17,13 +17,14 @@ def extracted(page: int, nfs: list[dict] | None, error: str | None = None) -> Ex
 
 
 def test_build_pdf_results_maps_pages_and_errors():
+    pdf_page_count = 4
     results = build_pdf_results(
-        [PdfPages("doc", 4)],
+        [PdfPages("doc", pdf_page_count)],
         [classified(1, "Nenhuma das Opções"), classified(2, "NFS-e"), classified(3, None, "falhou")],
         [extracted(2, [{"numero_nf": "10"}])],
     )
     doc = results["doc"]
-    assert doc.total_pages == 4
+    assert doc.total_pages == pdf_page_count
     assert doc.categories == {1: "Nenhuma das Opções", 2: "NFS-e"}
     assert doc.classification_errors == {3: "falhou"}
     assert doc.extracted_nfs == [{"numero_nf": "10", "pagina": 2}]

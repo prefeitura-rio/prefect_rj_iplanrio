@@ -18,11 +18,12 @@ spec.loader.exec_module(run_local)
 
 def test_run_writes_one_row_per_page(tmp_path, pdf_bytes):
     pdf = tmp_path / "doc.pdf"
-    pdf.write_bytes(pdf_bytes(2))
+    page_count = 2
+    pdf.write_bytes(pdf_bytes(page_count))
     output = tmp_path / "out.ndjson"
     usage = {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
     result = DirectResult(
-        2,
+        page_count,
         [ClassificationResult(PageId("doc", n), "Nenhuma das Opções", "j", usage, None) for n in (1, 2)],
         [],
     )
@@ -32,7 +33,7 @@ def test_run_writes_one_row_per_page(tmp_path, pdf_bytes):
     ):
         count = run_local.run([pdf], output, MagicMock())
     rows = [json.loads(line) for line in output.read_text().splitlines()]
-    assert count == 2
+    assert count == page_count
     assert [row["pagina"] for row in rows] == [1, 2]
     assert rows[0]["nome_arquivo"] == "doc"
     assert rows[0]["versao_pipeline"]["session_id"] is None

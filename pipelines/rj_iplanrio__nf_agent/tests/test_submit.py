@@ -30,7 +30,8 @@ def env(pdf_bytes):
         patch.object(submit, "download_bytes", side_effect=lambda uri: pdf_bytes(int(uri[-1]))),
         patch.object(submit, "find_done_pdfs", return_value=set()) as done,
         patch.object(submit, "in_flight_pdf_names", return_value=set()) as in_flight,
-        patch.object(submit, "submit_jsonl", side_effect=lambda *a, **k: next(batches)) as submit_jsonl,
+        # Any args accepted: this stub only hands out the next fake batch, it never inspects the call.
+        patch.object(submit, "submit_jsonl", side_effect=lambda *a, **k: next(batches)) as submit_jsonl,  # noqa: ARG005
         patch.object(submit, "append_event") as append_event,
     ):
         yield {"list_pdfs": list_pdfs, "done": done, "in_flight": in_flight,
@@ -48,13 +49,13 @@ def test_skips_done_and_in_flight_and_records_context(env):
     env["in_flight"].return_value = {"c3"}
     summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.pdf_count == 1
-    assert summary.page_count == 2
+    assert summary.page_count == 2  # noqa: PLR2004 -- "a2" has 2 pages per the env fixture's naming convention
     assert len(summary.session_ids) == 1
     event = env["append_event"].call_args.args[1]
     assert event.phase == PHASE_CLASSIFICATION
     assert event.state == STATE_SUBMITTED
     assert event.batch_id == "batch-0"
-    assert event.row_count == 2
+    assert event.row_count == 2  # noqa: PLR2004 -- "a2" has 2 pages per the env fixture's naming convention
     assert [(p.name, p.pages) for p in event.context.pdfs] == [("a2", 2)]
     assert event.context.processing_version == summary.processing_version
     assert event.context.input_uri == "gs://in"
@@ -76,7 +77,7 @@ def test_groups_pdfs_until_the_budget_fills(env, monkeypatch):
     env["submit_jsonl"].reset_mock()
     monkeypatch.setattr(constants, "BATCH_MAX_BYTES", 2 * cost_per_pdf)
     summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
-    assert len(summary.session_ids) == 2
+    assert len(summary.session_ids) == 2  # noqa: PLR2004 -- budget fits 2 of the 3 PDFs per session
     assert [call.args[1].count(b"\n") for call in env["submit_jsonl"].call_args_list] == [2, 1]
     sizes = [len(call.args[1]) for call in env["submit_jsonl"].call_args_list]
     assert all(size <= constants.BATCH_MAX_BYTES for size in sizes)
@@ -85,7 +86,7 @@ def test_groups_pdfs_until_the_budget_fills(env, monkeypatch):
 def test_max_pages_stops_before_exceeding(env):
     env["list_pdfs"].return_value = refs("a2", "b2", "c1")
     summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in", max_pages=3))
-    assert summary.page_count == 2
+    assert summary.page_count == 2  # noqa: PLR2004 -- "a2" has 2 pages per the env fixture's naming convention
     assert summary.pdf_count == 1
 
 

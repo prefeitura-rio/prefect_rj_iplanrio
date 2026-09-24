@@ -38,18 +38,21 @@ def test_call_direct_turns_exceptions_into_errors():
 
 def test_process_pdf_direct_extracts_only_nf_pages(pdf_bytes):
     client = MagicMock()
+    pdf_page_count = 3
 
     def respond(**kwargs):
         prompt = kwargs["messages"][0]["content"][0]["text"]
         if prompt == "classifica":
             page = kwargs["messages"][0]["content"][1]["file"]["filename"]
-            return chat_response('{"categoria": "NFS-e"}' if page.endswith("_p2.pdf") else '{"categoria": "Nenhuma das Opções"}')
+            is_nf_page = page.endswith("_p2.pdf")
+            category = "NFS-e" if is_nf_page else "Nenhuma das Opções"
+            return chat_response(f'{{"categoria": "{category}"}}')
         return chat_response('{"notas_fiscais": [{"numero_nf": "9"}]}')
 
     client.chat.completions.create.side_effect = respond
     prompts = PromptSet("v1", "classifica", "v1", "extrai {classification_hint}")
-    result = direct.process_pdf_direct(client, "doc", pdf_bytes(3), prompts, max_workers=2)
-    assert result.total_pages == 3
+    result = direct.process_pdf_direct(client, "doc", pdf_bytes(pdf_page_count), prompts, max_workers=2)
+    assert result.total_pages == pdf_page_count
     assert [item.category for item in result.classifications] == ["Nenhuma das Opções", "NFS-e", "Nenhuma das Opções"]
     assert [item.page.page_number for item in result.extractions] == [2]
     assert result.extractions[0].extracted == {"notas_fiscais": [{"numero_nf": "9"}]}

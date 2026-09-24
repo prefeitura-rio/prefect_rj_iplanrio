@@ -89,10 +89,12 @@ def process_pdf_direct(
     pages = split_pdf_pages(pdf_bytes)
 
     def classify(number: int) -> ClassificationResult:
+        """Classifica uma página do PDF."""
         page = PageId(pdf_name, number)
         return parse_classification(call_direct(client, prompts.classification_text, pages[number - 1], page))
 
     def extract(item: ClassificationResult) -> ExtractionResult:
+        """Extrai os dados de uma página já classificada como documento fiscal."""
         prompt = extraction_prompt_with_hint(prompts.extraction_text, item.category)
         return parse_extraction(call_direct(client, prompt, pages[item.page.page_number - 1], item.page))
 
