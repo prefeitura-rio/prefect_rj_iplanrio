@@ -29,7 +29,7 @@ deployments: []
 #     version: "{{ build-image.tag }}"
 #     entrypoint: pipelines/rj_crm__whitelist_whatsapp/flow.py:rj_crm__whitelist_whatsapp
 #     work_pool:
-#       name: k3s-pool
+#       name: onprem-pool
 #       work_queue_name: default
 #       job_variables:
 #         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -43,7 +43,7 @@ deployments: []
 #     version: "{{ build-image.tag }}"
 #     entrypoint: pipelines/rj_crm__whitelist_whatsapp/flow.py:rj_crm__whitelist_whatsapp
 #     work_pool:
-#       name: k3s-pool
+#       name: onprem-pool
 #       work_queue_name: default
 #       job_variables:
 #         image: "{{ build-image.image_name }}:{{ build-image.tag }}"

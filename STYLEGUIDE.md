@@ -663,11 +663,11 @@ Use letras minúsculas e hífens apenas. O `--` duplo separa segmentos lógicos.
 
 ### 9.2 Work pool e secrets
 
-Staging e produção usam `k3s-pool`:
+Staging e produção usam `onprem-pool`:
 
 ```yaml
 work_pool:
-  name: k3s-pool
+  name: onprem-pool
   work_queue_name: default
   job_variables:
     image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -780,7 +780,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -796,7 +796,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
