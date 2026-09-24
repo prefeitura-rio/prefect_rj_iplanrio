@@ -85,6 +85,7 @@ deployments:
     parameters:
       max_classification_rows: 1000
       workers: 200
+      mes_envio: "2021-11-01"
       # TEMPORARY bounded validation run: stop submitting new sessions once
       # 1000 pages total have been processed (see max_total_pages in
       # flow.py). Remove (back to uncapped) when promoting to prod.
