@@ -1,38 +1,6 @@
 name: rj_iplanrio__nf_agent
 prefect-version: 3.4.3
 
-# Secrets: the k3s `secretName` below is mounted as env vars into the job pod.
-# This pipeline has two execution modes (`execution_mode` flow parameter,
-# default `"batch"` below — see `flow.py`), both routed through Bifrost with
-# the SAME `BIFROST_API_KEY` / `BIFROST_BASE_URL` (see `utils/llm.py`) — no
-# separate Vertex AI credential is needed for batch mode (that was true of
-# an earlier version of this package that talked to Vertex AI directly; see
-# `utils/batch/__init__.py` for why that was abandoned).
-# Batch mode additionally needs `NF_BATCH_JOBS_TABLE` (fully-qualified
-# `project.dataset.nf_batch_jobs` tracking table — DDL in
-# `utils/batch/job_tracking.py`'s module docstring; must already exist,
-# streams-inserts-only contract) and `BIFROST_GCS_BUCKET` (a bucket
-# DEDICATED to Bifrost's own vertex-provider batch transport files —
-# deliberately separate from `GCS_BUCKET` below so the Bifrost gateway's
-# GCP service account never needs write access to the bucket holding real
-# PDF/NF data; see `utils/batch/bifrost_batch.py`).
-# GCP creds for GCS/BigQuery (both modes) come from `RJ_NF_AGENT_CREDENTIALS`
-# (see flow.py).
-#
-# GCS/BigQuery resource identifiers (bucket, PDF/output paths, table refs)
-# are DELIBERATELY NOT deployment parameters below — they're read exclusively
-# from env vars at flow runtime (`GCS_BUCKET`, `PDFS_BASE_PATH`,
-# `GCS_OUTPUT_BASE_PATH`, `BQ_EXTRACAO_PAGINA_TABLE`, `PIPELINE_RUNS_TABLE`),
-# same secret as above. This keeps a single source of truth: moving a
-# bucket/table is an Infisical change, not a `prefect.yaml` + redeploy.
-# `pdfs_base_path` must match the prefix condition on the runtime service
-# account's `storage.objectViewer` IAM binding (a mismatch 403s on every
-# download even with a valid key, since the grant is scoped by object-path
-# prefix, not just by bucket). `pipeline_runs_table` must already exist in
-# BigQuery — this pipeline only streams inserts into it, never creates it
-# (DDL in `utils/bigquery.py::BigQueryWriter.write_run_summary`); only
-# read/written by sync mode.
-
 build:
   - prefect.deployments.steps.run_shell_script:
       id: get-commit-hash
@@ -56,15 +24,12 @@ pull:
   - prefect.deployments.steps.set_working_directory:
       directory: /opt/prefect/prefect_rj_iplanrio
 
-# ── Deployments ────────────────────────────────────────────────────────────
-# One deployment per environment — both modes are the same flow/entrypoint,
-# selected by the `execution_mode` parameter (default "batch" — what the
-# prod schedule below runs). Sync mode stays reachable without its own
-# deployment: start a custom run on either deployment with
-# `execution_mode: "sync"` (and any of the sync-only parameters — db_path,
-# batch_size, max_pdfs, etc. — flow.py's own defaults apply if omitted).
 deployments:
   - name: rj-iplanrio--nf-agent--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:fkhouri
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     work_pool:
@@ -76,42 +41,20 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
         env:
-          # The deployed image has no `.git` checkout (see `.dockerignore`) —
-          # `get_git_info()` (utils/processing/metadata.py) can't run `git
-          # rev-parse` at runtime to tag rows with the pipeline version.
-          # Thread through the same commit `get-commit-hash` already
-          # computed at build time instead.
+          # A imagem não tem .git; o commit vai por variável para rastrear a versão nas linhas de saída.
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
     parameters:
       max_classification_rows: 1000
       workers: 200
       mes_envio: "2021-11-01"
-      # TEMPORARY bounded validation run: stop submitting new sessions once
-      # 1000 pages total have been processed (see max_total_pages in
-      # flow.py). Remove (back to uncapped) when promoting to prod.
       max_total_pages: 1000
-      # TEMPORARY fan-out for validation: plan up to 5 disjoint sessions
-      # per run for parallel Vertex processing (see max_sessions_per_run
-      # in flow.py). Start small, raise once end-to-end stability + Vertex
-      # concurrent-job quota allow. Prod keeps the default of 1.
       max_sessions_per_run: 5
-    # TEMPORARY deviation from STYLEGUIDE.md §9.3 ("No schedules: in
-    # staging"): batch mode's classification/extraction round trip through
-    # Vertex takes longer than a person can practically babysit with manual
-    # `workflow_dispatch` runs (each poll/submit is one flow-run — see
-    # flow.py's module docstring), so a schedule here lets a session
-    # actually progress to completion while validating the newly-fixed
-    # submit+poll path end-to-end in staging. REMOVE once that validation
-    # is done — either back to no schedule (manual-only) or promote
-    # straight to the prod deployment below, which already has this same
-    # schedule as its permanent, intended one.
-    schedules:
-      - interval: 900 # 15 minutes
-        anchor_date: "2025-01-01T00:00:00"
-        timezone: America/Sao_Paulo
-        slug: poll-submit-15min-TEMP
 
   - name: rj-iplanrio--nf-agent--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:fkhouri
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     work_pool:
@@ -123,20 +66,12 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
         env:
-          # Same as staging above: the deployed image has no `.git`
-          # checkout, so `get_git_info()` reads the deploy-time commit
-          # from `GIT_COMMIT_SHA` (computed by `get-commit-hash` at build
-          # time) instead of running `git rev-parse` at runtime.
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
     parameters:
       max_classification_rows: 1000
       workers: 200
     schedules:
-      # Batch jobs can take minutes to hours to finish — a 15-minute
-      # interval is frequent enough to advance sessions promptly (poll) and
-      # start the next one (submit) without hammering Bifrost for status.
-      # See flow.py.
-      - interval: 900 # 15 minutes
+      - interval: 900
         anchor_date: "2025-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: poll-submit-15min
