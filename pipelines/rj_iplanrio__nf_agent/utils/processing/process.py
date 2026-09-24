@@ -13,7 +13,7 @@ from prefect_rj_iplanrio.logging import get_logger
 
 from ..cache import DatabaseManager
 from ..classification.gemini_classifier import NF_CATEGORIES
-from ..nfst_fatura_merger import merge_nfst_with_fatura
+from ..nf_merge import merge_nfst_with_fatura
 from .classification_cache import _normalize_usage_by_page
 
 if TYPE_CHECKING:

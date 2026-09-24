@@ -38,7 +38,7 @@ from prefect_rj_iplanrio.logging import get_logger
 
 from ..extraction.coalesce import coalesce_nfs_by_numero
 from ..gcs import GCSDownloader
-from ..nfst_fatura_merger import merge_nfst_with_fatura
+from ..nf_merge import merge_nfst_with_fatura
 from ..processing.metadata import build_extracao_pagina_rows, build_versao_pipeline, utc_now_naive
 from .extraction_submit import ExtractionCandidate, submit_extraction_job
 from .job_tracking import (

@@ -1,38 +1,14 @@
-"""
-NFST ↔ Fatura Cross-Page Merger
-
-Pós-processamento que vincula NFSTs a Faturas de telecomunicações do mesmo ciclo
-de faturamento, usando numero_conta + mes_referencia como chave de junção.
-
-Contexto:
-    Documentos de telecomunicações frequentemente chegam em PDFs com múltiplas
-    páginas: uma página de Fatura/Demonstrativo (com "TOTAL A PAGAR") e uma ou
-    mais páginas de NFST (com "TOTAL NOTA FISCAL [operadora]"). O modelo de
-    extração vê cada página individualmente e retorna valor_total = null na NFST
-    quando "TOTAL A PAGAR" não está presente na mesma página. Este módulo resolve
-    esse null vinculando a NFST à Fatura correspondente (mesmo numero_conta).
-
-Uso:
-    extracted_nfs = merge_nfst_with_fatura(extracted_nfs)
-"""
+"""Pós-processamento das NFs extraídas: fusão por número e vínculo NFST ↔ Fatura."""
 
 from __future__ import annotations
 
 import math
 import re
+from collections import defaultdict
 
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
-# TODO(Trick): logger da iplanrio não exibe logs de nível INFO no Prefect
-# (bug em investigação). Workaround temporário: usamos logger.warning()
-# nos lugares que logicamente seriam logger.info() abaixo. Reverter para
-# logger.info() quando o bug for corrigido.
-
-
-# ---------------------------------------------------------------------------
-# Helpers de normalização
-# ---------------------------------------------------------------------------
 
 
 def normalize_value(val: object) -> float:
@@ -140,11 +116,6 @@ def mes_from_data_servico(data_servico: str | None) -> str | None:
     return None
 
 
-# ---------------------------------------------------------------------------
-# Lógica de match
-# ---------------------------------------------------------------------------
-
-
 def is_nfst(doc: dict) -> bool:
     tipo = (doc.get("tipo_documento") or "").strip().upper()
     return tipo == "NFST"
@@ -221,11 +192,6 @@ def find_fatura_for_nfst(
     return None, None
 
 
-# ---------------------------------------------------------------------------
-# Função principal
-# ---------------------------------------------------------------------------
-
-
 def merge_nfst_with_fatura(extracted_nfs: list[dict]) -> list[dict]:
     """
     Pós-processamento: vincula NFSTs a Faturas de telecomunicações do mesmo ciclo.
@@ -291,3 +257,100 @@ def merge_nfst_with_fatura(extracted_nfs: list[dict]) -> list[dict]:
         logger.warning(f"NFST merge: nenhuma das {len(nfsts_a_mergear)} NFST(s) pôde ser vinculada")
 
     return extracted_nfs
+
+
+def same_nf_key(nf: dict) -> tuple[str, str, str] | None:
+    """Identifica a mesma nota fiscal: número, emitente (só dígitos) e data de emissão.
+
+    :param nf: NF extraída.
+    :returns: Chave de agrupamento, ou ``None`` se faltar algum dos três campos (a NF não é fundida).
+    """
+    numero = str(nf.get("numero_nf") or "").strip()
+    emitente = re.sub(r"\D", "", str(nf.get("cnpj_emitente") or ""))
+    emissao = str(nf.get("data_emissao") or "").strip()
+    if not (numero and emitente and emissao):
+        return None
+    return numero, emitente, emissao
+
+
+def coalesce_nfs_by_numero(all_nfs: list[dict]) -> list[dict]:
+    """
+    Coalesce NFs that are the same fiscal note across batches.
+
+    Handles NFs split across multiple pages/batches by merging fields:
+
+    - Prefer non-null values.
+    - For ``valor_total``/``valor_total_servico``: prefer the largest value.
+    - For ``pagina``: use the earliest page number.
+    - Append merge warnings to ``observacao``.
+
+    NFs are grouped by :func:`same_nf_key`; NFs without a full key never merge.
+
+    :param all_nfs: List of NF dictionaries from all batches.
+    :returns: List of coalesced NFs.
+    """
+    if not all_nfs:
+        return []
+
+    # Group by same_nf_key
+    nf_groups = defaultdict(list)
+
+    for nf in all_nfs:
+        key = same_nf_key(nf) or ("sem-chave", str(id(nf)))
+        nf_groups[key].append(nf)
+
+    # Coalesce each group
+    coalesced = []
+    for group in nf_groups.values():
+        if len(group) == 1:
+            # Single NF, no coalescing needed
+            coalesced.append(group[0])
+        else:
+            # Multiple NFs with same key - MERGE
+            merged = {}
+            conflicts = []
+
+            for nf in group:
+                for field, value in nf.items():
+                    # Skip null/empty values
+                    if value is None or value in ("", "-"):
+                        continue
+
+                    # Field not in merged yet - add it
+                    if field not in merged:
+                        merged[field] = value
+
+                    # Field exists but is null - replace
+                    elif merged[field] is None or merged[field] == "" or merged[field] == "-":
+                        merged[field] = value
+
+                    # SPECIAL: For valor_total field, prefer MAIOR valor
+                    elif field == "valor_total":
+                        if isinstance(value, (int, float)) and isinstance(merged[field], (int, float)):
+                            if value > merged[field]:
+                                old_val = merged[field]
+                                merged[field] = value
+                                conflicts.append(f"{field}: {old_val} → {value}")
+
+                    # SPECIAL: For pagina, use earliest (menor número)
+                    elif field == "pagina":
+                        if isinstance(value, int) and isinstance(merged[field], int):
+                            merged[field] = min(merged[field], value)
+
+                    # For other fields, if different, log conflict but keep first value
+                    elif merged[field] != value:
+                        conflicts.append(f"{field}: '{merged[field]}' vs '{value}'")
+
+            # Add conflict info to observacao if any
+            if conflicts:
+                existing_obs = merged.get("observacao", "")
+                conflict_note = f"[MERGE: {'; '.join(conflicts)}]"
+
+                if existing_obs:
+                    merged["observacao"] = f"{existing_obs} {conflict_note}"
+                else:
+                    merged["observacao"] = conflict_note
+
+            coalesced.append(merged)
+
+    return coalesced
