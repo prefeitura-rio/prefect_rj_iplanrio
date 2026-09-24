@@ -79,7 +79,7 @@ def _disable_real_rate_limiter():
 
 
 @pytest.fixture(autouse=True)
-def _restore_google_application_credentials():
+def restore_google_application_credentials():
     """Restore ``GOOGLE_APPLICATION_CREDENTIALS`` after each test.
 
     ``settings.inject_gcp_credentials`` writes this var straight to

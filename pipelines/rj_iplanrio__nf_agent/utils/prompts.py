@@ -130,24 +130,6 @@ def list_available_versions(prompt_type: str) -> list[str]:
     return list_versions(prompt_type)
 
 
-def get_classification_prompt(version: str | None = None) -> str:
-    """Alias temporário para o código antigo (removido na Task 12).
-
-    :param version: Versão ou ``None``.
-    :returns: Texto do prompt.
-    """
-    return load_prompt("classification", version)[1]
-
-
-def get_extraction_prompt(version: str | None = None) -> str:
-    """Alias temporário para o código antigo (removido na Task 12).
-
-    :param version: Versão ou ``None``.
-    :returns: Texto do prompt.
-    """
-    return load_prompt("extraction", version)[1]
-
-
 def load_prompt_version(prompt_type: str, version: str) -> str:
     """Alias temporário para o código antigo (removido na Task 12).
 
