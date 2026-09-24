@@ -8,22 +8,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from prefect import task
 
-from .utils import (
-    MongoConnectionConfig,
-    check_mongo_indexes,
-    chunk_list,
-    close_mongo_connection,
-    fetch_chunks_batch,
-    get_mongo_connection,
-    get_pendentes,
-    map_filenames_to_files_ids,
-    pdf_exists_in_gcs,
-    reconstruct_pdf_bytes,
-    refresh_metadata_cache,
-    save_chunks_to_gcs,
-    save_pdf_to_gcs,
-)
-from .utils.log import logger_da_pipeline
+from pipelines.rj_cvl__osinfo_mongo.utils import bigquery, gcs, mongodb, pdf
+from pipelines.rj_cvl__osinfo_mongo.utils.log import logger_da_pipeline
+from pipelines.rj_cvl__osinfo_mongo.utils.mongodb import MongoConnectionConfig
 
 logger = logger_da_pipeline(__name__)
 
@@ -38,7 +25,7 @@ def check_mongo_indexes_task(mongo_config: MongoConnectionConfig) -> dict[str, d
     Returns:
         Dictionary mapping collection name -> index_information() result.
     """
-    return check_mongo_indexes(mongo_config)
+    return mongodb.check_mongo_indexes(mongo_config)
 
 
 @task
@@ -51,7 +38,7 @@ def get_pendentes_task(meses_envio: list[str]) -> pd.DataFrame:
     Returns:
         DataFrame with pending files (mes_envio, filename).
     """
-    return get_pendentes(meses_envio)
+    return bigquery.get_pendentes(meses_envio)
 
 
 @task
@@ -68,7 +55,7 @@ def map_filenames_to_files_ids_task(
         Dictionary mapping filename -> list of files_id.
     """
     filenames = pendentes["filename"].unique().tolist()
-    return map_filenames_to_files_ids(filenames, mongo_config)
+    return mongodb.map_filenames_to_files_ids(filenames, mongo_config)
 
 
 @task
@@ -85,7 +72,7 @@ def process_batch_task(
     Architecture (mirrors the batching/concurrency pattern validated in production,
     commit bff7549b, using pymongo directly instead of the iplanrio Mongo wrapper):
     - Phase 0 (pre-filter, no Mongo access): Check GCS for already-processed files
-      (pdf_exists_in_gcs) and exclude them from the Mongo query entirely.
+      (gcs.pdf_exists_in_gcs) and exclude them from the Mongo query entirely.
     - Phase 1 (single query): Fetch chunks for ALL remaining files_id in this batch
       with ONE $in query (not one query per file), matching the validated pattern.
     - Phase 2 (parallel): Group chunks by files_id, reconstruct PDFs, upload to GCS
@@ -118,7 +105,7 @@ def process_batch_task(
         filename = item["filename"]
         mes_envio = item["mes_envio"]
 
-        if pdf_exists_in_gcs(filename, mes_envio, bucket_name, base_path):
+        if gcs.pdf_exists_in_gcs(filename, mes_envio, bucket_name, base_path):
             logger.info(f"⊘ Skipped: {filename} (already in GCS)")
             skipped += 1
             continue
@@ -140,11 +127,11 @@ def process_batch_task(
         return batch_stats
 
     # ===== PHASE 1: Single MongoDB $in query for the whole batch =====
-    client = get_mongo_connection(mongo_config)
+    client = mongodb.get_mongo_connection(mongo_config)
     try:
-        chunks_df = fetch_chunks_batch(client, mongo_config.database, files_ids_to_fetch)
+        chunks_df = mongodb.fetch_chunks_batch(client, mongo_config.database, files_ids_to_fetch)
     finally:
-        close_mongo_connection(client)
+        mongodb.close_mongo_connection(client)
 
     if chunks_df.empty:
         logger.warning(f"Batch {batch_idx + 1}: no chunks found for any of {len(files_ids_to_fetch)} files_id")
@@ -179,13 +166,13 @@ def process_batch_task(
 
         try:
             # Save chunks to GCS
-            save_chunks_to_gcs(file_chunks_df, files_id, bucket_name, base_path)
+            gcs.save_chunks_to_gcs(file_chunks_df, files_id, bucket_name, base_path)
 
             # Reconstruct PDF
-            pdf_bytes = reconstruct_pdf_bytes(file_chunks_df)
+            pdf_bytes = pdf.reconstruct_pdf_bytes(file_chunks_df)
 
             # Save PDF to GCS
-            save_pdf_to_gcs(pdf_bytes, filename, mes_envio, bucket_name, base_path)
+            gcs.save_pdf_to_gcs(pdf_bytes, filename, mes_envio, bucket_name, base_path)
 
             logger.info(f"✓ Processed: {filename} (files_id={files_id[:8]}...)")
             return {"status": "success", "filename": filename}
@@ -199,8 +186,7 @@ def process_batch_task(
 
     with ThreadPoolExecutor(max_workers=upload_max_workers) as executor:
         futures = {
-            executor.submit(upload_file, files_id, file_chunks_df): files_id
-            for files_id, file_chunks_df in grouped
+            executor.submit(upload_file, files_id, file_chunks_df): files_id for files_id, file_chunks_df in grouped
         }
 
         for future in as_completed(futures):
@@ -273,7 +259,7 @@ def dump_files_to_gcs_task(
     logger.info(f"Total items to process: {len(items)}")
 
     # Chunk items into batches
-    batches = chunk_list(items, files_id_batch_size)
+    batches = pdf.chunk_list(items, files_id_batch_size)
     logger.info(f"Split into {len(batches)} batches of ~{files_id_batch_size} files")
 
     # Process batches with wave-based parallelism
@@ -324,4 +310,4 @@ def refresh_metadata_cache_task(project_id: str, dataset_id: str, table_id: str)
         dataset_id: BigQuery dataset ID.
         table_id: BigQuery table ID.
     """
-    refresh_metadata_cache(project_id, dataset_id, table_id)
+    bigquery.refresh_metadata_cache(project_id, dataset_id, table_id)
