@@ -14,8 +14,8 @@ from prefect import task
 from prefect_dbt import PrefectDbtRunner
 
 REPOSITORY = "github.com/prefeitura-rio/queries-rj-rmi.git"
-# Infisical: projeto prefect-jobs, pasta dbt-queries, chave RJ_RMI_SA. A pasta vira o prefixo da variável.
-SERVICE_ACCOUNT_ENV = "DBT_QUERIES__RJ_RMI_SA"
+# Chave RJ_RMI_SA do projeto prefect-jobs do Infisical. Chega no prefect-jobs-secrets com esse nome, sem prefixo.
+SERVICE_ACCOUNT_ENV = "RJ_RMI_SA"
 FAILED_STATUSES = ("error", "fail", "runtime error")
 
 
