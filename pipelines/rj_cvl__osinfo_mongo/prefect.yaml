@@ -39,6 +39,9 @@ deployments:
         command: uv run -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+        env:
+          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
+          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_cvl__osinfo_mongo
   - name: rj-cvl--osinfo-mongo--prod
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_cvl__osinfo_mongo/flow.py:rj_cvl__osinfo_mongo
@@ -54,3 +57,6 @@ deployments:
         command: uv run -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+        env:
+          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
+          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_cvl__osinfo_mongo
