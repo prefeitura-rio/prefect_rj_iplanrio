@@ -1,165 +1,107 @@
-"""Local test entrypoint — runs classification/extraction on PDFs already
-downloaded to disk, calling only the LLM (Gemini via Bifrost). No GCS or
-BigQuery client is ever instantiated: ``POCProcessor.process_pdf`` only
-touches ``GCSDownloader`` when ``pdf_path`` is ``None`` (see
-``utils/processing/process.py``), and neither ``PageStatusReader`` nor
-``BigQueryWriter`` are reachable from that call path at all — those only
-run inside ``utils/pipeline.py::discover_pending_files`` and
-``utils/orchestration.py::write_run_summary``, neither of which this
-script calls.
+"""Processa PDFs locais com chamadas diretas ao Bifrost e grava o NDJSON no formato extracao_pagina.
 
-Usage::
+Uso::
 
-    uv run --package rj_iplanrio__nf_agent python scripts/run_local.py \\
-        --pdfs-dir /caminho/para/pdfs/locais \\
-        --output ./local_run_output.ndjson
+    uv run --package rj_iplanrio__nf_agent python pipelines/rj_iplanrio__nf_agent/scripts/run_local.py \\
+        --pdf caminho/doc.pdf --output saida.ndjson
 
-A single file also works: ``--pdf /caminho/para/um.pdf``.
-
-Requires (from ``--env-file``, default ``.env`` next to this script):
-``BIFROST_API_KEY``, ``BIFROST_BASE_URL`` (pointed at Bifrost's OpenAI-compatible
-endpoint, e.g. ``https://bifrost.iplan.dados.rio/openai/v1`` — see ``utils/llm.py``),
-and at least one ``PROMPT_CLASSIFICATION_V*``/``PROMPT_EXTRACTION_V*`` pair.
-``GCS_BUCKET`` and ``RJ_NF_AGENT_CREDENTIALS`` are NOT needed for this script.
-The ``openai`` SDK is a normal dependency (``uv sync`` installs it) — no
-isolated install needed.
+Requer no ``.env``: ``BIFROST_API_KEY``, ``BIFROST_BASE_URL`` e ao menos um
+``PROMPT_CLASSIFICATION_V*`` e um ``PROMPT_EXTRACTION_V*``. Não usa GCS nem BigQuery.
 """
 
 import argparse
 import json
-import os
+import logging
 import sys
-import tempfile
-import time
+import uuid
 from pathlib import Path
-from unittest.mock import MagicMock
 
 from dotenv import load_dotenv
+from openai import OpenAI
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-PACKAGE_DIR = SCRIPT_DIR.parent
-REPO_ROOT = PACKAGE_DIR.parent.parent  # pipelines/rj_iplanrio__nf_agent/scripts -> repo root
-
-# Everything here is imported as `pipelines.rj_iplanrio__nf_agent.*` (relative imports
-# inside the package require it) — same layout tests/conftest.py relies on via
-# pytest's `pythonpath = ["../.."]`. A plain script needs this on sys.path itself.
+REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-REQUIRED_STATIC_ENV_VARS = ("BIFROST_API_KEY", "BIFROST_BASE_URL")
+from pipelines.rj_iplanrio__nf_agent.utils.bifrost import build_client  # noqa: E402
+from pipelines.rj_iplanrio__nf_agent.utils.direct import process_pdf_direct  # noqa: E402
+from pipelines.rj_iplanrio__nf_agent.utils.output import (  # noqa: E402
+    RunMetadata,
+    build_extracao_pagina_rows,
+    build_versao_pipeline,
+    utc_now_naive,
+)
+from pipelines.rj_iplanrio__nf_agent.utils.pdf import PdfPages  # noqa: E402
+from pipelines.rj_iplanrio__nf_agent.utils.prompts import load_prompts  # noqa: E402
+from pipelines.rj_iplanrio__nf_agent.utils.results import build_pdf_results  # noqa: E402
+from pipelines.rj_iplanrio__nf_agent.utils.versioning import compute_processing_version  # noqa: E402
+from prefect_rj_iplanrio.logging import get_logger  # noqa: E402
+
+logger = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
+    """Lê os argumentos de linha de comando.
+
+    :returns: Argumentos.
+    """
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    pdf_group = parser.add_mutually_exclusive_group(required=True)
-    pdf_group.add_argument("--pdfs-dir", type=Path, help="Directory of local PDFs to process.")
-    pdf_group.add_argument("--pdf", type=Path, help="A single local PDF to process.")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--pdf", type=Path, help="Um PDF local.")
+    source.add_argument("--pdfs-dir", type=Path, help="Pasta com PDFs locais.")
+    parser.add_argument("--output", type=Path, required=True, help="Arquivo NDJSON de saída.")
     parser.add_argument(
-        "--output", type=Path, required=True, help="Where to write the extracao_pagina-shaped NDJSON output."
-    )
-    parser.add_argument(
-        "--db-path",
-        type=Path,
-        default=Path("./local_run_cache.db"),
-        help="SQLite cache path (default: ./local_run_cache.db). Reusing it across runs "
-        "skips already-processed pages/PDFs.",
-    )
-    parser.add_argument(
-        "--env-file",
-        type=Path,
-        default=SCRIPT_DIR / ".env" if (SCRIPT_DIR / ".env").exists() else PACKAGE_DIR / ".env",
-        help="Path to the .env file to load before importing the pipeline (default: pipeline's own .env).",
+        "--env-file", type=Path, default=Path(__file__).resolve().parents[1] / ".env", help="Arquivo .env."
     )
     return parser.parse_args()
 
 
-def check_required_env_vars() -> None:
-    """Fail fast with a clear message instead of the generic RuntimeError/
-    FileNotFoundError that would otherwise come from deep inside llm.py/prompts.py.
-    """
-    # Imported here, after load_dotenv() has already run in main().
-    from pipelines.rj_iplanrio__nf_agent.utils.prompts import (  # noqa: PLC0415
-        list_available_versions,
-        load_prompt_version,
-    )
+def run(pdf_paths: list[Path], output_path: Path, client: OpenAI) -> int:
+    """Processa os PDFs e grava as linhas de saída.
 
-    missing = [var for var in REQUIRED_STATIC_ENV_VARS if not os.environ.get(var)]
-    for prompt_type in ("classification", "extraction"):
-        versions = list_available_versions(prompt_type)
-        # `list_available_versions` only checks the env var *exists* — the .env
-        # template ships with empty placeholders, so also check the latest
-        # version actually has non-empty text (the real failure mode right now).
-        latest_nonempty = versions and load_prompt_version(prompt_type, versions[-1])
-        if not latest_nonempty:
-            missing.append(f"PROMPT_{prompt_type.upper()}_V* (com texto preenchido, não vazio)")
-    if missing:
-        sys.exit(
-            "Faltam variáveis de ambiente necessárias para rodar localmente: "
-            f"{', '.join(missing)}. Preencha o .env (veja --env-file) antes de rodar."
-        )
+    :param pdf_paths: PDFs locais.
+    :param output_path: Arquivo NDJSON a gravar.
+    :param client: Cliente do Bifrost.
+    :returns: Número de linhas gravadas.
+    """
+    prompts = load_prompts()
+    pdfs, classifications, extractions = [], [], []
+    for path in pdf_paths:
+        logger.info("Processando %s", path.name)
+        result = process_pdf_direct(client, path.stem, path.read_bytes(), prompts)
+        pdfs.append(PdfPages(path.stem, result.total_pages))
+        classifications.extend(result.classifications)
+        extractions.extend(result.extractions)
+
+    metadata = RunMetadata(
+        versao_pipeline=build_versao_pipeline(
+            compute_processing_version(prompts),
+            prompts.classification_version,
+            prompts.extraction_version,
+            f"local-{uuid.uuid4()}",
+            None,
+        ),
+        generated_at=utc_now_naive(),
+    )
+    rows = build_extracao_pagina_rows(build_pdf_results(pdfs, classifications, extractions), metadata)
+    output_path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False, default=str) + "\n" for row in rows), encoding="utf-8"
+    )
+    return len(rows)
 
 
 def main() -> None:
+    """Ponto de entrada da CLI."""
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     args = parse_args()
-
     if not args.env_file.exists():
-        sys.exit(f".env não encontrado em {args.env_file} — passe --env-file explicitamente.")
+        raise SystemExit(f".env não encontrado em {args.env_file}; use --env-file.")
     load_dotenv(args.env_file)
-
-    # Everything below must be imported only after load_dotenv() — gemini_classifier.py /
-    # extraction/auth.py read PROMPT_* env vars at import time (see module docstring).
-    check_required_env_vars()
-
-    from iplanrio_agent_toolkit.rate_limiter import initialize_rate_limiter  # noqa: PLC0415
-
-    from pipelines.rj_iplanrio__nf_agent.utils.cache import DatabaseManager  # noqa: PLC0415
-    from pipelines.rj_iplanrio__nf_agent.utils.processing import metadata  # noqa: PLC0415
-    from pipelines.rj_iplanrio__nf_agent.utils.processing.batch import _log_processing_summary  # noqa: PLC0415
-    from pipelines.rj_iplanrio__nf_agent.utils.processing.processor import POCProcessor  # noqa: PLC0415
-
     pdf_paths = [args.pdf] if args.pdf else sorted(args.pdfs_dir.glob("*.pdf"))
     if not pdf_paths:
-        sys.exit(f"Nenhum PDF encontrado em {args.pdfs_dir or args.pdf}.")
-
-    # Conservative defaults for a local/manual test run — not the full production rate.
-    max_concurrent = 5
-    requests_per_minute = 60
-    initialize_rate_limiter(max_concurrent=max_concurrent, requests_per_minute=requests_per_minute)
-
-    processor = POCProcessor(
-        db_manager=DatabaseManager(args.db_path),  # SQLite only — no GCP.
-        gcs_downloader=MagicMock(),  # never invoked: every process_pdf call below passes pdf_path explicitly.
-        temp_dir=Path(tempfile.mkdtemp(prefix="nf_agent_local_run_")),
-        prompt_versions=None,  # resolves to the latest available version, same as real runs.
-    )
-
-    print(f"Processing {len(pdf_paths)} PDF(s) locally (no GCS/BQ) — cache: {args.db_path}")
-    pdf_tasks = [{"pdf_name": p.stem} for p in pdf_paths]
-    results: dict[str, dict] = {}
-    _t_run_start = time.time()
-    for path in pdf_paths:
-        print(f"  → {path.name}")
-        results[path.stem] = processor.process_pdf(pdf_filename=path.stem, pdf_path=path)
-    total_elapsed_sec = time.time() - _t_run_start
-
-    extracao_pagina_rows = metadata.build_extracao_pagina_rows(
-        pdf_tasks=pdf_tasks,
-        pdf_results=results,
-        timestamp_geracao=metadata.utc_now_naive(),
-        versao_pipeline=metadata.build_versao_pipeline(
-            processor,
-            workers=1,
-            requests_per_minute=requests_per_minute,
-            max_concurrent=max_concurrent,
-        ),
-    )
-
-    with args.output.open("w", encoding="utf-8") as f:
-        for row in extracao_pagina_rows:
-            f.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-
-    _log_processing_summary(len(pdf_tasks), extracao_pagina_rows, total_elapsed_sec=total_elapsed_sec)
-    print(f"\nOutput (formato extracao_pagina) escrito em: {args.output}")
+        raise SystemExit("Nenhum PDF encontrado.")
+    count = run(pdf_paths, args.output, build_client())
+    logger.info("%d linhas gravadas em %s", count, args.output)
 
 
 if __name__ == "__main__":
