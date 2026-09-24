@@ -21,7 +21,7 @@ from constants import (
     SP_TZ,
     FASE_LABEL
 )
-from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre, _add_id_hash
+from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre, _add_id_hash, resolve_dates as _resolve_dates
 
 
 
@@ -102,45 +102,24 @@ def fetch_ocorrencias_task(
         rows = [decode_row(r, domains) for r in raw_rows]
     return build_dataframe(rows)
 
+
 @task
-def resolve_dates(
+def resolve_dates_task(
+    fase: Literal["parcial", "consolidados", "errata"],
     data_inicio: Optional[str],
     data_fim: Optional[str],
-    fase: Literal["consolidados", "errata", "parcial"] = "parcial",
-) -> tuple[str, str]:
-    """Resolve ``data_inicio`` e ``data_fim`` conforme a fase, quando não fornecidos.
+) -> dict[str, str]:
+    """Wrapper ``@task`` sobre :func:`utils.resolve_dates`.
 
-    - ``"consolidados"``: janela dos últimos 30 dias (D-30 até D-1).
-    - ``"errata"``: janela do último trimestre completo.
-    - ``"parcial"``: janela do dia anterior.
+    Retorna dict em vez de tupla — o Prefect não suporta unpacking direto
+    de tuplas retornadas por tasks. Extraia as chaves no flow:
 
-    :param fase: Fase de disponibilidade dos dados (``"consolidados"`` ou ``"errata"``).
-    :param data_inicio: Data de início explícita, ou ``None`` para usar o default da fase.
-    :param data_fim: Data de fim explícita, ou ``None`` para usar o default da fase.
-    :returns: Tupla ``(data_inicio, data_fim)`` resolvida no formato ``YYYY-MM-DD``.
-    :raises ValueError: Se ``fase`` for inválida.
+        dates = resolve_dates_task(fase, data_inicio, data_fim)
+        data_inicio = dates["data_inicio"]
+        data_fim = dates["data_fim"]
     """
-    now = datetime.now(tz=SP_TZ)
+    return _resolve_dates(fase, data_inicio, data_fim)
 
-    if fase == "parcial":
-        if data_inicio is None and data_fim is None:
-            data_inicio = data_fim = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-
-    elif fase == "consolidados":
-        if data_inicio is None:
-            data_inicio = (now - timedelta(days=30)).strftime("%Y-%m-%d")
-        if data_fim is None:
-            data_fim = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    elif fase == "errata":
-        inicio_tri, fim_tri = _ultimo_trimestre(now)
-        if data_inicio is None:
-            data_inicio = inicio_tri
-        if data_fim is None:
-            data_fim = fim_tri
-    else:
-        raise ValueError(f"Fase inválida: {fase!r}. Use 'consolidados' ou 'errata', 'parcial'.")
-
-    return data_inicio, data_fim
 
 @task
 def upload_ocorrencias_task(

@@ -49,6 +49,50 @@ def _ultimo_trimestre(ref: datetime) -> tuple[str, str]:
     return datetime(ano, mes_inicio, 1).strftime("%Y-%m-%d"), ultimo_dia.strftime("%Y-%m-%d")
 
 
+def resolve_dates(
+    fase: Literal["parcial", "consolidados", "errata"],
+    data_inicio: Optional[str],
+    data_fim: Optional[str],
+) -> dict[str, str]:
+    """Resolve ``data_inicio`` e ``data_fim`` conforme a fase, quando não fornecidos.
+
+    Retorna um dict em vez de tupla para compatibilidade com ``@task`` do Prefect,
+    que não suporta unpacking direto de tuplas retornadas por tasks.
+
+    - ``"parcial"`` (Fase 1): janela do dia anterior (D-1 a D-1).
+    - ``"consolidados"`` (Fase 2): janela dos últimos 30 dias (D-30 até D-1).
+    - ``"errata"`` (Fase 3): janela do último trimestre completo.
+
+    :param fase: Fase de disponibilidade dos dados.
+    :param data_inicio: Data de início explícita, ou ``None`` para usar o default da fase.
+    :param data_fim: Data de fim explícita, ou ``None`` para usar o default da fase.
+    :returns: Dict com chaves ``"data_inicio"`` e ``"data_fim"`` no formato ``YYYY-MM-DD``.
+    :raises ValueError: Se ``fase`` for inválida.
+    """
+    now = datetime.now(tz=SP_TZ)
+
+    if fase == "parcial":
+        if data_inicio is None:
+            data_inicio = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        if data_fim is None:
+            data_fim = data_inicio
+    elif fase == "consolidados":
+        if data_inicio is None:
+            data_inicio = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+        if data_fim is None:
+            data_fim = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    elif fase == "errata":
+        inicio_tri, fim_tri = _ultimo_trimestre(now)
+        if data_inicio is None:
+            data_inicio = inicio_tri
+        if data_fim is None:
+            data_fim = fim_tri
+    else:
+        raise ValueError(f"Fase inválida: {fase!r}. Use 'parcial', 'consolidados' ou 'errata'.")
+
+    return {"data_inicio": data_inicio, "data_fim": data_fim}
+
+
 def strip_accents(text: str) -> str:
     """Remove acentos de uma string, preservando os demais caracteres.
 

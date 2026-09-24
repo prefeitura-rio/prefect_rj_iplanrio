@@ -7,7 +7,7 @@ from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from constants import MUNICIPIO_RIO_DE_JANEIRO, MAX_CONCURRENT_REQUESTS
-from task import fetch_ocorrencias_task, upload_ocorrencias_task, resolve_dates
+from task import fetch_ocorrencias_task, upload_ocorrencias_task, resolve_dates_task
 
 
 @flow(log_prints=True)
@@ -38,10 +38,13 @@ def rj_ssm__isp(
     :param max_concurrent_requests: Número máximo de requisições assíncronas simultâneas
         ao buscar páginas. Default: ``MAX_CONCURRENT_REQUESTS``.
     """
-    data_inicio, data_fim = resolve_dates(fase, data_inicio, data_fim)
 
     rename_current_flow_run_task(new_name=f"{dataset_id}.{table_id} [{fase}]")
     inject_bd_credentials_task(environment="prod")
+
+    dates = resolve_dates_task(fase, data_inicio, data_fim)
+    data_inicio = dates["data_inicio"]
+    data_fim = dates["data_fim"]
     dataframe = fetch_ocorrencias_task(
         data_inicio=data_inicio,
         data_fim=data_fim,
