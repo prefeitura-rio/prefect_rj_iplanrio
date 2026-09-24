@@ -25,6 +25,7 @@ architecture.
 
 import json
 import tempfile
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
@@ -398,9 +399,14 @@ def poll_once(client: OpenAI, config: PollConfig) -> list[str]:
         except Exception as exc:
             # Kept as warning for environments where logging works, but the
             # real visibility comes from the aggregated raise below — logger
-            # output alone has proven insufficient to surface these.
+            # output alone has proven insufficient to surface these. The full
+            # traceback is captured (not just str(exc)): a bare exception
+            # message once cost an entire debug cycle that guessed at the
+            # wrong call site while the real one never appeared in any log.
             logger.warning("Session %s (%s): advance failed: %s", event.session_id, event.phase, exc)
-            advance_errors.append(f"session {event.session_id} ({event.phase}): {exc}")
+            advance_errors.append(
+                f"session {event.session_id} ({event.phase}): {exc}\n{traceback.format_exc()}"
+            )
             continue
 
     if advance_errors:

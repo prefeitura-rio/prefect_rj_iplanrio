@@ -70,6 +70,18 @@ class TestAdvanceErrorsAreLoud:
             with pytest.raises(RuntimeError, match=r"s1.*403 download"):
                 poll_mod.poll_once(_client_ok(), _config())
 
+    def test_aggregated_error_includes_full_traceback(self):
+        # str(exc) alone once cost a full debug cycle guessing at the wrong
+        # call site — the traceback must travel with the message.
+        with (
+            patch.object(poll_mod, "get_active_sessions", return_value=[_active_event("s1")]),
+            patch.object(poll_mod, "_handle_classification_succeeded", side_effect=RuntimeError("boom")),
+        ):
+            with pytest.raises(RuntimeError) as exc_info:
+                poll_mod.poll_once(_client_ok(), _config())
+        assert "Traceback (most recent call last)" in str(exc_info.value)
+        assert "_handle_classification_succeeded" in str(exc_info.value)
+
     def test_one_failure_does_not_block_other_sessions(self):
         handled: list[str] = []
 
