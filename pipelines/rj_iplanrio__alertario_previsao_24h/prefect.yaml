@@ -30,7 +30,7 @@ deployments:
     parameters:
       send_discord_alerts: true  # Desativa envio de alertas ao Discord para teste
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -44,7 +44,7 @@ deployments:
     parameters:
       send_discord_alerts: true  # Ativa envio de alertas ao Discord
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
