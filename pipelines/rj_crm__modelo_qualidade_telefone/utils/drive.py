@@ -6,6 +6,14 @@ existentes não são tocadas — ver TODO). A pasta raiz (ID vem do flow como pa
 precisa já existir e estar compartilhada (Editor) com a service account de
 ``BASEDOSDADOS_CREDENTIALS_<PROD|STAGING>``; subpastas (aqui, uma por versão do modelo)
 são criadas automaticamente dentro dela.
+
+A pasta raiz vive numa Unidade Compartilhada (não "Meu Drive") — por isso toda chamada
+files().get/list/create abaixo passa ``supportsAllDrives=True`` (e
+``includeItemsFromAllDrives`` no list). Sem esse parâmetro a API do Drive trata item de
+Unidade Compartilhada como inexistente e devolve 404 mesmo com a service account tendo
+acesso — não confundir com falta de compartilhamento de fato (mesmo problema e mesma
+correção já feita em ``rj_crm__relatorio_engajamento_hsm``, commit 667c39ba — cópia inicial
+daqui foi feita antes desse fix existir lá).
 """
 
 import io
@@ -38,7 +46,13 @@ def busca_pasta(drive: Resource, nome: str, parent_id: str | None) -> str | None
     query = f"name = '{nome}' and mimeType = '{DRIVE_FOLDER_MIME}' and trashed = false"
     if parent_id:
         query += f" and '{parent_id}' in parents"
-    resultado = drive.files().list(q=query, fields="files(id, name)", spaces="drive").execute()
+    resultado = drive.files().list(
+        q=query,
+        fields="files(id, name)",
+        spaces="drive",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+    ).execute()
     arquivos = resultado.get("files", [])
     return arquivos[0]["id"] if arquivos else None
 
@@ -51,7 +65,7 @@ def confirma_pasta_raiz(drive: Resource, pasta_raiz_id: str) -> None:
     :raises RuntimeError: Se a pasta não existir ou não estiver acessível.
     """
     try:
-        drive.files().get(fileId=pasta_raiz_id, fields="id").execute()
+        drive.files().get(fileId=pasta_raiz_id, fields="id", supportsAllDrives=True).execute()
     except HttpError as exc:
         raise RuntimeError(
             f"Pasta de ID '{pasta_raiz_id}' inacessível — confira se ela ainda existe e se está "
@@ -68,7 +82,7 @@ def pasta_por_nome(drive: Resource, raiz_id: str, nome: str) -> str:
     if pasta_id:
         return pasta_id
     metadata = {"name": nome, "mimeType": DRIVE_FOLDER_MIME, "parents": [raiz_id]}
-    pasta = drive.files().create(body=metadata, fields="id").execute()
+    pasta = drive.files().create(body=metadata, fields="id", supportsAllDrives=True).execute()
     logger.info("Subpasta '%s' criada.", nome)
     return pasta["id"]
 
@@ -77,5 +91,5 @@ def upload_bytes(drive: Resource, pasta_id: str, nome_arquivo: str, conteudo: by
     """Sobe um arquivo (bytes em memória, sem passar por disco) pra uma pasta do Drive."""
     media = MediaIoBaseUpload(io.BytesIO(conteudo), mimetype=mime_type, resumable=False)
     metadata = {"name": nome_arquivo, "parents": [pasta_id]}
-    drive.files().create(body=metadata, media_body=media, fields="id").execute()
+    drive.files().create(body=metadata, media_body=media, fields="id", supportsAllDrives=True).execute()
     logger.info("'%s' publicado no Drive.", nome_arquivo)
