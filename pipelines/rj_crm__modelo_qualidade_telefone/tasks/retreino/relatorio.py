@@ -1,6 +1,6 @@
 """Monta e publica os artefatos de UM retreino (treino/SHAP + simulação + gate) numa
-subpasta do Drive nomeada pela versão do modelo (a data do treino — mesma convenção do
-GCS, ver ``utils/modelo_store.py``).
+subpasta do Drive nomeada pela versão do modelo (data e hora do treino, BRT — mesma
+convenção do GCS, ver ``utils/modelo_store.py``).
 
 Os números oficiais vivem no BigQuery (``tasks/retreino/publicar.py``); os arquivos daqui
 são pra leitura humana — comparar rapidamente sem escrever uma query.
@@ -158,7 +158,7 @@ def publica_relatorio(
     treino sozinho).
 
     :param resultado_treino: Saída de ``treinar.treina``.
-    :param versao: Nome da subpasta (a data do treino — mesma versão publicada no GCS).
+    :param versao: Nome da subpasta (data e hora do treino, BRT — mesma versão publicada no GCS).
     :param drive_pasta_raiz_id: ID da pasta raiz no Drive (precisa estar compartilhada,
         Editor, com a service account de ``BASEDOSDADOS_CREDENTIALS_<PROD|STAGING>``).
     :param environment: ``"prod"`` ou ``"staging"``.

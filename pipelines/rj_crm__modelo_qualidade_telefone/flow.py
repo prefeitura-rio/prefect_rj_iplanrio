@@ -7,8 +7,9 @@ modelo em produção/heurística/aleatório e (se passar no gate) promove uma ve
 Ver TODO do projeto pra detalhe de cada parte.
 """
 
-from datetime import date
+from datetime import datetime
 from typing import Literal, get_args
+from zoneinfo import ZoneInfo
 
 from prefect import flow
 from prefect_rj_iplanrio.logging import get_logger
@@ -66,7 +67,8 @@ def rj_crm__modelo_qualidade_telefone(
     ``tasks/retreino/promover.py``), publica a versão no GCS (sempre — aprovada ou não) e
     promove o champion só se aprovada. Publica os números na tabela de avaliação do BigQuery
     e um relatório legível (CSVs + gráficos de SHAP) numa subpasta do Drive nomeada pela
-    versão (a data do treino).
+    versão (data e hora do treino, BRT — não só a data: versão publicada é imutável, então
+    precisa ser única mesmo numa retentativa no mesmo dia).
 
     :param modo: ``"score"`` ou ``"retreino"``.
     :param environment: ``"prod"`` ou ``"staging"`` — decide o secret de credenciais.
@@ -100,7 +102,11 @@ def rj_crm__modelo_qualidade_telefone(
         return
 
     # modo == "retreino"
-    versao = date.today().isoformat()
+    agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
+    # data+hora, não só a data: uma versão publicada é imutável (ver utils/modelo_store.py)
+    # — só a data colidiria em qualquer retentativa no mesmo dia (ex.: falha no upload do
+    # Drive depois que o GCS já foi publicado, retreino rodado de novo manualmente).
+    versao = agora.strftime("%Y-%m-%d-%H%M%S")
     champion = carrega_champion_opcional_task(environment=environment, raiz=raiz_modelos)
     hiperparametros_champion = champion.metadata.get("hiperparametros") if champion else None
     booster_producao = champion.booster if champion else None
@@ -121,7 +127,9 @@ def rj_crm__modelo_qualidade_telefone(
         promocao_automatica=promocao_automatica,
     )
 
-    tabela_avaliacao = monta_tabela_avaliacao_task(resultado_treino, resultado_simulacao, decisao, versao, versao)
+    tabela_avaliacao = monta_tabela_avaliacao_task(
+        resultado_treino, resultado_simulacao, decisao, versao, agora.date().isoformat()
+    )
     publica_avaliacao_bq_task(
         tabela_avaliacao, environment=environment, dataset_id=dataset_id, table_id=table_id_avaliacao
     )

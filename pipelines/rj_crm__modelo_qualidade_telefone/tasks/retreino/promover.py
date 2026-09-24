@@ -152,7 +152,7 @@ def promove_se_aprovado(
     ``promocao_automatica=True``.
 
     :param raiz_modelos: Raiz das versões do modelo no GCS (ou diretório local, testes).
-    :param versao: Nome da pasta da versão — a data do treino (mesma versão do relatório
+    :param versao: Nome da pasta da versão — data e hora do treino, BRT (mesma versão do relatório
         do Drive, ver ``relatorio.py``).
     :param client: Cliente do GCS, obrigatório se ``raiz_modelos`` for ``gs://``.
     :raises FileExistsError: Se ``versao`` já foi publicada antes (versão é imutável).
