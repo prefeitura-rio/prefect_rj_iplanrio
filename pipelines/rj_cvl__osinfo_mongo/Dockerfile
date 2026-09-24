@@ -6,6 +6,8 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 
+COPY ./src ./src/
+
 COPY ./pipelines/rj_cvl__osinfo_mongo ./pipelines/rj_cvl__osinfo_mongo/
 
 RUN uv sync --package rj_cvl__osinfo_mongo
