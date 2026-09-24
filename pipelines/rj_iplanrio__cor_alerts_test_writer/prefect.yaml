@@ -34,7 +34,7 @@ deployments:
       cleanup_before: true
       cleanup_after: false
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
