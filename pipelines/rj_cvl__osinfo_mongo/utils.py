@@ -102,7 +102,7 @@ def check_mongo_indexes(mongo_config: MongoConnectionConfig) -> dict[str, dict]:
         close_mongo_connection(client)
 
     for collection, index_info in indexes.items():
-        logger.info(f"Indexes on {collection}: {index_info}")
+        logger.warning(f"Indexes on {collection}: {index_info}")
 
     return indexes
 
