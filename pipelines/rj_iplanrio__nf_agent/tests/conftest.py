@@ -94,3 +94,9 @@ def restore_google_application_credentials():
         os.environ.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
     else:
         os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = original
+
+
+@pytest.fixture
+def pdf_bytes():
+    """Fábrica de PDFs válidos em memória com N páginas."""
+    return make_pdf_bytes
