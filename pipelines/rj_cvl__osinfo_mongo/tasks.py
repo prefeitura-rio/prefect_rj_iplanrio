@@ -3,7 +3,6 @@
 Task wrappers around utility functions.
 """
 
-import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
@@ -24,8 +23,9 @@ from .utils import (
     save_chunks_to_gcs,
     save_pdf_to_gcs,
 )
+from .utils.log import logger_da_pipeline
 
-logger = logging.getLogger(__name__)
+logger = logger_da_pipeline(__name__)
 
 
 @task

@@ -17,7 +17,6 @@ keeping the exact same batching/retry/concurrency behavior.
 """
 
 import base64
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from string import Template
@@ -30,7 +29,9 @@ from pymongo import MongoClient
 from pymongo.errors import AutoReconnect, NetworkTimeout
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-logger = logging.getLogger(__name__)
+from .utils.log import logger_da_pipeline
+
+logger = logger_da_pipeline(__name__)
 
 
 @dataclass(frozen=True)
