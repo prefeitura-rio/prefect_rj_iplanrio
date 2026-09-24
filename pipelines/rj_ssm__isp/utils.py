@@ -58,7 +58,7 @@ def resolve_dates(
     que não suporta unpacking direto de tuplas retornadas por tasks.
 
     - ``"parcial"`` (Fase 1): janela do dia anterior (D-1 a D-1).
-    - ``"consolidados"`` (Fase 2): janela dos últimos 30 dias (D-30 até D-1).
+    - ``"consolidados"`` (Fase 2): mês anterior completo (1º ao último dia do mês anterior).
     - ``"errata"`` (Fase 3): janela do último trimestre completo.
 
     :param fase: Fase de disponibilidade dos dados.
@@ -75,10 +75,14 @@ def resolve_dates(
         if data_fim is None:
             data_fim = data_inicio
     elif fase == "consolidados":
+        # Primeiro dia do mês anterior
+        primeiro_dia_mes_atual = now.replace(day=1)
+        ultimo_dia_mes_anterior = primeiro_dia_mes_atual - timedelta(days=1)
+        primeiro_dia_mes_anterior = ultimo_dia_mes_anterior.replace(day=1)
         if data_inicio is None:
-            data_inicio = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+            data_inicio = primeiro_dia_mes_anterior.strftime("%Y-%m-%d")
         if data_fim is None:
-            data_fim = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+            data_fim = ultimo_dia_mes_anterior.strftime("%Y-%m-%d")
     elif fase == "errata":
         inicio_tri, fim_tri = _ultimo_trimestre(now)
         if data_inicio is None:

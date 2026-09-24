@@ -56,8 +56,8 @@ deployments:
       image_pull_policy: Always
 
   schedules:
-  # Fase 1 (Parcial): Roda todos os dias às 15h, para atualizar a tabela com os dados do dia anterior.
-  # Janela padrão: D-1 até D-1, calculada pelo flow. A fase "parcial" é usada para atualizar a tabela com os dados do dia anterior.
+  # Fase 1 (Parcial): roda diariamente às 15h.
+  # Janela: dia anterior (D-1), calculada pelo flow.
   - cron: "0 15 * * *"
     timezone: America/Sao_Paulo
     slug: ocorrencias-parcial
@@ -65,18 +65,18 @@ deployments:
       table_id: ocorrencias
       dump_mode: append
       fase: parcial
-  # Fase 2 (Consolidados): roda mensalmente no dia 1 de cada mês.
-  # Janela padrão: últimos 30 dias (D-30 até D-1), calculada pelo flow.
-  - cron: "0 6 1 * *"
+  # Fase 2 (Consolidados): roda 3x ao mês (dias 1, 15 e 30) às 16h.
+  # Janela: mês anterior completo (1º ao último dia do mês anterior), calculada pelo flow.
+  - cron: "0 16 1,15,30 * *"
     timezone: America/Sao_Paulo
     slug: ocorrencias-consolidados
     parameters:
       table_id: ocorrencias
       dump_mode: append
       fase: consolidados
-  # Fase 3 (Errata): roda 1x ao mês, apenas no início de cada trimestre
-  # (março, junho, setembro, dezembro). Janela padrão: último trimestre completo.
-  - cron: "0 5 1 3,6,9,12 *"
+  # Fase 3 (Errata): roda 3x ao mês (dias 1, 15 e 30) às 17h.
+  # Janela: último trimestre completo (Jan–Mar, Abr–Jun, Jul–Set, Out–Dez), calculada pelo flow.
+  - cron: "0 17 1,15,30 * *"
     timezone: America/Sao_Paulo
     slug: ocorrencias-errata
     parameters:

@@ -11,9 +11,9 @@ TMP_BASE: Final = "/tmp/rj_ssm__isp"
 
 # Fases de disponibilidade dos dados
 FASE_LABEL: dict[str, str] = {
-    "parcial": "Parcial",
-    "consolidados": "Consolidado",
-    "errata": "Errata",
+    "parcial": "parcial",
+    "consolidados": "consolidado",
+    "errata": "errata",
 }
 
 # Timeouts HTTP (segundos)

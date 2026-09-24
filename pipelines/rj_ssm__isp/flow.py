@@ -23,7 +23,6 @@ def rj_ssm__isp(
     max_concurrent_requests: int = MAX_CONCURRENT_REQUESTS,
 ) -> None:
     """Extrai ocorrências da camada de microdados do ISP-GEO e carrega no BigQuery.
-
     :param dataset_id: Dataset do BigQuery.
     :param table_id: Tabela do BigQuery.
     :param dump_mode: ``"append"`` para acumular dados, ``"overwrite"`` para substituir.
