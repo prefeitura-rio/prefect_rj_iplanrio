@@ -4,17 +4,12 @@ Downloads and reconstructs PDFs from OSINFO MongoDB, partitioned by mes_envio,
 into GCS bucket rj-agent-cgm-triagem-nf/staging/brutos_osinfo_mongo/.
 """
 
-import logging
-
 from iplanrio.pipelines_templates.dump_db.tasks import (
     get_database_username_and_password_from_secret_task,
 )
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 from prefect.task_runners import ConcurrentTaskRunner
-
-# Configure logging to capture INFO level logs in Prefect
-logging.basicConfig(level=logging.INFO)
 
 from .tasks import (
     check_mongo_indexes_task,

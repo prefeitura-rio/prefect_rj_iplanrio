@@ -28,7 +28,7 @@ from .utils import (
 logger = logging.getLogger(__name__)
 
 
-@task(name="check_mongo_indexes_task")
+@task
 def check_mongo_indexes_task(mongo_config: MongoConnectionConfig) -> dict[str, dict]:
     """Diagnostic task: connect to MongoDB and return index metadata.
 
@@ -38,11 +38,7 @@ def check_mongo_indexes_task(mongo_config: MongoConnectionConfig) -> dict[str, d
     Returns:
         Dictionary mapping collection name -> index_information() result.
     """
-    result = check_mongo_indexes(mongo_config)
-    logger.info("MongoDB index check completed successfully")
-    for collection, indexes in result.items():
-        logger.info(f"{collection}: {len(indexes)} indexes found")
-    return result
+    return check_mongo_indexes(mongo_config)
 
 
 @task
