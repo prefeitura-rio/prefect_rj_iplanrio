@@ -28,8 +28,7 @@ def setup_credentials_task() -> None:
 def clone_repository_task() -> str:
     """Clona o ``master`` do queries-rj-rmi e devolve o caminho do clone.
 
-    O token do GitHub não sai desta task, e o GitPython o mascara nas
-    mensagens de erro.
+    O token do GitHub não sai desta task nem das mensagens de erro do clone.
 
     :returns: O caminho do clone.
     :raises ValueError: Se ``GITHUB_TOKEN`` não existir.

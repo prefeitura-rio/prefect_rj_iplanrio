@@ -27,12 +27,20 @@ def set_application_credentials(key: str) -> None:
 def clone_repository(token: str) -> tuple[str, str]:
     """Clona o ``master`` do queries-rj-rmi numa pasta temporária.
 
+    O token vai como senha da URL, com o usuário ``x-access-token`` que o
+    GitHub documenta para clone com token. Com usuário e senha na URL, o git
+    não pede senha nem escreve o token nas mensagens de erro, e o GitPython o
+    mascara na linha de comando da exceção.
+
     :param token: Token do GitHub com leitura no queries-rj-rmi.
     :returns: O caminho do clone e o commit clonado, abreviado.
     """
     path = tempfile.mkdtemp(prefix="queries-rj-rmi-")
     repo = git.Repo.clone_from(
-        f"https://{token}@{REPOSITORY}", path, depth=1, branch="master"
+        f"https://x-access-token:{token}@{REPOSITORY}",
+        path,
+        depth=1,
+        branch="master",
     )
     return path, repo.head.commit.hexsha[:7]
 
