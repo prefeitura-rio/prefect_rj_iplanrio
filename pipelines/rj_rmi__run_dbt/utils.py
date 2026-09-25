@@ -45,7 +45,9 @@ def clone_repository(token: str) -> tuple[str, str]:
     O token vai como senha da URL, com o usuário ``x-access-token`` que o
     GitHub documenta para clone com token. Com usuário e senha na URL, o git
     não pede senha nem escreve o token nas mensagens de erro, e o GitPython o
-    mascara na linha de comando da exceção.
+    mascara na linha de comando da exceção. Como o git grava a URL do clone
+    no ``.git/config``, a URL do ``origin`` volta a ficar sem o token logo
+    depois do clone.
 
     :param token: Token do GitHub com leitura no queries-rj-rmi.
     :returns: O caminho do clone e o commit clonado, abreviado.
@@ -57,6 +59,7 @@ def clone_repository(token: str) -> tuple[str, str]:
         depth=1,
         branch="master",
     )
+    repo.remotes.origin.set_url(f"https://{REPOSITORY}")
     return path, repo.head.commit.hexsha[:7]
 
 
