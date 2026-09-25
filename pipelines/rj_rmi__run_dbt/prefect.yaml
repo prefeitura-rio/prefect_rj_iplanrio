@@ -24,7 +24,7 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  - name: rj-rmi--run_dbt--staging
+  - name: rj-rmi--run-dbt--staging
     tags:
       - environment:staging
       - severity:high
@@ -45,7 +45,7 @@ deployments:
         command: uv run --package rj_rmi__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-  - name: rj-rmi--run_dbt--prod
+  - name: rj-rmi--run-dbt--prod
     tags:
       - environment:prod
       - severity:high
