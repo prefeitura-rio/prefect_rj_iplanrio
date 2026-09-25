@@ -29,7 +29,7 @@ deployments:
     tags:
       - environment:staging
       - severity:medium
-      - code_owner:fkhouri
+      - code_owner:felipekhouri
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     concurrency_limit: 1
@@ -49,7 +49,7 @@ deployments:
     tags:
       - environment:prod
       - severity:medium
-      - code_owner:fkhouri
+      - code_owner:felipekhouri
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     concurrency_limit: 1
