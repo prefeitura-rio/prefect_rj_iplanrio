@@ -10,7 +10,8 @@ from dbt.cli.main import dbtRunnerResult
 from iplanrio.pipelines_utils.env import getenv_or_action
 
 REPOSITORY = "github.com/prefeitura-rio/queries-rj-rmi.git"
-# Chave RJ_RMI_SA do projeto prefect-jobs do Infisical. Chega no prefect-jobs-secrets com esse nome, sem prefixo.
+# Chave RJ_RMI_SA do projeto prefect-jobs do Infisical. Chega no
+# prefect-jobs-secrets com esse nome, sem prefixo.
 SERVICE_ACCOUNT_ENV = "RJ_RMI_SA"
 FAILED_STATUSES = ("error", "fail", "runtime error")
 
@@ -23,8 +24,13 @@ def read_service_account_key() -> str:
     """
     key = os.getenv(SERVICE_ACCOUNT_ENV, "").strip()
     if not key:
-        found = sorted(name for name in os.environ if "RMI" in name.upper().split("_"))
-        raise ValueError(f"{SERVICE_ACCOUNT_ENV} ausente ou vazia. Variáveis com RMI no nome: {found}")
+        found = sorted(
+            name for name in os.environ if "RMI" in name.upper().split("_")
+        )
+        raise ValueError(
+            f"{SERVICE_ACCOUNT_ENV} ausente ou vazia. "
+            f"Variáveis com RMI no nome: {found}"
+        )
     if not key.startswith("{"):
         key = base64.b64decode(key).decode()
     return key
@@ -35,7 +41,8 @@ def set_application_credentials(key: str) -> None:
 
     :param key: Chave da service account, em JSON.
     """
-    fd, path = tempfile.mkstemp(prefix="rj-rmi-sa-", suffix=".json")  # criado com permissão 600
+    # O mkstemp cria o arquivo com permissão 600.
+    fd, path = tempfile.mkstemp(prefix="rj-rmi-sa-", suffix=".json")
     with os.fdopen(fd, "w", encoding="utf-8") as file:
         file.write(key)
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
@@ -49,7 +56,9 @@ def clone_repository() -> tuple[str, str]:
     """
     path = tempfile.mkdtemp(prefix="queries-rj-rmi-")
     token = getenv_or_action("GITHUB_TOKEN")
-    repo = git.Repo.clone_from(f"https://{token}@{REPOSITORY}", path, depth=1, branch="master")
+    repo = git.Repo.clone_from(
+        f"https://{token}@{REPOSITORY}", path, depth=1, branch="master"
+    )
     return path, repo.head.commit.hexsha[:7]
 
 
@@ -65,7 +74,11 @@ def isolate_dbt_environment(project_dir: str) -> None:
     :param project_dir: Raiz do clone, onde ficam ``dbt_project.yml`` e
         ``profiles.yml``.
     """
-    inherited = [name for name in os.environ if name.startswith("DBT_") and name != "DBT_USER"]
+    inherited = [
+        name
+        for name in os.environ
+        if name.startswith("DBT_") and name != "DBT_USER"
+    ]
     for name in inherited:
         del os.environ[name]
     os.environ.update(DBT_PROJECT_DIR=project_dir, DBT_PROFILES_DIR=project_dir)
@@ -98,4 +111,8 @@ def failed_node_ids(result: dbtRunnerResult) -> list[str]:
     :returns: Os ``unique_id``, na ordem do dbt. WARN não entra.
     """
     node_results = getattr(result.result, "results", [])
-    return [getattr(item, "node", item).unique_id for item in node_results if item.status in FAILED_STATUSES]
+    return [
+        getattr(item, "node", item).unique_id
+        for item in node_results
+        if item.status in FAILED_STATUSES
+    ]

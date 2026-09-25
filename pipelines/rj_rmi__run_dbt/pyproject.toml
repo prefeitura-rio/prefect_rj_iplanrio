@@ -1,7 +1,10 @@
 [project]
 name = "rj_rmi__run_dbt"
 version = "1.0.0"
-description = "Roda o dbt do queries-rj-rmi no BigQuery rj-rmi como a service account do RMI: a passada diária (tag:daily) e comandos avulsos pela UI do Prefect."
+description = """\
+    Roda o dbt do queries-rj-rmi no BigQuery rj-rmi como a service account \
+    do RMI: a passada diária (tag:daily) e comandos avulsos pela UI do \
+    Prefect."""
 dependencies = [
     "prefect_rj_iplanrio",
     "dbt-bigquery==1.11.1",
@@ -11,3 +14,10 @@ dependencies = [
 
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
+
+[tool.ruff]
+# Herda a configuração da raiz, com linhas de até 80 caracteres. O src
+# aponta para a raiz do repo para o isort tratar pipelines como pacote local.
+extend = "../../pyproject.toml"
+src = ["../.."]
+line-length = 80
