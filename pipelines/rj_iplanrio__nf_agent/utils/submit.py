@@ -2,6 +2,7 @@
 
 import dataclasses
 import json
+import re
 import uuid
 from dataclasses import dataclass, field
 
@@ -30,6 +31,39 @@ class SubmitRequest:
     input_uri: str | None
     max_pages: int | None = None
     processing_version: str | None = None
+
+
+# Igual ao nome das subpastas já existentes no bucket (``mes_envio=2021-11-01``):
+# uma data completa, não um mês — o nome ficou de um formato antigo.
+MES_ENVIO_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])")
+
+
+def resolve_origem(origem: str | None, mes_envio: str | None, settings: Settings) -> str:
+    """Resolve a origem da submissão, com ``mes_envio`` opcional sobre a base padrão.
+
+    Se ``origem`` for informada, é usada como está e ``mes_envio`` é ignorado.
+    Caso contrário, monta ``gs://{GCS_BUCKET}/{PDFS_BASE_PATH}`` a partir do
+    ambiente e, se ``mes_envio`` for informado, restringe para a subpasta
+    ``mes_envio=<data>/`` dentro dela.
+
+    :param origem: URI completa (``gs://...``) informada explicitamente, ou ``None``.
+    :param mes_envio: Data ``YYYY-MM-DD`` selecionando a subpasta ``mes_envio=<data>``
+        da base padrão, ou ``None`` para a base inteira.
+    :param settings: Configuração de runtime (``gcs_bucket``/``pdfs_base_path``).
+    :returns: Origem final para :func:`storage.list_pdfs`.
+    :raises ValueError: Se nem ``origem`` nem ``PDFS_BASE_PATH`` estiverem
+        disponíveis, ou se ``mes_envio`` não estiver no formato ``YYYY-MM-DD``.
+    """
+    if origem:
+        return origem
+    if not settings.pdfs_base_path:
+        raise ValueError("Informe 'origem' ou configure PDFS_BASE_PATH para usar a base padrão.")
+    base = f"gs://{settings.gcs_bucket}/{settings.pdfs_base_path}"
+    if mes_envio is None:
+        return base
+    if not MES_ENVIO_PATTERN.fullmatch(mes_envio):
+        raise ValueError(f"mes_envio inválido: {mes_envio!r}. Use o formato YYYY-MM-DD.")
+    return f"{base}/mes_envio={mes_envio}"
 
 
 @dataclass(frozen=True)

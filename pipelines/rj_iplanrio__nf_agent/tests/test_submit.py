@@ -1,5 +1,6 @@
 """Tests for planning and submitting classification sessions."""
 
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,6 +19,31 @@ PROMPTS = PromptSet("v1", "classifica", "v1", "extrai {classification_hint}")
 
 def refs(*names: str) -> list[PdfRef]:
     return [PdfRef(name, f"gs://in/{name}") for name in names]
+
+
+def test_resolve_origem_explicit_wins_over_mes_envio():
+    assert submit.resolve_origem("gs://custom/path", "2021-11-01", SETTINGS) == "gs://custom/path"
+
+
+def test_resolve_origem_defaults_to_base_path_env():
+    with_base = replace(SETTINGS, pdfs_base_path="staging/pdfs")
+    assert submit.resolve_origem(None, None, with_base) == "gs://out-bkt/staging/pdfs"
+
+
+def test_resolve_origem_appends_mes_envio_subfolder():
+    with_base = replace(SETTINGS, pdfs_base_path="staging/pdfs")
+    assert submit.resolve_origem(None, "2021-11-01", with_base) == "gs://out-bkt/staging/pdfs/mes_envio=2021-11-01"
+
+
+def test_resolve_origem_rejects_bad_mes_envio_format():
+    with_base = replace(SETTINGS, pdfs_base_path="staging/pdfs")
+    with pytest.raises(ValueError, match="mes_envio"):
+        submit.resolve_origem(None, "01-11-2021", with_base)
+
+
+def test_resolve_origem_without_origem_or_base_path_raises():
+    with pytest.raises(ValueError, match="PDFS_BASE_PATH"):
+        submit.resolve_origem(None, None, SETTINGS)
 
 
 @pytest.fixture

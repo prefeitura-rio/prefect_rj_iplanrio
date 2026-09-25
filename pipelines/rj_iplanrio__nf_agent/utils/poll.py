@@ -105,7 +105,7 @@ def finish_session(
     )
     rows = build_extracao_pagina_rows(build_pdf_results(context.pdfs, classifications, extractions), metadata)
     uri = write_ndjson(
-        settings.output_bucket,
+        settings.gcs_bucket,
         settings.output_base_path,
         rows,
         f"extracao_pagina_{start.session_id}",

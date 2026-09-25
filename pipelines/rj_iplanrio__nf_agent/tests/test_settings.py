@@ -21,8 +21,16 @@ def test_load_settings_reads_env(monkeypatch):
         monkeypatch.setenv(key, value)
     loaded = settings.load_settings()
     assert loaded.bifrost_bucket == "bifrost-bucket"
-    assert loaded.output_bucket == "out-bucket"
+    assert loaded.gcs_bucket == "out-bucket"
     assert loaded.nf_batch_jobs_table == "p.d.nf_batch_jobs"
+    assert loaded.pdfs_base_path is None
+
+
+def test_load_settings_reads_optional_pdfs_base_path(monkeypatch):
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("PDFS_BASE_PATH", "staging/pdfs")
+    assert settings.load_settings().pdfs_base_path == "staging/pdfs"
 
 
 def test_load_settings_lists_every_missing_var(monkeypatch):

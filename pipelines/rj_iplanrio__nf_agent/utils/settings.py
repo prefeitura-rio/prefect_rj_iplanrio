@@ -8,9 +8,14 @@ from pathlib import Path
 CREDENTIALS_ENV = "RJ_NF_AGENT_CREDENTIALS"
 CREDENTIALS_PATH = Path("/tmp/rj_nf_agent_credentials.json")
 
+# PDFS_BASE_PATH é opcional: só é necessário quando a submissão não recebe
+# uma origem explícita (ver utils/submit.py::resolve_origem) — por isso fica
+# fora de REQUIRED_ENV.
+PDFS_BASE_PATH_ENV = "PDFS_BASE_PATH"
+
 REQUIRED_ENV = {
     "bifrost_bucket": "BIFROST_GCS_BUCKET",
-    "output_bucket": "GCS_BUCKET",
+    "gcs_bucket": "GCS_BUCKET",
     "output_base_path": "GCS_OUTPUT_BASE_PATH",
     "extracao_pagina_table": "BQ_EXTRACAO_PAGINA_TABLE",
     "nf_batch_jobs_table": "NF_BATCH_JOBS_TABLE",
@@ -22,10 +27,11 @@ class Settings:
     """Recursos GCP usados pela pipeline."""
 
     bifrost_bucket: str
-    output_bucket: str
+    gcs_bucket: str
     output_base_path: str
     extracao_pagina_table: str
     nf_batch_jobs_table: str
+    pdfs_base_path: str | None = None
 
 
 def load_settings() -> Settings:
@@ -37,7 +43,10 @@ def load_settings() -> Settings:
     missing = sorted(env for env in REQUIRED_ENV.values() if not os.environ.get(env))
     if missing:
         raise RuntimeError(f"Variáveis de ambiente ausentes: {', '.join(missing)}")
-    return Settings(**{field: os.environ[env] for field, env in REQUIRED_ENV.items()})
+    return Settings(
+        **{field: os.environ[env] for field, env in REQUIRED_ENV.items()},
+        pdfs_base_path=os.environ.get(PDFS_BASE_PATH_ENV),
+    )
 
 
 def inject_gcp_credentials() -> None:

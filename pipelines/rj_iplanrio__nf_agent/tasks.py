@@ -6,7 +6,7 @@ from prefect.cache_policies import NO_CACHE
 from .utils.bifrost import build_client
 from .utils.poll import PollSummary, poll_sessions
 from .utils.settings import inject_gcp_credentials, load_settings
-from .utils.submit import SubmitRequest, SubmitSummary, submit_pending
+from .utils.submit import SubmitRequest, SubmitSummary, resolve_origem, submit_pending
 
 
 @task
@@ -16,10 +16,14 @@ def inject_credentials_task() -> None:
 
 
 @task(cache_policy=NO_CACHE)
-def submit_task(origem: str | None, max_paginas: int | None, versao_processamento: str | None) -> SubmitSummary:
-    """Submete todos os PDFs pendentes da origem."""
-    request = SubmitRequest(input_uri=origem, max_pages=max_paginas, processing_version=versao_processamento)
-    return submit_pending(build_client(), load_settings(), request)
+def submit_task(
+    origem: str | None, mes_envio: str | None, max_paginas: int | None, versao_processamento: str | None
+) -> SubmitSummary:
+    """Submete todos os PDFs pendentes da origem (ou da base padrão + mes_envio)."""
+    settings = load_settings()
+    resolved_origem = resolve_origem(origem, mes_envio, settings)
+    request = SubmitRequest(input_uri=resolved_origem, max_pages=max_paginas, processing_version=versao_processamento)
+    return submit_pending(build_client(), settings, request)
 
 
 @task(cache_policy=NO_CACHE)
