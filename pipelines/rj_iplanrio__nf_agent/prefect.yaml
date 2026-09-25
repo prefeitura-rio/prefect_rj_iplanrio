@@ -44,6 +44,15 @@ deployments:
         env:
           # A imagem não tem .git; o commit vai por variável para rastrear a versão nas linhas de saída.
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
+    # Desvio deliberado do STYLEGUIDE §9.3 (staging sem schedules): sem isso,
+    # acompanhar uma sessão em andamento exige disparo manual repetido. O
+    # parâmetro padrão do flow (acao=acompanhar) garante que o schedule nunca
+    # submete PDF novo sozinho — só submeter continua manual.
+    schedules:
+      - interval: 900
+        anchor_date: "2025-01-01T00:00:00"
+        timezone: America/Sao_Paulo
+        slug: acompanhar-sessoes
 
   - name: rj-iplanrio--nf-agent--prod
     tags:
