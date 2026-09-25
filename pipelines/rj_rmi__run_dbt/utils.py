@@ -1,6 +1,7 @@
 """Utils for rj_rmi__run_dbt."""
 
 import base64
+import json
 import os
 import shlex
 import tempfile
@@ -47,6 +48,18 @@ def set_application_credentials(key: str) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as file:
         file.write(key)
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
+
+
+def credentials_identity(key: str) -> str:
+    """Devolve quem a chave autentica.
+
+    A chave de um login de usuário do gcloud, usada nos testes locais, não
+    tem ``client_email``.
+
+    :param key: Chave da service account, em JSON.
+    :returns: O ``client_email`` da chave, ou ``ADC de usuário``.
+    """
+    return json.loads(key).get("client_email", "ADC de usuário")
 
 
 def clone_repository() -> tuple[str, str]:

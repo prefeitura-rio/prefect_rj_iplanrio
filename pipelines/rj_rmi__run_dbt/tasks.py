@@ -1,7 +1,5 @@
 """Tasks for rj_rmi__run_dbt."""
 
-import json
-
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from prefect_dbt import PrefectDbtRunner
@@ -22,8 +20,8 @@ def setup_credentials_task() -> None:
     """
     key = utils.read_service_account_key()
     utils.set_application_credentials(key)
-    credentials = json.loads(key)
-    log(f"Credencial GCP: {credentials.get('client_email', 'ADC de usuário')}")
+    identity = utils.credentials_identity(key)
+    log(f"Credencial GCP: {identity}")
 
 
 @task
