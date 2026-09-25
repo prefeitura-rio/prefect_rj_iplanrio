@@ -1,0 +1,146 @@
+# Qualidade de Telefone -> BigQuery (crm_whatsapp.{telefone_prob_high_delivery,
+# telefone_qualidade_modelo_avaliacao}) + GCS (versões do modelo) + Drive (relatório mensal)
+#
+# Entrypoint: flow.py:rj_crm__modelo_qualidade_telefone
+#
+# modo="score": carrega o champion do GCS, pontua o universo elegível (CPFs com 2+
+# telefones) e publica a tabela do dia com truncate atômico. Roda a cada 3 dias (features
+# não mudam muito de um dia pro outro — ver decisão no TODO): ~06h BRT, horário provisório
+# até confirmar o fim do dbt diário.
+#
+# modo="retreino": treina um LightGBM novo, simula contra o modelo em produção/heurística/
+# aleatório, decide promoção pelo gate e publica os resultados (GCS + BQ + Drive). Roda 1x
+# por mês, dia 1 às 03h BRT (antes do scoring, pra terminar antes do 06h se possível).
+#
+# Credenciais necessárias no secret do work pool (mesmo secretName de
+# rj_crm__relatorio_engajamento_hsm — a service account de BASEDOSDADOS_CREDENTIALS_PROD
+# precisa ter permissão de leitura/escrita em gs://rj-crm-registry/modelos/qualidade_telefone/,
+# de escrita em rj-crm-registry.crm_whatsapp, e a pasta do Drive do relatório mensal precisa
+# estar compartilhada — Editor — com ela):
+#   BASEDOSDADOS_CREDENTIALS_PROD / _STAGING
+
+name: rj_crm__modelo_qualidade_telefone
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__modelo_qualidade_telefone-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__modelo_qualidade_telefone/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # -----------------------------------------------------------------------
+  # Deployment de staging (QA) — sem schedule ativo, roda sob demanda até validar
+  # (mesmo padrão de rj_crm__relatorio_engajamento_hsm).
+  # -----------------------------------------------------------------------
+  - name: rj-crm--modelo-qualidade-telefone--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:MariaLuizaCw
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
+    parameters:
+      modo: score
+      environment: staging
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__modelo_qualidade_telefone -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+
+  # -----------------------------------------------------------------------
+  # Deployment de produção — a cada 3 dias, ~06h BRT (horário provisório).
+  # -----------------------------------------------------------------------
+  - name: rj-crm--modelo-qualidade-telefone--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:MariaLuizaCw
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
+    parameters:
+      modo: score
+      environment: prod
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__modelo_qualidade_telefone -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    schedules:
+      - interval: 259200 # 3 dias
+        anchor_date: "2026-09-24T06:00:00"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: qualidade-telefone-score-3dias
+
+  # -----------------------------------------------------------------------
+  # Retreino — staging (QA), sem schedule ativo.
+  # -----------------------------------------------------------------------
+  - name: rj-crm--modelo-qualidade-telefone-retreino--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:MariaLuizaCw
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
+    parameters:
+      modo: retreino
+      environment: staging
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__modelo_qualidade_telefone -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+
+  # -----------------------------------------------------------------------
+  # Retreino — produção, dia 1 de cada mês às 03h BRT.
+  # -----------------------------------------------------------------------
+  - name: rj-crm--modelo-qualidade-telefone-retreino--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:MariaLuizaCw
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
+    parameters:
+      modo: retreino
+      environment: prod
+    work_pool:
+      name: onprem-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__modelo_qualidade_telefone -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    schedules:
+      - cron: "0 3 1 * *" # dia 1 de cada mês, 03h
+        timezone: America/Sao_Paulo
+        active: true
+        slug: qualidade-telefone-retreino-mensal
