@@ -1,5 +1,7 @@
 """Tasks for rj_rmi__run_dbt."""
 
+from typing import cast
+
 from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
@@ -18,7 +20,7 @@ def setup_credentials_task() -> None:
 
     :raises ValueError: Se ``RJ_RMI_SA`` não existir.
     """
-    key = getenv_or_action("RJ_RMI_SA")
+    key = cast(str, getenv_or_action("RJ_RMI_SA"))
     utils.set_application_credentials(key)
 
 
@@ -32,7 +34,7 @@ def clone_repository_task() -> str:
     :returns: O caminho do clone.
     :raises ValueError: Se ``GITHUB_TOKEN`` não existir.
     """
-    token = getenv_or_action("GITHUB_TOKEN")
+    token = cast(str, getenv_or_action("GITHUB_TOKEN"))
     path, commit = utils.clone_repository(token)
     log(f"{REPOSITORY} clonado no commit {commit}")
     return path

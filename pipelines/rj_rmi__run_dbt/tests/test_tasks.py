@@ -16,7 +16,6 @@ from types import SimpleNamespace
 import git
 import pytest
 from dbt.artifacts.schemas import results as dbt_results
-from dbt.cli.main import dbtRunnerResult
 
 from pipelines.rj_rmi__run_dbt import tasks
 
@@ -50,6 +49,16 @@ def node_result(unique_id: str, status: str) -> SimpleNamespace:
     """
     node = SimpleNamespace(unique_id=unique_id)
     return SimpleNamespace(status=status, node=node)
+
+
+def dbt_result(success: bool, result: object = None) -> SimpleNamespace:
+    """Imita o ``dbtRunnerResult`` que o ``PrefectDbtRunner`` devolve.
+
+    :param success: Se o comando deu certo.
+    :param result: O ``result`` do dbt, com os resultados dos nós.
+    :returns: Um objeto com ``success`` e ``result``.
+    """
+    return SimpleNamespace(success=success, result=result)
 
 
 def run_dbt(
@@ -141,7 +150,7 @@ def dbt(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
         options=None,
         environment=None,
         invocations=[],
-        outcome=dbtRunnerResult(success=True),
+        outcome=dbt_result(True),
     )
 
     class Runner:
@@ -155,7 +164,7 @@ def dbt(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             record.options = options
             record.environment = os.environ.copy()
 
-        def invoke(self, args: list[str]) -> dbtRunnerResult:
+        def invoke(self, args: list[str]) -> SimpleNamespace:
             """Registra os argumentos e devolve o resultado do comando.
 
             :param args: Argumentos do comando dbt.
@@ -163,7 +172,7 @@ def dbt(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
             """
             record.invocations.append(args)
             if args == ["deps"]:
-                return dbtRunnerResult(success=True)
+                return dbt_result(True)
             return record.outcome
 
     monkeypatch.setattr(tasks, "PrefectDbtRunner", Runner)
@@ -323,9 +332,7 @@ def test_run_dbt_failure_lists_the_failed_nodes(dbt: SimpleNamespace) -> None:
             status=dbt_results.RunStatus.Error, unique_id="macro.rmi.op"
         ),
     ]
-    dbt.outcome = dbtRunnerResult(
-        success=False, result=SimpleNamespace(results=results)
-    )
+    dbt.outcome = dbt_result(False, SimpleNamespace(results=results))
     message = (
         "dbt build terminou com erro: model.rmi.broken, test.rmi.failing, "
         "source.rmi.stale, macro.rmi.op"
@@ -350,7 +357,7 @@ def test_run_dbt_failure_without_failed_nodes_points_to_the_log(
     dbt: SimpleNamespace, result: object
 ) -> None:
     """Confere que a falha sem nó com erro manda ver o log."""
-    dbt.outcome = dbtRunnerResult(success=False, result=result)
+    dbt.outcome = dbt_result(False, result)
     message = "dbt debug terminou com erro: ver o log"
 
     with pytest.raises(RuntimeError, match=exactly(message)):
