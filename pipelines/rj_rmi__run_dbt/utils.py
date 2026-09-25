@@ -4,7 +4,6 @@ import base64
 import os
 import shlex
 import tempfile
-from pathlib import Path
 
 import git
 from dbt.cli.main import dbtRunnerResult
@@ -37,34 +36,37 @@ def set_application_credentials(key: str) -> None:
     :param key: Chave da service account, em JSON.
     """
     fd, path = tempfile.mkstemp(prefix="rj-rmi-sa-", suffix=".json")  # criado com permissão 600
-    os.close(fd)
-    Path(path).write_text(key, encoding="utf-8")
+    with os.fdopen(fd, "w", encoding="utf-8") as file:
+        file.write(key)
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
 
 
 def clone_repository() -> tuple[str, str]:
-    """Clona o queries-rj-rmi numa pasta temporária.
+    """Clona o ``master`` do queries-rj-rmi numa pasta temporária.
 
     :returns: O caminho do clone e o commit clonado, abreviado.
     :raises ValueError: Se ``GITHUB_TOKEN`` não existir.
     """
     path = tempfile.mkdtemp(prefix="queries-rj-rmi-")
     token = getenv_or_action("GITHUB_TOKEN")
-    repo = git.Repo.clone_from(f"https://{token}@{REPOSITORY}", path, depth=1)
+    repo = git.Repo.clone_from(f"https://{token}@{REPOSITORY}", path, depth=1, branch="master")
     return path, repo.head.commit.hexsha[:7]
 
 
 def isolate_dbt_environment(project_dir: str) -> None:
     """Troca os ``DBT_*`` herdados da pod pelos caminhos do clone.
 
-    O secret da pod é compartilhado com outros runners dbt, e nenhum
-    ``DBT_*`` dele vale aqui. Os caminhos vão pelo ambiente porque o dbt
-    valida ``DBT_PROFILES_DIR`` antes de receber os que o runner passa.
+    O secret da pod é compartilhado com outros runners dbt, e os ``DBT_*``
+    dele não valem aqui. Fica só o ``DBT_USER``, que dá o prefixo dos
+    datasets de dev no ``dbt_project.yml`` do queries-rj-rmi. Os caminhos
+    vão pelo ambiente porque o dbt valida ``DBT_PROFILES_DIR`` antes de
+    receber os que o runner passa.
 
     :param project_dir: Raiz do clone, onde ficam ``dbt_project.yml`` e
         ``profiles.yml``.
     """
-    for name in [name for name in os.environ if name.startswith("DBT_") and name != "DBT_USER"]:
+    inherited = [name for name in os.environ if name.startswith("DBT_") and name != "DBT_USER"]
+    for name in inherited:
         del os.environ[name]
     os.environ.update(DBT_PROJECT_DIR=project_dir, DBT_PROFILES_DIR=project_dir)
 

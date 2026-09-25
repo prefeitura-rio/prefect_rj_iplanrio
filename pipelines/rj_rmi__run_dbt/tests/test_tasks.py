@@ -217,7 +217,8 @@ def test_clone_uses_the_token_and_returns_the_folder(
 
     path = tasks.clone_repository_task.fn()
 
-    assert clones == [(REPOSITORY_URL, path, {"depth": 1})]
+    options = {"depth": 1, "branch": "master"}
+    assert clones == [(REPOSITORY_URL, path, options)]
     assert Path(path).parent == tmp_path
     assert Path(path).name.startswith("queries-rj-rmi-")
     assert logs == [

@@ -15,10 +15,13 @@ def setup_credentials_task() -> None:
 
     O ``profiles.yml`` do queries-rj-rmi usa ``method: oauth``, que lê ``GOOGLE_APPLICATION_CREDENTIALS``.
     A chave pode vir em JSON puro ou em base64.
+
+    :raises ValueError: Se ``RJ_RMI_SA`` estiver ausente ou vazia.
     """
     key = utils.read_service_account_key()
     utils.set_application_credentials(key)
-    log(f"Credencial GCP: {json.loads(key).get('client_email', 'ADC de usuário')}")
+    credentials = json.loads(key)
+    log(f"Credencial GCP: {credentials.get('client_email', 'ADC de usuário')}")
 
 
 @task
@@ -26,6 +29,9 @@ def clone_repository_task() -> str:
     """Clona o ``master`` do queries-rj-rmi e devolve o caminho do clone.
 
     O token do GitHub não sai desta task, e o GitPython o mascara nas mensagens de erro.
+
+    :returns: O caminho do clone.
+    :raises ValueError: Se ``GITHUB_TOKEN`` não existir.
     """
     path, commit = utils.clone_repository()
     log(f"{utils.REPOSITORY} clonado no commit {commit}")
