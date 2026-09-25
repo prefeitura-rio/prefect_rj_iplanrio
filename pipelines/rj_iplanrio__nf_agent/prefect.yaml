@@ -47,9 +47,11 @@ deployments:
     # Desvio deliberado do STYLEGUIDE §9.3 (staging sem schedules): sem isso,
     # acompanhar uma sessão em andamento exige disparo manual repetido. O
     # parâmetro padrão do flow (acao=acompanhar) garante que o schedule nunca
-    # submete PDF novo sozinho — só submeter continua manual.
+    # submete PDF novo sozinho — só submeter continua manual. tasks.py pausa
+    # este agendamento quando não sobra sessão ativa e reativa ao submeter,
+    # então o intervalo aqui só importa enquanto algo está de fato rodando.
     schedules:
-      - interval: 900
+      - interval: 3600
         anchor_date: "2025-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: acompanhar-sessoes
@@ -73,7 +75,7 @@ deployments:
         env:
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
     schedules:
-      - interval: 900
+      - interval: 3600
         anchor_date: "2025-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: acompanhar-sessoes
