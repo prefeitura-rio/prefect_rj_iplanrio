@@ -7,12 +7,11 @@ from dataclasses import dataclass, field
 
 from openai import OpenAI
 
-from prefect_rj_iplanrio.logging import get_logger
-
 from .. import constants
 from .bifrost import submit_jsonl
 from .categories import PAGE_CATEGORIES
 from .llm_requests import encode_custom_id, jsonl_line
+from .observability import get_logger
 from .pdf import PdfPages, split_pdf_pages
 from .pending import find_done_pdfs
 from .prompts import PromptSet, extraction_prompt_with_hint, load_prompts

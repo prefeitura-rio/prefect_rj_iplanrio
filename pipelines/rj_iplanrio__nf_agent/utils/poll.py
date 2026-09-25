@@ -10,11 +10,10 @@ from dataclasses import dataclass, field
 
 from openai import OpenAI
 
-from prefect_rj_iplanrio.logging import get_logger
-
 from .bifrost import read_batch_output, retrieve_batch, submit_jsonl
 from .categories import NF_CATEGORIES
 from .llm_requests import encode_custom_id, jsonl_line, page_b64_from_vertex_row
+from .observability import get_logger
 from .output import RunMetadata, build_extracao_pagina_rows, build_versao_pipeline, utc_now_naive
 from .pdf import PdfPages
 from .prompts import extraction_prompt_with_hint, load_prompts

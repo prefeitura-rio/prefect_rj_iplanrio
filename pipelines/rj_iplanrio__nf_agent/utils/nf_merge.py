@@ -6,7 +6,7 @@ import math
 import re
 from collections import defaultdict
 
-from prefect_rj_iplanrio.logging import get_logger
+from .observability import get_logger
 
 logger = get_logger(__name__)
 
