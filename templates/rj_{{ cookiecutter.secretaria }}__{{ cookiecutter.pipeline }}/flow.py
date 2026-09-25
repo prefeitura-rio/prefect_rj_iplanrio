@@ -9,6 +9,13 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from prefect_rj_iplanrio.log import get_logger
+
+# O Prefect carrega flow.py como __main__, portanto __name__ seria "__main__"
+# e os logs não seriam capturados pelo PREFECT_LOGGING_EXTRA_LOGGERS.
+# O nome explícito garante que este logger seja filho de
+# pipelines.rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}.
+logger = get_logger("pipelines.rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}.flow")
 
 
 @flow(log_prints=True)

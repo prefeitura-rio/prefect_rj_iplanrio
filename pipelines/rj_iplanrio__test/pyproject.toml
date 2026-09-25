@@ -1,7 +1,7 @@
 [project]
 name = "rj_iplanrio__test"
-version = "0.1.0"
-description = "Pipeline test da secretaria iplanrio"
+version = "1.0.0"
+description = "Pipeline de referência para validar o logger unificado, a arquitetura em três camadas (flow/tasks/utils) e o ciclo completo de uma pipeline no workspace."
 dependencies = [
     "prefect_rj_iplanrio",
 ]
