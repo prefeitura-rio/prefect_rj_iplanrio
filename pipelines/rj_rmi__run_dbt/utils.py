@@ -1,7 +1,5 @@
 """Utils for rj_rmi__run_dbt."""
 
-import base64
-import json
 import os
 import shlex
 import tempfile
@@ -11,30 +9,7 @@ from dbt.cli.main import dbtRunnerResult
 
 from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
 
-# Chave RJ_RMI_SA do projeto prefect-jobs do Infisical. Chega no
-# prefect-jobs-secrets com esse nome, sem prefixo.
-SERVICE_ACCOUNT_ENV = "RJ_RMI_SA"
 FAILED_STATUSES = ("error", "fail", "runtime error")
-
-
-def read_service_account_key() -> str:
-    """Lê a chave da service account do RMI, em JSON puro ou em base64.
-
-    :returns: A chave em JSON.
-    :raises ValueError: Se ``RJ_RMI_SA`` estiver ausente ou vazia.
-    """
-    key = os.getenv(SERVICE_ACCOUNT_ENV, "").strip()
-    if not key:
-        found = sorted(
-            name for name in os.environ if "RMI" in name.upper().split("_")
-        )
-        raise ValueError(
-            f"{SERVICE_ACCOUNT_ENV} ausente ou vazia. "
-            f"Variáveis com RMI no nome: {found}"
-        )
-    if not key.startswith("{"):
-        key = base64.b64decode(key).decode()
-    return key
 
 
 def set_application_credentials(key: str) -> None:
@@ -47,18 +22,6 @@ def set_application_credentials(key: str) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as file:
         file.write(key)
     os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = path
-
-
-def credentials_identity(key: str) -> str:
-    """Devolve quem a chave autentica.
-
-    A chave de um login de usuário do gcloud, usada nos testes locais, não
-    tem ``client_email``.
-
-    :param key: Chave da service account, em JSON.
-    :returns: O ``client_email`` da chave, ou ``ADC de usuário``.
-    """
-    return json.loads(key).get("client_email", "ADC de usuário")
 
 
 def clone_repository(token: str) -> tuple[str, str]:

@@ -4,13 +4,12 @@ Rodam sem rede, sem dbt e sem servidor do Prefect: chamam o ``.fn`` de cada
 task e trocam o log, o clone e o runner do dbt por registros.
 """
 
-import base64
 import json
 import os
 import re
 import stat
 import tempfile
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -171,12 +170,12 @@ def dbt(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
     return record
 
 
-def test_json_key_is_written_to_a_private_file(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, logs: list[str]
+def test_key_is_written_to_a_private_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Confere que a chave em JSON vai para um arquivo com permissão 600."""
+    """Confere que a chave vai para um arquivo com permissão 600."""
     key = json.dumps(SERVICE_ACCOUNT)
-    monkeypatch.setenv("RJ_RMI_SA", f"\n  {key}  \n")
+    monkeypatch.setenv("RJ_RMI_SA", key)
 
     tasks.setup_credentials_task.fn()
 
@@ -186,90 +185,20 @@ def test_json_key_is_written_to_a_private_file(
     assert path.suffix == ".json"
     assert path.read_text(encoding="utf-8") == key
     assert stat.S_IMODE(path.stat().st_mode) == stat.S_IRUSR | stat.S_IWUSR
-    assert logs == ["Credencial GCP: sa@rmi.iam"]
 
 
-@pytest.mark.parametrize(
-    "encode",
-    [base64.b64encode, base64.encodebytes],
-    ids=["base64", "base64 em linhas"],
-)
-def test_base64_key_is_decoded(
-    monkeypatch: pytest.MonkeyPatch,
-    logs: list[str],
-    encode: Callable[[bytes], bytes],
+def test_missing_key_fails_before_writing_the_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Confere que a chave em base64 é decodificada, com ou sem quebras."""
-    key = json.dumps(SERVICE_ACCOUNT)
-    monkeypatch.setenv("RJ_RMI_SA", encode(key.encode()).decode())
-
-    tasks.setup_credentials_task.fn()
-
-    assert credentials_file().read_text(encoding="utf-8") == key
-    assert logs == ["Credencial GCP: sa@rmi.iam"]
-
-
-def test_user_credentials_log_a_placeholder(
-    monkeypatch: pytest.MonkeyPatch, logs: list[str]
-) -> None:
-    """Confere que um login de usuário do gcloud loga ``ADC de usuário``."""
-    user = {"type": "authorized_user", "client_id": "id"}
-    monkeypatch.setenv("RJ_RMI_SA", json.dumps(user))
-
-    tasks.setup_credentials_task.fn()
-
-    assert logs == ["Credencial GCP: ADC de usuário"]
-
-
-@pytest.mark.parametrize(
-    ("value", "listed"),
-    [
-        (None, ["DBT_QUERIES__RJ_RMI_SA"]),
-        ("", ["DBT_QUERIES__RJ_RMI_SA", "RJ_RMI_SA"]),
-        ("  \n", ["DBT_QUERIES__RJ_RMI_SA", "RJ_RMI_SA"]),
-    ],
-    ids=["ausente", "vazia", "em branco"],
-)
-def test_missing_key_lists_the_variables_named_rmi(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-    value: str | None,
-    listed: list[str],
-) -> None:
-    """Confere que, sem a chave, a task lista as variáveis com RMI no nome.
-
-    E que ela não grava arquivo nem aponta o ADC.
-    """
-    for name in list(os.environ):
-        if "RMI" in name.upper():
-            monkeypatch.delenv(name)
-    monkeypatch.setenv("DBT_QUERIES__RJ_RMI_SA", "outro nome")
-    monkeypatch.setenv("PERMISSIONS", "RMI só no meio da palavra")
-    if value is not None:
-        monkeypatch.setenv("RJ_RMI_SA", value)
-    message = f"RJ_RMI_SA ausente ou vazia. Variáveis com RMI no nome: {listed}"
+    """Confere que, sem a chave, a task falha antes de gravar o arquivo."""
+    monkeypatch.delenv("RJ_RMI_SA", raising=False)
+    message = "Environment variable 'RJ_RMI_SA' not found."
 
     with pytest.raises(ValueError, match=exactly(message)):
         tasks.setup_credentials_task.fn()
 
     assert "GOOGLE_APPLICATION_CREDENTIALS" not in os.environ
     assert list(tmp_path.iterdir()) == []
-
-
-def test_invalid_key_fails_after_pointing_the_credentials(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Confere que uma chave que não é JSON só falha depois de gravada.
-
-    Fixa o comportamento atual. Validar a chave antes de gravar muda este
-    teste.
-    """
-    monkeypatch.setenv("RJ_RMI_SA", base64.b64encode(b"not json").decode())
-
-    with pytest.raises(json.JSONDecodeError):
-        tasks.setup_credentials_task.fn()
-
-    assert credentials_file().read_text(encoding="utf-8") == "not json"
 
 
 def test_clone_uses_the_token_and_returns_the_folder(

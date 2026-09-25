@@ -14,15 +14,12 @@ def setup_credentials_task() -> None:
     """Grava a service account do RMI num arquivo e aponta o ADC para ele.
 
     O ``profiles.yml`` do queries-rj-rmi usa ``method: oauth``, que lê
-    ``GOOGLE_APPLICATION_CREDENTIALS``. A chave pode vir em JSON puro ou em
-    base64.
+    ``GOOGLE_APPLICATION_CREDENTIALS``.
 
-    :raises ValueError: Se ``RJ_RMI_SA`` estiver ausente ou vazia.
+    :raises ValueError: Se ``RJ_RMI_SA`` não existir.
     """
-    key = utils.read_service_account_key()
+    key = getenv_or_action("RJ_RMI_SA")
     utils.set_application_credentials(key)
-    identity = utils.credentials_identity(key)
-    log(f"Credencial GCP: {identity}")
 
 
 @task
