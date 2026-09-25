@@ -31,9 +31,8 @@ deployments:
       - code_owner:miloskimatheus
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_rmi__run_dbt/flow.py:rj_rmi__run_dbt
-    # Só confere a pod: secret, chave, clone, deps e login no BigQuery, sem
-    # escrever nada. O target é prod e o secret é o de prod porque a service
-    # account do RMI não tem papel no rj-rmi-dev.
+    # dbt debug contra prod, que não escreve nada. O target e o secret são os
+    # de prod porque a service account do RMI não tem papel no rj-rmi-dev.
     parameters:
       command: "debug"
       target: "prod"

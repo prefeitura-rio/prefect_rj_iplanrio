@@ -1,4 +1,4 @@
-"""Testes de caracterização do flow rj_rmi__run_dbt."""
+"""Testes do flow rj_rmi__run_dbt."""
 
 import pytest
 

@@ -1,4 +1,4 @@
-"""Testes de caracterização das tasks do rj_rmi__run_dbt.
+"""Testes das tasks do rj_rmi__run_dbt.
 
 Rodam sem rede, sem dbt e sem servidor do Prefect: chamam o ``.fn`` de cada
 task e trocam o log, o clone e o runner do dbt por registros.
@@ -287,11 +287,11 @@ def test_run_dbt_replaces_the_inherited_dbt_variables(
 ) -> None:
     """Confere que só o ``DBT_USER`` sobra dos ``DBT_*`` herdados.
 
-    O runner já nasce com os caminhos do clone.
+    Os outros três são os que o ``prefect-jobs-secrets`` traz para o
+    ``rj_iplanrio__run_dbt``. O runner já nasce com os caminhos do clone.
     """
-    monkeypatch.setenv("DBT_PROFILES_DIR", "/secret/profiles")
-    monkeypatch.setenv("DBT_ENGINE_PROFILES_DIR", "/secret/engine")
-    monkeypatch.setenv("DBT_TARGET_PATH", "/secret/target")
+    for name in ("DBT_PROJECT_DIR", "DBT_PROFILES_DIR", "DBT_TARGET_PATH"):
+        monkeypatch.setenv(name, "/projeto/do/rj_iplanrio__run_dbt")
     monkeypatch.setenv("DBT_USER", "prefixo")
     monkeypatch.setenv("OTHER_VARIABLE", "kept")
 

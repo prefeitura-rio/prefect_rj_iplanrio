@@ -1,8 +1,4 @@
-"""Testes das convenções do prefect.yaml do rj_rmi__run_dbt.
-
-O STYLEGUIDE diz que o CI valida as tags (§13.5), mas nenhum workflow faz
-isso. Estes testes conferem o que vale para os dois deployments.
-"""
+"""Testes das convenções do prefect.yaml do rj_rmi__run_dbt."""
 
 import re
 from pathlib import Path

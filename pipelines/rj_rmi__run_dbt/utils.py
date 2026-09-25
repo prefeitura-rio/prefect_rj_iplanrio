@@ -40,11 +40,11 @@ def clone_repository(token: str) -> tuple[str, str]:
 def isolate_dbt_environment(project_dir: str) -> None:
     """Troca os ``DBT_*`` herdados da pod pelos caminhos do clone.
 
-    O secret da pod é compartilhado com outros runners dbt, e os ``DBT_*``
-    dele não valem aqui. Fica só o ``DBT_USER``, que dá o prefixo dos
-    datasets de dev no ``dbt_project.yml`` do queries-rj-rmi. Os caminhos
-    vão pelo ambiente porque o dbt valida ``DBT_PROFILES_DIR`` antes de
-    receber os que o runner passa.
+    O ``prefect-jobs-secrets`` também serve ao ``rj_iplanrio__run_dbt``, e os
+    ``DBT_*`` dele apontam para o projeto daquele runner. Fica só o
+    ``DBT_USER``, que dá o prefixo dos datasets de dev no ``dbt_project.yml``
+    do queries-rj-rmi. Os caminhos vão pelo ambiente porque o dbt valida
+    ``DBT_PROFILES_DIR`` antes de receber os que o runner passa.
 
     :param project_dir: Raiz do clone, onde ficam ``dbt_project.yml`` e
         ``profiles.yml``.
