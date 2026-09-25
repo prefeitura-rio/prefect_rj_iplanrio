@@ -12,6 +12,21 @@ from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
 FAILED_STATUSES = ("error", "fail", "runtime error")
 
 
+def read_secret(name: str) -> str:
+    """Lê um segredo das variáveis de ambiente.
+
+    :param name: Nome da variável de ambiente.
+    :returns: O valor da variável.
+    :raises ValueError: Se a variável não existir ou estiver vazia.
+    """
+    value = os.environ.get(name)
+    if not value:
+        raise ValueError(
+            f"A variável de ambiente {name} não existe ou está vazia."
+        )
+    return value
+
+
 def set_application_credentials(key: str) -> None:
     """Grava a chave num arquivo e aponta o ADC do Google para ele.
 
