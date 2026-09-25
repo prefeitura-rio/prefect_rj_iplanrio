@@ -7,6 +7,10 @@ resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'darwin'",
     "(platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32')",
 ]
+conflicts = [[
+    { package = "rj-cvl-osinfo-mongo" },
+    { package = "rj-iplanrio-taxirio" },
+]]
 
 [manifest]
 members = [
@@ -45,6 +49,7 @@ members = [
     "rj-crm-whitelist-whatsapp-relatorio",
     "rj-cvl-arquivo-virtual",
     "rj-cvl-osinfo",
+    "rj-cvl-osinfo-mongo",
     "rj-iplanrio-1746-seconverva-salesforce-poc",
     "rj-iplanrio-1746-ticket-capture",
     "rj-iplanrio-alertario-previsao-24h",
@@ -103,7 +108,7 @@ dependencies = [
     { name = "parsedatetime" },
     { name = "python-slugify" },
     { name = "pytimeparse" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/29/77/6f5df1c68bf056f5fdefc60ccc616303c6211e71cd6033c830c12735f605/agate-1.9.1.tar.gz", hash = "sha256:bc60880c2ee59636a2a80cd8603d63f995be64526abf3cbba12f00767bcd5b3d", size = 202303, upload-time = "2023-12-21T20:05:24.316Z" }
 wheels = [
@@ -244,7 +249,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "requests" },
     { name = "requests-oauthlib" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a8/f8/83f4e2aaaa0342dc67f783bf84427d9ff5cfa4ecde3a52d9b587740a91ee/apprise-1.11.0.tar.gz", hash = "sha256:3b1e6f5365b302d1fae270c0c8007958e54224b9b7808acec69006ea27f5b8a2", size = 2337248, upload-time = "2026-05-29T17:52:29.198Z" }
 wheels = [
@@ -473,7 +478,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -530,7 +535,7 @@ name = "click"
 version = "8.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9b/98/518d8e5081007684232226f475082b30087d0f585e8457db087298259f49/click-8.4.1.tar.gz", hash = "sha256:918b5633eddf6b41c32d4f454bf0de810065c74e3f7dbf8ee5452f8be88d3e96", size = 353007, upload-time = "2026-05-22T04:08:37.769Z" }
 wheels = [
@@ -638,7 +643,7 @@ name = "cryptography"
 version = "50.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/de/41/6cbdcf9142d00fe82836fbb51e503e58088575cf7a0fe1dbff6695bf0840/cryptography-50.0.0.tar.gz", hash = "sha256:eeac2acb5a20ed25e0ad6d1df9891a520b78b404266b6d11778f25d5d691a6c9", size = 880201, upload-time = "2026-07-31T14:25:10.11Z" }
 wheels = [
@@ -935,7 +940,7 @@ name = "docker"
 version = "7.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "pywin32", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
     { name = "requests" },
     { name = "urllib3" },
 ]
@@ -2100,7 +2105,7 @@ version = "0.8.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
-    { name = "orjson", marker = "platform_python_implementation != 'PyPy'" },
+    { name = "orjson", marker = "platform_python_implementation != 'PyPy' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
     { name = "packaging" },
     { name = "pydantic" },
     { name = "requests" },
@@ -2173,8 +2178,8 @@ name = "loguru"
 version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "win32-setctime", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
+    { name = "win32-setctime", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/3a/05/a1dae3dffd1116099471c643b8924f5aa6524411dc6c63fdae648c4f1aca/loguru-0.7.3.tar.gz", hash = "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6", size = 63559, upload-time = "2024-12-06T11:20:56.608Z" }
 wheels = [
@@ -2714,7 +2719,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "python-dateutil" },
-    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'emscripten' or sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/f8/87/4341c6252d1c47b08768c3d25ac487362bf403f0313ddae4a2a26c9b1b4c/pandas-3.0.3.tar.gz", hash = "sha256:696a4a00a2a2a35d4e5deb3fc946641b96c944f02230e4f76137fe35d806c4fc", size = 4651414, upload-time = "2026-05-11T18:54:29.21Z" }
 wheels = [
@@ -2809,7 +2814,7 @@ version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "python-dateutil" },
-    { name = "time-machine", marker = "implementation_name != 'pypy'" },
+    { name = "time-machine", marker = "implementation_name != 'pypy' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
     { name = "tzdata" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/b8/fe/27c7438c6ac8b8f8bef3c6e571855602ee784b85d072efddfff0ceb1cd77/pendulum-3.0.0.tar.gz", hash = "sha256:5d034998dea404ec31fae27af6b22cff1708f830a1ed7353be4d1019bb9f584e", size = 84524, upload-time = "2023-12-16T21:27:19.742Z" }
@@ -3175,7 +3180,7 @@ name = "psycopg"
 version = "3.3.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/db/2f/cb91e5502ec9de1de6f1b76cfbf69531932725361168bb06963620c77e2e/psycopg-3.3.4.tar.gz", hash = "sha256:e21207764952cff81b6b8bdacad9a3939f2793367fdac2987b3aac36a651b5bc", size = 165799, upload-time = "2026-05-01T23:31:55.179Z" }
 wheels = [
@@ -3184,7 +3189,7 @@ wheels = [
 
 [package.optional-dependencies]
 binary = [
-    { name = "psycopg-binary", marker = "implementation_name != 'pypy'" },
+    { name = "psycopg-binary", marker = "implementation_name != 'pypy' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 
 [[package]]
@@ -3411,10 +3416,26 @@ wheels = [
 
 [[package]]
 name = "pymongo"
+version = "3.13.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "sys_platform == 'win32'",
+    "sys_platform == 'emscripten'",
+    "sys_platform != 'emscripten' and sys_platform != 'win32'",
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ec/ff/9b08f29b57384e1f55080d15a12ba4908d93d46cd7fe83c5c562fdcd3400/pymongo-3.13.0.tar.gz", hash = "sha256:e22d6cf5802cd09b674c307cc9e03870b8c37c503ebec3d25b86f2ce8c535dc7", size = 804388, upload-time = "2022-11-01T19:06:29.025Z" }
+
+[[package]]
+name = "pymongo"
 version = "4.17.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "sys_platform == 'win32'",
+    "sys_platform == 'emscripten'",
+    "sys_platform != 'emscripten' and sys_platform != 'win32'",
+]
 dependencies = [
-    { name = "dnspython" },
+    { name = "dnspython", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ca/64/50be6fbac9c79fe2e4c17401a467da2d8764d82833d83cec325afe5cab32/pymongo-4.17.0.tar.gz", hash = "sha256:70ffa08ba641468cc068cf46c06b34f01a8ce3489f6411309fcb5ceabe6b2fc0", size = 2523370, upload-time = "2026-04-20T16:39:53.524Z" }
 wheels = [
@@ -3435,10 +3456,10 @@ name = "pymongoarrow"
 version = "1.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "pyarrow" },
-    { name = "pymongo" },
+    { name = "numpy", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
+    { name = "packaging", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
+    { name = "pyarrow", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
+    { name = "pymongo", version = "4.17.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/2e/b3/35237e60fc99e9fed0b7f37e49c171f8f03b44a01e6b77679708a705f426/pymongoarrow-1.14.0.tar.gz", hash = "sha256:f20fd2a62d5355670bfa4f36df7275a437e4c36c89b785e664852415917ec408", size = 69828, upload-time = "2026-05-28T22:16:44.425Z" }
 wheels = [
@@ -3558,7 +3579,7 @@ name = "pytest"
 version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -4732,6 +4753,21 @@ dependencies = [
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
+name = "rj-cvl-osinfo-mongo"
+version = "0.1.0"
+source = { virtual = "pipelines/rj_cvl__osinfo_mongo" }
+dependencies = [
+    { name = "pymongo", version = "3.13.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-19-rj-cvl-osinfo-mongo'" },
+    { name = "tenacity", marker = "extra == 'project-19-rj-cvl-osinfo-mongo'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pymongo", specifier = "==3.13.0" },
+    { name = "tenacity", specifier = ">=9.1.4" },
+]
+
+[[package]]
 name = "rj-iplanrio-1746-seconverva-salesforce-poc"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__1746_seconverva_salesforce_poc" }
@@ -5040,11 +5076,11 @@ name = "rj-iplanrio-taxirio"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__taxirio" }
 dependencies = [
-    { name = "prefect-rj-iplanrio" },
-    { name = "pyarrow" },
-    { name = "pymongo" },
-    { name = "pymongoarrow" },
-    { name = "pytz" },
+    { name = "prefect-rj-iplanrio", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
+    { name = "pyarrow", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
+    { name = "pymongo", version = "4.17.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
+    { name = "pymongoarrow", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
+    { name = "pytz", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
 ]
 
 [package.metadata]
@@ -5793,7 +5829,7 @@ name = "sqlalchemy"
 version = "2.0.50"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'" },
+    { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/57/da/6fbf010c8ebb347679d0d100b22fe9ba5e13fd04046c5df7280d2f0bf706/sqlalchemy-2.0.50.tar.gz", hash = "sha256:af5607d11ef90fd6a5c0549fe0045dce1663d427426bcfb506dcb5346a85a3b9", size = 9907424, upload-time = "2026-05-24T19:20:04.018Z" }
@@ -5938,7 +5974,7 @@ name = "tqdm"
 version = "4.68.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/06/b3/36c8ecf72e8925200671613332db156d84b99b3aee742a41c1938ebb0808/tqdm-4.68.1.tar.gz", hash = "sha256:fc163d96b287bd031e1aa24421ce4411b25559bd0a1be4fe649bdaa4d2c02bf5", size = 171236, upload-time = "2026-06-05T17:23:15.267Z" }
 wheels = [
@@ -6004,7 +6040,7 @@ name = "tzlocal"
 version = "5.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8b/2e/c14812d3d4d9cd1773c6be938f89e5735a1f11a9f184ac3639b93cef35d5/tzlocal-5.3.1.tar.gz", hash = "sha256:cceffc7edecefea1f595541dbd6e990cb1ea3d19bf01b2809f362a03dd7921fd", size = 30761, upload-time = "2025-03-05T21:17:41.549Z" }
 wheels = [
@@ -6153,7 +6189,7 @@ name = "whenever"
 version = "0.8.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "tzdata", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/4d/67/cfc23dfe54ced1e4388826b29db9b9ab2c70a342b33b7e92cf15866f35a6/whenever-0.8.10.tar.gz", hash = "sha256:5e2a3da71527e299f98eec5bb38c4e79d9527a127107387456125005884fb235", size = 240223, upload-time = "2025-10-16T20:31:23.538Z" }
 wheels = [
