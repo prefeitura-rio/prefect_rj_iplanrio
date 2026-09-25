@@ -7,6 +7,7 @@ from prefect import task
 from prefect_dbt import PrefectDbtRunner
 
 from pipelines.rj_rmi__run_dbt import utils
+from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
 
 
 @task
@@ -36,7 +37,7 @@ def clone_repository_task() -> str:
     :raises ValueError: Se ``GITHUB_TOKEN`` não existir.
     """
     path, commit = utils.clone_repository()
-    log(f"{utils.REPOSITORY} clonado no commit {commit}")
+    log(f"{REPOSITORY} clonado no commit {commit}")
     return path
 
 

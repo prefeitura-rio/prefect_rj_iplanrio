@@ -9,7 +9,8 @@ import git
 from dbt.cli.main import dbtRunnerResult
 from iplanrio.pipelines_utils.env import getenv_or_action
 
-REPOSITORY = "github.com/prefeitura-rio/queries-rj-rmi.git"
+from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
+
 # Chave RJ_RMI_SA do projeto prefect-jobs do Infisical. Chega no
 # prefect-jobs-secrets com esse nome, sem prefixo.
 SERVICE_ACCOUNT_ENV = "RJ_RMI_SA"
