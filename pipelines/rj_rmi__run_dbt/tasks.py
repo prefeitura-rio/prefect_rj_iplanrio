@@ -21,11 +21,13 @@ def setup_credentials_task() -> None:
     utils.set_application_credentials(key)
 
 
-@task
+@task(retries=2, retry_delay_seconds=60)
 def clone_repository_task() -> str:
     """Clona o ``master`` do queries-rj-rmi e devolve o caminho do clone.
 
     O token do GitHub não sai desta task nem das mensagens de erro do clone.
+    Uma falha no clone, como uma instabilidade do GitHub, é tentada de novo
+    antes de falhar o flow, inclusive a falta do token.
 
     :returns: O caminho do clone.
     :raises ValueError: Se ``GITHUB_TOKEN`` não existir ou estiver vazia.
