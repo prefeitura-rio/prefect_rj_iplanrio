@@ -12,6 +12,16 @@
 # aleatório, decide promoção pelo gate e publica os resultados (GCS + BQ + Drive). Roda 1x
 # por mês, dia 1 às 03h BRT (antes do scoring, pra terminar antes do 06h se possível).
 #
+# Os dois modos vivem no MESMO deployment de prod (e no mesmo de staging), cada um com seu
+# próprio schedule + `parameters: {modo: ...}` sobrescrevendo o default do deployment — não
+# dois deployments de prod separados. Motivo: .github/scripts/deploy_prefect_flows.py faz
+# `next(d for d in deployments if d.endswith(environment))` por pipeline, ou seja, só deploya
+# o PRIMEIRO deployment cujo nome termina em "prod"/"staging" — com dois deployments de prod
+# no mesmo prefect.yaml (score e retreino), o segundo nunca era deployado pelo CI (bug visto
+# em produção 2026-09-25: só o schedule de score existia no servidor, retreino nunca chegou
+# lá apesar de estar no arquivo desde o commit inicial). Um deployment só por ambiente, com
+# múltiplos schedules, evita esse bug por construção em vez de corrigir o script compartilhado.
+#
 # Credenciais necessárias no secret do work pool (mesmo secretName de
 # rj_crm__relatorio_engajamento_hsm — a service account de BASEDOSDADOS_CREDENTIALS_PROD
 # precisa ter permissão de leitura/escrita em gs://rj-crm-registry/modelos/qualidade_telefone/,
@@ -47,7 +57,9 @@ pull:
 deployments:
   # -----------------------------------------------------------------------
   # Deployment de staging (QA) — sem schedule ativo, roda sob demanda até validar
-  # (mesmo padrão de rj_crm__relatorio_engajamento_hsm).
+  # (mesmo padrão de rj_crm__relatorio_engajamento_hsm). `modo` é dropdown na UI
+  # (Literal["score", "retreino"], ver flow.py) — escolhe o modo na hora do run manual,
+  # não precisa de deployment nem schedule separado por modo.
   # -----------------------------------------------------------------------
   - name: rj-crm--modelo-qualidade-telefone--staging
     tags:
@@ -69,7 +81,9 @@ deployments:
         image_pull_policy: Always
 
   # -----------------------------------------------------------------------
-  # Deployment de produção — a cada 3 dias, ~06h BRT (horário provisório).
+  # Deployment de produção — um só pros dois modos (ver nota no topo do arquivo).
+  # `parameters` no nível do deployment é só o default de um run manual sem escolher modo;
+  # cada schedule abaixo sobrescreve `modo` pro seu próprio propósito.
   # -----------------------------------------------------------------------
   - name: rj-crm--modelo-qualidade-telefone--prod
     tags:
@@ -90,57 +104,19 @@ deployments:
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     schedules:
+      # Score — a cada 3 dias, ~06h BRT (horário provisório).
       - interval: 259200 # 3 dias
         anchor_date: "2026-09-24T06:00:00"
         timezone: America/Sao_Paulo
         active: true
         slug: qualidade-telefone-score-3dias
-
-  # -----------------------------------------------------------------------
-  # Retreino — staging (QA), sem schedule ativo.
-  # -----------------------------------------------------------------------
-  - name: rj-crm--modelo-qualidade-telefone-retreino--staging
-    tags:
-      - environment:staging
-      - severity:medium
-      - code_owner:MariaLuizaCw
-    version: "{{ build-image.tag }}"
-    entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
-    parameters:
-      modo: retreino
-      environment: staging
-    work_pool:
-      name: onprem-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: "uv run --package rj_crm__modelo_qualidade_telefone -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets-staging
-        image_pull_policy: Always
-
-  # -----------------------------------------------------------------------
-  # Retreino — produção, dia 1 de cada mês às 03h BRT.
-  # -----------------------------------------------------------------------
-  - name: rj-crm--modelo-qualidade-telefone-retreino--prod
-    tags:
-      - environment:prod
-      - severity:medium
-      - code_owner:MariaLuizaCw
-    version: "{{ get-commit-hash.stdout }}"
-    entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
-    parameters:
-      modo: retreino
-      environment: prod
-    work_pool:
-      name: onprem-pool
-      work_queue_name: default
-      job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-        command: "uv run --package rj_crm__modelo_qualidade_telefone -- prefect flow-run execute"
-        secretName: prefect-jobs-crm-registry-secrets
-        image_pull_policy: Always
-    schedules:
-      - cron: "0 3 1 * *" # dia 1 de cada mês, 03h
+        parameters:
+          modo: score
+      # Retreino — dia 1 de cada mês, 03h BRT (antes do score, pra terminar antes do 06h
+      # se possível).
+      - cron: "0 3 1 * *"
         timezone: America/Sao_Paulo
         active: true
         slug: qualidade-telefone-retreino-mensal
+        parameters:
+          modo: retreino
