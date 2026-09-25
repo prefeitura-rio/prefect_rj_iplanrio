@@ -226,7 +226,7 @@ def test_clone_uses_the_token_and_returns_the_folder(
     ]
 
 
-def test_clone_without_token_fails_after_creating_the_folder(
+def test_clone_without_token_fails_before_creating_the_folder(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     clones: list[tuple[str, str, dict]],
@@ -238,8 +238,7 @@ def test_clone_without_token_fails_after_creating_the_folder(
         tasks.clone_repository_task.fn()
 
     assert clones == []
-    [folder] = tmp_path.iterdir()
-    assert folder.name.startswith("queries-rj-rmi-")
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_run_dbt_installs_packages_then_runs_the_command(

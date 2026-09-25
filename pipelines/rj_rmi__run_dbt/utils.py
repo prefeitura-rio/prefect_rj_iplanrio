@@ -8,7 +8,6 @@ import tempfile
 
 import git
 from dbt.cli.main import dbtRunnerResult
-from iplanrio.pipelines_utils.env import getenv_or_action
 
 from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
 
@@ -62,14 +61,13 @@ def credentials_identity(key: str) -> str:
     return json.loads(key).get("client_email", "ADC de usuário")
 
 
-def clone_repository() -> tuple[str, str]:
+def clone_repository(token: str) -> tuple[str, str]:
     """Clona o ``master`` do queries-rj-rmi numa pasta temporária.
 
+    :param token: Token do GitHub com leitura no queries-rj-rmi.
     :returns: O caminho do clone e o commit clonado, abreviado.
-    :raises ValueError: Se ``GITHUB_TOKEN`` não existir.
     """
     path = tempfile.mkdtemp(prefix="queries-rj-rmi-")
-    token = getenv_or_action("GITHUB_TOKEN")
     repo = git.Repo.clone_from(
         f"https://{token}@{REPOSITORY}", path, depth=1, branch="master"
     )

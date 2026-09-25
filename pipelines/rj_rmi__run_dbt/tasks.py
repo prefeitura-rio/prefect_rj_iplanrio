@@ -1,5 +1,6 @@
 """Tasks for rj_rmi__run_dbt."""
 
+from iplanrio.pipelines_utils.env import getenv_or_action
 from iplanrio.pipelines_utils.logging import log
 from prefect import task
 from prefect_dbt import PrefectDbtRunner
@@ -34,7 +35,8 @@ def clone_repository_task() -> str:
     :returns: O caminho do clone.
     :raises ValueError: Se ``GITHUB_TOKEN`` não existir.
     """
-    path, commit = utils.clone_repository()
+    token = getenv_or_action("GITHUB_TOKEN")
+    path, commit = utils.clone_repository(token)
     log(f"{REPOSITORY} clonado no commit {commit}")
     return path
 
