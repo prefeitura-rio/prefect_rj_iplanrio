@@ -42,7 +42,7 @@ def clone_repository_task() -> str:
 def run_dbt_task(
     project_dir: str, command: str, select: str, flag: str, target: str
 ) -> None:
-    """Roda ``dbt deps`` e o comando pedido, e falha se algum nó falhar.
+    """Roda ``dbt deps`` e o comando pedido, e falha se algum deles falhar.
 
     WARN não falha.
 
@@ -52,12 +52,15 @@ def run_dbt_task(
     :param select: Valor do ``--select``. Vazio, a opção não é passada.
     :param flag: Demais argumentos, separados como no shell.
     :param target: Target do ``profiles.yml``.
-    :raises RuntimeError: Se algum nó terminar com erro ou falha.
+    :raises RuntimeError: Se o ``deps`` ou algum nó terminar com erro ou
+        falha.
     """
     utils.isolate_dbt_environment(project_dir)
     # Com raise_on_failure=True, o prefect-dbt 0.7.5 quebra em source freshness.
     runner = PrefectDbtRunner(raise_on_failure=False)
-    runner.invoke(["deps"])
+    deps = runner.invoke(["deps"])
+    if not deps.success:
+        raise RuntimeError("dbt deps terminou com erro: ver o log")
     result = runner.invoke(
         utils.dbt_args(command=command, select=select, flag=flag, target=target)
     )
