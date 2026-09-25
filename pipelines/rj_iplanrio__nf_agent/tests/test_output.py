@@ -1,8 +1,14 @@
 """Tests for extracao_pagina row building."""
 
+import json
 from datetime import datetime
 
-from pipelines.rj_iplanrio__nf_agent.utils.output import RunMetadata, build_extracao_pagina_rows, build_versao_pipeline
+from pipelines.rj_iplanrio__nf_agent.utils.output import (
+    RunMetadata,
+    build_extracao_pagina_rows,
+    build_versao_pipeline,
+    nf_field,
+)
 from pipelines.rj_iplanrio__nf_agent.utils.results import PdfResult
 
 USAGE = {"prompt_tokens": 1, "completion_tokens": 2, "total_tokens": 3}
@@ -39,6 +45,32 @@ def test_one_row_per_page_with_version_fields():
     assert rows[1]["uso"]["extracao"]["total_tokens"] == USAGE["total_tokens"]
     assert rows[2]["pipeline_status"] == "erro_processamento"
     assert rows[2]["pipeline_erro"] == "Página não processada"
+
+
+def test_free_key_nf_fields_are_serialized_as_json_text():
+    nf = {
+        "pagina": 2,
+        "tipo_documento": "NFS-e",
+        "numero_nf": "10",
+        "campos_de_valor_encontrados": {"valor_total_da_nota": 5.0},
+        "campos_de_cnpj_encontrados": None,
+    }
+    rows = build_extracao_pagina_rows({"doc": result(extracted_nfs=[nf])}, META)
+    row = rows[1]
+    assert row["valores_encontrados"] == json.dumps({"valor_total_da_nota": 5.0}, ensure_ascii=False, sort_keys=True)
+    assert isinstance(row["valores_encontrados"], str)
+    assert row["cnpjs_encontrados"] is None
+    # Campo que não é de chave livre: continua passando o valor bruto.
+    assert row["numero_documento"] == "10"
+
+
+def test_nf_field_only_serializes_the_free_key_fields():
+    nf = {"campos_de_valor_encontrados": {"a": 1}, "numero_nf": "10"}
+    assert nf_field("valores_encontrados", "campos_de_valor_encontrados", nf) == json.dumps(
+        {"a": 1}, ensure_ascii=False, sort_keys=True
+    )
+    assert nf_field("numero_documento", "numero_nf", nf) == "10"
+    assert nf_field("valores_encontrados", "campos_de_valor_encontrados", {}) is None
 
 
 def test_errors_become_erro_processamento():

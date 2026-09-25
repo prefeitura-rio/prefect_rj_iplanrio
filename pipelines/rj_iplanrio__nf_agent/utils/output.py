@@ -1,5 +1,6 @@
 """Linhas da tabela ``extracao_pagina`` (uma por página de cada PDF)."""
 
+import json
 import os
 import subprocess
 from dataclasses import dataclass
@@ -22,6 +23,13 @@ NF_FIELDS = {
     "cnpjs_encontrados": "campos_de_cnpj_encontrados",
     "observacao_extracao": "observacao",
 }
+
+# Campos de NF_FIELDS cujo valor de origem é um dicionário de chaves livres
+# (o modelo decide os nomes por página). Gravados como objeto aninhado, o
+# autodetect do BigQuery trava um RECORD nas chaves vistas na amostra — a
+# primeira página com uma chave nova quebra a leitura da tabela inteira. Como
+# texto JSON, o tipo da coluna nunca depende das chaves de uma página.
+JSON_NF_FIELDS = frozenset({"valores_encontrados", "cnpjs_encontrados"})
 
 
 @dataclass(frozen=True)
@@ -96,6 +104,21 @@ def usage_field(usage: dict[str, int] | None) -> dict:
     return {"modelo": constants.MODEL_NAME, **usage}
 
 
+def nf_field(column: str, source: str, nf: dict) -> object:
+    """Lê um campo de NF extraída, serializando os campos de chave livre como JSON.
+
+    :param column: Nome da coluna de saída (chave de :data:`NF_FIELDS`).
+    :param source: Chave correspondente no JSON de extração do modelo.
+    :param nf: NF extraída.
+    :returns: Valor pronto para a linha de saída — texto JSON para os campos
+        em :data:`JSON_NF_FIELDS`, o valor bruto para os demais.
+    """
+    value = nf.get(source)
+    if column in JSON_NF_FIELDS and value is not None:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return value
+
+
 def page_row(result: PdfResult, page: int, metadata: RunMetadata) -> dict:
     """Monta a linha de uma página sem campos de NF.
 
@@ -139,6 +162,6 @@ def build_extracao_pagina_rows(pdf_results: dict[str, PdfResult], metadata: RunM
             row = page_row(result, page, metadata)
             nf = nf_by_page.get(page)
             if nf is not None:
-                row.update({column: nf.get(source) for column, source in NF_FIELDS.items()})
+                row.update({column: nf_field(column, source, nf) for column, source in NF_FIELDS.items()})
             rows.append(row)
     return rows
