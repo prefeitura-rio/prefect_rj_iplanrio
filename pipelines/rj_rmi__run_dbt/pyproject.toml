@@ -1,0 +1,23 @@
+[project]
+name = "rj_rmi__run_dbt"
+version = "1.0.0"
+description = """\
+    Roda o dbt do queries-rj-rmi para construir o Registro Municipal \
+    Integrado no BigQuery rj-rmi, com a service account do RMI e separado do \
+    CRM: a passada diária (tag:daily) e comandos avulsos pela UI do Prefect."""
+dependencies = [
+    "prefect_rj_iplanrio",
+    "dbt-bigquery==1.11.1",
+    "gitpython>=3.1.44",
+    "prefect-dbt>=0.7.5",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
+
+[tool.ruff]
+# Herda a configuração da raiz, com linhas de até 80 caracteres. O src
+# aponta para a raiz do repo para o isort tratar pipelines como pacote local.
+extend = "../../pyproject.toml"
+src = ["../.."]
+line-length = 80
