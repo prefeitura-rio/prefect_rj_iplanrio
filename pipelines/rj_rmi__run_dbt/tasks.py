@@ -21,7 +21,7 @@ def setup_credentials_task() -> None:
     utils.set_application_credentials(key)
 
 
-@task(retries=2, retry_delay_seconds=60)
+@task(retries=3, retry_delay_seconds=60)
 def clone_repository_task() -> str:
     """Clona o ``master`` do queries-rj-rmi e devolve o caminho do clone.
 
