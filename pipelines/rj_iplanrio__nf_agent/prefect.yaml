@@ -51,7 +51,7 @@ deployments:
     # este agendamento quando não sobra sessão ativa e reativa ao submeter,
     # então o intervalo aqui só importa enquanto algo está de fato rodando.
     schedules:
-      - interval: 3600
+      - interval: 900
         anchor_date: "2025-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: acompanhar-sessoes
@@ -75,7 +75,7 @@ deployments:
         env:
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
     schedules:
-      - interval: 3600
+      - interval: 900
         anchor_date: "2025-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: acompanhar-sessoes
