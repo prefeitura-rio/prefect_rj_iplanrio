@@ -123,3 +123,17 @@ def test_unreadable_pdf_is_skipped(env):
         summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.skipped == ["a1"]
     assert summary.pdf_count == 1
+
+
+def test_download_failure_on_one_pdf_does_not_abort_the_rest(env, pdf_bytes):
+    env["list_pdfs"].return_value = refs("a1", "b1", "c1")
+
+    def flaky_download(uri):
+        if uri.endswith("b1"):
+            raise TimeoutError("conexão perdida com o GCS")
+        return pdf_bytes(int(uri[-1]))
+
+    with patch.object(submit, "download_bytes", side_effect=flaky_download):
+        summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
+    assert summary.skipped == ["b1"]
+    assert summary.pdf_count == 2  # noqa: PLR2004 -- a1 e c1 têm 1 página cada, per a convenção de nomes do fixture

@@ -135,7 +135,9 @@ def submit_pending(client: OpenAI, settings: Settings, request: SubmitRequest) -
     """Submete todos os PDFs pendentes da origem, em quantas sessões forem necessárias.
 
     Pendente = não processado na mesma ``versao_processamento`` e fora de sessões ativas.
-    Cada sessão é fechada quando a próxima linha passaria de ``BATCH_MAX_BYTES``.
+    Cada sessão é fechada quando a próxima linha passaria de ``BATCH_MAX_BYTES``. Um
+    PDF que falhe ao baixar ou ler é pulado (fica em ``skipped``) e não interrompe
+    os demais — com centenas de PDFs, uma falha pontual de rede é esperada.
 
     :param client: Cliente do Bifrost.
     :param settings: Configuração de runtime.
@@ -182,8 +184,8 @@ def submit_pending(client: OpenAI, settings: Settings, request: SubmitRequest) -
                 jsonl_line(encode_custom_id(ref.name, number), prompts.classification_text, page)
                 for number, page in enumerate(pages, start=1)
             ]
-        except ValueError as exc:
-            logger.warning("PDF %s ignorado: %s", ref.name, exc)
+        except Exception as exc:  # um PDF ruim (baixar ou ler) nunca pode derrubar o lote inteiro
+            logger.warning("PDF %s ignorado: falha ao baixar/ler: %s", ref.name, exc)
             skipped.append(ref.name)
             continue
         if request.max_pages is not None and page_count + len(pages) > request.max_pages:
