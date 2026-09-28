@@ -148,20 +148,26 @@ def fetch_data_extension_data(
     all_rows: List[Dict[str, Any]] = []
     page = 1
 
+    page_size = GetHistoryDataConstants.SFMC_MAX_PAGE_SIZE.value
+
     while True:
-        response = requests.get(base_url, headers=headers, params={"$page": page}, timeout=60)
+        response = requests.get(
+            base_url, headers=headers, params={"$page": page, "$pageSize": page_size}, timeout=60
+        )
         response.raise_for_status()
 
         data = response.json()
-        page_count = data.get("pageCount", 1)
         items = data.get("items", [])
 
         all_rows.extend(items)
 
-        if page >= page_count:
+        # O rowset do SFMC não retorna "pageCount", só "count" (total de registros da DE)
+        total = data.get("count", len(items))
+        if len(all_rows) >= total or not items:
             break
         page += 1
 
+    log(f"  [{external_key}] {page} página(s) lida(s), {len(all_rows)} de {total} registro(s).")
     return all_rows
 
 
