@@ -6,6 +6,16 @@ from unittest.mock import MagicMock, patch
 from pipelines.rj_iplanrio__nf_agent import tasks
 
 
+def test_submit_task_retries_on_transient_failure():
+    assert tasks.submit_task.retries == 3  # noqa: PLR2004 -- valor de configuração, não cálculo
+    assert tasks.submit_task.retry_delay_seconds == [30, 60, 120]
+
+
+def test_poll_task_retries_on_transient_failure():
+    assert tasks.poll_task.retries == 3  # noqa: PLR2004 -- valor de configuração, não cálculo
+    assert tasks.poll_task.retry_delay_seconds == [30, 60, 120]
+
+
 def fake_client(schedules):
     client = MagicMock()
     client.__enter__.return_value = client
