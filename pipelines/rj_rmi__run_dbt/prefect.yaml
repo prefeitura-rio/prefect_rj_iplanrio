@@ -1,0 +1,77 @@
+name: rj_rmi__run_dbt
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: "rj_rmi__run_dbt-{{ get-commit-hash.stdout }}"
+      dockerfile: pipelines/rj_rmi__run_dbt/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  - name: rj-rmi--run-dbt--staging
+    tags:
+      - environment:staging
+      - severity:high
+      - code_owner:miloskimatheus
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_rmi__run_dbt/flow.py:rj_rmi__run_dbt
+    # dbt debug contra prod, que não escreve nada. O target e o secret são os
+    # de prod porque a service account do RMI não tem papel no rj-rmi-dev.
+    parameters:
+      command: "debug"
+      target: "prod"
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_rmi__run_dbt -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+  - name: rj-rmi--run-dbt--prod
+    tags:
+      - environment:prod
+      - severity:high
+      - code_owner:miloskimatheus
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_rmi__run_dbt/flow.py:rj_rmi__run_dbt
+    # Valem para o schedule e para o Quick run, que refaz a passada do dia.
+    parameters:
+      command: "build"
+      select: "tag:daily"
+      target: "prod"
+    # Uma execução manual durante a agendada espera a vez em vez de escrever
+    # nos mesmos modelos.
+    concurrency_limit:
+      limit: 1
+      collision_strategy: ENQUEUE
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: uv run --package rj_rmi__run_dbt -- prefect flow-run execute
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
+    schedules:
+      # Depois da passada diária do rj-crm-registry (07:15, termina por volta
+      # de 07:30), da qual o RMI lê tabelas.
+      - cron: "0 8 * * *"
+        timezone: America/Sao_Paulo
+        slug: dbt_daily_build
