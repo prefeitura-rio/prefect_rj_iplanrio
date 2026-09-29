@@ -183,7 +183,7 @@ reviews:
         GENERAL STRUCTURE:
         - MUST have proper YAML syntax and indentation
         - MUST define both staging and prod deployments
-        - MUST use k3s-pool as work_pool name (suggest changing from datario-pool if found)
+        - MUST use onprem-pool as work_pool name
         - MUST have proper build, push, and pull steps configured
         - MUST use correct image naming convention with commit hash tags
 

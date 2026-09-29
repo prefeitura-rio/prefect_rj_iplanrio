@@ -213,6 +213,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
     ]),
     "messaging_session": _base_fields([
         bigquery.SchemaField("id", _STRING),
+        bigquery.SchemaField("conversation_id", _STRING),
         bigquery.SchemaField("status", _STRING),
         bigquery.SchemaField("start_time", _TIMESTAMP),
         bigquery.SchemaField("end_time", _TIMESTAMP),
@@ -244,6 +245,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
     ]),
     "messaging_session_staging": _base_fields([
         bigquery.SchemaField("id", _STRING),
+        bigquery.SchemaField("conversation_id", _STRING),
         bigquery.SchemaField("status", _STRING),
         bigquery.SchemaField("start_time", _TIMESTAMP),
         bigquery.SchemaField("end_time", _TIMESTAMP),

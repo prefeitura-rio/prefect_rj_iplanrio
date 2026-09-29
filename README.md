@@ -117,7 +117,7 @@ Você será solicitado a informar valores como `secretaria` e `pipeline`, que se
 Este repositório utiliza dois work pools principais para execução dos deployments Prefect:
 
 - **default-pool**: destinado à execução geral de pipelines, incluindo fluxos que não possuem requisitos especiais de rede ou infraestrutura. É o pool padrão para a maioria dos deployments.
-- **k3s-pool**: utilizado para pipelines que acessam bancos de dados ou sistemas internos da IplanRio, especialmente aqueles que exigem conexão via VPN. Esse pool garante que os jobs sejam executados em ambientes com acesso seguro e autorizado aos recursos internos.
+- **onprem-pool**: utilizado para pipelines que acessam bancos de dados ou sistemas internos da IplanRio, especialmente aqueles que exigem conexão via VPN. Esse pool garante que os jobs sejam executados em ambientes com acesso seguro e autorizado aos recursos internos.
 
 Ao configurar um deployment no arquivo `prefect.yaml`, selecione o pool apropriado conforme a necessidade de acesso aos dados ou sistemas.
 
