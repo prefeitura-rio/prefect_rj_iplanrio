@@ -8,7 +8,7 @@ Credenciais no Infisical (path: /salesforce_crm):
     SF_DC_INSTANCE_URL    https://<org>.my.salesforce.com
     SF_DC_DATASPACE       default (ou outro dataspace configurado)
 
-A CRM REST API (usada por extract_crm.py, F2a — messaging_session/
+A CRM REST API (usada por extract_from_crm_rest — messaging_session/
 messaging_end_user) reaproveita esta mesma sessão (client_credentials serve
 pros dois); não tem autenticação própria.
 """
@@ -18,6 +18,8 @@ from __future__ import annotations
 import requests
 from iplanrio.pipelines_utils.env import getenv_or_action
 from prefect import task
+
+from pipelines.rj_crm__salesforce_datacloud.utils.retry import so_erro_temporario
 
 
 def _get_dc_credentials() -> dict[str, str]:
@@ -35,7 +37,7 @@ def _get_dc_credentials() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-@task(log_prints=True, retries=3, retry_delay_seconds=30)
+@task(log_prints=True, retries=3, retry_delay_seconds=30, retry_condition_fn=so_erro_temporario)
 def get_data_cloud_session() -> dict[str, str]:
     """
     Autentica no Salesforce Data Cloud via OAuth2 Client Credentials Flow.
@@ -57,13 +59,11 @@ def get_data_cloud_session() -> dict[str, str]:
         "client_secret": creds["client_secret"],
     }
 
-    print("[AUTH][DC] Autenticando no Data Cloud (client_credentials)...")
     response = requests.post(token_url, data=payload, timeout=30)
     response.raise_for_status()
 
     data = response.json()
     instance_url = data.get("instance_url", creds["instance_url"]).rstrip("/")
-    print(f"[AUTH][DC] OK — instance_url: {instance_url}, scope: {data.get('scope')}")
 
     return {
         "access_token": data["access_token"],
