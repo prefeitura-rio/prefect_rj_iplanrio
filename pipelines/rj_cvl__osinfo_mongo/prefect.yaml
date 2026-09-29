@@ -32,7 +32,7 @@ deployments:
       - severity:medium
       - code_owner:fernandascovino
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -50,7 +50,7 @@ deployments:
       - severity:medium
       - code_owner:fernandascovino
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
