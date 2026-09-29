@@ -1,0 +1,15 @@
+SELECT
+    Id,
+    ConversationId,
+    Status,
+    StartTime,
+    EndTime,
+    MessagingChannelId,
+    MessagingEndUserId,
+    Origin,
+    CreatedDate,
+    LastModifiedDate
+FROM MessagingSession
+WHERE LastModifiedDate >= {data_inicio}
+  AND LastModifiedDate < {data_fim}
+ORDER BY CreatedDate ASC

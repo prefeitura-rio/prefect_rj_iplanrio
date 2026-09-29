@@ -1,14 +1,15 @@
-# Salesforce Data Cloud — Agentforce Pipeline
+# Salesforce Data Cloud Pipeline
 #
-# Entrypoint: flows/full_daily.py:agentforce_full_daily
+# Entrypoint: flow.py:salesforce_datacloud
 #
-# Fases:
-#   F1 — STDM (obrigatória): ai_agent_session, ai_agent_interaction,
-#                             ai_agent_interaction_step, ai_agent_interaction_message
-#   F2a — Messaging (opcional): messaging_session, conversation_entry
-#   F2b — MCE (opcional): mce_sent, mce_open, mce_click, mce_bounce, mce_unsub, mce_subscriber
-#   F3  — Platform Tracing (opcional): telemetry_trace_span
-#   F4  — GenAI Audit (opcional): genai_gateway_request, genai_generation, genai_quality, genai_feedback
+# Renomeado de rj_crm__salesforce_agentforce_api em 2026-09-29 — passou a
+# trazer tabelas do Data Cloud que não são do Agentforce. Os deployments
+# antigos (rj-crm--salesforce-agentforce-api--*) NÃO somem sozinhos no Prefect:
+# pausar/apagar na UI depois do deploy destes, senão os dois rodam em paralelo
+# (o concurrency_limit é por deployment, não segura MERGE cruzado).
+#
+# Tabelas: ver tabelas.yaml (uma entrada por tabela — Agentforce, Messaging,
+# Tracing, Eventos WhatsApp). Parâmetro `tabelas` roda só um subconjunto.
 #
 # Credenciais necessárias no Infisical (path: /salesforce_crm):
 #   SF_DC_CLIENT_ID      : Client ID da Connected App DataCloud_Integration
@@ -17,11 +18,15 @@
 #   SF_DC_INSTANCE_URL   : https://prefeitura-rio.my.salesforce.com
 #   SF_DC_DATASPACE      : default
 #
+# Discord (opcionais — sem eles a notificação é pulada, ver tasks/notify.py):
+#   DISCORD_WEBHOOK_URL_ERRORS               : falhas (canal de erro compartilhado)
+#   DISCORD_WEBHOOK_URL_SALESFORCE_DATACLOUD : resumo do diário e do reprocessamento
+#
 # OAuth token endpoint:
 #   POST https://prefeitura-rio.my.salesforce.com/services/oauth2/token
 #   grant_type=client_credentials&client_id=...&client_secret=...
 
-name: rj_crm__salesforce_agentforce_api
+name: rj_crm__salesforce_datacloud
 prefect-version: 3.4.3
 build:
   - prefect.deployments.steps.run_shell_script:
@@ -32,8 +37,8 @@ build:
       id: build-image
       requires: prefect-docker>=0.6.5
       image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
-      tag: rj_crm__salesforce_agentforce_api-{{ get-commit-hash.stdout }}
-      dockerfile: pipelines/rj_crm__salesforce_agentforce_api/Dockerfile
+      tag: rj_crm__salesforce_datacloud-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__salesforce_datacloud/Dockerfile
 push:
   - prefect_docker.deployments.steps.push_docker_image:
       requires: prefect-docker>=0.6.5
@@ -47,15 +52,15 @@ deployments:
   # -----------------------------------------------------------------------
   # Deployment de staging (QA)
   # -----------------------------------------------------------------------
-  - name: rj-crm--salesforce-agentforce-api--staging
+  - name: rj-crm--salesforce-datacloud--staging
     version: '{{ build-image.tag }}'
-    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
+    entrypoint: pipelines/rj_crm__salesforce_datacloud/flow.py:salesforce_datacloud
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        command: "uv run --package rj_crm__salesforce_datacloud -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
     parameters:
@@ -72,25 +77,25 @@ deployments:
       - cron: "*/15 * * * *"
         timezone: America/Sao_Paulo
         active: false
-        slug: agentforce-teste-15min
+        slug: datacloud-teste-15min
 
   # -----------------------------------------------------------------------
   # Deployment de producao
   # -----------------------------------------------------------------------
-  - name: rj-crm--salesforce-agentforce-api--prod
+  - name: rj-crm--salesforce-datacloud--prod
     version: '{{ get-commit-hash.stdout }}'
-    entrypoint: pipelines/rj_crm__salesforce_agentforce_api/flow.py:agentforce_full_daily
+    entrypoint: pipelines/rj_crm__salesforce_datacloud/flow.py:salesforce_datacloud
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
         image: '{{ build-image.image_name }}:{{ build-image.tag }}'
-        command: "uv run --package rj_crm__salesforce_agentforce_api -- prefect flow-run execute"
+        command: "uv run --package rj_crm__salesforce_datacloud -- prefect flow-run execute"
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     parameters:
       environment: prod
-      # dataset_id NÃO é o default (AgentforceConstants.DATASET_ID = "brutos_salesforce")
+      # dataset_id NÃO é o default (DataCloudConstants.DATASET_ID = "brutos_salesforce")
       # de propósito: todo o dbt (queries-rj-crm-registry, source "brutos_salesforce_
       # staging" — mesma convenção usada por TODAS as áreas de raw Salesforce do
       # monorepo, não só Agentforce) lê de brutos_salesforce_staging, não de
@@ -110,7 +115,7 @@ deployments:
       limit: 1
       collision_strategy: ENQUEUE
     schedules:
-      # Passe quente — janela rolante de 1h a cada 15min (ver tasks/janela.py).
+      # Passe quente — janela rolante de 1h a cada 15min (ver utils/janela.py).
       # Nunca teve schedule antes de 2026-08-27 — só rodava sob demanda (explica
       # o checkpoint de prod, agentforce_control.pipeline_checkpoints, ter ficado
       # vazio por tanto tempo). Migrado de watermark forward-only pra modo janela
@@ -122,7 +127,7 @@ deployments:
       - cron: "*/15 * * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: agentforce-producao-15min
+        slug: datacloud-producao-15min
         parameters:
           modo: hora
       # Passe frio — reconciliação do dia inteiro, 1x/dia às 00:15 (SP), pra
@@ -132,6 +137,6 @@ deployments:
       - cron: "15 0 * * *"
         timezone: America/Sao_Paulo
         active: true
-        slug: agentforce-producao-diaria
+        slug: datacloud-producao-diaria
         parameters:
           modo: dia
