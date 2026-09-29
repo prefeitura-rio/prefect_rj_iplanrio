@@ -24,14 +24,14 @@ data_particao por linha).
 
 Tudo em hora-parede de São Paulo — mesmo formato que a fonte usa (dígitos
 batem com a UI da Salesforce, apesar do rótulo UTC do BigQuery/DLO; ver notas
-em extract_data_cloud.py e raw_salesforce_ai_agent_session.sql). Usar
+em tasks/extract.py e raw_salesforce_ai_agent_session.sql). Usar
 datetime.now(tz=timezone.utc) aqui, como o checkpoint.py antigo fazia,
 introduziria ~3h de descompasso com o "agora" da fonte.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 SP = ZoneInfo("America/Sao_Paulo")
@@ -75,3 +75,62 @@ def janela_dia(dia: date, agora: datetime | None = None) -> tuple[str, str, date
     fim_dia = inicio + timedelta(days=1)
     fim = min(fim_dia, agora) if dia == agora.date() else fim_dia
     return inicio.strftime(_FMT), fim.strftime(_FMT), dia
+
+
+def janela_utc(data_inicio: str, data_fim: str) -> tuple[tuple[str, str], dict[str, str]]:
+    """
+    Converte a janela (hora-parede de SP com rótulo Z, ver janela_hora/janela_dia acima) pra
+    UTC de verdade — pra fontes que gravam UTC real (Tabela.janela_utc=True,
+    ex.: DLL de eventos WhatsApp), diferente das DMOs. Devolve também os
+    limites (inclusivos) de cdp_sys_PartitionDate__c, que é meia-noite UTC:
+    um dia de SP cai em 2 partições UTC.
+
+    Returns:
+        ((inicio_utc, fim_utc), {"particao_inicio": ..., "particao_fim": ...})
+    """
+    inicio = datetime.strptime(data_inicio, _FMT).replace(tzinfo=SP).astimezone(timezone.utc)
+    fim = datetime.strptime(data_fim, _FMT).replace(tzinfo=SP).astimezone(timezone.utc)
+    # fim é exclusivo — se cair exato na meia-noite UTC, a partição desse dia não entra
+    ultimo_dia = (fim - timedelta(microseconds=1)).date()
+    particoes = {
+        "particao_inicio": f"{inicio.date().isoformat()}T00:00:00Z",
+        "particao_fim": f"{ultimo_dia.isoformat()}T00:00:00Z",
+    }
+    return (inicio.strftime(_FMT), fim.strftime(_FMT)), particoes
+
+
+def fmt_janela(data_inicio: str, data_fim: str) -> str:
+    """'2026-09-29T14:00:00Z' x2 → '2026-09-29 14:00 → 2026-09-29 15:00 (SP)' (log)."""
+    ini = datetime.strptime(data_inicio, _FMT).strftime("%Y-%m-%d %H:%M")
+    fim = datetime.strptime(data_fim, _FMT).strftime("%Y-%m-%d %H:%M")
+    return f"{ini} → {fim} (SP)"
+
+
+def janelas_do_run(
+    modo: str,
+    partition_date: date | None,
+    reprocessar: bool,
+    reprocessar_de: date | None,
+    reprocessar_ate: date | None,
+) -> list[tuple[str, str, date]]:
+    """
+    Lista de janelas (data_inicio, data_fim, partition_date) a processar.
+
+    Normal: 1 janela — modo='hora' (última 1h) ou modo='dia' (partition_date,
+    default ontem). Reprocessamento: 1 janela de dia inteiro por dia de
+    reprocessar_de até reprocessar_ate (inclusivos; ate default = de).
+    """
+    if not reprocessar:
+        if modo == "dia":
+            return [janela_dia(partition_date or (date.today() - timedelta(days=1)))]
+        return [janela_hora()]
+
+    if reprocessar_de is None:
+        raise ValueError("reprocessar=True exige reprocessar_de (e opcionalmente reprocessar_ate).")
+    ate = reprocessar_ate or reprocessar_de
+    if ate < reprocessar_de:
+        raise ValueError(f"reprocessar_ate ({ate}) antes de reprocessar_de ({reprocessar_de}).")
+    if ate > date.today():
+        raise ValueError(f"reprocessar_ate ({ate}) no futuro.")
+    dias = (ate - reprocessar_de).days + 1
+    return [janela_dia(reprocessar_de + timedelta(days=i)) for i in range(dias)]

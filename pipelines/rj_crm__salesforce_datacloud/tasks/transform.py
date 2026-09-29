@@ -5,7 +5,7 @@ Transformações aplicadas a todos os DataFrames antes de carregar no BigQuery.
 Operações:
   - snake_case nos nomes de colunas
   - Remoção do prefixo ssot__ e sufixo __c dos campos do Data Cloud
-  - Conversão de tipos (datas, duração em ns → ms)
+  - Conversão de datas
   - Adição de coluna _loaded_at (timestamp de ingestão)
   - Adição de coluna data_particao (data de execução, para particionamento)
   - Cast de colunas para os tipos esperados pelo schema BQ
@@ -55,15 +55,6 @@ def _normalize_columns(df: pd.DataFrame, is_data_cloud: bool = False) -> pd.Data
     return df
 
 
-def _convert_duration_ns_to_ms(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    """Converte colunas de duração de nanosegundos para milissegundos."""
-    for col in columns:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce") / 1_000_000
-            df = df.rename(columns={col: col.replace("_ns", "_ms")})
-    return df
-
-
 def _filter_output_value_text_action_step_only(df: pd.DataFrame) -> pd.DataFrame:
     """
     Zera output_value_text para registros que não são ACTION_STEP.
@@ -101,7 +92,6 @@ def transform_dataframe(
     table_name: str = "desconhecida",
     is_data_cloud: bool = False,
     date_columns: list[str] | None = None,
-    duration_ns_columns: list[str] | None = None,
     partition_date: date | None = None,
     output_value_text_action_step_only: bool = False,
 ) -> pd.DataFrame:
@@ -114,7 +104,6 @@ def transform_dataframe(
         is_data_cloud   : Se True, remove prefixo ssot__ e sufixo __c dos campos.
         date_columns    : Colunas para converter para datetime UTC.
                           (após normalização de nomes, já em snake_case)
-        duration_ns_columns: Colunas em nanosegundos para converter para ms.
         partition_date  : Data de partição. Padrão: hoje.
         output_value_text_action_step_only: Se True, zera output_value_text para
                           registros que não são ACTION_STEP.
@@ -137,22 +126,18 @@ def transform_dataframe(
     if date_columns:
         df = _parse_dates(df, date_columns)
 
-    # 3. Converter durações ns → ms
-    if duration_ns_columns:
-        df = _convert_duration_ns_to_ms(df, duration_ns_columns)
-
-    # 4. Adicionar _loaded_at (timestamp de ingestão UTC)
+    # 3. Adicionar _loaded_at (timestamp de ingestão UTC)
     df["_loaded_at"] = datetime.now(tz=timezone.utc)
 
-    # 5. Adicionar data_particao como tipo date (não string) para particionamento DATE no BQ
+    # 4. Adicionar data_particao como tipo date (não string) para particionamento DATE no BQ
     if partition_date is None:
         partition_date = date.today()
     df["data_particao"] = partition_date
 
-    # 6. Remover strings vazias (Bulk API retorna "" para NULL)
+    # 5. Remover strings vazias (Bulk API retorna "" para NULL)
     df = df.replace("", None)
 
-    # 7. Zerar output_value_text para registros que não são ACTION_STEP
+    # 6. Zerar output_value_text para registros que não são ACTION_STEP
     if output_value_text_action_step_only:
         df = _filter_output_value_text_action_step_only(df)
 
