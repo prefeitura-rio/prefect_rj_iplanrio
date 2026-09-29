@@ -51,10 +51,10 @@ from pipelines.rj_crm__salesforce_datacloud.tasks.notify import (
     notify_falha_tabela,
     notify_resumo,
 )
-from pipelines.rj_crm__salesforce_datacloud.tasks.transform import transform_dataframe
 from pipelines.rj_crm__salesforce_datacloud.utils.janela import fmt_janela, janela_utc, janelas_do_run
 from pipelines.rj_crm__salesforce_datacloud.utils.queries import ler_query
 from pipelines.rj_crm__salesforce_datacloud.utils.tabelas import TABELAS, NomeTabela, Tabela
+from pipelines.rj_crm__salesforce_datacloud.utils.transform import transform_dataframe
 
 
 def processar_tabela(
@@ -104,7 +104,6 @@ def processar_tabela(
         df = extract_from_crm_rest(crm_session=session, soql=query, table_name=tabela.nome)
 
     if df.empty:
-        print(f"[FLOW] '{tabela.nome}': sem dados na janela — pulando carga.")
         return {"extraidas": 0, "inseridas": 0, "atualizadas": 0}
     extraidas = len(df)
 
@@ -276,5 +275,10 @@ def salesforce_datacloud(
             minutos=total_elapsed / 60,
         )
 
-    print(f"[FLOW] Pipeline concluido em {total_elapsed:.0f}s | {resultados}")
+    total = sum(n for tabelas_grupo in resultados.values() for n in tabelas_grupo.values())
+    print(
+        f"[FLOW] Concluído em {total_elapsed:.0f}s — {total} linhas inseridas/atualizadas "
+        f"em {len(selecionadas)} tabela(s)"
+        + (f"; falharam: {', '.join(falhas)}" if falhas else "")
+    )
     return resultados

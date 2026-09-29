@@ -40,7 +40,6 @@ def _enviar(env_var: str, mensagem: str) -> None:
     try:
         resp = requests.post(url, json={"content": mensagem}, timeout=15)
         resp.raise_for_status()
-        print("[NOTIFY] Notificação Discord enviada.")
     except Exception as exc:  # notificação nunca deve derrubar o flow
         print(f"[NOTIFY] WARN: falha ao enviar notificação Discord: {exc}")
 

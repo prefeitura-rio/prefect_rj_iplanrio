@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Transformações aplicadas a todos os DataFrames antes de carregar no BigQuery.
+Puro (sem I/O) — função comum, não task.
 
 Operações:
   - snake_case nos nomes de colunas
@@ -18,7 +19,6 @@ import re
 from datetime import date, datetime, timezone
 
 import pandas as pd
-from prefect import task
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +69,6 @@ def _filter_output_value_text_action_step_only(df: pd.DataFrame) -> pd.DataFrame
         lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, dict) else v
     )
     action_count = mask.sum()
-    print(f"[TRANSFORM] output_value_text: {action_count} ACTION_STEPs mantidos, {(~mask).sum()} zerados.")
     return df
 
 
@@ -86,7 +85,6 @@ def _parse_dates(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-@task(log_prints=True)
 def transform_dataframe(
     df: pd.DataFrame,
     table_name: str = "desconhecida",
@@ -113,14 +111,11 @@ def transform_dataframe(
         DataFrame transformado, pronto para carga no BigQuery.
     """
     if df.empty:
-        print(f"[TRANSFORM] '{table_name}': DataFrame vazio — pulando transformações.")
         return df
 
-    print(f"[TRANSFORM] '{table_name}': {len(df)} linhas, {len(df.columns)} colunas.")
 
     # 1. Normalizar nomes de colunas
     df = _normalize_columns(df, is_data_cloud=is_data_cloud)
-    print(f"[TRANSFORM] Colunas normalizadas: {list(df.columns)[:10]}...")
 
     # 2. Converter datas
     if date_columns:
@@ -141,8 +136,4 @@ def transform_dataframe(
     if output_value_text_action_step_only:
         df = _filter_output_value_text_action_step_only(df)
 
-    print(
-        f"[TRANSFORM] '{table_name}': transformação concluída — "
-        f"{len(df)} linhas, {len(df.columns)} colunas finais."
-    )
     return df

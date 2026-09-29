@@ -59,13 +59,11 @@ def get_data_cloud_session() -> dict[str, str]:
         "client_secret": creds["client_secret"],
     }
 
-    print("[AUTH][DC] Autenticando no Data Cloud (client_credentials)...")
     response = requests.post(token_url, data=payload, timeout=30)
     response.raise_for_status()
 
     data = response.json()
     instance_url = data.get("instance_url", creds["instance_url"]).rstrip("/")
-    print(f"[AUTH][DC] OK — instance_url: {instance_url}, scope: {data.get('scope')}")
 
     return {
         "access_token": data["access_token"],

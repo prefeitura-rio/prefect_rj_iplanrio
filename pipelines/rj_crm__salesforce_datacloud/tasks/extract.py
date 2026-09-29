@@ -141,7 +141,6 @@ def _run_query(
     # da página (1000), não o total — comparar dava "possível corte" falso em
     # toda extração com mais de 1 página (removido 2026-09-29). Paginação
     # conferida contra COUNT(*) na fonte no mesmo dia: bate linha a linha.
-    print(f"[DC][PAGINACAO] {len(all_rows)} linha(s) em {pagina} pagina(s).")
 
     return all_rows, col_names
 
@@ -190,8 +189,6 @@ def extract_from_data_cloud(
     instance_url = dc_session["instance_url"]
     dataspace = dc_session.get("dataspace", "default")
 
-    print(f"[DC] Executando query em '{table_name}'...")
-    print(f"[DC] Query: {query[:200]}...")
 
     try:
         rows, col_names = _run_query(
@@ -203,11 +200,9 @@ def extract_from_data_cloud(
         )
 
         if not rows:
-            print(f"[DC] '{table_name}': nenhum registro retornado.")
             return pd.DataFrame(columns=col_names)
 
         df = pd.DataFrame(rows, columns=col_names)
-        print(f"[DC] '{table_name}': {len(df)} linhas, {len(df.columns)} colunas.")
         return df
 
     except requests.HTTPError as exc:
@@ -250,7 +245,6 @@ def extract_from_crm_rest(
     token = crm_session["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    print(f"[CRM] '{table_name}': executando query SOQL...")
 
     url = f"{instance_url}{_CRM_QUERY_PATH}"
     resp = requests.get(url, headers=headers, params={"q": soql.strip()}, timeout=60)
@@ -267,9 +261,7 @@ def extract_from_crm_rest(
         resp.raise_for_status()
         data = resp.json()
         records.extend(data.get("records", []))
-        print(f"[CRM] '{table_name}': {len(records)} registros buscados...")
 
-    print(f"[CRM] '{table_name}': {len(records)} registros no total.")
 
     if not records:
         return pd.DataFrame()
