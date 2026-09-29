@@ -3,11 +3,11 @@
 Criação e carga da tabela de classificação no BigQuery.
 
 Tabela particionada por dia + clusterizada, tmp + MERGE — mesmo padrão de
-pipelines/rj_crm__salesforce_agentforce_api/tasks/{ensure_tables,load_bigquery}.py,
+pipelines/rj_crm__salesforce_datacloud/tasks/bigquery.py + utils/schemas.py,
 adaptado pra 1 tabela só e pra MERGE por id_sessao (sem filtro de partição — aqui
 reclassificar uma sessão pode mudar sua data_particao, então não dá pra usar partição
 no ON como a pipeline irmã faz). Nome da tabela intermediária (`_tmp`, não `_staging`)
-segue pipelines/rj_crm__get_history_data em vez do agentforce_api.
+segue pipelines/rj_crm__get_history_data em vez do salesforce_datacloud.
 """
 
 from __future__ import annotations
