@@ -2,7 +2,7 @@
 
 A credencial vem de ``get_bd_credentials_from_env``, API pública do ``iplanrio`` (D42).
 Mesmo caminho de `rj_crm__get_history_data`, `rj_crm__agentforce_classificacao_llm` e
-`rj_crm__salesforce_agentforce_api`, que leem este mesmo projeto.
+`rj_crm__salesforce_datacloud`, que leem este mesmo projeto.
 
 Credencial explícita não é redundância: o docstring de
 `rj_crm__agentforce_classificacao_llm/utils/bigquery.py` registra 403 ao confiar no ADC

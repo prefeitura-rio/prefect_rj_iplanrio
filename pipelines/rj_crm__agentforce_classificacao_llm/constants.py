@@ -17,7 +17,7 @@ class ClassificacaoConstants(Enum):
 
     # --- Fonte ---
     # View consolidada de sessões do Agentforce — já é a verdade por trás de
-    # ai_agent_session/ai_agent_interaction (fonte do pipeline rj_crm__salesforce_agentforce_api).
+    # ai_agent_session/ai_agent_interaction (fonte do pipeline rj_crm__salesforce_datacloud).
     # Não fazemos checagem extra de completude aqui: se `fim_datahora` está preenchido,
     # consideramos a sessão pronta pra classificar.
     SOURCE_TABLE = "rj-crm-registry.rmi_conversas.v2_chatbot_conversas"
