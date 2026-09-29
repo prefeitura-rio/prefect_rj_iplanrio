@@ -1,11 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-Extração de DMOs do Salesforce Data Cloud via Connect API REST.
+Extração da Salesforce — as duas tasks de extração do pipeline:
+  - extract_from_data_cloud : Data Cloud (DMOs/DLLs), SQL — source='data_cloud'
+  - extract_from_crm_rest   : CRM (MessagingEndUser, MessagingSession), SOQL —
+                              source='crm_rest'. Pagina via nextRecordsUrl.
 
-Usado por:
-  - Fase 1 (STDM): AiAgentSession, AiAgentInteraction, Steps, Messages
-  - Fase 2b (MCE): MCE_Sent, MCE_Open, MCE_Click, MCE_Bounce, MCE_Unsub, MCE_Subscriber
-  - Fase 4 (GenAI): GatewayRequest, Generation, Quality, Category, Feedback, Detail
+As duas só retentam erro temporário (utils/retry.py) — 4xx falha na hora.
+
+--- Data Cloud ---
+
+Extração de DMOs/DLLs do Salesforce Data Cloud via Connect API REST.
+
+Usado por toda tabela de tabelas.yaml com source='data_cloud' (tudo que não é
+crm_rest). Até 2026-09-29 existia também um source 'data_cloud_chunked'
+(tasks/extract_chunked.py) — criado quando esta extração não paginava
+direito; depois do conserto de 04/09 os dois paginavam igual (mesmo
+ORDER BY + LIMIT/OFFSET) e o chunked só carregava a staging em N jobs em vez
+de 1, sem economizar memória. Foi unificado aqui.
 
 Autenticação: OAuth2 Client Credentials (dc_session de get_data_cloud_session).
 
@@ -18,7 +29,9 @@ batidas pelo filtro, buscando 'ai_agent_session' de 07/08):
     "metadata": [{"name": ..., "type": ...}, ...],
     "returnedRows": N,           # quantas vieram NESTA resposta (ex.: 1415)
     "status": {
-        "rowCount": M,           # total que a query bate (ex.: 8245)
+        "rowCount": M,           # total que a query bate (ex.: 8245) — MAS
+                                 # com LIMIT na SQL vira o tamanho da página
+                                 # (sempre 1000 aqui), não o total
         "rowsProcessed": M,
         "queryId": "...",
         "completionStatus": "ResultsProduced",
@@ -38,11 +51,13 @@ Achado e corrigido em 04/09/2026 — ver quick/agentforce_ai_agent_backfill/
 (scripts/investigação que motivou o backfill de agosto) para o histórico.
 
 IMPORTANTE:
-  - Nomes de tabela: ssot__<NomeDMO>__dlm  (prefixo ssot__ obrigatório)
+  - Nomes de tabela: ssot__<NomeDMO>__dlm  (prefixo ssot__ obrigatório em DMO;
+    DLL não tem prefixo, ex.: MessagingEventsWhatsAppV2_00Das_4CAB1BC2__dll)
   - Nomes de coluna: ssot__<NomeCampo>__c  (idem)
   - Nunca use SELECT * em produção — liste colunas explicitamente
   - Toda query passada aqui precisa de um order_by_col (normalmente
-    ssot__Id__c) — é a coluna usada pra paginação determinística por OFFSET
+    ssot__Id__c; em DLL, a chave dela) — é a coluna usada pra paginação
+    determinística por OFFSET (order_by_col em tabelas.yaml)
 """
 
 from __future__ import annotations
@@ -50,6 +65,8 @@ from __future__ import annotations
 import pandas as pd
 import requests
 from prefect import task
+
+from pipelines.rj_crm__salesforce_datacloud.utils.retry import so_erro_temporario
 
 _QUERY_ENDPOINT = "/services/data/v67.0/ssot/query-sql"
 _WORKLOAD = "BatchQuery"
@@ -59,6 +76,13 @@ _WORKLOAD = "BatchQuery"
 # folgado abaixo disso. Não é limite de contagem fixa da API (não documentado
 # publicamente), então mantém folga em vez de chutar o teto exato.
 _PAGE_SIZE = 1000
+
+# Limite de segurança contra loop infinito de paginação (herdado do antigo
+# extract_chunked.py). Muito acima do maior volume real: tracing ~200k/dia.
+_MAX_ROWS = 5_000_000
+
+# Por página — 120s (o antigo chunked usava 120, este usava 60; ficou o maior).
+_TIMEOUT = 120
 
 
 def _run_query(
@@ -87,21 +111,21 @@ def _run_query(
 
     all_rows: list[list] = []
     col_names: list[str] = []
-    total_esperado: int | None = None
     offset = 0
     pagina = 0
 
     while True:
         pagina += 1
         sql_pagina = f"{sql.rstrip().rstrip(';')} ORDER BY {order_by_col} LIMIT {page_size} OFFSET {offset}"
-        resp = requests.post(url, headers=headers, json={"sql": sql_pagina}, timeout=60)
+        resp = requests.post(url, headers=headers, json={"sql": sql_pagina}, timeout=_TIMEOUT)
+        if not resp.ok:
+            print(f"[DC] Erro {resp.status_code} na query. SQL enviado:\n{sql_pagina}")
+            print(f"[DC] Resposta do Salesforce: {resp.text[:1000]}")
         resp.raise_for_status()
         data = resp.json()
 
         if pagina == 1:
             col_names = [c["name"] for c in data.get("metadata", [])]
-            status = data.get("status") or {}
-            total_esperado = status.get("rowCount")
 
         novas = data.get("data", [])
         all_rows.extend(novas)
@@ -109,12 +133,14 @@ def _run_query(
         if len(novas) < page_size:
             break  # última página (veio menos que o pedido)
         offset += page_size
+        if offset >= _MAX_ROWS:
+            print(f"[DC][PAGINACAO] WARN: atingiu o limite de segurança ({_MAX_ROWS} linhas) — parando.")
+            break
 
-    if total_esperado is not None and len(all_rows) != total_esperado:
-        print(
-            f"[DC][PAGINACAO] AVISO: {len(all_rows)} linhas coletadas, "
-            f"servidor reportou rowCount={total_esperado} — possível corte."
-        )
+    # Sem conferência contra status.rowCount: com LIMIT na SQL ele é o tamanho
+    # da página (1000), não o total — comparar dava "possível corte" falso em
+    # toda extração com mais de 1 página (removido 2026-09-29). Paginação
+    # conferida contra COUNT(*) na fonte no mesmo dia: bate linha a linha.
 
     return all_rows, col_names
 
@@ -123,6 +149,7 @@ def _run_query(
     log_prints=True,
     retries=3,
     retry_delay_seconds=[30, 60, 120],
+    retry_condition_fn=so_erro_temporario,
 )
 def extract_from_data_cloud(
     dc_session: dict,
@@ -147,23 +174,21 @@ def extract_from_data_cloud(
                            WHERE ssot__StartTimestamp__c >= '2024-01-01T00:00:00Z'"
         table_name  : Nome da tabela (para logs). Não afeta a query.
         order_by_col: Coluna estável pra paginação determinística por OFFSET.
-                      Default 'ssot__Id__c' — vale pra toda query deste
-                      pipeline, que sempre traz o id como primeira coluna do
-                      SELECT. Só precisa mudar se algum dia existir uma query
-                      sem essa coluna.
+                      Default 'ssot__Id__c' (DMOs); DLL passa a própria chave
+                      (order_by_col em tabelas.yaml).
 
     Returns:
         pd.DataFrame com os registros retornados, ou DataFrame vazio se não houver dados.
 
     Raises:
-        RuntimeError: Se a query falhar por razão diferente de tabela inexistente.
+        RuntimeError: Se a query falhar — inclusive tabela inexistente (antes
+                      devolvia vazio em silêncio; agora a tabela falha e o
+                      flow avisa no Discord, ou aborta se for crítica).
     """
     access_token = dc_session["access_token"]
     instance_url = dc_session["instance_url"]
     dataspace = dc_session.get("dataspace", "default")
 
-    print(f"[DC] Executando query em '{table_name}'...")
-    print(f"[DC] Query: {query[:200]}...")
 
     try:
         rows, col_names = _run_query(
@@ -175,19 +200,72 @@ def extract_from_data_cloud(
         )
 
         if not rows:
-            print(f"[DC] '{table_name}': nenhum registro retornado.")
             return pd.DataFrame(columns=col_names)
 
         df = pd.DataFrame(rows, columns=col_names)
-        print(f"[DC] '{table_name}': {len(df)} linhas, {len(df.columns)} colunas.")
         return df
 
     except requests.HTTPError as exc:
         body = exc.response.text if exc.response is not None else ""
-        # Tabela inexistente → retorna DataFrame vazio em vez de explodir
-        if "does not exist" in body or "not found" in body.lower():
-            print(f"[DC] WARN: '{table_name}' nao encontrada no Data Cloud — retornando vazio.")
-            return pd.DataFrame()
         raise RuntimeError(f"[DC] Erro HTTP ao extrair '{table_name}': {exc}\n{body}") from exc
     except Exception as exc:
         raise RuntimeError(f"[DC] Erro ao extrair '{table_name}': {exc}") from exc
+
+
+# ---------------------------------------------------------------------------
+# CRM REST (SOQL)
+# ---------------------------------------------------------------------------
+
+_CRM_QUERY_PATH = "/services/data/v67.0/query"
+
+
+@task(
+    log_prints=True,
+    retries=3,
+    retry_delay_seconds=[30, 60, 120],
+    retry_condition_fn=so_erro_temporario,
+)
+def extract_from_crm_rest(
+    crm_session: dict,
+    soql: str,
+    table_name: str = "desconhecida",
+) -> pd.DataFrame:
+    """
+    Executa uma query SOQL no CRM REST API e retorna um DataFrame com todos os registros.
+
+    Args:
+        crm_session : Dict com 'instance_url' e 'access_token'.
+        soql        : Query SOQL completa (sem watermark — já interpolado).
+        table_name  : Nome da tabela (para logs).
+
+    Returns:
+        DataFrame com todos os registros retornados.
+    """
+    instance_url = crm_session["instance_url"]
+    token = crm_session["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+
+    url = f"{instance_url}{_CRM_QUERY_PATH}"
+    resp = requests.get(url, headers=headers, params={"q": soql.strip()}, timeout=60)
+    if not resp.ok:
+        print(f"[CRM] Erro {resp.status_code}: {resp.text[:300]}")
+        resp.raise_for_status()
+
+    data = resp.json()
+    records = data.get("records", [])
+
+    while not data.get("done"):
+        next_url = f"{instance_url}{data['nextRecordsUrl']}"
+        resp = requests.get(next_url, headers=headers, timeout=60)
+        resp.raise_for_status()
+        data = resp.json()
+        records.extend(data.get("records", []))
+
+
+    if not records:
+        return pd.DataFrame()
+
+    # Remove o campo 'attributes' de metadata do Salesforce
+    rows = [{k: v for k, v in r.items() if k != "attributes"} for r in records]
+    return pd.DataFrame(rows)
