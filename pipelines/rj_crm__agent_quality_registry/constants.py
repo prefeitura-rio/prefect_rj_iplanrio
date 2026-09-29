@@ -1,5 +1,7 @@
 import os
 
+DISCORD_WEBHOOK_URL_ERRORS = os.getenv("DISCORD_WEBHOOK_URL_ERRORS", "")
+
 GITLAB_URL = os.getenv("AGENT_QUALITY_GITLAB_URL", "https://git.apps.rio.gov.br")
 GITLAB_PROJECT_ID = os.getenv("AGENT_QUALITY_GITLAB_PROJECT_ID", "1589")
 GITLAB_TOKEN = os.getenv("AGENT_QUALITY_GITLAB_TOKEN", "")
@@ -11,6 +13,7 @@ BQ_DATASET_ID = os.getenv("AGENT_QUALITY_BQ_DATASET_ID", "brutos_salesforce")
 BQ_QA_TABLE = os.getenv("AGENT_QUALITY_BQ_QA_TABLE", "agent_quality_qa_versions")
 BQ_PROD_TABLE = os.getenv("AGENT_QUALITY_BQ_PROD_TABLE", "agent_quality_prod_baselines")
 BQ_DETAIL_TABLE = os.getenv("AGENT_QUALITY_BQ_DETAIL_TABLE", "agent_quality_test_result_details")
+BQ_REJECTED_TABLE = os.getenv("AGENT_QUALITY_BQ_REJECTED_TABLE", "agent_quality_rejected_artifacts")
 
 SF_INSTANCE_URL = os.getenv("AGENT_QUALITY_SF_INSTANCE_URL") or os.getenv("SF_INSTANCE_URL", "")
 SF_CLIENT_ID = os.getenv("AGENT_QUALITY_SF_CLIENT_ID", "")
@@ -79,6 +82,10 @@ DETAIL_FIELDS: SchemaFields = [
     ("grid_run_id", "STRING", "NULLABLE"),
     ("grid_workbook_id", "STRING", "NULLABLE"),
     ("grid_worksheet_id", "STRING", "NULLABLE"),
+    ("grid_enrichment_status", "STRING", "NULLABLE"),
+    ("grid_run_status_json", "STRING", "NULLABLE"),
+    ("grid_worksheet_data_json", "STRING", "NULLABLE"),
+    ("result_origin", "STRING", "NULLABLE"),
     ("suite_name", "STRING", "NULLABLE"),
     ("runtime_suite_name", "STRING", "NULLABLE"),
     ("case_number", "STRING", "NULLABLE"),
@@ -100,4 +107,19 @@ DETAIL_FIELDS: SchemaFields = [
     ("safety_type", "STRING", "NULLABLE"),
     ("utterance", "STRING", "NULLABLE"),
     ("response", "STRING", "NULLABLE"),
+]
+
+REJECTED_FIELDS: SchemaFields = [
+    ("rejection_key", "STRING", "REQUIRED"),
+    ("failed_at", "TIMESTAMP", "REQUIRED"),
+    ("environment_scope", "STRING", "NULLABLE"),
+    ("registry_package_name", "STRING", "NULLABLE"),
+    ("registry_package_version", "STRING", "NULLABLE"),
+    ("package_id", "INT64", "NULLABLE"),
+    ("package_file_id", "INT64", "NULLABLE"),
+    ("artifact_sha256", "STRING", "NULLABLE"),
+    ("stage", "STRING", "REQUIRED"),
+    ("error_type", "STRING", "REQUIRED"),
+    ("error_message", "STRING", "REQUIRED"),
+    ("retryable", "BOOL", "REQUIRED"),
 ]

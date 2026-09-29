@@ -1,9 +1,12 @@
 """Acesse os artefatos de qualidade no GitLab Generic Registry."""
 
+import hashlib
 from typing import Any
 from urllib.parse import quote
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from pipelines.rj_crm__agent_quality_registry.constants import (
     GITLAB_PACKAGE_PROD,
@@ -13,6 +16,10 @@ from pipelines.rj_crm__agent_quality_registry.constants import (
     GITLAB_URL,
 )
 from pipelines.rj_crm__agent_quality_registry.utils.schemas import Artifact, RegistryFile
+
+
+class ArtifactChecksumError(ValueError):
+    """Indique que o conteúdo baixado não corresponde ao SHA256 do Registry."""
 
 
 class GitLabRegistryClient:
@@ -33,6 +40,17 @@ class GitLabRegistryClient:
         self.project_id = quote(str(project_id), safe="")
         self.session = requests.Session()
         self.session.headers.update({"PRIVATE-TOKEN": token, "Accept": "application/json"})
+        retry = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            backoff_factor=1,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+            respect_retry_after_header=True,
+        )
+        self.session.mount("https://", HTTPAdapter(max_retries=retry))
+        self.session.mount("http://", HTTPAdapter(max_retries=retry))
         self.timeout = timeout
 
     def get(self, path: str, **params: Any) -> Any:
@@ -77,22 +95,36 @@ class GitLabRegistryClient:
 
         files: list[RegistryFile] = []
         for package in packages:
+            if package.get("name") != package_name:
+                continue
             package_id = package.get("id")
             version = str(package.get("version", ""))
             if not package_id or not version:
                 continue
-            package_files = self.get(f"/projects/{self.project_id}/packages/{package_id}/package_files")
+            package_files: list[dict[str, Any]] = []
+            page = 1
+            while True:
+                batch = self.get(
+                    f"/projects/{self.project_id}/packages/{package_id}/package_files",
+                    per_page=page_size,
+                    page=page,
+                )
+                package_files.extend(batch)
+                if len(batch) < page_size:
+                    break
+                page += 1
             for package_file in package_files:
                 file_name = package_file.get("file_name")
                 if file_name != "agent-quality-artifact.json":
                     continue
+                package_file_id = int(package_file["id"])
                 files.append(
                     RegistryFile(
                         environment=environment,
                         package_name=package_name,
                         package_version=version,
                         package_id=int(package_id),
-                        package_file_id=int(package_file["id"]),
+                        package_file_id=package_file_id,
                         file_name=file_name,
                         file_sha256=package_file.get("file_sha256"),
                         created_at=package_file.get("created_at") or package.get("created_at"),
@@ -103,7 +135,17 @@ class GitLabRegistryClient:
                         ),
                     )
                 )
-        return files
+        latest_by_coordinate: dict[tuple[str, str, str], RegistryFile] = {}
+        for registry_file in files:
+            coordinate = (
+                registry_file.package_name,
+                registry_file.package_version,
+                registry_file.file_name,
+            )
+            current = latest_by_coordinate.get(coordinate)
+            if current is None or registry_file.package_file_id > current.package_file_id:
+                latest_by_coordinate[coordinate] = registry_file
+        return list(latest_by_coordinate.values())
 
     def download(self, registry_file: RegistryFile) -> dict[str, Any]:
         """Baixe e decodifique um artefato do Registry.
@@ -114,7 +156,27 @@ class GitLabRegistryClient:
         """
         response = self.session.get(registry_file.download_url, timeout=self.timeout)
         response.raise_for_status()
+        actual_sha256 = hashlib.sha256(response.content).hexdigest()
+        if registry_file.file_sha256 and actual_sha256.lower() != registry_file.file_sha256.lower():
+            raise ArtifactChecksumError(
+                "SHA256 divergente para "
+                f"package_file_id={registry_file.package_file_id}: "
+                f"esperado={registry_file.file_sha256}, obtido={actual_sha256}"
+            )
         return response.json()
+
+
+def create_gitlab_client() -> GitLabRegistryClient:
+    """Crie o cliente do Registry com a configuração do ambiente."""
+    return GitLabRegistryClient(GITLAB_URL, GITLAB_PROJECT_ID, GITLAB_TOKEN)
+
+
+def discover_registry_files(client: GitLabRegistryClient | None = None) -> list[RegistryFile]:
+    """Descubra os arquivos de QA e baseline sem baixar seus conteúdos."""
+    registry_client = client or create_gitlab_client()
+    files = registry_client.list_files(GITLAB_PACKAGE_QA, "qa")
+    files.extend(registry_client.list_files(GITLAB_PACKAGE_PROD, "prod_baseline"))
+    return files
 
 
 def discover_artifacts() -> list[Artifact]:
@@ -124,7 +186,6 @@ def discover_artifacts() -> list[Artifact]:
     :raises ValueError: Se o token do GitLab não estiver configurado.
     :raises requests.HTTPError: Se a API GitLab responder com erro HTTP.
     """
-    client = GitLabRegistryClient(GITLAB_URL, GITLAB_PROJECT_ID, GITLAB_TOKEN)
-    files = client.list_files(GITLAB_PACKAGE_QA, "qa")
-    files.extend(client.list_files(GITLAB_PACKAGE_PROD, "prod_baseline"))
+    client = create_gitlab_client()
+    files = discover_registry_files(client)
     return [(registry_file, client.download(registry_file)) for registry_file in files]

@@ -20,6 +20,35 @@ def serialize_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
+def string_or_none(value: Any) -> str | None:
+    """Normalize valores escalares ou estruturados para campos STRING."""
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return serialize_json(value)
+    return str(value)
+
+
+def int_or_none(value: Any) -> int | None:
+    """Normalize um valor para INT64 ou retorne nulo quando inválido."""
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def float_or_none(value: Any) -> float | None:
+    """Normalize um valor para FLOAT64 ou retorne nulo quando inválido."""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def extract_run_id(result_file: str | None) -> str | None:
     """Extraia o ID da execução a partir do nome de arquivo de resultado.
 
@@ -81,31 +110,31 @@ def parse_artifact(
         "artifact_generated_at": artifact.get("generatedAt"),
         "tested_at": tested_at,
         "promoted_at": registry_file.created_at if source == "prod_baseline" else None,
-        "agent_version_id": agent.get("id"),
-        "agent_version_number": agent.get("versionNumber"),
-        "agent_version_status": agent.get("status"),
-        "gitlab_project_id": gitlab.get("projectId"),
-        "gitlab_project_path": gitlab.get("projectPath"),
-        "pipeline_id": gitlab.get("pipelineId"),
-        "pipeline_url": gitlab.get("pipelineUrl"),
-        "job_id": gitlab.get("jobId"),
-        "job_url": gitlab.get("jobUrl"),
-        "commit_sha": gitlab.get("commitSha"),
-        "merge_request_iid": gitlab.get("mergeRequestIid"),
-        "source_branch": gitlab.get("sourceBranch"),
-        "target_branch": gitlab.get("targetBranch"),
-        "routing_total": routing_summary.get("total"),
-        "routing_pass": routing_summary.get("pass"),
-        "routing_fail": routing_summary.get("fail"),
-        "routing_pass_rate": routing_summary.get("passRate"),
-        "harness_scenarios_total": (harness_summary.get("scenarios") or {}).get("total"),
-        "harness_scenarios_pass": (harness_summary.get("scenarios") or {}).get("pass"),
-        "harness_scenarios_fail": (harness_summary.get("scenarios") or {}).get("fail"),
-        "harness_scenarios_pass_rate": (harness_summary.get("scenarios") or {}).get("passRate"),
-        "harness_turns_total": (harness_summary.get("turns") or {}).get("total"),
-        "harness_turns_pass": (harness_summary.get("turns") or {}).get("pass"),
-        "harness_turns_fail": (harness_summary.get("turns") or {}).get("fail"),
-        "harness_turns_pass_rate": (harness_summary.get("turns") or {}).get("passRate"),
+        "agent_version_id": string_or_none(agent.get("id")),
+        "agent_version_number": int_or_none(agent.get("versionNumber")),
+        "agent_version_status": string_or_none(agent.get("status")),
+        "gitlab_project_id": string_or_none(gitlab.get("projectId")),
+        "gitlab_project_path": string_or_none(gitlab.get("projectPath")),
+        "pipeline_id": string_or_none(gitlab.get("pipelineId")),
+        "pipeline_url": string_or_none(gitlab.get("pipelineUrl")),
+        "job_id": string_or_none(gitlab.get("jobId")),
+        "job_url": string_or_none(gitlab.get("jobUrl")),
+        "commit_sha": string_or_none(gitlab.get("commitSha")),
+        "merge_request_iid": string_or_none(gitlab.get("mergeRequestIid")),
+        "source_branch": string_or_none(gitlab.get("sourceBranch")),
+        "target_branch": string_or_none(gitlab.get("targetBranch")),
+        "routing_total": int_or_none(routing_summary.get("total")),
+        "routing_pass": int_or_none(routing_summary.get("pass")),
+        "routing_fail": int_or_none(routing_summary.get("fail")),
+        "routing_pass_rate": float_or_none(routing_summary.get("passRate")),
+        "harness_scenarios_total": int_or_none((harness_summary.get("scenarios") or {}).get("total")),
+        "harness_scenarios_pass": int_or_none((harness_summary.get("scenarios") or {}).get("pass")),
+        "harness_scenarios_fail": int_or_none((harness_summary.get("scenarios") or {}).get("fail")),
+        "harness_scenarios_pass_rate": float_or_none((harness_summary.get("scenarios") or {}).get("passRate")),
+        "harness_turns_total": int_or_none((harness_summary.get("turns") or {}).get("total")),
+        "harness_turns_pass": int_or_none((harness_summary.get("turns") or {}).get("pass")),
+        "harness_turns_fail": int_or_none((harness_summary.get("turns") or {}).get("fail")),
+        "harness_turns_pass_rate": float_or_none((harness_summary.get("turns") or {}).get("passRate")),
         "metric_counters_json": serialize_json(routing.get("metricCounters") or {}),
         "quality_summary_json": serialize_json((artifact.get("qualityReport") or {}).get("summary")),
         "ingested_at": ingested_at.isoformat(),
@@ -113,6 +142,34 @@ def parse_artifact(
     details = parse_suite_details(release_key, source, tested_at, agent, routing_summary)
     details.extend(parse_harness_details(release_key, source, tested_at, agent, harness))
     return row, details
+
+
+def extract_suite_runs(artifact: dict[str, Any]) -> list[dict[str, str | None]]:
+    """Extraia as suites e seus runs mesmo quando o artefato não trouxer casos.
+
+    :param artifact: Conteúdo JSON do artefato.
+    :returns: Referências únicas de suite e run encontradas no resumo de roteamento.
+    """
+    routing_summary = (artifact.get("routing") or {}).get("summary") or {}
+    runs: list[dict[str, str | None]] = []
+    seen: set[tuple[str, str]] = set()
+    for suite in routing_summary.get("suites") or []:
+        suite_name = suite.get("suite")
+        run_id = extract_run_id(suite.get("resultFile"))
+        if not isinstance(suite_name, str) or not suite_name or not run_id:
+            continue
+        key = (suite_name, run_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        runs.append(
+            {
+                "suite_name": suite_name,
+                "runtime_suite_name": suite.get("runtimeSuite"),
+                "run_id": run_id,
+            }
+        )
+    return runs
 
 
 def parse_suite_details(
@@ -150,30 +207,34 @@ def parse_suite_details(
                         "environment_scope": source,
                         "test_source": "test_suite",
                         "tested_at": tested_at,
-                        "agent_version_number": agent.get("versionNumber"),
+                        "agent_version_number": int_or_none(agent.get("versionNumber")),
                         "grid_run_id": run_id,
                         "grid_workbook_id": None,
                         "grid_worksheet_id": None,
-                        "suite_name": suite_name,
-                        "runtime_suite_name": suite.get("runtimeSuite"),
-                        "case_number": case.get("caseNumber"),
+                        "grid_enrichment_status": None,
+                        "grid_run_status_json": None,
+                        "grid_worksheet_data_json": None,
+                        "result_origin": "artifact",
+                        "suite_name": string_or_none(suite_name),
+                        "runtime_suite_name": string_or_none(suite.get("runtimeSuite")),
+                        "case_number": string_or_none(case.get("caseNumber")),
                         "worksheet_row_id": None,
-                        "assertion": assertion.get("assertion"),
+                        "assertion": string_or_none(assertion.get("assertion")),
                         "scenario_id": None,
-                        "service_name": case.get("expectedSubagent"),
+                        "service_name": string_or_none(case.get("expectedSubagent")),
                         "turn_number": None,
-                        "status": assertion.get("result"),
-                        "score": assertion.get("score"),
-                        "latency_ms": case.get("latencyMs"),
-                        "expected_value": assertion.get("expectedValue"),
-                        "actual_value": assertion.get("actualValue"),
-                        "message": assertion.get("message"),
+                        "status": string_or_none(assertion.get("result")),
+                        "score": float_or_none(assertion.get("score")),
+                        "latency_ms": int_or_none(case.get("latencyMs")),
+                        "expected_value": string_or_none(assertion.get("expectedValue")),
+                        "actual_value": string_or_none(assertion.get("actualValue")),
+                        "message": string_or_none(assertion.get("message")),
                         "judge_provider": None,
                         "judge_pass": None,
                         "judge_rationale": None,
                         "safety_severity": None,
                         "safety_type": None,
-                        "utterance": case.get("utterance"),
+                        "utterance": string_or_none(case.get("utterance")),
                         "response": None,
                     }
                 )
@@ -213,31 +274,37 @@ def parse_harness_details(
                         "environment_scope": source,
                         "test_source": "harness",
                         "tested_at": tested_at,
-                        "agent_version_number": agent.get("versionNumber"),
+                        "agent_version_number": int_or_none(agent.get("versionNumber")),
                         "grid_run_id": None,
                         "grid_workbook_id": None,
                         "grid_worksheet_id": None,
+                        "grid_enrichment_status": None,
+                        "grid_run_status_json": None,
+                        "grid_worksheet_data_json": None,
+                        "result_origin": "artifact",
                         "suite_name": None,
                         "runtime_suite_name": None,
                         "case_number": None,
                         "worksheet_row_id": None,
                         "assertion": None,
-                        "scenario_id": scenario.get("id"),
-                        "service_name": scenario.get("serviceName"),
-                        "turn_number": turn.get("turn"),
+                        "scenario_id": string_or_none(scenario.get("id")),
+                        "service_name": string_or_none(scenario.get("serviceName")),
+                        "turn_number": int_or_none(turn.get("turn")),
                         "status": status,
-                        "score": judge.get("score"),
-                        "latency_ms": turn.get("latencyMs"),
+                        "score": float_or_none(judge.get("score")),
+                        "latency_ms": int_or_none(turn.get("latencyMs")),
                         "expected_value": None,
                         "actual_value": None,
-                        "message": turn.get("httpError") or judge.get("rationale") or safety.get("message"),
-                        "judge_provider": judge.get("provider"),
+                        "message": string_or_none(
+                            turn.get("httpError") or judge.get("rationale") or safety.get("message")
+                        ),
+                        "judge_provider": string_or_none(judge.get("provider")),
                         "judge_pass": judge.get("pass"),
-                        "judge_rationale": judge.get("rationale"),
-                        "safety_severity": safety.get("severity"),
-                        "safety_type": safety.get("type"),
-                        "utterance": turn.get("sent"),
-                        "response": turn.get("response"),
+                        "judge_rationale": string_or_none(judge.get("rationale")),
+                        "safety_severity": string_or_none(safety.get("severity")),
+                        "safety_type": string_or_none(safety.get("type")),
+                        "utterance": string_or_none(turn.get("sent")),
+                        "response": string_or_none(turn.get("response")),
                     }
                 )
     return details

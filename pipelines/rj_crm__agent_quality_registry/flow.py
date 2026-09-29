@@ -17,12 +17,14 @@ def rj_crm__agent_quality_registry(
     project_id: str = BQ_PROJECT_ID,
     dataset_id: str = BQ_DATASET_ID,
     environment: str = "prod",
+    full_refresh: bool = False,
 ) -> None:
     """Ingira artefatos de qualidade do GitLab Registry no BigQuery.
 
     :param project_id: Identificador do projeto Google Cloud de destino.
     :param dataset_id: Identificador do dataset BigQuery de destino.
     :param environment: Ambiente cujas credenciais devem ser injetadas.
+    :param full_refresh: Reprocesse inclusive package_file_ids já carregados.
     """
     rename_current_flow_run_task(new_name="agent-quality-registry-daily")
     credentials = inject_bd_credentials_task(environment=environment)
@@ -38,5 +40,6 @@ def rj_crm__agent_quality_registry(
         project_id=project_id,
         dataset_id=dataset_id,
         environment=environment,
+        full_refresh=full_refresh,
         wait_for=[tables_ready],
     )

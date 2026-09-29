@@ -1,5 +1,5 @@
 name: rj_crm__agent_quality_registry
-prefect-version: 3.4.3
+prefect-version: 3.4.9
 
 build:
   - prefect.deployments.steps.run_shell_script:

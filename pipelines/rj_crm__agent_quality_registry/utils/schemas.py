@@ -29,6 +29,7 @@ class IngestionConfig:
     project_id: str
     dataset_id: str
     environment: str
+    full_refresh: bool = False
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class TableSpec:
     fields: list[tuple[str, str, str]]
     partition_field: str
     key: str
+    clustering_fields: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
