@@ -7,7 +7,7 @@
 # classifica via Bifrost/Gemini e grava via staging + MERGE (idempotente).
 #
 # Credenciais necessárias no secret do work pool (mesmo secretName usado por
-# rj_crm__salesforce_agentforce_api, já que escreve no mesmo dataset):
+# rj_crm__salesforce_datacloud, já que escreve no mesmo dataset):
 #   BF_KEY                                        : API key do gateway Bifrost
 #   DISCORD_WEBHOOK_URL_AGENTFORCE_CLASSIFICACAO   : (opcional) resumo diário
 #   DISCORD_WEBHOOK_URL_ERRORS                     : (opcional) alerta de falha crítica
@@ -40,10 +40,10 @@ pull:
 deployments:
   # -----------------------------------------------------------------------
   # Deployment de staging (QA) — sem schedule ativo, roda sob demanda até validar
-  # volume/custo, igual foi feito com o agentforce_api. DIFERENTE do agentforce_api:
+  # volume/custo, igual foi feito com o salesforce_datacloud. DIFERENTE do salesforce_datacloud:
   # não tem dataset _staging separado pra esta tabela — grava na MESMA
   # brutos_salesforce.ai_agent_session_classificacao que a prod usa. Não dá pra
-  # espelhar o padrão do agentforce_api aqui: o join em fct_chatbot_v2.sql (repo
+  # espelhar o padrão do salesforce_datacloud aqui: o join em fct_chatbot_v2.sql (repo
   # queries-rj-crm-registry) é fixo em brutos_salesforce, não parametrizado por
   # ambiente — uma cópia em brutos_salesforce_staging nunca apareceria lá, e rodar
   # staging só pra alimentar uma tabela que ninguém lê não testa nada de verdade.

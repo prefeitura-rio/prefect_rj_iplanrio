@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Criação automática das tabelas BigQuery da pipeline Agentforce.
+Schemas BigQuery das tabelas da pipeline Salesforce Data Cloud — só dados.
+Cobre todas as tabelas de tabelas.yaml (final + _staging de cada uma).
 
-Chamada no início de cada execução — idempotente (CREATE IF NOT EXISTS via SDK).
-Cobre todas as fases: F1, F2a, F2b, F3, F4.
+Quem cria as tabelas é tasks/bigquery.py:ensure_bq_tables (a cada execução,
+idempotente); load_chunk_to_staging usa SCHEMAS pro schema da carga.
 """
 
 from __future__ import annotations
 
 from google.cloud import bigquery
-from prefect import task
 
 _TIMESTAMP = bigquery.enums.SqlTypeNames.TIMESTAMP
 _STRING = bigquery.enums.SqlTypeNames.STRING
@@ -26,12 +26,62 @@ def _base_fields(extra: list[bigquery.SchemaField]) -> list[bigquery.SchemaField
     ]
 
 
+# --- Eventos WhatsApp (DLL MessagingEventsWhatsAppV2_00Das_4CAB1BC2__dll) ---
+# Nomes = saída de _clean_dc_field_name (transform.py) sobre as colunas de
+# sql/messaging_events_whatsapp.sql. Chave do MERGE: event_id (EventId__c —
+# conferido único e nunca vazio no histórico todo em 2026-09-29).
+_MESSAGING_EVENTS_WHATSAPP_FIELDS = [
+    bigquery.SchemaField("event_id", _STRING),
+    bigquery.SchemaField("event_date_time", _TIMESTAMP),
+    bigquery.SchemaField("event_type", _STRING),
+    bigquery.SchemaField("send_status", _STRING),
+    bigquery.SchemaField("not_sent_reason", _STRING),
+    bigquery.SchemaField("error_code", _STRING),
+    bigquery.SchemaField("contact_point_phone_number", _STRING),
+    bigquery.SchemaField("individual_id", _STRING),
+    bigquery.SchemaField("kq_individual_id", _STRING),
+    bigquery.SchemaField("whats_app_wam_id", _STRING),
+    bigquery.SchemaField("message_id", _STRING),
+    bigquery.SchemaField("bulk_message_id", _STRING),
+    bigquery.SchemaField("content_id", _STRING),
+    bigquery.SchemaField("message", _STRING),
+    bigquery.SchemaField("message_purpose", _STRING),
+    bigquery.SchemaField("pricing_category", _STRING),
+    bigquery.SchemaField("journey_id", _STRING),
+    bigquery.SchemaField("flow_element_run_id", _STRING),
+    bigquery.SchemaField("kq_flow_element_run_id", _STRING),
+    bigquery.SchemaField("kq_event_id", _STRING),
+    bigquery.SchemaField("engagement_channel", _STRING),
+    bigquery.SchemaField("kq_engagement_channel", _STRING),
+    bigquery.SchemaField("application", _STRING),
+    bigquery.SchemaField("source", _STRING),
+    bigquery.SchemaField("sender_id", _STRING),
+    bigquery.SchemaField("sender_display_name", _STRING),
+    bigquery.SchemaField("username", _STRING),
+    bigquery.SchemaField("business_unit_id", _STRING),
+    bigquery.SchemaField("external_account_id", _STRING),
+    bigquery.SchemaField("tenant", _STRING),
+    bigquery.SchemaField("bsuid", _STRING),
+    bigquery.SchemaField("parent_bsuid", _STRING),
+    bigquery.SchemaField("ctwa_campaign_source_type", _STRING),
+    bigquery.SchemaField("ctwa_campaign_source_id", _STRING),
+    bigquery.SchemaField("ctwa_click_id", _STRING),
+    bigquery.SchemaField("link_url", _STRING),
+    bigquery.SchemaField("resolved_url", _STRING),
+    bigquery.SchemaField("user_agent", _STRING),
+    bigquery.SchemaField("global_event", _BOOL),
+    bigquery.SchemaField("data_source", _STRING),
+    bigquery.SchemaField("data_source_object", _STRING),
+    bigquery.SchemaField("cdp_sys_source_version", _STRING),
+    bigquery.SchemaField("cdp_sys_partition_date", _TIMESTAMP),
+]
+
 # ---------------------------------------------------------------------------
 # Schemas por tabela
 # ---------------------------------------------------------------------------
 
 SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
-    # --- F1 — STDM ---
+    # --- Agentforce (STDM) ---
     "ai_agent_session": _base_fields([
         bigquery.SchemaField("id", _STRING),
         bigquery.SchemaField("related_messaging_session_id", _STRING),
@@ -113,7 +163,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
     ]),
 
     # Staging das 4 acima — desde 2026-09-08, write_mode='merge' via modo janela
-    # (ver tasks/janela.py e flow.py sf_to_bq): a janela rolante de 1h recaptura
+    # (ver utils/janela.py e flow.py): a janela rolante de 1h recaptura
     # o mesmo registro de propósito a cada tick, então precisa de staging+MERGE
     # em vez de append puro (que duplicaria a cada sobreposição).
     "ai_agent_session_staging": _base_fields([
@@ -196,7 +246,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("modality", _STRING),
     ]),
 
-    # --- F2a — Messaging CRM ---
+    # --- Messaging ---
     "messaging_end_user": _base_fields([
         bigquery.SchemaField("id", _STRING),
         bigquery.SchemaField("name", _STRING),
@@ -296,7 +346,7 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("kq_id", _STRING),
     ]),
 
-    # --- F3 — Platform Tracing ---
+    # --- Tracing ---
     "telemetry_trace_span": _base_fields([
         bigquery.SchemaField("id", _STRING),
         bigquery.SchemaField("telemetry_trace", _STRING),
@@ -332,6 +382,9 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
         bigquery.SchemaField("kq_id", _STRING),
     ]),
 
+    # --- Eventos WhatsApp ---
+    "messaging_events_whatsapp": _base_fields(list(_MESSAGING_EVENTS_WHATSAPP_FIELDS)),
+    "messaging_events_whatsapp_staging": _base_fields(list(_MESSAGING_EVENTS_WHATSAPP_FIELDS)),
 }
 
 # Tabelas com particionamento + clustering
@@ -344,43 +397,8 @@ PARTITIONED_TABLES: dict[str, list[str]] = {
     "messaging_session": ["id"],
     "conversation_entry": ["id"],
     "telemetry_trace_span": ["id"],
+    "messaging_events_whatsapp": ["event_id"],
     # telemetry_trace_span_staging, messaging_end_user_staging, messaging_session_staging:
     # sem particionamento (staging tables)
 }
 
-
-# ---------------------------------------------------------------------------
-# Task
-# ---------------------------------------------------------------------------
-
-
-@task(log_prints=True)
-def ensure_bq_tables(project_id: str, dataset_id: str) -> None:
-    """
-    Cria todas as tabelas da pipeline no BigQuery se ainda não existirem.
-    Idempotente — seguro rodar a cada execução.
-
-    Args:
-        project_id : ID do projeto GCP.
-        dataset_id : Dataset de destino.
-    """
-    client = bigquery.Client(project=project_id)
-    dataset_ref = bigquery.DatasetReference(project_id, dataset_id)
-
-    print(f"[ENSURE_TABLES] Verificando {len(SCHEMAS)} tabelas em '{project_id}.{dataset_id}'...")
-
-    for table_id, schema in SCHEMAS.items():
-        table_ref = dataset_ref.table(table_id)
-        table = bigquery.Table(table_ref, schema=schema)
-
-        if table_id in PARTITIONED_TABLES:
-            table.time_partitioning = bigquery.TimePartitioning(
-                type_=bigquery.TimePartitioningType.DAY,
-                field="data_particao",
-            )
-            table.clustering_fields = PARTITIONED_TABLES[table_id]
-
-        client.create_table(table, exists_ok=True)
-        print(f"[ENSURE_TABLES]   {table_id}: OK")
-
-    print("[ENSURE_TABLES] Todas as tabelas verificadas.")

@@ -1,13 +1,22 @@
 # -*- coding: utf-8 -*-
 """
+Tasks de BigQuery da pipeline: criação das tabelas (ensure_bq_tables),
+carga (staging + MERGE).
+
 Carregamento de DataFrames no BigQuery: staging (tabela fixa, uma por tabela
-final — ex.: 'ai_agent_session_staging', schema em ensure_tables.py) + MERGE
+final — ex.: 'ai_agent_session_staging', schema em utils/schemas.py) + MERGE
 por chave primária, sempre. A staging é limpa (TRUNCATE) só depois de um
-MERGE bem-sucedido — se o MERGE falhar, ela fica suja pra próxima execução
-herdar por cima. Foi assim que aconteceu com messaging_end_user_staging nesta
-investigação (erro "UPDATE/MERGE must match at most one source row", nunca
-limpo, piorando a cada tentativa) — resolvido dedupando a origem antes do
-MERGE, não trocando o mecanismo de staging em si.
+MERGE bem-sucedido; o MERGE deduplica a staging antes de casar (ver
+sql/bigquery/merge_staging.sql), então sobra de MERGE falho ou id repetido na
+fonte não trava mais os ticks seguintes.
+
+SQL em sql/bigquery/ (lido via utils/queries.py).
+
+Sem validação de contagem pós-carga (removida 2026-09-29): o MERGE é atômico
+— terminou sem erro, as linhas estão lá, e as contagens exatas vêm do próprio
+job (dml_stats). A validação antiga só recontava a partição do dia e dava
+falso alarme quando o MERGE cobria mais de uma partição (ex.: sobra de staging
+de dias anteriores).
 """
 
 from __future__ import annotations
@@ -16,7 +25,8 @@ import pandas as pd
 from google.cloud import bigquery
 from prefect import task
 
-from pipelines.rj_crm__salesforce_agentforce_api.tasks.ensure_tables import SCHEMAS
+from pipelines.rj_crm__salesforce_datacloud.utils.queries import ler_query
+from pipelines.rj_crm__salesforce_datacloud.utils.schemas import PARTITIONED_TABLES, SCHEMAS
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +45,33 @@ def _full_table_id(project_id: str, dataset_id: str, table_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Tasks
 # ---------------------------------------------------------------------------
+
+
+@task(log_prints=True)
+def ensure_bq_tables(project_id: str, dataset_id: str) -> None:
+    """
+    Cria todas as tabelas da pipeline no BigQuery se ainda não existirem.
+    Idempotente — seguro rodar a cada execução.
+
+    Args:
+        project_id : ID do projeto GCP.
+        dataset_id : Dataset de destino.
+    """
+    client = bigquery.Client(project=project_id)
+    dataset_ref = bigquery.DatasetReference(project_id, dataset_id)
+
+    for table_id, schema in SCHEMAS.items():
+        table_ref = dataset_ref.table(table_id)
+        table = bigquery.Table(table_ref, schema=schema)
+
+        if table_id in PARTITIONED_TABLES:
+            table.time_partitioning = bigquery.TimePartitioning(
+                type_=bigquery.TimePartitioningType.DAY,
+                field="data_particao",
+            )
+            table.clustering_fields = PARTITIONED_TABLES[table_id]
+
+        client.create_table(table, exists_ok=True)
 
 
 @task(
@@ -58,14 +95,13 @@ def load_chunk_to_staging(
         project_id      : ID do projeto GCP.
         dataset_id      : Dataset de staging.
         staging_table_id: Nome da tabela staging (ex: 'ai_agent_session_staging'),
-                          schema pré-cadastrado em ensure_tables.py.
+                          schema pré-cadastrado em utils/schemas.py.
         chunk_num       : Número do chunk (para logs).
 
     Returns:
         Número de linhas carregadas.
     """
     if df_chunk.empty:
-        print(f"[BQ][STAGING] Chunk {chunk_num} vazio — pulando.")
         return 0
 
     client = _get_bq_client(project_id)
@@ -81,14 +117,12 @@ def load_chunk_to_staging(
         autodetect=schema is None,
     )
 
-    print(f"[BQ][STAGING] Chunk {chunk_num}: {len(df_chunk)} linhas → '{staging_table_id}'...")
     job = client.load_table_from_dataframe(df_chunk, full_id, job_config=job_config)
     job.result()
 
     if job.errors:
         raise RuntimeError(f"[BQ][STAGING] Chunk {chunk_num} com erros: {job.errors}")
 
-    print(f"[BQ][STAGING] Chunk {chunk_num}: OK.")
     return len(df_chunk)
 
 
@@ -104,7 +138,7 @@ def merge_staging_to_target(
     target_table_id: str,
     primary_key: str,
     partition_field: str = "data_particao",
-) -> int:
+) -> dict[str, int]:
     """
     Executa MERGE da staging table para a tabela final, com filtro de partição.
     Limpa a staging table após o MERGE.
@@ -118,7 +152,9 @@ def merge_staging_to_target(
         partition_field  : Campo de partição para filtro. Padrão: 'data_particao'.
 
     Returns:
-        Número de linhas afetadas (aproximado via COUNT após MERGE).
+        {"inseridas": n, "atualizadas": n} — do dml_stats do job (INSERT = id
+        novo na partição, UPDATE = id que já existia, ex.: sobreposição de
+        janela ou reprocessamento).
     """
     client = _get_bq_client(project_id)
 
@@ -132,26 +168,25 @@ def merge_staging_to_target(
     insert_cols = ", ".join([primary_key] + cols)
     insert_vals = ", ".join([f"s.{primary_key}"] + [f"s.{c}" for c in cols])
 
-    merge_sql = f"""
-        MERGE `{target_full}` AS t
-        USING `{staging_full}` AS s
-        ON t.{primary_key} = s.{primary_key}
-           AND t.{partition_field} = s.{partition_field}
-        WHEN MATCHED THEN
-            UPDATE SET {set_clause}
-        WHEN NOT MATCHED THEN
-            INSERT ({insert_cols})
-            VALUES ({insert_vals})
-    """
+    merge_sql = ler_query("bigquery/merge_staging.sql").format(
+        target=target_full,
+        staging=staging_full,
+        primary_key=primary_key,
+        partition_field=partition_field,
+        set_clause=set_clause,
+        insert_cols=insert_cols,
+        insert_vals=insert_vals,
+    )
 
-    print(f"[BQ][MERGE] Executando MERGE: '{staging_table_id}' → '{target_table_id}'...")
     merge_job = client.query(merge_sql)
     merge_job.result()
-    print(f"[BQ][MERGE] Concluido. Affected rows: {merge_job.num_dml_affected_rows}")
+    stats = merge_job.dml_stats
+    resultado = {
+        "inseridas": (stats.inserted_row_count if stats else 0) or 0,
+        "atualizadas": (stats.updated_row_count if stats else 0) or 0,
+    }
 
     # Limpar staging após merge bem-sucedido
-    truncate_sql = f"TRUNCATE TABLE `{staging_full}`"
-    client.query(truncate_sql).result()
-    print(f"[BQ][MERGE] Staging '{staging_table_id}' limpa.")
+    client.query(ler_query("bigquery/truncate_staging.sql").format(staging=staging_full)).result()
 
-    return merge_job.num_dml_affected_rows or 0
+    return resultado
