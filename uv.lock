@@ -69,6 +69,7 @@ members = [
     "rj-iplanrio-vigia-urbano",
     "rj-pgm-divida-ativa",
     "rj-pic-disparos-email",
+    "rj-rmi-run-dbt",
     "rj-seconserva-infraestrutura-siscor-obras",
     "rj-segovi-dump-db-1746",
     "rj-segur-forca-municipal",
@@ -587,7 +588,7 @@ name = "colorlog"
 version = "6.12.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/8c/55/ba79756cb90c8d69d599d57785398ac87bba7b19c80e87f4e8a562197c93/colorlog-6.12.0.tar.gz", hash = "sha256:2a7924c1dadf18b22a0eb8b06d1c7b01d5341707ec1641eb6fcc4fde0c3e8e5f", size = 18151, upload-time = "2026-07-23T13:40:40.71Z" }
 wheels = [
@@ -2487,9 +2488,9 @@ resolution-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "llvmlite", version = "0.36.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "numpy", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "setuptools", marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
+    { name = "llvmlite", version = "0.36.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio') or (sys_platform != 'darwin' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
+    { name = "numpy", marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio') or (sys_platform != 'darwin' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
+    { name = "setuptools", marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio') or (sys_platform != 'darwin' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e3/7d/3d61160836e49f40913741c464f119551c15ed371c1d91ea50308495b93b/numba-0.53.1.tar.gz", hash = "sha256:9cd4e5216acdc66c4e9dab2dfd22ddb5bef151185c070d4a3cd8e78638aff5b0", size = 2213956, upload-time = "2021-03-26T09:15:50.402Z" }
 
@@ -2503,8 +2504,8 @@ resolution-markers = [
     "(platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32')",
 ]
 dependencies = [
-    { name = "llvmlite", version = "0.49.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "numpy", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "llvmlite", version = "0.49.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
+    { name = "numpy", marker = "platform_machine != 'x86_64' or sys_platform != 'darwin' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/90/2544f4e3a61e501d6c9a5418fd4b905323222693d54a02cab0106a0af865/numba-0.67.0.tar.gz", hash = "sha256:cd75aa535b33fa05d9d930b1ae8af9f97a2881e96d72dfb38ec9b78284d9f851", size = 2836515, upload-time = "2026-08-11T23:04:00.174Z" }
 wheels = [
@@ -3421,7 +3422,8 @@ source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "sys_platform == 'win32'",
     "sys_platform == 'emscripten'",
-    "sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+    "(platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32')",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ec/ff/9b08f29b57384e1f55080d15a12ba4908d93d46cd7fe83c5c562fdcd3400/pymongo-3.13.0.tar.gz", hash = "sha256:e22d6cf5802cd09b674c307cc9e03870b8c37c503ebec3d25b86f2ce8c535dc7", size = 804388, upload-time = "2022-11-01T19:06:29.025Z" }
 
@@ -3432,7 +3434,8 @@ source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
     "sys_platform == 'win32'",
     "sys_platform == 'emscripten'",
-    "sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "platform_machine == 'x86_64' and sys_platform == 'darwin'",
+    "(platform_machine != 'x86_64' and sys_platform == 'darwin') or (sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32')",
 ]
 dependencies = [
     { name = "dnspython", marker = "extra == 'project-19-rj-iplanrio-taxirio'" },
@@ -4757,12 +4760,14 @@ name = "rj-cvl-osinfo-mongo"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cvl__osinfo_mongo" }
 dependencies = [
+    { name = "prefect-rj-iplanrio", marker = "extra == 'project-19-rj-cvl-osinfo-mongo'" },
     { name = "pymongo", version = "3.13.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'project-19-rj-cvl-osinfo-mongo'" },
     { name = "tenacity", marker = "extra == 'project-19-rj-cvl-osinfo-mongo'" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "prefect-rj-iplanrio", editable = "." },
     { name = "pymongo", specifier = "==3.13.0" },
     { name = "tenacity", specifier = ">=9.1.4" },
 ]
@@ -5142,6 +5147,25 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.2" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
+]
+
+[[package]]
+name = "rj-rmi-run-dbt"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_rmi__run_dbt" }
+dependencies = [
+    { name = "dbt-bigquery" },
+    { name = "gitpython" },
+    { name = "prefect-dbt" },
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dbt-bigquery", specifier = "==1.11.1" },
+    { name = "gitpython", specifier = ">=3.1.44" },
+    { name = "prefect-dbt", specifier = ">=0.7.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
 ]
 
 [[package]]
@@ -5685,10 +5709,10 @@ version = "0.52.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
-    { name = "llvmlite", version = "0.36.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "llvmlite", version = "0.49.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "numba", version = "0.53.1", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine == 'x86_64' and sys_platform == 'darwin'" },
-    { name = "numba", version = "0.67.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "llvmlite", version = "0.36.0", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio') or (sys_platform != 'darwin' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
+    { name = "llvmlite", version = "0.49.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
+    { name = "numba", version = "0.53.1", source = { registry = "https://pypi.org/simple" }, marker = "(platform_machine == 'x86_64' and sys_platform == 'darwin') or (platform_machine != 'x86_64' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio') or (sys_platform != 'darwin' and extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
+    { name = "numba", version = "0.67.0", source = { registry = "https://pypi.org/simple" }, marker = "platform_machine != 'x86_64' or sys_platform != 'darwin' or (extra == 'project-19-rj-cvl-osinfo-mongo' and extra == 'project-19-rj-iplanrio-taxirio')" },
     { name = "numpy" },
     { name = "packaging" },
     { name = "pandas" },

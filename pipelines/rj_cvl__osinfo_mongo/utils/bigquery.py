@@ -9,9 +9,9 @@ from string import Template
 import pandas as pd
 from google.cloud import bigquery
 
-from .log import logger_da_pipeline
+from .log import get_logger
 
-logger = logger_da_pipeline(__name__)
+logger = get_logger(__name__)
 
 
 def load_query(package_path: str, query_name: str) -> str:

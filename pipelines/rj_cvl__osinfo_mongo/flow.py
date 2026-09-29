@@ -11,14 +11,14 @@ from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 from prefect.task_runners import ConcurrentTaskRunner
 
-from .tasks import (
+from pipelines.rj_cvl__osinfo_mongo.tasks import (
     check_mongo_indexes_task,
     dump_files_to_gcs_task,
     get_pendentes_task,
     map_filenames_to_files_ids_task,
     refresh_metadata_cache_task,
 )
-from .utils import MongoConnectionConfig
+from pipelines.rj_cvl__osinfo_mongo.utils.mongodb import MongoConnectionConfig
 
 
 @flow(log_prints=True, task_runner=ConcurrentTaskRunner())

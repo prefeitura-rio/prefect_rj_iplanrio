@@ -8,9 +8,9 @@ from datetime import datetime
 import pandas as pd
 from google.cloud import storage
 
-from .log import logger_da_pipeline
+from .log import get_logger
 
-logger = logger_da_pipeline(__name__)
+logger = get_logger(__name__)
 
 
 def save_chunks_to_gcs(

@@ -5,9 +5,9 @@ Functions for reconstructing PDF files from MongoDB chunks.
 
 import pandas as pd
 
-from .log import logger_da_pipeline
+from .log import get_logger
 
-logger = logger_da_pipeline(__name__)
+logger = get_logger(__name__)
 
 
 def chunk_list(items: list, chunk_size: int) -> list[list]:

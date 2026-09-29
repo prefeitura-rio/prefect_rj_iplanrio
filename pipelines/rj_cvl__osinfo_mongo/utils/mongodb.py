@@ -15,9 +15,9 @@ from pymongo import MongoClient
 from pymongo.errors import AutoReconnect, NetworkTimeout
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from .log import logger_da_pipeline
+from .log import get_logger
 
-logger = logger_da_pipeline(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)

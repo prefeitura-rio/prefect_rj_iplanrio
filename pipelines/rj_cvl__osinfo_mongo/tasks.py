@@ -9,10 +9,10 @@ import pandas as pd
 from prefect import task
 
 from pipelines.rj_cvl__osinfo_mongo.utils import bigquery, gcs, mongodb, pdf
-from pipelines.rj_cvl__osinfo_mongo.utils.log import logger_da_pipeline
+from pipelines.rj_cvl__osinfo_mongo.utils.log import get_logger
 from pipelines.rj_cvl__osinfo_mongo.utils.mongodb import MongoConnectionConfig
 
-logger = logger_da_pipeline(__name__)
+logger = get_logger(__name__)
 
 
 @task
