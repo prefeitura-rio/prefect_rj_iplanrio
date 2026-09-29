@@ -131,7 +131,7 @@ def rj_crm__agentforce_classificacao_llm(
     if not bf_key:
         raise ValueError(
             "BF_KEY não encontrada nas variáveis de ambiente — adicionar ao secret do work pool "
-            "(mesmo secretName usado por rj_crm__salesforce_agentforce_api)."
+            "(mesmo secretName usado por rj_crm__salesforce_datacloud)."
         )
 
     # Não precisa de try/except aqui: on_failure=[notify_falha_flow] no decorator acima já
