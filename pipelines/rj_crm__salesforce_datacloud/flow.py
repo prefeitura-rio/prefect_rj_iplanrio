@@ -8,7 +8,7 @@ Duas partes:
     crítica (as do Agentforce) que falhar aborta tudo; não-crítica avisa no
     Discord e segue.
   - processar_tabela: o COMO de uma tabela numa janela — extrair → transformar
-    → staging + MERGE → validar. Não sabe de modo, reprocessamento nem Discord.
+    → staging + MERGE. Não sabe de modo, reprocessamento nem Discord.
 
 Até 2026-09-29 isso era dividido em "fases" (F1 como subflow separado,
 F2a/F3/F5 inline aqui) e a rotina de uma tabela ficava em flows/template.py
@@ -40,7 +40,6 @@ from pipelines.rj_crm__salesforce_datacloud.tasks.bigquery import (
     ensure_bq_tables,
     load_chunk_to_staging,
     merge_staging_to_target,
-    validate_row_count,
 )
 from pipelines.rj_crm__salesforce_datacloud.tasks.extract import (
     extract_from_crm_rest,
@@ -67,8 +66,7 @@ def processar_tabela(
     session: dict,
 ) -> dict[str, int]:
     """
-    Extrai → transforma → carrega (staging + MERGE) → valida UMA tabela numa
-    janela.
+    Extrai → transforma → carrega (staging + MERGE) UMA tabela numa janela.
 
     Args:
         tabela         : Configuração da tabela (tabelas.yaml).
@@ -131,16 +129,6 @@ def processar_tabela(
         target_table_id=tabela.nome,
         primary_key=tabela.primary_key,
         partition_field="data_particao",
-    )
-
-    # --- Validar ---
-    validate_row_count(
-        source_count=merge["inseridas"] + merge["atualizadas"],
-        project_id=project_id,
-        dataset_id=dataset_id,
-        table_id=tabela.nome,
-        partition_date=str(partition_date),
-        write_mode="merge",
     )
 
     return {"extraidas": extraidas, **merge}

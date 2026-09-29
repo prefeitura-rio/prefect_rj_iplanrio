@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Tasks de BigQuery da pipeline: criação das tabelas (ensure_bq_tables),
-carga (staging + MERGE) e validação de contagem pós-carga.
+carga (staging + MERGE).
 
 Carregamento de DataFrames no BigQuery: staging (tabela fixa, uma por tabela
 final — ex.: 'ai_agent_session_staging', schema em utils/schemas.py) + MERGE
@@ -11,6 +11,12 @@ sql/bigquery/merge_staging.sql), então sobra de MERGE falho ou id repetido na
 fonte não trava mais os ticks seguintes.
 
 SQL em sql/bigquery/ (lido via utils/queries.py).
+
+Sem validação de contagem pós-carga (removida 2026-09-29): o MERGE é atômico
+— terminou sem erro, as linhas estão lá, e as contagens exatas vêm do próprio
+job (dml_stats). A validação antiga só recontava a partição do dia e dava
+falso alarme quando o MERGE cobria mais de uma partição (ex.: sobra de staging
+de dias anteriores).
 """
 
 from __future__ import annotations
@@ -184,72 +190,3 @@ def merge_staging_to_target(
     client.query(ler_query("bigquery/truncate_staging.sql").format(staging=staging_full)).result()
 
     return resultado
-
-
-# Validação pós-carga: compara contagem de registros entre source e BigQuery.
-@task(log_prints=True)
-def validate_row_count(
-    source_count: int,
-    project_id: str,
-    dataset_id: str,
-    table_id: str,
-    partition_date: str,
-    partition_field: str = "data_particao",
-    tolerance_pct: float = 0.01,
-    write_mode: str = "append",
-) -> bool:
-    """
-    Verifica se a contagem de linhas no BigQuery corresponde à contagem no source.
-
-    Para write_mode='replace': valida que BQ == source (dentro da tolerância).
-    Para write_mode='append' ou 'merge': valida que BQ >= source (acúmulo esperado).
-
-    Args:
-        source_count    : Total de registros extraídos do Salesforce.
-        project_id      : ID do projeto GCP.
-        dataset_id      : Dataset de destino.
-        table_id        : Tabela de destino.
-        partition_date  : Data da partição no formato 'YYYY-MM-DD'.
-        partition_field : Campo de partição. Padrão: 'data_particao'.
-        tolerance_pct   : Tolerância máxima de delta (0.01 = 1%). Padrão: 1%.
-                          Usado apenas para write_mode='replace'.
-        write_mode      : 'append', 'replace' ou 'merge'. Padrão: 'append'.
-
-    Returns:
-        True se validação passar.
-
-    Raises:
-        RuntimeError: Se validação falhar.
-    """
-    if source_count == 0:
-        return True
-
-    client = bigquery.Client(project=project_id)
-    full_id = f"{project_id}.{dataset_id}.{table_id}"
-
-    query = ler_query("bigquery/conta_particao.sql").format(
-        table=full_id,
-        partition_field=partition_field,
-        partition_date=partition_date,
-    )
-
-    result = client.query(query).result()
-    bq_count = next(iter(result)).cnt
-
-    if write_mode == "replace":
-        delta = abs(source_count - bq_count)
-        delta_pct = delta / source_count if source_count > 0 else 0.0
-        if delta_pct > tolerance_pct:
-            raise RuntimeError(
-                f"[VALIDATE] FAIL '{table_id}': delta {delta_pct:.2%} excede tolerância "
-                f"{tolerance_pct:.2%}. source={source_count}, BQ={bq_count}."
-            )
-    else:
-        # append/merge: BQ deve ter pelo menos os registros do source
-        if bq_count < source_count:
-            raise RuntimeError(
-                f"[VALIDATE] FAIL '{table_id}': BQ ({bq_count}) < source ({source_count}). "
-                f"Registros podem não ter sido inseridos."
-            )
-
-    return True
