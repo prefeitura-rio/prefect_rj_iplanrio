@@ -9,7 +9,7 @@ import random
 import time
 from dataclasses import dataclass
 
-from prefect_rj_iplanrio.log import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 logger = get_logger(__name__)
 

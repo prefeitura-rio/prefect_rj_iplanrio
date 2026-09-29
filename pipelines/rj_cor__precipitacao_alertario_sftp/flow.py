@@ -3,7 +3,7 @@
 from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
@@ -15,7 +15,7 @@ from tasks import (
     download_xml_files_from_list_task
 )
 
-logger = get_logger(__name__)
+logger = get_logger("pipelines.rj_cor__precipitacao_alertario_sftp.flow")
 
 
 @flow(log_prints=True, name="rj-cor-precipitacao-alertario-sftp")
@@ -73,10 +73,10 @@ def rj_cor__precipitacao_alertario_sftp(
     bucket_name = getenv_or_action("bucket-nimbus")
     prefix = getenv_or_action("prefix")
 
-    logger.info("🌧️  Iniciando coleta de dados de precipitação AlertaRio via SFTP")
+    logger.info("Iniciando coleta de dados de precipitacao AlertaRio via SFTP")
 
     # Step 1: Listar arquivos XML novos
-    logger.info("📥 Listando arquivos XML na landing zone...")
+    logger.info("Listando arquivos XML na landing zone...")
     if max_date_bigquery is None:
         bq = get_max_date_from_bigquery_task(
             project_id=project_id
@@ -105,7 +105,7 @@ def rj_cor__precipitacao_alertario_sftp(
     )
 
     if dataset_id_pluviometric is not None and pluviometric_path is not None:
-        logger.info("📤 Enviando dados pluviométricos para BigQuery: %s", pluviometric_path)
+        logger.info("Enviando dados pluviometricos para BigQuery: %s", pluviometric_path)
         create_table_and_upload_to_gcs_task(
             data_path=pluviometric_path,
             dataset_id=dataset_id_pluviometric,
@@ -114,7 +114,7 @@ def rj_cor__precipitacao_alertario_sftp(
         )
 
     if dataset_id_meteorological is not None and meteorological_path is not None:
-        logger.info("📤 Enviando dados meteorológicos para BigQuery: %s", meteorological_path)
+        logger.info("Enviando dados meteorologicos para BigQuery: %s", meteorological_path)
         create_table_and_upload_to_gcs_task(
             data_path=meteorological_path,
             dataset_id=dataset_id_meteorological,

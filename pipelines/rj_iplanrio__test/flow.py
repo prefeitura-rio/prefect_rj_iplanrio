@@ -7,7 +7,7 @@ logs do Prefect — servindo de referência de arquitetura para novas pipelines.
 
 from prefect import flow
 
-from prefect_rj_iplanrio.log import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 from pipelines.rj_iplanrio__test.tasks import (
     calcular_relatorio_task,

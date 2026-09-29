@@ -64,6 +64,7 @@ members = [
     "rj-iplanrio-vigia-urbano",
     "rj-pgm-divida-ativa",
     "rj-pic-disparos-email",
+    "rj-rmi-run-dbt",
     "rj-seconserva-infraestrutura-siscor-obras",
     "rj-segovi-dump-db-1746",
     "rj-segur-forca-municipal",
@@ -1794,7 +1795,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#fda88406e677516f5a2d7d511930b89b7c0357bb" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git?branch=new-logger-prefect#091dc40b12b98b82c09d32abdb140937d25bc35e" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -3032,7 +3033,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "idna", specifier = ">=3.10" },
-    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git" },
+    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git?branch=new-logger-prefect" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "prefect", specifier = "==3.4.9" },
@@ -5058,7 +5059,7 @@ requires-dist = [
 
 [[package]]
 name = "rj-iplanrio-test"
-version = "0.1.0"
+version = "1.0.0"
 source = { virtual = "pipelines/rj_iplanrio__test" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
@@ -5106,6 +5107,25 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1.2" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
+]
+
+[[package]]
+name = "rj-rmi-run-dbt"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_rmi__run_dbt" }
+dependencies = [
+    { name = "dbt-bigquery" },
+    { name = "gitpython" },
+    { name = "prefect-dbt" },
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "dbt-bigquery", specifier = "==1.11.1" },
+    { name = "gitpython", specifier = ">=3.1.44" },
+    { name = "prefect-dbt", specifier = ">=0.7.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
 ]
 
 [[package]]

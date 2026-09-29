@@ -6,7 +6,7 @@ permitida aqui é a configuração de retry, cache e instrumentação do Prefect
 
 from prefect import task
 
-from prefect_rj_iplanrio.log import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 from pipelines.rj_iplanrio__test.utils import (
     Medicao,
