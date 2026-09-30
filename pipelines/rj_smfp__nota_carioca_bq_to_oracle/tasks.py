@@ -1,6 +1,7 @@
 """Tasks da carga BigQuery → GCS → SQL*Loader → Oracle."""
 
 from prefect import task
+from prefect.artifacts import create_progress_artifact, update_progress_artifact
 from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 
@@ -59,12 +60,15 @@ def ensure_oracle_table_task(
 
 
 @task(cache_policy=NO_CACHE)
-def extract_table_to_gcs_task(project: str, dataset_id: str, table_id: str, bucket: str) -> list[str]:
+def extract_table_to_gcs_task(project: str, dataset_id: str, table_id: str, bucket: str) -> list[bigquery.ExportedFile]:
     """Exporta a tabela para um prefixo exclusivo deste flow run no GCS."""
     prefix = f"{dataset_id}/{table_id}/{flow_run.id}"
-    return bigquery.extract_table_to_gcs(
+    files = bigquery.extract_table_to_gcs(
         project=project, dataset_id=dataset_id, table_id=table_id, bucket=bucket, prefix=prefix
     )
+    total = sqlldr.format_size(sum(exported.size for exported in files))
+    log(f"{table_id}: extract gerou {len(files)} arquivos ({total} comprimidos) em gs://{bucket}/{prefix}")
+    return files
 
 
 @task(cache_policy=NO_CACHE)
@@ -80,18 +84,38 @@ def load_into_oracle_task(  # noqa: PLR0913
     table: str,
     plan: LoadPlan,
     bucket: str,
-    blob_names: list[str],
+    files: list[bigquery.ExportedFile],
     sessions: int,
+    progress_interval_seconds: int,
 ) -> int:
-    """Carrega os arquivos exportados com SQL*Loader direct path e retorna as linhas carregadas."""
-    job = sqlldr.LoadJob(
-        table=table,
-        fields=plan.fields,
-        bucket=bucket,
-        blob_names=blob_names,
-        sessions=sessions,
+    """Carrega os arquivos com SQL*Loader direct path, registrando o andamento, e retorna as linhas carregadas."""
+    job = sqlldr.LoadJob(table=table, fields=plan.fields, bucket=bucket, files=files, sessions=sessions)
+    artifact_id = create_progress_artifact(progress=0.0, description=f"Carga de {table}")
+    log(
+        f"Carga de {table} iniciada: {len(files)} arquivos "
+        f"({sqlldr.format_size(sum(exported.size for exported in files))}) em {min(sessions, len(files))} sessão(ões)"
     )
-    return sqlldr.load_from_gcs(config=oracle.read_oracle_config(infisical_secret_path), job=job)
+
+    def report(snapshot: sqlldr.ProgressSnapshot) -> None:
+        log(sqlldr.format_progress(table, snapshot))
+        update_progress_artifact(artifact_id=artifact_id, progress=sqlldr.progress_percent(snapshot))
+
+    result = sqlldr.load_from_gcs(
+        config=oracle.read_oracle_config(infisical_secret_path),
+        job=job,
+        on_progress=report,
+        progress_interval_seconds=progress_interval_seconds,
+    )
+    update_progress_artifact(artifact_id=artifact_id, progress=100.0)
+    sessions_text = ", ".join(
+        f"sessão {item.index}: {item.files} arquivos, {sqlldr.format_count(item.rows)} linhas"
+        for item in result.sessions
+    )
+    log(
+        f"Carga de {table} concluída: {sqlldr.format_count(result.rows)} linhas em "
+        f"{sqlldr.format_duration(result.elapsed_seconds)} ({sessions_text})"
+    )
+    return result.rows
 
 
 @task(cache_policy=NO_CACHE)
@@ -104,12 +128,18 @@ def validate_row_count_task(
     """
     expected = int(table_schema["num_rows"])
     oracle_rows = oracle.count_rows(config=oracle.read_oracle_config(infisical_secret_path), table=table)
+    counts = ", ".join(
+        f"{label}={sqlldr.format_count(value)}"
+        for label, value in (("BigQuery", expected), ("SQL*Loader", loaded_rows), ("Oracle", oracle_rows))
+    )
     if not expected == loaded_rows == oracle_rows:
-        raise ValueError(f"{table}: BigQuery={expected}, SQL*Loader={loaded_rows}, Oracle={oracle_rows}")
+        raise ValueError(f"{table}: contagens divergentes: {counts}")
+    log(f"{table}: contagens conferidas: {counts}")
     return oracle_rows
 
 
 @task(cache_policy=NO_CACHE)
-def delete_gcs_files_task(project: str, bucket: str, blob_names: list[str]) -> None:
+def delete_gcs_files_task(project: str, bucket: str, files: list[bigquery.ExportedFile]) -> None:
     """Remove do GCS os arquivos exportados."""
-    bigquery.delete_blobs(project=project, bucket=bucket, blob_names=blob_names)
+    bigquery.delete_blobs(project=project, bucket=bucket, blob_names=[exported.name for exported in files])
+    log(f"Removidos {len(files)} arquivos temporários de gs://{bucket}")
