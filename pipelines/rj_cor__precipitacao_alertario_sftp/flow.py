@@ -1,4 +1,4 @@
-"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
+"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS.."""
 
 from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
@@ -20,13 +20,13 @@ logger = get_logger(__name__)
 
 @flow(log_prints=True, name="rj-cor-precipitacao-alertario-sftp")
 def rj_cor__precipitacao_alertario_sftp(
-    dataset_id_pluviometric: str = 'clima_pluviometro',
-    table_id_pluviometric: str = 'taxa_precipitacao_alertario_5min',
-    dataset_id_meteorological: str = 'clima_estacao_meteorologica',
-    table_id_meteorological: str = 'meteorologia_alertario',
+    dataset_id_pluviometric: str = "clima_pluviometro",
+    table_id_pluviometric: str = "taxa_precipitacao_alertario_5min",
+    dataset_id_meteorological: str = "clima_estacao_meteorologica",
+    table_id_meteorological: str = "meteorologia_alertario",
     dump_mode: str = "append",
     project_id: str = "rj-iplanrio",
-    max_date_bigquery: str | None = None
+    max_date_bigquery: str | None = None,
 ) -> None:
     """Coleta dados de precipitação do AlertaRio via arquivos XML em GCS.
 
@@ -78,21 +78,16 @@ def rj_cor__precipitacao_alertario_sftp(
     # Step 1: Listar arquivos XML novos
     logger.info("Listando arquivos XML na landing zone...")
     if max_date_bigquery is None:
-        bq = get_max_date_from_bigquery_task(
-            project_id=project_id
-        )
+        bq = get_max_date_from_bigquery_task(project_id=project_id)
     else:
         bq = max_date_bigquery
 
     xml_files = get_bucket_files_with_datetime_filter_task(
-        max_datetime_from_bq=bq,
-        bucket_name=bucket_name,
-        prefix=prefix
+        max_datetime_from_bq=bq, bucket_name=bucket_name, prefix=prefix
     )
 
     content = download_xml_files_from_list_task(
-        bucket_name=bucket_name,
-        file_names=xml_files
+        bucket_name=bucket_name, file_names=xml_files
     )
 
     # Validar se houve download de arquivos
@@ -105,7 +100,9 @@ def rj_cor__precipitacao_alertario_sftp(
     )
 
     if dataset_id_pluviometric is not None and pluviometric_path is not None:
-        logger.info("Enviando dados pluviometricos para BigQuery: %s", pluviometric_path)
+        logger.info(
+            "Enviando dados pluviometricos para BigQuery: %s", pluviometric_path
+        )
         create_table_and_upload_to_gcs_task(
             data_path=pluviometric_path,
             dataset_id=dataset_id_pluviometric,
@@ -114,7 +111,9 @@ def rj_cor__precipitacao_alertario_sftp(
         )
 
     if dataset_id_meteorological is not None and meteorological_path is not None:
-        logger.info("Enviando dados meteorologicos para BigQuery: %s", meteorological_path)
+        logger.info(
+            "Enviando dados meteorologicos para BigQuery: %s", meteorological_path
+        )
         create_table_and_upload_to_gcs_task(
             data_path=meteorological_path,
             dataset_id=dataset_id_meteorological,

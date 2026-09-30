@@ -4,7 +4,7 @@ Estima a probabilidade de cada telefone ser HighDelivery no WhatsApp (LightGBM) 
 por mês, retreina o modelo. Um único flow, dois modos — ``score`` roda a cada 3 dias e só
 executa o modelo já treinado; ``retreino`` roda uma vez por mês e treina, avalia contra o
 modelo em produção/heurística/aleatório e (se passar no gate) promove uma versão nova.
-Ver TODO do projeto pra detalhe de cada parte.
+Ver TODO do projeto pra detalhe de cada parte..
 """
 
 from datetime import datetime
@@ -20,16 +20,29 @@ from pipelines.rj_crm__modelo_qualidade_telefone.tasks.carrega_modelo import (
     carrega_champion_task,
 )
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino import extrair, treinar
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import avalia_simulacao_task
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import avalia_gate_task, promove_se_aprovado_task
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import (
+    avalia_simulacao_task,
+)
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import (
+    avalia_gate_task,
+    promove_se_aprovado_task,
+)
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.publicar import (
     monta_tabela_avaliacao_task,
     publica_avaliacao_bq_task,
 )
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.relatorio import publica_relatorio_task
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.pontua_telefones import pontua_telefones_task
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.publica_tabela import publica_scores_task
-from pipelines.rj_crm__modelo_qualidade_telefone.utils.logging_fix import garante_logging_visivel
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.relatorio import (
+    publica_relatorio_task,
+)
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.pontua_telefones import (
+    pontua_telefones_task,
+)
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.publica_tabela import (
+    publica_scores_task,
+)
+from pipelines.rj_crm__modelo_qualidade_telefone.utils.logging_fix import (
+    garante_logging_visivel,
+)
 
 logger = get_logger(__name__)
 
@@ -96,11 +109,19 @@ def rj_crm__modelo_qualidade_telefone(
 
     if modo == "score":
         champion = carrega_champion_task(environment=environment, raiz=raiz_modelos)
-        caminho_parquet, stats = pontua_telefones_task(champion, environment=environment, tamanho_lote=tamanho_lote)
-        publica_scores_task(
-            caminho_parquet, stats, environment=environment, dataset_id=dataset_id, table_id=table_id_score
+        caminho_parquet, stats = pontua_telefones_task(
+            champion, environment=environment, tamanho_lote=tamanho_lote
         )
-        logger.info("Scoring publicado: versão %s, %d linhas.", champion.versao, stats.n_linhas)
+        publica_scores_task(
+            caminho_parquet,
+            stats,
+            environment=environment,
+            dataset_id=dataset_id,
+            table_id=table_id_score,
+        )
+        logger.info(
+            "Scoring publicado: versão %s, %d linhas.", champion.versao, stats.n_linhas
+        )
         return
 
     # modo == "retreino"
@@ -109,8 +130,12 @@ def rj_crm__modelo_qualidade_telefone(
     # — só a data colidiria em qualquer retentativa no mesmo dia (ex.: falha no upload do
     # Drive depois que o GCS já foi publicado, retreino rodado de novo manualmente).
     versao = agora.strftime("%Y-%m-%d-%H%M%S")
-    champion = carrega_champion_opcional_task(environment=environment, raiz=raiz_modelos)
-    hiperparametros_champion = champion.metadata.get("hiperparametros") if champion else None
+    champion = carrega_champion_opcional_task(
+        environment=environment, raiz=raiz_modelos
+    )
+    hiperparametros_champion = (
+        champion.metadata.get("hiperparametros") if champion else None
+    )
     booster_producao = champion.booster if champion else None
 
     df_treino = extrair.extrai_treino_task(environment=environment)
@@ -118,14 +143,25 @@ def rj_crm__modelo_qualidade_telefone(
         df_treino, n_trials=n_trials, hiperparametros_champion=hiperparametros_champion
     )
 
-    df_eventos = extrair.extrai_eventos_task(environment=environment, janela_recente_dias=janela_recente_dias)
+    df_eventos = extrair.extrai_eventos_task(
+        environment=environment, janela_recente_dias=janela_recente_dias
+    )
     resultado_simulacao = avalia_simulacao_task(
-        df_eventos, resultado_treino.telefones_treino, resultado_treino.booster, booster_producao
+        df_eventos,
+        resultado_treino.telefones_treino,
+        resultado_treino.booster,
+        booster_producao,
     )
 
-    decisao = avalia_gate_task(resultado_treino, resultado_simulacao, exigir_gate=exigir_gate)
+    decisao = avalia_gate_task(
+        resultado_treino, resultado_simulacao, exigir_gate=exigir_gate
+    )
     promove_se_aprovado_task(
-        resultado_treino, decisao, raiz_modelos, versao, environment=environment,
+        resultado_treino,
+        decisao,
+        raiz_modelos,
+        versao,
+        environment=environment,
         promocao_automatica=promocao_automatica,
     )
 
@@ -133,10 +169,24 @@ def rj_crm__modelo_qualidade_telefone(
         resultado_treino, resultado_simulacao, decisao, versao, agora.date().isoformat()
     )
     publica_avaliacao_bq_task(
-        tabela_avaliacao, environment=environment, dataset_id=dataset_id, table_id=table_id_avaliacao
+        tabela_avaliacao,
+        environment=environment,
+        dataset_id=dataset_id,
+        table_id=table_id_avaliacao,
     )
     publica_relatorio_task(
-        resultado_treino, versao, drive_pasta_raiz_id, environment, resultado_simulacao, decisao, df_treino
+        resultado_treino,
+        versao,
+        drive_pasta_raiz_id,
+        environment,
+        resultado_simulacao,
+        decisao,
+        df_treino,
     )
 
-    logger.info("Retreino %s concluído: promovido=%s (motivos: %s).", versao, decisao.promovido, decisao.motivos)
+    logger.info(
+        "Retreino %s concluído: promovido=%s (motivos: %s).",
+        versao,
+        decisao.promovido,
+        decisao.motivos,
+    )

@@ -1,4 +1,4 @@
-"""Flow for rj_crm__whitelist_whatsapp_relatorio."""
+"""Flow for rj_crm__whitelist_whatsapp_relatorio.."""
 
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
@@ -42,15 +42,23 @@ def rj_crm__whitelist_whatsapp_relatorio(
     :param query_ultima_ocorrencia: Query de diagnóstico, no mesmo formato.
     :raises RuntimeError: Se o relatório foi publicado no Discord mas o e-mail falhou.
     """
-    rename_current_flow_run_task(new_name=f"whitelist_whatsapp_relatorio--{environment}")
+    rename_current_flow_run_task(
+        new_name=f"whitelist_whatsapp_relatorio--{environment}"
+    )
     validar_configuracao_task()
     preparar_credenciais_task()
 
-    janela = resolver_janela_task(start_datetime=start_datetime, end_datetime=end_datetime)
+    janela = resolver_janela_task(
+        start_datetime=start_datetime, end_datetime=end_datetime
+    )
     ocorrencias = buscar_ocorrencias_task(query=query_ocorrencias, janela=janela)
-    ultima_ocorrencia = buscar_ultima_ocorrencia_task(query=query_ultima_ocorrencia, ocorrencias=ocorrencias)
+    ultima_ocorrencia = buscar_ultima_ocorrencia_task(
+        query=query_ultima_ocorrencia, ocorrencias=ocorrencias
+    )
 
-    estado_email = enviar_email_task(janela=janela, ocorrencias=ocorrencias, return_state=True)
+    estado_email = enviar_email_task(
+        janela=janela, ocorrencias=ocorrencias, return_state=True
+    )
     email_entregue = estado_email.is_completed()
 
     enviar_discord_task(
@@ -62,4 +70,6 @@ def rj_crm__whitelist_whatsapp_relatorio(
     )
 
     if not email_entregue:
-        raise RuntimeError("Relatório publicado no Discord, mas o envio do e-mail falhou.")
+        raise RuntimeError(
+            "Relatório publicado no Discord, mas o envio do e-mail falhou."
+        )

@@ -37,5 +37,5 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_iplanrio__test -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always

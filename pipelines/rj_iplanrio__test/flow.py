@@ -2,7 +2,7 @@
 
 Esta pipeline não consome dados reais. Ela simula a coleta de medições de
 sensores, aplica validação e cálculo estatístico, e publica o resultado nos
-logs do Prefect — servindo de referência de arquitetura para novas pipelines.
+logs do Prefect — servindo de referência de arquitetura para novas pipelines..
 """
 
 from iplanrio.pipelines_utils.logging import get_logger
@@ -47,9 +47,15 @@ def rj_iplanrio__test(
         unidade,
     )
     logger.info("[flow] INFO — iniciando pipeline de teste para sensor '%s'", sensor_id)
-    logger.warning("[flow] WARNING — pipeline de teste em execução; não usar em produção")
-    logger.error("[flow] ERROR — mensagem de nível ERROR emitida intencionalmente para validação do logger")
-    logger.critical("[flow] CRITICAL — mensagem de nível CRITICAL emitida intencionalmente para validação do logger")
+    logger.warning(
+        "[flow] WARNING — pipeline de teste em execução; não usar em produção"
+    )
+    logger.error(
+        "[flow] ERROR — mensagem de nível ERROR emitida intencionalmente para validação do logger"
+    )
+    logger.critical(
+        "[flow] CRITICAL — mensagem de nível CRITICAL emitida intencionalmente para validação do logger"
+    )
 
     medicoes = gerar_medicoes_task(
         sensor_id=sensor_id,
