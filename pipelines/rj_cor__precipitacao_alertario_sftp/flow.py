@@ -8,13 +8,14 @@ from iplanrio.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
 from iplanrio.pipelines_utils.env import getenv_or_action
-from tasks import (
+from pipelines.rj_cor__precipitacao_alertario_sftp.tasks import (
     get_max_date_from_bigquery_task,
     get_bucket_files_with_datetime_filter_task,
     process_multiple_xml_files_task,
-    download_xml_files_from_list_task
+    download_xml_files_from_list_task,
 )
-
+import os
+from dotenv import load_dotenv
 logger = get_logger("pipelines.rj_cor__precipitacao_alertario_sftp.flow")
 
 
@@ -68,10 +69,10 @@ def rj_cor__precipitacao_alertario_sftp(
     """
     # Setup
     rename_current_flow_run_task(new_name="precipitacao-alertario-sftp")
-    inject_bd_credentials_task(environment="prod")
-
-    bucket_name = getenv_or_action("bucket-nimbus")
-    prefix = getenv_or_action("prefix")
+    # inject_bd_credentials_task(environment="prod")
+    load_dotenv()
+    bucket_name = os.getenv("bucket_nimbus")
+    prefix = os.getenv("prefix")
 
     logger.info("Iniciando coleta de dados de precipitacao AlertaRio via SFTP")
 
@@ -119,5 +120,5 @@ def rj_cor__precipitacao_alertario_sftp(
             data_path=meteorological_path,
             dataset_id=dataset_id_meteorological,
             table_id=table_id_meteorological,
-            dump_mode=dump_mode
-    )
+            dump_mode=dump_mode,
+        )
