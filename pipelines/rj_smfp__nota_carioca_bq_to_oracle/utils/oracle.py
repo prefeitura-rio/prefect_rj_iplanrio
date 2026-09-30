@@ -128,11 +128,16 @@ def column_definitions(columns: list[Column]) -> str:
 
 
 def connect(config: OracleConfig) -> oracledb.Connection:
-    """Abre uma conexão em modo thin com o Oracle.
+    """Abre uma conexão em modo thick com o Oracle.
+
+    O modo thick usa o Instant Client da imagem base e aceita usuários com
+    verifier de senha 10G, que o modo thin rejeita (``DPY-3015``).
 
     :param config: Configuração da conexão.
     :returns: Conexão aberta.
     """
+    if oracledb.is_thin_mode():
+        oracledb.init_oracle_client()
     return oracledb.connect(user=config.user, password=config.password, dsn=config.dsn)
 
 
