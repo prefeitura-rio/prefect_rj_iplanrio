@@ -1,6 +1,12 @@
 import pytest
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import Column, map_columns
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import (
+    LoaderField,
+    OracleColumn,
+    build_load_plan,
+    loader_spec,
+    oracle_column,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     CROSS_SCHEMA_PRIVILEGES,
     MANAGED_TABLE_MARKER,
@@ -18,39 +24,96 @@ def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
     return {"name": name, "type": type_, "mode": mode}
 
 
-def test_map_columns_keeps_order_and_maps_types():
-    columns = map_columns(
-        [
-            field("_airbyte_raw_id", "STRING", "REQUIRED"),
-            field("valor", "NUMERIC"),
-            field("qtd", "INTEGER"),
-            field("criado_em", "TIMESTAMP"),
-            field("meta", "JSON"),
-        ]
-    )
-    assert [column.name for column in columns] == ["_AIRBYTE_RAW_ID", "VALOR", "QTD", "CRIADO_EM", "META"]
-    assert [column.oracle_type for column in columns] == [
-        "VARCHAR2(4000 BYTE)",
-        "NUMBER",
-        "NUMBER(19)",
-        "TIMESTAMP(6) WITH TIME ZONE",
-        "VARCHAR2(4000 BYTE)",
+def ora(name: str, data_type: str, length=None, char_used=None, precision=None, scale=None, nullable=False):
+    return OracleColumn(name, data_type, length, char_used, precision, scale, nullable)
+
+
+TEMPLATE = [
+    ora("CPF_CNPJ_RESPONSAVEL", "VARCHAR2", 14, "B"),
+    ora("DATA_COMPETENCIA_MUNICIPIO", "DATE", 7),
+    ora("NOTA_FISCAL", "NUMBER", 22, precision=15, scale=0),
+    ora("VALOR", "NUMBER", 22),
+    ora("NOME", "VARCHAR2", 300, "C", nullable=True),
+]
+
+
+def test_ddl_matches_original_column_definitions():
+    assert [column.definition for column in TEMPLATE] == [
+        '"CPF_CNPJ_RESPONSAVEL" VARCHAR2(14 BYTE) NOT NULL',
+        '"DATA_COMPETENCIA_MUNICIPIO" DATE NOT NULL',
+        '"NOTA_FISCAL" NUMBER(15,0) NOT NULL',
+        '"VALOR" NUMBER NOT NULL',
+        '"NOME" VARCHAR2(300 CHAR)',
     ]
-    assert columns[3].loader_field == 'TIMESTAMP WITH TIME ZONE "YYYY-MM-DD HH24:MI:SS.FF TZR"'
+    assert ora("QTD", "NUMBER", 22, scale=0).ddl_type == "NUMBER(*,0)"
+    assert ora("TS", "TIMESTAMP(6) WITH TIME ZONE", 13).ddl_type == "TIMESTAMP(6) WITH TIME ZONE"
+
+
+def test_oracle_column_parses_dictionary_row():
+    row = {
+        "column_name": "NOTA_FISCAL",
+        "data_type": "NUMBER",
+        "data_length": 22,
+        "char_used": None,
+        "data_precision": 15,
+        "data_scale": 0,
+        "nullable": "N",
+    }
+    assert oracle_column(row) == ora("NOTA_FISCAL", "NUMBER", 22, precision=15, scale=0)
+
+
+def test_build_load_plan_follows_original_and_ignores_extra_bigquery_columns():
+    bq = [
+        field("_bigquery_uid", "STRING"),
+        field("cpf_cnpj_responsavel", "STRING"),
+        field("data_competencia_municipio", "STRING"),
+        field("nota_fiscal", "NUMERIC"),
+        field("valor", "NUMERIC"),
+        field("nome", "STRING"),
+        field("_bigquery_particao_data", "DATE"),
+    ]
+    plan = build_load_plan(bq, TEMPLATE)
+    assert plan.columns == TEMPLATE
+    assert plan.ignored == ["_BIGQUERY_UID", "_BIGQUERY_PARTICAO_DATA"]
+    assert [(f.name, f.spec) for f in plan.fields] == [
+        ("_BIGQUERY_UID", "FILLER CHAR(4000)"),
+        ("CPF_CNPJ_RESPONSAVEL", "CHAR(4000)"),
+        (
+            "DATA_COMPETENCIA_MUNICIPIO",
+            "CHAR(64) \"TO_DATE(SUBSTR(REPLACE(:DATA_COMPETENCIA_MUNICIPIO, 'T', ' '), 1, 19), "
+            "'YYYY-MM-DD HH24:MI:SS')\"",
+        ),
+        ("NOTA_FISCAL", "CHAR(64)"),
+        ("VALOR", "CHAR(64)"),
+        ("NOME", "CHAR(4000)"),
+        ("_BIGQUERY_PARTICAO_DATA", "FILLER CHAR(4000)"),
+    ]
+
+
+def test_build_load_plan_requires_every_original_column():
+    with pytest.raises(ValueError, match="ausentes no BigQuery"):
+        build_load_plan([field("cpf_cnpj_responsavel", "STRING")], TEMPLATE)
 
 
 @pytest.mark.parametrize(
-    "unsupported",
-    [field("dia", "DATE"), field("itens", "STRING", "REPEATED"), field("endereco", "RECORD")],
+    ("column", "bq_type"),
+    [
+        (ora("DATA", "DATE", 7), "INTEGER"),
+        (ora("VALOR", "NUMBER", 22), "STRING"),
+        (ora("TEXTO", "CLOB", 4000), "STRING"),
+        (ora("_DATA", "DATE", 7), "STRING"),
+    ],
 )
-def test_map_columns_rejects_unsupported_types(unsupported):
+def test_loader_spec_rejects_unsupported_combinations(column, bq_type):
     with pytest.raises(NotImplementedError):
-        map_columns([field("id", "STRING"), unsupported])
+        loader_spec(column, bq_type)
 
 
-def test_map_columns_rejects_invalid_column_name():
+def test_build_load_plan_rejects_nested_and_invalid_names():
+    with pytest.raises(NotImplementedError):
+        build_load_plan([field("itens", "STRING", "REPEATED")], [])
     with pytest.raises(ValueError, match="Nome de coluna"):
-        map_columns([field("coluna com espaço", "STRING")])
+        build_load_plan([field("coluna com espaço", "STRING")], [])
 
 
 def test_oracle_table_name_always_has_prefix():
@@ -87,17 +150,21 @@ def test_secret_env_key_follows_iplanrio_convention():
     assert secret_env_key("/db-oracle-nota-fiscal", "DB_HOST") == "DB_ORACLE_NOTA_FISCAL__DB_HOST"
 
 
-def test_column_definitions_quotes_names():
-    columns = [Column("ID", "NUMBER(19)", "CHAR(32)"), Column("NOME", "VARCHAR2(4000 BYTE)", "CHAR(4000)")]
-    assert column_definitions(columns) == '  "ID" NUMBER(19),\n  "NOME" VARCHAR2(4000 BYTE)'
+def test_column_definitions_keep_types_and_not_null():
+    assert column_definitions(TEMPLATE[:2]) == (
+        '  "CPF_CNPJ_RESPONSAVEL" VARCHAR2(14 BYTE) NOT NULL,\n  "DATA_COMPETENCIA_MUNICIPIO" DATE NOT NULL'
+    )
 
 
 def test_build_control_file_handles_embedded_newlines_and_blanks():
-    control = build_control_file("DESTINO", "BQLOAD_X", [Column("ID", "NUMBER(19)", "CHAR(32)")])
+    control = build_control_file(
+        "DESTINO", "BQLOAD_X", [LoaderField("ID", "CHAR(32)"), LoaderField("_EXTRA", "FILLER CHAR(4000)")]
+    )
     lines = control.splitlines()
     assert lines[:5] == ["LOAD DATA", "CHARACTERSET AL32UTF8", "APPEND", "PRESERVE BLANKS", 'INTO TABLE "DESTINO"."BQLOAD_X"']
     assert "FIELDS CSV WITH EMBEDDED TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'" in lines
-    assert '  "ID" CHAR(32)' in lines
+    assert '  "ID" CHAR(32),' in lines
+    assert '  "_EXTRA" FILLER CHAR(4000)' in lines
 
 
 def test_split_round_robin_skips_empty_groups():

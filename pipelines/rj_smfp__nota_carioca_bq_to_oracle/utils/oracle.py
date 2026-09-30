@@ -7,7 +7,7 @@ from pathlib import Path
 import oracledb
 
 from iplanrio.pipelines_utils.env import getenv_or_action
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import Column
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn, oracle_column
 from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 
@@ -165,13 +165,45 @@ def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
         )
 
 
-def column_definitions(columns: list[Column]) -> str:
+def column_definitions(columns: list[OracleColumn]) -> str:
     """Monta a lista de colunas do ``CREATE TABLE``.
 
     :param columns: Colunas da tabela.
     :returns: Fragmento SQL com uma coluna por linha.
     """
-    return ",\n".join(f'  "{column.name}" {column.oracle_type}' for column in columns)
+    return ",\n".join(f"  {column.definition}" for column in columns)
+
+
+def read_column_definitions(cursor: oracledb.Cursor, owner: str, table: str) -> list[OracleColumn]:
+    """Lê as colunas de uma tabela no dicionário do Oracle, na ordem da tabela.
+
+    :param cursor: Cursor de uma conexão aberta.
+    :param owner: Dono da tabela.
+    :param table: Nome da tabela.
+    :returns: Colunas da tabela, ou lista vazia se ela não existir ou não estiver
+        visível para a sessão.
+    """
+    cursor.execute(load_query(QUERIES_ANCHOR, "get_column_definitions"), {"owner": owner, "table_name": table})
+    names = [description[0].lower() for description in cursor.description]
+    return [oracle_column(dict(zip(names, row, strict=True))) for row in cursor.fetchall()]
+
+
+def fetch_template_columns(config: OracleConfig, template_schema: str, table: str) -> list[OracleColumn]:
+    """Lê a definição da tabela original, que serve de modelo para a de destino.
+
+    :param config: Configuração da conexão.
+    :param template_schema: Schema da tabela original.
+    :param table: Nome da tabela original (o mesmo da tabela no BigQuery).
+    :returns: Colunas da tabela original, na ordem dela.
+    :raises LookupError: Se a tabela original não existir ou não estiver visível.
+    """
+    with connect(config) as connection, connection.cursor() as cursor:
+        columns = read_column_definitions(cursor, template_schema, table)
+    if not columns:
+        raise LookupError(
+            f"Tabela original {template_schema}.{table} não encontrada; ela define os tipos da tabela de destino."
+        )
+    return columns
 
 
 def connect(config: OracleConfig) -> oracledb.Connection:
@@ -188,11 +220,12 @@ def connect(config: OracleConfig) -> oracledb.Connection:
     return oracledb.connect(user=config.user, password=config.password, dsn=config.dsn)
 
 
-def ensure_table(config: OracleConfig, table: str, columns: list[Column], source: str) -> None:
+def ensure_table(config: OracleConfig, table: str, columns: list[OracleColumn], source: str) -> None:
     """Cria a tabela de destino se ela não existir, ou confere a existente.
 
     Uma tabela existente só é aceita se tiver a marca da pipeline no comentário
-    e as mesmas colunas, na mesma ordem, do schema atual do BigQuery.
+    e exatamente as mesmas colunas da tabela original: nomes, ordem, tipos,
+    tamanhos e ``NOT NULL``.
 
     :param config: Configuração da conexão.
     :param table: Nome da tabela no Oracle.
@@ -200,7 +233,7 @@ def ensure_table(config: OracleConfig, table: str, columns: list[Column], source
     :param source: Tabela de origem, gravada no comentário.
     :raises PermissionError: Se a sessão não tiver os privilégios necessários ou
         se a tabela existir sem a marca da pipeline.
-    :raises ValueError: Se as colunas da tabela existente divergirem do schema.
+    :raises ValueError: Se as colunas da tabela existente divergirem da original.
     """
     binds = {"owner": config.schema, "table_name": table}
     with connect(config) as connection, connection.cursor() as cursor:
@@ -225,13 +258,21 @@ def ensure_table(config: OracleConfig, table: str, columns: list[Column], source
             return
 
         assert_managed_table(table, row[1])
-        cursor.execute(load_query(QUERIES_ANCHOR, "get_table_columns"), binds)
-        existing = [column_name for (column_name,) in cursor.fetchall()]
-        expected = [column.name for column in columns]
+        existing = [column.definition for column in read_column_definitions(cursor, config.schema, table)]
+        expected = [column.definition for column in columns]
         if existing != expected:
+            differences = [
+                f"{found or '(ausente)'} → {wanted or '(ausente)'}"
+                for found, wanted in zip(
+                    existing + [""] * (len(expected) - len(existing)),
+                    expected + [""] * (len(existing) - len(expected)),
+                    strict=True,
+                )
+                if found != wanted
+            ]
             raise ValueError(
-                f"As colunas de {config.schema}.{table} divergem do schema do BigQuery. "
-                f"Existentes: {existing}. Esperadas: {expected}."
+                f"A definição de {config.schema}.{table} diverge da tabela original: {differences}. "
+                f"Apague a tabela (DROP TABLE {config.schema}.{table} PURGE) para a pipeline recriá-la."
             )
         logger.info("Tabela %s.%s já existe e foi criada pela pipeline", config.schema, table)
 

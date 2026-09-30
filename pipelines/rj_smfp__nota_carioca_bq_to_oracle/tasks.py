@@ -5,7 +5,7 @@ from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, oracle, sqlldr
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import map_columns
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, build_load_plan
 
 
 @task
@@ -21,18 +21,27 @@ def get_table_schema_task(project: str, dataset_id: str, table_id: str) -> dict[
 
 
 @task(cache_policy=NO_CACHE)
+def plan_load_task(
+    infisical_secret_path: str, template_schema: str | None, table_id: str, table_schema: dict[str, object]
+) -> LoadPlan:
+    """Monta o plano de carga a partir da tabela original no Oracle e do schema do BigQuery."""
+    config = oracle.read_oracle_config(infisical_secret_path)
+    template = oracle.fetch_template_columns(
+        config=config,
+        template_schema=oracle.validate_identifier(template_schema or config.schema),
+        table=oracle.validate_identifier(table_id),
+    )
+    return build_load_plan(table_schema["fields"], template)
+
+
+@task(cache_policy=NO_CACHE)
 def ensure_oracle_table_task(
-    infisical_secret_path: str, project: str, dataset_id: str, table_id: str, table_schema: dict[str, object]
+    infisical_secret_path: str, project: str, dataset_id: str, table_id: str, plan: LoadPlan
 ) -> str:
     """Cria ou confere a tabela de destino e retorna o nome dela no Oracle."""
     config = oracle.read_oracle_config(infisical_secret_path)
     table = oracle.oracle_table_name(table_id)
-    oracle.ensure_table(
-        config=config,
-        table=table,
-        columns=map_columns(table_schema["fields"]),
-        source=f"{project}.{dataset_id}.{table_id}",
-    )
+    oracle.ensure_table(config=config, table=table, columns=plan.columns, source=f"{project}.{dataset_id}.{table_id}")
     return table
 
 
@@ -56,7 +65,7 @@ def truncate_oracle_table_task(infisical_secret_path: str, table: str) -> str:
 def load_into_oracle_task(  # noqa: PLR0913
     infisical_secret_path: str,
     table: str,
-    table_schema: dict[str, object],
+    plan: LoadPlan,
     bucket: str,
     blob_names: list[str],
     sessions: int,
@@ -64,7 +73,7 @@ def load_into_oracle_task(  # noqa: PLR0913
     """Carrega os arquivos exportados com SQL*Loader direct path e retorna as linhas carregadas."""
     job = sqlldr.LoadJob(
         table=table,
-        columns=map_columns(table_schema["fields"]),
+        fields=plan.fields,
         bucket=bucket,
         blob_names=blob_names,
         sessions=sessions,

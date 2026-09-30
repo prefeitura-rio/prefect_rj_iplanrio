@@ -12,7 +12,7 @@ from pathlib import Path
 
 from google.cloud import storage
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import Column
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoaderField
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import OracleConfig
 from prefect_rj_iplanrio.logging import get_logger
 
@@ -28,33 +28,33 @@ class LoadJob:
     """Carga de uma tabela a partir dos arquivos exportados pelo BigQuery.
 
     :param table: Tabela de destino no Oracle, já vazia.
-    :param columns: Colunas na ordem do CSV.
+    :param fields: Campos do CSV, na ordem do schema do BigQuery.
     :param bucket: Bucket dos arquivos.
     :param blob_names: Arquivos ``.csv.gz`` exportados.
     :param sessions: Número máximo de sessões simultâneas do SQL*Loader.
     """
 
     table: str
-    columns: list[Column]
+    fields: list[LoaderField]
     bucket: str
     blob_names: list[str]
     sessions: int
 
 
-def build_control_file(schema: str, table: str, columns: list[Column]) -> str:
+def build_control_file(schema: str, table: str, fields: list[LoaderField]) -> str:
     """Gera o control file do SQL*Loader para o CSV exportado pelo BigQuery.
 
     ``CSV WITH EMBEDDED`` aceita quebras de linha dentro de valores entre aspas.
     ``PRESERVE BLANKS`` mantém espaços em campos sem aspas, que o SQL*Loader
     removeria por padrão; ele precisa vir entre o método de carga e o
-    ``INTO TABLE``.
+    ``INTO TABLE``. Campos ``FILLER`` são lidos do CSV e descartados.
 
     :param schema: Schema da tabela de destino.
     :param table: Nome da tabela de destino.
-    :param columns: Colunas na ordem do CSV.
+    :param fields: Campos na ordem do CSV.
     :returns: Conteúdo do control file.
     """
-    fields = ",\n".join(f'  "{column.name}" {column.loader_field}' for column in columns)
+    field_lines = ",\n".join(f'  "{field.name}" {field.spec}' for field in fields)
     return (
         "LOAD DATA\n"
         "CHARACTERSET AL32UTF8\n"
@@ -63,7 +63,7 @@ def build_control_file(schema: str, table: str, columns: list[Column]) -> str:
         f'INTO TABLE "{schema}"."{table}"\n'
         "FIELDS CSV WITH EMBEDDED TERMINATED BY ',' OPTIONALLY ENCLOSED BY '\"'\n"
         "TRAILING NULLCOLS\n"
-        f"(\n{fields}\n)\n"
+        f"(\n{field_lines}\n)\n"
     )
 
 
@@ -121,7 +121,7 @@ def load_from_gcs(config: OracleConfig, job: LoadJob) -> int:
     with tempfile.TemporaryDirectory(prefix="sqlldr-") as workdir:
         work = Path(workdir)
         control = work / "load.ctl"
-        control.write_text(build_control_file(config.schema, job.table, job.columns), encoding="utf-8")
+        control.write_text(build_control_file(config.schema, job.table, job.fields), encoding="utf-8")
         parfile = work / "userid.par"
         parfile.touch(mode=0o600)
         parfile.write_text(f'userid={config.user}/"{config.password}"@//{config.dsn}\n', encoding="utf-8")

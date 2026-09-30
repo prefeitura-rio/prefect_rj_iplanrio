@@ -7,12 +7,14 @@ import oracledb
 from google.cloud import bigquery
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import get_table_schema
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import map_columns
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     MANAGED_TABLE_MARKER,
     OracleConfig,
     connect,
     oracle_table_name,
+    read_column_definitions,
+    validate_identifier,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import (
     compare_columns,
@@ -27,6 +29,25 @@ from prefect_rj_iplanrio.sql import load_query
 # load_query resolve queries/ no diretório pai do caminho recebido; a pasta utils/ aponta para a raiz da pipeline.
 QUERIES_ANCHOR = str(Path(__file__).parent)
 MEGABYTE = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class ValidationRequest:
+    """Tabela a validar e opções da validação.
+
+    :param project: Projeto do BigQuery.
+    :param dataset_id: Dataset de origem.
+    :param table_id: Tabela de origem; a tabela original no Oracle tem o mesmo nome.
+    :param template_schema: Schema da tabela original no Oracle.
+    :param compute_column_metrics: Se calcula as métricas por coluna, que leem a
+        tabela inteira nos dois bancos.
+    """
+
+    project: str
+    dataset_id: str
+    table_id: str
+    template_schema: str
+    compute_column_metrics: bool
 
 
 @dataclass
@@ -104,26 +125,28 @@ def fetch_bigquery_metrics(project: str, dataset_id: str, table_id: str, express
     return list(row.values())
 
 
-def validate_table(
-    config: OracleConfig, project: str, dataset_id: str, table_id: str, compute_column_metrics: bool
-) -> TableReport:
-    """Compara uma tabela do BigQuery com a tabela carregada no Oracle.
+def validate_table(config: OracleConfig, request: ValidationRequest) -> TableReport:  # noqa: PLR0915
+    """Compara a tabela carregada no Oracle com a tabela original e com o BigQuery.
 
     :param config: Configuração da conexão com o Oracle.
-    :param project: Projeto do BigQuery.
-    :param dataset_id: Dataset de origem.
-    :param table_id: Tabela de origem.
-    :param compute_column_metrics: Se calcula as métricas por coluna, que leem a
-        tabela inteira nos dois bancos.
+    :param request: Tabela a validar e opções.
     :returns: Relatório com as seções de texto e o total de divergências.
     """
-    table = oracle_table_name(table_id)
-    report = TableReport(source=f"{project}.{dataset_id}.{table_id}", target=f"{config.schema}.{table}")
-    table_schema = get_table_schema(project=project, dataset_id=dataset_id, table_id=table_id)
+    table = oracle_table_name(request.table_id)
+    template_name = f"{request.template_schema}.{validate_identifier(request.table_id)}"
+    report = TableReport(
+        source=f"{request.project}.{request.dataset_id}.{request.table_id}", target=f"{config.schema}.{table}"
+    )
+    table_schema = get_table_schema(project=request.project, dataset_id=request.dataset_id, table_id=request.table_id)
     bq_fields, bq_rows = table_schema["fields"], int(table_schema["num_rows"])
     binds = {"owner": config.schema, "table_name": table}
 
     with connect(config) as connection, connection.cursor() as cursor:
+        template = read_column_definitions(cursor, request.template_schema, validate_identifier(request.table_id))
+        if not template:
+            report.divergences = 1
+            report.sections.append(f"Tabela original {template_name} não encontrada no Oracle.")
+            return report
         cursor.execute(load_query(QUERIES_ANCHOR, "get_table_overview"), binds)
         overview = cursor.fetchone()
         if overview is None:
@@ -139,10 +162,7 @@ def validate_table(
         cursor.execute(load_query(QUERIES_ANCHOR, "get_table_constraint_count"), binds)
         (constraints,) = cursor.fetchone()
         size = fetch_table_size_mb(cursor, config.schema, table)
-
-        cursor.execute(load_query(QUERIES_ANCHOR, "get_table_columns_detail"), binds)
-        names = [description[0].lower() for description in cursor.description]
-        oracle_columns = [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
+        actual = read_column_definitions(cursor, config.schema, table)
 
         rows_status = "OK" if bq_rows == oracle_rows else "DIVERGE"
         managed = (comment or "").startswith(MANAGED_TABLE_MARKER)
@@ -153,6 +173,7 @@ def validate_table(
                 [
                     ("Origem (BigQuery)", report.source),
                     ("Destino (Oracle)", report.target),
+                    ("Tabela original (modelo)", template_name),
                     ("Linhas no BigQuery", f"{bq_rows:,}".replace(",", ".")),
                     ("Linhas no Oracle (COUNT)", f"{int(oracle_rows):,}".replace(",", ".")),
                     ("Contagem", rows_status),
@@ -171,31 +192,34 @@ def validate_table(
             )
         )
 
-        try:
-            expected_types = [column.oracle_type for column in map_columns(bq_fields)]
-        except (NotImplementedError, ValueError) as error:
-            report.divergences += 1
-            report.sections.append(f"Schema do BigQuery sem suporte na carga: {error}")
-            return report
-        column_rows = compare_columns(bq_fields, expected_types, oracle_columns)
+        bq_types = {field["name"].upper(): f"{field['type']} ({field['mode']})" for field in bq_fields}
+        column_rows = compare_columns(template, actual, bq_types)
         column_divergences = count_divergences(column_rows)
         report.divergences += column_divergences
         report.sections.append(
-            f"Colunas: {len(bq_fields)} no BigQuery, {len(oracle_columns)} no Oracle, "
-            f"{column_divergences} divergente(s)\n"
-            + format_text_table(
-                ["#", "Coluna", "BigQuery", "Oracle esperado", "Oracle atual", "Aceita nulo", "Status"], column_rows
-            )
+            f"Colunas: {len(template)} na original, {len(actual)} na carregada, {column_divergences} divergente(s)\n"
+            + format_text_table(["#", "Coluna", "BigQuery", "Original", "Carregada", "Status"], column_rows)
         )
 
-        if not compute_column_metrics:
+        try:
+            plan = build_load_plan(bq_fields, template)
+        except (NotImplementedError, ValueError) as error:
+            report.divergences += 1
+            report.sections.append(f"O schema do BigQuery não pode ser carregado na original: {error}")
+            return report
+        if plan.ignored:
+            report.sections.append(
+                f"Colunas do BigQuery que não existem na original e não são carregadas: {plan.ignored}"
+            )
+
+        if not request.compute_column_metrics:
             report.sections.append("Métricas por coluna: não calculadas (compute_column_metrics=false).")
             return report
         if column_divergences:
             report.sections.append("Métricas por coluna: não calculadas, porque as colunas divergem.")
             return report
 
-        specs = metric_specs(bq_fields)
+        specs = metric_specs(bq_fields, {column.name: column.data_type for column in template})
         cursor.execute(
             load_query(
                 QUERIES_ANCHOR,
@@ -207,7 +231,9 @@ def validate_table(
         )
         oracle_values = list(cursor.fetchone())
 
-    bq_values = fetch_bigquery_metrics(project, dataset_id, table_id, [spec.bigquery_expression for spec in specs])
+    bq_values = fetch_bigquery_metrics(
+        request.project, request.dataset_id, request.table_id, [spec.bigquery_expression for spec in specs]
+    )
     metric_rows = compare_metrics(specs, bq_values, oracle_values)
     metric_divergences = count_divergences(metric_rows)
     report.divergences += metric_divergences

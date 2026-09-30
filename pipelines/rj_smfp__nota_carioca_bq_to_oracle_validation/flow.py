@@ -20,6 +20,7 @@ def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
     infisical_secret_path: str = "/db-oracle-nota-fiscal",
     compute_column_metrics: bool = True,
     fail_on_divergence: bool = True,
+    template_schema: str | None = None,
 ) -> None:
     rename_current_flow_run_task(new_name=f"validacao-{dataset_id}")
     inject_bd_credentials_task(environment="prod")
@@ -32,6 +33,7 @@ def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
             project=project,
             dataset_id=dataset_id,
             table_id=table_id,
+            template_schema=template_schema,
             compute_column_metrics=compute_column_metrics,
         )
         for table_id in tables

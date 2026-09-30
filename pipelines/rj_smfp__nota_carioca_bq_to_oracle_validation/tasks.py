@@ -5,8 +5,12 @@ from prefect.cache_policies import NO_CACHE
 
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import list_tables
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import read_oracle_config
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.inspect import describe_session, validate_table
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import read_oracle_config, validate_identifier
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.inspect import (
+    ValidationRequest,
+    describe_session,
+    validate_table,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import format_text_table
 
 
@@ -23,17 +27,24 @@ def log_session_task(infisical_secret_path: str) -> None:
 
 
 @task(cache_policy=NO_CACHE)
-def validate_table_task(
-    infisical_secret_path: str, project: str, dataset_id: str, table_id: str, compute_column_metrics: bool
+def validate_table_task(  # noqa: PLR0913
+    infisical_secret_path: str,
+    project: str,
+    dataset_id: str,
+    table_id: str,
+    template_schema: str | None,
+    compute_column_metrics: bool,
 ) -> dict[str, object]:
     """Valida uma tabela, registra o relatório no log e retorna o resumo."""
-    report = validate_table(
-        config=read_oracle_config(infisical_secret_path),
+    config = read_oracle_config(infisical_secret_path)
+    request = ValidationRequest(
         project=project,
         dataset_id=dataset_id,
         table_id=table_id,
+        template_schema=validate_identifier(template_schema or config.schema),
         compute_column_metrics=compute_column_metrics,
     )
+    report = validate_table(config=config, request=request)
     status = "OK" if report.divergences == 0 else f"{report.divergences} DIVERGÊNCIA(S)"
     log(f"Validação de {report.target}: {status}")
     for section in report.sections:

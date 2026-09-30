@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn
+
 NUMERIC_KINDS = {"nao_nulos", "soma", "minimo_num", "maximo_num", "comprimento_total", "comprimento_maximo"}
 STATUS_OK = "OK"
 STATUS_DIVERGE = "DIVERGE"
@@ -34,25 +36,49 @@ class MetricSpec:
     oracle_expression: str
 
 
-def metric_specs(bq_fields: list[dict[str, str]]) -> list[MetricSpec]:
+def metric_specs(bq_fields: list[dict[str, str]], target_types: dict[str, str]) -> list[MetricSpec]:
     """Define as métricas por coluna que comparam o conteúdo das duas tabelas.
 
-    Strings vazias do BigQuery viram ``NULL`` no Oracle, então os não-nulos de
-    ``STRING`` desconsideram ``''`` no BigQuery. Nenhuma métrica expõe valores de
-    linhas de texto, apenas contagens e comprimentos.
+    Só entram as colunas carregadas (as que existem na tabela original). Strings
+    vazias do BigQuery viram ``NULL`` no Oracle, então os não-nulos de ``STRING``
+    desconsideram ``''`` no BigQuery. Datas guardadas como texto no BigQuery são
+    convertidas como na carga antes de comparar mínimo e máximo. Nenhuma métrica
+    expõe valores de linhas de texto, apenas contagens e comprimentos.
 
     :param bq_fields: Campos do schema do BigQuery (``name``, ``type``, ``mode``).
-    :returns: Métricas na ordem das colunas.
+    :param target_types: Tipo base no Oracle de cada coluna carregada, pelo nome
+        em maiúsculas.
+    :returns: Métricas na ordem das colunas do BigQuery.
     """
     specs = []
     for field in bq_fields:
-        bq, ora = f"`{field['name']}`", f'"{field["name"].upper()}"'
+        name = field["name"].upper()
+        if name not in target_types:
+            continue
+        bq, ora, target = f"`{field['name']}`", f'"{name}"', target_types[name]
         if field["type"] in ("NUMERIC", "INTEGER"):
             specs += [
                 MetricSpec(field["name"], "nao_nulos", f"COUNT({bq})", f"COUNT({ora})"),
                 MetricSpec(field["name"], "soma", f"CAST(SUM({bq}) AS STRING)", f"TO_CHAR(SUM({ora}))"),
                 MetricSpec(field["name"], "minimo_num", f"CAST(MIN({bq}) AS STRING)", f"TO_CHAR(MIN({ora}))"),
                 MetricSpec(field["name"], "maximo_num", f"CAST(MAX({bq}) AS STRING)", f"TO_CHAR(MAX({ora}))"),
+            ]
+        elif field["type"] == "STRING" and target == "DATE":
+            bq_date = f"SAFE_CAST(REPLACE(SUBSTR({bq}, 1, 19), 'T', ' ') AS DATETIME)"
+            specs += [
+                MetricSpec(field["name"], "nao_nulos", f"COUNTIF({bq} IS NOT NULL AND {bq} != '')", f"COUNT({ora})"),
+                MetricSpec(
+                    field["name"],
+                    "minimo",
+                    f"FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MIN({bq_date}))",
+                    f"TO_CHAR(MIN({ora}), 'YYYY-MM-DD HH24:MI:SS')",
+                ),
+                MetricSpec(
+                    field["name"],
+                    "maximo",
+                    f"FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MAX({bq_date}))",
+                    f"TO_CHAR(MAX({ora}), 'YYYY-MM-DD HH24:MI:SS')",
+                ),
             ]
         elif field["type"] == "STRING":
             specs += [
@@ -115,56 +141,48 @@ def compare_metrics(specs: list[MetricSpec], bq_values: list[object], oracle_val
     return rows
 
 
-def format_oracle_type(column: dict[str, object]) -> str:
-    """Monta o tipo de uma coluna no formato do ``CREATE TABLE``.
+def describe_column(column: OracleColumn | None) -> str:
+    """Descreve tipo e nulidade de uma coluna como no ``CREATE TABLE``.
 
-    :param column: Linha de ``all_tab_columns`` com ``data_type``, ``data_length``,
-        ``data_precision``, ``data_scale`` e ``char_used``.
-    :returns: Tipo, por exemplo ``VARCHAR2(4000 BYTE)`` ou ``NUMBER(19)``.
+    :param column: Coluna, ou ``None`` se ausente.
+    :returns: Por exemplo ``VARCHAR2(14 BYTE) NOT NULL``, ou ``(ausente)``.
     """
-    data_type = str(column["data_type"])
-    if data_type in ("VARCHAR2", "NVARCHAR2", "CHAR", "NCHAR"):
-        unit = "CHAR" if column["char_used"] == "C" else "BYTE"
-        return f"{data_type}({column['data_length']} {unit})"
-    if data_type == "NUMBER":
-        precision, scale = column["data_precision"], column["data_scale"]
-        if precision is None:
-            return "NUMBER"
-        return f"NUMBER({precision})" if not scale else f"NUMBER({precision},{scale})"
-    return data_type
+    if column is None:
+        return "(ausente)"
+    try:
+        ddl_type = column.ddl_type
+    except NotImplementedError:
+        ddl_type = column.data_type
+    return ddl_type + ("" if column.nullable else " NOT NULL")
 
 
 def compare_columns(
-    bq_fields: list[dict[str, str]], expected_types: list[str], oracle_columns: list[dict[str, object]]
+    template: list[OracleColumn], actual: list[OracleColumn], bq_types: dict[str, str]
 ) -> list[list[str]]:
-    """Compara, posição a posição, o schema do BigQuery com as colunas do Oracle.
+    """Compara, posição a posição, a tabela original com a tabela carregada.
 
-    A ordem importa porque o CSV exportado segue a ordem do schema do BigQuery.
+    Nome, ordem, tipo, tamanho e ``NOT NULL`` precisam ser iguais.
 
-    :param bq_fields: Campos do schema do BigQuery.
-    :param expected_types: Tipo esperado no Oracle para cada campo, na mesma ordem.
-    :param oracle_columns: Linhas de ``all_tab_columns`` ordenadas por ``column_id``.
-    :returns: Linhas ``[#, coluna, tipo BigQuery, Oracle esperado, Oracle atual,
-        aceita nulo, status]``.
+    :param template: Colunas da tabela original, na ordem dela.
+    :param actual: Colunas da tabela carregada, na ordem dela.
+    :param bq_types: Tipo no BigQuery de cada coluna, pelo nome em maiúsculas.
+    :returns: Linhas ``[#, coluna, tipo BigQuery, original, carregada, status]``.
     """
     rows = []
-    for index in range(max(len(bq_fields), len(oracle_columns))):
-        field = bq_fields[index] if index < len(bq_fields) else None
-        column = oracle_columns[index] if index < len(oracle_columns) else None
-        expected = expected_types[index] if field else "-"
-        actual = format_oracle_type(column) if column else "(ausente)"
-        name = field["name"].upper() if field else "(ausente)"
-        same_name = column is not None and field is not None and column["column_name"] == name
-        status = STATUS_OK if same_name and expected == actual else STATUS_DIVERGE
+    for index in range(max(len(template), len(actual))):
+        original = template[index] if index < len(template) else None
+        loaded = actual[index] if index < len(actual) else None
+        name = original.name if original else "(ausente)"
+        same_name = original is not None and loaded is not None and original.name == loaded.name
+        same_definition = same_name and describe_column(original) == describe_column(loaded)
         rows.append(
             [
                 str(index + 1),
-                name if same_name or column is None else f"{name} ≠ {column['column_name']}",
-                f"{field['type']} ({field['mode']})" if field else "-",
-                expected,
-                actual,
-                ("sim" if column["nullable"] == "Y" else "não") if column else "-",
-                status,
+                name if same_name or loaded is None else f"{name} ≠ {loaded.name}",
+                bq_types.get(name, "-"),
+                describe_column(original),
+                describe_column(loaded),
+                STATUS_OK if same_definition else STATUS_DIVERGE,
             ]
         )
     return rows
