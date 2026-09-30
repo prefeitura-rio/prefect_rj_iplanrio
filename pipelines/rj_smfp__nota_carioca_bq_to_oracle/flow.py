@@ -27,6 +27,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     sqlldr_sessions: int = 2,
     template_schema: str | None = None,
     excluded_template_columns: list[str] | None = None,
+    progress_interval_seconds: int = 30,
 ) -> None:
     rename_current_flow_run_task(new_name=dataset_id)
     inject_bd_credentials_task(environment="prod")
@@ -48,7 +49,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             table_id=table_id,
             plan=plan,
         )
-        blob_names = extract_table_to_gcs_task(
+        exported_files = extract_table_to_gcs_task(
             project=project, dataset_id=dataset_id, table_id=table_id, bucket=gcs_bucket
         )
         empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=oracle_table)
@@ -57,8 +58,9 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             table=empty_table,
             plan=plan,
             bucket=gcs_bucket,
-            blob_names=blob_names,
+            files=exported_files,
             sessions=sqlldr_sessions,
+            progress_interval_seconds=progress_interval_seconds,
         )
         validated_rows = validate_row_count_task(
             infisical_secret_path=infisical_secret_path,
@@ -66,4 +68,4 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             table_schema=table_schema,
             loaded_rows=loaded_rows,
         )
-        delete_gcs_files_task(project=project, bucket=gcs_bucket, blob_names=blob_names, wait_for=[validated_rows])
+        delete_gcs_files_task(project=project, bucket=gcs_bucket, files=exported_files, wait_for=[validated_rows])
