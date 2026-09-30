@@ -39,8 +39,6 @@ deployments:
       command: uv run --package rj_cor__precipitacao_alertario_sftp -- prefect flow-run execute
       secretName: prefect-jobs-secrets-staging
       image_pull_policy: Always
-      env:
-        PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_cor__precipitacao_alertario_sftp
 
 - name: rj-cor--precipitacao-alertario-sftp--prod
   tags:
@@ -57,8 +55,6 @@ deployments:
       command: uv run --package rj_cor__precipitacao_alertario_sftp -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
-      env:
-        PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_cor__precipitacao_alertario_sftp
   schedules:
   - interval: 300
     anchor_date: "2021-01-01T00:00:00"

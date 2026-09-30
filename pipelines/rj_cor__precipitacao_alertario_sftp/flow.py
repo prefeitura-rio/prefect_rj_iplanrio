@@ -1,4 +1,4 @@
-"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS.."""
+"""Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
 
 from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
@@ -14,7 +14,8 @@ from pipelines.rj_cor__precipitacao_alertario_sftp.tasks import (
     process_multiple_xml_files_task,
     download_xml_files_from_list_task,
 )
-logger = get_logger("pipelines.rj_cor__precipitacao_alertario_sftp.flow")
+
+logger = get_logger(__name__)
 
 
 @flow(log_prints=True, name="rj-cor-precipitacao-alertario-sftp")

@@ -12,7 +12,7 @@ from typing import Literal, get_args
 from zoneinfo import ZoneInfo
 
 from prefect import flow
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.carrega_modelo import (

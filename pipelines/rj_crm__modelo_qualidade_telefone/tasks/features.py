@@ -11,7 +11,7 @@ from typing import Literal
 
 import pandas as pd
 from google.cloud import bigquery, bigquery_storage_v1
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants

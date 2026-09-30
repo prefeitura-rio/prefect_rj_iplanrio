@@ -1795,7 +1795,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git?branch=new-logger-prefect#427eb0f4c26fb490af0d22677ff9687e5871b3c5" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git?branch=new-logger-prefect#f2fc23e3ad1e9b2c7374015f74cbaf31b1af8b4c" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },

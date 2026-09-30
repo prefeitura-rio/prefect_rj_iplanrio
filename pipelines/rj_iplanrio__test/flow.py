@@ -2,12 +2,11 @@
 
 Esta pipeline não consome dados reais. Ela simula a coleta de medições de
 sensores, aplica validação e cálculo estatístico, e publica o resultado nos
-logs do Prefect — servindo de referência de arquitetura para novas pipelines..
+logs do Prefect — servindo de referência de arquitetura para novas pipelines.
 """
 
-from prefect import flow
-
 from iplanrio.pipelines_utils.logging import get_logger
+from prefect import flow
 
 from pipelines.rj_iplanrio__test.tasks import (
     calcular_relatorio_task,
@@ -16,10 +15,7 @@ from pipelines.rj_iplanrio__test.tasks import (
     validar_medicoes_task,
 )
 
-# O Prefect carrega flow.py como __main__, então __name__ seria "__main__" e
-# os logs não seriam capturados pelo PREFECT_LOGGING_EXTRA_LOGGERS. O nome
-# explícito garante que este logger seja filho de pipelines.rj_iplanrio__test.
-logger = get_logger("pipelines.rj_iplanrio__test.flow")
+logger = get_logger(__name__)
 
 
 @flow(log_prints=True)

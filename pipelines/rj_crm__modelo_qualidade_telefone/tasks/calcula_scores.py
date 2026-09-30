@@ -17,7 +17,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES, FEATURES_FLOAT
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import AcumuladorCobertura
