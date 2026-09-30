@@ -28,9 +28,9 @@ def build_schema(fields: SchemaFields) -> list[bigquery.SchemaField]:
     :param fields: Nome, tipo e modo de cada campo.
     :returns: Campos compatíveis com a API BigQuery.
     """
-    # Normalize type names: INT64 -> INTEGER, FLOAT64 -> FLOAT
-    # (BigQuery API returns normalized names)
-    type_mapping = {"INT64": "INTEGER", "FLOAT64": "FLOAT"}
+    # Normalize type names to match what BigQuery API returns
+    # INT64 -> INTEGER, FLOAT64 -> FLOAT, BOOL -> BOOLEAN
+    type_mapping = {"INT64": "INTEGER", "FLOAT64": "FLOAT", "BOOL": "BOOLEAN"}
     return [
         bigquery.SchemaField(name, type_mapping.get(field_type, field_type), mode=mode)
         for name, field_type, mode in fields
