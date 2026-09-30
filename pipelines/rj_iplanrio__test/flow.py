@@ -2,7 +2,7 @@
 
 Esta pipeline não consome dados reais. Ela simula a coleta de medições de
 sensores, aplica validação e cálculo estatístico, e publica o resultado nos
-logs do Prefect — servindo de referência de arquitetura para novas pipelines...
+logs do Prefect — servindo de referência de arquitetura para novas pipelines....
 """
 
 from iplanrio.pipelines_utils.logging import get_logger

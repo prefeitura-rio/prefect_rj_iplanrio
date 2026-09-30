@@ -4,7 +4,7 @@ Estima a probabilidade de cada telefone ser HighDelivery no WhatsApp (LightGBM) 
 por mês, retreina o modelo. Um único flow, dois modos — ``score`` roda a cada 3 dias e só
 executa o modelo já treinado; ``retreino`` roda uma vez por mês e treina, avalia contra o
 modelo em produção/heurística/aleatório e (se passar no gate) promove uma versão nova.
-Ver TODO do projeto pra detalhe de cada parte...
+Ver TODO do projeto pra detalhe de cada parte....
 """
 
 from datetime import datetime
