@@ -81,6 +81,8 @@ members = [
     "rj-smfp-atividade-economica",
     "rj-smfp-dump-db-ergon",
     "rj-smfp-iptu-inadimplentes",
+    "rj-smfp-nota-carioca-bq-to-oracle",
+    "rj-smfp-nota-carioca-bq-to-oracle-validation",
     "rj-smfp-porte-empresa",
     "rj-smfp-sigma",
     "rj-smi-siscob",
@@ -5435,6 +5437,44 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-smfp-nota-carioca-bq-to-oracle"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_smfp__nota_carioca_bq_to_oracle" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "oracledb" },
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.41.0" },
+    { name = "google-cloud-storage", specifier = ">=2.10.0" },
+    { name = "oracledb", specifier = ">=4.0.1" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
+
+[[package]]
+name = "rj-smfp-nota-carioca-bq-to-oracle-validation"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_smfp__nota_carioca_bq_to_oracle_validation" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "oracledb" },
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.41.0" },
+    { name = "google-cloud-storage", specifier = ">=2.10.0" },
+    { name = "oracledb", specifier = ">=4.0.1" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+]
 
 [[package]]
 name = "rj-smfp-porte-empresa"
