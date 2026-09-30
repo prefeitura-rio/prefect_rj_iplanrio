@@ -18,7 +18,20 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     secret_env_key,
     validate_identifier,
 )
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import build_control_file, split_round_robin
+import io
+
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import (
+    CountingReader,
+    ProgressSnapshot,
+    SessionProgress,
+    build_control_file,
+    format_count,
+    format_duration,
+    format_progress,
+    format_size,
+    progress_percent,
+    split_round_robin,
+)
 
 
 def field(name: str, type_: str, mode: str = "NULLABLE") -> dict[str, str]:
@@ -202,3 +215,41 @@ def test_split_round_robin_skips_empty_groups():
     assert split_round_robin(["a", "b", "c"], 2) == [["a", "c"], ["b"]]
     assert split_round_robin(["a"], 4) == [["a"]]
     assert split_round_robin([], 2) == []
+
+
+GB = 1024**3
+
+
+def test_format_helpers():
+    assert format_count(67987860) == "67.987.860"
+    assert format_size(int(1.5 * GB)) == "1,50 GB"
+    assert format_duration(250) == "4m10s"
+    assert format_duration(3725) == "1h02m05s"
+
+
+def test_progress_percent_and_message_with_estimate():
+    snapshot = ProgressSnapshot(files_done=30, files_total=120, bytes_done=GB, bytes_total=4 * GB, elapsed_seconds=300)
+    assert progress_percent(snapshot) == 25.0
+    assert format_progress("BQLOAD_X", snapshot) == (
+        "Carga de BQLOAD_X: 30/120 arquivos, 1,00 GB de 4,00 GB (25,0%), 5m00s decorridos, término estimado em ~15m00s"
+    )
+
+
+def test_progress_message_before_start_and_after_all_files_sent():
+    start = ProgressSnapshot(files_done=0, files_total=10, bytes_done=0, bytes_total=GB, elapsed_seconds=1)
+    assert format_progress("T", start).endswith("(0,0%), 0m01s decorridos, calculando estimativa")
+    done = ProgressSnapshot(files_done=10, files_total=10, bytes_done=GB, bytes_total=GB, elapsed_seconds=60)
+    assert progress_percent(done) == 100.0
+    assert format_progress("T", done).endswith("aguardando o SQL*Loader concluir")
+    empty = ProgressSnapshot(files_done=0, files_total=0, bytes_done=0, bytes_total=0, elapsed_seconds=0)
+    assert progress_percent(empty) == 100.0
+
+
+def test_counting_reader_tracks_bytes_read():
+    progress = SessionProgress()
+    reader = CountingReader(io.BytesIO(b"x" * 10), progress)
+    assert reader.read(4) == b"xxxx"
+    assert reader.read() == b"xxxxxx"
+    assert reader.read() == b""
+    progress.add_file()
+    assert (progress.bytes_done, progress.files_done) == (10, 1)
