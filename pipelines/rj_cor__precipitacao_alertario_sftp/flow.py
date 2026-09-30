@@ -14,8 +14,6 @@ from pipelines.rj_cor__precipitacao_alertario_sftp.tasks import (
     process_multiple_xml_files_task,
     download_xml_files_from_list_task,
 )
-import os
-from dotenv import load_dotenv
 logger = get_logger("pipelines.rj_cor__precipitacao_alertario_sftp.flow")
 
 
@@ -69,10 +67,10 @@ def rj_cor__precipitacao_alertario_sftp(
     """
     # Setup
     rename_current_flow_run_task(new_name="precipitacao-alertario-sftp")
-    # inject_bd_credentials_task(environment="prod")
-    load_dotenv()
-    bucket_name = os.getenv("bucket_nimbus")
-    prefix = os.getenv("prefix")
+    inject_bd_credentials_task(environment="prod")
+
+    bucket_name = getenv_or_action("bucket-nimbus")
+    prefix = getenv_or_action("prefix")
 
     logger.info("Iniciando coleta de dados de precipitacao AlertaRio via SFTP")
 
