@@ -4,6 +4,7 @@ from prefect import task
 from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 
+from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, oracle, sqlldr
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, build_load_plan
 
@@ -41,7 +42,10 @@ def ensure_oracle_table_task(
     """Cria ou confere a tabela de destino e retorna o nome dela no Oracle."""
     config = oracle.read_oracle_config(infisical_secret_path)
     table = oracle.oracle_table_name(table_id)
-    oracle.ensure_table(config=config, table=table, columns=plan.columns, source=f"{project}.{dataset_id}.{table_id}")
+    action = oracle.ensure_table(
+        config=config, table=table, columns=plan.columns, source=f"{project}.{dataset_id}.{table_id}"
+    )
+    log(action)
     return table
 
 

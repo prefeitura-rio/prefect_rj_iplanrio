@@ -220,61 +220,76 @@ def connect(config: OracleConfig) -> oracledb.Connection:
     return oracledb.connect(user=config.user, password=config.password, dsn=config.dsn)
 
 
-def ensure_table(config: OracleConfig, table: str, columns: list[OracleColumn], source: str) -> None:
-    """Cria a tabela de destino se ela não existir, ou confere a existente.
+def definition_differences(existing: list[str], expected: list[str]) -> list[str]:
+    """Lista, posição a posição, as colunas cuja definição difere da original.
 
-    Uma tabela existente só é aceita se tiver a marca da pipeline no comentário
-    e exatamente as mesmas colunas da tabela original: nomes, ordem, tipos,
-    tamanhos e ``NOT NULL``.
+    :param existing: Definições das colunas da tabela existente.
+    :param expected: Definições das colunas da tabela original.
+    :returns: Diferenças no formato ``atual → esperada``; vazia se forem iguais.
+    """
+    size = max(len(existing), len(expected))
+    padded_existing = existing + [""] * (size - len(existing))
+    padded_expected = expected + [""] * (size - len(expected))
+    return [
+        f"{found or '(ausente)'} → {wanted or '(ausente)'}"
+        for found, wanted in zip(padded_existing, padded_expected, strict=True)
+        if found != wanted
+    ]
+
+
+def create_managed_table(
+    cursor: oracledb.Cursor, schema: str, table: str, columns: list[OracleColumn], source: str
+) -> None:
+    """Cria a tabela de destino e grava a marca da pipeline no comentário.
+
+    :param cursor: Cursor de uma conexão aberta.
+    :param schema: Schema da tabela.
+    :param table: Nome da tabela.
+    :param columns: Colunas, na ordem da tabela original.
+    :param source: Tabela de origem, gravada no comentário.
+    """
+    cursor.execute(
+        load_query(QUERIES_ANCHOR, "create_table", schema=schema, table=table, columns=column_definitions(columns))
+    )
+    comment = f"{MANAGED_TABLE_MARKER}: carga a partir de {source}".replace("'", "''")
+    cursor.execute(load_query(QUERIES_ANCHOR, "comment_on_table", schema=schema, table=table, comment=comment))
+
+
+def ensure_table(config: OracleConfig, table: str, columns: list[OracleColumn], source: str) -> str:
+    """Deixa a tabela de destino com a mesma definição da tabela original.
+
+    Cria a tabela se ela não existir. Se existir e tiver sido criada pela
+    pipeline (prefixo e marca no comentário), é reaproveitada quando a definição
+    é igual à original, ou apagada e recriada quando diverge. Tabelas sem a
+    marca da pipeline nunca são alteradas.
 
     :param config: Configuração da conexão.
     :param table: Nome da tabela no Oracle.
-    :param columns: Colunas esperadas.
+    :param columns: Colunas da tabela original.
     :param source: Tabela de origem, gravada no comentário.
+    :returns: O que foi feito, em texto, para registrar no log.
     :raises PermissionError: Se a sessão não tiver os privilégios necessários ou
         se a tabela existir sem a marca da pipeline.
-    :raises ValueError: Se as colunas da tabela existente divergirem da original.
     """
+    target = f"{config.schema}.{table}"
     binds = {"owner": config.schema, "table_name": table}
     with connect(config) as connection, connection.cursor() as cursor:
         assert_privileges(cursor, config.schema)
         cursor.execute(load_query(QUERIES_ANCHOR, "get_table_comment"), binds)
         row = cursor.fetchone()
         if row is None:
-            cursor.execute(
-                load_query(
-                    QUERIES_ANCHOR,
-                    "create_table",
-                    schema=config.schema,
-                    table=table,
-                    columns=column_definitions(columns),
-                )
-            )
-            comment = f"{MANAGED_TABLE_MARKER}: carga a partir de {source}".replace("'", "''")
-            cursor.execute(
-                load_query(QUERIES_ANCHOR, "comment_on_table", schema=config.schema, table=table, comment=comment)
-            )
-            logger.info("Tabela %s.%s criada com %d colunas", config.schema, table, len(columns))
-            return
+            create_managed_table(cursor, config.schema, table, columns, source)
+            return f"Tabela {target} criada com a definição da original ({len(columns)} colunas)."
 
         assert_managed_table(table, row[1])
         existing = [column.definition for column in read_column_definitions(cursor, config.schema, table)]
-        expected = [column.definition for column in columns]
-        if existing != expected:
-            differences = [
-                f"{found or '(ausente)'} → {wanted or '(ausente)'}"
-                for found, wanted in zip(
-                    existing + [""] * (len(expected) - len(existing)),
-                    expected + [""] * (len(existing) - len(expected)),
-                    strict=True,
-                )
-                if found != wanted
-            ]
-            raise ValueError(
-                f"A definição de {config.schema}.{table} diverge da tabela original: {differences}. "
-                f"Apague a tabela (DROP TABLE {config.schema}.{table} PURGE) para a pipeline recriá-la."
-            )
-        logger.info("Tabela %s.%s já existe e foi criada pela pipeline", config.schema, table)
+        differences = definition_differences(existing, [column.definition for column in columns])
+        if not differences:
+            return f"Tabela {target} já existe com a definição da original e será recarregada."
+
+        cursor.execute(load_query(QUERIES_ANCHOR, "drop_table", schema=config.schema, table=table))
+        create_managed_table(cursor, config.schema, table, columns, source)
+        return f"Tabela {target} divergia da original e foi apagada e recriada. Diferenças: {differences}"
 
 
 def truncate_table(config: OracleConfig, table: str) -> None:

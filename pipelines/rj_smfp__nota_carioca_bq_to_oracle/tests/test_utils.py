@@ -12,6 +12,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     MANAGED_TABLE_MARKER,
     assert_managed_table,
     column_definitions,
+    definition_differences,
     missing_privileges,
     oracle_table_name,
     secret_env_key,
@@ -148,6 +149,16 @@ def test_missing_privileges_lists_what_other_users_lack():
 
 def test_secret_env_key_follows_iplanrio_convention():
     assert secret_env_key("/db-oracle-nota-fiscal", "DB_HOST") == "DB_ORACLE_NOTA_FISCAL__DB_HOST"
+
+
+def test_definition_differences_lists_changed_missing_and_extra_columns():
+    expected = ['"A" DATE NOT NULL', '"B" VARCHAR2(14 BYTE) NOT NULL']
+    assert definition_differences(expected, expected) == []
+    assert definition_differences(['"A" VARCHAR2(4000 BYTE)'], expected) == [
+        '"A" VARCHAR2(4000 BYTE) → "A" DATE NOT NULL',
+        '(ausente) → "B" VARCHAR2(14 BYTE) NOT NULL',
+    ]
+    assert definition_differences([*expected, '"C" NUMBER'], expected) == ['"C" NUMBER → (ausente)']
 
 
 def test_column_definitions_keep_types_and_not_null():
