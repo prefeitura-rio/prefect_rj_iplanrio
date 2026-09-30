@@ -15,6 +15,14 @@ logger = get_logger(__name__)
 
 TABLE_PREFIX = "BQLOAD_"
 MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
+CROSS_SCHEMA_PRIVILEGES = (
+    "COMMENT ANY TABLE",
+    "CREATE ANY TABLE",
+    "DROP ANY TABLE",
+    "INSERT ANY TABLE",
+    "LOCK ANY TABLE",
+    "SELECT ANY TABLE",
+)
 IDENTIFIER_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 # load_query resolve queries/ no diretório pai do caminho recebido; a pasta utils/ aponta para a raiz da pipeline.
 QUERIES_ANCHOR = str(Path(__file__).parent)
@@ -118,6 +126,45 @@ def assert_managed_table(table: str, comment: str | None) -> None:
         raise PermissionError(f"{table} já existe e não foi criada por {MANAGED_TABLE_MARKER}; nada foi alterado.")
 
 
+def missing_privileges(session_user: str, schema: str, privileges: set[str]) -> list[str]:
+    """Lista os privilégios que faltam para operar tabelas em outro schema.
+
+    O dono do schema não precisa de privilégios ``ANY``. Os demais usuários
+    precisam de todos: criar e comentar a tabela, esvaziá-la com ``TRUNCATE``,
+    travá-la e inserir no direct path do SQL*Loader e contar as linhas.
+
+    :param session_user: Usuário efetivo da sessão (o alvo, em conexões proxy).
+    :param schema: Schema onde as tabelas ficam.
+    :param privileges: Privilégios de sistema da sessão.
+    :returns: Privilégios ausentes, em ordem alfabética.
+    """
+    if session_user == schema:
+        return []
+    return sorted(set(CROSS_SCHEMA_PRIVILEGES) - privileges)
+
+
+def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
+    """Falha antes de qualquer alteração se a sessão não puder operar o schema.
+
+    Sem essa checagem, o ``CREATE TABLE`` podia funcionar e o ``COMMENT`` falhar,
+    deixando uma tabela sem a marca da pipeline que bloqueia os runs seguintes.
+
+    :param cursor: Cursor de uma conexão aberta.
+    :param schema: Schema onde as tabelas ficam.
+    :raises PermissionError: Se faltar algum privilégio.
+    """
+    cursor.execute(load_query(QUERIES_ANCHOR, "get_session_privileges"))
+    rows = cursor.fetchall()
+    session_user = rows[0][0] if rows else ""
+    missing = missing_privileges(session_user, schema, {privilege for _, privilege in rows})
+    if missing:
+        raise PermissionError(
+            f"O usuário {session_user} não é dono de {schema} e não tem {missing}. Nada foi alterado. "
+            f"Conecte como {schema} via proxy (DB_USERNAME=<usuario>[{schema}], após "
+            f'ALTER USER {schema} GRANT CONNECT THROUGH "<usuario>") ou peça esses privilégios à DBA.'
+        )
+
+
 def column_definitions(columns: list[Column]) -> str:
     """Monta a lista de colunas do ``CREATE TABLE``.
 
@@ -151,11 +198,13 @@ def ensure_table(config: OracleConfig, table: str, columns: list[Column], source
     :param table: Nome da tabela no Oracle.
     :param columns: Colunas esperadas.
     :param source: Tabela de origem, gravada no comentário.
-    :raises PermissionError: Se a tabela existir sem a marca da pipeline.
+    :raises PermissionError: Se a sessão não tiver os privilégios necessários ou
+        se a tabela existir sem a marca da pipeline.
     :raises ValueError: Se as colunas da tabela existente divergirem do schema.
     """
     binds = {"owner": config.schema, "table_name": table}
     with connect(config) as connection, connection.cursor() as cursor:
+        assert_privileges(cursor, config.schema)
         cursor.execute(load_query(QUERIES_ANCHOR, "get_table_comment"), binds)
         row = cursor.fetchone()
         if row is None:

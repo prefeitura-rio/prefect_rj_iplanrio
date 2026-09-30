@@ -2,9 +2,11 @@ import pytest
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import Column, map_columns
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
+    CROSS_SCHEMA_PRIVILEGES,
     MANAGED_TABLE_MARKER,
     assert_managed_table,
     column_definitions,
+    missing_privileges,
     oracle_table_name,
     secret_env_key,
     validate_identifier,
@@ -69,6 +71,16 @@ def test_assert_managed_table_accepts_only_marked_prefixed_tables():
         assert_managed_table("BQLOAD_X", "tabela do sistema legado")
     with pytest.raises(PermissionError, match="não começa"):
         assert_managed_table("NOTAS", f"{MANAGED_TABLE_MARKER}: carga")
+
+
+def test_missing_privileges_skips_schema_owner():
+    assert missing_privileges("DFEN", "DFEN", set()) == []
+
+
+def test_missing_privileges_lists_what_other_users_lack():
+    current = {"CREATE ANY TABLE", "DROP ANY TABLE", "INSERT ANY TABLE", "SELECT ANY TABLE", "UNLIMITED TABLESPACE"}
+    assert missing_privileges("26234793", "DFEN", current) == ["COMMENT ANY TABLE", "LOCK ANY TABLE"]
+    assert missing_privileges("26234793", "DFEN", set(CROSS_SCHEMA_PRIVILEGES)) == []
 
 
 def test_secret_env_key_follows_iplanrio_convention():
