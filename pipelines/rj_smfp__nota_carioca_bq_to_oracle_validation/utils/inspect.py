@@ -39,6 +39,8 @@ class ValidationRequest:
     :param dataset_id: Dataset de origem.
     :param table_id: Tabela de origem; a tabela original no Oracle tem o mesmo nome.
     :param template_schema: Schema da tabela original no Oracle.
+    :param excluded_columns: Colunas da original que a carga não cria (além das
+        ``ROWID`` ausentes no BigQuery, excluídas automaticamente).
     :param compute_column_metrics: Se calcula as métricas por coluna, que leem a
         tabela inteira nos dois bancos.
     """
@@ -47,6 +49,7 @@ class ValidationRequest:
     dataset_id: str
     table_id: str
     template_schema: str
+    excluded_columns: tuple[str, ...]
     compute_column_metrics: bool
 
 
@@ -193,24 +196,31 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
         )
 
         bq_types = {field["name"].upper(): f"{field['type']} ({field['mode']})" for field in bq_fields}
-        column_rows = compare_columns(template, actual, bq_types)
-        column_divergences = count_divergences(column_rows)
-        report.divergences += column_divergences
-        report.sections.append(
-            f"Colunas: {len(template)} na original, {len(actual)} na carregada, {column_divergences} divergente(s)\n"
-            + format_text_table(["#", "Coluna", "BigQuery", "Original", "Carregada", "Status"], column_rows)
-        )
-
         try:
-            plan = build_load_plan(bq_fields, template)
+            plan = build_load_plan(bq_fields, template, list(request.excluded_columns))
         except (NotImplementedError, ValueError) as error:
             report.divergences += 1
             report.sections.append(f"O schema do BigQuery não pode ser carregado na original: {error}")
             return report
+        if plan.excluded:
+            excluded_types = {column.name: column.data_type for column in template}
+            report.sections.append(
+                "Colunas da original que não são criadas na carregada (ROWID ou excluídas por parâmetro): "
+                + ", ".join(f"{name} ({excluded_types[name]})" for name in plan.excluded)
+            )
         if plan.ignored:
             report.sections.append(
                 f"Colunas do BigQuery que não existem na original e não são carregadas: {plan.ignored}"
             )
+
+        column_rows = compare_columns(plan.columns, actual, bq_types)
+        column_divergences = count_divergences(column_rows)
+        report.divergences += column_divergences
+        report.sections.append(
+            f"Colunas: {len(plan.columns)} esperadas (original sem as excluídas), {len(actual)} na carregada, "
+            f"{column_divergences} divergente(s)\n"
+            + format_text_table(["#", "Coluna", "BigQuery", "Original", "Carregada", "Status"], column_rows)
+        )
 
         if not request.compute_column_metrics:
             report.sections.append("Métricas por coluna: não calculadas (compute_column_metrics=false).")
@@ -219,7 +229,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
             report.sections.append("Métricas por coluna: não calculadas, porque as colunas divergem.")
             return report
 
-        specs = metric_specs(bq_fields, {column.name: column.data_type for column in template})
+        specs = metric_specs(bq_fields, {column.name: column.data_type for column in plan.columns})
         cursor.execute(
             load_query(
                 QUERIES_ANCHOR,

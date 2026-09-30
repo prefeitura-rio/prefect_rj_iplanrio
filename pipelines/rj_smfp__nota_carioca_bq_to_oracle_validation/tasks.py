@@ -33,6 +33,7 @@ def validate_table_task(  # noqa: PLR0913
     dataset_id: str,
     table_id: str,
     template_schema: str | None,
+    excluded_template_columns: list[str] | None,
     compute_column_metrics: bool,
 ) -> dict[str, object]:
     """Valida uma tabela, registra o relatório no log e retorna o resumo."""
@@ -42,6 +43,7 @@ def validate_table_task(  # noqa: PLR0913
         dataset_id=dataset_id,
         table_id=table_id,
         template_schema=validate_identifier(template_schema or config.schema),
+        excluded_columns=tuple(excluded_template_columns or ()),
         compute_column_metrics=compute_column_metrics,
     )
     report = validate_table(config=config, request=request)

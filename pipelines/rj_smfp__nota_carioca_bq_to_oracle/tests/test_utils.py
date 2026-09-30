@@ -96,6 +96,26 @@ def test_build_load_plan_requires_every_original_column():
         build_load_plan([field("cpf_cnpj_responsavel", "STRING")], TEMPLATE)
 
 
+def test_build_load_plan_excludes_rowid_columns_missing_in_bigquery():
+    template = [*TEMPLATE[:2], ora("NN_ROWID", "ROWID", 10), ora("PC_ROWID", "UROWID", 4000)]
+    bq = [field("cpf_cnpj_responsavel", "STRING"), field("data_competencia_municipio", "STRING")]
+    plan = build_load_plan(bq, template)
+    assert plan.excluded == ["NN_ROWID", "PC_ROWID"]
+    assert [column.name for column in plan.columns] == ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"]
+
+
+def test_build_load_plan_excludes_requested_columns_and_ignores_them_if_in_bigquery():
+    template = [*TEMPLATE[:2], ora("DPS_ROWID", "VARCHAR2", 18, "B")]
+    bq = [field("cpf_cnpj_responsavel", "STRING"), field("data_competencia_municipio", "STRING")]
+    with pytest.raises(ValueError, match="excluded_template_columns"):
+        build_load_plan(bq, template)
+    plan = build_load_plan(bq, template, ["dps_rowid"])
+    assert plan.excluded == ["DPS_ROWID"]
+    assert [column.name for column in plan.columns] == ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"]
+    with_extra = build_load_plan([*bq, field("dps_rowid", "STRING")], template, ["DPS_ROWID"])
+    assert with_extra.ignored == ["DPS_ROWID"]
+
+
 @pytest.mark.parametrize(
     ("column", "bq_type"),
     [

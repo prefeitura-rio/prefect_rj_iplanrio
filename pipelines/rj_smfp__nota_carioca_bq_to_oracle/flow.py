@@ -26,6 +26,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     infisical_secret_path: str = "/db-oracle-nota-fiscal",
     sqlldr_sessions: int = 2,
     template_schema: str | None = None,
+    excluded_template_columns: list[str] | None = None,
 ) -> None:
     rename_current_flow_run_task(new_name=dataset_id)
     inject_bd_credentials_task(environment="prod")
@@ -36,6 +37,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         plan = plan_load_task(
             infisical_secret_path=infisical_secret_path,
             template_schema=template_schema,
+            excluded_template_columns=excluded_template_columns,
             table_id=table_id,
             table_schema=table_schema,
         )

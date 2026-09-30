@@ -23,7 +23,11 @@ def get_table_schema_task(project: str, dataset_id: str, table_id: str) -> dict[
 
 @task(cache_policy=NO_CACHE)
 def plan_load_task(
-    infisical_secret_path: str, template_schema: str | None, table_id: str, table_schema: dict[str, object]
+    infisical_secret_path: str,
+    template_schema: str | None,
+    excluded_template_columns: list[str] | None,
+    table_id: str,
+    table_schema: dict[str, object],
 ) -> LoadPlan:
     """Monta o plano de carga a partir da tabela original no Oracle e do schema do BigQuery."""
     config = oracle.read_oracle_config(infisical_secret_path)
@@ -32,7 +36,12 @@ def plan_load_task(
         template_schema=oracle.validate_identifier(template_schema or config.schema),
         table=oracle.validate_identifier(table_id),
     )
-    return build_load_plan(table_schema["fields"], template)
+    plan = build_load_plan(table_schema["fields"], template, excluded_template_columns)
+    if plan.excluded:
+        log(f"{table_id}: colunas da original que não são criadas na BQLOAD_ (ROWID ou excluídas): {plan.excluded}")
+    if plan.ignored:
+        log(f"{table_id}: colunas do BigQuery que não existem na original e são ignoradas: {plan.ignored}")
+    return plan
 
 
 @task(cache_policy=NO_CACHE)
