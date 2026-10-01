@@ -1,14 +1,18 @@
 from decimal import Decimal
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import IndexDefinition, Partitioning, TablePartition
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import (
     compare_columns,
+    compare_indexes,
     compare_metrics,
+    compare_partitions,
     count_divergences,
     describe_column,
     format_text_table,
     metric_specs,
     normalize_metric,
+    short_bound,
 )
 
 
@@ -112,3 +116,64 @@ def test_compare_metrics_reports_divergences_with_readable_labels():
 def test_format_text_table_aligns_columns():
     text = format_text_table(["A", "Coluna"], [["1", "x"], ["22", "yy"]])
     assert text.splitlines() == ["A  | Coluna", "---+-------", "1  | x", "22 | yy"]
+
+
+JAN = "TO_DATE(' 2026-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN')"
+FEB = "TO_DATE(' 2026-02-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN')"
+MONTHLY = Partitioning(
+    "RANGE",
+    ("DATA_COMPETENCIA_MUNICIPIO",),
+    None,
+    (TablePartition("P_INITIAL", JAN, "DFEN_BIG_DATA"), TablePartition("P_202601", FEB, "DFEN_BIG_DATA")),
+)
+
+
+def test_short_bound_shows_only_the_date():
+    assert short_bound(JAN) == "< 2026-01-01 00:00:00"
+    assert short_bound("MAXVALUE") == "MAXVALUE"
+
+
+def test_compare_partitions_accepts_identical_copy():
+    rows = compare_partitions(MONTHLY, MONTHLY)
+    assert [row[-1] for row in rows] == ["OK", "OK", "OK"]
+    assert rows[1] == [
+        "1",
+        "P_INITIAL",
+        "< 2026-01-01 00:00:00 em DFEN_BIG_DATA",
+        "< 2026-01-01 00:00:00 em DFEN_BIG_DATA",
+        "OK",
+    ]
+
+
+def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions():
+    rows = compare_partitions(MONTHLY, None)
+    assert rows[0] == ["-", "(particionamento)", "RANGE (DATA_COMPETENCIA_MUNICIPIO)", "sem partição", "DIVERGE"]
+    assert count_divergences(rows) == 3
+    other = Partitioning(
+        "RANGE", ("DATA_COMPETENCIA_MUNICIPIO",), None, (MONTHLY.partitions[0], TablePartition("P_X", FEB, "USERS"))
+    )
+    rows = compare_partitions(MONTHLY, other)
+    assert [row[-1] for row in rows] == ["OK", "OK", "DIVERGE", "DIVERGE"]
+    assert rows[2][3] == "(ausente)"
+    assert rows[3][:3] == ["+", "P_X", "(ausente)"]
+    assert compare_partitions(None, None) == [["-", "(particionamento)", "sem partição", "sem partição", "OK"]]
+
+
+def index(name, degree="1", status="N/A", columns=("A", "B")):
+    return IndexDefinition(name, "NORMAL", False, columns, "LOCAL", "DFEN_BIG_IDX", degree=degree, status=status)
+
+
+def test_compare_indexes_requires_same_definition_usable_and_without_parallel_degree():
+    expected = [index("BQLOAD_IX1"), index("BQLOAD_IX2"), index("BQLOAD_IX3"), index("BQLOAD_IX4")]
+    actual = [
+        index("BQLOAD_IX1"),
+        index("BQLOAD_IX2", degree="4"),
+        index("BQLOAD_IX3", status="UNUSABLE"),
+        index("BQLOAD_EXTRA"),
+    ]
+    rows = compare_indexes(expected, actual)
+    assert [row[-1] for row in rows] == ["OK", "DIVERGE", "DIVERGE", "DIVERGE", "DIVERGE"]
+    assert rows[0][1] == "LOCAL NORMAL (A, B) em DFEN_BIG_IDX"
+    assert rows[3][2] == "(ausente)"
+    assert rows[4][:2] == ["BQLOAD_EXTRA", "(não esperado)"]
+    assert compare_indexes([index("BQLOAD_IX1")], [index("BQLOAD_IX1", columns=("B", "A"))])[0][-1] == "DIVERGE"
