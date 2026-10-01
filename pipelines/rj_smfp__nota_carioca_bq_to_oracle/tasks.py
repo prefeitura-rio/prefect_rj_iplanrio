@@ -1,6 +1,7 @@
 """Tasks da carga BigQuery → GCS → SQL*Loader → Oracle."""
 
 import time
+from datetime import datetime
 
 from prefect import task
 from prefect.artifacts import create_progress_artifact, update_progress_artifact
@@ -8,12 +9,13 @@ from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 
 from iplanrio.pipelines_utils.logging import log
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, oracle, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, inmemory, oracle, slots, sqlldr
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     StructurePlan,
     describe_partitioning,
     plan_structure,
+    slot_indexes,
 )
 
 
@@ -23,10 +25,29 @@ def list_tables_task(project: str, dataset_id: str, table_ids: list[str] | None)
     return table_ids or bigquery.list_tables(project=project, dataset_id=dataset_id)
 
 
-@task
-def get_table_schema_task(project: str, dataset_id: str, table_id: str) -> dict[str, object]:
-    """Lê o schema e a contagem de linhas da tabela no BigQuery."""
-    return bigquery.get_table_schema(project=project, dataset_id=dataset_id, table_id=table_id)
+@task(cache_policy=NO_CACHE)
+def export_snapshot_task(
+    project: str, dataset_id: str, table_ids: list[str], bucket: str, quiet_minutes: int
+) -> dict[str, bigquery.TableSnapshot]:
+    """Exporta todas as tabelas como uma foto única do BigQuery, num prefixo exclusivo deste flow run."""
+    prefix = f"{dataset_id}/{flow_run.id}"
+    request = bigquery.SnapshotRequest(
+        project=project,
+        dataset_id=dataset_id,
+        table_ids=table_ids,
+        bucket=bucket,
+        prefix=prefix,
+        quiet_seconds=quiet_minutes * 60,
+    )
+    snapshot = bigquery.export_consistent_snapshot(request, report=log)
+    for table in snapshot.values():
+        total = sqlldr.format_size(sum(exported.size for exported in table.files))
+        rows = sqlldr.format_count(oracle.to_int(table.schema["num_rows"]))
+        log(
+            f"{table.table_id}: foto do BigQuery de {table.last_modified:%Y-%m-%d %H:%M:%S} UTC, "
+            f"{rows} linhas, {len(table.files)} arquivos ({total})"
+        )
+    return snapshot
 
 
 @task(cache_policy=NO_CACHE)
@@ -79,29 +100,34 @@ def plan_structure_task(
 
 
 @task(cache_policy=NO_CACHE)
-def ensure_oracle_table_task(  # noqa: PLR0913
-    infisical_secret_path: str, project: str, dataset_id: str, table_id: str, plan: LoadPlan, structure: StructurePlan
-) -> str:
-    """Cria ou confere a tabela de destino e retorna o nome dela no Oracle."""
-    config = oracle.read_oracle_config(infisical_secret_path)
-    table = oracle.oracle_table_name(table_id)
-    definition = oracle.TableDefinition(
-        columns=plan.columns, layout=structure.layout, source=f"{project}.{dataset_id}.{table_id}"
-    )
-    log(oracle.ensure_table(config=config, table=table, definition=definition))
-    return table
+def resolve_slots_task(infisical_secret_path: str, table_id: str) -> slots.SlotPlan:
+    """Descobre a tabela física em uso e a que recebe a carga, corrigindo trocas interrompidas."""
+    base = oracle.oracle_table_name(table_id)
+    plan, realigned = slots.resolve_slots(config=oracle.read_oracle_config(infisical_secret_path), base=base)
+    if realigned:
+        log(f"{base}: troca anterior incompleta; sinônimos de {realigned} voltaram para {plan.active}")
+    log(f"{base}: em uso {plan.active or '(nenhuma; primeira carga em A/B)'}; a carga vai para {plan.inactive}")
+    return plan
 
 
 @task(cache_policy=NO_CACHE)
-def extract_table_to_gcs_task(project: str, dataset_id: str, table_id: str, bucket: str) -> list[bigquery.ExportedFile]:
-    """Exporta a tabela para um prefixo exclusivo deste flow run no GCS."""
-    prefix = f"{dataset_id}/{table_id}/{flow_run.id}"
-    files = bigquery.extract_table_to_gcs(
-        project=project, dataset_id=dataset_id, table_id=table_id, bucket=bucket, prefix=prefix
+def ensure_oracle_table_task(  # noqa: PLR0913
+    infisical_secret_path: str,
+    project: str,
+    dataset_id: str,
+    table_id: str,
+    table: str,
+    plan: LoadPlan,
+    structure: StructurePlan,
+) -> str:
+    """Cria ou confere a tabela física que recebe a carga e retorna o nome dela."""
+    definition = oracle.TableDefinition(
+        columns=plan.columns, layout=structure.layout, source=f"{project}.{dataset_id}.{table_id}"
     )
-    total = sqlldr.format_size(sum(exported.size for exported in files))
-    log(f"{table_id}: extract gerou {len(files)} arquivos ({total} comprimidos) em gs://{bucket}/{prefix}")
-    return files
+    log(
+        oracle.ensure_table(config=oracle.read_oracle_config(infisical_secret_path), table=table, definition=definition)
+    )
+    return table
 
 
 @task(cache_policy=NO_CACHE)
@@ -180,10 +206,12 @@ def validate_row_count_task(
 
 
 @task(cache_policy=NO_CACHE)
-def grant_access_task(infisical_secret_path: str, table: str) -> None:
-    """Concede o acesso dos consumidores à tabela carregada e cria os sinônimos deles."""
-    oracle.grant_access(config=oracle.read_oracle_config(infisical_secret_path), table=table)
-    log(f"{table}: acesso concedido e sinônimos criados")
+def grant_access_task(infisical_secret_path: str, table: str) -> str:
+    """Concede aos consumidores o acesso à tabela física e retorna o nome dela."""
+    slots.grant_access(config=oracle.read_oracle_config(infisical_secret_path), table=table)
+    grantees = ", ".join(f"{grantee} ({privileges})" for grantee, privileges in slots.CONSUMER_GRANTS)
+    log(f"{table}: acesso concedido a {grantees}")
+    return table
 
 
 @task(cache_policy=NO_CACHE)
@@ -195,11 +223,11 @@ def delete_gcs_files_task(project: str, bucket: str, files: list[bigquery.Export
 
 @task(cache_policy=NO_CACHE)
 def create_oracle_indexes_task(
-    infisical_secret_path: str, table: str, structure: StructurePlan, parallel_degree: int
+    infisical_secret_path: str, table: str, structure: StructurePlan, slot: str, parallel_degree: int
 ) -> str:
-    """Cria os índices da tabela de destino, um por vez, registrando o andamento, e retorna o nome dela."""
+    """Cria os índices da tabela física, com o sufixo dela, um por vez, e retorna o nome dela."""
     config = oracle.read_oracle_config(infisical_secret_path)
-    indexes = structure.layout.indexes
+    indexes = slot_indexes(structure.layout.indexes, slot)
     if not indexes:
         log(f"{table}: a original não tem índices para replicar")
         return table
@@ -219,10 +247,72 @@ def create_oracle_indexes_task(
 
 
 @task(cache_policy=NO_CACHE)
-def gather_oracle_stats_task(infisical_secret_path: str, table: str, parallel_degree: int) -> None:
-    """Coleta as estatísticas da tabela de destino para o otimizador."""
+def gather_oracle_stats_task(infisical_secret_path: str, table: str, parallel_degree: int) -> str:
+    """Coleta as estatísticas da tabela física para o otimizador e retorna o nome dela."""
     started = time.monotonic()
     oracle.gather_table_stats(
         config=oracle.read_oracle_config(infisical_secret_path), table=table, parallel_degree=parallel_degree
     )
     log(f"{table}: estatísticas coletadas em {sqlldr.format_duration(time.monotonic() - started)}")
+    return table
+
+
+@task(cache_policy=NO_CACHE)
+def record_load_task(
+    infisical_secret_path: str, plan: slots.SlotPlan, table: str, source: str, snapshot_modified: datetime
+) -> slots.SlotPlan:
+    """Grava no comentário da tabela física a foto do BigQuery carregada e retorna o plano pronto para a troca."""
+    comment = slots.record_load(
+        config=oracle.read_oracle_config(infisical_secret_path),
+        table=table,
+        source=source,
+        snapshot_modified=snapshot_modified,
+    )
+    log(f"{table}: carga concluída e registrada ({comment})")
+    return plan
+
+
+@task(cache_policy=NO_CACHE)
+def start_inmemory_population_task(
+    infisical_secret_path: str, table: str, structure: StructurePlan, wait_minutes: int
+) -> None:
+    """Pede ao Oracle para popular a tabela física no In-Memory, se ela usa In-Memory e a espera está ligada."""
+    if structure.layout.inmemory is None or wait_minutes <= 0:
+        return
+    errors = inmemory.start_population(
+        config=oracle.read_oracle_config(infisical_secret_path),
+        table=table,
+        partitioned=structure.layout.partitioning is not None,
+    )
+    log(f"{table}: população do In-Memory iniciada" if not errors else f"{table}: população não iniciada: {errors}")
+
+
+@task(cache_policy=NO_CACHE)
+def wait_inmemory_task(
+    infisical_secret_path: str, plans: list[slots.SlotPlan], wait_minutes: int
+) -> list[slots.SlotPlan]:
+    """Espera as tabelas carregadas ficarem no In-Memory antes da troca e retorna os planos."""
+    if wait_minutes <= 0:
+        log("Espera pelo In-Memory desligada (inmemory_wait_minutes=0); a troca segue direto.")
+        return plans
+    started = time.monotonic()
+    complete = inmemory.wait_for_population(
+        config=oracle.read_oracle_config(infisical_secret_path),
+        tables=[plan.inactive for plan in plans],
+        timeout_seconds=wait_minutes * 60,
+        report=log,
+    )
+    if complete:
+        log(f"Tabelas carregadas inteiras no In-Memory em {sqlldr.format_duration(time.monotonic() - started)}")
+    return plans
+
+
+@task(cache_policy=NO_CACHE)
+def swap_synonyms_task(infisical_secret_path: str, plans: list[slots.SlotPlan]) -> None:
+    """Aponta os sinônimos de todas as tabelas para as recém-carregadas, uma tabela logo após a outra."""
+    config = oracle.read_oracle_config(infisical_secret_path)
+    for plan in plans:
+        actions = slots.swap_synonyms(config=config, plan=plan)
+        log(f"{plan.base}: troca feita: {'; '.join(actions)}")
+        kept = f"{plan.active} fica com a carga anterior" if plan.active else "não havia tabela A/B anterior"
+        log(f"{plan.base}: em uso agora {plan.inactive}; {kept}")
