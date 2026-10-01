@@ -3,6 +3,7 @@
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 import oracledb
@@ -26,7 +27,7 @@ logger = get_logger(__name__)
 
 TABLE_PREFIX = "BQLOAD_"
 MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
-# Os sinônimos de grant_access ficam em outros schemas, o que exige CREATE ANY SYNONYM até do dono.
+# Os sinônimos ficam também nos schemas dos consumidores, o que exige CREATE ANY SYNONYM até do dono.
 OWNER_PRIVILEGES = ("CREATE ANY SYNONYM",)
 CROSS_SCHEMA_PRIVILEGES = (
     *OWNER_PRIVILEGES,
@@ -228,6 +229,20 @@ def fetch_template_columns(config: OracleConfig, template_schema: str, table: st
             f"Tabela original {template_schema}.{table} não encontrada; ela define os tipos da tabela de destino."
         )
     return columns
+
+
+def to_int(value: object) -> int:
+    """Converte para inteiro um número lido do banco, tratando nulo como zero.
+
+    :param value: Valor de uma coluna numérica.
+    :returns: O valor inteiro.
+    :raises TypeError: Se o valor não for numérico.
+    """
+    if value is None:
+        return 0
+    if isinstance(value, int | float | Decimal | str):
+        return int(value)
+    raise TypeError(f"Valor não numérico: {value!r}")
 
 
 def fetch_rows(cursor: oracledb.Cursor, query: str, binds: Mapping[str, object]) -> list[dict[str, object]]:
@@ -508,22 +523,6 @@ def gather_table_stats(config: OracleConfig, table: str, parallel_degree: int) -
             load_query(QUERIES_ANCHOR, "gather_table_stats"),
             {"owner": config.schema, "table_name": table, "degree": parallel_degree},
         )
-
-
-def grant_access(config: OracleConfig, table: str) -> None:
-    """Concede o acesso dos consumidores à tabela e cria os sinônimos deles.
-
-    O ``DROP`` de ``ensure_table`` apaga os grants, então a concessão roda após
-    toda carga. Os comandos podem ser repetidos sem efeito colateral.
-
-    :param config: Configuração da conexão.
-    :param table: Nome da tabela no Oracle.
-    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        assert_managed_existing_table(cursor, config.schema, table)
-        cursor.execute(load_query(QUERIES_ANCHOR, "grant_access", schema=config.schema, table=table))
-    logger.info("Acesso concedido em %s.%s", config.schema, table)
 
 
 def count_rows(config: OracleConfig, table: str) -> int:

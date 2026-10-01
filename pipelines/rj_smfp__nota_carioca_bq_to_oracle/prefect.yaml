@@ -31,6 +31,10 @@ deployments:
   - code_owner:fredzolio
   version: "{{ build-image.tag }}"
   entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle/flow.py:rj_smfp__nota_carioca_bq_to_oracle
+  # Duas cargas simultâneas escreveriam na mesma tabela inativa (A/B); a segunda espera a primeira.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -46,6 +50,10 @@ deployments:
   - code_owner:fredzolio
   version: "{{ get-commit-hash.stdout }}"
   entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle/flow.py:rj_smfp__nota_carioca_bq_to_oracle
+  # Duas cargas simultâneas escreveriam na mesma tabela inativa (A/B); a segunda espera a primeira.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
   parameters:
     dataset_id: nota_carioca
   work_pool:

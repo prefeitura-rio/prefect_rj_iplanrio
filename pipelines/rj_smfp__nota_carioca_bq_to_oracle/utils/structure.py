@@ -289,6 +289,26 @@ def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefi
     return StructurePlan(layout=layout, skipped_indexes=tuple(skipped))
 
 
+def slot_indexes(indexes: tuple[IndexDefinition, ...], slot: str) -> tuple[IndexDefinition, ...]:
+    """Renomeia os índices para uma das tabelas físicas (``A`` ou ``B``).
+
+    Nomes de índice são únicos no schema, então cada tabela física tem os seus,
+    com o sufixo dela.
+
+    :param indexes: Índices com o nome base (``BQLOAD_<índice original>``).
+    :param slot: Sufixo da tabela física.
+    :returns: Índices com o nome ``<nome base>_<slot>``.
+    :raises ValueError: Se algum nome ficar inválido para o Oracle.
+    """
+    renamed = []
+    for index in indexes:
+        name = f"{index.name}_{slot}"
+        if not INDEX_NAME_PATTERN.match(name):
+            raise ValueError(f"Nome de índice inválido para o Oracle: {name!r}")
+        renamed.append(replace(index, name=name))
+    return tuple(renamed)
+
+
 def quote(name: str) -> str:
     """Delimita um identificador com aspas duplas.
 
