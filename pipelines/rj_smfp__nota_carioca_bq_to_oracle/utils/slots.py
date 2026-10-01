@@ -27,6 +27,8 @@ CONSUMER_GRANTS = (
     ("RL_NFSEOWNER_DRL", "SELECT"),
     ("NFSE_OWNER", "SELECT, ALTER, DELETE"),
 )
+# Tabela particionada aparece em all_objects também como TABLE PARTITION/SUBPARTITION, com o nome da tabela.
+REPLACEABLE_OBJECT_TYPES = {"TABLE", "TABLE PARTITION", "TABLE SUBPARTITION", "SYNONYM"}
 SNAPSHOT_PATTERN = re.compile(r"snapshot do BigQuery de ([0-9-]+ [0-9:]+) UTC; carregada em ([0-9-]+ [0-9:]+) UTC")
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S"
 
@@ -158,6 +160,36 @@ def create_synonym(cursor: oracledb.Cursor, owner: str, base: str, schema: str, 
     cursor.execute(load_query(QUERIES_ANCHOR, "create_synonym", owner=owner, synonym=base, schema=schema, table=table))
 
 
+def assert_replaceable_legacy_table(cursor: oracledb.Cursor, schema: str, base: str) -> bool:
+    """Confere se a tabela única antiga, se existir, pode dar lugar ao sinônimo.
+
+    Roda antes de qualquer alteração, para que uma tabela que a pipeline não
+    criou com o nome ``BQLOAD_<tabela>`` interrompa o run sem mexer em nada.
+
+    :param cursor: Cursor de uma conexão aberta.
+    :param schema: Schema das tabelas físicas.
+    :param base: Nome estável da tabela.
+    :returns: Se a tabela única antiga existe.
+    :raises PermissionError: Se a tabela existir sem a marca da pipeline, ou se
+        houver com esse nome outro tipo de objeto, que impediria criar o sinônimo.
+    """
+    types = {
+        str(row["object_type"])
+        for row in fetch_rows(cursor, "get_objects_named", {"owner": schema, "object_name": base})
+    }
+    others = sorted(types - REPLACEABLE_OBJECT_TYPES)
+    if others:
+        raise PermissionError(
+            f"Existe {others} com o nome {schema}.{base}, que impede criar o sinônimo. Nada foi alterado."
+        )
+    rows = fetch_rows(cursor, "get_table_comment", {"owner": schema, "table_name": base})
+    if not rows:
+        return False
+    comment = rows[0]["comments"]
+    assert_managed_table(base, None if comment is None else str(comment))
+    return True
+
+
 def resolve_slots(config: OracleConfig, base: str) -> tuple[SlotPlan, list[str]]:
     """Descobre a tabela em uso e a que recebe a carga, corrigindo trocas interrompidas.
 
@@ -165,11 +197,13 @@ def resolve_slots(config: OracleConfig, base: str) -> tuple[SlotPlan, list[str]]
     :param base: Nome estável da tabela.
     :returns: Plano das tabelas e donos dos sinônimos repontados para a tabela em
         uso.
-    :raises PermissionError: Se faltar privilégio ou algum sinônimo apontar para
-        um objeto que a pipeline não gerencia.
+    :raises PermissionError: Se faltar privilégio, se algum sinônimo apontar para
+        um objeto que a pipeline não gerencia ou se existir uma tabela
+        ``BQLOAD_<tabela>`` que a pipeline não criou.
     """
     with connect(config) as connection, connection.cursor() as cursor:
         assert_privileges(cursor, config.schema)
+        assert_replaceable_legacy_table(cursor, config.schema, base)
         synonyms = read_synonyms(cursor, config.schema, base)
         plan = choose_slots(base, config.schema, synonyms)
         realigned = synonyms_to_realign(plan, synonyms)
@@ -267,20 +301,17 @@ def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
     :param plan: Tabela em uso e tabela recém-carregada.
     :returns: Ações executadas, em texto, para o log.
     :raises PermissionError: Se a tabela carregada ou a tabela única antiga não
-        pertencerem à pipeline.
+        pertencerem à pipeline; a conferência acontece antes de qualquer
+        sinônimo ser repontado.
     """
     actions = []
     with connect(config) as connection, connection.cursor() as cursor:
         assert_managed_existing_table(cursor, config.schema, plan.inactive)
+        legacy = assert_replaceable_legacy_table(cursor, config.schema, plan.base)
         for owner in CONSUMER_SYNONYM_OWNERS:
             create_synonym(cursor, owner, plan.base, config.schema, plan.inactive)
             actions.append(f"{owner}.{plan.base} → {plan.inactive}")
-        cursor.execute(
-            load_query(QUERIES_ANCHOR, "get_table_comment"), {"owner": config.schema, "table_name": plan.base}
-        )
-        legacy = cursor.fetchone()
-        if legacy is not None:
-            assert_managed_table(plan.base, legacy[1])
+        if legacy:
             cursor.execute(load_query(QUERIES_ANCHOR, "drop_table", schema=config.schema, table=plan.base))
             actions.append(f"tabela única antiga {config.schema}.{plan.base} apagada")
         create_synonym(cursor, config.schema, plan.base, config.schema, plan.inactive)

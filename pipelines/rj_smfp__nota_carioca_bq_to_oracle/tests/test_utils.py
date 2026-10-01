@@ -23,7 +23,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
 import io
 from datetime import UTC, datetime, timedelta
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, slots
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import changed_tables, quiet_wait_seconds
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.inmemory import InMemoryStatus
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
@@ -672,3 +672,126 @@ def test_foreign_indexes_protects_indexes_the_pipeline_did_not_create():
         "DFEN.IX_MANUAL",
         "OUTRO.BQLOAD_X",
     ]
+
+
+MARKED = f"{MANAGED_TABLE_MARKER}: carga a partir de x"
+
+
+class FakeCursor:
+    """Responde às consultas de dicionário usadas na troca e registra os comandos DDL."""
+
+    def __init__(self, objects, comments, synonyms=()):
+        self.objects, self.comments, self.synonyms = objects, comments, synonyms
+        self.ddl, self.rows, self.description = [], [], []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def execute(self, sql, binds=None):
+        binds = binds or {}
+        if "FROM all_objects" in sql:
+            self.answer(["object_type"], [(kind,) for kind in self.objects.get(binds["object_name"], [])])
+        elif "FROM all_tables t" in sql and "all_tab_comments" in sql:
+            name = binds["table_name"]
+            found = [(name, self.comments[name])] if name in self.comments else []
+            self.answer(["table_name", "comments"], found)
+        elif "session_privs" in sql:
+            self.answer(["session_user", "privilege"], [("DFEN", "CREATE ANY SYNONYM")])
+        elif "FROM all_synonyms" in sql:
+            self.answer(["owner", "table_owner", "table_name"], list(self.synonyms))
+        else:
+            self.ddl.append(" ".join(sql.split()))
+
+    def answer(self, names, rows):
+        self.description = [(name,) for name in names]
+        self.rows = rows
+
+    def fetchone(self):
+        return self.rows[0] if self.rows else None
+
+    def fetchall(self):
+        return self.rows
+
+
+class FakeConnection:
+    def __init__(self, cursor):
+        self.fake_cursor = cursor
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def cursor(self):
+        return self.fake_cursor
+
+
+
+def fake_database(monkeypatch, objects, comments, synonyms=()):
+    cursor = FakeCursor(objects, comments, synonyms)
+    monkeypatch.setattr(slots, "connect", lambda config: FakeConnection(cursor))
+    return cursor
+
+
+def slots_config():
+    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import OracleConfig
+
+    return OracleConfig("DFEN", "x", "h", "1521", "S", "DFEN")
+
+
+PLAN_A = SlotPlan("BQLOAD_X", None, "BQLOAD_X_A")
+
+
+def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monkeypatch):
+    cursor = fake_database(
+        monkeypatch,
+        objects={"BQLOAD_X": ["TABLE", "TABLE PARTITION"]},
+        comments={"BQLOAD_X": MARKED, "BQLOAD_X_A": MARKED},
+    )
+    slots.swap_synonyms(slots_config(), PLAN_A)
+    assert cursor.ddl == [
+        'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
+        'CREATE OR REPLACE SYNONYM "NFSE_USER"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
+        'DROP TABLE "DFEN"."BQLOAD_X" PURGE',
+        'CREATE OR REPLACE SYNONYM "DFEN"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
+    ]
+
+
+def test_swap_after_migration_only_repoints_synonyms(monkeypatch):
+    cursor = fake_database(monkeypatch, objects={"BQLOAD_X": ["SYNONYM"]}, comments={"BQLOAD_X_B": MARKED})
+    slots.swap_synonyms(slots_config(), SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B"))
+    assert [statement.split()[4] for statement in cursor.ddl] == [
+        '"NFSE_SIGA"."BQLOAD_X"',
+        '"NFSE_USER"."BQLOAD_X"',
+        '"DFEN"."BQLOAD_X"',
+    ]
+
+
+@pytest.mark.parametrize(
+    ("objects", "comments", "message"),
+    [
+        ({"BQLOAD_X": ["TABLE"]}, {"BQLOAD_X": "tabela de outro sistema", "BQLOAD_X_A": MARKED}, "não foi criada"),
+        ({"BQLOAD_X": ["VIEW"]}, {"BQLOAD_X_A": MARKED}, "impede criar o sinônimo"),
+    ],
+)
+def test_swap_changes_nothing_when_the_name_cannot_become_a_synonym(monkeypatch, objects, comments, message):
+    cursor = fake_database(monkeypatch, objects=objects, comments=comments)
+    with pytest.raises(PermissionError, match=message):
+        slots.swap_synonyms(slots_config(), PLAN_A)
+    assert cursor.ddl == []
+
+
+def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(monkeypatch):
+    cursor = fake_database(
+        monkeypatch,
+        objects={"BQLOAD_X": ["TABLE"]},
+        comments={"BQLOAD_X": None},
+        synonyms=[("NFSE_SIGA", "DFEN", "BQLOAD_X_B"), ("DFEN", "DFEN", "BQLOAD_X_A")],
+    )
+    with pytest.raises(PermissionError, match="não foi criada"):
+        slots.resolve_slots(slots_config(), "BQLOAD_X")
+    assert cursor.ddl == []
