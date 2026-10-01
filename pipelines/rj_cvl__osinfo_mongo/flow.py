@@ -2,8 +2,6 @@
 
 Downloads and reconstructs PDFs from OSINFO MongoDB, partitioned by mes_envio,
 into GCS bucket rj-agent-cgm-triagem-nf/staging/brutos_osinfo_mongo/.
-
-- MongoDB pagination with mongo_batch_size=20000 for streaming behavior
 """
 
 from iplanrio.pipelines_templates.dump_db.tasks import (
