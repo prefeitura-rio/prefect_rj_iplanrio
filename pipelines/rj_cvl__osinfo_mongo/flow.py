@@ -21,7 +21,7 @@ from pipelines.rj_cvl__osinfo_mongo.tasks import (
     refresh_metadata_cache_task,
 )
 from pipelines.rj_cvl__osinfo_mongo.utils.mongodb import MongoConnectionConfig
-
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 
 @flow(log_prints=True, task_runner=ConcurrentTaskRunner())
 def rj_cvl__osinfo_mongo(
@@ -60,6 +60,8 @@ def rj_cvl__osinfo_mongo(
         bq_files_limit: Optional limit on number of files to process. If set,
             adds a LIMIT clause to the BigQuery query.
     """
+
+    inject_bd_credentials_task(environment="prod")
     # Get DB credentials from Infisical
     secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
 
