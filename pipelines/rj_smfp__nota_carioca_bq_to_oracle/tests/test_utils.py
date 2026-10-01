@@ -13,6 +13,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     assert_managed_table,
     column_definitions,
     definition_differences,
+    foreign_indexes,
     missing_privileges,
     oracle_table_name,
     secret_env_key,
@@ -20,6 +21,18 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
 )
 import io
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
+    IndexDefinition,
+    Partitioning,
+    TableLayout,
+    TablePartition,
+    index_from_dictionary,
+    index_statement_parts,
+    layout_differences,
+    partitioning_from_dictionary,
+    plan_structure,
+    storage_clause,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import (
     CountingReader,
     ProgressSnapshot,
@@ -176,7 +189,14 @@ def test_missing_privileges_skips_schema_owner():
 
 def test_missing_privileges_lists_what_other_users_lack():
     current = {"CREATE ANY TABLE", "DROP ANY TABLE", "INSERT ANY TABLE", "SELECT ANY TABLE", "UNLIMITED TABLESPACE"}
-    assert missing_privileges("26234793", "DFEN", current) == ["COMMENT ANY TABLE", "LOCK ANY TABLE"]
+    assert missing_privileges("26234793", "DFEN", current) == [
+        "ALTER ANY INDEX",
+        "ANALYZE ANY",
+        "COMMENT ANY TABLE",
+        "CREATE ANY INDEX",
+        "DROP ANY INDEX",
+        "LOCK ANY TABLE",
+    ]
     assert missing_privileges("26234793", "DFEN", set(CROSS_SCHEMA_PRIVILEGES)) == []
 
 
@@ -253,3 +273,145 @@ def test_counting_reader_tracks_bytes_read():
     assert reader.read() == b""
     progress.add_file()
     assert (progress.bytes_done, progress.files_done) == (10, 1)
+
+
+JAN = "TO_DATE(' 2026-01-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN')"
+FEB = "TO_DATE(' 2026-02-01 00:00:00', 'SYYYY-MM-DD HH24:MI:SS', 'NLS_CALENDAR=GREGORIAN')"
+RANGE_BY_MONTH = Partitioning(
+    kind="RANGE",
+    key_columns=("DATA_COMPETENCIA_MUNICIPIO",),
+    interval=None,
+    partitions=(TablePartition("P_INITIAL", JAN, "DFEN_BIG_DATA"), TablePartition("P_202601", FEB, "DFEN_BIG_DATA")),
+)
+
+
+def index(name, columns, locality="LOCAL", index_type="NORMAL", unique=False, tablespace="DFEN_BIG_IDX", **extra):
+    return IndexDefinition(name, index_type, unique, tuple(columns), locality, tablespace, **extra)
+
+
+def test_partitioning_from_dictionary_keeps_only_declared_partitions():
+    partitioning = partitioning_from_dictionary(
+        {"partitioning_type": "RANGE", "subpartitioning_type": "NONE", "interval": "NUMTOYMINTERVAL(1, 'MONTH') "},
+        ["DATA_COMPETENCIA_MUNICIPIO"],
+        [
+            {"partition_name": "P_INITIAL", "high_value": f" {JAN} ", "tablespace_name": "DFEN_BIG_DATA", "interval": "NO"},
+            {"partition_name": "SYS_P101", "high_value": FEB, "tablespace_name": "DFEN_BIG_DATA", "interval": "YES"},
+        ],
+    )
+    assert partitioning == Partitioning(
+        "RANGE",
+        ("DATA_COMPETENCIA_MUNICIPIO",),
+        "NUMTOYMINTERVAL(1, 'MONTH')",
+        (TablePartition("P_INITIAL", JAN, "DFEN_BIG_DATA"),),
+    )
+    composite = partitioning_from_dictionary(
+        {"partitioning_type": "RANGE", "subpartitioning_type": "HASH", "interval": None}, ["D"], []
+    )
+    assert composite.kind == "RANGE-HASH"
+
+
+def test_index_from_dictionary_ignores_degree_and_status_in_comparison():
+    row = {
+        "owner": "DFEN",
+        "index_name": "IX",
+        "index_type": "NORMAL",
+        "uniqueness": "NONUNIQUE",
+        "locality": "LOCAL",
+        "tablespace_name": "DFEN_BIG_IDX",
+        "degree": "  4",
+        "status": "N/A",
+    }
+    parsed = index_from_dictionary(row, ["A", "B"])
+    assert (parsed.degree, parsed.status, parsed.owner) == ("4", "N/A", "DFEN")
+    assert parsed == index("IX", ["A", "B"])
+
+
+def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_index():
+    template = TableLayout(
+        "DFEN_BIG_DATA",
+        RANGE_BY_MONTH,
+        (
+            index("I_SNAP$_MVT_NOTAS", ["SYS_NC00015$"], index_type="FUNCTION-BASED NORMAL", tablespace=None),
+            index("IX_MVT_NNEX_DET_CPFR_DCM_NN", ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"]),
+        ),
+    )
+    plan = plan_structure(template, ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"], "BQLOAD_")
+    assert plan.skipped_indexes == ("I_SNAP$_MVT_NOTAS",)
+    assert plan.layout == TableLayout(
+        "DFEN_BIG_DATA",
+        RANGE_BY_MONTH,
+        (index("BQLOAD_IX_MVT_NNEX_DET_CPFR_DCM_NN", ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"]),),
+    )
+
+
+@pytest.mark.parametrize(
+    ("template", "error"),
+    [
+        (TableLayout(None, None, (index("IX", ["A"], locality="GLOBAL"),)), NotImplementedError),
+        (TableLayout(None, None, (index("IX", ["SYS_NC1$"], index_type="FUNCTION-BASED NORMAL"),)), NotImplementedError),
+        (TableLayout(None, Partitioning("HASH", ("A",), None, ()), ()), NotImplementedError),
+        (TableLayout(None, None, (index("IX", ["NN_ROWID"]),)), ValueError),
+        (TableLayout(None, Partitioning("RANGE", ("NN_ROWID",), None, ()), ()), ValueError),
+        (TableLayout(None, None, (index("I" * 124, ["A"]),)), ValueError),
+    ],
+)
+def test_plan_structure_rejects_what_the_load_cannot_replicate(template, error):
+    with pytest.raises(error):
+        plan_structure(template, ["A"], "BQLOAD_")
+
+
+def test_storage_clause_copies_tablespace_and_partitions_without_inmemory():
+    assert storage_clause(TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)) == (
+        'TABLESPACE "DFEN_BIG_DATA"\n'
+        "NO INMEMORY\n"
+        'PARTITION BY RANGE ("DATA_COMPETENCIA_MUNICIPIO") (\n'
+        f'  PARTITION "P_INITIAL" VALUES LESS THAN ({JAN}) TABLESPACE "DFEN_BIG_DATA",\n'
+        f'  PARTITION "P_202601" VALUES LESS THAN ({FEB}) TABLESPACE "DFEN_BIG_DATA"\n'
+        ")"
+    )
+    interval = Partitioning("RANGE", ("D",), "NUMTOYMINTERVAL(1, 'MONTH')", (TablePartition("P", JAN, None),))
+    assert storage_clause(TableLayout(None, interval)) == (
+        f"NO INMEMORY\nPARTITION BY RANGE (\"D\") INTERVAL (NUMTOYMINTERVAL(1, 'MONTH')) (\n"
+        f'  PARTITION "P" VALUES LESS THAN ({JAN})\n)'
+    )
+    listed = Partitioning("LIST", ("UF",), None, (TablePartition("P_RJ", "'RJ'", None),))
+    assert "PARTITION \"P_RJ\" VALUES ('RJ')" in storage_clause(TableLayout(None, listed))
+    assert storage_clause(TableLayout(None, None)) == "NO INMEMORY"
+
+
+def test_index_statement_parts():
+    assert index_statement_parts(index("BQLOAD_IX", ["A", "B"]), 4) == {
+        "kind": "",
+        "columns": '"A", "B"',
+        "options": 'TABLESPACE "DFEN_BIG_IDX" LOCAL PARALLEL 4',
+    }
+    unique = index("BQLOAD_UK", ["A"], locality=None, unique=True, tablespace=None)
+    assert index_statement_parts(unique, 2) == {"kind": "UNIQUE", "columns": '"A"', "options": "PARALLEL 2"}
+    assert index_statement_parts(index("BQLOAD_BM", ["A"], index_type="BITMAP"), 1)["kind"] == "BITMAP"
+
+
+def test_layout_differences_detect_missing_partitioning_and_changed_partitions():
+    expected = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)
+    assert layout_differences(expected, expected) == []
+    assert layout_differences(TableLayout("USERS", None), expected) == [
+        "tablespace: USERS → DFEN_BIG_DATA",
+        "particionamento: sem partição → RANGE (DATA_COMPETENCIA_MUNICIPIO) com 2 partição(ões) declarada(s)",
+    ]
+    fewer = Partitioning("RANGE", ("DATA_COMPETENCIA_MUNICIPIO",), None, RANGE_BY_MONTH.partitions[:1])
+    assert layout_differences(TableLayout("DFEN_BIG_DATA", fewer), expected) == [
+        f"partição ausente: P_202601 ({FEB}) em DFEN_BIG_DATA"
+    ]
+    with_interval = Partitioning("RANGE", ("DATA_COMPETENCIA_MUNICIPIO",), "NUMTOYMINTERVAL(1, 'MONTH')", RANGE_BY_MONTH.partitions)
+    assert layout_differences(TableLayout("DFEN_BIG_DATA", with_interval), expected) == [
+        "particionamento: RANGE (DATA_COMPETENCIA_MUNICIPIO) INTERVAL NUMTOYMINTERVAL(1, 'MONTH') → "
+        "RANGE (DATA_COMPETENCIA_MUNICIPIO)"
+    ]
+
+
+def test_foreign_indexes_protects_indexes_the_pipeline_did_not_create():
+    ours = index("BQLOAD_IX", ["A"], owner="DFEN")
+    assert foreign_indexes([ours], "DFEN") == []
+    assert foreign_indexes([ours, index("IX_MANUAL", ["A"], owner="DFEN"), index("BQLOAD_X", ["A"], owner="OUTRO")], "DFEN") == [
+        "DFEN.IX_MANUAL",
+        "OUTRO.BQLOAD_X",
+    ]
