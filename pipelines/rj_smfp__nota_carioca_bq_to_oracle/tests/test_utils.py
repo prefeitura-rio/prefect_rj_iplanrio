@@ -10,6 +10,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     CROSS_SCHEMA_PRIVILEGES,
     MANAGED_TABLE_MARKER,
+    QUERIES_ANCHOR,
     assert_managed_table,
     column_definitions,
     definition_differences,
@@ -33,6 +34,8 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     plan_structure,
     storage_clause,
 )
+from prefect_rj_iplanrio.sql import load_query
+
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import (
     CountingReader,
     ProgressSnapshot,
@@ -183,8 +186,9 @@ def test_assert_managed_table_accepts_only_marked_prefixed_tables():
         assert_managed_table("NOTAS", f"{MANAGED_TABLE_MARKER}: carga")
 
 
-def test_missing_privileges_skips_schema_owner():
-    assert missing_privileges("DFEN", "DFEN", set()) == []
+def test_missing_privileges_owner_needs_only_synonyms_in_other_schemas():
+    assert missing_privileges("DFEN", "DFEN", set()) == ["CREATE ANY SYNONYM"]
+    assert missing_privileges("DFEN", "DFEN", {"CREATE ANY SYNONYM"}) == []
 
 
 def test_missing_privileges_lists_what_other_users_lack():
@@ -194,10 +198,27 @@ def test_missing_privileges_lists_what_other_users_lack():
         "ANALYZE ANY",
         "COMMENT ANY TABLE",
         "CREATE ANY INDEX",
+        "CREATE ANY SYNONYM",
         "DROP ANY INDEX",
+        "GRANT ANY OBJECT PRIVILEGE",
         "LOCK ANY TABLE",
     ]
     assert missing_privileges("26234793", "DFEN", set(CROSS_SCHEMA_PRIVILEGES)) == []
+
+
+def test_grant_access_grants_and_creates_synonyms_for_the_loaded_table():
+    sql = load_query(QUERIES_ANCHOR, "grant_access", schema="DFEN", table="BQLOAD_X")
+    statements = [line.strip() for line in sql.splitlines() if "EXECUTE IMMEDIATE" in line]
+    assert sql.startswith("BEGIN")
+    assert sql.rstrip().endswith("END;")
+    assert statements == [
+        """EXECUTE IMMEDIATE 'GRANT SELECT ON "DFEN"."BQLOAD_X" TO RL_NFSE';""",
+        """EXECUTE IMMEDIATE 'GRANT SELECT ON "DFEN"."BQLOAD_X" TO RL_NFSE_SIGA';""",
+        """EXECUTE IMMEDIATE 'GRANT SELECT ON "DFEN"."BQLOAD_X" TO RL_NFSEOWNER_DRL';""",
+        """EXECUTE IMMEDIATE 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X" TO NFSE_OWNER';""",
+        """EXECUTE IMMEDIATE 'CREATE OR REPLACE SYNONYM NFSE_SIGA."BQLOAD_X" FOR "DFEN"."BQLOAD_X"';""",
+        """EXECUTE IMMEDIATE 'CREATE OR REPLACE SYNONYM NFSE_USER."BQLOAD_X" FOR "DFEN"."BQLOAD_X"';""",
+    ]
 
 
 def test_secret_env_key_follows_iplanrio_convention():
