@@ -10,15 +10,20 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import get_tabl
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     MANAGED_TABLE_MARKER,
+    TABLE_PREFIX,
     OracleConfig,
     connect,
     oracle_table_name,
     read_column_definitions,
+    read_table_layout,
     validate_identifier,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import TableLayout, plan_structure
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import (
     compare_columns,
+    compare_indexes,
     compare_metrics,
+    compare_partitions,
     count_divergences,
     format_key_values,
     format_text_table,
@@ -107,6 +112,60 @@ def fetch_table_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> str:
     return "sem segmento alocado" if size is None else f"{int(size) / MEGABYTE:.2f} MB"
 
 
+def fetch_indexes_size_mb(cursor: oracledb.Cursor, owner: str, table: str) -> str:
+    """Lê o tamanho alocado dos índices da tabela, se a sessão puder ler ``dba_segments``.
+
+    :param cursor: Cursor de uma conexão aberta.
+    :param owner: Dono da tabela.
+    :param table: Nome da tabela.
+    :returns: Tamanho em MB, ou uma explicação se não for possível ler.
+    """
+    try:
+        cursor.execute(load_query(QUERIES_ANCHOR, "get_indexes_size_dba"), {"owner": owner, "table_name": table})
+    except oracledb.DatabaseError:
+        return "sem acesso a dba_segments"
+    (size,) = cursor.fetchone()
+    return "sem segmento alocado" if size is None else f"{int(size) / MEGABYTE:.2f} MB"
+
+
+def structure_sections(template: TableLayout, loaded: TableLayout, loaded_columns: list[str]) -> tuple[int, list[str]]:
+    """Compara partições e índices da tabela original com os da tabela carregada.
+
+    :param template: Estrutura da tabela original.
+    :param loaded: Estrutura da tabela carregada.
+    :param loaded_columns: Colunas criadas na tabela carregada.
+    :returns: Número de divergências e seções de texto do relatório.
+    """
+    try:
+        expected = plan_structure(template, loaded_columns, TABLE_PREFIX)
+    except (NotImplementedError, ValueError) as error:
+        return 1, [f"A estrutura da original não pode ser replicada pela carga: {error}"]
+
+    partition_rows = compare_partitions(expected.layout.partitioning, loaded.partitioning)
+    partition_divergences = count_divergences(partition_rows)
+    tablespace_ok = expected.layout.tablespace == loaded.tablespace
+    index_rows = compare_indexes(list(expected.layout.indexes), list(loaded.indexes))
+    index_divergences = count_divergences(index_rows)
+    sections = [
+        f"Partições: tablespace original {expected.layout.tablespace or '(padrão)'}, carregada "
+        f"{loaded.tablespace or '(padrão)'} ({'OK' if tablespace_ok else 'DIVERGE'}); "
+        f"{partition_divergences} divergência(s). Partições criadas pelo INTERVAL não entram.\n"
+        + format_text_table(["#", "Partição", "Original", "Carregada", "Status"], partition_rows),
+        f"Índices: {len(expected.layout.indexes)} esperado(s), {len(loaded.indexes)} na carregada, "
+        f"{index_divergences} divergente(s). Esperado: definição da original, utilizável e paralelismo 1.\n"
+        + (
+            format_text_table(["Índice", "Esperado", "Carregado", "Paralelismo", "Status", "Resultado"], index_rows)
+            if index_rows
+            else "(a original não tem índices para replicar)"
+        ),
+    ]
+    if expected.skipped_indexes:
+        sections.append(
+            f"Índices da original não replicados (internos de view materializada): {list(expected.skipped_indexes)}"
+        )
+    return partition_divergences + index_divergences + (not tablespace_ok), sections
+
+
 def fetch_bigquery_metrics(project: str, dataset_id: str, table_id: str, expressions: list[str]) -> list[object]:
     """Calcula as métricas agregadas no BigQuery.
 
@@ -156,7 +215,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
             report.divergences = 1
             report.sections.append(f"A tabela {report.target} não existe no Oracle. Rode a pipeline de carga.")
             return report
-        created, last_ddl_time, comment, stats_rows, last_analyzed, tablespace, logging = overview
+        created, last_ddl_time, comment, stats_rows, last_analyzed, tablespace, logging, inmemory = overview
 
         cursor.execute(load_query(QUERIES_ANCHOR, "count_rows", schema=config.schema, table=table))
         (oracle_rows,) = cursor.fetchone()
@@ -165,7 +224,10 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
         cursor.execute(load_query(QUERIES_ANCHOR, "get_table_constraint_count"), binds)
         (constraints,) = cursor.fetchone()
         size = fetch_table_size_mb(cursor, config.schema, table)
+        indexes_size = fetch_indexes_size_mb(cursor, config.schema, table)
         actual = read_column_definitions(cursor, config.schema, table)
+        template_layout = read_table_layout(cursor, request.template_schema, validate_identifier(request.table_id))
+        loaded_layout = read_table_layout(cursor, config.schema, table)
 
         rows_status = "OK" if bq_rows == oracle_rows else "DIVERGE"
         managed = (comment or "").startswith(MANAGED_TABLE_MARKER)
@@ -186,8 +248,10 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
                     ("Último DDL", last_ddl_time),
                     ("Tablespace", tablespace),
                     ("Logging", logging),
+                    ("InMemory", inmemory),
                     ("Tamanho alocado", size),
                     ("Índices", indexes),
+                    ("Tamanho dos índices", indexes_size),
                     ("Constraints (PK/UK/FK)", constraints),
                     ("Estatísticas: linhas", stats_rows),
                     ("Estatísticas: coletadas em", last_analyzed),
@@ -221,6 +285,12 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
             f"{column_divergences} divergente(s)\n"
             + format_text_table(["#", "Coluna", "BigQuery", "Original", "Carregada", "Status"], column_rows)
         )
+        if template_layout is not None and loaded_layout is not None:
+            structure_divergences, sections = structure_sections(
+                template_layout, loaded_layout, [column.name for column in plan.columns]
+            )
+            report.divergences += structure_divergences
+            report.sections += sections
 
         if not request.compute_column_metrics:
             report.sections.append("Métricas por coluna: não calculadas (compute_column_metrics=false).")
