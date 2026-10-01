@@ -25,7 +25,10 @@ logger = get_logger(__name__)
 
 TABLE_PREFIX = "BQLOAD_"
 MANAGED_TABLE_MARKER = "rj_smfp__nota_carioca_bq_to_oracle"
+# Os sinônimos de grant_access ficam em outros schemas, o que exige CREATE ANY SYNONYM até do dono.
+OWNER_PRIVILEGES = ("CREATE ANY SYNONYM",)
 CROSS_SCHEMA_PRIVILEGES = (
+    *OWNER_PRIVILEGES,
     "ALTER ANY INDEX",
     "ANALYZE ANY",
     "COMMENT ANY TABLE",
@@ -33,6 +36,7 @@ CROSS_SCHEMA_PRIVILEGES = (
     "CREATE ANY TABLE",
     "DROP ANY INDEX",
     "DROP ANY TABLE",
+    "GRANT ANY OBJECT PRIVILEGE",
     "INSERT ANY TABLE",
     "LOCK ANY TABLE",
     "SELECT ANY TABLE",
@@ -143,21 +147,21 @@ def assert_managed_table(table: str, comment: str | None) -> None:
 
 
 def missing_privileges(session_user: str, schema: str, privileges: set[str]) -> list[str]:
-    """Lista os privilégios que faltam para operar tabelas em outro schema.
+    """Lista os privilégios que faltam para operar as tabelas do schema.
 
-    O dono do schema não precisa de privilégios ``ANY``. Os demais usuários
-    precisam de todos: criar e comentar a tabela, esvaziá-la com ``TRUNCATE``,
-    travá-la e inserir no direct path do SQL*Loader, contar as linhas, apagar e
-    criar os índices, tirar o paralelismo deles e coletar estatísticas.
+    O dono do schema precisa apenas criar sinônimos nos schemas dos
+    consumidores. Os demais usuários precisam de todos: criar e comentar a
+    tabela, esvaziá-la com ``TRUNCATE``, travá-la e inserir no direct path do
+    SQL*Loader, contar as linhas, apagar e criar os índices, tirar o paralelismo
+    deles, coletar estatísticas, conceder acesso e criar os sinônimos.
 
     :param session_user: Usuário efetivo da sessão (o alvo, em conexões proxy).
     :param schema: Schema onde as tabelas ficam.
     :param privileges: Privilégios de sistema da sessão.
     :returns: Privilégios ausentes, em ordem alfabética.
     """
-    if session_user == schema:
-        return []
-    return sorted(set(CROSS_SCHEMA_PRIVILEGES) - privileges)
+    required = OWNER_PRIVILEGES if session_user == schema else CROSS_SCHEMA_PRIVILEGES
+    return sorted(set(required) - privileges)
 
 
 def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
@@ -174,6 +178,8 @@ def assert_privileges(cursor: oracledb.Cursor, schema: str) -> None:
     rows = cursor.fetchall()
     session_user = rows[0][0] if rows else ""
     missing = missing_privileges(session_user, schema, {privilege for _, privilege in rows})
+    if missing and session_user == schema:
+        raise PermissionError(f"O usuário {schema} não tem {missing}. Nada foi alterado. Peça à DBA.")
     if missing:
         raise PermissionError(
             f"O usuário {session_user} não é dono de {schema} e não tem {missing}. Nada foi alterado. "
@@ -498,6 +504,22 @@ def gather_table_stats(config: OracleConfig, table: str, parallel_degree: int) -
             load_query(QUERIES_ANCHOR, "gather_table_stats"),
             {"owner": config.schema, "table_name": table, "degree": parallel_degree},
         )
+
+
+def grant_access(config: OracleConfig, table: str) -> None:
+    """Concede o acesso dos consumidores à tabela e cria os sinônimos deles.
+
+    O ``DROP`` de ``ensure_table`` apaga os grants, então a concessão roda após
+    toda carga. Os comandos podem ser repetidos sem efeito colateral.
+
+    :param config: Configuração da conexão.
+    :param table: Nome da tabela no Oracle.
+    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
+    """
+    with connect(config) as connection, connection.cursor() as cursor:
+        assert_managed_existing_table(cursor, config.schema, table)
+        cursor.execute(load_query(QUERIES_ANCHOR, "grant_access", schema=config.schema, table=table))
+    logger.info("Acesso concedido em %s.%s", config.schema, table)
 
 
 def count_rows(config: OracleConfig, table: str) -> int:
