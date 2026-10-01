@@ -4,8 +4,9 @@ SELECT
     c.comments,
     t.num_rows AS stats_num_rows,
     TO_CHAR(t.last_analyzed, 'YYYY-MM-DD HH24:MI:SS') AS last_analyzed,
-    t.tablespace_name,
-    t.logging
+    COALESCE(t.tablespace_name, p.def_tablespace_name) AS tablespace_name,
+    COALESCE(t.logging, p.def_logging) AS logging,
+    COALESCE(t.inmemory, p.def_inmemory) AS inmemory
 FROM all_tables t
 JOIN all_objects o
     ON o.owner = t.owner
@@ -14,5 +15,8 @@ JOIN all_objects o
 LEFT JOIN all_tab_comments c
     ON c.owner = t.owner
     AND c.table_name = t.table_name
+LEFT JOIN all_part_tables p
+    ON p.owner = t.owner
+    AND p.table_name = t.table_name
 WHERE t.owner = :owner
     AND t.table_name = :table_name
