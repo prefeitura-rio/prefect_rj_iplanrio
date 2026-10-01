@@ -67,7 +67,7 @@ def plan_structure_task(
     indexes = ", ".join(index.name for index in structure.layout.indexes) or "nenhum"
     log(
         f"{table_id}: tablespace {structure.layout.tablespace or '(padrão do schema)'}, "
-        f"{describe_partitioning(structure.layout.partitioning)}, sem INMEMORY; "
+        f"{describe_partitioning(structure.layout.partitioning)}, {structure.layout.inmemory or 'NO INMEMORY'}; "
         f"índices criados após a carga: {indexes}"
     )
     if structure.skipped_indexes:
