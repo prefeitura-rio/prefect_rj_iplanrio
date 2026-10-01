@@ -102,7 +102,7 @@ def get_pendentes(meses_envio: list[str], bq_files_limit: int | None = None) -> 
     # Execute BigQuery query with error handling
     try:
         client = bigquery.Client()
-        df = client.query(query).result().to_pandas()
+        df = client.query(query).result().to_dataframe()
     except GoogleAPIError as e:
         logger.error(f"BigQuery error executing query: {e}")
         raise
