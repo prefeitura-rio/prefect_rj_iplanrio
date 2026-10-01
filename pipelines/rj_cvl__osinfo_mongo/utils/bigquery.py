@@ -26,7 +26,9 @@ def load_query(package_path: str, query_name: str) -> str:
     """
     import os
 
-    query_dir = os.path.join(os.path.dirname(package_path), "queries")
+    # Go up one level from utils/ to pipeline root
+    pipeline_dir = os.path.dirname(os.path.dirname(package_path))
+    query_dir = os.path.join(pipeline_dir, "queries")
     query_file = os.path.join(query_dir, f"{query_name}.sql")
     with open(query_file) as f:
         return f.read()
