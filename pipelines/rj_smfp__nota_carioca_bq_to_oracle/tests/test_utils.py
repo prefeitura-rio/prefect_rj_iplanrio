@@ -21,7 +21,21 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     validate_identifier,
 )
 import io
+from datetime import UTC, datetime, timedelta
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import changed_tables, quiet_wait_seconds
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.inmemory import InMemoryStatus
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
+    CONSUMER_GRANTS,
+    SlotPlan,
+    SynonymTarget,
+    choose_slots,
+    load_comment,
+    parse_load_comment,
+    synonym_owners,
+    synonyms_to_realign,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     IndexDefinition,
     Partitioning,
@@ -33,6 +47,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     layout_differences,
     partitioning_from_dictionary,
     plan_structure,
+    slot_indexes,
     storage_clause,
 )
 from prefect_rj_iplanrio.sql import load_query
@@ -207,19 +222,161 @@ def test_missing_privileges_lists_what_other_users_lack():
     assert missing_privileges("26234793", "DFEN", set(CROSS_SCHEMA_PRIVILEGES)) == []
 
 
-def test_grant_access_grants_and_creates_synonyms_for_the_loaded_table():
-    sql = load_query(QUERIES_ANCHOR, "grant_access", schema="DFEN", table="BQLOAD_X")
-    statements = [line.strip() for line in sql.splitlines() if "EXECUTE IMMEDIATE" in line]
-    assert sql.startswith("BEGIN")
-    assert sql.rstrip().endswith("END;")
-    assert statements == [
-        """EXECUTE IMMEDIATE 'GRANT SELECT ON "DFEN"."BQLOAD_X" TO RL_NFSE';""",
-        """EXECUTE IMMEDIATE 'GRANT SELECT ON "DFEN"."BQLOAD_X" TO RL_NFSE_SIGA';""",
-        """EXECUTE IMMEDIATE 'GRANT SELECT ON "DFEN"."BQLOAD_X" TO RL_NFSEOWNER_DRL';""",
-        """EXECUTE IMMEDIATE 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X" TO NFSE_OWNER';""",
-        """EXECUTE IMMEDIATE 'CREATE OR REPLACE SYNONYM NFSE_SIGA."BQLOAD_X" FOR "DFEN"."BQLOAD_X"';""",
-        """EXECUTE IMMEDIATE 'CREATE OR REPLACE SYNONYM NFSE_USER."BQLOAD_X" FOR "DFEN"."BQLOAD_X"';""",
+def test_grant_and_synonym_statements_for_the_physical_table():
+    assert load_query(
+        QUERIES_ANCHOR, "grant_on_table", privileges="SELECT, ALTER, DELETE", schema="DFEN", table="BQLOAD_X_A",
+        grantee="NFSE_OWNER",
+    ) == 'GRANT SELECT, ALTER, DELETE ON "DFEN"."BQLOAD_X_A" TO "NFSE_OWNER"\n'
+    assert load_query(
+        QUERIES_ANCHOR, "create_synonym", owner="NFSE_SIGA", synonym="BQLOAD_X", schema="DFEN", table="BQLOAD_X_B"
+    ) == 'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_B"\n'
+    assert CONSUMER_GRANTS == (
+        ("RL_NFSE", "SELECT"),
+        ("RL_NFSE_SIGA", "SELECT"),
+        ("RL_NFSEOWNER_DRL", "SELECT"),
+        ("NFSE_OWNER", "SELECT, ALTER, DELETE"),
+    )
+    assert synonym_owners("DFEN") == ("DFEN", "NFSE_SIGA", "NFSE_USER")
+
+
+def test_inmemory_queries_keep_the_dollar_of_the_views():
+    assert "gv$inmemory_area" in load_query(QUERIES_ANCHOR, "get_inmemory_area")
+    assert "gv$im_segments" in load_query(QUERIES_ANCHOR, "get_inmemory_segments")
+
+
+def syn(owner, table_name, table_owner="DFEN"):
+    return SynonymTarget(owner, table_owner, table_name)
+
+
+def test_choose_slots_first_load_goes_to_a_even_with_legacy_synonyms():
+    plan = choose_slots("BQLOAD_X", "DFEN", [])
+    assert (plan.active, plan.inactive, plan.slot) == (None, "BQLOAD_X_A", "A")
+    legacy = choose_slots("BQLOAD_X", "DFEN", [syn("NFSE_SIGA", "BQLOAD_X"), syn("NFSE_USER", "BQLOAD_X")])
+    assert (legacy.active, legacy.inactive) == (None, "BQLOAD_X_A")
+
+
+def test_choose_slots_alternates_between_a_and_b():
+    on_a = [syn("DFEN", "BQLOAD_X_A"), syn("NFSE_SIGA", "BQLOAD_X_A"), syn("NFSE_USER", "BQLOAD_X_A")]
+    assert choose_slots("BQLOAD_X", "DFEN", on_a) == SlotPlan("BQLOAD_X", "BQLOAD_X_A", "BQLOAD_X_B")
+    on_b = [syn("DFEN", "BQLOAD_X_B")]
+    assert choose_slots("BQLOAD_X", "DFEN", on_b) == SlotPlan("BQLOAD_X", "BQLOAD_X_B", "BQLOAD_X_A")
+
+
+def test_choose_slots_after_interrupted_swap_trusts_schema_then_consumers():
+    partial = [syn("DFEN", "BQLOAD_X_A"), syn("NFSE_SIGA", "BQLOAD_X_B"), syn("NFSE_USER", "BQLOAD_X_B")]
+    plan = choose_slots("BQLOAD_X", "DFEN", partial)
+    assert (plan.active, plan.inactive) == ("BQLOAD_X_A", "BQLOAD_X_B")
+    assert synonyms_to_realign(plan, partial) == ["NFSE_SIGA", "NFSE_USER"]
+    first_swap_interrupted = [syn("NFSE_SIGA", "BQLOAD_X_A"), syn("NFSE_USER", "BQLOAD_X")]
+    plan = choose_slots("BQLOAD_X", "DFEN", first_swap_interrupted)
+    assert (plan.active, plan.inactive) == ("BQLOAD_X_A", "BQLOAD_X_B")
+    assert synonyms_to_realign(plan, first_swap_interrupted) == []
+
+
+def test_choose_slots_refuses_synonyms_pointing_to_unmanaged_objects():
+    with pytest.raises(PermissionError, match="não gerencia"):
+        choose_slots("BQLOAD_X", "DFEN", [syn("NFSE_SIGA", "MVT_X")])
+    with pytest.raises(PermissionError, match="não gerencia"):
+        choose_slots("BQLOAD_X", "DFEN", [syn("DFEN", "BQLOAD_X_A", table_owner="OUTRO")])
+    other_owner = choose_slots("BQLOAD_X", "DFEN", [syn("APP_QUALQUER", "MVT_X")])
+    assert other_owner.active is None
+
+
+def test_load_comment_round_trip_keeps_pipeline_marker():
+    snapshot = datetime(2026, 10, 1, 1, 50, 47, 630000, tzinfo=UTC)
+    loaded_at = datetime(2026, 10, 1, 3, 4, 5, tzinfo=UTC)
+    comment = load_comment("rj-iplanrio-dia.nota_carioca.T", snapshot, loaded_at)
+    assert comment == (
+        f"{MANAGED_TABLE_MARKER}: carga a partir de rj-iplanrio-dia.nota_carioca.T; "
+        "snapshot do BigQuery de 2026-10-01 01:50:47 UTC; carregada em 2026-10-01 03:04:05 UTC"
+    )
+    assert parse_load_comment(comment) == ("2026-10-01 01:50:47", "2026-10-01 03:04:05")
+    assert parse_load_comment(f"{MANAGED_TABLE_MARKER}: carga a partir de x") is None
+    assert parse_load_comment(None) is None
+    assert_managed_table("BQLOAD_X_A", comment)
+
+
+def test_slot_indexes_suffix_each_physical_table():
+    renamed = slot_indexes((index("BQLOAD_IX_A", ["A"]), index("BQLOAD_IX_B", ["B"])), "B")
+    assert [item.name for item in renamed] == ["BQLOAD_IX_A_B", "BQLOAD_IX_B_B"]
+    with pytest.raises(ValueError, match="inválido"):
+        slot_indexes((index("I" * 127, ["A"]),), "A")
+
+
+T0 = datetime(2026, 10, 1, 12, 0, 0, tzinfo=UTC)
+
+
+def test_quiet_wait_and_changed_tables():
+    assert quiet_wait_seconds([T0 - timedelta(minutes=2), T0 - timedelta(hours=1)], T0, 300) == 180
+    assert quiet_wait_seconds([T0 - timedelta(minutes=10)], T0, 300) == 0
+    assert quiet_wait_seconds([], T0, 300) == 0
+    assert changed_tables({"A": T0, "B": T0}, {"A": T0, "B": T0 + timedelta(seconds=1)}) == ["B"]
+
+
+def snapshot_request(**extra):
+    return bigquery.SnapshotRequest(
+        project="p", dataset_id="d", table_ids=["DET", "EXI"], bucket="b", prefix="d/run", quiet_seconds=300, **extra
+    )
+
+
+def fake_bigquery(monkeypatch, modified_reads):
+    reads = iter(modified_reads)
+    extracted, deleted = [], []
+    monkeypatch.setattr(bigquery, "get_last_modified", lambda project, dataset_id, table_id: next(reads)[table_id])
+    monkeypatch.setattr(
+        bigquery, "get_table_schema", lambda project, dataset_id, table_id: {"fields": [], "num_rows": 1}
+    )
+
+    def extract(project, dataset_id, table_id, bucket, prefix):
+        extracted.append(prefix)
+        return [bigquery.ExportedFile(name=f"{prefix}/part-0.csv.gz", size=1)]
+
+    monkeypatch.setattr(bigquery, "extract_table_to_gcs", extract)
+    monkeypatch.setattr(bigquery, "delete_blobs", lambda project, bucket, blob_names: deleted.extend(blob_names))
+    monkeypatch.setattr(bigquery, "datetime", type("FrozenDatetime", (), {"now": staticmethod(lambda tz: T0)}))
+    return extracted, deleted
+
+
+def test_export_consistent_snapshot_waits_for_quiet_period_and_retries_on_change(monkeypatch):
+    old, recent, newer = T0 - timedelta(hours=1), T0 - timedelta(minutes=1), T0 - timedelta(seconds=30)
+    reads = [
+        {"DET": recent}, {"EXI": old},
+        {"DET": old}, {"EXI": old}, {"DET": old}, {"EXI": newer},
+        {"DET": old}, {"EXI": old}, {"DET": old}, {"EXI": old},
     ]
+    waits, messages = [], []
+    extracted, deleted = fake_bigquery(monkeypatch, reads)
+    snapshot = bigquery.export_consistent_snapshot(snapshot_request(), report=messages.append, sleep=waits.append)
+    assert waits == [240]
+    assert extracted == ["d/run/tentativa-1/DET", "d/run/tentativa-1/EXI", "d/run/tentativa-2/DET", "d/run/tentativa-2/EXI"]
+    assert deleted == ["d/run/tentativa-1/DET/part-0.csv.gz", "d/run/tentativa-1/EXI/part-0.csv.gz"]
+    assert "mudou durante o extract em ['EXI']" in messages[1]
+    assert snapshot["DET"].last_modified == old
+    assert snapshot["EXI"].files == [bigquery.ExportedFile("d/run/tentativa-2/EXI/part-0.csv.gz", 1)]
+
+
+def test_export_consistent_snapshot_gives_up(monkeypatch):
+    recent = T0 - timedelta(seconds=10)
+    fake_bigquery(monkeypatch, [{"DET": recent}, {"EXI": recent}])
+    with pytest.raises(RuntimeError, match="sem alterações"):
+        bigquery.export_consistent_snapshot(
+            snapshot_request(max_wait_seconds=60), report=lambda message: None, sleep=lambda seconds: None
+        )
+    old = T0 - timedelta(hours=1)
+    fake_bigquery(monkeypatch, [{"DET": old}, {"EXI": old}, {"DET": T0}, {"EXI": old}])
+    with pytest.raises(RuntimeError, match="1 extracts seguidos"):
+        bigquery.export_consistent_snapshot(
+            snapshot_request(max_attempts=1), report=lambda message: None, sleep=lambda seconds: None
+        )
+
+
+def test_inmemory_status_complete_and_description():
+    done = InMemoryStatus("BQLOAD_X_A", 6, 6, 0, 0)
+    assert done.complete
+    assert done.description == "BQLOAD_X_A: 6/6 segmento(s) no In-Memory, 0,00 GB por popular"
+    assert not InMemoryStatus("T", 6, 5, 0, 0).complete
+    assert not InMemoryStatus("T", 6, 6, 1024**3, 1).complete
+    assert InMemoryStatus("T", 0, 0, 0, 0).complete
 
 
 def test_secret_env_key_follows_iplanrio_convention():
