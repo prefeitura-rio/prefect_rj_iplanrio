@@ -4,9 +4,11 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleCol
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import IndexDefinition, Partitioning, TablePartition
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import (
     compare_columns,
+    compare_grants,
     compare_indexes,
     compare_metrics,
     compare_partitions,
+    compare_synonyms,
     count_divergences,
     describe_column,
     format_text_table,
@@ -177,3 +179,25 @@ def test_compare_indexes_requires_same_definition_usable_and_without_parallel_de
     assert rows[3][2] == "(ausente)"
     assert rows[4][:2] == ["BQLOAD_EXTRA", "(não esperado)"]
     assert compare_indexes([index("BQLOAD_IX1")], [index("BQLOAD_IX1", columns=("B", "A"))])[0][-1] == "DIVERGE"
+
+
+def test_compare_synonyms_requires_all_owners_on_active_table():
+    owners = ("DFEN", "NFSE_SIGA", "NFSE_USER")
+    targets = {"DFEN": "DFEN.BQLOAD_X_B", "NFSE_SIGA": "DFEN.BQLOAD_X_B", "NFSE_USER": "DFEN.BQLOAD_X_A"}
+    rows = compare_synonyms(owners, targets, "DFEN.BQLOAD_X_B")
+    assert rows == [
+        ["DFEN", "DFEN.BQLOAD_X_B", "OK"],
+        ["NFSE_SIGA", "DFEN.BQLOAD_X_B", "OK"],
+        ["NFSE_USER", "DFEN.BQLOAD_X_A", "DIVERGE"],
+    ]
+    assert compare_synonyms(("NFSE_SIGA",), {}, "DFEN.BQLOAD_X_A") == [["NFSE_SIGA", "(ausente)", "DIVERGE"]]
+
+
+def test_compare_grants_accepts_extra_privileges_and_flags_missing_ones():
+    expected = (("RL_NFSE", "SELECT"), ("NFSE_OWNER", "SELECT, ALTER, DELETE"))
+    found = [("RL_NFSE", "SELECT"), ("RL_NFSE", "INSERT"), ("NFSE_OWNER", "SELECT"), ("NFSE_OWNER", "DELETE")]
+    assert compare_grants(expected, found) == [
+        ["RL_NFSE", "SELECT", "INSERT, SELECT", "OK"],
+        ["NFSE_OWNER", "ALTER, DELETE, SELECT", "DELETE, SELECT", "DIVERGE"],
+    ]
+    assert compare_grants((("RL_NFSE", "SELECT"),), []) == [["RL_NFSE", "SELECT", "(nenhum)", "DIVERGE"]]

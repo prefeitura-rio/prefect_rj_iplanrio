@@ -278,6 +278,48 @@ def compare_indexes(expected: list[IndexDefinition], actual: list[IndexDefinitio
     return rows
 
 
+def compare_synonyms(owners: tuple[str, ...], targets: dict[str, str], active: str | None) -> list[list[str]]:
+    """Confere se todos os sinônimos da tabela apontam para a tabela física em uso.
+
+    :param owners: Donos esperados dos sinônimos.
+    :param targets: Objeto apontado (``dono.tabela``) pelo sinônimo de cada dono.
+    :param active: Tabela em uso (``dono.tabela``), ou ``None`` se não houver.
+    :returns: Linhas ``[sinônimo, aponta para, status]``.
+    """
+    rows = []
+    for owner in owners:
+        target = targets.get(owner)
+        status = STATUS_OK if target is not None and target == active else STATUS_DIVERGE
+        rows.append([owner, target or "(ausente)", status])
+    return rows
+
+
+def compare_grants(expected: tuple[tuple[str, str], ...], found: list[tuple[str, str]]) -> list[list[str]]:
+    """Confere os privilégios concedidos aos consumidores na tabela física.
+
+    :param expected: Pares ``(grantee, privilégios separados por vírgula)``.
+    :param found: Pares ``(grantee, privilégio)`` concedidos na tabela.
+    :returns: Linhas ``[grantee, esperado, concedido, status]``; privilégios a
+        mais não contam como divergência.
+    """
+    granted: dict[str, set[str]] = {}
+    for grantee, privilege in found:
+        granted.setdefault(grantee, set()).add(privilege)
+    rows = []
+    for grantee, privileges in expected:
+        wanted = {privilege.strip() for privilege in privileges.split(",")}
+        has = granted.get(grantee, set())
+        rows.append(
+            [
+                grantee,
+                ", ".join(sorted(wanted)),
+                ", ".join(sorted(has)) or "(nenhum)",
+                STATUS_OK if wanted <= has else STATUS_DIVERGE,
+            ]
+        )
+    return rows
+
+
 def count_divergences(rows: list[list[str]]) -> int:
     """Conta as linhas de uma comparação cujo status é divergente.
 
