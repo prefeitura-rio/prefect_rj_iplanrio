@@ -31,7 +31,7 @@ def rj_cvl__osinfo_mongo(
     infisical_secret_path: str = "/db-osinfo-mongo",
     gcs_bucket_name: str = "rj-agent-cgm-triagem-nf",
     gcs_base_path: str = "staging/brutos_osinfo_mongo",
-    files_id_batch_size: int = 500,
+    files_id_batch_size: int = 5000,
     batch_workers: int = 5,
     upload_max_workers: int = 50,
     check_indexes_only: bool = False,

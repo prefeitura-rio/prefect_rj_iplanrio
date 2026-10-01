@@ -192,17 +192,19 @@ def _decode_base64_data(value: Any) -> Any:
     wait=wait_exponential(multiplier=1, min=1, max=2),
     retry=retry_if_exception_type((AutoReconnect, NetworkTimeout)),
 )
-def fetch_chunks_batch(client: MongoClient, database: str, files_ids: list[str]) -> pd.DataFrame:
-    """Fetch chunk documents for a batch of files_id from MongoDB in a single query.
+def fetch_chunks_batch(client: MongoClient, database: str, files_ids: list[str], mongo_batch_size: int = 20000) -> pd.DataFrame:
+    """Fetch chunk documents for a batch of files_id from MongoDB with pagination.
 
     Uses a single $in query for the whole batch (validated production pattern),
-    not one query per file. Automatically retries up to 2 times on transient
-    MongoDB connection errors.
+    with internal pagination to avoid memory exhaustion on large batches.
+    Fetches in chunks of mongo_batch_size to maintain streaming behavior.
+    Automatically retries up to 2 times on transient MongoDB connection errors.
 
     Args:
         client: pymongo.MongoClient instance (already connected, reused across batch).
         database: MongoDB database name.
         files_ids: List of files_id (as strings) to fetch chunks for.
+        mongo_batch_size: Number of chunks to fetch per page (default: 20000).
 
     Returns:
         DataFrame with all chunk rows for the given files_ids (columns: n, data,
@@ -216,24 +218,39 @@ def fetch_chunks_batch(client: MongoClient, database: str, files_ids: list[str])
 
     files_ids_obj = [ObjectId(fid) for fid in files_ids]
     query = {"files_id": {"$in": files_ids_obj}}
-    documents = list(collection.find(query))
 
-    if not documents:
+    # Paginate through results to avoid memory exhaustion
+    rows = []
+    skip = 0
+    total_fetched = 0
+
+    while True:
+        documents = list(collection.find(query).skip(skip).limit(mongo_batch_size))
+        
+        if not documents:
+            break
+
+        for doc in documents:
+            rows.append(
+                {
+                    "n": doc.get("n"),
+                    "data": doc.get("data"),
+                    "files_id": str(doc.get("files_id")),
+                }
+            )
+
+        total_fetched += len(documents)
+        if total_fetched % 100000 == 0:
+            logger.info(f"Fetched {total_fetched:,} chunks so far from {len(files_ids)} files_id...")
+
+        skip += mongo_batch_size
+
+    if not rows:
         logger.warning(f"No chunks found for {len(files_ids)} files_id in this batch")
         return pd.DataFrame(columns=["n", "data", "files_id"])
-
-    rows = []
-    for doc in documents:
-        rows.append(
-            {
-                "n": doc.get("n"),
-                "data": doc.get("data"),
-                "files_id": str(doc.get("files_id")),
-            }
-        )
 
     df = pd.DataFrame(rows)
     df["data"] = df["data"].apply(_decode_base64_data)
 
-    logger.info(f"Fetched {len(df)} total chunk rows for {len(files_ids)} files_id")
+    logger.info(f"Fetched {len(df):,} total chunk rows for {len(files_ids)} files_id")
     return df
