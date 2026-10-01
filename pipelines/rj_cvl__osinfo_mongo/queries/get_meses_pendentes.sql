@@ -4,10 +4,10 @@
 WITH corte AS (
   SELECT MAX(mes_envio) AS mes_corte
   FROM `rj-agent-cgm-triagem-nf.brutos_osinfo_mongo.vw_files_pdfs_mes_envio`
-  where mes_envio IN UNNEST($meses_envio)
+  WHERE DATE(mes_envio) IN UNNEST(ARRAY<DATE>$meses_envio)
 )
 SELECT
-  d.mes_envio,
+  DATE(d.mes_envio) AS mes_envio,
   d.filename
 FROM `rj-agent-cgm-triagem-nf.brutos_osinfo_mongo.vw_files_pdfs_download` d
 CROSS JOIN corte c
