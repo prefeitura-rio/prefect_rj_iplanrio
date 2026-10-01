@@ -1,0 +1,1 @@
+DROP INDEX "$schema"."$index"
