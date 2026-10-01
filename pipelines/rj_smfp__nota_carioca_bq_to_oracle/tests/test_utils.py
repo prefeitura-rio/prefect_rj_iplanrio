@@ -29,6 +29,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     TablePartition,
     index_from_dictionary,
     index_statement_parts,
+    inmemory_from_dictionary,
     layout_differences,
     partitioning_from_dictionary,
     plan_structure,
@@ -362,6 +363,7 @@ def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_ind
         "DFEN_BIG_DATA",
         RANGE_BY_MONTH,
         (index("BQLOAD_IX_MVT_NNEX_DET_CPFR_DCM_NN", ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"]),),
+        inmemory=INMEMORY_HIGH,
     )
 
 
@@ -398,6 +400,83 @@ def test_storage_clause_copies_tablespace_and_partitions_without_inmemory():
     listed = Partitioning("LIST", ("UF",), None, (TablePartition("P_RJ", "'RJ'", None),))
     assert "PARTITION \"P_RJ\" VALUES ('RJ')" in storage_clause(TableLayout(None, listed))
     assert storage_clause(TableLayout(None, None)) == "NO INMEMORY"
+
+
+INMEMORY_HIGH = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
+
+
+def inmemory_row(inmemory="ENABLED", priority="HIGH", compression="FOR QUERY HIGH", distribute="AUTO", duplicate="NO DUPLICATE"):
+    return {
+        "inmemory": inmemory,
+        "inmemory_priority": priority,
+        "inmemory_compression": compression,
+        "inmemory_distribute": distribute,
+        "inmemory_duplicate": duplicate,
+    }
+
+
+@pytest.mark.parametrize(
+    ("row", "expected"),
+    [
+        pytest.param(inmemory_row(), INMEMORY_HIGH, id="original_mvt"),
+        pytest.param(
+            inmemory_row(priority="NONE", compression="NO MEMCOMPRESS", distribute=None, duplicate=None),
+            "INMEMORY PRIORITY NONE NO MEMCOMPRESS",
+            id="no_compression_single_instance",
+        ),
+        pytest.param(
+            inmemory_row(compression="FOR CAPACITY LOW", distribute="BY ROWID RANGE", duplicate="DUPLICATE ALL"),
+            "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR CAPACITY LOW DISTRIBUTE BY ROWID RANGE DUPLICATE ALL",
+            id="rac_options",
+        ),
+        pytest.param(inmemory_row(inmemory="DISABLED"), None, id="disabled"),
+        pytest.param(inmemory_row(inmemory="NONE"), None, id="partition_default_not_set"),
+        pytest.param(inmemory_row(inmemory=None), None, id="no_value"),
+    ],
+)
+def test_inmemory_from_dictionary_builds_the_create_table_clause(row, expected):
+    assert inmemory_from_dictionary(row) == expected
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        pytest.param(inmemory_row(priority="HIGH; DROP"), id="priority"),
+        pytest.param(inmemory_row(compression="FOR QUERY"), id="compression"),
+        pytest.param(inmemory_row(distribute="BY HASH"), id="distribute"),
+        pytest.param(inmemory_row(duplicate="TRIPLICATE"), id="duplicate"),
+    ],
+)
+def test_inmemory_from_dictionary_rejects_unknown_values(row):
+    with pytest.raises(NotImplementedError, match="INMEMORY"):
+        inmemory_from_dictionary(row)
+
+
+@pytest.mark.parametrize(
+    "original_inmemory",
+    [
+        pytest.param(None, id="original_not_in_memory"),
+        pytest.param(INMEMORY_HIGH, id="original_in_memory"),
+        pytest.param("INMEMORY PRIORITY LOW MEMCOMPRESS FOR DML", id="original_with_other_options"),
+    ],
+)
+def test_plan_structure_puts_every_loaded_table_in_memory(original_inmemory):
+    template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, inmemory=original_inmemory)
+    assert plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO"], "BQLOAD_").layout.inmemory == INMEMORY_HIGH
+
+
+def test_storage_clause_uses_inmemory_of_original():
+    assert storage_clause(TableLayout("DFEN_BIG_DATA", None, inmemory=INMEMORY_HIGH)) == (
+        f'TABLESPACE "DFEN_BIG_DATA"\n{INMEMORY_HIGH}'
+    )
+
+
+def test_layout_differences_detect_changed_inmemory():
+    expected = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, inmemory=INMEMORY_HIGH)
+    assert layout_differences(expected, expected) == []
+    assert layout_differences(TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH), expected) == [
+        f"inmemory: NO INMEMORY → {INMEMORY_HIGH}"
+    ]
 
 
 def test_index_statement_parts():

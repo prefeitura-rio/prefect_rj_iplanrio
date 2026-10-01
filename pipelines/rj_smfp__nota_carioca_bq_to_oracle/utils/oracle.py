@@ -14,6 +14,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     TableLayout,
     index_from_dictionary,
     index_statement_parts,
+    inmemory_from_dictionary,
     layout_differences,
     partitioning_from_dictionary,
     storage_clause,
@@ -243,7 +244,7 @@ def fetch_rows(cursor: oracledb.Cursor, query: str, binds: Mapping[str, object])
 
 
 def read_table_layout(cursor: oracledb.Cursor, owner: str, table: str) -> TableLayout | None:
-    """Lê tablespace, particionamento e índices de uma tabela no dicionário do Oracle.
+    """Lê tablespace, particionamento, índices e In-Memory de uma tabela no dicionário do Oracle.
 
     :param cursor: Cursor de uma conexão aberta.
     :param owner: Dono da tabela.
@@ -271,7 +272,10 @@ def read_table_layout(cursor: oracledb.Cursor, owner: str, table: str) -> TableL
     )
     tablespace = storage[0]["tablespace_name"] or storage[0]["def_tablespace_name"]
     return TableLayout(
-        tablespace=None if tablespace is None else str(tablespace), partitioning=partitioning, indexes=indexes
+        tablespace=None if tablespace is None else str(tablespace),
+        partitioning=partitioning,
+        indexes=indexes,
+        inmemory=inmemory_from_dictionary(storage[0]),
     )
 
 
