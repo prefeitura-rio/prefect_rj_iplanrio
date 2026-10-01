@@ -180,6 +180,13 @@ def validate_row_count_task(
 
 
 @task(cache_policy=NO_CACHE)
+def grant_access_task(infisical_secret_path: str, table: str) -> None:
+    """Concede o acesso dos consumidores à tabela carregada e cria os sinônimos deles."""
+    oracle.grant_access(config=oracle.read_oracle_config(infisical_secret_path), table=table)
+    log(f"{table}: acesso concedido e sinônimos criados")
+
+
+@task(cache_policy=NO_CACHE)
 def delete_gcs_files_task(project: str, bucket: str, files: list[bigquery.ExportedFile]) -> None:
     """Remove do GCS os arquivos exportados."""
     bigquery.delete_blobs(project=project, bucket=bucket, blob_names=[exported.name for exported in files])
