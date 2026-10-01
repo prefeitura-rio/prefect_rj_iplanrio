@@ -12,6 +12,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     extract_table_to_gcs_task,
     gather_oracle_stats_task,
     get_table_schema_task,
+    grant_access_task,
     list_tables_task,
     load_into_oracle_task,
     plan_load_task,
@@ -86,6 +87,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             parallel_degree=index_parallel_degree,
             wait_for=[validated_rows],
         )
-        gather_oracle_stats_task(
+        gathered_stats = gather_oracle_stats_task(
             infisical_secret_path=infisical_secret_path, table=indexed_table, parallel_degree=index_parallel_degree
         )
+        grant_access_task(infisical_secret_path=infisical_secret_path, table=indexed_table, wait_for=[gathered_stats])
