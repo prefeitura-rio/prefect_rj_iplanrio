@@ -35,6 +35,7 @@ def rj_cvl__osinfo_mongo(
     batch_workers: int = 5,
     upload_max_workers: int = 50,
     check_indexes_only: bool = False,
+    bq_files_limit: int | None = None,
 ) -> None:
     """Download and reconstruct PDFs from OSINFO MongoDB by mes_envio.
 
@@ -54,11 +55,11 @@ def rj_cvl__osinfo_mongo(
         upload_max_workers: Max workers for parallel uploads.
         check_indexes_only: If True, only run the MongoDB connectivity/index
             check (FILES.chunks and FILES.files).
+        bq_files_limit: Optional limit on number of files to process. If set,
+            adds a LIMIT clause to the BigQuery query.
     """
     # Get DB credentials from Infisical
-    secrets = get_database_username_and_password_from_secret_task(
-        infisical_secret_path=infisical_secret_path
-    )
+    secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
 
     # Build MongoDB connection config
     mongo_config = MongoConnectionConfig(
@@ -82,7 +83,7 @@ def rj_cvl__osinfo_mongo(
     rename_current_flow_run_task(new_name=",".join(meses_envio))
 
     # Get pending files from BigQuery
-    pendentes = get_pendentes_task(meses_envio=meses_envio)
+    pendentes = get_pendentes_task(meses_envio=meses_envio, bq_files_limit=bq_files_limit)
 
     # Map filenames to files_id in MongoDB
     files_map = map_filenames_to_files_ids_task(pendentes=pendentes, mongo_config=mongo_config)

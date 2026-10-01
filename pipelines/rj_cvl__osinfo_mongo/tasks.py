@@ -29,16 +29,17 @@ def check_mongo_indexes_task(mongo_config: MongoConnectionConfig) -> dict[str, d
 
 
 @task
-def get_pendentes_task(meses_envio: list[str]) -> pd.DataFrame:
+def get_pendentes_task(meses_envio: list[str], bq_files_limit: int | None = None) -> pd.DataFrame:
     """Get pending PDFs from BigQuery.
 
     Args:
         meses_envio: List of months to query in YYYY-MM-DD format.
+        bq_files_limit: Optional limit on number of files to retrieve.
 
     Returns:
         DataFrame with pending files (mes_envio, filename).
     """
-    return bigquery.get_pendentes(meses_envio)
+    return bigquery.get_pendentes(meses_envio, bq_files_limit=bq_files_limit)
 
 
 @task

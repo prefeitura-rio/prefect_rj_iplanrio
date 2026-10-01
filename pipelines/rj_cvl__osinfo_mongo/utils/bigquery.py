@@ -32,11 +32,12 @@ def load_query(package_path: str, query_name: str) -> str:
         return f.read()
 
 
-def get_pendentes(meses_envio: list[str]) -> pd.DataFrame:
+def get_pendentes(meses_envio: list[str], bq_files_limit: int | None = None) -> pd.DataFrame:
     """Query BigQuery for pending PDFs (uri IS NULL) by month.
 
     Args:
         meses_envio: List of months in YYYY-MM-DD format (e.g., ["2021-11-01", "2021-12-01"]).
+        bq_files_limit: Optional limit on number of files to retrieve.
 
     Returns:
         DataFrame with columns: mes_envio (DATE), filename (STRING).
@@ -46,9 +47,12 @@ def get_pendentes(meses_envio: list[str]) -> pd.DataFrame:
     # Format months as SQL array literal: ['2021-11-01', '2021-12-01']
     meses_sql = "[" + ", ".join(f"'{m}'" for m in meses_envio) + "]"
 
+    # Format LIMIT clause if bq_files_limit is provided
+    limit_clause = f"LIMIT {bq_files_limit}" if bq_files_limit else ""
+
     # Use string.Template for substitution
     template = Template(query_template)
-    query = template.substitute(meses_envio=meses_sql)
+    query = template.substitute(meses_envio=meses_sql, bq_files_limit_clause=limit_clause)
 
     client = bigquery.Client()
     df = client.query(query).to_pandas()
