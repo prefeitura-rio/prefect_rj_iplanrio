@@ -5,13 +5,17 @@ from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
+    create_oracle_indexes_task,
     delete_gcs_files_task,
+    drop_oracle_indexes_task,
     ensure_oracle_table_task,
     extract_table_to_gcs_task,
+    gather_oracle_stats_task,
     get_table_schema_task,
     list_tables_task,
     load_into_oracle_task,
     plan_load_task,
+    plan_structure_task,
     truncate_oracle_table_task,
     validate_row_count_task,
 )
@@ -28,6 +32,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     template_schema: str | None = None,
     excluded_template_columns: list[str] | None = None,
     progress_interval_seconds: int = 30,
+    index_parallel_degree: int = 4,
 ) -> None:
     rename_current_flow_run_task(new_name=dataset_id)
     inject_bd_credentials_task(environment="prod")
@@ -42,17 +47,22 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             table_id=table_id,
             table_schema=table_schema,
         )
+        structure = plan_structure_task(
+            infisical_secret_path=infisical_secret_path, template_schema=template_schema, table_id=table_id, plan=plan
+        )
         oracle_table = ensure_oracle_table_task(
             infisical_secret_path=infisical_secret_path,
             project=project,
             dataset_id=dataset_id,
             table_id=table_id,
             plan=plan,
+            structure=structure,
         )
         exported_files = extract_table_to_gcs_task(
             project=project, dataset_id=dataset_id, table_id=table_id, bucket=gcs_bucket
         )
-        empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=oracle_table)
+        unindexed_table = drop_oracle_indexes_task(infisical_secret_path=infisical_secret_path, table=oracle_table)
+        empty_table = truncate_oracle_table_task(infisical_secret_path=infisical_secret_path, table=unindexed_table)
         loaded_rows = load_into_oracle_task(
             infisical_secret_path=infisical_secret_path,
             table=empty_table,
@@ -69,3 +79,13 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             loaded_rows=loaded_rows,
         )
         delete_gcs_files_task(project=project, bucket=gcs_bucket, files=exported_files, wait_for=[validated_rows])
+        indexed_table = create_oracle_indexes_task(
+            infisical_secret_path=infisical_secret_path,
+            table=empty_table,
+            structure=structure,
+            parallel_degree=index_parallel_degree,
+            wait_for=[validated_rows],
+        )
+        gather_oracle_stats_task(
+            infisical_secret_path=infisical_secret_path, table=indexed_table, parallel_degree=index_parallel_degree
+        )
