@@ -46,10 +46,10 @@ deployments:
         command: uv run --package rj_pic__disparos_email -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-    schedules:
-      - interval: 86400  # Executa a cada 24h
-        anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
-        timezone: America/Sao_Paulo
-        slug: prod-daily
-        parameters:
-          email_subject: "Pequenos Cariocas - Alertas"
+    # schedules:
+    #   - interval: 86400  # Executa a cada 24h
+    #     anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
+    #     timezone: America/Sao_Paulo
+    #     slug: prod-daily
+    #     parameters:
+    #       email_subject: "Pequenos Cariocas - Alertas"
