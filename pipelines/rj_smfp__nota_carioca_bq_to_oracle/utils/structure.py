@@ -9,6 +9,22 @@ SNAPSHOT_INDEX_PREFIX = "I_SNAP$"
 SUPPORTED_PARTITIONING = ("RANGE", "LIST")
 SUPPORTED_INDEX_TYPES = ("NORMAL", "BITMAP")
 USABLE_INDEX_STATUSES = ("VALID", "N/A")
+# Valores de all_tables e all_part_tables aceitos no INMEMORY; o texto entra no DDL como está.
+INMEMORY_PRIORITIES = ("NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
+INMEMORY_COMPRESSIONS = (
+    "NO MEMCOMPRESS",
+    "FOR DML",
+    "FOR QUERY LOW",
+    "FOR QUERY HIGH",
+    "FOR CAPACITY LOW",
+    "FOR CAPACITY HIGH",
+    "AUTO",
+)
+INMEMORY_DISTRIBUTES = ("AUTO", "BY ROWID RANGE", "BY PARTITION", "BY SUBPARTITION")
+INMEMORY_DUPLICATES = ("NO DUPLICATE", "DUPLICATE", "DUPLICATE ALL")
+# Toda tabela carregada vai para o In-Memory, com as opções das MVT_ originais. A cláusula tem todas as opções,
+# como o dicionário as devolve; sem DISTRIBUTE e DUPLICATE, a tabela criada seria vista como divergente e recriada.
+LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
 
 
 @dataclass(frozen=True)
@@ -93,18 +109,21 @@ class IndexDefinition:
 
 @dataclass(frozen=True)
 class TableLayout:
-    """Tablespace, particionamento e índices de uma tabela.
+    """Tablespace, particionamento, índices e In-Memory de uma tabela.
 
     :param tablespace: Tablespace da tabela (o padrão das partições, se for
         particionada).
     :param partitioning: Particionamento, ou ``None`` se a tabela não for
         particionada.
     :param indexes: Índices da tabela.
+    :param inmemory: Cláusula ``INMEMORY`` da tabela (o padrão das partições, se
+        for particionada), ou ``None`` se ela não estiver no In-Memory.
     """
 
     tablespace: str | None
     partitioning: Partitioning | None
     indexes: tuple[IndexDefinition, ...] = ()
+    inmemory: str | None = None
 
 
 @dataclass(frozen=True)
@@ -149,6 +168,55 @@ def partitioning_from_dictionary(
     return Partitioning(kind=kind, key_columns=tuple(key_columns), interval=interval, partitions=partitions)
 
 
+def inmemory_option(row: dict[str, object], key: str, allowed: tuple[str, ...]) -> str | None:
+    """Lê uma opção do In-Memory e confere se ela pode entrar no DDL.
+
+    :param row: Linha do dicionário do Oracle.
+    :param key: Nome da coluna.
+    :param allowed: Valores aceitos.
+    :returns: O valor, ou ``None`` se a coluna for nula.
+    :raises NotImplementedError: Se o valor não for aceito.
+    """
+    value = row[key]
+    if value is None:
+        return None
+    if value not in allowed:
+        raise NotImplementedError(f"INMEMORY: {key} = {value!r} sem suporte na carga.")
+    return str(value)
+
+
+def inmemory_from_dictionary(row: dict[str, object]) -> str | None:
+    """Monta a cláusula ``INMEMORY`` a partir do dicionário do Oracle.
+
+    Em tabela particionada, a linha deve trazer o padrão das partições
+    (``all_part_tables.def_inmemory*``), que as partições declaradas e as do
+    ``INTERVAL`` herdam.
+
+    :param row: Linha com ``inmemory``, ``inmemory_priority``,
+        ``inmemory_compression``, ``inmemory_distribute`` e ``inmemory_duplicate``.
+    :returns: Por exemplo ``INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH
+        DISTRIBUTE AUTO NO DUPLICATE``, ou ``None`` se o In-Memory não estiver
+        ativo.
+    :raises NotImplementedError: Se alguma opção tiver valor desconhecido.
+    """
+    if row["inmemory"] != "ENABLED":
+        return None
+    priority = inmemory_option(row, "inmemory_priority", INMEMORY_PRIORITIES)
+    compression = inmemory_option(row, "inmemory_compression", INMEMORY_COMPRESSIONS)
+    distribute = inmemory_option(row, "inmemory_distribute", INMEMORY_DISTRIBUTES)
+    duplicate = inmemory_option(row, "inmemory_duplicate", INMEMORY_DUPLICATES)
+    parts = ["INMEMORY"]
+    if priority:
+        parts.append(f"PRIORITY {priority}")
+    if compression:
+        parts.append(compression if compression == "NO MEMCOMPRESS" else f"MEMCOMPRESS {compression}")
+    if distribute:
+        parts.append(f"DISTRIBUTE {distribute}")
+    if duplicate:
+        parts.append(duplicate)
+    return " ".join(parts)
+
+
 def index_from_dictionary(row: dict[str, object], columns: list[str]) -> IndexDefinition:
     """Monta a definição de um índice a partir das linhas do dicionário do Oracle.
 
@@ -173,7 +241,8 @@ def index_from_dictionary(row: dict[str, object], columns: list[str]) -> IndexDe
 def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefix: str) -> StructurePlan:
     """Define a estrutura da tabela carregada a partir da tabela original.
 
-    Tablespace e particionamento são copiados. Os índices são copiados com o
+    Tablespace e particionamento são copiados, e a tabela vai sempre para o
+    In-Memory (``LOADED_TABLE_INMEMORY``). Os índices são copiados com o
     nome ``<prefixo><nome original>``, exceto os ``I_SNAP$`` de views
     materializadas.
 
@@ -211,7 +280,12 @@ def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefi
         if not INDEX_NAME_PATTERN.match(name):
             raise ValueError(f"Nome de índice inválido para o Oracle: {name!r}")
         indexes.append(replace(index, name=name))
-    layout = TableLayout(tablespace=template.tablespace, partitioning=partitioning, indexes=tuple(indexes))
+    layout = TableLayout(
+        tablespace=template.tablespace,
+        partitioning=partitioning,
+        indexes=tuple(indexes),
+        inmemory=LOADED_TABLE_INMEMORY,
+    )
     return StructurePlan(layout=layout, skipped_indexes=tuple(skipped))
 
 
@@ -246,15 +320,14 @@ def partitioning_clause(partitioning: Partitioning) -> str:
 def storage_clause(layout: TableLayout) -> str:
     """Monta as cláusulas de armazenamento do ``CREATE TABLE``.
 
-    A tabela é sempre criada com ``NO INMEMORY``: uma cópia não deve disputar a
-    memória do In-Memory com as tabelas que a aplicação usa, mesmo que o
-    tablespace tenha ``INMEMORY`` como padrão.
+    Sem a cláusula ``INMEMORY`` no layout, a tabela é criada com ``NO INMEMORY``,
+    mesmo que o tablespace tenha ``INMEMORY`` como padrão.
 
-    :param layout: Tablespace e particionamento da tabela.
+    :param layout: Tablespace, particionamento e In-Memory da tabela.
     :returns: Fragmento SQL que segue a lista de colunas.
     """
     clauses = [f"TABLESPACE {quote(layout.tablespace)}"] if layout.tablespace else []
-    clauses.append("NO INMEMORY")
+    clauses.append(layout.inmemory or "NO INMEMORY")
     if layout.partitioning is not None:
         clauses.append(partitioning_clause(layout.partitioning))
     return "\n".join(clauses)
@@ -277,7 +350,7 @@ def index_statement_parts(index: IndexDefinition, parallel_degree: int) -> dict[
 
 
 def layout_differences(existing: TableLayout, expected: TableLayout) -> list[str]:
-    """Lista as diferenças de tablespace e particionamento entre duas tabelas.
+    """Lista as diferenças de tablespace, In-Memory e particionamento entre duas tabelas.
 
     Índices não entram: a carga os apaga e recria a cada execução.
 
@@ -288,6 +361,8 @@ def layout_differences(existing: TableLayout, expected: TableLayout) -> list[str
     differences = []
     if existing.tablespace != expected.tablespace:
         differences.append(f"tablespace: {existing.tablespace or '(padrão)'} → {expected.tablespace or '(padrão)'}")
+    if existing.inmemory != expected.inmemory:
+        differences.append(f"inmemory: {existing.inmemory or 'NO INMEMORY'} → {expected.inmemory or 'NO INMEMORY'}")
     found, wanted = existing.partitioning, expected.partitioning
     if found is None or wanted is None:
         if found != wanted:
