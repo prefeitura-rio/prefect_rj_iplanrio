@@ -1,5 +1,7 @@
 """Flow for rj_smfp__nota_carioca_bq_to_oracle."""
 
+from typing import Literal
+
 from prefect import flow
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
@@ -17,6 +19,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     plan_load_task,
     plan_structure_task,
     record_load_task,
+    refresh_synonyms_task,
     resolve_slots_task,
     start_inmemory_population_task,
     swap_synonyms_task,
@@ -40,10 +43,14 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     index_parallel_degree: int = 4,
     bigquery_quiet_minutes: int = 5,
     inmemory_wait_minutes: int = 30,
+    mode: Literal["full", "synonyms_only"] = "full",
 ) -> None:
     rename_current_flow_run_task(new_name=dataset_id)
     inject_bd_credentials_task(environment="prod")
     tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
+    if mode == "synonyms_only":
+        refresh_synonyms_task(infisical_secret_path=infisical_secret_path, table_ids=tables)
+        return
     snapshot = export_snapshot_task(
         project=project,
         dataset_id=dataset_id,
