@@ -18,3 +18,12 @@ CLUSTER_KEYS = {
     "NOTAS_NACIONAIS": "NOTA_NACIONAL",
     "PESSOAS_NACIONAIS": "PESSOA_NACIONAL",
 }
+
+# Tag dos flow runs filhos (um por tabela); o pai a usa para distingui-los dos pais na exclusão mútua.
+CHILD_TAG = "o2bq-table"
+# Labels da tabela temporária validada pelo filho; o pai só publica se baterem com o seu run id, o SCN e a contagem.
+LABEL_RUN_ID = "o2bq_run_id"
+LABEL_SCN = "o2bq_scn"
+LABEL_ROWS = "o2bq_rows"
+# Limite do BigQuery para o valor de um label.
+LABEL_VALUE_MAX_LENGTH = 63

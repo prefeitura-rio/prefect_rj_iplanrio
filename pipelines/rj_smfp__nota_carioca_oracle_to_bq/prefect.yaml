@@ -31,9 +31,10 @@ deployments:
   - code_owner:fredzolio
   version: "{{ build-image.tag }}"
   entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
-  # Duas cargas simultâneas disputariam as mesmas tabelas temporárias; a segunda espera a primeira.
+  # 1 pai + 3 filhos (um pod por tabela). A exclusão entre cargas é feita no código: o pai recusa a execução se
+  # houver outro pai (ou filho) ativo, sem limite global de concorrência, que prenderia o slot se um pod morresse.
   concurrency_limit:
-    limit: 1
+    limit: 4
     collision_strategy: ENQUEUE
   work_pool:
     name: onprem-pool
@@ -50,9 +51,10 @@ deployments:
   - code_owner:fredzolio
   version: "{{ get-commit-hash.stdout }}"
   entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
-  # Duas cargas simultâneas disputariam as mesmas tabelas temporárias; a segunda espera a primeira.
+  # 1 pai + 3 filhos (um pod por tabela). A exclusão entre cargas é feita no código: o pai recusa a execução se
+  # houver outro pai (ou filho) ativo, sem limite global de concorrência, que prenderia o slot se um pod morresse.
   concurrency_limit:
-    limit: 1
+    limit: 4
     collision_strategy: ENQUEUE
   parameters:
     dataset_id: brutos_nota_fiscal

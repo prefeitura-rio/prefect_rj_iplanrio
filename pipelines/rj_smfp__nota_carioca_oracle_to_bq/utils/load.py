@@ -6,6 +6,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import TEMP_TABLE_SU
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import bigquery, gcs
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractResult
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import OracleConfig, Snapshot, count_as_of_scn
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import encode_proof, verify_proof
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.plan import TablePlan, assert_counts_match
 
 
@@ -61,6 +62,35 @@ def validate_table(
     return bigquery_rows
 
 
+def stamp_validated(destination: Destination, plan: TablePlan, run_id: str, snapshot: Snapshot, rows: int) -> None:
+    """Marca a tabela temporária validada com o run id do pai, o SCN e a contagem, para o pai conferir.
+
+    :param destination: Projeto, dataset e bucket.
+    :param plan: Plano da tabela.
+    :param run_id: Flow run do pai.
+    :param snapshot: Foto da carga.
+    :param rows: Linhas validadas.
+    """
+    description = f"Validada para a execução {run_id} no SCN {snapshot.scn}: {rows} linhas."
+    bigquery.stamp_table(
+        destination.project, destination.dataset_id, plan.temp_id, encode_proof(run_id, snapshot.scn, rows), description
+    )
+
+
+def verify_validated(destination: Destination, plans: list[TablePlan], run_id: str, snapshot: Snapshot) -> None:
+    """Confere, antes de publicar, que cada tabela temporária foi validada para esta execução e este SCN.
+
+    :param destination: Projeto, dataset e bucket.
+    :param plans: Planos das tabelas.
+    :param run_id: Flow run do pai.
+    :param snapshot: Foto da carga.
+    :raises ParallelRunError: Se alguma tabela faltar ou tiver marca divergente.
+    """
+    for plan in plans:
+        proof = bigquery.read_proof(destination.project, destination.dataset_id, plan.temp_id)
+        verify_proof(plan.table_id, proof, run_id, snapshot.scn)
+
+
 def publish_tables(destination: Destination, plans: list[TablePlan]) -> None:
     """Troca cada tabela final pela temporária, só depois de todas validadas.
 
@@ -71,14 +101,16 @@ def publish_tables(destination: Destination, plans: list[TablePlan]) -> None:
         bigquery.publish_table(destination.project, destination.dataset_id, plan.temp_id, plan.table_id)
 
 
-def cleanup(destination: Destination, plans: list[TablePlan], prefixes: list[str]) -> None:
-    """Apaga as tabelas temporárias e os arquivos desta execução; nunca toca nas tabelas finais.
+def cleanup(destination: Destination, plans: list[TablePlan], prefixes: list[str], drop_temp: bool = True) -> None:
+    """Apaga os arquivos desta execução e, se pedido, as tabelas temporárias; nunca toca nas tabelas finais.
 
     :param destination: Projeto, dataset e bucket.
     :param plans: Planos das tabelas.
     :param prefixes: Prefixos dos arquivos desta execução no bucket.
+    :param drop_temp: Se ``False``, mantém as temporárias (um filho bem-sucedido as deixa para o pai publicar).
     """
-    for plan in plans:
-        bigquery.delete_temp_table(destination.project, destination.dataset_id, plan.temp_id, TEMP_TABLE_SUFFIX)
+    if drop_temp:
+        for plan in plans:
+            bigquery.delete_temp_table(destination.project, destination.dataset_id, plan.temp_id, TEMP_TABLE_SUFFIX)
     for prefix in prefixes:
         gcs.delete_prefix(destination.project, destination.bucket, prefix)

@@ -4,6 +4,7 @@ from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import AIRBYTE_EXTRACTED_AT, AIRBYTE_META, QUERIES_ANCHOR
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import TableProof
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.schema import BqField
 from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
@@ -103,6 +104,37 @@ def count_rows(project: str, dataset_id: str, table_id: str) -> int:
     :returns: Número de linhas.
     """
     return int(bigquery.Client(project=project).get_table(f"{project}.{dataset_id}.{table_id}").num_rows or 0)
+
+
+def stamp_table(project: str, dataset_id: str, temp_id: str, labels: dict[str, str], description: str) -> None:
+    """Grava labels e descrição na tabela temporária, sem tocar nos dados.
+
+    :param project: Projeto da tabela.
+    :param dataset_id: Dataset da tabela.
+    :param temp_id: Tabela temporária.
+    :param labels: Labels a gravar (valores já no charset do BigQuery).
+    :param description: Descrição legível da validação.
+    """
+    client = bigquery.Client(project=project)
+    table = client.get_table(f"{project}.{dataset_id}.{temp_id}")
+    table.labels = {**(table.labels or {}), **labels}
+    table.description = description
+    client.update_table(table, ["labels", "description"])
+
+
+def read_proof(project: str, dataset_id: str, table_id: str) -> TableProof | None:
+    """Lê os labels e a contagem de linhas da tabela, se ela existir.
+
+    :param project: Projeto da tabela.
+    :param dataset_id: Dataset da tabela.
+    :param table_id: Nome da tabela.
+    :returns: Labels e linhas, ou ``None`` se a tabela não existir.
+    """
+    try:
+        table = bigquery.Client(project=project).get_table(f"{project}.{dataset_id}.{table_id}")
+    except NotFound:
+        return None
+    return TableProof(labels=dict(table.labels or {}), num_rows=int(table.num_rows or 0))
 
 
 def publish_table(project: str, dataset_id: str, temp_id: str, final_id: str) -> None:

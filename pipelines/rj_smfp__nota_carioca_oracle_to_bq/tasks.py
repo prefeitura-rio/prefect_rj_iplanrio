@@ -4,13 +4,33 @@ import time
 
 from prefect import task
 from prefect.cache_policies import NO_CACHE
-from prefect.runtime import flow_run
+from prefect.runtime import deployment, flow_run
+from prefect.settings import PREFECT_UI_URL
 
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import extract, load, memory, oracle, plan
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import extract, load, memory, oracle, parallel, plan, runs
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_duration, format_size
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.supervise import Supervision, supervise
+
+POLL_SECONDS = 30.0
+
+
+@task(cache_policy=NO_CACHE)
+def ensure_exclusive_task() -> None:
+    """Recusa a execução se outra carga deste deployment (pai ou filho) estiver em andamento.
+
+    Não usa limite global de concorrência: um pod morto por OOM deixaria o slot preso.
+
+    :raises ParallelRunError: Se houver outra execução ativa, nomeando-a para o usuário cancelá-la se travada.
+    """
+    if deployment.id is None:
+        log("Execução fora de um deployment; exclusão mútua não verificada")
+        return
+    conflicts = parallel.find_conflicts(runs.list_active_runs(str(deployment.id)), str(flow_run.id))
+    if conflicts:
+        raise parallel.ParallelRunError(parallel.describe_conflicts(conflicts))
 
 
 @task(cache_policy=NO_CACHE)
@@ -66,6 +86,7 @@ def extract_table_task(  # noqa: PLR0913
     table_plan: plan.TablePlan,
     snapshot: oracle.Snapshot,
     options: extract.ExtractOptions,
+    run_id: str,
 ) -> extract.ExtractResult:
     """Lê a tabela em faixas de ROWID com vários processos e grava Parquet no GCS."""
     request = extract.ExtractRequest(
@@ -76,7 +97,7 @@ def extract_table_task(  # noqa: PLR0913
         snapshot=snapshot,
         project=project,
         bucket=bucket,
-        run_id=str(flow_run.id),
+        run_id=run_id,
         options=options,
     )
     result = extract.extract_table(request, report=log)
@@ -111,7 +132,7 @@ def validate_table_task(  # noqa: PLR0913
     extracted: extract.ExtractResult,
     snapshot: oracle.Snapshot,
     loaded_rows: int,
-) -> plan.TablePlan:
+) -> int:
     """Compara a contagem do BigQuery com a do Oracle no SCN da foto; falha sem tocar na tabela final."""
     started = time.monotonic()
     rows = load.validate_table(
@@ -125,7 +146,58 @@ def validate_table_task(  # noqa: PLR0913
         f"{table_plan.table_id}: contagem validada, {rows:,} linhas iguais no Oracle (SCN {snapshot.scn}), "
         f"nos arquivos e no BigQuery ({format_duration(time.monotonic() - started)}; carregadas {loaded_rows:,})"
     )
-    return table_plan
+    return rows
+
+
+@task(cache_policy=NO_CACHE)
+def stamp_validated_task(  # noqa: PLR0913
+    project: str,
+    dataset_id: str,
+    bucket: str,
+    table_plan: plan.TablePlan,
+    run_id: str,
+    snapshot: oracle.Snapshot,
+    rows: int,
+) -> None:
+    """Grava na tabela temporária a prova de que foi validada para o pai ``run_id`` e o SCN da foto."""
+    load.stamp_validated(load.Destination(project, dataset_id, bucket), table_plan, run_id, snapshot, rows)
+    log(f"{table_plan.table_id}: tabela temporária marcada como validada (execução {run_id}, SCN {snapshot.scn})")
+
+
+@task(cache_policy=NO_CACHE)
+def launch_children_task(
+    table_ids: list[str], snapshot: oracle.Snapshot, passthrough: dict[str, object]
+) -> dict[str, str]:
+    """Lança um flow run filho por tabela neste mesmo deployment, em paralelo, cada um no seu pod."""
+    if deployment.name is None or flow_run.flow_name is None:
+        raise parallel.ParallelRunError("parallel_tables exige execução por um deployment; use parallel_tables=False.")
+    run_id = str(flow_run.id)
+    parameters = {
+        table_id: parallel.build_child_parameters(table_id, snapshot, run_id, passthrough) for table_id in table_ids
+    }
+    children = runs.launch_children(f"{flow_run.flow_name}/{deployment.name}", parameters)
+    ui_url = PREFECT_UI_URL.value()
+    for table_id, child_id in children.items():
+        link = f" {ui_url}/runs/flow-run/{child_id}" if ui_url else ""
+        log(f"{table_id}: filho lançado, flow run {child_id}{link}")
+    return children
+
+
+@task(cache_policy=NO_CACHE)
+def wait_children_task(children: dict[str, str]) -> None:
+    """Acompanha os filhos a cada 30 s; se algum falhar, cancela os irmãos e falha sem publicar."""
+    supervise(
+        children, Supervision(read=runs.read_runs, cancel=runs.cancel_runs, report=log, poll_seconds=POLL_SECONDS)
+    )
+
+
+@task(cache_policy=NO_CACHE)
+def verify_validated_task(  # noqa: PLR0913
+    project: str, dataset_id: str, bucket: str, plans: list[plan.TablePlan], run_id: str, snapshot: oracle.Snapshot
+) -> None:
+    """Confere que cada temporária existe e foi validada nesta execução, no SCN da foto, com a contagem atual."""
+    load.verify_validated(load.Destination(project, dataset_id, bucket), plans, run_id, snapshot)
+    log(f"Marcas de validação conferidas (execução {run_id}, SCN {snapshot.scn}): {[p.table_id for p in plans]}")
 
 
 @task(cache_policy=NO_CACHE)
@@ -138,9 +210,11 @@ def publish_tables_task(project: str, dataset_id: str, bucket: str, validated: l
 
 
 @task(cache_policy=NO_CACHE)
-def cleanup_task(project: str, dataset_id: str, bucket: str, plans: list[plan.TablePlan]) -> None:
-    """Apaga tabelas temporárias e arquivos do GCS desta execução, com sucesso ou falha."""
-    run_id = str(flow_run.id)
+def cleanup_task(  # noqa: PLR0913
+    project: str, dataset_id: str, bucket: str, plans: list[plan.TablePlan], run_id: str, drop_temp: bool = True
+) -> None:
+    """Apaga os arquivos do GCS de ``run_id`` e, com ``drop_temp``, as tabelas temporárias; com sucesso ou falha."""
     prefixes = [blob_prefix(GCS_PREFIX, table_plan.table_id, run_id) for table_plan in plans]
-    load.cleanup(load.Destination(project, dataset_id, bucket), plans, prefixes)
-    log(f"Tabelas temporárias e arquivos do GCS apagados ({[table_plan.table_id for table_plan in plans]})")
+    load.cleanup(load.Destination(project, dataset_id, bucket), plans, prefixes, drop_temp)
+    names = [table_plan.table_id for table_plan in plans]
+    log(f"Arquivos do GCS apagados{' e tabelas temporárias' if drop_temp else ''} ({names})")
