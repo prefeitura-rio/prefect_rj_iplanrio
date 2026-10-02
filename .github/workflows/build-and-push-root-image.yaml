@@ -13,10 +13,15 @@ on:
         required: false
         type: string
 
+permissions: {}
+
 jobs:
   build-and-push-root-image:
     name: Build and push root image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,6 +36,9 @@ jobs:
     name: Deploy Prefect staging flows
     needs: build-and-push-root-image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -55,6 +63,9 @@ jobs:
     name: Deploy Prefect prod flows
     needs: build-and-push-root-image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

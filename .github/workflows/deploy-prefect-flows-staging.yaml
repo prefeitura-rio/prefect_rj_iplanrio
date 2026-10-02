@@ -38,6 +38,8 @@ on:
         required: false
         type: string
 
+permissions: {}
+
 jobs:
   deploy-prefect-staging-flows:
     name: Deploy Prefect staging flows
