@@ -24,7 +24,7 @@ import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 from scipy import stats
 from statsmodels.stats.proportion import proportions_ztest
 

@@ -1797,7 +1797,7 @@ wheels = [
 [[package]]
 name = "iplanrio"
 version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#fda88406e677516f5a2d7d511930b89b7c0357bb" }
+source = { git = "https://github.com/prefeitura-rio/iplanrio.git?branch=new-logger-prefect#238885260b11ad0aba65509b9024721c81c3f3f6" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -3035,7 +3035,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "idna", specifier = ">=3.10" },
-    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git" },
+    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git?branch=new-logger-prefect" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "prefect", specifier = "==3.4.9" },
@@ -5053,7 +5053,7 @@ requires-dist = [
 
 [[package]]
 name = "rj-iplanrio-test"
-version = "0.1.0"
+version = "1.0.0"
 source = { virtual = "pipelines/rj_iplanrio__test" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
