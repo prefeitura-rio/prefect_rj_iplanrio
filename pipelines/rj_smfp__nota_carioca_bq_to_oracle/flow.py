@@ -6,6 +6,7 @@ from prefect import flow
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_DEPLOYMENT
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     create_oracle_indexes_task,
     delete_gcs_files_task,
@@ -21,12 +22,14 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     record_load_task,
     refresh_synonyms_task,
     resolve_slots_task,
+    run_dbt_task,
     start_inmemory_population_task,
     swap_synonyms_task,
     truncate_oracle_table_task,
     validate_row_count_task,
     wait_inmemory_task,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.dbt import resolve_dbt_parameters, should_run_dbt
 
 
 @flow(log_prints=True)
@@ -44,9 +47,20 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     bigquery_quiet_minutes: int = 5,
     inmemory_wait_minutes: int = 30,
     mode: Literal["full", "synonyms_only"] = "full",
+    run_dbt: bool = False,
+    dbt_deployment: str = DBT_DEPLOYMENT,
+    dbt_parameters: dict[str, object] | None = None,
+    dbt_timeout_minutes: int = 120,
 ) -> None:
     rename_current_flow_run_task(new_name=dataset_id)
     inject_bd_credentials_task(environment="prod")
+    dbt_finished_at = None
+    if should_run_dbt(run_dbt, mode):
+        dbt_finished_at = run_dbt_task(
+            deployment=dbt_deployment,
+            parameters=resolve_dbt_parameters(dbt_parameters),
+            timeout_minutes=dbt_timeout_minutes,
+        )
     tables = list_tables_task(project=project, dataset_id=dataset_id, table_ids=table_ids)
     if mode == "synonyms_only":
         refresh_synonyms_task(infisical_secret_path=infisical_secret_path, table_ids=tables)
@@ -57,6 +71,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         table_ids=tables,
         bucket=gcs_bucket,
         quiet_minutes=bigquery_quiet_minutes,
+        dbt_finished_at=dbt_finished_at,
     )
 
     loaded = []
