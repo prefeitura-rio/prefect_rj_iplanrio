@@ -316,3 +316,13 @@ def swap_synonyms_task(infisical_secret_path: str, plans: list[slots.SlotPlan]) 
         log(f"{plan.base}: troca feita: {'; '.join(actions)}")
         kept = f"{plan.active} fica com a carga anterior" if plan.active else "não havia tabela A/B anterior"
         log(f"{plan.base}: em uso agora {plan.inactive}; {kept}")
+
+
+@task(cache_policy=NO_CACHE)
+def refresh_synonyms_task(infisical_secret_path: str, table_ids: list[str]) -> None:
+    """Reaponta os sinônimos de todos os donos para as tabelas já em uso, sem carga."""
+    config = oracle.read_oracle_config(infisical_secret_path)
+    for table_id in table_ids:
+        base = oracle.oracle_table_name(table_id)
+        actions = slots.refresh_synonyms(config=config, base=base)
+        log(f"{base}: sinônimos reapontados para a tabela em uso, sem carga: {'; '.join(actions)}")
