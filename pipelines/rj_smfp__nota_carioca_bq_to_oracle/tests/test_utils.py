@@ -236,7 +236,7 @@ def test_grant_and_synonym_statements_for_the_physical_table():
         ("RL_NFSEOWNER_DRL", "SELECT"),
         ("NFSE_OWNER", "SELECT, ALTER, DELETE"),
     )
-    assert synonym_owners("DFEN") == ("DFEN", "NFSE_SIGA", "NFSE_USER")
+    assert synonym_owners("DFEN") == ("DFEN", "NFSE_SIGA", "NFSE_USER", "NFSE_OWNER")
 
 
 def test_inmemory_queries_keep_the_dollar_of_the_views():
@@ -756,6 +756,7 @@ def test_swap_migrates_partitioned_legacy_table_after_repointing_consumers(monke
     assert cursor.ddl == [
         'CREATE OR REPLACE SYNONYM "NFSE_SIGA"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
         'CREATE OR REPLACE SYNONYM "NFSE_USER"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
+        'CREATE OR REPLACE SYNONYM "NFSE_OWNER"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
         'DROP TABLE "DFEN"."BQLOAD_X" PURGE',
         'CREATE OR REPLACE SYNONYM "DFEN"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_A"',
     ]
@@ -767,6 +768,7 @@ def test_swap_after_migration_only_repoints_synonyms(monkeypatch):
     assert [statement.split()[4] for statement in cursor.ddl] == [
         '"NFSE_SIGA"."BQLOAD_X"',
         '"NFSE_USER"."BQLOAD_X"',
+        '"NFSE_OWNER"."BQLOAD_X"',
         '"DFEN"."BQLOAD_X"',
     ]
 
