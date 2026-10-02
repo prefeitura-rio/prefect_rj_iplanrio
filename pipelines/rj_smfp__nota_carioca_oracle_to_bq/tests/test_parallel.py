@@ -197,9 +197,7 @@ class FakeRuns:
         self.cancelled.extend(run_ids)
 
     def supervision(self) -> Supervision:
-        return Supervision(
-            read=self.read, cancel=self.cancel, report=self.reports.append, sleep=lambda _seconds: None
-        )
+        return Supervision(read=self.read, cancel=self.cancel, report=self.reports.append, sleep=lambda _seconds: None)
 
 
 CHILDREN = {"DPS": "a", "NOTAS": "b", "PESSOAS": "c"}
