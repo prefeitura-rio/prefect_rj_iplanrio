@@ -797,3 +797,35 @@ def test_resolve_slots_stops_before_loading_when_legacy_table_is_not_managed(mon
     with pytest.raises(PermissionError, match="não foi criada"):
         slots.resolve_slots(slots_config(), "BQLOAD_X")
     assert cursor.ddl == []
+
+
+def test_refresh_synonyms_points_every_owner_to_the_active_table(monkeypatch):
+    cursor = fake_database(
+        monkeypatch,
+        objects={"BQLOAD_X": ["SYNONYM"]},
+        comments={"BQLOAD_X_A": MARKED, "BQLOAD_X_B": MARKED},
+        synonyms=[("DFEN", "DFEN", "BQLOAD_X_B"), ("NFSE_SIGA", "DFEN", "BQLOAD_X_B")],
+    )
+    actions = slots.refresh_synonyms(slots_config(), "BQLOAD_X")
+    assert [statement for statement in cursor.ddl if statement.startswith("GRANT")] == [
+        f'GRANT {privileges} ON "DFEN"."BQLOAD_X_B" TO "{grantee}"' for grantee, privileges in CONSUMER_GRANTS
+    ]
+    assert [statement for statement in cursor.ddl if statement.startswith("CREATE")] == [
+        f'CREATE OR REPLACE SYNONYM "{owner}"."BQLOAD_X" FOR "DFEN"."BQLOAD_X_B"'
+        for owner in ("NFSE_SIGA", "NFSE_USER", "NFSE_OWNER", "DFEN")
+    ]
+    assert actions[-1] == "DFEN.BQLOAD_X → BQLOAD_X_B"
+
+
+@pytest.mark.parametrize(
+    ("objects", "comments", "synonyms", "error"),
+    [
+        ({}, {}, [], LookupError),
+        ({"BQLOAD_X": ["TABLE"]}, {"BQLOAD_X": MARKED}, [("NFSE_SIGA", "DFEN", "BQLOAD_X")], PermissionError),
+    ],
+)
+def test_refresh_synonyms_changes_nothing_without_an_active_a_b_table(monkeypatch, objects, comments, synonyms, error):
+    cursor = fake_database(monkeypatch, objects=objects, comments=comments, synonyms=synonyms)
+    with pytest.raises(error):
+        slots.refresh_synonyms(slots_config(), "BQLOAD_X")
+    assert cursor.ddl == []
