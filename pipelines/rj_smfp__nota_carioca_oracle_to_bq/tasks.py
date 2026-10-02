@@ -8,7 +8,7 @@ from prefect.runtime import flow_run
 
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import extract, load, oracle, plan
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import extract, load, memory, oracle, plan
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_duration, format_size
 
@@ -42,6 +42,20 @@ def plan_table_task(  # noqa: PLR0913
     elif table_plan.changes.added:
         log(f"{table_id}: colunas novas aceitas: {list(table_plan.changes.added)}")
     return table_plan
+
+
+@task(cache_policy=NO_CACHE)
+def check_memory_budget_task(plans: list[plan.TablePlan], options: extract.ExtractOptions) -> extract.ExtractOptions:
+    """Falha antes de extrair se os workers mais o processo principal não couberem na memória do pod."""
+    estimates = {
+        table_plan.table_id: memory.plan_worker_memory(
+            table_plan.columns, options.worker_memory_mb, options.batch_rows
+        ).worker_mb
+        for table_plan in plans
+    }
+    total_mb = memory.check_pod_budget(estimates, options.workers, options.pod_memory_mb)
+    log(f"Memória estimada: ~{total_mb} MiB de {options.pod_memory_mb} MiB do pod ({options.workers} workers)")
+    return options
 
 
 @task(cache_policy=NO_CACHE)

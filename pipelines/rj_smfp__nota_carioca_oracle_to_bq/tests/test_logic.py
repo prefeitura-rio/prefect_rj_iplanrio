@@ -141,10 +141,10 @@ def test_build_jobs_name_one_parquet_per_chunk_inside_the_run_prefix() -> None:
         project="proj",
         bucket="bucket",
         run_id="run-1",
-        options=ExtractOptions(batch_rows=1234),
+        options=ExtractOptions(),
     )
 
-    jobs = build_jobs(request, [Chunk(1, "AAA", "BBB"), Chunk(12, "CCC", "DDD")])
+    jobs = build_jobs(request, [Chunk(1, "AAA", "BBB"), Chunk(12, "CCC", "DDD")], batch_rows=1234)
 
     assert [job.blob_name for job in jobs] == [
         "oracle_to_bq/DPS/run-1/chunk-000001.parquet",

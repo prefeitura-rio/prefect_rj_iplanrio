@@ -205,6 +205,7 @@ def read_columns(config: OracleConfig, schema: str, table: str) -> tuple[OracleC
             data_type=str(row["data_type"]),
             precision=None if row["data_precision"] is None else to_int(row["data_precision"]),
             scale=None if row["data_scale"] is None else to_int(row["data_scale"]),
+            data_length=None if row["data_length"] is None else to_int(row["data_length"]),
         )
         for row in rows
     )

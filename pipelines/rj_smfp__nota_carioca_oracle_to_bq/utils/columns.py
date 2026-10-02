@@ -30,12 +30,14 @@ class OracleColumn:
     :param data_type: ``DATA_TYPE`` do dicionário (``NUMBER``, ``VARCHAR2``...).
     :param precision: ``DATA_PRECISION``; nulo para ``NUMBER`` sem precisão.
     :param scale: ``DATA_SCALE``.
+    :param data_length: ``DATA_LENGTH`` (bytes declarados); só entra na estimativa de memória.
     """
 
     name: str
     data_type: str
     precision: int | None
     scale: int | None
+    data_length: int | None = None
 
     @property
     def quoted(self) -> str:

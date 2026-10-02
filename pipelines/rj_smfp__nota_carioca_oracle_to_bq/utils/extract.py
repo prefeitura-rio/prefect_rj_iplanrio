@@ -10,6 +10,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX, Q
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import Chunk, ChunkRequest, chunk_task_name, rowid_chunks
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import OracleColumn
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.memory import WorkerMemory, plan_worker_memory
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import (
     OracleConfig,
     Snapshot,
@@ -26,13 +27,17 @@ class ExtractOptions:
 
     :param workers: Processos de leitura, cada um com sua conexão.
     :param chunk_size_blocks: Tamanho aproximado de cada faixa de ROWID, em blocos.
-    :param batch_rows: Linhas por lote lido do Oracle; limita a memória de cada worker.
+    :param batch_rows: Teto de linhas por lote lido do Oracle; o lote real sai de ``worker_memory_mb``.
+    :param worker_memory_mb: Orçamento de memória de cada worker, em MiB; define o lote de cada tabela.
+    :param pod_memory_mb: Orçamento de memória do pod, em MiB; a extração falha antes de começar se não couber.
     :param progress_interval_seconds: Intervalo entre linhas de progresso.
     """
 
-    workers: int = 8
+    workers: int = 2
     chunk_size_blocks: int = 32768
     batch_rows: int = 50_000
+    worker_memory_mb: int = 1536
+    pod_memory_mb: int = 7168
     progress_interval_seconds: int = 30
 
 
@@ -84,11 +89,21 @@ class ExtractResult:
     seconds: float
 
 
-def build_jobs(request: ExtractRequest, chunks: list[Chunk]) -> list[ChunkJob]:
+def worker_memory(request: ExtractRequest) -> WorkerMemory:
+    """Dimensiona o lote de leitura da tabela a partir do orçamento de memória do worker.
+
+    :param request: Tabela e parâmetros de desempenho.
+    :returns: Lote escolhido e memória estimada de um worker.
+    """
+    return plan_worker_memory(request.columns, request.options.worker_memory_mb, request.options.batch_rows)
+
+
+def build_jobs(request: ExtractRequest, chunks: list[Chunk], batch_rows: int) -> list[ChunkJob]:
     """Cria um trabalho por faixa, com o SELECT já renderizado.
 
     :param request: Tabela e destino.
     :param chunks: Faixas de ROWID.
+    :param batch_rows: Linhas por lote lido do Oracle.
     :returns: Trabalhos, na ordem das faixas.
     """
     sql = load_query(
@@ -107,7 +122,7 @@ def build_jobs(request: ExtractRequest, chunks: list[Chunk]) -> list[ChunkJob]:
             extracted_at=request.snapshot.taken_at,
             columns=request.columns,
             blob_name=f"{prefix}/chunk-{chunk.chunk_id:06d}.parquet",
-            batch_rows=request.options.batch_rows,
+            batch_rows=batch_rows,
         )
         for chunk in chunks
     ]
@@ -169,9 +184,14 @@ def extract_table(request: ExtractRequest, report: Callable[[str], None]) -> Ext
         task_name=chunk_task_name(request.table, request.run_id),
         chunk_size_blocks=request.options.chunk_size_blocks,
     )
+    memory = worker_memory(request)
     with rowid_chunks(chunk_request) as chunks:
-        jobs = build_jobs(request, chunks)
+        jobs = build_jobs(request, chunks, memory.batch_rows)
         report(f"{request.table}: {len(jobs)} faixas de ROWID (~{request.options.chunk_size_blocks} blocos cada)")
+        report(
+            f"{request.table}: lote de {memory.batch_rows:,} linhas ({memory.row_bytes:,} bytes reservados por linha); "
+            f"~{memory.worker_mb} MiB por worker, {request.options.workers} workers"
+        )
         if not jobs:
             results: list[ChunkResult] = []
         else:

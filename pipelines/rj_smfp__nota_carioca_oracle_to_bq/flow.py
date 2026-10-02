@@ -6,6 +6,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import DEFAULT_TABLES
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
+    check_memory_budget_task,
     cleanup_task,
     extract_table_task,
     load_table_task,
@@ -25,9 +26,11 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     source_schema: str | None = None,
     gcs_bucket: str = "rj-iplanrio-dia-bq-to-oracle",
     infisical_secret_path: str = "/db-oracle-nota-fiscal",
-    workers: int = 8,
+    workers: int = 2,
     chunk_size_blocks: int = 32768,
     batch_rows: int = 50_000,
+    worker_memory_mb: int = 1536,
+    pod_memory_mb: int = 7168,
     progress_interval_seconds: int = 30,
 ) -> None:
     rename_current_flow_run_task(new_name=dataset_id)
@@ -36,6 +39,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         workers=workers,
         chunk_size_blocks=chunk_size_blocks,
         batch_rows=batch_rows,
+        worker_memory_mb=worker_memory_mb,
+        pod_memory_mb=pod_memory_mb,
         progress_interval_seconds=progress_interval_seconds,
     )
     snapshot = take_snapshot_task(infisical_secret_path=infisical_secret_path)
@@ -51,6 +56,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         for table_id in table_ids or DEFAULT_TABLES
     ]
     try:
+        options = check_memory_budget_task(plans=plans, options=options)
         validated = []
         for table_plan in plans:
             extracted = extract_table_task(
