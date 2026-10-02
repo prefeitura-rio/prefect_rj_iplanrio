@@ -67,7 +67,7 @@ deployments:
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
   schedules:
-  - cron: "0 */3 * * *"
+  - cron: "0 9,18 * * *"
     timezone: America/Sao_Paulo
     active: true
-    slug: nota-carioca-bq-to-oracle-a-cada-3h
+    slug: nota-carioca-bq-to-oracle-9h-18h
