@@ -317,3 +317,38 @@ def swap_synonyms(config: OracleConfig, plan: SlotPlan) -> list[str]:
         create_synonym(cursor, config.schema, plan.base, config.schema, plan.inactive)
         actions.append(f"{config.schema}.{plan.base} → {plan.inactive}")
     return actions
+
+
+def refresh_synonyms(config: OracleConfig, base: str) -> list[str]:
+    """Reaponta todos os sinônimos para a tabela física já em uso, sem carga.
+
+    Serve para criar sinônimos de um dono novo ou corrigir um sinônimo removido
+    sem esperar uma carga completa. Os grants dos consumidores são reaplicados na
+    tabela em uso antes, para o sinônimo novo já funcionar.
+
+    :param config: Configuração da conexão.
+    :param base: Nome estável da tabela.
+    :returns: Ações executadas, em texto, para o log.
+    :raises LookupError: Se ainda não houver tabela A/B em uso.
+    :raises PermissionError: Se faltar privilégio, se algum sinônimo apontar para
+        um objeto que a pipeline não gerencia ou se a migração para A/B não tiver
+        terminado (a tabela única antiga ainda existe).
+    """
+    with connect(config) as connection, connection.cursor() as cursor:
+        assert_privileges(cursor, config.schema)
+        if assert_replaceable_legacy_table(cursor, config.schema, base):
+            raise PermissionError(
+                f"{config.schema}.{base} ainda é a tabela única antiga; rode a carga completa (mode=full) "
+                "para terminar a migração para A/B. Nada foi alterado."
+            )
+        plan = choose_slots(base, config.schema, read_synonyms(cursor, config.schema, base))
+        if plan.active is None:
+            raise LookupError(f"{base}: nenhuma tabela A/B em uso; rode a carga completa (mode=full).")
+        assert_managed_existing_table(cursor, config.schema, plan.active)
+    grant_access(config, plan.active)
+    actions = []
+    with connect(config) as connection, connection.cursor() as cursor:
+        for owner in (*CONSUMER_SYNONYM_OWNERS, config.schema):
+            create_synonym(cursor, owner, base, config.schema, plan.active)
+            actions.append(f"{owner}.{base} → {plan.active}")
+    return actions
