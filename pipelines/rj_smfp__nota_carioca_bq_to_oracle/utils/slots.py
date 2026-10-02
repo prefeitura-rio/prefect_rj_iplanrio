@@ -20,7 +20,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
 from prefect_rj_iplanrio.sql import load_query
 
 SLOTS = ("A", "B")
-CONSUMER_SYNONYM_OWNERS = ("NFSE_SIGA", "NFSE_USER")
+CONSUMER_SYNONYM_OWNERS = ("NFSE_SIGA", "NFSE_USER", "NFSE_OWNER")
 CONSUMER_GRANTS = (
     ("RL_NFSE", "SELECT"),
     ("RL_NFSE_SIGA", "SELECT"),
