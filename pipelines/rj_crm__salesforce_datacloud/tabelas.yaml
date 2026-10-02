@@ -88,3 +88,13 @@
   primary_key: event_id
   order_by_col: EventId__c   # DLL não tem ssot__Id__c
   janela_utc: true
+
+# DLL do Marketing Cloud (send events) — traz o SubscriberKey (CPF) por
+# message_key (= message_id de messaging_events_whatsapp).
+# ID__c conferido único e nunca vazio no histórico todo em 2026-10-02.
+- nome: sfmc_whatsapp_send_event
+  grupo: Eventos WhatsApp
+  query: sfmc_whatsapp_send_event.sql
+  date_columns: [engagement_date_time, accepted_time_utc, last_modified_date, cdp_sys_partition_date]
+  order_by_col: ID__c   # DLL não tem ssot__Id__c; primary_key = id (padrão)
+  janela_utc: true
