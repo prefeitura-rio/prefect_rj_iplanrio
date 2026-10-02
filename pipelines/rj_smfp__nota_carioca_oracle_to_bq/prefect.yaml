@@ -1,0 +1,66 @@
+name: rj_smfp__nota_carioca_oracle_to_bq
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_oracle_to_bq-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_oracle_to_bq/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+- name: rj-smfp--nota-carioca-oracle-to-bq--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
+  # Duas cargas simultâneas disputariam as mesmas tabelas temporárias; a segunda espera a primeira.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+- name: rj-smfp--nota-carioca-oracle-to-bq--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_oracle_to_bq/flow.py:rj_smfp__nota_carioca_oracle_to_bq
+  # Duas cargas simultâneas disputariam as mesmas tabelas temporárias; a segunda espera a primeira.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: ENQUEUE
+  parameters:
+    dataset_id: brutos_nota_fiscal
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always

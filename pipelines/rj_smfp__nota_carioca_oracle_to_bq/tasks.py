@@ -1,0 +1,132 @@
+"""Tasks da carga Oracle → GCS (Parquet) → BigQuery."""
+
+import time
+
+from prefect import task
+from prefect.cache_policies import NO_CACHE
+from prefect.runtime import flow_run
+
+from iplanrio.pipelines_utils.logging import log
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import extract, load, oracle, plan
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_duration, format_size
+
+
+@task(cache_policy=NO_CACHE)
+def take_snapshot_task(infisical_secret_path: str) -> oracle.Snapshot:
+    """Lê o SCN que fixa o ponto de leitura das três tabelas."""
+    snapshot = oracle.read_snapshot(oracle.read_oracle_config(infisical_secret_path))
+    log(f"SCN da foto: {snapshot.scn} ({snapshot.taken_at:%Y-%m-%d %H:%M:%S} UTC); sync_id = {snapshot.sync_id}")
+    return snapshot
+
+
+@task(cache_policy=NO_CACHE)
+def plan_table_task(  # noqa: PLR0913
+    infisical_secret_path: str,
+    source_schema: str | None,
+    project: str,
+    dataset_id: str,
+    table_id: str,
+    snapshot: oracle.Snapshot,
+) -> plan.TablePlan:
+    """Lê as colunas do Oracle, monta o schema do BigQuery e o confere com a tabela final atual."""
+    config = oracle.read_oracle_config(infisical_secret_path)
+    schema = oracle.validate_identifier(source_schema or config.schema)
+    table_plan = plan.check_destination(
+        project, dataset_id, plan.plan_table(config, schema, oracle.validate_identifier(table_id), snapshot)
+    )
+    log(f"{table_id}: {len(table_plan.columns)} colunas no Oracle; cluster {list(table_plan.cluster_fields)}")
+    if table_plan.changes is None:
+        log(f"{table_id}: a tabela final ainda não existe em {dataset_id}; será criada")
+    elif table_plan.changes.added:
+        log(f"{table_id}: colunas novas aceitas: {list(table_plan.changes.added)}")
+    return table_plan
+
+
+@task(cache_policy=NO_CACHE)
+def extract_table_task(  # noqa: PLR0913
+    infisical_secret_path: str,
+    project: str,
+    bucket: str,
+    table_plan: plan.TablePlan,
+    snapshot: oracle.Snapshot,
+    options: extract.ExtractOptions,
+) -> extract.ExtractResult:
+    """Lê a tabela em faixas de ROWID com vários processos e grava Parquet no GCS."""
+    request = extract.ExtractRequest(
+        config=oracle.read_oracle_config(infisical_secret_path),
+        schema=table_plan.schema,
+        table=table_plan.table_id,
+        columns=table_plan.columns,
+        snapshot=snapshot,
+        project=project,
+        bucket=bucket,
+        run_id=str(flow_run.id),
+        options=options,
+    )
+    result = extract.extract_table(request, report=log)
+    log(
+        f"{result.table}: extração concluída em {format_duration(result.seconds)}: {result.rows:,} linhas, "
+        f"{format_size(result.bytes_written)} em {result.files} arquivos ({result.chunks} faixas)"
+    )
+    return result
+
+
+@task(cache_policy=NO_CACHE)
+def load_table_task(
+    project: str, dataset_id: str, bucket: str, table_plan: plan.TablePlan, extracted: extract.ExtractResult
+) -> int:
+    """Carrega os Parquet numa tabela temporária com a mesma partição e cluster da final."""
+    started = time.monotonic()
+    rows = load.load_table(load.Destination(project, dataset_id, bucket), table_plan, extracted)
+    log(
+        f"{table_plan.table_id}: {rows:,} linhas carregadas em {dataset_id}.{table_plan.temp_id} "
+        f"em {format_duration(time.monotonic() - started)}"
+    )
+    return rows
+
+
+@task(cache_policy=NO_CACHE)
+def validate_table_task(  # noqa: PLR0913
+    infisical_secret_path: str,
+    project: str,
+    dataset_id: str,
+    bucket: str,
+    table_plan: plan.TablePlan,
+    extracted: extract.ExtractResult,
+    snapshot: oracle.Snapshot,
+    loaded_rows: int,
+) -> plan.TablePlan:
+    """Compara a contagem do BigQuery com a do Oracle no SCN da foto; falha sem tocar na tabela final."""
+    started = time.monotonic()
+    rows = load.validate_table(
+        oracle.read_oracle_config(infisical_secret_path),
+        load.Destination(project, dataset_id, bucket),
+        table_plan,
+        extracted,
+        snapshot,
+    )
+    log(
+        f"{table_plan.table_id}: contagem validada, {rows:,} linhas iguais no Oracle (SCN {snapshot.scn}), "
+        f"nos arquivos e no BigQuery ({format_duration(time.monotonic() - started)}; carregadas {loaded_rows:,})"
+    )
+    return table_plan
+
+
+@task(cache_policy=NO_CACHE)
+def publish_tables_task(project: str, dataset_id: str, bucket: str, validated: list[plan.TablePlan]) -> None:
+    """Troca as tabelas finais pelas temporárias; só roda com todas as tabelas validadas."""
+    started = time.monotonic()
+    load.publish_tables(load.Destination(project, dataset_id, bucket), validated)
+    names = [table_plan.table_id for table_plan in validated]
+    log(f"Tabelas finais substituídas em {dataset_id}: {names} ({format_duration(time.monotonic() - started)})")
+
+
+@task(cache_policy=NO_CACHE)
+def cleanup_task(project: str, dataset_id: str, bucket: str, plans: list[plan.TablePlan]) -> None:
+    """Apaga tabelas temporárias e arquivos do GCS desta execução, com sucesso ou falha."""
+    run_id = str(flow_run.id)
+    prefixes = [blob_prefix(GCS_PREFIX, table_plan.table_id, run_id) for table_plan in plans]
+    load.cleanup(load.Destination(project, dataset_id, bucket), plans, prefixes)
+    log(f"Tabelas temporárias e arquivos do GCS apagados ({[table_plan.table_id for table_plan in plans]})")
