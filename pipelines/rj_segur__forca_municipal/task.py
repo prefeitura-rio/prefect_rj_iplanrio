@@ -37,6 +37,7 @@ from pipelines.rj_segur__forca_municipal.constants import (
     SINGLE_PAGE_ENDPOINTS,
     SP_TZ,
     TMP_BASE,
+    UNIT_IDS_LOOKBACK_PARTITIONS,
 )
 from pipelines.rj_segur__forca_municipal.utils import (
     _add_id_hash,
@@ -292,7 +293,9 @@ def run_unit_positions_task(
     unit_id_concurrency), sem ordem definida entre eles. A partição do dia é deletada
     antes de qualquer escrita, garantindo idempotência por re-run.
 
-    IDs de unidade são obtidos via query na última partição de unidades_historico (snapshot).
+    IDs de unidade são obtidos via query nas últimas UNIT_IDS_LOOKBACK_PARTITIONS partições
+    de unidades_historico (snapshots diários). Usar mais de uma evita perder unidades quando
+    a última partição ainda está parcial (unidades_historico em execução).
     """
     if data_inicio is None:
         data_inicio = (datetime.now(tz=SP_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -313,12 +316,18 @@ def run_unit_positions_task(
         query=f"""
             SELECT DISTINCT UnitId
             FROM {_tbl}
-            WHERE data_particao = (SELECT MAX(data_particao) FROM {_tbl})
+            WHERE data_particao IN (
+                SELECT DISTINCT data_particao FROM {_tbl}
+                ORDER BY data_particao DESC LIMIT {UNIT_IDS_LOOKBACK_PARTITIONS}
+            )
               AND UnitId IS NOT NULL
             ORDER BY UnitId
         """,
     )
-    log(f"{len(unit_ids)} unidades encontradas na última partição do histórico BQ")
+    log(
+        f"{len(unit_ids)} unidades encontradas nas últimas"
+        f" {UNIT_IDS_LOOKBACK_PARTITIONS} partições do histórico BQ"
+    )
 
     if not unit_ids:
         log("Nenhuma unidade no histórico BQ.", level="warning")
