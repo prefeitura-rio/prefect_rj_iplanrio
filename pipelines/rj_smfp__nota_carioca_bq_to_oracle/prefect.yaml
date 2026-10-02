@@ -64,3 +64,8 @@ deployments:
       command: uv run --package rj_smfp__nota_carioca_bq_to_oracle -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
+  schedules:
+  - cron: "0 */3 * * *"
+    timezone: America/Sao_Paulo
+    active: true
+    slug: nota-carioca-bq-to-oracle-a-cada-3h
