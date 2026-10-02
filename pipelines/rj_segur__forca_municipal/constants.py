@@ -18,6 +18,10 @@ DEFAULT_CONCURRENCY: Final = 5
 DEFAULT_UNIT_ID_CONCURRENCY: Final = 1  # unit_positions: IDs em paralelo por dia
 DEFAULT_QMD_ID_CONCURRENCY: Final = 5  # qmd_detalhes/kml: IDs QMD em paralelo
 
+# unit_positions: nº de partições recentes de unidades_historico usadas para listar unidades.
+# >1 protege contra a partição mais recente ainda parcial (unidades_historico em execução).
+UNIT_IDS_LOOKBACK_PARTITIONS: Final = 8
+
 # Timeouts HTTP (segundos)
 API_TIMEOUT: Final = 120.0
 API_CONNECT_TIMEOUT: Final = 10.0
