@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from google.cloud import bigquery, storage
 
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.dbt import skip_initial_quiet_wait
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -125,6 +126,8 @@ class SnapshotRequest:
     :param max_attempts: Extracts descartados, no máximo, por alteração durante
         a exportação.
     :param max_wait_seconds: Espera máxima, somada, por um período sem alterações.
+    :param dbt_finished_at: Fim do run de dbt feito antes da carga, em UTC. Se nenhuma
+        tabela mudou depois dele, a espera inicial é dispensada.
     """
 
     project: str
@@ -135,6 +138,7 @@ class SnapshotRequest:
     quiet_seconds: float
     max_attempts: int = 5
     max_wait_seconds: float = 3600.0
+    dbt_finished_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -197,11 +201,16 @@ def export_consistent_snapshot(
     """
     waited = 0.0
     attempt = 0
+    first_pass = True
     while attempt < request.max_attempts:
         modified = {
             table_id: get_last_modified(request.project, request.dataset_id, table_id) for table_id in request.table_ids
         }
         wait = quiet_wait_seconds(list(modified.values()), datetime.now(UTC), request.quiet_seconds)
+        if wait > 0 and first_pass and skip_initial_quiet_wait(list(modified.values()), request.dbt_finished_at):
+            report("Nenhuma tabela mudou depois do dbt desta execução; dispensando a espera sem alterações")
+            wait = 0.0
+        first_pass = False
         if wait > 0:
             if waited + wait > request.max_wait_seconds:
                 raise RuntimeError(
