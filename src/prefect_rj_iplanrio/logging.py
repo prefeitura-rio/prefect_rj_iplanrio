@@ -16,13 +16,15 @@ Usage::
     logger.error("Upload failed: %s", error)
 """
 
-from prefect.logging import get_logger
+import logging
+from logging import Logger
 
-def get_logger(name: str):
+
+def get_logger(name: str) -> Logger:
     """Return a pre-configured logger for the given module.
 
     :param name: Module name — pass ``__name__`` from the calling module.
     :returns: A :class:`logging.Logger` instance with workspace-wide
         configuration applied.
     """
-    return get_logger(name)
+    return logging.getLogger(name)

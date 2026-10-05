@@ -1,4 +1,4 @@
-"""Flow for rj_smfp__crf."""
+"""Flow for rj_smfp__crf.."""
 
 from prefect import flow
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
