@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass(frozen=True)
 class FwfTableConfig:
     """Configuration for reading a fixed-width format (FWF) table.
@@ -25,8 +26,11 @@ class FwfTableConfig:
 
 
 # FWF table configurations for CRF data files
+# Padrão de nome: 00-PER-AAAAMMDD.txt (períodos), 00-PERMEI-AAAAMMDD.txt (períodos MEI),
+# 00-EVE-AAAAMMDD.txt (eventos), 00-EVEMEI-AAAAMMDD.txt (eventos MEI)
+
 FWF_PERIODOS_CONFIG = FwfTableConfig(
-    table_id="periodos",
+    table_id="periodo_simples",
     colspecs=[
         (0, 8),    # CNPJ
         (8, 16),   # Data início
@@ -41,10 +45,11 @@ FWF_PERIODOS_CONFIG = FwfTableConfig(
         "identificador_cancelamento",
         "numero_opcao",
     ],
+    file_pattern="00-PER-*.txt",
 )
 
 FWF_PERIODOS_MEI_CONFIG = FwfTableConfig(
-    table_id="periodos",
+    table_id="periodos_mei",
     colspecs=[
         (0, 8),    # CNPJ
         (8, 16),   # Data início
@@ -59,10 +64,11 @@ FWF_PERIODOS_MEI_CONFIG = FwfTableConfig(
         "identificador_cancelamento",
         "numero_opcao",
     ],
+    file_pattern="00-PERMEI-*.txt",
 )
 
 FWF_EVENTOS_CONFIG = FwfTableConfig(
-    table_id="eventos",
+    table_id="eventos_simples",
     colspecs=[
         (0, 8),      # CNPJ
         (8, 9),      # Natureza do evento
@@ -95,6 +101,7 @@ FWF_EVENTOS_CONFIG = FwfTableConfig(
         "hora_ocorrencia",
         "numero_opcao",
     ],
+    file_pattern="00-EVE-*.txt",
 )
 
 FWF_EVENTOS_MEI_CONFIG = FwfTableConfig(
@@ -131,4 +138,5 @@ FWF_EVENTOS_MEI_CONFIG = FwfTableConfig(
         "hora_ocorrencia",
         "numero_opcao",
     ],
+    file_pattern="00-EVEMEI-*.txt",
 )

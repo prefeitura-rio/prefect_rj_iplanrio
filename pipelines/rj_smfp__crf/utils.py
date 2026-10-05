@@ -1,31 +1,177 @@
 """Utility functions for GCS ZIP file handling and extraction."""
 
 import io
+import re
 import zipfile
-from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
-from datetime import datetime
+
 import pandas as pd
-from google.cloud.storage import Client, Bucket
+from google.cloud import bigquery
+from google.cloud.storage import Bucket, Client
 from iplanrio.pipelines_utils.pandas import to_partitions
-from tomlkit import date
+from loguru import logger
+from prefect_rj_iplanrio.sql import load_query
+
+from pipelines.rj_smfp__crf.constants import (
+    FwfTableConfig,
+    FWF_PERIODOS_CONFIG,
+    FWF_PERIODOS_MEI_CONFIG,
+    FWF_EVENTOS_CONFIG,
+    FWF_EVENTOS_MEI_CONFIG,
+)
+
+
+
+
+def get_max_date_from_bigquery(
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+) -> date | None:
+    """Obtém a maior data de partição da tabela CRF no BigQuery.
+
+    Executa a query SQL para obter o valor máximo de ``data_particao``
+    da tabela especificada, servindo como marca d'água para filtrar
+    arquivos ZIP novos no bucket GCS.
+
+    :param project_id: ID do projeto GCP.
+    :param dataset_id: ID do dataset BigQuery.
+    :param table_id: ID da tabela BigQuery.
+    :returns: Data máxima como ``datetime.date`` ou ``None`` se a tabela estiver vazia.
+    :raises Exception: Se houver erro ao executar a query.
+    """
+    logger.info(
+        "Obtendo data máxima de partição do BigQuery: %s.%s.%s",
+        project_id,
+        dataset_id,
+        table_id,
+    )
+
+    try:
+        query = load_query(
+            __file__,
+            "get_max_partition",
+            project_id=project_id,
+            dataset_id=dataset_id,
+            table_id=table_id,
+        )
+
+        client = bigquery.Client(project=project_id)
+        query_job = client.query(query)
+        results = query_job.result()
+
+        for row in results:
+            max_date = row.max_data_particao
+            if max_date:
+                logger.info("Data máxima de partição encontrada: %s", max_date)
+                return max_date
+            else:
+                logger.info("Nenhuma data de partição encontrada na tabela")
+                return None
+
+    except Exception as e:
+        logger.error("Erro ao obter data máxima de partição do BigQuery: %s", e)
+        raise
+
+
+def extract_date_from_blob_name(blob_name: str) -> date | None:
+    """Extrai a data do nome de um arquivo ZIP CRF.
+
+    Procura pelo padrão ``DDMMYYYY`` no nome do arquivo.
+    Exemplo: ``BX-22518948-EVE-03012021.zip`` → ``date(2021, 1, 3)``.
+
+    :param blob_name: Nome do blob no GCS (pode incluir prefixo de pasta).
+    :returns: Data extraída como ``datetime.date`` ou ``None`` se o padrão não
+        for encontrado ou a data for inválida.
+    """
+    filename = blob_name.split("/")[-1]
+    match = re.search(r"-(\d{8})\.zip$", filename, re.IGNORECASE)
+    if match:
+        date_str = match.group(1)
+        try:
+            day = int(date_str[0:2])
+            month = int(date_str[2:4])
+            year = int(date_str[4:8])
+            return date(year, month, day)
+        except (ValueError, TypeError):
+            logger.debug("Data inválida extraída de '%s': %s", blob_name, date_str)
+    return None
+
 
 def list_zip_files_in_gcs_folder(
-    bucket: Bucket, folder_prefix: str
+    bucket: Bucket,
+    folder_prefix: str,
+    max_date_from_bq: date | str | None = None,
 ) -> list[str]:
-    """List all ZIP files in a GCS folder.
+    """Lista arquivos ZIP no GCS filtrando por data maior que a partição do BQ.
+
+    Lista todos os blobs ZIP no bucket com o prefixo especificado e retorna
+    apenas aqueles cuja data extraída do nome do arquivo é posterior à data
+    máxima de partição encontrada no BigQuery.
+
+    Se ``max_date_from_bq`` for ``None``, todos os arquivos ZIP são retornados.
 
     :param bucket: Google Cloud Storage bucket object.
-    :param folder_prefix: Folder path prefix in the bucket (e.g., 'data/crf/').
-    :returns: List of blob names (full paths) for ZIP files found.
+    :param folder_prefix: Prefixo do caminho da pasta no bucket (ex.: ``'PERIODOS_EVENTOS/'``).
+    :param max_date_from_bq: Data máxima de partição do BigQuery como ``datetime.date``
+        ou string ``YYYY-MM-DD``. Arquivos com data igual ou anterior são ignorados.
+    :returns: Lista de nomes de blob (caminhos completos) para arquivos ZIP filtrados.
     """
-    zip_blobs = []
+    # Converter string para date se necessário
+    if isinstance(max_date_from_bq, str):
+        try:
+            max_date_from_bq = date.fromisoformat(max_date_from_bq)
+        except ValueError:
+            logger.warning(
+                "Não foi possível converter max_date_bigquery '%s' para date, ignorando filtro",
+                max_date_from_bq,
+            )
+            max_date_from_bq = None
+
+    if max_date_from_bq:
+        logger.info(
+            "Listando arquivos ZIP do bucket '%s' com prefixo '%s' (filtrando após %s)",
+            bucket.name,
+            folder_prefix,
+            max_date_from_bq,
+        )
+    else:
+        logger.info(
+            "Listando arquivos ZIP do bucket '%s' com prefixo '%s' (sem filtro de data)",
+            bucket.name,
+            folder_prefix,
+        )
+
     blobs = bucket.list_blobs(prefix=folder_prefix)
-    for blob in blobs:
-        # if blob.name.startswith(folder_prefix) and blob.name.endswith(".zip"):
-            if blob.name == "PERIODOS_EVENTOS/BX-22518948-EVE-03012021.zip":
-                zip_blobs.append(blob.name)
-    return zip_blobs
+    zip_blobs = [blob.name for blob in blobs if blob.name.endswith(".zip")]
+
+    logger.info("Total de arquivos ZIP encontrados: %d", len(zip_blobs))
+
+    if not max_date_from_bq:
+        return zip_blobs
+
+    filtered = []
+    for blob_name in zip_blobs:
+        file_date = extract_date_from_blob_name(blob_name)
+        if file_date is None:
+            logger.debug("Não foi possível extrair data de '%s', ignorando", blob_name)
+            continue
+        if file_date > max_date_from_bq:
+            filtered.append(blob_name)
+            logger.debug("Arquivo incluído: %s (data=%s)", blob_name, file_date)
+        else:
+            logger.debug(
+                "Arquivo ignorado: %s (data=%s <= max=%s)",
+                blob_name,
+                file_date,
+                max_date_from_bq,
+            )
+
+    logger.info(
+        "Arquivos após filtro de data: %d de %d", len(filtered), len(zip_blobs)
+    )
+    return filtered
 
 
 def download_and_extract_zip_from_gcs(
@@ -98,152 +244,11 @@ def get_gcs_bucket(project_id: str, bucket_name: str) -> Bucket:
     return bucket
 
 
-@dataclass(frozen=True)
-class FwfTableConfig:
-    """Configuration for reading a fixed-width format (FWF) table.
-
-    Stores column specifications and names for a specific FWF data file
-    format used in CRF (Cadastro de Recursos Financeiros) processing.
-    """
-
-    table_id: str
-    """Table identifier (e.g., 'periodos', 'eventos', 'eventos_mei')."""
-
-    colspecs: list[tuple[int, int]]
-    """Column position specifications as (start_col, end_col) tuples."""
-
-    names: list[str]
-    """Column names in the same order as colspecs."""
-
-    file_pattern: str = "*.txt"
-    """Glob pattern to find the file (default: '*.txt')."""
-
-    encoding: str = "utf-8"
-    """File encoding (default: 'utf-8')."""
-
-
-# FWF table configurations for CRF data files
-# Padrão de nome: 00-PER-AAAAMMDD.txt (períodos), 00-PERMEI-AAAAMMDD.txt (períodos MEI),
-# 00-EVE-AAAAMMDD.txt (eventos), 00-EVEMEI-AAAAMMDD.txt (eventos MEI)
-
-FWF_PERIODOS_CONFIG = FwfTableConfig(
-    table_id="periodos",
-    colspecs=[
-        (0, 8),    # CNPJ
-        (8, 16),   # Data início
-        (16, 24),  # Data fim
-        (24, 25),  # Identificador cancelamento
-        (25, 34),  # Número opção
-    ],
-    names=[
-        "cnpj",
-        "data_inicio",
-        "data_fim",
-        "identificador_cancelamento",
-        "numero_opcao",
-    ],
-    file_pattern="00-PER-*.txt",
-)
-
-FWF_PERIODOS_MEI_CONFIG = FwfTableConfig(
-    table_id="periodos_mei",
-    colspecs=[
-        (0, 8),    # CNPJ
-        (8, 16),   # Data início
-        (16, 24),  # Data fim
-        (24, 25),  # Identificador cancelamento
-        (25, 34),  # Número opção
-    ],
-    names=[
-        "cnpj",
-        "data_inicio",
-        "data_fim",
-        "identificador_cancelamento",
-        "numero_opcao",
-    ],
-    file_pattern="00-PERMEI-*.txt",
-)
-
-FWF_EVENTOS_CONFIG = FwfTableConfig(
-    table_id="eventos",
-    colspecs=[
-        (0, 8),      # CNPJ
-        (8, 9),      # Natureza do evento
-        (9, 12),     # Código do evento
-        (12, 20),    # Data do fato motivador
-        (20, 28),    # Data efeito
-        (28, 78),    # Número do processo judicial
-        (78, 103),   # Número do processo administrativo
-        (103, 353),  # Observações
-        (353, 360),  # Código UA
-        (360, 362),  # Código UF
-        (362, 366),  # Código Município
-        (366, 374),  # Data de ocorrência
-        (374, 380),  # Hora de ocorrência
-        (380, 389),  # Número da Opção
-    ],
-    names=[
-        "cnpj",
-        "natureza_evento",
-        "codigo_evento",
-        "data_fato_motivador",
-        "data_efeito",
-        "numero_processo_judicial",
-        "numero_processo_administrativo",
-        "observacoes",
-        "codigo_ua",
-        "codigo_uf",
-        "codigo_municipio",
-        "data_ocorrencia",
-        "hora_ocorrencia",
-        "numero_opcao",
-    ],
-    file_pattern="00-EVE-*.txt",
-)
-
-FWF_EVENTOS_MEI_CONFIG = FwfTableConfig(
-    table_id="eventos_mei",
-    colspecs=[
-        (0, 8),      # CNPJ
-        (8, 9),      # Natureza do evento
-        (9, 12),     # Código do evento
-        (12, 20),    # Data do fato motivador
-        (20, 28),    # Data efeito
-        (28, 78),    # Número do processo judicial
-        (78, 103),   # Número do processo administrativo
-        (103, 353),  # Observações
-        (353, 360),  # Código UA
-        (360, 362),  # Código UF
-        (362, 366),  # Código Município
-        (366, 374),  # Data de ocorrência
-        (374, 380),  # Hora de ocorrência
-        (380, 389),  # Número da Opção
-    ],
-    names=[
-        "cnpj",
-        "natureza_evento",
-        "codigo_evento",
-        "data_fato_motivador",
-        "data_efeito",
-        "numero_processo_judicial",
-        "numero_processo_administrativo",
-        "observacoes",
-        "codigo_ua",
-        "codigo_uf",
-        "codigo_municipio",
-        "data_ocorrencia",
-        "hora_ocorrencia",
-        "numero_opcao",
-    ],
-    file_pattern="00-EVEMEI-*.txt",
-)
-
-
 def read_extracted_fwf_file(
     extract_path: str,
     table_id: str,
-    extract_base_path
-) -> pd.DataFrame:
+    extract_base_path: str
+) -> tuple[pd.DataFrame, str]:
     """Lê um arquivo de formato de largura fixa (FWF) de um diretório descompactado.
 
     Busca um arquivo correspondente ao padrão de arquivo do `table_id` no
@@ -263,9 +268,9 @@ def read_extracted_fwf_file(
     """
     # Mapa de configurações por table_id
     config_map = {
-        "periodos": FWF_PERIODOS_CONFIG,
+        "periodos_simples": FWF_PERIODOS_CONFIG,
         "periodos_mei": FWF_PERIODOS_MEI_CONFIG,
-        "eventos": FWF_EVENTOS_CONFIG,
+        "eventos_simples": FWF_EVENTOS_CONFIG,
         "eventos_mei": FWF_EVENTOS_MEI_CONFIG,
     }
 
@@ -322,18 +327,18 @@ def read_extracted_fwf_file(
             data_referencia = partes[-1]
             df["data_referencia"] = data_referencia
 
-            df['ano'] = df["data_referencia"].apply(lambda x: str(x)[0:4])[0]
-            df['mes'] = df["data_referencia"].apply(lambda x: str(x)[4:6])[0]
-            df['dia'] = df["data_referencia"].apply(lambda x: str(x)[6:8])[0]
+            df['ano_particao'] = df["data_referencia"].apply(lambda x: str(x)[0:4])[0]
+            df['mes_particao'] = df["data_referencia"].apply(lambda x: str(x)[4:6])[0]
+            df['data_particao'] = pd.to_datetime(df["data_referencia"], format="%Y%m%d")
 
-
+            data_path = f"{extract_base_path}/{table_id}"
             to_partitions(
             data=df,
             savepath=f"{extract_base_path}/{table_id}",
             data_type="parquet",
-            partition_columns=["ano", "mes", "dia"],
+            partition_columns=["ano_particao", "mes_particao", "data_particao"],
         )
-        return df
+        return df, data_path
 
     except Exception as e:
         raise pd.errors.ParserError(

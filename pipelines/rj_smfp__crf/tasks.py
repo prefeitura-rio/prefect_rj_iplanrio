@@ -1,26 +1,68 @@
 """Tasks for GCS ZIP file handling and extraction."""
 
+from datetime import date
+
 import pandas as pd
 from prefect import task
-from prefect.logging import get_run_logger
-from iplanrio.pipelines_utils.pandas import to_partitions
-import utils
+from pipelines.rj_smfp__crf.utils import (
+    get_max_date_from_bigquery,
+    list_zip_files_in_gcs_folder,
+    get_gcs_bucket,
+    download_and_extract_zip_from_gcs,
+    list_extracted_files,
+    read_extracted_fwf_file,
+    cleanup_extracted_directory,
+)
+
+
+@task(retries=3, retry_delay_seconds=10)
+def get_max_date_from_bigquery_task(
+    project_id: str,
+    dataset_id: str,
+    table_id: str,
+) -> date | None:
+    """Obtém a maior data de partição da tabela CRF no BigQuery.
+
+    Executa a query SQL para obter o valor máximo de ``data_particao``
+    da tabela especificada, servindo como marca d'água para filtrar
+    arquivos ZIP novos no bucket GCS.
+
+    :param project_id: ID do projeto GCP.
+    :param dataset_id: ID do dataset BigQuery.
+    :param table_id: ID da tabela BigQuery.
+    :returns: Data máxima como ``datetime.date`` ou ``None`` se a tabela estiver vazia.
+    :raises Exception: Se houver erro ao executar a query.
+    """
+    return get_max_date_from_bigquery(
+        project_id=project_id,
+        dataset_id=dataset_id,
+        table_id=table_id,
+    )
 
 
 @task
 def list_zip_files_task(
-    project_id: str, bucket_name: str, folder_prefix: str
+    project_id: str,
+    bucket_name: str,
+    folder_prefix: str,
+    max_date_from_bq: date | None = None,
 ) -> list[str]:
-    """List all ZIP files in a GCS folder.
+    """Lista arquivos ZIP no GCS filtrando por data maior que a partição do BQ.
 
     :param project_id: Google Cloud project ID.
     :param bucket_name: Name of the GCS bucket.
     :param folder_prefix: Folder path prefix in the bucket (e.g., 'data/crf/').
-    :returns: List of ZIP file blob names found in the folder.
+    :param max_date_from_bq: Data máxima de partição do BigQuery. Arquivos com
+        data igual ou anterior são ignorados. Se ``None``, retorna todos os ZIPs.
+    :returns: List of ZIP file blob names found in the folder after date filter.
     """
-    logger = get_run_logger()
-    bucket = utils.get_gcs_bucket(project_id, bucket_name)
-    return utils.list_zip_files_in_gcs_folder(bucket, folder_prefix)
+
+    bucket = get_gcs_bucket(project_id, bucket_name)
+    return list_zip_files_in_gcs_folder(
+        bucket=bucket,
+        folder_prefix=folder_prefix,
+        max_date_from_bq=max_date_from_bq,
+    )
 
 
 @task
@@ -38,9 +80,9 @@ def download_and_extract_zip_task(
     :param extract_path: Local directory path where files will be extracted.
     :returns: Path to the extraction directory.
     """
-    logger = get_run_logger()
-    bucket = utils.get_gcs_bucket(project_id, bucket_name)
-    return utils.download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
+
+    bucket = get_gcs_bucket(project_id, bucket_name)
+    return download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
 
 
 @task
@@ -50,8 +92,8 @@ def list_extracted_files_task(extract_path: str) -> list[str]:
     :param extract_path: Path to the directory containing extracted files.
     :returns: List of relative file paths in the directory.
     """
-    logger = get_run_logger()
-    return utils.list_extracted_files(extract_path)
+
+    return list_extracted_files(extract_path)
 
 
 @task
@@ -73,11 +115,11 @@ def read_extracted_fwf_file_task(
     :raises FileNotFoundError: Se nenhum arquivo for encontrado.
     :raises ValueError: Se múltiplos arquivos forem encontrados ou table_id inválido.
     """
-    logger = get_run_logger()
-    logger.info(
+
+    print(
         f"Lendo arquivo FWF da tabela '{table_id}' do diretório {extract_path}"
     )
-    return utils.read_extracted_fwf_file(
+    return read_extracted_fwf_file(
         extract_path=extract_path,
         table_id=table_id,
     )
@@ -92,9 +134,9 @@ def cleanup_extracted_directory_task(extract_path: str) -> None:
 
     :param extract_path: Caminho do diretório a ser limpo.
     """
-    logger = get_run_logger()
-    logger.info(f"Limpando diretório descompactado: {extract_path}")
-    utils.cleanup_extracted_directory(extract_path)
+
+    print(f"Limpando diretório descompactado: {extract_path}")
+    cleanup_extracted_directory(extract_path)
 
 
 @task
@@ -103,32 +145,48 @@ def process_all_crf_zip_files_task(
     bucket_name: str,
     folder_prefix: str,
     extract_base_path: str,
-    table_id: str
-) -> dict[str, int]:
+    table_id: str,
+    max_date_from_bq: date | None = None,
+) -> str | None:
     """Processa sequencialmente todos os arquivos ZIP CRF do GCS.
 
-    Realiza o ciclo completo para cada arquivo ZIP:
-    1. Baixar e descompactar o arquivo ZIP.
-    2. Listar arquivos descompactados.
-    3. Ler os 4 arquivos FWF (periodos, periodos_mei, eventos, eventos_mei).
-    4. Limpar o diretório descompactado.
+    Realiza o ciclo completo para cada arquivo ZIP com data posterior à
+    partição máxima do BigQuery:
+    1. Listar arquivos ZIP no GCS filtrados pela data de partição.
+    2. Baixar e descompactar o arquivo ZIP.
+    3. Listar arquivos descompactados.
+    4. Ler o arquivo FWF correspondente ao ``table_id``.
+    5. Limpar o diretório descompactado.
 
     :param project_id: Google Cloud project ID.
     :param bucket_name: GCS bucket name contendo os arquivos ZIP.
     :param folder_prefix: Prefixo do caminho da pasta no bucket.
     :param extract_base_path: Diretório base local para arquivos descompactados.
+    :param table_id: Identificador da tabela CRF a processar.
+    :param max_date_from_bq: Data máxima de partição do BigQuery usada como
+        marca d'água. Arquivos com data igual ou anterior são ignorados.
 
-    :returns: Dicionário com estatísticas de processamento.
+    :returns: Caminho local (``data_path``) onde os arquivos parquet foram salvos,
+        ou ``None`` se nenhum arquivo ZIP foi encontrado para processar.
     """
-    logger = get_run_logger()
 
-    # Listar todos os arquivos ZIP no GCS
-    bucket = utils.get_gcs_bucket(project_id, bucket_name)
-    zip_files = utils.list_zip_files_in_gcs_folder(bucket, folder_prefix)
 
-    logger.info("Processando %d arquivos ZIP", len(zip_files))
+    # Listar arquivos ZIP no GCS, filtrando pela data de partição do BigQuery
+    bucket = get_gcs_bucket(project_id, bucket_name)
+    zip_files = list_zip_files_in_gcs_folder(
+        bucket=bucket,
+        folder_prefix=folder_prefix,
+        max_date_from_bq=max_date_from_bq,
+    )
 
-    total= 0
+    print("Processando %d arquivos ZIP", len(zip_files))
+
+    if not zip_files:
+        print("Nenhum arquivo ZIP encontrado para processar")
+        return None
+
+    total = 0
+    data_path = None
 
 
     # Processar cada arquivo ZIP sequencialmente
@@ -137,66 +195,66 @@ def process_all_crf_zip_files_task(
         zip_filename = blob_name.split("/")[-1].replace(".zip", "")
         extract_path = f"{extract_base_path}/{zip_filename}"
 
-        logger.info("Iniciando processamento de %s", blob_name)
+        print("Iniciando processamento de %s", blob_name)
 
         # Passo 1: Baixar e descompactar ZIP
-        bucket = utils.get_gcs_bucket(project_id, bucket_name)
-        extracted_dir = utils.download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
+        bucket = get_gcs_bucket(project_id, bucket_name)
+        extracted_dir = download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
 
         # Passo 2: Verificar arquivos descompactados
-        extracted_files = utils.list_extracted_files(extract_path=extracted_dir)
-        logger.info("Descompactados %d arquivos de %s", len(extracted_files), blob_name)
+        extracted_files = list_extracted_files(extract_path=extracted_dir)
+        print("Descompactados %d arquivos de %s", len(extracted_files), blob_name)
 
         # Passo 3: Ler os 4 arquivos FWF sequencialmente
-        logger.info("Lendo 4 arquivos FWF de %s", blob_name)
-        if table_id == "periodo_simples":
-            df = utils.read_extracted_fwf_file(
+        print("Lendo 4 arquivos FWF de %s", blob_name)
+        if table_id == "periodos_simples":
+            df, data_path = read_extracted_fwf_file(
                 extract_path=extracted_dir,
-                table_id="periodos",
+                table_id="periodos_simples",
                 extract_base_path=extract_base_path
             )
             periodos_count = len(df)
             total += periodos_count
-            logger.info("Processadas %d linhas de periodos", periodos_count)
+            print("Processadas %d linhas de periodos", periodos_count)
         elif table_id == "periodos_mei":
-            df = utils.read_extracted_fwf_file(
+            df, data_path = read_extracted_fwf_file(
                 extract_path=extracted_dir,
                 table_id="periodos_mei",
                 extract_base_path=extract_base_path
             )
             periodos_mei_count = len(df)
             total += periodos_mei_count
-            logger.info("Processadas %d linhas de periodos_mei", periodos_mei_count)
+            print("Processadas %d linhas de periodos_mei", periodos_mei_count)
 
         elif table_id == "eventos_simples":
-            df = utils.read_extracted_fwf_file(
+            df, data_path = read_extracted_fwf_file(
                 extract_path=extracted_dir,
-                table_id="eventos",
+                table_id="eventos_simples",
                 extract_base_path=extract_base_path
             )
             eventos_count = len(df)
             total += eventos_count
-            logger.info("Processadas %d linhas de eventos", eventos_count)
+            print("Processadas %d linhas de eventos", eventos_count)
 
         elif table_id == "eventos_mei":
-            df = utils.read_extracted_fwf_file(
+            df, data_path = read_extracted_fwf_file(
                 extract_path=extracted_dir,
                 table_id="eventos_mei",
                 extract_base_path=extract_base_path
                 )
             eventos_mei_count = len(df)
             total += eventos_mei_count
-            logger.info("Processadas %d linhas de eventos_mei", eventos_mei_count)
+            print("Processadas %d linhas de eventos_mei", eventos_mei_count)
 
 
         # Passo 4: Limpar diretório descompactado
-        utils.cleanup_extracted_directory(extract_path=extracted_dir)
-        logger.info("Concluido processamento de %s", blob_name)
+        cleanup_extracted_directory(extract_path=extracted_dir)
+        print("Concluido processamento de %s", blob_name)
 
-    logger.info(
+    print(
         "Processamento concluido. Total: %s=%d",
         table_id,
         total
     )
-    breakpoint()
-    return df
+
+    return data_path
