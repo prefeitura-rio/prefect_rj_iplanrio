@@ -1,9 +1,12 @@
 """Tasks for GCS ZIP file handling and extraction."""
 
 from datetime import date
+from pathlib import Path
 
 import pandas as pd
 from prefect import task
+
+from pipelines.rj_smfp__crf.constants import EXTRACT_BASE_PATH
 from pipelines.rj_smfp__crf.utils import (
     get_max_date_from_bigquery,
     list_zip_files_in_gcs_folder,
@@ -144,7 +147,6 @@ def process_all_crf_zip_files_task(
     project_id: str,
     bucket_name: str,
     folder_prefix: str,
-    extract_base_path: str,
     table_id: str,
     max_date_from_bq: date | None = None,
 ) -> str | None:
@@ -153,15 +155,13 @@ def process_all_crf_zip_files_task(
     Realiza o ciclo completo para cada arquivo ZIP com data posterior à
     partição máxima do BigQuery:
     1. Listar arquivos ZIP no GCS filtrados pela data de partição.
-    2. Baixar e descompactar o arquivo ZIP.
-    3. Listar arquivos descompactados.
-    4. Ler o arquivo FWF correspondente ao ``table_id``.
-    5. Limpar o diretório descompactado.
+    2. Baixar e descompactar o arquivo ZIP em ``EXTRACT_BASE_PATH``.
+    3. Ler o arquivo FWF correspondente ao ``table_id``.
+    4. Limpar o diretório descompactado (sempre, via ``try/finally``).
 
     :param project_id: Google Cloud project ID.
     :param bucket_name: GCS bucket name contendo os arquivos ZIP.
     :param folder_prefix: Prefixo do caminho da pasta no bucket.
-    :param extract_base_path: Diretório base local para arquivos descompactados.
     :param table_id: Identificador da tabela CRF a processar.
     :param max_date_from_bq: Data máxima de partição do BigQuery usada como
         marca d'água. Arquivos com data igual ou anterior são ignorados.
@@ -169,6 +169,7 @@ def process_all_crf_zip_files_task(
     :returns: Caminho local (``data_path``) onde os arquivos parquet foram salvos,
         ou ``None`` se nenhum arquivo ZIP foi encontrado para processar.
     """
+    extract_base_path = EXTRACT_BASE_PATH
 
 
     # Listar arquivos ZIP no GCS, filtrando pela data de partição do BigQuery

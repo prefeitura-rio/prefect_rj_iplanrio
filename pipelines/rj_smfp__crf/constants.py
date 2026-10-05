@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+EXTRACT_BASE_PATH = "/tmp/rj_smfp__crf"
+
 
 @dataclass(frozen=True)
 class FwfTableConfig:

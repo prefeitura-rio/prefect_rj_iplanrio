@@ -5,7 +5,7 @@ import re
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
-
+import shutil
 import pandas as pd
 from google.cloud import bigquery
 from google.cloud.storage import Bucket, Client
@@ -348,26 +348,22 @@ def read_extracted_fwf_file(
 
 
 def cleanup_extracted_directory(extract_path: str) -> None:
-    """Remove todos os arquivos de um diretório descompactado.
+    """Remove recursivamente um diretório e todo o seu conteúdo.
 
-    Deleta recursivamente todos os arquivos no diretório, útil para limpeza
-    após o processamento de um lote de arquivos FWF.
+    Deleta o diretório e todos os arquivos/subdiretórios contidos nele.
+    Se o diretório não existir, a função retorna silenciosamente.
 
-    :param extract_path: Caminho do diretório a ser limpo.
-    :raises FileNotFoundError: Se o diretório não existir.
+    :param extract_path: Caminho do diretório a ser removido.
     :raises Exception: Se houver erro ao remover arquivos.
     """
+
     extract_dir = Path(extract_path)
 
     if not extract_dir.exists():
-        raise FileNotFoundError(
-            f"Diretório não encontrado: {extract_path}"
-        )
+        return
 
     try:
-        for file_path in extract_dir.rglob("*"):
-            if file_path.is_file():
-                file_path.unlink()
+        shutil.rmtree(extract_dir)
     except Exception as e:
         raise Exception(
             f"Erro ao limpar diretório {extract_path}: {e}"
