@@ -66,9 +66,3 @@ def rj_smfp__crf(
             source_format="parquet",
             table_id=table_id,
         )
-
-
-rj_smfp__crf(
-    table_id="periodos_simples",
-    max_date_bigquery="2026-09-19",
-)
