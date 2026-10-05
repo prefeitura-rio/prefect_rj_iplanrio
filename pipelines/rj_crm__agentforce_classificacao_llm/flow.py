@@ -3,7 +3,7 @@
 Flow diário — Classificação inicial por LLM das sessões do Agentforce (WhatsApp).
 
 Extrai sessões dos últimos LOOKBACK_DAYS dias ainda não classificadas (dois filtros: um
-pré-filtro barato por classificacao_llm_datahora na fonte, mais o anti-join de sempre
+pré-filtro barato por llm.classificacao_datahora na fonte, mais o anti-join de sempre
 contra a tabela destino como garantia final — ver queries/extract_sessoes.sql), classifica
 via Bifrost/Gemini (ou por regra, quando é resposta atrasada a botão), aplica o catálogo
 de regras de tema e grava em rj-crm-registry.brutos_salesforce.ai_agent_session_classificacao
@@ -131,7 +131,7 @@ def rj_crm__agentforce_classificacao_llm(
     if not bf_key:
         raise ValueError(
             "BF_KEY não encontrada nas variáveis de ambiente — adicionar ao secret do work pool "
-            "(mesmo secretName usado por rj_crm__salesforce_agentforce_api)."
+            "(mesmo secretName usado por rj_crm__salesforce_datacloud)."
         )
 
     # Não precisa de try/except aqui: on_failure=[notify_falha_flow] no decorator acima já
@@ -147,7 +147,7 @@ def rj_crm__agentforce_classificacao_llm(
         tmp_table_id=dest_tmp_table_id,
     )
 
-    # 2. Extrai sessões pendentes (janela fixa + pré-filtro por classificacao_llm_datahora
+    # 2. Extrai sessões pendentes (janela fixa + pré-filtro por llm.classificacao_datahora
     #    + anti-join final contra o destino) e enriquece com HSM
     df_sessoes = extrai_sessoes_nao_classificadas(
         project_id=project_id,
@@ -172,9 +172,9 @@ def rj_crm__agentforce_classificacao_llm(
 
     # 4. Catálogo de regras de tema/motivo — carregado antes da classificação porque
     #    tanto o passo 5 (pré-classificadas) quanto o passo 6 (LLM, lote a lote)
-    #    precisam dele. Catálogo ausente ou sem regra pra secretaria da sessão:
-    #    tema_nome/causa_nome ficam vazios, não bloqueia nada. Hoje só tema tem regra
-    #    no catálogo (motivo vem sempre vazio) — ver aplica_regras_causa.
+    #    precisam dele. Catálogo ausente ou sem regra pra secretaria/tema da sessão:
+    #    tema_nome/causa_nome ficam vazios, não bloqueia nada — ver aplica_regras_causa
+    #    (motivo só é aplicado dentro do tema ao qual pertence, via categoria_pai).
     df_regras_tema = carrega_catalogo_regras(
         project_id=project_id,
         dataset_id=dest_dataset_id,

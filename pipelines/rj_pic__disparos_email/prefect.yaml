@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_pic__disparos_email/flow.py:rj_pic__disparos_email
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -39,17 +39,17 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_pic__disparos_email/flow.py:rj_pic__disparos_email
     work_pool:
-      name: k3s-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_pic__disparos_email -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-    schedules:
-      - interval: 86400  # Executa a cada 24h
-        anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
-        timezone: America/Sao_Paulo
-        slug: prod-daily
-        parameters:
-          email_subject: "Pequenos Cariocas - Alertas"
+    # schedules:
+    #   - interval: 86400  # Executa a cada 24h
+    #     anchor_date: "2025-01-01T12:00:00"  # Data de início do schedule em UTC
+    #     timezone: America/Sao_Paulo
+    #     slug: prod-daily
+    #     parameters:
+    #       email_subject: "Pequenos Cariocas - Alertas"

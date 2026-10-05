@@ -1,0 +1,139 @@
+# -*- coding: utf-8 -*-
+"""
+Transformações aplicadas a todos os DataFrames antes de carregar no BigQuery.
+Puro (sem I/O) — função comum, não task.
+
+Operações:
+  - snake_case nos nomes de colunas
+  - Remoção do prefixo ssot__ e sufixo __c dos campos do Data Cloud
+  - Conversão de datas
+  - Adição de coluna _loaded_at (timestamp de ingestão)
+  - Adição de coluna data_particao (data de execução, para particionamento)
+  - Cast de colunas para os tipos esperados pelo schema BQ
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import date, datetime, timezone
+
+import pandas as pd
+
+
+# ---------------------------------------------------------------------------
+# Funções utilitárias (internas)
+# ---------------------------------------------------------------------------
+
+
+def _to_snake_case(name: str) -> str:
+    """Converte CamelCase ou PascalCase para snake_case."""
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", name)
+    s = re.sub(r"([a-z\d])([A-Z])", r"\1_\2", s)
+    return s.lower()
+
+
+def _clean_dc_field_name(name: str) -> str:
+    """
+    Remove prefixo ssot__ e sufixo __c/__dlm/__dll dos campos do Data Cloud.
+    Ex: 'ssot__StartTime__c' → 'start_time'
+        'AiAgentSession__dlm' → 'ai_agent_session'
+    """
+    cleaned = re.sub(r"^ssot__", "", name)
+    cleaned = re.sub(r"(__c|__dlm|__dll)$", "", cleaned)
+    return _to_snake_case(cleaned)
+
+
+def _normalize_columns(df: pd.DataFrame, is_data_cloud: bool = False) -> pd.DataFrame:
+    """Renomeia colunas para snake_case, removendo prefixos DC se necessário."""
+    if is_data_cloud:
+        df.columns = [_clean_dc_field_name(c) for c in df.columns]
+    else:
+        df.columns = [_to_snake_case(c) for c in df.columns]
+    # Remover colunas duplicadas após normalização (edge case)
+    df = df.loc[:, ~df.columns.duplicated()]
+    return df
+
+
+def _filter_output_value_text_action_step_only(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Zera output_value_text para registros que não são ACTION_STEP.
+    Serializa dicts para string nos que mantêm o valor.
+    """
+    if "output_value_text" not in df.columns or "ai_agent_interaction_step_type" not in df.columns:
+        return df
+    mask = df["ai_agent_interaction_step_type"] == "ACTION_STEP"
+    df = df.copy()
+    df.loc[~mask, "output_value_text"] = None
+    df["output_value_text"] = df["output_value_text"].apply(
+        lambda v: json.dumps(v, ensure_ascii=False) if isinstance(v, dict) else v
+    )
+    action_count = mask.sum()
+    return df
+
+
+def _parse_dates(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
+    """Converte colunas de data/datetime para datetime com timezone UTC."""
+    for col in columns:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Task principal
+# ---------------------------------------------------------------------------
+
+
+def transform_dataframe(
+    df: pd.DataFrame,
+    table_name: str = "desconhecida",
+    is_data_cloud: bool = False,
+    date_columns: list[str] | None = None,
+    partition_date: date | None = None,
+    output_value_text_action_step_only: bool = False,
+) -> pd.DataFrame:
+    """
+    Aplica transformações padrão a um DataFrame antes do carregamento no BQ.
+
+    Args:
+        df              : DataFrame bruto da extração.
+        table_name      : Nome da tabela (para logs).
+        is_data_cloud   : Se True, remove prefixo ssot__ e sufixo __c dos campos.
+        date_columns    : Colunas para converter para datetime UTC.
+                          (após normalização de nomes, já em snake_case)
+        partition_date  : Data de partição. Padrão: hoje.
+        output_value_text_action_step_only: Se True, zera output_value_text para
+                          registros que não são ACTION_STEP.
+                          Usar apenas para ai_agent_interaction_step.
+
+    Returns:
+        DataFrame transformado, pronto para carga no BigQuery.
+    """
+    if df.empty:
+        return df
+
+
+    # 1. Normalizar nomes de colunas
+    df = _normalize_columns(df, is_data_cloud=is_data_cloud)
+
+    # 2. Converter datas
+    if date_columns:
+        df = _parse_dates(df, date_columns)
+
+    # 3. Adicionar _loaded_at (timestamp de ingestão UTC)
+    df["_loaded_at"] = datetime.now(tz=timezone.utc)
+
+    # 4. Adicionar data_particao como tipo date (não string) para particionamento DATE no BQ
+    if partition_date is None:
+        partition_date = date.today()
+    df["data_particao"] = partition_date
+
+    # 5. Remover strings vazias (Bulk API retorna "" para NULL)
+    df = df.replace("", None)
+
+    # 6. Zerar output_value_text para registros que não são ACTION_STEP
+    if output_value_text_action_step_only:
+        df = _filter_output_value_text_action_step_only(df)
+
+    return df

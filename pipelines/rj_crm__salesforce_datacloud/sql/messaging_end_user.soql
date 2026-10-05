@@ -1,0 +1,17 @@
+SELECT
+    Id,
+    Name,
+    MessagingChannelId,
+    MessageType,
+    MessagingPlatformKey,
+    Locale,
+    IsoCountryCode,
+    MessagingConsentStatus,
+    IsFullyOptedIn,
+    MessagingExternalUserKey,
+    CreatedDate,
+    LastModifiedDate
+FROM MessagingEndUser
+WHERE LastModifiedDate >= {data_inicio}
+  AND LastModifiedDate < {data_fim}
+ORDER BY CreatedDate ASC

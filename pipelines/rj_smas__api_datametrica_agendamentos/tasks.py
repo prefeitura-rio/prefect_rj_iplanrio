@@ -131,6 +131,10 @@ def fetch_agendamentos_from_api(credentials: Dict[str, str], date: str) -> List[
 
         response.raise_for_status()
 
+        if not response.text or not response.text.strip():
+            log(f"Aviso: API retornou body vazio. Retornando lista vazia.")
+            return []
+
         agendamentos_data = response.json()
         log(f"Recuperados {len(agendamentos_data)} agendamentos")
 
@@ -158,8 +162,13 @@ def transform_agendamentos_data(
 
     agendamentos = []
     for data in agendamentos_data:
+        if len(agendamentos_data) < 10:
+            log(f"Poucos registros recebidos como string: {data}")
         try:
             if isinstance(data, str):
+                if not data.strip():
+                    log("Registro ignorado: string vazia recebida da API")
+                    continue
                 data = json.loads(data)
             agendamento = {
                 "id": data["id"],

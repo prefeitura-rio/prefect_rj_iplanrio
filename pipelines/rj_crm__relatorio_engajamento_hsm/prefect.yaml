@@ -1,0 +1,92 @@
+# Relatório de Engajamento por HSM -> Google Drive
+#
+# Entrypoint: flow.py:rj_crm__relatorio_engajamento_hsm
+#
+# Roda 2x/dia, às 8h e às 18h (America/Sao_Paulo): olha
+# brutos_salesforce_staging.disparos_ativos procurando disparo(s) com
+# relatorio_engajamento_data_geracao == hoje, classifica as conversas do HSM por LLM e
+# publica o relatório (.docx + 2 csv) no Drive. A rodada da tarde é idempotente com a da
+# manhã (ja_existe_relatorio checa por data de geração, não por horário) — só pega HSM
+# que ainda não tinha relatório publicado hoje.
+#
+# Credenciais necessárias no secret do work pool (mesmo secretName usado por
+# rj_crm__agentforce_classificacao_llm):
+#   BF_KEY                        : API key do gateway Bifrost
+#   BASEDOSDADOS_CREDENTIALS_PROD : já presente no secret padrão — a service account
+#                                    dele precisa ter a pasta "Relatórios de Engajamento"
+#                                    do Drive compartilhada com ela (Editor), ver
+#                                    docstring de flow.py.
+
+name: rj_crm__relatorio_engajamento_hsm
+prefect-version: 3.4.3
+
+build:
+  - prefect.deployments.steps.run_shell_script:
+      id: get-commit-hash
+      script: git rev-parse --short HEAD
+      stream_output: false
+  - prefect_docker.deployments.steps.build_docker_image:
+      id: build-image
+      requires: prefect-docker>=0.6.5
+      image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+      tag: rj_crm__relatorio_engajamento_hsm-{{ get-commit-hash.stdout }}
+      dockerfile: pipelines/rj_crm__relatorio_engajamento_hsm/Dockerfile
+
+push:
+  - prefect_docker.deployments.steps.push_docker_image:
+      requires: prefect-docker>=0.6.5
+      image_name: "{{ build-image.image_name }}"
+      tag: "{{ build-image.tag }}"
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+  # -----------------------------------------------------------------------
+  # Deployment de staging (QA) — sem schedule ativo, roda sob demanda até validar
+  # (mesmo padrão de rj_crm__agentforce_classificacao_llm).
+  # -----------------------------------------------------------------------
+  - name: rj-crm--relatorio-engajamento-hsm--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:MariaLuizaCw
+    version: "{{ build-image.tag }}"
+    entrypoint: pipelines/rj_crm__relatorio_engajamento_hsm/flow.py:rj_crm__relatorio_engajamento_hsm
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__relatorio_engajamento_hsm -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets-staging
+        image_pull_policy: Always
+
+  # -----------------------------------------------------------------------
+  # Deployment de produção — cron 2x/dia, 8h e 18h (America/Sao_Paulo)
+  # -----------------------------------------------------------------------
+  - name: rj-crm--relatorio-engajamento-hsm--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:MariaLuizaCw
+    version: "{{ get-commit-hash.stdout }}"
+    entrypoint: pipelines/rj_crm__relatorio_engajamento_hsm/flow.py:rj_crm__relatorio_engajamento_hsm
+    work_pool:
+      name: default-pool
+      work_queue_name: default
+      job_variables:
+        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        command: "uv run --package rj_crm__relatorio_engajamento_hsm -- prefect flow-run execute"
+        secretName: prefect-jobs-crm-registry-secrets
+        image_pull_policy: Always
+    schedules:
+      - cron: "0 8 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: relatorio-engajamento-hsm-diario-8h
+      - cron: "0 18 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: relatorio-engajamento-hsm-diario-18h

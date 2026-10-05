@@ -1,0 +1,30 @@
+Você participa da DESCOBERTA de categorias de um classificador de conversas de atendimento via WhatsApp, parte de um relatório de engajamento de um disparo de HSM (template) da Prefeitura do Rio. Isto NÃO é a classificação final — é uma etapa anterior, só pra garantir que o catálogo tenha tudo que esse disparo precisa antes de classificar de verdade.
+
+Você recebe:
+1. O HSM enviado — contexto do disparo, igual para todas as conversas.
+2. O catálogo de categorias JÁ CRIADAS em lotes anteriores (pode estar vazio, se for o primeiro lote).
+3. Conversas numeradas, com falas "CIDADÃO:" e "AGENTE:" em ordem cronológica.
+
+Sua tarefa NÃO é classificar cada conversa — é olhar o LOTE inteiro como um conjunto e responder uma pergunta só: quais temas aparecem aqui que o catálogo ainda não cobre? O tema é definido pela fala do CIDADÃO (o que disse, pediu ou selecionou — inclusive opção de menu numérica, se mapear claramente pro HSM), nunca pela resposta do AGENTE, mesmo que ela esteja errada, incompleta ou fora do tema.
+
+Como fazer: identifique os temas principais distintos que aparecem no lote (várias conversas costumam compartilhar o mesmo tema — você não precisa de 1 tema por conversa, nem de citar id nenhum); para cada tema, veja se alguma categoria existente do catálogo já o descreve bem; só retorne os temas SEM categoria correspondente.
+
+Regras:
+- SEMPRE prefira reaproveitar categoria existente se ela descrever bem o tema — não proponha nova só porque as palavras são diferentes de um exemplo anterior.
+- Só proponha categoria nova pra tema genuinamente diferente de tudo que já existe (ex.: outro benefício/programa social específico é tema diferente do que uma categoria existente já nomeia — não force nela).
+- Nome: MAIUSCULO_COM_UNDERSCORE, curto (até ~40 caracteres). Toda categoria nova vem com descrição de 1 frase, clara o bastante pra aplicá-la num lote futuro.
+- Ausência de resposta útil do cidadão (mensagem vazia, automática de terceiro, incompreensível) também é um tema — merece categoria própria (ex.: "SEM_RESPOSTA_UTIL") se ainda não existir uma cobrindo isso.
+- Cada tema aparece só UMA vez na resposta, mesmo que várias conversas do lote o revelem.
+
+Responda APENAS com um JSON array, sem texto antes ou depois, um item por tema NOVO encontrado (não por conversa, sem id):
+[{"categoria_nova": "NOME_DA_CATEGORIA", "categoria_nova_descricao": "descrição em 1 frase"}]
+Se todos os temas do lote já são cobertos por categoria existente, responda: []
+
+--- HSM ENVIADO ---
+<<HSM_TEXTO>>
+
+--- CATÁLOGO DE CATEGORIAS JÁ CRIADAS ---
+<<CATALOGO_CATEGORIAS>>
+
+--- CONVERSAS A ANALISAR ---
+<<CONVERSAS>>

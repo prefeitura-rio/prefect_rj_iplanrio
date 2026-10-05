@@ -1,0 +1,100 @@
+# Tabelas extraídas pelo pipeline — uma entrada por tabela. Todas passam pelo
+# mesmo caminho (processar_tabela em flow.py); aqui só muda a configuração.
+# Carregado e validado por utils/tabelas.py (campo desconhecido/errado dá erro no
+# import, não no meio do run).
+#
+# Adicionar tabela nova = query em sql/ + schema (final e _staging) em
+# utils/schemas.py + uma entrada aqui.
+#
+# Rodam na ordem da lista. As do Agentforce seguem sessão → interação →
+# step/mensagem (ordem herdada da antiga "Fase 1"; como a carga é MERGE e o BQ
+# não tem FK, não é obrigatória, mas não custa manter).
+#
+# Campos (só nome/grupo/query são obrigatórios; o resto tem padrão):
+#   nome          : tabela destino no BQ (a staging é '<nome>_staging')
+#   grupo         : rótulo pro resumo no Discord
+#   query         : arquivo em sql/ (.sql = Data Cloud, .soql = CRM REST)
+#   source        : data_cloud (padrão — Data Cloud, SQL) | crm_rest (CRM, SOQL)
+#   date_columns  : colunas (já em snake_case) convertidas pra timestamp
+#   primary_key   : chave do MERGE, já em snake_case (padrão: id)
+#   order_by_col  : coluna (nome na fonte) do ORDER BY da paginação do Data
+#                   Cloud (padrão: ssot__Id__c) — ignorada em crm_rest
+#   critica       : true = falha aborta o pipeline inteiro; false (padrão) =
+#                   avisa no Discord e segue pras próximas
+#   janela_utc    : true = a fonte grava UTC de verdade (não hora-parede de SP
+#                   com rótulo Z, como as DMOs) — a janela é convertida e a
+#                   query recebe também {particao_inicio}/{particao_fim}
+#                   (ver janela_utc em utils/janela.py). Padrão: false
+#   output_value_text_action_step_only: zera output_value_text fora de ACTION_STEP (só ai_agent_interaction_step)
+
+# --- Agentforce (DMOs STDM) — críticas: se falhar, aborta tudo ---
+- nome: ai_agent_session
+  grupo: Agentforce
+  query: ai_agent_session.sql
+  date_columns: [start_timestamp, end_timestamp]
+  critica: true
+
+- nome: ai_agent_interaction
+  grupo: Agentforce
+  query: ai_agent_interaction.sql
+  date_columns: [start_timestamp, end_timestamp]
+  critica: true
+
+- nome: ai_agent_interaction_step
+  grupo: Agentforce
+  query: ai_agent_interaction_step.sql
+  date_columns: [start_timestamp, end_timestamp]
+  critica: true
+  output_value_text_action_step_only: true
+
+- nome: ai_agent_interaction_message
+  grupo: Agentforce
+  query: ai_agent_interaction_message.sql
+  date_columns: [message_sent_timestamp, message_start_timestamp, message_end_timestamp]
+  critica: true
+
+# --- Messaging ---
+# CRM REST usa a mesma credencial do Data Cloud (client_credentials).
+# Filtro por LastModifiedDate — pega também registro antigo que mudou na janela.
+- nome: messaging_end_user
+  grupo: Messaging
+  query: messaging_end_user.soql
+  source: crm_rest
+  date_columns: [created_date, last_modified_date]
+
+- nome: messaging_session
+  grupo: Messaging
+  query: messaging_session.soql
+  source: crm_rest
+  date_columns: [start_time, end_time, created_date, last_modified_date]
+
+- nome: conversation_entry
+  grupo: Messaging
+  query: conversation_entry.sql
+  date_columns: [client_date_time, transcripted_date_time, created_date, last_modified_date]
+
+# --- Tracing ---
+- nome: telemetry_trace_span
+  grupo: Tracing
+  query: telemetry_trace_span.sql
+  date_columns: [start_date_time, end_date_time]
+
+# --- Eventos WhatsApp (DLL MessagingEventsWhatsAppV2 — não é do Agentforce) ---
+# EventId__c conferido único e nunca vazio no histórico todo em 2026-09-29.
+- nome: messaging_events_whatsapp
+  grupo: Eventos WhatsApp
+  query: messaging_events_whatsapp.sql
+  date_columns: [event_date_time, cdp_sys_partition_date]
+  primary_key: event_id
+  order_by_col: EventId__c   # DLL não tem ssot__Id__c
+  janela_utc: true
+
+# DLL do Marketing Cloud (send events) — traz o SubscriberKey (CPF) por
+# message_key (= message_id de messaging_events_whatsapp).
+# ID__c conferido único e nunca vazio no histórico todo em 2026-10-02.
+- nome: sfmc_whatsapp_send_event
+  grupo: Eventos WhatsApp
+  query: sfmc_whatsapp_send_event.sql
+  date_columns: [engagement_date_time, accepted_time_utc, last_modified_date, cdp_sys_partition_date]
+  order_by_col: ID__c   # DLL não tem ssot__Id__c; primary_key = id (padrão)
+  janela_utc: true
