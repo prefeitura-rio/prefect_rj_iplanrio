@@ -257,4 +257,10 @@ def process_all_crf_zip_files_task(
         total
     )
 
+    if data_path is None:
+        raise ValueError(
+            f"table_id '{table_id}' inválido. "
+            "Válidos: 'periodos_simples', 'periodos_mei', 'eventos_simples', 'eventos_mei'."
+        )
+
     return data_path

@@ -12,7 +12,7 @@ from pipelines.rj_smfp__crf.env import CRF__BUCKET_NAME, CRF__FOLDER_PREFIX_PERI
 def rj_smfp__crf(
     table_id: str | None = None,
     project_id: str = CRF__PROJECT_ID,
-    dataset_id: str = "smfp_crf",
+    dataset_id: str = "brutos_crf",
     extract_base_path: str = "/tmp/rj_smfp__crf",
     max_date_bigquery: str | None = None,
 ) -> None:

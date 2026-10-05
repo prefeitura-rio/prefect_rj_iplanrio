@@ -329,7 +329,7 @@ def read_extracted_fwf_file(
 
             df['ano_particao'] = df["data_referencia"].apply(lambda x: str(x)[0:4])[0]
             df['mes_particao'] = df["data_referencia"].apply(lambda x: str(x)[4:6])[0]
-            df['data_particao'] = pd.to_datetime(df["data_referencia"], format="%Y%m%d")
+            df['data_particao'] = pd.to_datetime(df["data_referencia"], format="%Y%m%d").dt.strftime("%Y-%m-%d")
 
             data_path = f"{extract_base_path}/{table_id}"
             to_partitions(
