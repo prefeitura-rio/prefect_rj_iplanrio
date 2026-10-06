@@ -92,7 +92,7 @@ def extract_date_from_blob_name(blob_name: str) -> date | None:
             year = int(date_str[4:8])
             return date(year, month, day)
         except (ValueError, TypeError):
-            logger.debug("Data inválida extraída de '%s': %s", blob_name, date_str)
+            logger.warning("Data inválida extraída de '{}': {}", blob_name, date_str)
     return None
 
 
@@ -137,12 +137,10 @@ def list_zip_files_in_gcs_folder(
         try:
             return date.fromisoformat(str(value))
         except ValueError:
-            logger.warning(
-                "Não foi possível converter '%s' ('%s') para date, ignorando filtro",
-                param_name,
-                value,
+            raise ValueError(
+                f"Formato de data inválido para '{param_name}': '{value}'. "
+                "Use o formato YYYY-MM-DD."
             )
-            return None
 
     # Compatibilidade: max_date_from_bq equivale a data_inicio
     if data_inicio is None and max_date_from_bq is not None:
@@ -156,7 +154,10 @@ def list_zip_files_in_gcs_folder(
     )
 
     blobs = bucket.list_blobs(prefix=folder_prefix)
-    zip_blobs = [blob.name for blob in blobs if blob.name.endswith(".zip")]
+    zip_blobs = [
+        blob.name for blob in blobs
+        if blob.name.split("/")[-1].startswith("BX-") and blob.name.endswith(".zip")
+    ]
 
     print(f"Total de arquivos ZIP encontrados: {len(zip_blobs)}")
 
