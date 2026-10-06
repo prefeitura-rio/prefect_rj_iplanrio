@@ -14,14 +14,26 @@ from prefect_rj_iplanrio.sql import load_query
 
 @dataclass(frozen=True)
 class Snapshot:
-    """Ponto de leitura consistente: todas as leituras da sonda são ``AS OF SCN``.
+    """Ponto de leitura consistente: as leituras da sonda são ``AS OF SCN`` quando o flashback está disponível.
 
     :param scn: System change number no início da sonda.
     :param taken_at: Horário (UTC) em que o SCN foi lido.
+    :param source: Consulta que forneceu o SCN (``v$database`` ou ``DBMS_FLASHBACK``).
+    :param flashback: ``False`` se ``AS OF SCN`` falhou em alguma tabela; aí as leituras são sem SCN.
     """
 
     scn: int
     taken_at: datetime
+    source: str
+    flashback: bool = True
+
+
+# (consulta em queries/, origem exibida no relatório), na ordem de tentativa.
+SNAPSHOT_SOURCES = (("get_snapshot", "v$database"), ("get_snapshot_flashback", "DBMS_FLASHBACK"))
+
+
+class SnapshotError(RuntimeError):
+    """Nenhuma das fontes de SCN está acessível ao usuário."""
 
 
 def query_rows(
@@ -74,12 +86,50 @@ def to_utc(value: object) -> datetime:
 def read_snapshot(config: OracleConfig) -> Snapshot:
     """Lê o SCN atual e o horário do banco, que fixam o ponto de leitura.
 
+    Tenta ``v$database.CURRENT_SCN`` e, sem acesso a ela, ``DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER``.
+
     :param config: Configuração da conexão.
-    :returns: SCN e horário (UTC) lidos na mesma consulta.
+    :returns: SCN, horário (UTC) e a fonte usada.
+    :raises SnapshotError: Se nenhuma fonte estiver acessível; a mensagem traz os erros e os GRANTs possíveis.
     """
+    errors: list[str] = []
     with connect_read_only(config) as connection, connection.cursor() as cursor:
-        (row,) = query_rows(cursor, "get_snapshot")
-    return Snapshot(scn=to_int(row["scn"]), taken_at=to_utc(row["taken_at"]))
+        for query, source in SNAPSHOT_SOURCES:
+            try:
+                (row,) = query_rows(cursor, query)
+            except oracledb.DatabaseError as error:
+                errors.append(f"{source}: {str(error).splitlines()[0]}")
+                continue
+            return Snapshot(scn=to_int(row["scn"]), taken_at=to_utc(row["taken_at"]), source=source)
+    raise SnapshotError(
+        "Não foi possível ler o SCN (" + "; ".join(errors) + "). Peça à DBA um destes: "
+        "GRANT SELECT ON SYS.V_$DATABASE ou GRANT EXECUTE ON SYS.DBMS_FLASHBACK."
+    )
+
+
+def flashback_failures(config: OracleConfig, schema: str, tables: tuple[str, ...], scn: int) -> list[str]:
+    """Testa ``AS OF SCN`` com uma linha de cada tabela, antes das leituras pesadas.
+
+    :param config: Configuração da conexão.
+    :param schema: Dono das tabelas.
+    :param tables: Tabelas a testar.
+    :param scn: SCN da foto.
+    :returns: Uma mensagem por tabela em que o ``AS OF SCN`` falhou; vazia se funcionou em todas.
+    """
+    failures: list[str] = []
+    with connect_read_only(config) as connection, connection.cursor() as cursor:
+        for table in tables:
+            try:
+                query_rows(
+                    cursor,
+                    "check_flashback",
+                    {"scn": scn},
+                    schema=validate_identifier(schema),
+                    table=validate_identifier(table),
+                )
+            except oracledb.DatabaseError as error:
+                failures.append(f"{schema}.{table}: {str(error).splitlines()[0]}")
+    return failures
 
 
 def read_columns(cursor: oracledb.Cursor, schema: str, table: str) -> tuple[OracleColumn, ...]:

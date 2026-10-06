@@ -127,6 +127,7 @@ def format_profile(profile: TableProfile, schema: str, chunk_size_blocks: int) -
             f"faixas de ROWID ({chunk_size_blocks:,} blocos)",
             f"{profile.total_chunks:,} (amostradas: {len(profile.sampled)})",
         ),
+        ("faixas calculadas por", profile.chunk_source),
     ]
     notes = "".join(f"\nnota: {note}" for note in profile.notes)
     return block(f"3. Tabela {schema}.{profile.table}", f"{key_values(pairs)}\n{format_partitions(profile)}{notes}")
