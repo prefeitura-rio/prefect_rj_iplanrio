@@ -40,7 +40,7 @@ def rj_smfp__crf(
         )
 
     rename_current_flow_run_task(new_name=f"{project_id}.{dataset_id}.{table_id}")
-    # inject_bd_credentials_task(environment="prod")
+    inject_bd_credentials_task(environment="prod")
 
     if max_date_bigquery is None:
         max_date = get_max_date_from_bigquery_task(
