@@ -41,11 +41,8 @@ def get_max_date_from_bigquery(
     :returns: Data máxima como ``datetime.date`` ou ``None`` se a tabela estiver vazia.
     :raises Exception: Se houver erro ao executar a query.
     """
-    logger.info(
-        "Obtendo data máxima de partição do BigQuery: %s.%s.%s",
-        project_id,
-        dataset_id,
-        table_id,
+    print(
+        f"Obtendo data máxima de partição do BigQuery: {project_id}.{dataset_id}.{table_id}",
     )
 
     try:
@@ -102,75 +99,93 @@ def extract_date_from_blob_name(blob_name: str) -> date | None:
 def list_zip_files_in_gcs_folder(
     bucket: Bucket,
     folder_prefix: str,
+    data_inicio: date | str | None = None,
+    data_fim: date | str | None = None,
     max_date_from_bq: date | str | None = None,
 ) -> list[str]:
-    """Lista arquivos ZIP no GCS filtrando por data maior que a partição do BQ.
+    """Lista arquivos ZIP no GCS filtrando por intervalo de datas.
 
     Lista todos os blobs ZIP no bucket com o prefixo especificado e retorna
-    apenas aqueles cuja data extraída do nome do arquivo é posterior à data
-    máxima de partição encontrada no BigQuery.
+    apenas aqueles cuja data extraída do nome do arquivo está dentro do
+    intervalo ``(data_inicio, data_fim]``.
 
-    Se ``max_date_from_bq`` for ``None``, todos os arquivos ZIP são retornados.
+    - ``data_inicio``: arquivos com data **igual ou anterior** são ignorados
+      (exclusivo no início, equivalente à marca d'água).
+    - ``data_fim``: arquivos com data **posterior** são ignorados (inclusivo no fim).
+    - Se ambos forem ``None`` (e ``max_date_from_bq`` também), todos os ZIPs são retornados.
+
+    .. note::
+        O parâmetro ``max_date_from_bq`` é mantido por compatibilidade e equivale
+        a ``data_inicio`` quando fornecido.
 
     :param bucket: Google Cloud Storage bucket object.
     :param folder_prefix: Prefixo do caminho da pasta no bucket (ex.: ``'PERIODOS_EVENTOS/'``).
-    :param max_date_from_bq: Data máxima de partição do BigQuery como ``datetime.date``
-        ou string ``YYYY-MM-DD``. Arquivos com data igual ou anterior são ignorados.
+    :param data_inicio: Início do intervalo como ``datetime.date`` ou ``YYYY-MM-DD``.
+        Arquivos com data igual ou anterior são ignorados. Se ``None``, sem limite inferior.
+    :param data_fim: Fim do intervalo como ``datetime.date`` ou ``YYYY-MM-DD``.
+        Arquivos com data posterior são ignorados. Se ``None``, sem limite superior.
+    :param max_date_from_bq: Alias legado para ``data_inicio``. Ignorado se
+        ``data_inicio`` for fornecido.
     :returns: Lista de nomes de blob (caminhos completos) para arquivos ZIP filtrados.
     """
-    # Converter string para date se necessário
-    if isinstance(max_date_from_bq, str):
+
+    def _parse_date(value: date | str | None, param_name: str) -> date | None:
+        if value is None:
+            return None
+        if isinstance(value, date):
+            return value
         try:
-            max_date_from_bq = date.fromisoformat(max_date_from_bq)
+            return date.fromisoformat(str(value))
         except ValueError:
             logger.warning(
-                "Não foi possível converter max_date_bigquery '%s' para date, ignorando filtro",
-                max_date_from_bq,
+                "Não foi possível converter '%s' ('%s') para date, ignorando filtro",
+                param_name,
+                value,
             )
-            max_date_from_bq = None
+            return None
 
-    if max_date_from_bq:
-        logger.info(
-            "Listando arquivos ZIP do bucket '%s' com prefixo '%s' (filtrando após %s)",
-            bucket.name,
-            folder_prefix,
-            max_date_from_bq,
-        )
-    else:
-        logger.info(
-            "Listando arquivos ZIP do bucket '%s' com prefixo '%s' (sem filtro de data)",
-            bucket.name,
-            folder_prefix,
-        )
+    # Compatibilidade: max_date_from_bq equivale a data_inicio
+    if data_inicio is None and max_date_from_bq is not None:
+        data_inicio = max_date_from_bq
+
+    data_inicio = _parse_date(data_inicio, "data_inicio")
+    data_fim = _parse_date(data_fim, "data_fim")
+
+    print(
+        f"Listando arquivos ZIP do bucket '{bucket.name}' com prefixo '{folder_prefix}' (data_inicio={data_inicio}, data_fim={data_fim})"
+    )
 
     blobs = bucket.list_blobs(prefix=folder_prefix)
     zip_blobs = [blob.name for blob in blobs if blob.name.endswith(".zip")]
 
-    logger.info("Total de arquivos ZIP encontrados: %d", len(zip_blobs))
+    print(f"Total de arquivos ZIP encontrados: {len(zip_blobs)}")
 
-    if not max_date_from_bq:
+    if data_inicio is None and data_fim is None:
         return zip_blobs
 
     filtered = []
     for blob_name in zip_blobs:
         file_date = extract_date_from_blob_name(blob_name)
         if file_date is None:
-            logger.debug("Não foi possível extrair data de '%s', ignorando", blob_name)
+            print(f"Não foi possível extrair data de '{blob_name}', ignorando")
             continue
-        if file_date > max_date_from_bq:
-            filtered.append(blob_name)
-            logger.debug("Arquivo incluído: %s (data=%s)", blob_name, file_date)
-        else:
-            logger.debug(
-                "Arquivo ignorado: %s (data=%s <= max=%s)",
-                blob_name,
-                file_date,
-                max_date_from_bq,
-            )
+        if data_inicio is not None and file_date <= data_inicio:
+            # print(
+            #     f"Arquivo ignorado: {blob_name} (data={file_date} <= data_inicio={data_inicio})"
+            # )
+            continue
+        if data_fim is not None and file_date > data_fim:
+            # print(
+            #     f"Arquivo ignorado: {blob_name} (data={file_date} > data_fim={data_fim})"
+            # )
+            continue
+        filtered.append(blob_name)
+        print(f"Arquivo incluído: {blob_name} (data={file_date})")
 
-    logger.info(
-        "Arquivos após filtro de data: %d de %d", len(filtered), len(zip_blobs)
+    print(
+        f"Arquivos após filtro de data: {len(filtered)} de {len(zip_blobs)}"
     )
+
     return filtered
 
 

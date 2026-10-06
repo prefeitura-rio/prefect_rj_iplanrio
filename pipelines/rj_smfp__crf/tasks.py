@@ -148,13 +148,13 @@ def process_all_crf_zip_files_task(
     bucket_name: str,
     folder_prefix: str,
     table_id: str,
-    max_date_from_bq: date | None = None,
+    data_inicio: date | str | None = None,
+    data_fim: date | str | None = None,
 ) -> str | None:
     """Processa sequencialmente todos os arquivos ZIP CRF do GCS.
 
-    Realiza o ciclo completo para cada arquivo ZIP com data posterior à
-    partição máxima do BigQuery:
-    1. Listar arquivos ZIP no GCS filtrados pela data de partição.
+    Realiza o ciclo completo para cada arquivo ZIP dentro do intervalo de datas:
+    1. Listar arquivos ZIP no GCS filtrados pelo intervalo ``(data_inicio, data_fim]``.
     2. Baixar e descompactar o arquivo ZIP em ``EXTRACT_BASE_PATH``.
     3. Ler o arquivo FWF correspondente ao ``table_id``.
     4. Limpar o diretório descompactado (sempre, via ``try/finally``).
@@ -163,21 +163,23 @@ def process_all_crf_zip_files_task(
     :param bucket_name: GCS bucket name contendo os arquivos ZIP.
     :param folder_prefix: Prefixo do caminho da pasta no bucket.
     :param table_id: Identificador da tabela CRF a processar.
-    :param max_date_from_bq: Data máxima de partição do BigQuery usada como
-        marca d'água. Arquivos com data igual ou anterior são ignorados.
+    :param data_inicio: Data de início do intervalo (``YYYY-MM-DD`` ou ``date``).
+        Arquivos com data igual ou anterior são ignorados. Se ``None``, sem limite inferior.
+    :param data_fim: Data de fim do intervalo (``YYYY-MM-DD`` ou ``date``).
+        Arquivos com data posterior são ignorados. Se ``None``, sem limite superior.
 
     :returns: Caminho local (``data_path``) onde os arquivos parquet foram salvos,
         ou ``None`` se nenhum arquivo ZIP foi encontrado para processar.
     """
     extract_base_path = EXTRACT_BASE_PATH
 
-
-    # Listar arquivos ZIP no GCS, filtrando pela data de partição do BigQuery
+    # Listar arquivos ZIP no GCS, filtrando pelo intervalo de datas
     bucket = get_gcs_bucket(project_id, bucket_name)
     zip_files = list_zip_files_in_gcs_folder(
         bucket=bucket,
         folder_prefix=folder_prefix,
-        max_date_from_bq=max_date_from_bq,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
     )
 
     print(f"Processando {len(zip_files)} arquivos ZIP")
@@ -253,11 +255,5 @@ def process_all_crf_zip_files_task(
         print(f"Concluido processamento de {blob_name}")
 
     print(f"Processamento concluido. Total: {table_id}={total}")
-
-    if data_path is None:
-        raise ValueError(
-            f"table_id '{table_id}' inválido. "
-            "Válidos: 'periodos_simples', 'periodos_mei', 'eventos_simples', 'eventos_mei'."
-        )
 
     return data_path
