@@ -180,7 +180,7 @@ def process_all_crf_zip_files_task(
         max_date_from_bq=max_date_from_bq,
     )
 
-    print("Processando %d arquivos ZIP", len(zip_files))
+    print(f"Processando {len(zip_files)} arquivos ZIP")
 
     if not zip_files:
         print("Nenhum arquivo ZIP encontrado para processar")
@@ -196,7 +196,7 @@ def process_all_crf_zip_files_task(
         zip_filename = blob_name.split("/")[-1].replace(".zip", "")
         extract_path = f"{extract_base_path}/{zip_filename}"
 
-        print("Iniciando processamento de %s", blob_name)
+        print(f"Iniciando processamento de {blob_name}")
 
         # Passo 1: Baixar e descompactar ZIP
         bucket = get_gcs_bucket(project_id, bucket_name)
@@ -204,10 +204,10 @@ def process_all_crf_zip_files_task(
 
         # Passo 2: Verificar arquivos descompactados
         extracted_files = list_extracted_files(extract_path=extracted_dir)
-        print("Descompactados %d arquivos de %s", len(extracted_files), blob_name)
+        print(f"Descompactados {len(extracted_files)} arquivos de {blob_name}")
 
         # Passo 3: Ler os 4 arquivos FWF sequencialmente
-        print("Lendo 4 arquivos FWF de %s", blob_name)
+        print(f"Lendo arquivos FWF de {blob_name}")
         if table_id == "periodos_simples":
             df, data_path = read_extracted_fwf_file(
                 extract_path=extracted_dir,
@@ -216,7 +216,7 @@ def process_all_crf_zip_files_task(
             )
             periodos_count = len(df)
             total += periodos_count
-            print("Processadas %d linhas de periodos", periodos_count)
+            print(f"Processadas {periodos_count} linhas de periodos")
         elif table_id == "periodos_mei":
             df, data_path = read_extracted_fwf_file(
                 extract_path=extracted_dir,
@@ -225,7 +225,7 @@ def process_all_crf_zip_files_task(
             )
             periodos_mei_count = len(df)
             total += periodos_mei_count
-            print("Processadas %d linhas de periodos_mei", periodos_mei_count)
+            print(f"Processadas {periodos_mei_count} linhas de periodos_mei")
 
         elif table_id == "eventos_simples":
             df, data_path = read_extracted_fwf_file(
@@ -235,7 +235,7 @@ def process_all_crf_zip_files_task(
             )
             eventos_count = len(df)
             total += eventos_count
-            print("Processadas %d linhas de eventos", eventos_count)
+            print(f"Processadas {eventos_count} linhas de eventos")
 
         elif table_id == "eventos_mei":
             df, data_path = read_extracted_fwf_file(
@@ -245,18 +245,14 @@ def process_all_crf_zip_files_task(
                 )
             eventos_mei_count = len(df)
             total += eventos_mei_count
-            print("Processadas %d linhas de eventos_mei", eventos_mei_count)
+            print(f"Processadas {eventos_mei_count} linhas de eventos_mei")
 
 
         # Passo 4: Limpar diretório descompactado
         cleanup_extracted_directory(extract_path=extracted_dir)
-        print("Concluido processamento de %s", blob_name)
+        print(f"Concluido processamento de {blob_name}")
 
-    print(
-        "Processamento concluido. Total: %s=%d",
-        table_id,
-        total
-    )
+    print(f"Processamento concluido. Total: {table_id}={total}")
 
     if data_path is None:
         raise ValueError(
