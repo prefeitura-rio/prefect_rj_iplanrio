@@ -4,6 +4,7 @@ Functions for uploading and checking PDF and chunk files in GCS.
 """
 
 from datetime import datetime
+from functools import lru_cache
 
 import pandas as pd
 from google.cloud import storage
@@ -11,6 +12,17 @@ from google.cloud import storage
 from .log import get_logger
 
 logger = get_logger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_storage_client() -> storage.Client:
+    """Return a single GCS client shared by every call and thread.
+
+    A new ``storage.Client()`` starts without an access token, so creating one
+    per call makes every exists/upload request a fresh token from Google.
+    Sharing one client fetches the token once and refreshes it as needed.
+    """
+    return storage.Client()
 
 
 def save_chunks_to_gcs(
@@ -30,7 +42,7 @@ def save_chunks_to_gcs(
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")
     blob_name = f"{base_path}/chunks/files_id={files_id}/{timestamp}.parquet"
 
-    client = storage.Client()
+    client = get_storage_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
 
@@ -59,7 +71,7 @@ def save_pdf_to_gcs(
     """
     blob_name = f"{base_path}/files_pdfs/mes_envio={mes_envio}/{filename}"
 
-    client = storage.Client()
+    client = get_storage_client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
 
@@ -85,7 +97,7 @@ def pdf_exists_in_gcs(
     """
     blob_name = f"{base_path}/files_pdfs/mes_envio={mes_envio}/{filename}"
 
-    client = storage.Client()
+    client = get_storage_client()
     exists = client.bucket(bucket_name).blob(blob_name).exists()
 
     if exists:
