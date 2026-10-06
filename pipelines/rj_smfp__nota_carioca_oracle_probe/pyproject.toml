@@ -1,0 +1,14 @@
+[project]
+name = "rj_smfp__nota_carioca_oracle_probe"
+version = "1.0.0"
+description = "Read-only probe that measures how fast the Nota Carioca DFEN tables can be extracted from the production Oracle to Parquet in GCS and locates the bottleneck, writing a shareable report to the Prefect logs."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "google-cloud-storage>=2.10.0",
+    "numpy>=2.0.0",
+    "oracledb>=4.0.1",
+    "pyarrow>=24.0.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
