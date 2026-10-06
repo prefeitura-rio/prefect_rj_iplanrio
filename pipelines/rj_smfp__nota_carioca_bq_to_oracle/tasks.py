@@ -9,7 +9,8 @@ from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 
 from iplanrio.pipelines_utils.logging import log
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, inmemory, oracle, slots, sqlldr
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_POLL_SECONDS
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, dbt, inmemory, oracle, runs, slots, sqlldr
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     StructurePlan,
@@ -19,6 +20,23 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
 )
 
 
+@task(cache_policy=NO_CACHE)
+def run_dbt_task(deployment: str, parameters: dict[str, object], timeout_minutes: int) -> datetime:
+    """Roda o deployment de dbt como subflow, espera terminar com sucesso e retorna o fim dele (UTC)."""
+    run = runs.start_deployment_run(deployment=deployment, parameters=parameters)
+    link = f" ({run.url})" if run.url else ""
+    log(f"dbt iniciado: run {run.name} [{run.id}] do deployment {deployment}{link}")
+    waiter = dbt.RunWaiter(
+        runs=runs.PrefectRuns(),
+        timeout_seconds=timeout_minutes * 60,
+        poll_seconds=DBT_POLL_SECONDS,
+        report=log,
+    )
+    finished_at = waiter.wait(run.id)
+    log(f"dbt concluído às {finished_at:%Y-%m-%d %H:%M:%S} UTC")
+    return finished_at
+
+
 @task
 def list_tables_task(project: str, dataset_id: str, table_ids: list[str] | None) -> list[str]:
     """Retorna as tabelas pedidas ou, se nenhuma for informada, todas as do dataset."""
@@ -26,8 +44,13 @@ def list_tables_task(project: str, dataset_id: str, table_ids: list[str] | None)
 
 
 @task(cache_policy=NO_CACHE)
-def export_snapshot_task(
-    project: str, dataset_id: str, table_ids: list[str], bucket: str, quiet_minutes: int
+def export_snapshot_task(  # noqa: PLR0913
+    project: str,
+    dataset_id: str,
+    table_ids: list[str],
+    bucket: str,
+    quiet_minutes: int,
+    dbt_finished_at: datetime | None,
 ) -> dict[str, bigquery.TableSnapshot]:
     """Exporta todas as tabelas como uma foto única do BigQuery, num prefixo exclusivo deste flow run."""
     prefix = f"{dataset_id}/{flow_run.id}"
@@ -38,6 +61,7 @@ def export_snapshot_task(
         bucket=bucket,
         prefix=prefix,
         quiet_seconds=quiet_minutes * 60,
+        dbt_finished_at=dbt_finished_at,
     )
     snapshot = bigquery.export_consistent_snapshot(request, report=log)
     for table in snapshot.values():
