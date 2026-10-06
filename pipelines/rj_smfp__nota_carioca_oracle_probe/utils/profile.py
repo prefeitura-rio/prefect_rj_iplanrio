@@ -92,6 +92,7 @@ class TableProfile:
     :param segment_source: De onde veio ``segment_bytes``.
     :param modifications: Mudanças desde as estatísticas; ``None`` se indisponível.
     :param total_chunks: Faixas de ROWID para ``chunk_size_blocks``.
+    :param chunk_source: Como as faixas foram calculadas.
     :param sampled: Faixas escolhidas para a medição.
     :param notes: Motivos de consultas que falharam.
     """
@@ -106,6 +107,7 @@ class TableProfile:
     segment_source: str
     modifications: Modifications | None
     total_chunks: int
+    chunk_source: str
     sampled: tuple[Chunk, ...]
     notes: tuple[str, ...]
 
@@ -248,10 +250,10 @@ def profile_table(request: ProfileRequest) -> TableProfile:
         task_name=chunk_task_name(request.table, options.run_id),
         chunk_size_blocks=options.chunk_size_blocks,
     )
-    with rowid_chunks(chunk_request) as chunks, connect_read_only(request.config) as connection:
+    with rowid_chunks(chunk_request) as chunk_set, connect_read_only(request.config) as connection:
         with connection.cursor() as cursor:
             populated = partial(chunk_has_rows, cursor, options.schema, request.table)
-            total, sampled = len(chunks), pick_chunks(chunks, options.sample_chunks, populated)
+            total, sampled = len(chunk_set.chunks), pick_chunks(chunk_set.chunks, options.sample_chunks, populated)
     return TableProfile(
         table=request.table,
         columns=columns,
@@ -263,6 +265,7 @@ def profile_table(request: ProfileRequest) -> TableProfile:
         segment_source=segment[1],
         modifications=modifications,
         total_chunks=total,
+        chunk_source=chunk_set.source,
         sampled=sampled,
         notes=tuple(notes),
     )
