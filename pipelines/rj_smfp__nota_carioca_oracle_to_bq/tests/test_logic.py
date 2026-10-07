@@ -1,6 +1,4 @@
 # ruff: noqa: PLR2004
-import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 
 import pytest
@@ -12,7 +10,6 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import (
     ExtractOptions,
     ExtractRequest,
     build_jobs,
-    collect_results,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix, delete_prefix
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import (
@@ -36,7 +33,6 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import (
     format_progress,
     format_size,
 )
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.worker import ChunkResult
 from prefect_rj_iplanrio.sql import load_query
 
 SNAPSHOT = Snapshot(scn=123456789, taken_at=datetime(2026, 10, 1, tzinfo=UTC))
@@ -109,16 +105,27 @@ def test_count_check_requires_oracle_files_and_bigquery_to_agree() -> None:
 
 
 def test_progress_math_and_formatting() -> None:
-    progress = Progress(chunks_done=25, chunks_total=100, rows=500_000, bytes_written=3 * 1024**3, elapsed_seconds=100)
+    progress = Progress(
+        chunks_read=30,
+        chunks_uploaded=25,
+        chunks_total=100,
+        rows_read=500_000,
+        bytes_uploaded=3 * 1024**3,
+        pending_files=5,
+        elapsed_seconds=100,
+    )
 
     assert estimate_remaining_seconds(progress) == 300
     line = format_progress("DPS", progress)
-    assert "25/100 faixas (25.0%)" in line
+    assert "lidas 30/100" in line
+    assert "enviadas 25/100 faixas (25.0%)" in line
     assert "5,000 linhas/s" in line
-    assert "3.0 GB" in line
+    assert "3.0 GB enviados" in line
+    assert "5 arquivos locais pendentes" in line
     assert "faltam ~5m00s" in line
-    assert estimate_remaining_seconds(Progress(0, 10, 0, 0, 5)) is None
-    assert "calculando" in format_progress("DPS", Progress(0, 10, 0, 0, 5))
+    nothing_uploaded = Progress(2, 0, 10, 100, 0, 2, 5)
+    assert estimate_remaining_seconds(nothing_uploaded) is None
+    assert "calculando" in format_progress("DPS", nothing_uploaded)
 
 
 def test_format_helpers() -> None:
@@ -156,46 +163,3 @@ def test_delete_prefix_refuses_prefixes_wider_than_one_run() -> None:
     assert blob_prefix("oracle_to_bq", "DPS", "run-1") == "oracle_to_bq/DPS/run-1"
     with pytest.raises(ValueError, match="largo demais"):
         delete_prefix("proj", "bucket", "oracle_to_bq")
-
-
-def request_with_interval(seconds: int) -> ExtractRequest:
-    return ExtractRequest(
-        config=OracleConfig("u", "p", "h", "1521", "s", "DFEN"),
-        schema="DFEN",
-        table="DPS",
-        columns=COLUMNS,
-        snapshot=SNAPSHOT,
-        project="p",
-        bucket="b",
-        run_id="r",
-        options=ExtractOptions(progress_interval_seconds=seconds),
-    )
-
-
-def test_collect_results_reports_progress_and_returns_every_chunk() -> None:
-    lines: list[str] = []
-
-    def work(index: int) -> ChunkResult:
-        time.sleep(0.05)
-        return ChunkResult(rows=index, bytes_written=index * 10)
-
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        futures = [pool.submit(work, index) for index in range(1, 6)]
-        results = collect_results(request_with_interval(0), futures, lines.append)
-
-    assert sum(result.rows for result in results) == 15
-    assert lines
-    assert all(line.startswith("DPS: ") for line in lines)
-
-
-def test_collect_results_raises_first_worker_failure() -> None:
-    def work(index: int) -> ChunkResult:
-        if index == 2:
-            raise RuntimeError("ORA-01555")
-        time.sleep(0.05)
-        return ChunkResult(rows=1, bytes_written=1)
-
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        futures = [pool.submit(work, index) for index in range(1, 5)]
-        with pytest.raises(RuntimeError, match="ORA-01555"):
-            collect_results(request_with_interval(60), futures, lambda _: None)
