@@ -32,7 +32,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_smfp__crf/flow.py:rj_smfp__crf
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -48,7 +48,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_smfp__crf/flow.py:rj_smfp__crf
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -56,31 +56,31 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     schedules:
-    - interval: 86400
-      anchor_date: "2021-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: crf-periodos-simples
-      parameters:
-        table_id: periodos_simples
-        dataset_id: brutos_crf
-    - interval: 86400
-      anchor_date: "2021-01-01T01:10:00"
-      timezone: America/Sao_Paulo
-      slug: crf-periodos-mei
-      parameters:
-        table_id: periodos_mei
-        dataset_id: brutos_crf
-    - interval: 86400
-      anchor_date: "2021-01-01T01:20:00"
-      timezone: America/Sao_Paulo
-      slug: crf-eventos-simples
-      parameters:
-        table_id: eventos_simples
-        dataset_id: brutos_crf
-    - interval: 86400
-      anchor_date: "2021-01-01T01:30:00"
-      timezone: America/Sao_Paulo
-      slug: crf-eventos-mei
-      parameters:
-        table_id: eventos_mei
-        dataset_id: brutos_crf
+      - interval: 86400
+        anchor_date: "2021-01-01T01:00:00"
+        timezone: America/Sao_Paulo
+        slug: crf-periodos-simples
+        parameters:
+          table_id: periodos_simples
+          dataset_id: brutos_crf
+      - interval: 86400
+        anchor_date: "2021-01-01T01:10:00"
+        timezone: America/Sao_Paulo
+        slug: crf-periodos-mei
+        parameters:
+          table_id: periodos_mei
+          dataset_id: brutos_crf
+      - interval: 86400
+        anchor_date: "2021-01-01T01:20:00"
+        timezone: America/Sao_Paulo
+        slug: crf-eventos-simples
+        parameters:
+          table_id: eventos_simples
+          dataset_id: brutos_crf
+      - interval: 86400
+        anchor_date: "2021-01-01T01:30:00"
+        timezone: America/Sao_Paulo
+        slug: crf-eventos-mei
+        parameters:
+          table_id: eventos_mei
+          dataset_id: brutos_crf
