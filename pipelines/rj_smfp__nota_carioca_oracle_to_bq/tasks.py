@@ -9,7 +9,18 @@ from prefect.settings import PREFECT_UI_URL
 
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import extract, load, memory, oracle, parallel, plan, runs
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import (
+    chunks,
+    extract,
+    load,
+    memory,
+    oracle,
+    parallel,
+    plan,
+    publish,
+    runs,
+)
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import format_checksums
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_duration, format_size
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.supervise import Supervision, supervise
@@ -31,6 +42,13 @@ def ensure_exclusive_task() -> None:
     conflicts = parallel.find_conflicts(runs.list_active_runs(str(deployment.id)), str(flow_run.id))
     if conflicts:
         raise parallel.ParallelRunError(parallel.describe_conflicts(conflicts))
+
+
+@task(cache_policy=NO_CACHE)
+def drop_leftover_chunk_tasks_task(infisical_secret_path: str) -> None:
+    """Apaga as tarefas ``DBMS_PARALLEL_EXECUTE`` deixadas por execuções interrompidas (pods mortos)."""
+    dropped = chunks.drop_leftover_chunk_tasks(oracle.read_oracle_config(infisical_secret_path))
+    log(f"{len(dropped)} tarefas de chunking deixadas por execuções anteriores apagadas: {dropped}")
 
 
 @task(cache_policy=NO_CACHE)
@@ -59,10 +77,15 @@ def plan_table_task(  # noqa: PLR0913
     table_plan = plan.check_destination(
         project, dataset_id, plan.plan_table(config, schema, oracle.validate_identifier(table_id), snapshot)
     )
-    log(f"{table_id}: {len(table_plan.columns)} colunas no Oracle; cluster {list(table_plan.cluster_fields)}")
+    log(f"{table_id}: {len(table_plan.columns)} colunas no Oracle; checksum em {list(table_plan.checksum_columns)}")
     if table_plan.changes is None:
-        log(f"{table_id}: a tabela final ainda não existe em {dataset_id}; será criada")
-    elif table_plan.changes.added:
+        log(
+            f"{table_id}: a tabela final ainda não existe em {dataset_id}; "
+            f"layout padrão: {table_plan.layout.describe()}"
+        )
+    else:
+        log(f"{table_id}: layout espelhado da tabela final: {table_plan.layout.describe()}")
+    if table_plan.changes is not None and table_plan.changes.added:
         log(f"{table_id}: colunas novas aceitas: {list(table_plan.changes.added)}")
     return table_plan
 
@@ -97,6 +120,7 @@ def extract_table_task(  # noqa: PLR0913
         schema=table_plan.schema,
         table=table_plan.table_id,
         columns=table_plan.columns,
+        checksum_columns=table_plan.checksum_columns,
         snapshot=snapshot,
         project=project,
         bucket=bucket,
@@ -108,6 +132,7 @@ def extract_table_task(  # noqa: PLR0913
         f"{result.table}: extração concluída em {format_duration(result.seconds)}: {result.rows:,} linhas, "
         f"{format_size(result.bytes_written)} em {result.files} arquivos ({result.chunks} faixas)"
     )
+    log(f"{result.table}: checksums extraídos: {format_checksums(result.checksums)}")
     return result
 
 
@@ -136,7 +161,7 @@ def validate_table_task(  # noqa: PLR0913
     snapshot: oracle.Snapshot,
     loaded_rows: int,
 ) -> int:
-    """Compara a contagem do BigQuery com a do Oracle no SCN da foto; falha sem tocar na tabela final."""
+    """Compara contagem e checksum do BigQuery com o Oracle no SCN da foto; falha sem tocar na tabela final."""
     started = time.monotonic()
     rows = load.validate_table(
         oracle.read_oracle_config(infisical_secret_path),
@@ -149,6 +174,7 @@ def validate_table_task(  # noqa: PLR0913
         f"{table_plan.table_id}: contagem validada, {rows:,} linhas iguais no Oracle (SCN {snapshot.scn}), "
         f"nos arquivos e no BigQuery ({format_duration(time.monotonic() - started)}; carregadas {loaded_rows:,})"
     )
+    log(f"{table_plan.table_id}: checksums iguais na extração e no BigQuery: {format_checksums(extracted.checksums)}")
     return rows
 
 
@@ -195,19 +221,13 @@ def wait_children_task(children: dict[str, str]) -> None:
 
 
 @task(cache_policy=NO_CACHE)
-def verify_validated_task(  # noqa: PLR0913
-    project: str, dataset_id: str, bucket: str, plans: list[plan.TablePlan], run_id: str, snapshot: oracle.Snapshot
+def publish_tables_task(
+    project: str, dataset_id: str, validated: list[plan.TablePlan], run_id: str, snapshot: oracle.Snapshot
 ) -> None:
-    """Confere que cada temporária existe e foi validada nesta execução, no SCN da foto, com a contagem atual."""
-    load.verify_validated(load.Destination(project, dataset_id, bucket), plans, run_id, snapshot)
-    log(f"Marcas de validação conferidas (execução {run_id}, SCN {snapshot.scn}): {[p.table_id for p in plans]}")
-
-
-@task(cache_policy=NO_CACHE)
-def publish_tables_task(project: str, dataset_id: str, bucket: str, validated: list[plan.TablePlan]) -> None:
-    """Troca as tabelas finais pelas temporárias; só roda com todas as tabelas validadas."""
+    """Confere todas as tabelas e as troca tudo ou nada; um copy que falha desfaz os já publicados."""
     started = time.monotonic()
-    load.publish_tables(load.Destination(project, dataset_id, bucket), validated)
+    request = publish.PublishRequest(validated, run_id, snapshot.scn)
+    publish.publish_all(publish.BigQueryStore(project, dataset_id), request, log)
     names = [table_plan.table_id for table_plan in validated]
     log(f"Tabelas finais substituídas em {dataset_id}: {names} ({format_duration(time.monotonic() - started)})")
 

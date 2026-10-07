@@ -1,12 +1,13 @@
-"""Etapas depois da extração: load, validação, troca das tabelas finais e limpeza."""
+"""Etapas depois da extração: load, validação, marca de validação e limpeza."""
 
 from dataclasses import dataclass
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import TEMP_TABLE_SUFFIX
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import bigquery, gcs
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import assert_checksums_match
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractResult
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import OracleConfig, Snapshot, count_as_of_scn
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import encode_proof, verify_proof
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import encode_proof
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.plan import TablePlan, assert_counts_match
 
 
@@ -32,9 +33,7 @@ def load_table(destination: Destination, plan: TablePlan, extracted: ExtractResu
     :param extracted: Resultado da extração.
     :returns: Linhas carregadas.
     """
-    bigquery.recreate_temp_table(
-        destination.project, destination.dataset_id, plan.temp_id, plan.fields, plan.cluster_fields
-    )
+    bigquery.recreate_temp_table(destination.project, destination.dataset_id, plan.temp_id, plan.fields, plan.layout)
     if extracted.files == 0:
         return 0
     uri = f"gs://{destination.bucket}/{extracted.prefix}/*.parquet"
@@ -46,7 +45,7 @@ def load_table(destination: Destination, plan: TablePlan, extracted: ExtractResu
 def validate_table(
     config: OracleConfig, destination: Destination, plan: TablePlan, extracted: ExtractResult, snapshot: Snapshot
 ) -> int:
-    """Confere a contagem da tabela temporária contra o Oracle no SCN da foto.
+    """Confere a contagem e o checksum de conteúdo da tabela temporária contra o Oracle e a extração.
 
     :param config: Conexão com o Oracle.
     :param destination: Projeto, dataset e bucket.
@@ -55,10 +54,13 @@ def validate_table(
     :param snapshot: Foto da carga.
     :returns: Linhas validadas.
     :raises CountMismatchError: Se as contagens divergirem.
+    :raises ChecksumMismatchError: Se a contagem de não nulos ou a soma de uma coluna de checksum divergir.
     """
     oracle_rows = count_as_of_scn(config, plan.schema, plan.table_id, snapshot)
     bigquery_rows = bigquery.count_rows(destination.project, destination.dataset_id, plan.temp_id)
     assert_counts_match(plan.table_id, oracle_rows, bigquery_rows, extracted.rows)
+    loaded = bigquery.read_checksums(destination.project, destination.dataset_id, plan.temp_id, plan.checksum_columns)
+    assert_checksums_match(plan.table_id, extracted.checksums, loaded)
     return bigquery_rows
 
 
@@ -75,30 +77,6 @@ def stamp_validated(destination: Destination, plan: TablePlan, run_id: str, snap
     bigquery.stamp_table(
         destination.project, destination.dataset_id, plan.temp_id, encode_proof(run_id, snapshot.scn, rows), description
     )
-
-
-def verify_validated(destination: Destination, plans: list[TablePlan], run_id: str, snapshot: Snapshot) -> None:
-    """Confere, antes de publicar, que cada tabela temporária foi validada para esta execução e este SCN.
-
-    :param destination: Projeto, dataset e bucket.
-    :param plans: Planos das tabelas.
-    :param run_id: Flow run do pai.
-    :param snapshot: Foto da carga.
-    :raises ParallelRunError: Se alguma tabela faltar ou tiver marca divergente.
-    """
-    for plan in plans:
-        proof = bigquery.read_proof(destination.project, destination.dataset_id, plan.temp_id)
-        verify_proof(plan.table_id, proof, run_id, snapshot.scn)
-
-
-def publish_tables(destination: Destination, plans: list[TablePlan]) -> None:
-    """Troca cada tabela final pela temporária, só depois de todas validadas.
-
-    :param destination: Projeto, dataset e bucket.
-    :param plans: Planos das tabelas, todas já validadas.
-    """
-    for plan in plans:
-        bigquery.publish_table(destination.project, destination.dataset_id, plan.temp_id, plan.table_id)
 
 
 def cleanup(destination: Destination, plans: list[TablePlan], prefixes: list[str], drop_temp: bool = True) -> None:
