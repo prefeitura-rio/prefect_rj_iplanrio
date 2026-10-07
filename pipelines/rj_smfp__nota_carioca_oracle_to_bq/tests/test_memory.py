@@ -98,3 +98,19 @@ def test_first_staging_configuration_would_have_been_refused_before_extraction()
 
     with pytest.raises(MemoryBudgetError):
         check_pod_budget({"DPS": old_worker_mb}, workers=8, pod_memory_mb=7168)
+
+
+def test_defaults_estimate_exactly_the_pod_request_budget_and_is_accepted() -> None:
+    options = ExtractOptions()
+
+    total = check_pod_budget({"DPS": options.worker_memory_mb}, options.workers, options.pod_memory_mb)
+
+    assert (options.workers, options.worker_memory_mb, options.pod_memory_mb) == (2, 1536, 3584)
+    assert total == MAIN_BASE_MB + 2 * 1536 == 3584
+
+
+def test_four_workers_with_the_default_worker_memory_are_refused() -> None:
+    options = ExtractOptions()
+
+    with pytest.raises(MemoryBudgetError, match="request"):
+        check_pod_budget({"PESSOAS": options.worker_memory_mb}, workers=4, pod_memory_mb=options.pod_memory_mb)
