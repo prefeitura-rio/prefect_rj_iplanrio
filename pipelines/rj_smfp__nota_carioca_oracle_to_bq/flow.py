@@ -52,7 +52,6 @@ def _extract_load_validate(table_plan: TablePlan, ctx: TableRunContext) -> int:
         project=ctx.project, dataset_id=ctx.dataset_id, bucket=ctx.bucket, table_plan=table_plan, extracted=extracted
     )
     return validate_table_task(
-        infisical_secret_path=ctx.infisical_secret_path,
         project=ctx.project,
         dataset_id=ctx.dataset_id,
         bucket=ctx.bucket,
@@ -112,7 +111,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     worker_memory_mb: int = 640,
     pod_memory_mb: int = 1792,
     progress_interval_seconds: int = 30,
-    upload_concurrency: int = 2,
+    upload_concurrency: int = 4,
+    max_pending_files: int = 4,
     parallel_tables: bool = True,
     table_id: str | None = None,
     scn: int | None = None,
@@ -130,6 +130,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         pod_memory_mb=pod_memory_mb,
         progress_interval_seconds=progress_interval_seconds,
         upload_concurrency=upload_concurrency,
+        max_pending_files=max_pending_files,
     )
     if child is not None:
         ctx = TableRunContext(
@@ -168,6 +169,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
                 "pod_memory_mb": pod_memory_mb,
                 "progress_interval_seconds": progress_interval_seconds,
                 "upload_concurrency": upload_concurrency,
+                "max_pending_files": max_pending_files,
             }
             children = launch_children_task(
                 table_ids=[table_plan.table_id for table_plan in plans], snapshot=snapshot, passthrough=passthrough

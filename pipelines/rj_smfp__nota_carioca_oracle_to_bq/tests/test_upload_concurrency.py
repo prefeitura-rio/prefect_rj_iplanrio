@@ -21,10 +21,10 @@ class Stop(Exception):
     """Interrompe o flow assim que os filhos seriam lançados."""
 
 
-def test_upload_concurrency_defaults_to_two() -> None:
+def test_upload_concurrency_defaults_to_four() -> None:
     # Given default options
-    # Then at most two uploads run at once
-    assert ExtractOptions().upload_concurrency == 2
+    # Then four uploads run at once, to mitigate slow TCP flows
+    assert ExtractOptions().upload_concurrency == 4
 
 
 @pytest.mark.parametrize("value", [0, -1])
