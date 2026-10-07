@@ -98,13 +98,16 @@ def plan_worker_memory(columns: tuple[OracleColumn, ...], worker_memory_mb: int,
 
 
 def check_pod_budget(worker_mb_by_table: Mapping[str, int], workers: int, pod_memory_mb: int) -> int:
-    """Confere que o processo principal mais os workers cabem na memória do pod.
+    """Confere que o processo principal mais os workers cabem no orçamento de memória do pod.
+
+    O orçamento é o REQUEST de memória do pod (4 GiB no template de job do K3s) menos folga, não o limite de
+    8 GiB: acima do request o scheduler superaloca o nó e ele pode ficar sem memória.
 
     As tabelas são extraídas uma de cada vez, então vale a mais pesada.
 
     :param worker_mb_by_table: Memória estimada de um worker em cada tabela, em MiB.
     :param workers: Processos de leitura simultâneos.
-    :param pod_memory_mb: Orçamento de memória do pod, em MiB.
+    :param pod_memory_mb: Orçamento do pod, em MiB: request de memória menos folga.
     :returns: A maior estimativa total, em MiB.
     :raises MemoryBudgetError: Se alguma tabela estourar o orçamento.
     """
@@ -113,7 +116,8 @@ def check_pod_budget(worker_mb_by_table: Mapping[str, int], workers: int, pod_me
     if totals[worst_table] > pod_memory_mb:
         raise MemoryBudgetError(
             f"{worst_table}: {workers} workers de ~{worker_mb_by_table[worst_table]} MiB + {MAIN_BASE_MB} MiB do "
-            f"processo principal somam ~{totals[worst_table]} MiB, acima do orçamento de {pod_memory_mb} MiB do pod; "
-            "reduza workers ou worker_memory_mb."
+            f"processo principal somam ~{totals[worst_table]} MiB, acima do orçamento de {pod_memory_mb} MiB do pod "
+            "(o request de memória, 4 GiB no template de job do K3s, menos folga; passar do request deixa o "
+            "scheduler superalocar o nó); reduza workers ou worker_memory_mb."
         )
     return totals[worst_table]

@@ -9,7 +9,16 @@ from prefect.settings import PREFECT_UI_URL
 
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import extract, load, memory, oracle, parallel, plan, runs
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import (
+    chunks,
+    extract,
+    load,
+    memory,
+    oracle,
+    parallel,
+    plan,
+    runs,
+)
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_duration, format_size
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.supervise import Supervision, supervise
@@ -31,6 +40,13 @@ def ensure_exclusive_task() -> None:
     conflicts = parallel.find_conflicts(runs.list_active_runs(str(deployment.id)), str(flow_run.id))
     if conflicts:
         raise parallel.ParallelRunError(parallel.describe_conflicts(conflicts))
+
+
+@task(cache_policy=NO_CACHE)
+def drop_leftover_chunk_tasks_task(infisical_secret_path: str) -> None:
+    """Apaga as tarefas ``DBMS_PARALLEL_EXECUTE`` deixadas por execuções interrompidas (pods mortos)."""
+    dropped = chunks.drop_leftover_chunk_tasks(oracle.read_oracle_config(infisical_secret_path))
+    log(f"{len(dropped)} tarefas de chunking deixadas por execuções anteriores apagadas: {dropped}")
 
 
 @task(cache_policy=NO_CACHE)
