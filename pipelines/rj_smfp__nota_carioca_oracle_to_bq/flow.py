@@ -107,6 +107,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     worker_memory_mb: int = 1536,
     pod_memory_mb: int = 7168,
     progress_interval_seconds: int = 30,
+    upload_concurrency: int = 2,
     parallel_tables: bool = True,
     table_id: str | None = None,
     scn: int | None = None,
@@ -123,6 +124,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         worker_memory_mb=worker_memory_mb,
         pod_memory_mb=pod_memory_mb,
         progress_interval_seconds=progress_interval_seconds,
+        upload_concurrency=upload_concurrency,
     )
     if child is not None:
         ctx = TableRunContext(
@@ -159,6 +161,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
                 "worker_memory_mb": worker_memory_mb,
                 "pod_memory_mb": pod_memory_mb,
                 "progress_interval_seconds": progress_interval_seconds,
+                "upload_concurrency": upload_concurrency,
             }
             children = launch_children_task(
                 table_ids=[table_plan.table_id for table_plan in plans], snapshot=snapshot, passthrough=passthrough

@@ -31,6 +31,8 @@ class ExtractOptions:
     :param worker_memory_mb: Orçamento de memória de cada worker, em MiB; define o lote de cada tabela.
     :param pod_memory_mb: Orçamento de memória do pod, em MiB; a extração falha antes de começar se não couber.
     :param progress_interval_seconds: Intervalo entre linhas de progresso.
+    :param upload_concurrency: Uploads ao GCS simultâneos no pod; o link até o bucket
+        é lento e muitos uploads em paralelo estouram o timeout de escrita.
     """
 
     workers: int = 2
@@ -39,6 +41,15 @@ class ExtractOptions:
     worker_memory_mb: int = 1536
     pod_memory_mb: int = 7168
     progress_interval_seconds: int = 30
+    upload_concurrency: int = 2
+
+    def __post_init__(self) -> None:
+        """Valida os parâmetros.
+
+        :raises ValueError: Se ``upload_concurrency`` for menor que 1.
+        """
+        if self.upload_concurrency < 1:
+            raise ValueError(f"upload_concurrency deve ser >= 1, recebido {self.upload_concurrency}.")
 
 
 @dataclass(frozen=True)
@@ -195,11 +206,17 @@ def extract_table(request: ExtractRequest, report: Callable[[str], None]) -> Ext
         if not jobs:
             results: list[ChunkResult] = []
         else:
+            context = get_context("spawn")
             with ProcessPoolExecutor(
                 max_workers=min(request.options.workers, len(jobs)),
-                mp_context=get_context("spawn"),
+                mp_context=context,
                 initializer=init_worker,
-                initargs=(request.config, request.project, request.bucket),
+                initargs=(
+                    request.config,
+                    request.project,
+                    request.bucket,
+                    context.BoundedSemaphore(request.options.upload_concurrency),
+                ),
             ) as pool:
                 try:
                     results = collect_results(request, [pool.submit(process_chunk, job) for job in jobs], report)

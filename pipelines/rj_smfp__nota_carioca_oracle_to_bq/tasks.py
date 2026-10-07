@@ -37,7 +37,10 @@ def ensure_exclusive_task() -> None:
 def take_snapshot_task(infisical_secret_path: str) -> oracle.Snapshot:
     """Lê o SCN que fixa o ponto de leitura das três tabelas."""
     snapshot = oracle.read_snapshot(oracle.read_oracle_config(infisical_secret_path))
-    log(f"SCN da foto: {snapshot.scn} ({snapshot.taken_at:%Y-%m-%d %H:%M:%S} UTC); sync_id = {snapshot.sync_id}")
+    log(
+        f"SCN da foto: {snapshot.scn} ({snapshot.taken_at:%Y-%m-%d %H:%M:%S} UTC); "
+        f"sync_id = {snapshot.sync_id}; fonte do SCN: {snapshot.source}"
+    )
     return snapshot
 
 

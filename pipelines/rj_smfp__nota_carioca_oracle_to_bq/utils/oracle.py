@@ -1,6 +1,7 @@
 """Acesso ao Oracle de origem: configuração, conexão, foto consistente, metadados e contagem."""
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -44,16 +45,28 @@ class OracleConfig:
         return f"{self.host}:{self.port}/{self.service_name}"
 
 
+# (consulta em queries/, origem exibida no log), na ordem de tentativa.
+SNAPSHOT_SOURCES = (("get_snapshot", "v$database"), ("get_snapshot_flashback", "DBMS_FLASHBACK"))
+SNAPSHOT_GRANT_HINT = "Peça à DBA: GRANT SELECT ON SYS.V_$DATABASE ou GRANT EXECUTE ON SYS.DBMS_FLASHBACK"
+
+
+class SnapshotError(RuntimeError):
+    """Nenhuma das fontes de SCN está acessível ao usuário."""
+
+
 @dataclass(frozen=True)
 class Snapshot:
     """Ponto de leitura consistente: todas as tabelas são lidas ``AS OF SCN``.
 
     :param scn: System change number no início da carga.
     :param taken_at: Horário (UTC) em que o SCN foi lido.
+    :param source: Consulta que forneceu o SCN (``v$database`` ou ``DBMS_FLASHBACK``); o filho, que recebe só o
+        SCN e o horário do pai, usa o valor padrão.
     """
 
     scn: int
     taken_at: datetime
+    source: str = "pai"
 
     @property
     def sync_id(self) -> int:
@@ -165,12 +178,35 @@ def fetch_rows(cursor: oracledb.Cursor, query: str, binds: dict[str, object]) ->
 def read_snapshot(config: OracleConfig) -> Snapshot:
     """Lê o SCN atual e o horário do banco, que fixam o ponto de leitura.
 
+    Tenta ``v$database.CURRENT_SCN`` e, sem acesso a ela, ``DBMS_FLASHBACK.GET_SYSTEM_CHANGE_NUMBER``.
+
     :param config: Configuração da conexão.
-    :returns: SCN e horário (UTC) lidos na mesma consulta.
+    :returns: SCN, horário (UTC) lidos na mesma consulta e a fonte usada.
+    :raises SnapshotError: Se nenhuma fonte estiver acessível; a mensagem traz os erros ORA e os GRANTs possíveis.
     """
     with connect(config) as connection, connection.cursor() as cursor:
-        (row,) = fetch_rows(cursor, "get_snapshot", {})
-    return Snapshot(scn=to_int(row["scn"]), taken_at=to_utc(row["taken_at"]))
+        return snapshot_from_sources(lambda query: fetch_rows(cursor, query, {}), SNAPSHOT_SOURCES)
+
+
+def snapshot_from_sources(
+    fetch: Callable[[str], list[dict[str, object]]], sources: tuple[tuple[str, str], ...]
+) -> Snapshot:
+    """Lê a foto da primeira fonte de SCN que o usuário consegue executar.
+
+    :param fetch: Executa a consulta de ``queries/`` de mesmo nome e devolve as linhas.
+    :param sources: Pares (consulta em ``queries/``, origem), na ordem de tentativa.
+    :returns: A foto, com a origem que respondeu.
+    :raises SnapshotError: Se todas as fontes falharem.
+    """
+    errors: list[str] = []
+    for query, source in sources:
+        try:
+            (row,) = fetch(query)
+        except oracledb.DatabaseError as error:
+            errors.append(f"{source}: {str(error).splitlines()[0]}")
+            continue
+        return Snapshot(scn=to_int(row["scn"]), taken_at=to_utc(row["taken_at"]), source=source)
+    raise SnapshotError("Não foi possível ler o SCN.\n" + "\n".join(errors) + f"\n{SNAPSHOT_GRANT_HINT}")
 
 
 def to_utc(value: object) -> datetime:

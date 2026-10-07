@@ -3,6 +3,7 @@
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
+from multiprocessing.synchronize import BoundedSemaphore
 from pathlib import Path
 
 import oracledb
@@ -64,29 +65,38 @@ class WorkerContext:
     config: OracleConfig | None = None
     connection: oracledb.Connection | None = None
     bucket: storage.Bucket | None = None
+    upload_slots: BoundedSemaphore | None = None
 
 
 WORKER = WorkerContext()
 
 
-def init_worker(config: OracleConfig, project: str, bucket: str) -> None:
+def init_worker(config: OracleConfig, project: str, bucket: str, upload_slots: BoundedSemaphore) -> None:
     """Abre a conexão do Oracle e o client do GCS do processo worker.
 
     :param config: Conexão com o Oracle.
     :param project: Projeto do GCS.
     :param bucket: Bucket de destino.
+    :param upload_slots: Semáforo compartilhado entre os workers que limita os uploads simultâneos.
     """
+    WORKER.upload_slots = upload_slots
     WORKER.config = config
     WORKER.connection = connect(config)
     WORKER.bucket = storage.Client(project=project).bucket(bucket)
 
 
-def write_chunk(connection: oracledb.Connection, bucket: storage.Bucket, job: ChunkJob) -> ChunkResult:
+def write_chunk(
+    connection: oracledb.Connection, bucket: storage.Bucket, job: ChunkJob, upload_slots: BoundedSemaphore
+) -> ChunkResult:
     """Lê uma faixa em lotes, grava um Parquet local e o envia ao GCS.
+
+    A leitura é sempre ``AS OF SCN`` (``job.sql`` vem de ``select_chunk.sql``): sem o SCN a leitura por faixa de
+    ROWID foi ~100x mais lenta em prod.
 
     :param connection: Conexão do worker.
     :param bucket: Bucket de destino.
     :param job: Faixa e destino.
+    :param upload_slots: Semáforo que limita os uploads simultâneos do pod; só o envio o segura.
     :returns: Linhas e bytes gravados.
     """
     binds = {"scn": job.scn, "start_rowid": job.chunk.start_rowid, "end_rowid": job.chunk.end_rowid}
@@ -105,7 +115,8 @@ def write_chunk(connection: oracledb.Connection, bucket: storage.Bucket, job: Ch
         if rows == 0:
             return ChunkResult(rows=0, bytes_written=0)
         size = path.stat().st_size
-        upload_file(bucket, path, job.blob_name)
+        with upload_slots:
+            upload_file(bucket, path, job.blob_name)
     return ChunkResult(rows=rows, bytes_written=size)
 
 
@@ -119,14 +130,14 @@ def process_chunk(job: ChunkJob) -> ChunkResult:
     :returns: Linhas e bytes gravados.
     :raises RuntimeError: Se o worker não foi inicializado.
     """
-    if WORKER.config is None or WORKER.bucket is None:
+    if WORKER.config is None or WORKER.bucket is None or WORKER.upload_slots is None:
         raise RuntimeError("Worker sem inicialização; use init_worker como initializer do pool.")
     attempt = 1
     while True:
         try:
             if WORKER.connection is None:
                 WORKER.connection = connect(WORKER.config)
-            return write_chunk(WORKER.connection, WORKER.bucket, job)
+            return write_chunk(WORKER.connection, WORKER.bucket, job, WORKER.upload_slots)
         except (oracledb.OperationalError, oracledb.InterfaceError):
             WORKER.connection = None
             if attempt >= MAX_CHUNK_ATTEMPTS:
