@@ -1,5 +1,7 @@
 """Tasks da sonda de leitura do Oracle da Nota Carioca."""
 
+from dataclasses import replace
+
 from prefect import task
 from prefect.artifacts import create_markdown_artifact
 from prefect.cache_policies import NO_CACHE
@@ -26,7 +28,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.report_summary import (
 )
 from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.runner import summarize
 from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.scaling import ScalingRun, scale_table
-from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.session import Snapshot, read_snapshot
+from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.session import Snapshot, flashback_failures, read_snapshot
 
 
 @task(cache_policy=NO_CACHE)
@@ -83,10 +85,22 @@ def database_task(options: ProbeOptions) -> DatabaseInfo:
 
 @task(cache_policy=NO_CACHE)
 def snapshot_task(options: ProbeOptions) -> Snapshot:
-    """Lê o SCN único usado em todas as leituras da sonda."""
-    snapshot = read_snapshot(read_oracle_config(options.infisical_secret_path))
-    log(f"Foto de leitura: SCN {snapshot.scn:,} em {snapshot.taken_at:%Y-%m-%d %H:%M:%S} UTC")
-    return snapshot
+    """Lê o SCN único das leituras e confere se ``AS OF SCN`` funciona em todas as tabelas."""
+    config = read_oracle_config(options.infisical_secret_path)
+    snapshot = read_snapshot(config)
+    log(
+        f"Foto de leitura: SCN {snapshot.scn:,} (fonte: {snapshot.source}) em {snapshot.taken_at:%Y-%m-%d %H:%M:%S} UTC"
+    )
+    failures = flashback_failures(config, options.schema, options.tables, snapshot.scn)
+    if not failures:
+        log("AS OF SCN conferido em todas as tabelas.")
+        return snapshot
+    log(
+        "AS OF SCN falhou; as medições seguem SEM SCN (a carga real precisa dele). "
+        "Peça à DBA: GRANT FLASHBACK ANY TABLE (ou FLASHBACK nas tabelas).\n" + "\n".join(failures),
+        level="warning",
+    )
+    return replace(snapshot, flashback=False)
 
 
 @task(cache_policy=NO_CACHE)
