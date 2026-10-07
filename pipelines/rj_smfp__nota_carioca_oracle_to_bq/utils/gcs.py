@@ -17,8 +17,10 @@ logger = get_logger(__name__)
 
 # Múltiplo de 256 KiB, exigido pelo upload resumível; evita ler o arquivo inteiro para a memória.
 UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024
-# Segundos por requisição (conexão e leitura); o padrão da lib, 60 s, estourou em prod com o link lento.
-UPLOAD_TIMEOUT_SECONDS = 600
+# Segundos por requisição (conexão e leitura). Conexões travadas (observado on-prem: alguns fluxos TCP param ou
+# se arrastam a ~3 MB/s) devem ser abandonadas e refeitas rápido em uma nova conexão. Pedaços de 8 MiB na menor
+# taxa saudável observada (~3 MB/s) levam ~3 s, então 120 s por requisição é folgado.
+UPLOAD_TIMEOUT_SECONDS = 120
 # Prazo total das retentativas internas da lib (uma por requisição do upload resumível).
 UPLOAD_RETRY_DEADLINE_SECONDS = 30 * 60
 # Tentativas externas, cada uma refazendo o upload inteiro, com espera de 5, 10, 20 e 40 s entre elas.

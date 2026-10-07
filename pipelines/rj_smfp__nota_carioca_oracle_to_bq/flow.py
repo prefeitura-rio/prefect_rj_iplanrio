@@ -4,6 +4,11 @@ Dois modos no mesmo deployment. O pai (``table_id`` nulo) tira a foto, planeja, 
 ``parallel_tables``, lança um filho por tabela, cada um no seu pod, e só publica depois que todos validaram.
 O filho (``table_id`` preenchido) extrai, carrega e valida uma tabela e nunca toca nas finais. Com
 ``parallel_tables=False`` o pai faz tudo em sequência no próprio pod.
+
+Os padrões de memória (``workers=2``, ``worker_memory_mb=640``, ``pod_memory_mb=1792``) cabem no REQUEST de 2 GiB por
+pod do template de job do K3s aplicado: passar do request deixa o scheduler superalocar o nó, que ficou NotReady.
+A publicação é tudo ou nada: todas as tabelas são conferidas antes do primeiro copy e, se um copy falhar, as já
+publicadas voltam ao estado anterior por time travel.
 """
 
 from prefect import flow
@@ -15,6 +20,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import DEFAULT_TABLE
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     check_memory_budget_task,
     cleanup_task,
+    drop_leftover_chunk_tasks_task,
     ensure_exclusive_task,
     extract_table_task,
     launch_children_task,
@@ -24,7 +30,6 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     stamp_validated_task,
     take_snapshot_task,
     validate_table_task,
-    verify_validated_task,
     wait_children_task,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractOptions
@@ -104,8 +109,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     workers: int = 2,
     chunk_size_blocks: int = 32768,
     batch_rows: int = 50_000,
-    worker_memory_mb: int = 1536,
-    pod_memory_mb: int = 7168,
+    worker_memory_mb: int = 640,
+    pod_memory_mb: int = 1792,
     progress_interval_seconds: int = 30,
     upload_concurrency: int = 2,
     parallel_tables: bool = True,
@@ -133,6 +138,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         _run_child(ctx, source_schema, child.table_id)
         return
     ensure_exclusive_task()
+    drop_leftover_chunk_tasks_task(infisical_secret_path=infisical_secret_path)
     snapshot = take_snapshot_task(infisical_secret_path=infisical_secret_path)
     plans = [
         plan_table_task(
@@ -167,13 +173,19 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
                 table_ids=[table_plan.table_id for table_plan in plans], snapshot=snapshot, passthrough=passthrough
             )
             wait_children_task(children=children)
-            verify_validated_task(
-                project=project, dataset_id=dataset_id, bucket=gcs_bucket, plans=plans, run_id=run_id, snapshot=snapshot
-            )
         else:
             ctx = TableRunContext(infisical_secret_path, project, dataset_id, gcs_bucket, run_id, snapshot, options)
             for table_plan in plans:
-                _extract_load_validate(table_plan, ctx)
-        publish_tables_task(project=project, dataset_id=dataset_id, bucket=gcs_bucket, validated=plans)
+                rows = _extract_load_validate(table_plan, ctx)
+                stamp_validated_task(
+                    project=project,
+                    dataset_id=dataset_id,
+                    bucket=gcs_bucket,
+                    table_plan=table_plan,
+                    run_id=run_id,
+                    snapshot=snapshot,
+                    rows=rows,
+                )
+        publish_tables_task(project=project, dataset_id=dataset_id, validated=plans, run_id=run_id, snapshot=snapshot)
     finally:
         cleanup_task(project=project, dataset_id=dataset_id, bucket=gcs_bucket, plans=plans, run_id=run_id)
