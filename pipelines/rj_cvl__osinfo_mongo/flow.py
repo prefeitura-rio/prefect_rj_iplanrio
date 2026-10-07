@@ -37,6 +37,7 @@ def rj_cvl__osinfo_mongo(
     check_indexes_only: bool = False,
     bq_files_limit: int | None = None,
     max_file_size_mb: int = 200,
+    max_batch_mb: int = 400,
 ) -> None:
     """Download and reconstruct PDFs from OSINFO MongoDB by mes_envio.
 
@@ -60,6 +61,9 @@ def rj_cvl__osinfo_mongo(
             adds a LIMIT clause to the BigQuery query.
         max_file_size_mb: Files larger than this (MB) are skipped with a warning
             to protect the pod memory. 0 disables the check.
+        max_batch_mb: Maximum total size (MB) of the files in one batch, besides
+            files_id_batch_size, to bound the memory of each concurrent batch.
+            0 disables the check.
     """
 
     inject_bd_credentials_task(environment="prod")
@@ -104,6 +108,7 @@ def rj_cvl__osinfo_mongo(
         batch_workers=batch_workers,
         upload_max_workers=upload_max_workers,
         max_file_size_mb=max_file_size_mb,
+        max_batch_mb=max_batch_mb,
     )
 
     # Refresh BigQuery external table metadata cache

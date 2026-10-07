@@ -13,7 +13,7 @@ PEAK_FACTOR = 10
 # Assumed size when a file's length is unknown.
 DEFAULT_FILE_BYTES = 2 * 1024 * 1024
 # Combined weight allowed in flight across all concurrent uploads.
-MEMORY_BUDGET_BYTES = 2 * 1024**3
+MEMORY_BUDGET_BYTES = int(2.5 * 1024**3)
 
 
 class ByteBudget:

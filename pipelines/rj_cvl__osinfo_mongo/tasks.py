@@ -230,6 +230,7 @@ def dump_files_to_gcs_task(
     batch_workers: int = 5,
     upload_max_workers: int = 50,
     max_file_size_mb: int = 200,
+    max_batch_mb: int = 400,
 ) -> list[dict]:
     """Orchestrate batch processing of files with wave-based parallelism.
 
@@ -244,6 +245,9 @@ def dump_files_to_gcs_task(
         upload_max_workers: Max workers for parallel uploads within each batch.
         max_file_size_mb: Files larger than this (MB) are skipped with a warning,
             because converting them can exhaust the pod memory. 0 disables the check.
+        max_batch_mb: Maximum total size (MB) of the files in one batch, on top of
+            files_id_batch_size. A batch is held in memory until it finishes, so
+            this bounds the memory of each concurrent batch. 0 disables the check.
 
     Returns:
         List of batch statistics.
@@ -267,12 +271,14 @@ def dump_files_to_gcs_task(
             logger.warning(f"No files_id found for filename: {filename}")
 
     # Look up file sizes (metadata only) and skip files too large for the pod memory
-    lengths = mongodb.fetch_files_lengths([item["files_id"] for item in items], mongo_config)
+    files_info = mongodb.fetch_files_info([item["files_id"] for item in items], mongo_config)
     max_bytes = max_file_size_mb * 1_000_000 if max_file_size_mb else None
     kept_items = []
     too_large = []
     for item in items:
-        item["length"] = lengths.get(item["files_id"])
+        info = files_info.get(item["files_id"], {})
+        item["length"] = info.get("length")
+        item["md5"] = info.get("md5")
         if max_bytes and item["length"] and item["length"] > max_bytes:
             too_large.append(item)
         else:
@@ -289,9 +295,35 @@ def dump_files_to_gcs_task(
 
     logger.info(f"Total items to process: {len(items)}")
 
-    # Chunk items into batches
-    batches = pdf.chunk_list(items, files_id_batch_size)
-    logger.info(f"Split into {len(batches)} batches of ~{files_id_batch_size} files")
+    # Diagnostics: biggest files and how much content is duplicated (same md5)
+    sized = sorted((i for i in items if i["length"]), key=lambda i: i["length"], reverse=True)
+    if sized:
+        total_mb = sum(i["length"] for i in sized) / 1_000_000
+        top = ", ".join(f"{i['filename'][:40]} ({i['length'] / 1_000_000:.0f} MB)" for i in sized[:5])
+        logger.info(f"Total size to download: {total_mb:,.0f} MB; largest: {top}")
+    by_md5: dict[str, list[dict]] = {}
+    for item in items:
+        if item["md5"] and item["length"]:
+            by_md5.setdefault(item["md5"], []).append(item)
+    duplicated = [group for group in by_md5.values() if len(group) > 1]
+    redundant_mb = sum(sum(i["length"] for i in group[1:]) for group in duplicated) / 1_000_000
+    logger.info(
+        f"md5 known for {sum(len(g) for g in by_md5.values())} of {len(items)} files; "
+        f"{len(duplicated)} contents repeated, {redundant_mb:,.0f} MB redundant"
+    )
+
+    # Chunk items into batches bounded by count and by total bytes
+    batches = pdf.chunk_by_size(
+        items,
+        max_items=files_id_batch_size,
+        max_bytes=max_batch_mb * 1_000_000 if max_batch_mb else None,
+        default_bytes=memory.DEFAULT_FILE_BYTES,
+    )
+    batch_mb = [sum(i.get("length") or memory.DEFAULT_FILE_BYTES for i in b) / 1_000_000 for b in batches]
+    logger.info(
+        f"Split into {len(batches)} batches (up to {files_id_batch_size} files / {max_batch_mb} MB each); "
+        f"largest batch {max(batch_mb, default=0):.0f} MB"
+    )
 
     # Process batches with wave-based parallelism
     all_stats = []

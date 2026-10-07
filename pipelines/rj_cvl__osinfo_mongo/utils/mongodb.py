@@ -167,8 +167,8 @@ def map_filenames_to_files_ids(filenames: list[str], mongo_config: MongoConnecti
     wait=wait_exponential(multiplier=1, min=1, max=2),
     retry=retry_if_exception_type((AutoReconnect, NetworkTimeout)),
 )
-def fetch_files_lengths(files_ids: list[str], mongo_config: MongoConnectionConfig) -> dict[str, int]:
-    """Fetch the size in bytes (GridFS ``length``) of each file from FILES.files.
+def fetch_files_info(files_ids: list[str], mongo_config: MongoConnectionConfig) -> dict[str, dict]:
+    """Fetch the size in bytes (GridFS ``length``) and ``md5`` of each file from FILES.files.
 
     Reads metadata only (no chunks), so it is cheap even for thousands of files.
 
@@ -177,28 +177,29 @@ def fetch_files_lengths(files_ids: list[str], mongo_config: MongoConnectionConfi
         mongo_config: MongoDB connection configuration.
 
     Returns:
-        Dictionary mapping files_id -> length in bytes. Files without a
-        ``length`` field are left out.
+        Dictionary mapping files_id -> {"length": int | None, "md5": str | None}.
     """
     if not files_ids:
         return {}
 
     client = get_mongo_connection(mongo_config)
-    lengths: dict[str, int] = {}
+    info: dict[str, dict] = {}
 
     try:
         collection = client[mongo_config.database]["FILES.files"]
         for batch in _chunk_list(files_ids, 2000):
             query = {"_id": {"$in": [ObjectId(files_id) for files_id in batch]}}
-            for doc in collection.find(query, {"_id": 1, "length": 1}):
+            for doc in collection.find(query, {"_id": 1, "length": 1, "md5": 1}):
                 length = doc.get("length")
-                if length is not None:
-                    lengths[str(doc["_id"])] = int(length)
+                info[str(doc["_id"])] = {
+                    "length": int(length) if length is not None else None,
+                    "md5": doc.get("md5"),
+                }
     finally:
         close_mongo_connection(client)
 
-    logger.info(f"Fetched sizes for {len(lengths)} of {len(files_ids)} files")
-    return lengths
+    logger.info(f"Fetched sizes for {len(info)} of {len(files_ids)} files")
+    return info
 
 
 def _decode_base64_data(value: Any) -> Any:
