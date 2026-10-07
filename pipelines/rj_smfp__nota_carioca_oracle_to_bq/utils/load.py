@@ -6,7 +6,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import TEMP_TABLE_SU
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import bigquery, gcs
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import assert_checksums_match
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractResult
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import OracleConfig, Snapshot, count_as_of_scn
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import Snapshot
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import encode_proof
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.plan import TablePlan, assert_counts_match
 
@@ -42,23 +42,22 @@ def load_table(destination: Destination, plan: TablePlan, extracted: ExtractResu
     return rows
 
 
-def validate_table(
-    config: OracleConfig, destination: Destination, plan: TablePlan, extracted: ExtractResult, snapshot: Snapshot
-) -> int:
+def validate_table(destination: Destination, plan: TablePlan, extracted: ExtractResult) -> int:
     """Confere a contagem e o checksum de conteúdo da tabela temporária contra o Oracle e a extração.
 
-    :param config: Conexão com o Oracle.
+    A contagem do Oracle (``COUNT(*) AS OF SCN`` no SCN da foto) já foi feita, durante a extração, por
+    :func:`extract_table` e vem em ``extracted.oracle_rows``; aqui o Oracle não é consultado de novo. A conferência
+    segue a três vias: Oracle, arquivos extraídos e BigQuery.
+
     :param destination: Projeto, dataset e bucket.
     :param plan: Plano da tabela.
-    :param extracted: Resultado da extração.
-    :param snapshot: Foto da carga.
+    :param extracted: Resultado da extração, com a contagem do Oracle e os checksums.
     :returns: Linhas validadas.
     :raises CountMismatchError: Se as contagens divergirem.
     :raises ChecksumMismatchError: Se a contagem de não nulos ou a soma de uma coluna de checksum divergir.
     """
-    oracle_rows = count_as_of_scn(config, plan.schema, plan.table_id, snapshot)
     bigquery_rows = bigquery.count_rows(destination.project, destination.dataset_id, plan.temp_id)
-    assert_counts_match(plan.table_id, oracle_rows, bigquery_rows, extracted.rows)
+    assert_counts_match(plan.table_id, extracted.oracle_rows, bigquery_rows, extracted.rows)
     loaded = bigquery.read_checksums(destination.project, destination.dataset_id, plan.temp_id, plan.checksum_columns)
     assert_checksums_match(plan.table_id, extracted.checksums, loaded)
     return bigquery_rows
