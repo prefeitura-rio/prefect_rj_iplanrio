@@ -3,7 +3,7 @@
 import io
 import re
 import zipfile
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 import shutil
 import pandas as pd
@@ -20,8 +20,6 @@ from pipelines.rj_smfp__crf.constants import (
     FWF_EVENTOS_CONFIG,
     FWF_EVENTOS_MEI_CONFIG,
 )
-
-
 
 
 def get_max_date_from_bigquery(
@@ -41,8 +39,9 @@ def get_max_date_from_bigquery(
     :returns: Data máxima como ``datetime.date`` ou ``None`` se a tabela estiver vazia.
     :raises Exception: Se houver erro ao executar a query.
     """
-    print(
-        f"Obtendo data máxima de partição do BigQuery: {project_id}.{dataset_id}.{table_id}",
+    logger.info(
+        "Obtendo data máxima de partição do BigQuery: {}.{}.{}",
+        project_id, dataset_id, table_id,
     )
 
     try:
@@ -149,8 +148,9 @@ def list_zip_files_in_gcs_folder(
     data_inicio = _parse_date(data_inicio, "data_inicio")
     data_fim = _parse_date(data_fim, "data_fim")
 
-    print(
-        f"Listando arquivos ZIP do bucket '{bucket.name}' com prefixo '{folder_prefix}' (data_inicio={data_inicio}, data_fim={data_fim})"
+    logger.info(
+        "Listando arquivos ZIP do bucket '{}' com prefixo '{}' (data_inicio={}, data_fim={})",
+        bucket.name, folder_prefix, data_inicio, data_fim,
     )
 
     blobs = bucket.list_blobs(prefix=folder_prefix)
@@ -159,7 +159,7 @@ def list_zip_files_in_gcs_folder(
         if blob.name.split("/")[-1].startswith("BX-") and blob.name.endswith(".zip")
     ]
 
-    print(f"Total de arquivos ZIP encontrados: {len(zip_blobs)}")
+    logger.info("Total de arquivos ZIP encontrados: {}", len(zip_blobs))
 
     if data_inicio is None and data_fim is None:
         return zip_blobs
@@ -168,24 +168,18 @@ def list_zip_files_in_gcs_folder(
     for blob_name in zip_blobs:
         file_date = extract_date_from_blob_name(blob_name)
         if file_date is None:
-            print(f"Não foi possível extrair data de '{blob_name}', ignorando")
+            logger.warning("Não foi possível extrair data de '{}', ignorando", blob_name)
             continue
         if data_inicio is not None and file_date <= data_inicio:
-            # print(
-            #     f"Arquivo ignorado: {blob_name} (data={file_date} <= data_inicio={data_inicio})"
-            # )
+            logger.debug("Arquivo ignorado: {} (data={} <= data_inicio={})", blob_name, file_date, data_inicio)
             continue
         if data_fim is not None and file_date > data_fim:
-            # print(
-            #     f"Arquivo ignorado: {blob_name} (data={file_date} > data_fim={data_fim})"
-            # )
+            logger.debug("Arquivo ignorado: {} (data={} > data_fim={})", blob_name, file_date, data_fim)
             continue
         filtered.append(blob_name)
-        print(f"Arquivo incluído: {blob_name} (data={file_date})")
+        logger.info("Arquivo incluído: {} (data={})", blob_name, file_date)
 
-    print(
-        f"Arquivos após filtro de data: {len(filtered)} de {len(zip_blobs)}"
-    )
+    logger.info("Arquivos após filtro de data: {} de {}", len(filtered), len(zip_blobs))
 
     return filtered
 
@@ -330,37 +324,40 @@ def read_extracted_fwf_file(
             dtype=str,
             encoding=config.encoding,
         )
-
-        # Adicionar coluna com nome completo do arquivo
-        arquivo_nome = file_path.name
-        df["arquivo_origem"] = arquivo_nome
-
-        # Extrair data de referência do nome do arquivo (formato: 00-XXX-AAAAMMDD.txt)
-        # Extrai apenas os 8 dígitos da data (AAAAMMDD)
-        nome_sem_ext = arquivo_nome.replace(".txt", "").replace(".TXT", "")
-        partes = nome_sem_ext.split("-")
-        if len(partes) >= 3:
-            data_referencia = partes[-1]
-            df["data_referencia"] = data_referencia
-
-            df['ano_particao'] = df["data_referencia"].apply(lambda x: str(x)[0:4])[0]
-            df['mes_particao'] = df["data_referencia"].apply(lambda x: str(x)[4:6])[0]
-            df['data_particao'] = pd.to_datetime(df["data_referencia"], format="%Y%m%d").dt.strftime("%Y-%m-%d")
-
-            data_path = f"{extract_base_path}/{table_id}"
-            to_partitions(
-            data=df,
-            savepath=f"{extract_base_path}/{table_id}",
-            data_type="parquet",
-            partition_columns=["ano_particao", "mes_particao", "data_particao"],
-        )
-        return df, data_path
-
     except Exception as e:
         raise pd.errors.ParserError(
             f"Erro ao fazer parsing do arquivo FWF '{file_path}' para "
             f"a tabela '{table_id}': {e}"
         ) from e
+
+    # Adicionar coluna com nome completo do arquivo
+    arquivo_nome = file_path.name
+    df["arquivo_origem"] = arquivo_nome
+
+    # Extrair data de referência do nome do arquivo (formato: 00-XXX-AAAAMMDD.txt)
+    nome_sem_ext = arquivo_nome.replace(".txt", "").replace(".TXT", "")
+    partes = nome_sem_ext.split("-")
+    if len(partes) < 3:
+        raise ValueError(
+            f"Nome do arquivo '{arquivo_nome}' não segue o padrão esperado "
+            "'XX-XXX-AAAAMMDD.txt' — não foi possível extrair a data de referência."
+        )
+
+    data_referencia = partes[-1]
+    df["data_referencia"] = data_referencia
+    df["ano_particao"] = df["data_referencia"].str[0:4]
+    df["mes_particao"] = df["data_referencia"].str[4:6]
+    df["data_particao"] = pd.to_datetime(df["data_referencia"], format="%Y%m%d").dt.strftime("%Y-%m-%d")
+
+    data_path = f"{extract_base_path}/{table_id}"
+    to_partitions(
+        data=df,
+        savepath=data_path,
+        data_type="parquet",
+        partition_columns=["ano_particao", "mes_particao", "data_particao"],
+    )
+
+    return df, data_path
 
 
 def cleanup_extracted_directory(extract_path: str) -> None:

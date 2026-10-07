@@ -1,5 +1,6 @@
-"""Flow for rj_smfp__crf.."""
+"""Flow for rj_smfp__crf."""
 
+from loguru import logger
 from prefect import flow
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from pipelines.rj_smfp__crf.tasks import get_max_date_from_bigquery_task, process_all_crf_zip_files_task
@@ -31,14 +32,14 @@ def rj_smfp__crf(
     :param table_id: Identificador da tabela CRF a processar. Obrigatório.
         Valores válidos: ``'periodos_simples'``, ``'periodos_mei'``,
         ``'eventos_simples'``, ``'eventos_mei'``.
-    :param project_id: Google Cloud project ID (padrão: ``'rj-rec-rio'``).
+    :param project_id: Google Cloud project ID (padrão: ``'rj-iplanrio'``).
     :param dataset_id: ID do dataset BigQuery de destino (padrão: ``'brutos_crf'``).
     :param data_inicio: Data de início do intervalo no formato ``YYYY-MM-DD``.
         Arquivos com data igual ou anterior são ignorados. Se ``None`` junto
         com ``data_fim``, consulta automaticamente o BigQuery.
     :param data_fim: Data de fim do intervalo no formato ``YYYY-MM-DD``.
         Arquivos com data posterior são ignorados. Se ``None``, não aplica
-        limite superior.
+        limite superior. Requer que ``data_inicio`` também seja fornecido.
     :raises ValueError: Se ``table_id`` não for um dos valores válidos.
     """
     valid_table_ids = ("periodos_simples", "periodos_mei", "eventos_simples", "eventos_mei")
@@ -54,7 +55,7 @@ def rj_smfp__crf(
     if data_inicio is None and data_fim is None:
         data_inicio = get_max_date_from_bigquery_task(
             project_id=project_id,
-            dataset_id="brutos_crf_staging",
+            dataset_id=f"{dataset_id}_staging",
             table_id=table_id,
         )
 
@@ -68,6 +69,7 @@ def rj_smfp__crf(
     )
 
     if data_path is None:
+        logger.info("Nenhum arquivo ZIP encontrado no intervalo especificado — flow encerrado sem upload.")
         return
 
     create_table_and_upload_to_gcs_task(

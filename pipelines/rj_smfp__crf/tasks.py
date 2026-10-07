@@ -1,9 +1,8 @@
 """Tasks for GCS ZIP file handling and extraction."""
 
 from datetime import date
-from pathlib import Path
 
-import pandas as pd
+from loguru import logger
 from prefect import task
 
 from pipelines.rj_smfp__crf.constants import EXTRACT_BASE_PATH
@@ -44,105 +43,6 @@ def get_max_date_from_bigquery_task(
 
 
 @task
-def list_zip_files_task(
-    project_id: str,
-    bucket_name: str,
-    folder_prefix: str,
-    max_date_from_bq: date | None = None,
-) -> list[str]:
-    """Lista arquivos ZIP no GCS filtrando por data maior que a partição do BQ.
-
-    :param project_id: Google Cloud project ID.
-    :param bucket_name: Name of the GCS bucket.
-    :param folder_prefix: Folder path prefix in the bucket (e.g., 'data/crf/').
-    :param max_date_from_bq: Data máxima de partição do BigQuery. Arquivos com
-        data igual ou anterior são ignorados. Se ``None``, retorna todos os ZIPs.
-    :returns: List of ZIP file blob names found in the folder after date filter.
-    """
-
-    bucket = get_gcs_bucket(project_id, bucket_name)
-    return list_zip_files_in_gcs_folder(
-        bucket=bucket,
-        folder_prefix=folder_prefix,
-        max_date_from_bq=max_date_from_bq,
-    )
-
-
-@task
-def download_and_extract_zip_task(
-    project_id: str, bucket_name: str, blob_name: str, extract_path: str
-) -> str:
-    """Download and extract a ZIP file from GCS.
-
-    Downloads a ZIP file from Google Cloud Storage and extracts its contents
-    to a local directory.
-
-    :param project_id: Google Cloud project ID.
-    :param bucket_name: Name of the GCS bucket.
-    :param blob_name: Full blob name/path in the bucket.
-    :param extract_path: Local directory path where files will be extracted.
-    :returns: Path to the extraction directory.
-    """
-
-    bucket = get_gcs_bucket(project_id, bucket_name)
-    return download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
-
-
-@task
-def list_extracted_files_task(extract_path: str) -> list[str]:
-    """List all extracted files in a directory.
-
-    :param extract_path: Path to the directory containing extracted files.
-    :returns: List of relative file paths in the directory.
-    """
-
-    return list_extracted_files(extract_path)
-
-
-@task
-def read_extracted_fwf_file_task(
-    extract_path: str,
-    table_id: str,
-) -> pd.DataFrame:
-    """Lê um arquivo FWF descompactado para um DataFrame.
-
-    Task que encapsula a leitura de arquivo de largura fixa (FWF) do
-    diretório descompactado, com suporte para múltiplos formatos de tabela
-    CRF (períodos, eventos, eventos_mei).
-
-    :param extract_path: Caminho do diretório contendo os arquivos descompactados.
-    :param table_id: Identificador da tabela ('periodos', 'eventos', 'eventos_mei').
-
-    :returns: DataFrame com os dados do arquivo FWF parseado.
-
-    :raises FileNotFoundError: Se nenhum arquivo for encontrado.
-    :raises ValueError: Se múltiplos arquivos forem encontrados ou table_id inválido.
-    """
-
-    print(
-        f"Lendo arquivo FWF da tabela '{table_id}' do diretório {extract_path}"
-    )
-    return read_extracted_fwf_file(
-        extract_path=extract_path,
-        table_id=table_id,
-    )
-
-
-@task
-def cleanup_extracted_directory_task(extract_path: str) -> None:
-    """Remove todos os arquivos de um diretório descompactado.
-
-    Task que deleta recursivamente todos os arquivos no diretório após
-    o processamento ser concluído.
-
-    :param extract_path: Caminho do diretório a ser limpo.
-    """
-
-    print(f"Limpando diretório descompactado: {extract_path}")
-    cleanup_extracted_directory(extract_path)
-
-
-@task
 def process_all_crf_zip_files_task(
     project_id: str,
     bucket_name: str,
@@ -167,14 +67,21 @@ def process_all_crf_zip_files_task(
         Arquivos com data igual ou anterior são ignorados. Se ``None``, sem limite inferior.
     :param data_fim: Data de fim do intervalo (``YYYY-MM-DD`` ou ``date``).
         Arquivos com data posterior são ignorados. Se ``None``, sem limite superior.
+        Requer que ``data_inicio`` também seja fornecido.
 
     :returns: Caminho local (``data_path``) onde os arquivos parquet foram salvos,
         ou ``None`` se nenhum arquivo ZIP foi encontrado para processar.
+    :raises ValueError: Se ``data_fim`` for fornecido sem ``data_inicio``.
     """
-    extract_base_path = EXTRACT_BASE_PATH
+    if data_fim is not None and data_inicio is None:
+        raise ValueError(
+            "data_fim não pode ser fornecido sem data_inicio. "
+            "Forneça data_inicio para definir o início do intervalo."
+        )
 
-    # Listar arquivos ZIP no GCS, filtrando pelo intervalo de datas
+    extract_base_path = EXTRACT_BASE_PATH
     bucket = get_gcs_bucket(project_id, bucket_name)
+
     zip_files = list_zip_files_in_gcs_folder(
         bucket=bucket,
         folder_prefix=folder_prefix,
@@ -182,78 +89,41 @@ def process_all_crf_zip_files_task(
         data_fim=data_fim,
     )
 
-    print(f"Processando {len(zip_files)} arquivos ZIP")
+    logger.info("Processando {} arquivos ZIP", len(zip_files))
 
     if not zip_files:
-        print("Nenhum arquivo ZIP encontrado para processar")
+        logger.info("Nenhum arquivo ZIP encontrado para processar")
         return None
 
     total = 0
     data_path = None
 
-
-    # Processar cada arquivo ZIP sequencialmente
     for blob_name in zip_files:
-        # Extrair nome do arquivo ZIP para construir caminho local
         zip_filename = blob_name.split("/")[-1].replace(".zip", "")
         extract_path = f"{extract_base_path}/{zip_filename}"
 
-        print(f"Iniciando processamento de {blob_name}")
+        logger.info("Iniciando processamento de {}", blob_name)
 
-        # Passo 1: Baixar e descompactar ZIP
-        bucket = get_gcs_bucket(project_id, bucket_name)
-        extracted_dir = download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
+        try:
+            extracted_dir = download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
 
-        # Passo 2: Verificar arquivos descompactados
-        extracted_files = list_extracted_files(extract_path=extracted_dir)
-        print(f"Descompactados {len(extracted_files)} arquivos de {blob_name}")
+            extracted_files = list_extracted_files(extract_path=extracted_dir)
+            logger.info("Descompactados {} arquivos de {}", len(extracted_files), blob_name)
 
-        # Passo 3: Ler os 4 arquivos FWF sequencialmente
-        print(f"Lendo arquivos FWF de {blob_name}")
-        if table_id == "periodos_simples":
             df, data_path = read_extracted_fwf_file(
                 extract_path=extracted_dir,
-                table_id="periodos_simples",
-                extract_base_path=extract_base_path
+                table_id=table_id,
+                extract_base_path=extract_base_path,
             )
-            periodos_count = len(df)
-            total += periodos_count
-            print(f"Processadas {periodos_count} linhas de periodos")
-        elif table_id == "periodos_mei":
-            df, data_path = read_extracted_fwf_file(
-                extract_path=extracted_dir,
-                table_id="periodos_mei",
-                extract_base_path=extract_base_path
-            )
-            periodos_mei_count = len(df)
-            total += periodos_mei_count
-            print(f"Processadas {periodos_mei_count} linhas de periodos_mei")
+            total += len(df)
+            logger.info("Processadas {} linhas de {}", len(df), table_id)
 
-        elif table_id == "eventos_simples":
-            df, data_path = read_extracted_fwf_file(
-                extract_path=extracted_dir,
-                table_id="eventos_simples",
-                extract_base_path=extract_base_path
-            )
-            eventos_count = len(df)
-            total += eventos_count
-            print(f"Processadas {eventos_count} linhas de eventos")
+        finally:
+            cleanup_extracted_directory(extract_path=extract_path)
+            logger.info("Diretório limpo: {}", extract_path)
 
-        elif table_id == "eventos_mei":
-            df, data_path = read_extracted_fwf_file(
-                extract_path=extracted_dir,
-                table_id="eventos_mei",
-                extract_base_path=extract_base_path
-                )
-            eventos_mei_count = len(df)
-            total += eventos_mei_count
-            print(f"Processadas {eventos_mei_count} linhas de eventos_mei")
+        logger.info("Concluído processamento de {}", blob_name)
 
-
-        # Passo 4: Limpar diretório descompactado
-        cleanup_extracted_directory(extract_path=extracted_dir)
-        print(f"Concluido processamento de {blob_name}")
-
-    print(f"Processamento concluido. Total: {table_id}={total}")
+    logger.info("Processamento concluído. Total de linhas em {}: {}", table_id, total)
 
     return data_path

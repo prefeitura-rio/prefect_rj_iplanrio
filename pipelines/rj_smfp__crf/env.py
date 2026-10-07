@@ -11,11 +11,8 @@ if os.path.exists("pipelines/rj_smfp__crf/.env"):  # noqa
     )
 
 CRF__BUCKET_NAME = getenv_or_action(
-    key="CRF__BUCKET_NAME", action="ignore"
+    key="CRF__BUCKET_NAME"
 )
 CRF__FOLDER_PREFIX_PERIODOS_EVENTOS = getenv_or_action(
-    key="CRF__FOLDER_PREFIX_PERIODOS_EVENTOS", action="ignore"
-)
-CRF__PROJECT_ID = getenv_or_action(
-    key="CRF__PROJECT_ID", action="ignore"
+    key="CRF__FOLDER_PREFIX_PERIODOS_EVENTOS"
 )
