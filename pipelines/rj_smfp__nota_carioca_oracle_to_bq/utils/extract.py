@@ -1,12 +1,13 @@
 """Extração paralela de uma tabela do Oracle para arquivos Parquet no GCS."""
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass
 from multiprocessing import get_context
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX, QUERIES_ANCHOR
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import ColumnChecksum, merge_checksums
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import Chunk, ChunkRequest, chunk_task_name, rowid_chunks
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import OracleColumn
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
@@ -29,9 +30,9 @@ class ExtractOptions:
     :param chunk_size_blocks: Tamanho aproximado de cada faixa de ROWID, em blocos.
     :param batch_rows: Teto de linhas por lote lido do Oracle; o lote real sai de ``worker_memory_mb``.
     :param worker_memory_mb: Orçamento de memória de cada worker, em MiB; define o lote de cada tabela.
-    :param pod_memory_mb: Orçamento de memória do pod, em MiB: o REQUEST de memória do pod (4 GiB no template de job
-        do K3s) menos folga, e não o limite de 8 GiB. Usar mais que o request deixa o scheduler superalocar o nó
-        (incidente da primeira execução em prod); a extração falha antes de começar se não couber.
+    :param pod_memory_mb: Orçamento de memória do pod, em MiB: o REQUEST de memória do pod (2 GiB no template de job
+        do K3s aplicado) menos 256 MiB de folga, e não o limite de 8 GiB. Usar mais que o request deixa o scheduler
+        superalocar o nó, que ficou NotReady no incidente; a extração falha antes de começar se não couber.
     :param progress_interval_seconds: Intervalo entre linhas de progresso.
     :param upload_concurrency: Uploads ao GCS simultâneos no pod; o link até o bucket
         é lento e muitos uploads em paralelo estouram o timeout de escrita.
@@ -40,8 +41,8 @@ class ExtractOptions:
     workers: int = 2
     chunk_size_blocks: int = 32768
     batch_rows: int = 50_000
-    worker_memory_mb: int = 1536
-    pod_memory_mb: int = 3584
+    worker_memory_mb: int = 640
+    pod_memory_mb: int = 1792
     progress_interval_seconds: int = 30
     upload_concurrency: int = 2
 
@@ -62,6 +63,7 @@ class ExtractRequest:
     :param schema: Dono da tabela.
     :param table: Nome da tabela.
     :param columns: Colunas do SELECT, na ordem da tabela.
+    :param checksum_columns: Colunas ``NUMBER`` do checksum de conteúdo.
     :param snapshot: Foto consistente de leitura.
     :param project: Projeto do GCS.
     :param bucket: Bucket de destino.
@@ -78,6 +80,7 @@ class ExtractRequest:
     bucket: str
     run_id: str
     options: ExtractOptions
+    checksum_columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -91,6 +94,7 @@ class ExtractResult:
     :param files: Arquivos gerados (faixas vazias não geram arquivo).
     :param prefix: Prefixo dos arquivos no bucket.
     :param seconds: Duração da extração.
+    :param checksums: Contagem de não nulos e soma exata de cada coluna de checksum, somadas sobre todas as faixas.
     """
 
     table: str
@@ -100,6 +104,7 @@ class ExtractResult:
     files: int
     prefix: str
     seconds: float
+    checksums: Mapping[str, ColumnChecksum]
 
 
 def worker_memory(request: ExtractRequest) -> WorkerMemory:
@@ -136,6 +141,7 @@ def build_jobs(request: ExtractRequest, chunks: list[Chunk], batch_rows: int) ->
             columns=request.columns,
             blob_name=f"{prefix}/chunk-{chunk.chunk_id:06d}.parquet",
             batch_rows=batch_rows,
+            checksum_columns=request.checksum_columns,
         )
         for chunk in chunks
     ]
@@ -233,4 +239,5 @@ def extract_table(request: ExtractRequest, report: Callable[[str], None]) -> Ext
         files=sum(1 for result in results if result.rows),
         prefix=blob_prefix(GCS_PREFIX, request.table, request.run_id),
         seconds=time.monotonic() - started,
+        checksums=merge_checksums([result.checksums for result in results], request.checksum_columns),
     )
