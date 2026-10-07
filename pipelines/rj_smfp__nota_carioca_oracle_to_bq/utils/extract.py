@@ -29,7 +29,9 @@ class ExtractOptions:
     :param chunk_size_blocks: Tamanho aproximado de cada faixa de ROWID, em blocos.
     :param batch_rows: Teto de linhas por lote lido do Oracle; o lote real sai de ``worker_memory_mb``.
     :param worker_memory_mb: Orçamento de memória de cada worker, em MiB; define o lote de cada tabela.
-    :param pod_memory_mb: Orçamento de memória do pod, em MiB; a extração falha antes de começar se não couber.
+    :param pod_memory_mb: Orçamento de memória do pod, em MiB: o REQUEST de memória do pod (4 GiB no template de job
+        do K3s) menos folga, e não o limite de 8 GiB. Usar mais que o request deixa o scheduler superalocar o nó
+        (incidente da primeira execução em prod); a extração falha antes de começar se não couber.
     :param progress_interval_seconds: Intervalo entre linhas de progresso.
     :param upload_concurrency: Uploads ao GCS simultâneos no pod; o link até o bucket
         é lento e muitos uploads em paralelo estouram o timeout de escrita.
@@ -39,7 +41,7 @@ class ExtractOptions:
     chunk_size_blocks: int = 32768
     batch_rows: int = 50_000
     worker_memory_mb: int = 1536
-    pod_memory_mb: int = 7168
+    pod_memory_mb: int = 3584
     progress_interval_seconds: int = 30
     upload_concurrency: int = 2
 
