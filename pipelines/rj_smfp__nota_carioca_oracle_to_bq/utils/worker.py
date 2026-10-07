@@ -1,22 +1,18 @@
-"""Processo worker: lê faixas de ROWID do Oracle e envia Parquet ao GCS."""
+"""Processo worker: lê faixas de ROWID do Oracle e grava Parquet no spool local."""
 
-import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
-from multiprocessing.synchronize import BoundedSemaphore
 from pathlib import Path
 
 import oracledb
 import pyarrow as pa
 import pyarrow.parquet as pq
-from google.cloud import storage
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import ColumnChecksum, chunk_checksums, merge_checksums
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import Chunk
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import OracleColumn, fetch_schema
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.convert import to_output_table
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import upload_file
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import OracleConfig, connect
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.schema import parquet_schema
 from prefect_rj_iplanrio.logging import get_logger
@@ -36,7 +32,7 @@ class ChunkJob:
     :param scn: SCN da foto.
     :param extracted_at: Horário da foto.
     :param columns: Colunas do SELECT.
-    :param blob_name: Objeto de destino no GCS.
+    :param blob_name: Objeto de destino no GCS; quem envia o arquivo é o processo principal.
     :param batch_rows: Linhas por lote.
     :param checksum_columns: Colunas ``NUMBER`` cuja contagem de não nulos e soma exata a faixa devolve.
     """
@@ -56,13 +52,15 @@ class ChunkResult:
     """Resultado de uma faixa.
 
     :param rows: Linhas gravadas.
-    :param bytes_written: Bytes do Parquet enviado; zero se a faixa não tinha linhas.
+    :param bytes_written: Bytes do Parquet gravado; zero se a faixa não tinha linhas.
     :param checksums: Checksum, calculado sobre os arrays gravados no Parquet, de cada coluna de checksum.
+    :param path: Parquet no spool local, ainda não enviado; ``None`` se a faixa não tinha linhas (nenhum arquivo).
     """
 
     rows: int
     bytes_written: int
     checksums: Mapping[str, ColumnChecksum] = field(default_factory=dict)
+    path: Path | None = None
 
 
 class WorkerContext:
@@ -70,40 +68,33 @@ class WorkerContext:
 
     config: OracleConfig | None = None
     connection: oracledb.Connection | None = None
-    bucket: storage.Bucket | None = None
-    upload_slots: BoundedSemaphore | None = None
+    spool_dir: Path | None = None
 
 
 WORKER = WorkerContext()
 
 
-def init_worker(config: OracleConfig, project: str, bucket: str, upload_slots: BoundedSemaphore) -> None:
-    """Abre a conexão do Oracle e o client do GCS do processo worker.
+def init_worker(config: OracleConfig, spool_dir: Path) -> None:
+    """Abre a conexão do Oracle do processo worker e guarda o diretório do spool.
 
     :param config: Conexão com o Oracle.
-    :param project: Projeto do GCS.
-    :param bucket: Bucket de destino.
-    :param upload_slots: Semáforo compartilhado entre os workers que limita os uploads simultâneos.
+    :param spool_dir: Diretório local, criado pelo processo principal, onde os Parquet são gravados.
     """
-    WORKER.upload_slots = upload_slots
     WORKER.config = config
+    WORKER.spool_dir = spool_dir
     WORKER.connection = connect(config)
-    WORKER.bucket = storage.Client(project=project).bucket(bucket)
 
 
-def write_chunk(
-    connection: oracledb.Connection, bucket: storage.Bucket, job: ChunkJob, upload_slots: BoundedSemaphore
-) -> ChunkResult:
-    """Lê uma faixa em lotes, grava um Parquet local e o envia ao GCS.
+def write_chunk(connection: oracledb.Connection, spool_dir: Path, job: ChunkJob) -> ChunkResult:
+    """Lê uma faixa em lotes e grava um Parquet no spool local, sem enviá-lo.
 
     A leitura é sempre ``AS OF SCN`` (``job.sql`` vem de ``select_chunk.sql``): sem o SCN a leitura por faixa de
-    ROWID foi ~100x mais lenta em prod.
+    ROWID foi ~100x mais lenta em prod. O envio ao GCS é do processo principal, para o worker voltar logo ao Oracle.
 
     :param connection: Conexão do worker.
-    :param bucket: Bucket de destino.
+    :param spool_dir: Diretório do spool local.
     :param job: Faixa e destino.
-    :param upload_slots: Semáforo que limita os uploads simultâneos do pod; só o envio o segura.
-    :returns: Linhas, bytes e checksums gravados.
+    :returns: Linhas, bytes, checksums e caminho do arquivo; sem linhas, nenhum arquivo fica no spool.
     """
     binds = {"scn": job.scn, "start_rowid": job.chunk.start_rowid, "end_rowid": job.chunk.end_rowid}
     batches = connection.fetch_df_batches(
@@ -111,24 +102,21 @@ def write_chunk(
     )
     rows = 0
     checksums = merge_checksums([], job.checksum_columns)
-    with tempfile.TemporaryDirectory(prefix="oracle_to_bq_") as directory:
-        path = Path(directory) / "chunk.parquet"
-        with pq.ParquetWriter(path, parquet_schema(job.columns), compression=PARQUET_COMPRESSION) as writer:
-            for frame in batches:
-                batch = pa.table(frame)
-                if batch.num_rows:
-                    output = to_output_table(batch, job.columns, job.extracted_at)
-                    writer.write_table(output)
-                    checksums = merge_checksums(
-                        [checksums, chunk_checksums(output, job.checksum_columns)], job.checksum_columns
-                    )
-                    rows += batch.num_rows
-        if rows == 0:
-            return ChunkResult(rows=0, bytes_written=0, checksums=checksums)
-        size = path.stat().st_size
-        with upload_slots:
-            upload_file(bucket, path, job.blob_name)
-    return ChunkResult(rows=rows, bytes_written=size, checksums=checksums)
+    path = spool_dir / f"chunk-{job.chunk.chunk_id:06d}.parquet"
+    with pq.ParquetWriter(path, parquet_schema(job.columns), compression=PARQUET_COMPRESSION) as writer:
+        for frame in batches:
+            batch = pa.table(frame)
+            if batch.num_rows:
+                output = to_output_table(batch, job.columns, job.extracted_at)
+                writer.write_table(output)
+                checksums = merge_checksums(
+                    [checksums, chunk_checksums(output, job.checksum_columns)], job.checksum_columns
+                )
+                rows += batch.num_rows
+    if rows == 0:
+        path.unlink()
+        return ChunkResult(rows=0, bytes_written=0, checksums=checksums)
+    return ChunkResult(rows=rows, bytes_written=path.stat().st_size, checksums=checksums, path=path)
 
 
 def process_chunk(job: ChunkJob) -> ChunkResult:
@@ -138,17 +126,17 @@ def process_chunk(job: ChunkJob) -> ChunkResult:
     SCN antigo demais) propaga, pois repetir não o resolve.
 
     :param job: Faixa e destino.
-    :returns: Linhas e bytes gravados.
+    :returns: Linhas, bytes e caminho do Parquet gravado.
     :raises RuntimeError: Se o worker não foi inicializado.
     """
-    if WORKER.config is None or WORKER.bucket is None or WORKER.upload_slots is None:
+    if WORKER.config is None or WORKER.spool_dir is None:
         raise RuntimeError("Worker sem inicialização; use init_worker como initializer do pool.")
     attempt = 1
     while True:
         try:
             if WORKER.connection is None:
                 WORKER.connection = connect(WORKER.config)
-            return write_chunk(WORKER.connection, WORKER.bucket, job, WORKER.upload_slots)
+            return write_chunk(WORKER.connection, WORKER.spool_dir, job)
         except (oracledb.OperationalError, oracledb.InterfaceError):
             WORKER.connection = None
             if attempt >= MAX_CHUNK_ATTEMPTS:
