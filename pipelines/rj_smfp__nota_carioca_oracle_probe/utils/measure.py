@@ -178,16 +178,17 @@ def compare_flashback(
 
 
 def build_tasks(options: ProbeOptions, profile: TableProfile, snapshot: Snapshot) -> list[ChunkTask]:
-    """Cria a leitura ``AS OF SCN`` de cada faixa amostrada.
+    """Cria a leitura de cada faixa amostrada: ``AS OF SCN`` se o flashback estiver disponível, senão sem SCN.
 
     :param options: Parâmetros da sonda.
     :param profile: Perfil da tabela.
     :param snapshot: Foto de leitura.
     :returns: Uma leitura por faixa.
     """
-    sql = render_select(profile.columns, options.schema, profile.table, with_scn=True)
+    sql = render_select(profile.columns, options.schema, profile.table, with_scn=snapshot.flashback)
+    scn = snapshot.scn if snapshot.flashback else None
     return [
-        ChunkTask(sql, chunk, snapshot.scn, snapshot.taken_at, profile.columns, profile.plan.batch_rows)
+        ChunkTask(sql, chunk, scn, snapshot.taken_at, profile.columns, profile.plan.batch_rows)
         for chunk in profile.sampled
     ]
 
@@ -213,7 +214,7 @@ def benchmark_table(
             target = None if bucket is None else UploadTarget(bucket, blob_name)
             stages.append(measure_chunk(connection, task, options.compression_variants, target))
         first = next((task for task, stage in zip(tasks, stages, strict=True) if stage.rows), None)
-        if options.compare_no_scn and first is not None:
+        if options.compare_no_scn and snapshot.flashback and first is not None:
             plain_sql = render_select(profile.columns, options.schema, profile.table, with_scn=False)
             plain = ChunkTask(plain_sql, first.chunk, None, first.extracted_at, first.columns, first.batch_rows)
             flashback = compare_flashback(connection, first, plain)
