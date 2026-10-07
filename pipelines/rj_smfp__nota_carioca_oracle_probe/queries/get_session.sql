@@ -1,0 +1,5 @@
+SELECT
+    USER AS usuario,
+    SYS_CONTEXT('USERENV', 'SERVICE_NAME') AS servico,
+    SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') AS schema_atual
+FROM dual
