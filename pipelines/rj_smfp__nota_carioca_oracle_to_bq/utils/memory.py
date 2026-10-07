@@ -22,7 +22,11 @@ NUMBER_BYTES_PER_ROW = 384
 DATE_BYTES_PER_ROW = 256
 # Interpretador, pyarrow, Instant Client, client do GCS e do Prefect num worker recém-iniciado (medido ~220-270 MB).
 WORKER_BASE_MB = 320
-# Processo principal (engine do Prefect, clients do BigQuery e do GCS).
+# Processo principal (engine do Prefect, clients do BigQuery e do GCS). Cobre também as threads de upload da
+# extração (``upload_concurrency`` = 4 por padrão): cada uma lê o Parquet do disco em pedaços de 8 MiB (~32 MiB de
+# buffers, mais ~10-20 MiB de TLS e requests), bem abaixo dos 256 MiB de folga que ``pod_memory_mb`` já deixa abaixo do
+# request; os workers, por sua vez, não seguram mais buffers de upload. O spool vive em disco (``/tmp`` do pod); se
+# ele fosse tmpfs, os arquivos locais (até ``max_pending_files``) contariam como memória.
 MAIN_BASE_MB = 512
 MIN_BATCH_ROWS = 500
 
