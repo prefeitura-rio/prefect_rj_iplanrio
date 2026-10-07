@@ -107,7 +107,7 @@ def test_defaults_fit_the_two_gib_pod_request_with_headroom_and_are_accepted() -
 
     assert (options.workers, options.worker_memory_mb, options.pod_memory_mb) == (2, 640, 1792)
     assert options.pod_memory_mb == 2048 - 256
-    assert options.upload_concurrency == 2
+    assert options.upload_concurrency == 4
     assert total == MAIN_BASE_MB + 2 * 640 == 1792
 
 
