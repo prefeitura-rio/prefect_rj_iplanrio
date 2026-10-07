@@ -15,6 +15,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import DEFAULT_TABLE
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     check_memory_budget_task,
     cleanup_task,
+    drop_leftover_chunk_tasks_task,
     ensure_exclusive_task,
     extract_table_task,
     launch_children_task,
@@ -105,7 +106,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     chunk_size_blocks: int = 32768,
     batch_rows: int = 50_000,
     worker_memory_mb: int = 1536,
-    pod_memory_mb: int = 7168,
+    pod_memory_mb: int = 3584,
     progress_interval_seconds: int = 30,
     upload_concurrency: int = 2,
     parallel_tables: bool = True,
@@ -133,6 +134,7 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         _run_child(ctx, source_schema, child.table_id)
         return
     ensure_exclusive_task()
+    drop_leftover_chunk_tasks_task(infisical_secret_path=infisical_secret_path)
     snapshot = take_snapshot_task(infisical_secret_path=infisical_secret_path)
     plans = [
         plan_table_task(
