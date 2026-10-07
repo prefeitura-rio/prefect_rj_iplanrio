@@ -59,6 +59,7 @@ def test_parent_passes_upload_concurrency_to_children(monkeypatch: pytest.Monkey
         "rename_current_flow_run_task": ignore,
         "inject_bd_credentials_task": ignore,
         "ensure_exclusive_task": ignore,
+        "drop_leftover_chunk_tasks_task": ignore,
         "take_snapshot_task": fake_take_snapshot,
         "plan_table_task": fake_plan,
         "check_memory_budget_task": fake_budget,
