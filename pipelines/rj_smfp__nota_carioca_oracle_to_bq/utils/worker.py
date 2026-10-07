@@ -1,7 +1,8 @@
 """Processo worker: lê faixas de ROWID do Oracle e envia Parquet ao GCS."""
 
 import tempfile
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 from multiprocessing.synchronize import BoundedSemaphore
 from pathlib import Path
@@ -11,6 +12,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from google.cloud import storage
 
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import ColumnChecksum, chunk_checksums, merge_checksums
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import Chunk
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import OracleColumn, fetch_schema
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.convert import to_output_table
@@ -36,6 +38,7 @@ class ChunkJob:
     :param columns: Colunas do SELECT.
     :param blob_name: Objeto de destino no GCS.
     :param batch_rows: Linhas por lote.
+    :param checksum_columns: Colunas ``NUMBER`` cuja contagem de não nulos e soma exata a faixa devolve.
     """
 
     sql: str
@@ -45,6 +48,7 @@ class ChunkJob:
     columns: tuple[OracleColumn, ...]
     blob_name: str
     batch_rows: int
+    checksum_columns: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,10 +57,12 @@ class ChunkResult:
 
     :param rows: Linhas gravadas.
     :param bytes_written: Bytes do Parquet enviado; zero se a faixa não tinha linhas.
+    :param checksums: Checksum, calculado sobre os arrays gravados no Parquet, de cada coluna de checksum.
     """
 
     rows: int
     bytes_written: int
+    checksums: Mapping[str, ColumnChecksum] = field(default_factory=dict)
 
 
 class WorkerContext:
@@ -97,27 +103,32 @@ def write_chunk(
     :param bucket: Bucket de destino.
     :param job: Faixa e destino.
     :param upload_slots: Semáforo que limita os uploads simultâneos do pod; só o envio o segura.
-    :returns: Linhas e bytes gravados.
+    :returns: Linhas, bytes e checksums gravados.
     """
     binds = {"scn": job.scn, "start_rowid": job.chunk.start_rowid, "end_rowid": job.chunk.end_rowid}
     batches = connection.fetch_df_batches(
         job.sql, binds, size=job.batch_rows, fetch_decimals=True, requested_schema=fetch_schema(job.columns)
     )
     rows = 0
+    checksums = merge_checksums([], job.checksum_columns)
     with tempfile.TemporaryDirectory(prefix="oracle_to_bq_") as directory:
         path = Path(directory) / "chunk.parquet"
         with pq.ParquetWriter(path, parquet_schema(job.columns), compression=PARQUET_COMPRESSION) as writer:
             for frame in batches:
                 batch = pa.table(frame)
                 if batch.num_rows:
-                    writer.write_table(to_output_table(batch, job.columns, job.extracted_at))
+                    output = to_output_table(batch, job.columns, job.extracted_at)
+                    writer.write_table(output)
+                    checksums = merge_checksums(
+                        [checksums, chunk_checksums(output, job.checksum_columns)], job.checksum_columns
+                    )
                     rows += batch.num_rows
         if rows == 0:
-            return ChunkResult(rows=0, bytes_written=0)
+            return ChunkResult(rows=0, bytes_written=0, checksums=checksums)
         size = path.stat().st_size
         with upload_slots:
             upload_file(bucket, path, job.blob_name)
-    return ChunkResult(rows=rows, bytes_written=size)
+    return ChunkResult(rows=rows, bytes_written=size, checksums=checksums)
 
 
 def process_chunk(job: ChunkJob) -> ChunkResult:

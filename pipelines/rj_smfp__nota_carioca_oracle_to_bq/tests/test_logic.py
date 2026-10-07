@@ -28,6 +28,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.plan import (
     assert_counts_match,
     cluster_fields_for,
 )
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.schema import TableLayout
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import (
     Progress,
     estimate_remaining_seconds,
@@ -89,17 +90,13 @@ def test_drop_default_ddl_targets_the_temp_table() -> None:
 
 
 def test_cluster_fields_match_destination_contract() -> None:
-    columns = (OracleColumn("NOTA_NACIONAL", "VARCHAR2", None, None),)
-
-    assert cluster_fields_for("NOTAS_NACIONAIS", columns) == ("NOTA_NACIONAL", "_airbyte_extracted_at")
+    assert cluster_fields_for("NOTAS_NACIONAIS") == ("NOTA_NACIONAL", "_airbyte_extracted_at")
     with pytest.raises(ValueError, match="Sem cluster"):
-        cluster_fields_for("OUTRA", columns)
-    with pytest.raises(ValueError, match="não existe"):
-        cluster_fields_for("DPS", columns)
+        cluster_fields_for("OUTRA")
 
 
 def test_temp_table_never_collides_with_final_name() -> None:
-    plan = TablePlan("DPS", "DFEN", COLUMNS, (), ("DPS",), None)
+    plan = TablePlan("DPS", "DFEN", COLUMNS, (), TableLayout("DAY", "_airbyte_extracted_at", ("DPS",)), None)
 
     assert plan.temp_id == "DPS__oracle_to_bq_tmp"
 
