@@ -100,17 +100,45 @@ def test_first_staging_configuration_would_have_been_refused_before_extraction()
         check_pod_budget({"DPS": old_worker_mb}, workers=8, pod_memory_mb=7168)
 
 
-def test_defaults_estimate_exactly_the_pod_request_budget_and_is_accepted() -> None:
+def test_defaults_fit_the_two_gib_pod_request_with_headroom_and_are_accepted() -> None:
     options = ExtractOptions()
 
     total = check_pod_budget({"DPS": options.worker_memory_mb}, options.workers, options.pod_memory_mb)
 
-    assert (options.workers, options.worker_memory_mb, options.pod_memory_mb) == (2, 1536, 3584)
-    assert total == MAIN_BASE_MB + 2 * 1536 == 3584
+    assert (options.workers, options.worker_memory_mb, options.pod_memory_mb) == (2, 640, 1792)
+    assert options.pod_memory_mb == 2048 - 256
+    assert options.upload_concurrency == 2
+    assert total == MAIN_BASE_MB + 2 * 640 == 1792
 
 
-def test_four_workers_with_the_default_worker_memory_are_refused() -> None:
+def test_three_workers_with_the_default_worker_memory_are_refused() -> None:
     options = ExtractOptions()
 
     with pytest.raises(MemoryBudgetError, match="request"):
-        check_pod_budget({"PESSOAS": options.worker_memory_mb}, workers=4, pod_memory_mb=options.pod_memory_mb)
+        check_pod_budget({"PESSOAS": options.worker_memory_mb}, workers=3, pod_memory_mb=options.pod_memory_mb)
+
+
+def sized_columns(texts: int, numbers: int, dates: int) -> tuple[OracleColumn, ...]:
+    return (
+        *[varchar(50)] * texts,
+        *[OracleColumn("N", "NUMBER", 17, 2, data_length=22)] * numbers,
+        *[OracleColumn("D", "DATE", None, None, data_length=7)] * dates,
+    )
+
+
+def test_real_table_row_sizes_get_a_batch_above_the_minimum_within_the_pod_budget() -> None:
+    options = ExtractOptions()
+    tables = {
+        "DPS": (sized_columns(24, 44, 3), 128_256),
+        "NOTAS_NACIONAIS": (sized_columns(20, 14, 6), 99_072),
+    }
+
+    estimates: dict[str, int] = {}
+    for name, (columns, row_bytes) in tables.items():
+        memory = plan_worker_memory(columns, options.worker_memory_mb, options.batch_rows)
+        assert memory.row_bytes == row_bytes
+        assert MIN_BATCH_ROWS < memory.batch_rows < 4000
+        assert memory.worker_mb <= options.worker_memory_mb
+        estimates[name] = memory.worker_mb
+
+    assert check_pod_budget(estimates, options.workers, options.pod_memory_mb) <= options.pod_memory_mb
