@@ -130,7 +130,8 @@ def extract_table_task(  # noqa: PLR0913
     result = extract.extract_table(request, report=log)
     log(
         f"{result.table}: extração concluída em {format_duration(result.seconds)}: {result.rows:,} linhas, "
-        f"{format_size(result.bytes_written)} em {result.files} arquivos ({result.chunks} faixas)"
+        f"{format_size(result.bytes_written)} em {result.files} arquivos enviados ({result.chunks} faixas); "
+        f"Oracle AS OF SCN: {result.oracle_rows:,} linhas"
     )
     log(f"{result.table}: checksums extraídos: {format_checksums(result.checksums)}")
     return result
@@ -152,7 +153,6 @@ def load_table_task(
 
 @task(cache_policy=NO_CACHE)
 def validate_table_task(  # noqa: PLR0913
-    infisical_secret_path: str,
     project: str,
     dataset_id: str,
     bucket: str,
@@ -161,18 +161,13 @@ def validate_table_task(  # noqa: PLR0913
     snapshot: oracle.Snapshot,
     loaded_rows: int,
 ) -> int:
-    """Compara contagem e checksum do BigQuery com o Oracle no SCN da foto; falha sem tocar na tabela final."""
+    """Compara contagem e checksum do BigQuery com o Oracle (contado no SCN da foto durante a extração)."""
     started = time.monotonic()
-    rows = load.validate_table(
-        oracle.read_oracle_config(infisical_secret_path),
-        load.Destination(project, dataset_id, bucket),
-        table_plan,
-        extracted,
-        snapshot,
-    )
+    rows = load.validate_table(load.Destination(project, dataset_id, bucket), table_plan, extracted)
     log(
-        f"{table_plan.table_id}: contagem validada, {rows:,} linhas iguais no Oracle (SCN {snapshot.scn}), "
-        f"nos arquivos e no BigQuery ({format_duration(time.monotonic() - started)}; carregadas {loaded_rows:,})"
+        f"{table_plan.table_id}: contagem validada, {rows:,} linhas iguais no Oracle (SCN {snapshot.scn}, contado "
+        f"durante a extração), nos arquivos e no BigQuery ({format_duration(time.monotonic() - started)}; "
+        f"carregadas {loaded_rows:,})"
     )
     log(f"{table_plan.table_id}: checksums iguais na extração e no BigQuery: {format_checksums(extracted.checksums)}")
     return rows
