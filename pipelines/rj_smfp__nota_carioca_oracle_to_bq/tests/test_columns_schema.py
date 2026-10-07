@@ -82,21 +82,19 @@ def test_build_fields_adds_airbyte_columns_before_oracle_columns() -> None:
     fields = build_fields((column("DPS", "VARCHAR2"), column("VALOR", "NUMBER", 17, 2)), sync_id=875)
 
     assert [(f.name, f.field_type, f.mode) for f in fields] == [
-        ("_airbyte_raw_id", "STRING", "REQUIRED"),
         ("_airbyte_extracted_at", "TIMESTAMP", "REQUIRED"),
         ("_airbyte_meta", "JSON", "REQUIRED"),
         ("_airbyte_generation_id", "INTEGER", "NULLABLE"),
         ("DPS", "STRING", "NULLABLE"),
         ("VALOR", "NUMERIC", "NULLABLE"),
     ]
-    assert fields[2].default == meta_default(875) == 'JSON \'{"changes":[],"sync_id":875}\''
+    assert fields[1].default == meta_default(875) == 'JSON \'{"changes":[],"sync_id":875}\''
 
 
 def test_parquet_schema_omits_json_column_and_marks_required_columns_not_null() -> None:
     schema = parquet_schema((column("DPS", "VARCHAR2"),))
 
-    assert schema.names == ["_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_generation_id", "DPS"]
-    assert not schema.field("_airbyte_raw_id").nullable
+    assert schema.names == ["_airbyte_extracted_at", "_airbyte_generation_id", "DPS"]
     assert not schema.field("_airbyte_extracted_at").nullable
     assert schema.field("_airbyte_extracted_at").type == pa.timestamp("us", tz="UTC")
     assert schema.field("DPS").nullable
@@ -122,6 +120,25 @@ def test_new_column_is_accepted() -> None:
 def test_removed_column_is_refused() -> None:
     changes = diff_schemas(EXISTING, (BqField("A", "STRING"),))
 
+    with pytest.raises(SchemaChangeError, match="Removidas: \\['B'\\]"):
+        assert_compatible("T", changes)
+
+
+def test_retired_airbyte_raw_id_may_disappear_from_the_destination() -> None:
+    existing = (BqField("_airbyte_raw_id", "STRING", "REQUIRED"), *EXISTING)
+
+    changes = diff_schemas(existing, EXISTING)
+
+    assert changes.removed == ()
+    assert_compatible("T", changes)
+
+
+def test_other_removed_columns_are_still_refused_alongside_the_retired_one() -> None:
+    existing = (BqField("_airbyte_raw_id", "STRING", "REQUIRED"), *EXISTING)
+
+    changes = diff_schemas(existing, (BqField("A", "STRING"),))
+
+    assert changes.removed == ("B",)
     with pytest.raises(SchemaChangeError, match="Removidas: \\['B'\\]"):
         assert_compatible("T", changes)
 

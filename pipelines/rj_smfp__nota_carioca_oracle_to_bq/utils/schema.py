@@ -8,7 +8,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import (
     AIRBYTE_EXTRACTED_AT,
     AIRBYTE_GENERATION_ID,
     AIRBYTE_META,
-    AIRBYTE_RAW_ID,
+    RETIRED_COLUMNS,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import OracleColumn, bq_type, output_type
 
@@ -68,7 +68,6 @@ def build_fields(columns: tuple[OracleColumn, ...], sync_id: int) -> tuple[BqFie
     :raises NotImplementedError: Se alguma coluna tiver tipo não suportado.
     """
     airbyte = (
-        BqField(AIRBYTE_RAW_ID, "STRING", "REQUIRED"),
         BqField(AIRBYTE_EXTRACTED_AT, "TIMESTAMP", "REQUIRED"),
         BqField(AIRBYTE_META, "JSON", "REQUIRED", meta_default(sync_id)),
         BqField(AIRBYTE_GENERATION_ID, "INTEGER"),
@@ -87,7 +86,6 @@ def parquet_schema(columns: tuple[OracleColumn, ...]) -> pa.Schema:
     """
     return pa.schema(
         [
-            pa.field(AIRBYTE_RAW_ID, pa.string(), nullable=False),
             pa.field(AIRBYTE_EXTRACTED_AT, pa.timestamp("us", tz="UTC"), nullable=False),
             pa.field(AIRBYTE_GENERATION_ID, pa.int64()),
             *[pa.field(column.name, output_type(column)) for column in columns],
@@ -98,6 +96,9 @@ def parquet_schema(columns: tuple[OracleColumn, ...]) -> pa.Schema:
 def diff_schemas(existing: tuple[BqField, ...], expected: tuple[BqField, ...]) -> SchemaChanges:
     """Compara, por nome, o schema da tabela atual com o novo.
 
+    Colunas de ``RETIRED_COLUMNS`` que só existem no destino não contam como removidas: a pipeline deixou de
+    gravá-las de propósito, e a troca por copy ``WRITE_TRUNCATE`` as tira da tabela final.
+
     :param existing: Campos da tabela de destino atual.
     :param expected: Campos do schema novo.
     :returns: Colunas acrescentadas, removidas e com tipo alterado.
@@ -106,7 +107,7 @@ def diff_schemas(existing: tuple[BqField, ...], expected: tuple[BqField, ...]) -
     wanted = {field.name: field.field_type for field in expected}
     return SchemaChanges(
         added=tuple(name for name in wanted if name not in current),
-        removed=tuple(name for name in current if name not in wanted),
+        removed=tuple(name for name in current if name not in wanted and name not in RETIRED_COLUMNS),
         changed=tuple(
             f"{name}: {current[name]} → {wanted[name]}"
             for name in wanted

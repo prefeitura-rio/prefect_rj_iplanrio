@@ -1,7 +1,6 @@
 """Conversão vetorizada de lotes do Oracle para as tabelas Arrow gravadas no Parquet."""
 
 import base64
-import os
 from datetime import datetime
 from typing import assert_never
 
@@ -17,9 +16,6 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import (
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.schema import parquet_schema
 
 B64_ALPHABET = np.frombuffer(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", dtype=np.uint8)
-HEX_ALPHABET = np.frombuffer(b"0123456789abcdef", dtype=np.uint8)
-UUID_DASHES = (8, 13, 18, 23)
-UUID_HEX_DESTINATIONS = np.array([i + sum(i >= start for start in (8, 12, 16, 20)) for i in range(32)])
 
 
 def fixed_width_strings(chars: np.ndarray) -> pa.Array:
@@ -95,24 +91,6 @@ def iso_date_strings(values: pa.Array) -> pa.Array:
     return pa.array(text, pa.string(), mask=nulls)
 
 
-def uuid_strings(count: int) -> pa.Array:
-    """Gera ``count`` UUIDs aleatórios (versão 4) em texto, sem laço Python.
-
-    :param count: Quantidade de UUIDs.
-    :returns: Array ``string`` de 36 caracteres por valor.
-    """
-    raw = np.frombuffer(os.urandom(16 * count), dtype=np.uint8).reshape(count, 16).copy()
-    raw[:, 6] = (raw[:, 6] & 0x0F) | 0x40
-    raw[:, 8] = (raw[:, 8] & 0x3F) | 0x80
-    digits = np.empty((count, 32), dtype=np.uint8)
-    digits[:, 0::2] = HEX_ALPHABET[raw >> 4]
-    digits[:, 1::2] = HEX_ALPHABET[raw & 15]
-    chars = np.empty((count, 36), dtype=np.uint8)
-    chars[:, UUID_DASHES] = ord("-")
-    chars[:, UUID_HEX_DESTINATIONS] = digits
-    return fixed_width_strings(chars)
-
-
 def convert_column(column: OracleColumn, values: pa.ChunkedArray | pa.Array) -> pa.Array:
     """Converte uma coluna do lote para o tipo gravado no Parquet.
 
@@ -152,7 +130,6 @@ def to_output_table(batch: pa.Table, columns: tuple[OracleColumn, ...], extracte
         raise ValueError(f"Colunas do lote {batch.column_names} diferem das esperadas {names}")
     count = batch.num_rows
     arrays = [
-        uuid_strings(count),
         pa.repeat(pa.scalar(extracted_at, pa.timestamp("us", tz="UTC")), count),
         pa.repeat(pa.scalar(1, pa.int64()), count),
         *[convert_column(column, batch.column(index)) for index, column in enumerate(columns)],

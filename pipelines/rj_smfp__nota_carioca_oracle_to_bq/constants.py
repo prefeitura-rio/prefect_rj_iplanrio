@@ -11,6 +11,9 @@ AIRBYTE_RAW_ID = "_airbyte_raw_id"
 AIRBYTE_EXTRACTED_AT = "_airbyte_extracted_at"
 AIRBYTE_META = "_airbyte_meta"
 AIRBYTE_GENERATION_ID = "_airbyte_generation_id"
+# Colunas do destino do Airbyte que a pipeline deixou de gravar de propósito; a remoção delas não aborta a carga.
+# _airbyte_raw_id: UUID aleatório por linha, sem uso no dbt, ~13-16% dos bytes enviados ao GCS.
+RETIRED_COLUMNS = frozenset({AIRBYTE_RAW_ID})
 
 # Coluna de cluster de cada tabela, igual à do destino mantido pelo Airbyte; ``_airbyte_extracted_at`` vem depois.
 CLUSTER_KEYS = {

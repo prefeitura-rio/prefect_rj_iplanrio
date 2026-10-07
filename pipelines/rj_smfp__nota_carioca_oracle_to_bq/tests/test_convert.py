@@ -1,7 +1,6 @@
 # ruff: noqa: PLR2004, DTZ001
 import base64
 import random
-import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -14,7 +13,6 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.convert import (
     base64_strings,
     iso_date_strings,
     to_output_table,
-    uuid_strings,
 )
 
 EXTRACTED_AT = datetime(2026, 10, 1, 20, 38, 44, tzinfo=UTC)
@@ -64,15 +62,6 @@ def test_dates_become_iso_strings_without_fraction_or_timezone() -> None:
     assert iso_date_strings(dates).to_pylist() == ["2025-05-15T02:44:00", "2025-10-16T00:00:00", None]
 
 
-def test_uuids_are_valid_version4_and_unique() -> None:
-    values = uuid_strings(1000).to_pylist()
-
-    parsed = [uuid.UUID(value) for value in values]
-    assert {item.version for item in parsed} == {4}
-    assert len(set(values)) == 1000
-    assert all(len(value) == 36 for value in values)
-
-
 def test_batch_becomes_airbyte_shaped_table() -> None:
     columns = (
         OracleColumn("PESSOA_NACIONAL", "RAW", None, None),
@@ -93,7 +82,8 @@ def test_batch_becomes_airbyte_shaped_table() -> None:
 
     table = to_output_table(batch, columns, EXTRACTED_AT)
 
-    assert table.column_names[:3] == ["_airbyte_raw_id", "_airbyte_extracted_at", "_airbyte_generation_id"]
+    assert table.column_names[:2] == ["_airbyte_extracted_at", "_airbyte_generation_id"]
+    assert "_airbyte_raw_id" not in table.column_names
     assert table["_airbyte_extracted_at"].to_pylist() == [EXTRACTED_AT, EXTRACTED_AT]
     assert table["_airbyte_generation_id"].to_pylist() == [1, 1]
     assert table["PESSOA_NACIONAL"].to_pylist() == [base64.b64encode(bytes(range(16))).decode(), None]
