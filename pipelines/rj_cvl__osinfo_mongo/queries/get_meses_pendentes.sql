@@ -13,5 +13,5 @@ FROM `rj-agent-cgm-triagem-nf.brutos_osinfo_mongo.vw_files_pdfs_download` d
 CROSS JOIN corte c
 WHERE d.sem_duplicacao_a_baixar
   AND d.mes_envio <= c.mes_corte
-ORDER BY d.mes_envio
+ORDER BY d.mes_envio, d.filename
 $bq_files_limit_clause

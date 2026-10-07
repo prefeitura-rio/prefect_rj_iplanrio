@@ -36,6 +36,7 @@ def rj_cvl__osinfo_mongo(
     upload_max_workers: int = 50,
     check_indexes_only: bool = False,
     bq_files_limit: int | None = None,
+    max_file_size_mb: int = 200,
 ) -> None:
     """Download and reconstruct PDFs from OSINFO MongoDB by mes_envio.
 
@@ -57,6 +58,8 @@ def rj_cvl__osinfo_mongo(
             check (FILES.chunks and FILES.files).
         bq_files_limit: Optional limit on number of files to process. If set,
             adds a LIMIT clause to the BigQuery query.
+        max_file_size_mb: Files larger than this (MB) are skipped with a warning
+            to protect the pod memory. 0 disables the check.
     """
 
     inject_bd_credentials_task(environment="prod")
@@ -100,6 +103,7 @@ def rj_cvl__osinfo_mongo(
         files_id_batch_size=files_id_batch_size,
         batch_workers=batch_workers,
         upload_max_workers=upload_max_workers,
+        max_file_size_mb=max_file_size_mb,
     )
 
     # Refresh BigQuery external table metadata cache

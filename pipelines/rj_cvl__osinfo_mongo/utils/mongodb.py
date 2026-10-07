@@ -162,6 +162,45 @@ def map_filenames_to_files_ids(filenames: list[str], mongo_config: MongoConnecti
     return result
 
 
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=1, max=2),
+    retry=retry_if_exception_type((AutoReconnect, NetworkTimeout)),
+)
+def fetch_files_lengths(files_ids: list[str], mongo_config: MongoConnectionConfig) -> dict[str, int]:
+    """Fetch the size in bytes (GridFS ``length``) of each file from FILES.files.
+
+    Reads metadata only (no chunks), so it is cheap even for thousands of files.
+
+    Args:
+        files_ids: files_id values (as strings) to look up.
+        mongo_config: MongoDB connection configuration.
+
+    Returns:
+        Dictionary mapping files_id -> length in bytes. Files without a
+        ``length`` field are left out.
+    """
+    if not files_ids:
+        return {}
+
+    client = get_mongo_connection(mongo_config)
+    lengths: dict[str, int] = {}
+
+    try:
+        collection = client[mongo_config.database]["FILES.files"]
+        for batch in _chunk_list(files_ids, 2000):
+            query = {"_id": {"$in": [ObjectId(files_id) for files_id in batch]}}
+            for doc in collection.find(query, {"_id": 1, "length": 1}):
+                length = doc.get("length")
+                if length is not None:
+                    lengths[str(doc["_id"])] = int(length)
+    finally:
+        close_mongo_connection(client)
+
+    logger.info(f"Fetched sizes for {len(lengths)} of {len(files_ids)} files")
+    return lengths
+
+
 def _decode_base64_data(value: Any) -> Any:
     """Decode base64 string to bytes, if needed.
 

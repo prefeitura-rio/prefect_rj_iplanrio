@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from prefect import task
 
-from pipelines.rj_cvl__osinfo_mongo.utils import bigquery, gcs, mongodb, pdf
+from pipelines.rj_cvl__osinfo_mongo.utils import bigquery, gcs, memory, mongodb, pdf
 from pipelines.rj_cvl__osinfo_mongo.utils.log import get_logger
 from pipelines.rj_cvl__osinfo_mongo.utils.mongodb import MongoConnectionConfig
 
@@ -165,6 +165,9 @@ def process_batch_task(
         filename = item["filename"]
         mes_envio = item["mes_envio"]
 
+        # Bound the combined peak memory of concurrent conversions (see utils/memory.py)
+        weight = memory.upload_weight(item.get("length"))
+        memory.UPLOAD_BUDGET.acquire(weight)
         try:
             # Save chunks to GCS
             gcs.save_chunks_to_gcs(file_chunks_df, files_id, bucket_name, base_path)
@@ -184,6 +187,9 @@ def process_batch_task(
                 extra={"error": str(e)},
             )
             return {"status": "error", "filename": filename, "error": str(e)}
+
+        finally:
+            memory.UPLOAD_BUDGET.release(weight)
 
     with ThreadPoolExecutor(max_workers=upload_max_workers) as executor:
         futures = {
@@ -223,6 +229,7 @@ def dump_files_to_gcs_task(
     files_id_batch_size: int = 500,
     batch_workers: int = 5,
     upload_max_workers: int = 50,
+    max_file_size_mb: int = 200,
 ) -> list[dict]:
     """Orchestrate batch processing of files with wave-based parallelism.
 
@@ -235,6 +242,8 @@ def dump_files_to_gcs_task(
         files_id_batch_size: Number of files per batch.
         batch_workers: Number of concurrent batches.
         upload_max_workers: Max workers for parallel uploads within each batch.
+        max_file_size_mb: Files larger than this (MB) are skipped with a warning,
+            because converting them can exhaust the pod memory. 0 disables the check.
 
     Returns:
         List of batch statistics.
@@ -256,6 +265,27 @@ def dump_files_to_gcs_task(
                 )
         else:
             logger.warning(f"No files_id found for filename: {filename}")
+
+    # Look up file sizes (metadata only) and skip files too large for the pod memory
+    lengths = mongodb.fetch_files_lengths([item["files_id"] for item in items], mongo_config)
+    max_bytes = max_file_size_mb * 1_000_000 if max_file_size_mb else None
+    kept_items = []
+    too_large = []
+    for item in items:
+        item["length"] = lengths.get(item["files_id"])
+        if max_bytes and item["length"] and item["length"] > max_bytes:
+            too_large.append(item)
+        else:
+            kept_items.append(item)
+
+    for item in too_large:
+        logger.warning(
+            f"⊘ Skipped (too large): {item['filename']} "
+            f"({item['length'] / 1_000_000:.0f} MB, files_id={item['files_id']}, limit {max_file_size_mb} MB)"
+        )
+    if too_large:
+        logger.warning(f"{len(too_large)} file(s) above {max_file_size_mb} MB were skipped")
+    items = kept_items
 
     logger.info(f"Total items to process: {len(items)}")
 
