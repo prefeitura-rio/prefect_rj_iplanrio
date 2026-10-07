@@ -236,7 +236,7 @@ def dump_files_to_gcs_task(
 
     Args:
         pendentes: DataFrame with pending files (mes_envio, filename).
-        files_map: Dictionary mapping filename -> list of files_id.
+        files_map: Dictionary mapping filename -> list of files_id, newest first.
         mongo_config: MongoDB connection configuration.
         bucket_name: GCS bucket name.
         base_path: Base path in GCS.
@@ -259,14 +259,14 @@ def dump_files_to_gcs_task(
         mes_envio = row["mes_envio"]
 
         if filename in files_map:
-            for files_id in files_map[filename]:
-                items.append(
-                    {
-                        "files_id": files_id,
-                        "filename": filename,
-                        "mes_envio": str(mes_envio),
-                    }
-                )
+            # files_map lists versions newest first; only the latest is downloaded
+            items.append(
+                {
+                    "files_id": files_map[filename][0],
+                    "filename": filename,
+                    "mes_envio": str(mes_envio),
+                }
+            )
         else:
             logger.warning(f"No files_id found for filename: {filename}")
 

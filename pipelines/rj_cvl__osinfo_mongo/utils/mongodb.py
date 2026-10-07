@@ -7,6 +7,7 @@ require basedosdados==2.0.3).
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -123,7 +124,8 @@ def map_filenames_to_files_ids(filenames: list[str], mongo_config: MongoConnecti
         mongo_config: MongoDB connection configuration.
 
     Returns:
-        Dictionary mapping filename -> list of files_id (may have multiple IDs per filename).
+        Dictionary mapping filename -> list of files_id (may have multiple IDs per filename),
+        newest upload first (``uploadDate``, ties broken by ``_id``).
     """
     if not filenames:
         logger.warning("No filenames provided for lookup")
@@ -132,7 +134,7 @@ def map_filenames_to_files_ids(filenames: list[str], mongo_config: MongoConnecti
     logger.info(f"Mapping {len(filenames)} filenames to files_id in MongoDB (sequential, batched)")
 
     client = get_mongo_connection(mongo_config)
-    result: dict[str, list[str]] = {}
+    found: dict[str, list[tuple]] = {}
 
     try:
         db = client[mongo_config.database]
@@ -143,22 +145,27 @@ def map_filenames_to_files_ids(filenames: list[str], mongo_config: MongoConnecti
             logger.info(f"Processing filename batch {batch_idx + 1}/{len(batches)} ({len(batch_filenames)} files)")
 
             query = {"filename": {"$in": batch_filenames}}
-            documents = list(collection.find(query, {"_id": 1, "filename": 1}))
+            documents = list(collection.find(query, {"_id": 1, "filename": 1, "uploadDate": 1}))
 
             for doc in documents:
                 filename = doc.get("filename")
-                files_id = str(doc["_id"])
 
                 if filename is None:
                     continue
 
-                result.setdefault(filename, []).append(files_id)
+                found.setdefault(filename, []).append((doc.get("uploadDate") or datetime.min, doc["_id"]))
 
             logger.info(f"Batch {batch_idx + 1}: found {len(documents)} documents")
     finally:
         close_mongo_connection(client)
 
+    result = {
+        filename: [str(files_id) for _, files_id in sorted(versions, reverse=True)] for filename, versions in found.items()
+    }
     logger.info(f"Total unique filenames mapped: {len(result)}")
+    n_multi = sum(1 for ids in result.values() if len(ids) > 1)
+    if n_multi:
+        logger.info(f"{n_multi} filenames have more than one version in MongoDB; the newest one is used")
     return result
 
 

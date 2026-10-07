@@ -1,4 +1,5 @@
--- Query para buscar arquivos pendentes (sem URI) agrupados por mes_envio
+-- Query para buscar arquivos pendentes (ainda sem PDF no GCS) agrupados por mes_envio.
+-- mes_envio e o ultimo mes em que o arquivo foi enviado (uma linha por filename)
 -- Retorna: mes_envio (DATE), filename (STRING)
 
 WITH corte AS (
@@ -11,7 +12,7 @@ SELECT
   d.filename
 FROM `rj-agent-cgm-triagem-nf.brutos_osinfo_mongo.vw_files_pdfs_download` d
 CROSS JOIN corte c
-WHERE d.sem_duplicacao_a_baixar
+WHERE d.n_arquivos_gcs = 0
   AND d.mes_envio <= c.mes_corte
 ORDER BY d.mes_envio, d.filename
 $bq_files_limit_clause
