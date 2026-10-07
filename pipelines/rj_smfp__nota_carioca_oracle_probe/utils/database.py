@@ -9,6 +9,9 @@ from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.softquery import SoftRow
 DEFAULT_BLOCK_SIZE = 8192
 # (título no relatório, view consultada, arquivo em queries/)
 SECTION_SPECS = (
+    ("Sessão", "dual", "get_session"),
+    ("Privilégios de sistema relevantes (session_privs)", "session_privs", "get_session_privs"),
+    ("EXECUTE em pacotes, direto ou via PUBLIC (all_tab_privs)", "all_tab_privs", "get_package_privs"),
     ("Versão (v$version)", "v$version", "get_version"),
     ("Componentes (product_component_version)", "product_component_version", "get_product_version"),
     ("Banco (v$database)", "v$database", "get_database"),

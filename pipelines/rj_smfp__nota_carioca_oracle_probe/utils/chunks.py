@@ -9,6 +9,8 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 
+import oracledb
+
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     OracleConfig,
     connect,
@@ -16,8 +18,12 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     validate_identifier,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_probe.constants import CHUNK_TASK_PREFIX, QUERIES_ANCHOR
-from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.session import query_rows
+from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.extents import group_extents, range_rowids, read_extents
+from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.session import connect_read_only, query_rows
+from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
+
+logger = get_logger(__name__)
 
 TASK_NAME_UNSAFE = re.compile(r"[^A-Z0-9_]")
 
@@ -93,15 +99,73 @@ def drop_chunk_task(config: OracleConfig, task_name: str) -> None:
         cursor.execute(load_query(QUERIES_ANCHOR, "drop_chunk_task"), {"task_name": task_name})
 
 
-@contextmanager
-def rowid_chunks(request: ChunkRequest) -> Iterator[list[Chunk]]:
-    """Entrega as faixas de ROWID e garante que a tarefa seja apagada ao sair.
+@dataclass(frozen=True)
+class ChunkSet:
+    """Faixas de ROWID de uma tabela e como foram calculadas.
 
-    :param request: Tabela e tamanho das faixas.
-    :yields: Faixas em ordem de ``chunk_id``.
+    :param chunks: Faixas, em ordem.
+    :param source: ``DBMS_PARALLEL_EXECUTE`` ou ``dba_extents`` com o motivo do fallback.
+    """
+
+    chunks: list[Chunk]
+    source: str
+
+
+def drop_chunk_task_if_created(config: OracleConfig, task_name: str) -> None:
+    """Apaga a tarefa depois de uma falha no chunking, caso ela tenha chegado a ser criada.
+
+    :param config: Conexão com o Oracle.
+    :param task_name: Nome da tarefa.
     """
     try:
-        yield read_chunks(request)
+        drop_chunk_task(config, task_name)
+    except oracledb.DatabaseError as error:
+        logger.warning("Tarefa %s não apagada (provavelmente não foi criada): %s", task_name, first_line(error))
+
+
+def first_line(error: oracledb.DatabaseError) -> str:
+    """Resume o erro do Oracle em uma linha, incluindo a causa ``PLS-`` que segue o ``ORA-06550``.
+
+    :param error: Erro do driver.
+    :returns: Texto curto, ex. ``ORA-06550: line 2, column 5: PLS-00201: ...``.
+    """
+    lines = [line.strip() for line in str(error).splitlines() if line.strip()]
+    return " ".join(lines[:2])
+
+
+def extent_chunks(request: ChunkRequest) -> list[Chunk]:
+    """Calcula as faixas a partir dos extents, sem ``DBMS_PARALLEL_EXECUTE`` e sem gravar nada.
+
+    :param request: Tabela e tamanho das faixas.
+    :returns: Faixas numeradas a partir de 1.
+    """
+    with connect_read_only(request.config) as connection, connection.cursor() as cursor:
+        extents = read_extents(cursor, request.schema, request.table)
+    ranges = group_extents(extents, request.chunk_size_blocks)
+    return [Chunk(index, *range_rowids(block_range)) for index, block_range in enumerate(ranges, start=1)]
+
+
+@contextmanager
+def rowid_chunks(request: ChunkRequest) -> Iterator[ChunkSet]:
+    """Entrega as faixas de ROWID; com ``DBMS_PARALLEL_EXECUTE``, apaga a tarefa ao sair.
+
+    Se o pacote falhar (ex.: sem ``EXECUTE``), calcula as faixas pelos extents.
+
+    :param request: Tabela e tamanho das faixas.
+    :yields: Faixas e a forma como foram calculadas.
+    """
+    chunks: list[Chunk] | None = None
+    failure = ""
+    try:
+        chunks = read_chunks(request)
+    except oracledb.DatabaseError as error:
+        failure = first_line(error)
+        drop_chunk_task_if_created(request.config, request.task_name)
+    if chunks is None:
+        yield ChunkSet(extent_chunks(request), f"dba_extents (DBMS_PARALLEL_EXECUTE falhou: {failure})")
+        return
+    try:
+        yield ChunkSet(chunks, "DBMS_PARALLEL_EXECUTE")
     finally:
         drop_chunk_task(request.config, request.task_name)
 
