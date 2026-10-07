@@ -85,6 +85,7 @@ members = [
     "rj-smfp-nota-carioca-bq-to-oracle",
     "rj-smfp-nota-carioca-bq-to-oracle-validation",
     "rj-smfp-nota-carioca-oracle-probe",
+    "rj-smfp-nota-carioca-oracle-to-bq",
     "rj-smfp-porte-empresa",
     "rj-smfp-sigma",
     "rj-smi-siscob",
@@ -5513,6 +5514,29 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "google-cloud-storage", specifier = ">=2.10.0" },
+    { name = "numpy", specifier = ">=2.0.0" },
+    { name = "oracledb", specifier = ">=4.0.1" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "pyarrow", specifier = ">=24.0.0" },
+]
+
+[[package]]
+name = "rj-smfp-nota-carioca-oracle-to-bq"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_smfp__nota_carioca_oracle_to_bq" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-storage" },
+    { name = "numpy" },
+    { name = "oracledb" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "pyarrow" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.41.0" },
     { name = "google-cloud-storage", specifier = ">=2.10.0" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "oracledb", specifier = ">=4.0.1" },
