@@ -50,6 +50,49 @@ class SchemaChangeError(ValueError):
     """O schema novo remove coluna ou muda tipo em relação ao destino atual."""
 
 
+class LayoutError(ValueError):
+    """O particionamento ou o cluster da tabela final não pode ser reproduzido ou não bate com o da temporária."""
+
+
+@dataclass(frozen=True)
+class TableLayout:
+    """Particionamento por tempo e cluster de uma tabela do BigQuery.
+
+    O copy job ``WRITE_TRUNCATE`` só troca a tabela final por uma temporária de layout igual.
+
+    :param partition_type: Granularidade da partição por tempo (``DAY``...); ``None`` se a tabela não é particionada.
+    :param partition_field: Coluna da partição; ``None`` na partição por data de ingestão ou sem partição.
+    :param clustering: Colunas de cluster, em ordem; vazio se não há cluster.
+    """
+
+    partition_type: str | None
+    partition_field: str | None
+    clustering: tuple[str, ...]
+
+    def describe(self) -> str:
+        """Descreve o layout para o log e as mensagens de erro."""
+        partition = (
+            "sem partição" if self.partition_type is None else f"{self.partition_type} em {self.partition_field}"
+        )
+        return f"partição {partition}; cluster {list(self.clustering)}"
+
+
+@dataclass(frozen=True)
+class TableState:
+    """Estado de uma tabela do BigQuery lido da API.
+
+    :param fields: Schema da tabela.
+    :param layout: Particionamento e cluster.
+    :param labels: Labels da tabela.
+    :param num_rows: Linhas segundo os metadados.
+    """
+
+    fields: tuple[BqField, ...]
+    layout: TableLayout
+    labels: dict[str, str]
+    num_rows: int
+
+
 def meta_default(sync_id: int) -> str:
     """Monta o ``DEFAULT`` de ``_airbyte_meta``.
 
@@ -127,4 +170,37 @@ def assert_compatible(table_id: str, changes: SchemaChanges) -> None:
         raise SchemaChangeError(
             f"{table_id}: o schema novo é incompatível com o destino atual; nada foi alterado no BigQuery. "
             f"Removidas: {list(changes.removed)}; tipo alterado: {list(changes.changed)}."
+        )
+
+
+def assert_layout_fields(table_id: str, layout: TableLayout, fields: tuple[BqField, ...]) -> None:
+    """Confere que a coluna de partição e as de cluster existem no schema novo.
+
+    :param table_id: Nome da tabela, usado na mensagem.
+    :param layout: Layout que a tabela temporária vai ter.
+    :param fields: Schema novo.
+    :raises LayoutError: Se a coluna de partição ou alguma coluna de cluster não existir no schema novo.
+    """
+    names = {field.name for field in fields}
+    needed = (() if layout.partition_field is None else (layout.partition_field,)) + layout.clustering
+    missing = [name for name in needed if name not in names]
+    if missing:
+        raise LayoutError(
+            f"{table_id}: a tabela final usa {layout.describe()}, mas {missing} não existe no schema novo; "
+            "nada foi alterado no BigQuery."
+        )
+
+
+def assert_layouts_match(table_id: str, temp: TableLayout, final: TableLayout) -> None:
+    """Confere que a temporária tem o mesmo particionamento e cluster da final, requisito do copy job.
+
+    :param table_id: Nome da tabela, usado na mensagem.
+    :param temp: Layout da tabela temporária.
+    :param final: Layout da tabela final.
+    :raises LayoutError: Se os layouts divergirem.
+    """
+    if temp != final:
+        raise LayoutError(
+            f"{table_id}: layout incompatível, temporária com {temp.describe()} e final com {final.describe()}; "
+            "o copy job falharia e nenhuma tabela foi publicada."
         )
