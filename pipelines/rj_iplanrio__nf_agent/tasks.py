@@ -15,38 +15,6 @@ from .utils.tracking import active_sessions
 logger = get_logger(__name__)
 
 
-def set_own_schedule_active(active: bool) -> None:
-    """Ativa ou pausa o agendamento do deployment que está rodando este flow.
-
-    Sem efeito fora de um deployment (execução local, CLI, testes), onde
-    ``deployment.id`` é ``None``. Usado para o agendamento só ficar ativo
-    enquanto há sessão em andamento — ``submit_task`` reativa ao criar
-    sessão nova, ``poll_task`` pausa quando não sobra nenhuma.
-
-    :param active: ``True`` para reativar, ``False`` para pausar.
-    """
-    if deployment.id is None:
-        return
-    with get_client(sync_client=True) as client:
-        for schedule in client.read_deployment_schedules(deployment.id):
-            if schedule.active != active:
-                client.update_deployment_schedule(deployment.id, schedule.id, active=active)
-                logger.info("Agendamento %s: %s", schedule.id, "reativado" if active else "pausado")
-
-
-def trigger_immediate_poll() -> None:
-    """Dispara agora um novo run do próprio deployment (acao=acompanhar).
-
-    Evita esperar até o próximo tick do agendamento (até 1h) depois de uma
-    submissão — o novo run entra na fila e roda assim que este terminar
-    (``concurrency_limit: 1``). Sem efeito fora de um deployment.
-    """
-    if deployment.id is None:
-        return
-    with get_client(sync_client=True) as client:
-        client.create_flow_run_from_deployment(deployment.id, parameters={"acao": "acompanhar"})
-
-
 @task
 def inject_credentials_task() -> None:
     """Configura as credenciais GCP a partir do Infisical."""
@@ -59,8 +27,9 @@ def submit_task(
 ) -> SubmitSummary:
     """Submete todos os PDFs pendentes da origem (ou da base padrão + mes_envio).
 
-    Reativa o agendamento e dispara um acompanhamento imediato se alguma
-    sessão foi criada. Uma falha transitória do Bifrost (ex.: ``no healthy
+    Reativar o agendamento e disparar o acompanhamento é feito à parte, por
+    ``activate_schedule_task``, que o flow chama mesmo se esta task falhar.
+    Uma falha transitória do Bifrost (ex.: ``no healthy
     upstream``) no meio da submissão de centenas de PDFs derrubava a task
     inteira sem deixar rastro em ``nf_batch_jobs`` — as sessões já criadas
     até ali ficavam registradas, mas o resto nunca era submetido. As
@@ -71,25 +40,56 @@ def submit_task(
     settings = load_settings()
     resolved_origem = resolve_origem(origem, mes_envio, settings)
     request = SubmitRequest(input_uri=resolved_origem, max_pages=max_paginas, processing_version=versao_processamento)
-    summary = submit_pending(build_client(), settings, request)
-    if summary.session_ids:
-        set_own_schedule_active(True)
-        trigger_immediate_poll()
-    return summary
+    return submit_pending(build_client(), settings, request)
 
 
 @task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=[30, 60, 120])
 def poll_task() -> PollSummary:
     """Avança as sessões ativas que terminaram.
 
-    Pausa o próprio agendamento se não sobrar nenhuma sessão ativa depois
-    de avançar — só ``submit_task`` reativa, ao criar sessão nova. As
-    tentativas automáticas em caso de falha transitória (Bifrost/GCS) são
+    As tentativas automáticas em caso de falha transitória (Bifrost/GCS) são
     seguras pelo mesmo motivo de ``submit_task``: cada tentativa reconsulta
     ``active_sessions`` do zero, sem depender de estado da tentativa anterior.
     """
     settings = load_settings()
-    summary = poll_sessions(build_client(), settings)
-    if not active_sessions(settings.nf_batch_jobs_table):
-        set_own_schedule_active(False)
-    return summary
+    return poll_sessions(build_client(), settings)
+
+
+@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=[30, 60, 120])
+def activate_schedule_task() -> None:
+    """Reativa o agendamento e dispara um acompanhamento se houver sessão ativa.
+
+    Decide por ``active_sessions`` (o mesmo critério com que ``pause_schedule_if_idle_task``
+    pausa), não pelo resumo da submissão: numa repetição da submissão, ``submit_pending``
+    considera tudo "em voo" e devolveria zero sessões novas, deixando as já criadas sem
+    acompanhamento. O flow chama esta task em ``finally``, então ela roda também quando a
+    submissão falha depois de criar sessões. Sem efeito fora de um deployment.
+    """
+    settings = load_settings()
+    if deployment.id is None or not active_sessions(settings.nf_batch_jobs_table):
+        return
+    with get_client(sync_client=True) as client:
+        for schedule in client.read_deployment_schedules(deployment.id):
+            if not schedule.active:
+                client.update_deployment_schedule(deployment.id, schedule.id, active=True)
+                logger.info("Agendamento %s: reativado", schedule.id)
+        # Evita esperar até o próximo tick do agendamento (até 15 min) depois de uma submissão;
+        # o novo run entra na fila e roda assim que este terminar (``concurrency_limit: 1``).
+        client.create_flow_run_from_deployment(deployment.id, parameters={"acao": "acompanhar"})
+
+
+@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=[30, 60, 120])
+def pause_schedule_if_idle_task() -> None:
+    """Pausa o agendamento do próprio deployment se não sobrar sessão ativa.
+
+    Só ``activate_schedule_task`` reativa, ao encontrar sessão ativa depois de uma
+    submissão. Sem efeito fora de um deployment.
+    """
+    settings = load_settings()
+    if deployment.id is None or active_sessions(settings.nf_batch_jobs_table):
+        return
+    with get_client(sync_client=True) as client:
+        for schedule in client.read_deployment_schedules(deployment.id):
+            if schedule.active:
+                client.update_deployment_schedule(deployment.id, schedule.id, active=False)
+                logger.info("Agendamento %s: pausado", schedule.id)

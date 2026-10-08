@@ -60,8 +60,13 @@ def env(pdf_bytes):
         patch.object(submit, "submit_jsonl", side_effect=lambda *a, **k: next(batches)) as submit_jsonl,  # noqa: ARG005
         patch.object(submit, "append_event") as append_event,
     ):
-        yield {"list_pdfs": list_pdfs, "done": done, "in_flight": in_flight,
-               "submit_jsonl": submit_jsonl, "append_event": append_event}
+        yield {
+            "list_pdfs": list_pdfs,
+            "done": done,
+            "in_flight": in_flight,
+            "submit_jsonl": submit_jsonl,
+            "append_event": append_event,
+        }
 
 
 def test_requires_origem():
@@ -118,8 +123,10 @@ def test_max_pages_stops_before_exceeding(env):
 
 def test_unreadable_pdf_is_skipped(env):
     env["list_pdfs"].return_value = refs("a1", "b1")
-    with patch.object(submit, "download_bytes", side_effect=[b"lixo", b"%PDF"]), \
-         patch.object(submit, "split_pdf_pages", side_effect=[ValueError("PDF ilegível"), ["QUJD"]]):
+    with (
+        patch.object(submit, "download_bytes", side_effect=[b"lixo", b"%PDF"]),
+        patch.object(submit, "split_pdf_pages", side_effect=[ValueError("PDF ilegível"), ["QUJD"]]),
+    ):
         summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.skipped == ["a1"]
     assert summary.pdf_count == 1

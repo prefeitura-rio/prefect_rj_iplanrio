@@ -9,6 +9,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from openai import OpenAI
+from openai.types import Batch
 
 from .bifrost import read_batch_output, retrieve_batch, submit_jsonl
 from .categories import NF_CATEGORIES
@@ -115,7 +116,7 @@ def finish_session(
     logger.info("Sessão %s concluída: %d linhas em %s", start.session_id, len(rows), uri)
 
 
-def advance_classification(client: OpenAI, settings: Settings, event: JobEvent, batch) -> bool:
+def advance_classification(client: OpenAI, settings: Settings, event: JobEvent, batch: Batch) -> bool:
     """Trata uma classificação concluída: submete a extração ou finaliza se não houver NF.
 
     :param client: Cliente do Bifrost.
@@ -161,7 +162,7 @@ def advance_classification(client: OpenAI, settings: Settings, event: JobEvent, 
     return True
 
 
-def finish_extraction(client: OpenAI, settings: Settings, event: JobEvent, batch) -> None:
+def finish_extraction(client: OpenAI, settings: Settings, event: JobEvent, batch: Batch) -> None:
     """Trata uma extração concluída lendo as duas saídas direto do Vertex.
 
     :param client: Cliente do Bifrost.
@@ -211,8 +212,13 @@ def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
             try:
                 append_event(
                     settings.nf_batch_jobs_table,
-                    JobEvent(event.session_id, event.phase, event.batch_id, STATE_FAILED,
-                             error=str(getattr(batch, "errors", None) or batch.status)),
+                    JobEvent(
+                        event.session_id,
+                        event.phase,
+                        event.batch_id,
+                        STATE_FAILED,
+                        error=str(getattr(batch, "errors", None) or batch.status),
+                    ),
                 )
             except Exception as exc:
                 errors.append(f"sessão {event.session_id} ({event.phase}): {exc}\n{traceback.format_exc()}")

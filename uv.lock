@@ -5029,7 +5029,6 @@ dependencies = [
     { name = "prefect-docker" },
     { name = "prefect-rj-iplanrio" },
     { name = "pymupdf" },
-    { name = "python-dotenv" },
 ]
 
 [package.optional-dependencies]
@@ -5047,7 +5046,6 @@ requires-dist = [
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "pymupdf", specifier = ">=1.23.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "python-dotenv", specifier = ">=1.0.0" },
 ]
 provides-extras = ["dev"]
 

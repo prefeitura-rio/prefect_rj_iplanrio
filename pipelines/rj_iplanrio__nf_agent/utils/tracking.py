@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
 from google.cloud import bigquery
+from google.cloud.bigquery import Row
 
 from .bq import insert_row, run_query
 from .pdf import PdfPages
@@ -65,7 +66,7 @@ class JobEvent:
     context: SessionContext | None = None
 
 
-def event_from_row(row) -> JobEvent:
+def event_from_row(row: Row) -> JobEvent:
     """Converte uma linha de resultado do BigQuery.
 
     :param row: Linha com as colunas de ``nf_batch_jobs``.

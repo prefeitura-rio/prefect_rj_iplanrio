@@ -18,20 +18,25 @@ para a criação do logger — do contrário sempre cairia no fallback.
 """
 
 from logging import Logger
+from typing import Any
 
 from prefect.exceptions import MissingContextError
 from prefect.logging import get_run_logger
 
-from prefect_rj_iplanrio.logging import get_logger as _get_shared_logger
+from prefect_rj_iplanrio.logging import get_logger as get_shared_logger
 
 
-class _VisibleLogger:
+class VisibleLogger:
     """Repassa cada chamada para o run logger do Prefect quando disponível."""
 
     def __init__(self, name: str) -> None:
-        self._fallback = _get_shared_logger(name)
+        """Guarda o logger compartilhado como destino fora de um run.
 
-    def _resolve(self) -> Logger:
+        :param name: Nome do módulo, repassado ao ``get_logger`` compartilhado.
+        """
+        self.fallback = get_shared_logger(name)
+
+    def resolve(self) -> Logger:
         """Escolhe o logger de destino no momento da chamada.
 
         :returns: O run logger do Prefect dentro de um flow/task; o logger
@@ -40,15 +45,15 @@ class _VisibleLogger:
         try:
             return get_run_logger()
         except MissingContextError:
-            return self._fallback
+            return self.fallback
 
-    def __getattr__(self, item: str):
+    def __getattr__(self, item: str) -> Any:
         """Encaminha qualquer atributo/método para o logger resolvido na hora.
 
         :param item: Nome do atributo (``info``, ``warning``, ``error`` etc.).
         :returns: O atributo correspondente do logger resolvido.
         """
-        return getattr(self._resolve(), item)
+        return getattr(self.resolve(), item)
 
 
 def get_logger(name: str) -> Logger:
@@ -58,4 +63,4 @@ def get_logger(name: str) -> Logger:
     :returns: Logger cujas chamadas aparecem na UI do Prefect durante um run,
         e caem no logger padrão do workspace fora de um run.
     """
-    return _VisibleLogger(name)  # type: ignore[return-value]
+    return VisibleLogger(name)  # type: ignore[return-value]

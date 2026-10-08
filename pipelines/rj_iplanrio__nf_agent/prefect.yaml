@@ -34,7 +34,7 @@ deployments:
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     concurrency_limit: 1
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
@@ -44,17 +44,6 @@ deployments:
         env:
           # A imagem não tem .git; o commit vai por variável para rastrear a versão nas linhas de saída.
           GIT_COMMIT_SHA: "{{ get-commit-hash.stdout }}"
-    # Desvio deliberado do STYLEGUIDE §9.3 (staging sem schedules): sem isso,
-    # acompanhar uma sessão em andamento exige disparo manual repetido. O
-    # parâmetro padrão do flow (acao=acompanhar) garante que o schedule nunca
-    # submete PDF novo sozinho — só submeter continua manual. tasks.py pausa
-    # este agendamento quando não sobra sessão ativa e reativa ao submeter,
-    # então o intervalo aqui só importa enquanto algo está de fato rodando.
-    schedules:
-      - interval: 900
-        anchor_date: "2025-01-01T00:00:00"
-        timezone: America/Sao_Paulo
-        slug: acompanhar-sessoes
 
   - name: rj-iplanrio--nf-agent--prod
     tags:
@@ -65,7 +54,7 @@ deployments:
     entrypoint: pipelines/rj_iplanrio__nf_agent/flow.py:rj_iplanrio__nf_agent
     concurrency_limit: 1
     work_pool:
-      name: default-pool
+      name: onprem-pool
       work_queue_name: default
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"

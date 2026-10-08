@@ -45,8 +45,16 @@ def io(vertex_row):
         patch.object(poll, "append_event", side_effect=lambda table, event: appended.append(event)),  # noqa: ARG005
         patch.object(poll, "write_ndjson", return_value="gs://out-bkt/x.ndjson") as write,
     ):
-        yield SimpleNamespace(active=active, retrieve=retrieve, read=read, load_prompts=load_prompts,
-                              submit_jsonl=submit_jsonl, write=write, appended=appended, row=vertex_row)
+        yield SimpleNamespace(
+            active=active,
+            retrieve=retrieve,
+            read=read,
+            load_prompts=load_prompts,
+            submit_jsonl=submit_jsonl,
+            write=write,
+            appended=appended,
+            row=vertex_row,
+        )
 
 
 def test_waits_on_in_progress_and_tolerates_status_errors(io):
@@ -105,8 +113,10 @@ def test_classification_done_submits_extraction_from_echoed_pages(io):
 def test_classification_without_nf_finishes_directly(io):
     io.active.return_value = [START]
     io.retrieve.return_value = batch("completed")
-    io.read.return_value = [io.row("doc:1", '{"categoria": "Nenhuma das Opções"}'),
-                            io.row("doc:2", '{"categoria": "Nenhuma das Opções"}')]
+    io.read.return_value = [
+        io.row("doc:1", '{"categoria": "Nenhuma das Opções"}'),
+        io.row("doc:2", '{"categoria": "Nenhuma das Opções"}'),
+    ]
     summary = poll.poll_sessions(MagicMock(), SETTINGS)
     assert summary.finished == ["s1"]
     io.submit_jsonl.assert_not_called()
@@ -150,8 +160,10 @@ def test_legacy_session_without_context(io):
     legacy_start = JobEvent("s1", PHASE_CLASSIFICATION, "cls-batch", "validating")
     io.active.return_value = [legacy_start]
     io.retrieve.return_value = batch("completed")
-    io.read.return_value = [io.row("doc:1", '{"categoria": "Nenhuma das Opções"}'),
-                            io.row("doc:3", '{"categoria": "Nenhuma das Opções"}')]
+    io.read.return_value = [
+        io.row("doc:1", '{"categoria": "Nenhuma das Opções"}'),
+        io.row("doc:3", '{"categoria": "Nenhuma das Opções"}'),
+    ]
     with patch.object(poll, "session_start", return_value=legacy_start):
         summary = poll.poll_sessions(MagicMock(), SETTINGS)
     assert summary.finished == ["s1"]

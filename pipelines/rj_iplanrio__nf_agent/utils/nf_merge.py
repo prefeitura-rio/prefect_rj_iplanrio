@@ -1,7 +1,5 @@
 """Pós-processamento das NFs extraídas: fusão por número e vínculo NFST ↔ Fatura."""
 
-from __future__ import annotations
-
 import math
 import re
 from collections import defaultdict
@@ -65,11 +63,12 @@ def normalize_numero_conta(conta: str | None) -> str | None:
 
 
 def normalize_mes_referencia(mes: str | None) -> str | None:
-    """
-    Normaliza mês de referência para o formato MM/YYYY.
+    """Normaliza o mês de referência para o formato ``MM/YYYY``.
 
-    Aceita: "05/2024", "5/2024", "2024-05", "05-2024".
-    Retorna None se não reconhecido.
+    Aceita ``"05/2024"``, ``"5/2024"``, ``"2024-05"`` e ``"05-2024"``.
+
+    :param mes: Texto do mês de referência, ou ``None``.
+    :returns: ``"MM/YYYY"``, ou ``None`` se não reconhecido.
     """
     if not mes:
         return None
@@ -94,12 +93,12 @@ def normalize_mes_referencia(mes: str | None) -> str | None:
 
 
 def mes_from_data_servico(data_servico: str | None) -> str | None:
-    """
-    Extrai o mês/ano de data_servico para usar como fallback quando
-    mes_referencia não está disponível na NFST.
+    """Extrai o mês/ano de ``data_servico`` para usar quando ``mes_referencia`` falta na NFST.
 
-    Aceita: "25/04/2024 a 24/05/2024", "01/2024", "01/04/2024".
-    Retorna: "MM/YYYY" do primeiro mês encontrado, ou None.
+    Aceita ``"25/04/2024 a 24/05/2024"``, ``"01/2024"`` e ``"01/04/2024"``.
+
+    :param data_servico: Texto da data de serviço, ou ``None``.
+    :returns: ``"MM/YYYY"`` do primeiro mês encontrado, ou ``None``.
     """
     if not data_servico:
         return None
@@ -115,11 +114,21 @@ def mes_from_data_servico(data_servico: str | None) -> str | None:
 
 
 def is_nfst(doc: dict) -> bool:
+    """Indica se o documento é uma NFST (nota fiscal de serviço de telecomunicações).
+
+    :param doc: Documento extraído, com ``tipo_documento``.
+    :returns: ``True`` se o tipo for NFST.
+    """
     tipo = (doc.get("tipo_documento") or "").strip().upper()
     return tipo == "NFST"
 
 
 def is_fatura_telecom(doc: dict) -> bool:
+    """Indica se o documento é uma fatura de telecomunicações (tem ``numero_conta``).
+
+    :param doc: Documento extraído, com ``tipo_documento`` e ``numero_conta``.
+    :returns: ``True`` se for fatura com número de conta.
+    """
     tipo = (doc.get("tipo_documento") or "").strip().lower()
     return tipo == "fatura" and bool(doc.get("numero_conta"))
 
@@ -133,20 +142,21 @@ def find_fatura_for_nfst(
     nfst: dict,
     faturas: list[dict],
 ) -> tuple[dict | None, str | None]:
-    """
-    Encontra a Fatura de telecomunicações que corresponde a esta NFST.
+    """Encontra a Fatura de telecomunicações que corresponde a esta NFST.
 
     Estratégia de match (em ordem de prioridade):
-    1. numero_conta exato (normalizado) + mes_referencia exato → match definitivo
-    2. numero_conta exato + mes_referencia derivado de data_servico da NFST
-    3. numero_conta exato sem desambiguação por mês (quando há apenas 1 candidata)
 
-    Retorna:
-        (fatura_dict, descricao_match) ou (None, None) se não encontrada.
+    1. ``numero_conta`` exato (normalizado) + ``mes_referencia`` exato → match definitivo
+    2. ``numero_conta`` exato + ``mes_referencia`` derivado de ``data_servico`` da NFST
+    3. ``numero_conta`` exato sem desambiguação por mês (quando há apenas 1 candidata)
+
+    :param nfst: Documento NFST a vincular.
+    :param faturas: Faturas candidatas.
+    :returns: ``(fatura, descricao_match)``, ou ``(None, None)`` se não encontrada.
     """
     nfst_conta = normalize_numero_conta(nfst.get("numero_conta"))
     if not nfst_conta:
-        logger.warning(f"NFST pág.{nfst.get('pagina')} sem numero_conta — merge impossível")
+        logger.warning("NFST pág.%s sem numero_conta — merge impossível", nfst.get("pagina"))
         return None, None
 
     candidatas = [f for f in faturas if normalize_numero_conta(f.get("numero_conta")) == nfst_conta]
@@ -249,9 +259,9 @@ def merge_nfst_with_fatura(extracted_nfs: list[dict]) -> list[dict]:
         merged_count += 1
 
     if merged_count:
-        logger.warning(f"NFST merge concluído: {merged_count}/{len(nfsts_a_mergear)} NFST(s) preenchidas")
+        logger.warning("NFST merge concluído: %d/%d NFST(s) preenchidas", merged_count, len(nfsts_a_mergear))
     else:
-        logger.warning(f"NFST merge: nenhuma das {len(nfsts_a_mergear)} NFST(s) pôde ser vinculada")
+        logger.warning("NFST merge: nenhuma das %d NFST(s) pôde ser vinculada", len(nfsts_a_mergear))
 
     return extracted_nfs
 

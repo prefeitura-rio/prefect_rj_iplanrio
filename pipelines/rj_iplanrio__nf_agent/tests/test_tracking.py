@@ -43,8 +43,13 @@ def test_active_sessions_maps_rows():
 
 
 def test_session_start_parses_context_and_requires_a_row():
-    row = {"session_id": "s1", "phase": "classification", "bifrost_batch_id": "b", "state": "submitted",
-           "contexto": CONTEXT.to_json()}
+    row = {
+        "session_id": "s1",
+        "phase": "classification",
+        "bifrost_batch_id": "b",
+        "state": "submitted",
+        "contexto": CONTEXT.to_json(),
+    }
     with patch.object(tracking, "run_query", return_value=[row]):
         assert tracking.session_start("p.d.t", "s1").context == CONTEXT
     with patch.object(tracking, "run_query", return_value=[]), pytest.raises(RuntimeError, match="s1"):

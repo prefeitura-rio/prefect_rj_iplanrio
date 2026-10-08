@@ -3,9 +3,9 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Any
 
 from openai import OpenAI
+from openai.types import Batch
 
 from .. import constants
 from .storage import download_text
@@ -71,7 +71,7 @@ def submit_jsonl(client: OpenAI, data: bytes, filename: str, bucket: str) -> Sub
     return SubmittedBatch(batch_id=batch.id, input_file_id=uploaded.id)
 
 
-def retrieve_batch(client: OpenAI, batch_id: str) -> Any:
+def retrieve_batch(client: OpenAI, batch_id: str) -> Batch:
     """Consulta o estado de um batch.
 
     :param client: Cliente do Bifrost.

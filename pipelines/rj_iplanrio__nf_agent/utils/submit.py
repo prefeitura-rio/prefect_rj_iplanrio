@@ -158,7 +158,12 @@ def submit_pending(client: OpenAI, settings: Settings, request: SubmitRequest) -
     pending = [ref for ref in refs if ref.name not in done and ref.name not in in_flight]
     logger.info(
         "Origem %s: %d PDFs, %d já processados na versão %s, %d em voo, %d pendentes",
-        request.input_uri, len(refs), len(done), version, len(in_flight & {ref.name for ref in refs}), len(pending),
+        request.input_uri,
+        len(refs),
+        len(done),
+        version,
+        len(in_flight & {ref.name for ref in refs}),
+        len(pending),
     )
 
     run_id = str(uuid.uuid4())
