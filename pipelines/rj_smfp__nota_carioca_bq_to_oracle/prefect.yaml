@@ -58,6 +58,23 @@ deployments:
     dataset_id: nota_carioca
     # dbt antes da carga (falha do dbt falha a carga); para carregar sem dbt, Custom run com run_dbt=false.
     run_dbt: true
+    # Só as tabelas já homologadas no Oracle. Sem esta lista a carga pegaria todas as tabelas do dataset,
+    # inclusive MVT_NOTAS_NACIONAIS_DETALHES, que ainda não foi liberada (DDL, espaço e prazo a combinar).
+    table_ids:
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
+    # dbt só dos models dessas duas tabelas (e dos testes deles). A tag:nota_carioca inclui o model novo, cuja
+    # query passa do timeout de 5 min do profile. Precisa da lista completa: a pipeline não mescla com os padrões.
+    dbt_parameters:
+      command: build
+      select: mart_nota_carioca__notas_nacionais_exigiveis mart_nota_carioca__notas_nacionais_exigiveis_detalhes
+      send_discord_report: false
+      github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
+      bigquery_project: rj-iplanrio
+      target: prod
+      gcs_buckets:
+        prod: rj-iplanrio_dbt
+        dev: rj-iplanrio-dev_dbt
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -69,5 +86,6 @@ deployments:
   schedules:
   - cron: "0 9,18 * * *"
     timezone: America/Sao_Paulo
-    active: true
+    # Desativada em prod pela UI; mantida desativada para o deploy não religar a agenda sem decisão explícita.
+    active: false
     slug: nota-carioca-bq-to-oracle-9h-18h
