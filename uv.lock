@@ -79,7 +79,6 @@ members = [
     "rj-sme-educacao-basica",
     "rj-smfp-adm-instrumentos-firmados",
     "rj-smfp-atividade-economica",
-    "rj-smfp-crf",
     "rj-smfp-dump-db-ergon",
     "rj-smfp-iptu-inadimplentes",
     "rj-smfp-nota-carioca-bq-to-oracle",
@@ -5412,17 +5411,6 @@ requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 name = "rj-smfp-atividade-economica"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_smfp__atividade_economica" }
-dependencies = [
-    { name = "prefect-rj-iplanrio" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
-
-[[package]]
-name = "rj-smfp-crf"
-version = "1.0.0"
-source = { virtual = "pipelines/rj_smfp__crf" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
 ]

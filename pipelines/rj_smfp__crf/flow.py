@@ -1,4 +1,4 @@
-"""Flow for rj_smfp__crf..."""
+"""Flow for rj_smfp__crf.."""
 
 from loguru import logger
 from prefect import flow
