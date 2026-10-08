@@ -10,7 +10,7 @@ import pandas as pd
 from google.cloud import bigquery
 from google.cloud.storage import Bucket, Client
 from iplanrio.pipelines_utils.pandas import to_partitions
-from loguru import logger
+from iplanrio.pipelines_utils.logging import log
 from prefect_rj_iplanrio.sql import load_query
 
 from pipelines.rj_smfp__crf.constants import (
@@ -39,10 +39,7 @@ def get_max_date_from_bigquery(
     :returns: Data máxima como ``datetime.date`` ou ``None`` se a tabela estiver vazia.
     :raises Exception: Se houver erro ao executar a query.
     """
-    logger.info(
-        "Obtendo data máxima de partição do BigQuery: {}.{}.{}",
-        project_id, dataset_id, table_id,
-    )
+    log(f"Obtendo data máxima de partição do BigQuery: {project_id}.{dataset_id}.{table_id}")
 
     try:
         query = load_query(
@@ -60,14 +57,14 @@ def get_max_date_from_bigquery(
         for row in results:
             max_date = row.max_data_particao
             if max_date:
-                logger.info("Data máxima de partição encontrada: %s", max_date)
+                log(f"Data máxima de partição encontrada: {max_date}")
                 return max_date
             else:
-                logger.info("Nenhuma data de partição encontrada na tabela")
+                log("Nenhuma data de partição encontrada na tabela")
                 return None
 
     except Exception as e:
-        logger.error("Erro ao obter data máxima de partição do BigQuery: %s", e)
+        log(f"Erro ao obter data máxima de partição do BigQuery: {e}", level="error")
         raise
 
 
@@ -91,7 +88,7 @@ def extract_date_from_blob_name(blob_name: str) -> date | None:
             year = int(date_str[4:8])
             return date(year, month, day)
         except (ValueError, TypeError):
-            logger.warning("Data inválida extraída de '{}': {}", blob_name, date_str)
+            log(f"Data inválida extraída de '{blob_name}': {date_str}", level="warning")
     return None
 
 
@@ -128,7 +125,7 @@ def list_zip_files_in_gcs_folder(
     :returns: Lista de nomes de blob (caminhos completos) para arquivos ZIP filtrados.
     """
 
-    def _parse_date(value: date | str | None, param_name: str) -> date | None:
+    def parse_date(value: date | str | None, param_name: str) -> date | None:
         if value is None:
             return None
         if isinstance(value, date):
@@ -136,30 +133,25 @@ def list_zip_files_in_gcs_folder(
         try:
             return date.fromisoformat(str(value))
         except ValueError:
-            raise ValueError(
-                f"Formato de data inválido para '{param_name}': '{value}'. "
-                "Use o formato YYYY-MM-DD."
-            )
+            raise ValueError(f"Formato de data inválido para '{param_name}': '{value}'. Use o formato YYYY-MM-DD.")
 
     # Compatibilidade: max_date_from_bq equivale a data_inicio
     if data_inicio is None and max_date_from_bq is not None:
         data_inicio = max_date_from_bq
 
-    data_inicio = _parse_date(data_inicio, "data_inicio")
-    data_fim = _parse_date(data_fim, "data_fim")
+    data_inicio = parse_date(data_inicio, "data_inicio")
+    data_fim = parse_date(data_fim, "data_fim")
 
-    logger.info(
-        "Listando arquivos ZIP do bucket '{}' com prefixo '{}' (data_inicio={}, data_fim={})",
-        bucket.name, folder_prefix, data_inicio, data_fim,
+    log(
+        f"Listando arquivos ZIP do bucket '{bucket.name}' com prefixo '{folder_prefix}' (data_inicio={data_inicio}, data_fim={data_fim})"
     )
 
     blobs = bucket.list_blobs(prefix=folder_prefix)
     zip_blobs = [
-        blob.name for blob in blobs
-        if blob.name.split("/")[-1].startswith("BX-") and blob.name.endswith(".zip")
+        blob.name for blob in blobs if blob.name.split("/")[-1].startswith("BX-") and blob.name.endswith(".zip")
     ]
 
-    logger.info("Total de arquivos ZIP encontrados: {}", len(zip_blobs))
+    log(f"Total de arquivos ZIP encontrados: {len(zip_blobs)}")
 
     if data_inicio is None and data_fim is None:
         return zip_blobs
@@ -168,25 +160,23 @@ def list_zip_files_in_gcs_folder(
     for blob_name in zip_blobs:
         file_date = extract_date_from_blob_name(blob_name)
         if file_date is None:
-            logger.warning("Não foi possível extrair data de '{}', ignorando", blob_name)
+            log(f"Não foi possível extrair data de '{blob_name}', ignorando", level="warning")
             continue
         if data_inicio is not None and file_date <= data_inicio:
-            logger.debug("Arquivo ignorado: {} (data={} <= data_inicio={})", blob_name, file_date, data_inicio)
+            log(f"Arquivo ignorado: {blob_name} (data={file_date} <= data_inicio={data_inicio})", level="debug")
             continue
         if data_fim is not None and file_date > data_fim:
-            logger.debug("Arquivo ignorado: {} (data={} > data_fim={})", blob_name, file_date, data_fim)
+            log(f"Arquivo ignorado: {blob_name} (data={file_date} > data_fim={data_fim})", level="debug")
             continue
         filtered.append(blob_name)
-        logger.info("Arquivo incluído: {} (data={})", blob_name, file_date)
+        log(f"Arquivo incluído: {blob_name} (data={file_date})")
 
-    logger.info("Arquivos após filtro de data: {} de {}", len(filtered), len(zip_blobs))
+    log(f"Arquivos após filtro de data: {len(filtered)} de {len(zip_blobs)}")
 
     return filtered
 
 
-def download_and_extract_zip_from_gcs(
-    bucket: Bucket, blob_name: str, extract_path: str
-) -> str:
+def download_and_extract_zip_from_gcs(bucket: Bucket, blob_name: str, extract_path: str) -> str:
     """Download a ZIP file from GCS and extract its contents locally.
 
     Downloads the ZIP blob from Google Cloud Storage to memory, extracts all
@@ -202,9 +192,7 @@ def download_and_extract_zip_from_gcs(
     blob = bucket.blob(blob_name)
 
     if not blob.exists():
-        raise FileNotFoundError(
-            f"Blob '{blob_name}' not found in bucket '{bucket.name}'"
-        )
+        raise FileNotFoundError(f"Blob '{blob_name}' not found in bucket '{bucket.name}'")
 
     # Download to memory
     zip_content = blob.download_as_bytes()
@@ -254,11 +242,7 @@ def get_gcs_bucket(project_id: str, bucket_name: str) -> Bucket:
     return bucket
 
 
-def read_extracted_fwf_file(
-    extract_path: str,
-    table_id: str,
-    extract_base_path: str
-) -> tuple[pd.DataFrame, str]:
+def read_extracted_fwf_file(extract_path: str, table_id: str, extract_base_path: str) -> tuple[pd.DataFrame, str]:
     """Lê um arquivo de formato de largura fixa (FWF) de um diretório descompactado.
 
     Busca um arquivo correspondente ao padrão de arquivo do `table_id` no
@@ -285,26 +269,20 @@ def read_extracted_fwf_file(
     }
 
     if table_id not in config_map:
-        raise ValueError(
-            f"table_id '{table_id}' inválido. "
-            f"Válidos: {', '.join(config_map.keys())}"
-        )
+        raise ValueError(f"table_id '{table_id}' inválido. Válidos: {', '.join(config_map.keys())}")
 
     config = config_map[table_id]
     extract_dir = Path(extract_path)
 
     if not extract_dir.exists():
-        raise FileNotFoundError(
-            f"Diretório de descompactação não encontrado: {extract_path}"
-        )
+        raise FileNotFoundError(f"Diretório de descompactação não encontrado: {extract_path}")
 
     # Busca arquivos correspondentes ao padrão
     matching_files = list(extract_dir.glob(config.file_pattern))
 
     if not matching_files:
         raise FileNotFoundError(
-            f"Nenhum arquivo com padrão '{config.file_pattern}' encontrado em "
-            f"{extract_path} para a tabela '{table_id}'"
+            f"Nenhum arquivo com padrão '{config.file_pattern}' encontrado em {extract_path} para a tabela '{table_id}'"
         )
 
     if len(matching_files) > 1:
@@ -326,8 +304,7 @@ def read_extracted_fwf_file(
         )
     except Exception as e:
         raise pd.errors.ParserError(
-            f"Erro ao fazer parsing do arquivo FWF '{file_path}' para "
-            f"a tabela '{table_id}': {e}"
+            f"Erro ao fazer parsing do arquivo FWF '{file_path}' para a tabela '{table_id}': {e}"
         ) from e
 
     # Adicionar coluna com nome completo do arquivo
@@ -378,6 +355,82 @@ def cleanup_extracted_directory(extract_path: str) -> None:
     try:
         shutil.rmtree(extract_dir)
     except Exception as e:
-        raise Exception(
-            f"Erro ao limpar diretório {extract_path}: {e}"
-        ) from e
+        raise Exception(f"Erro ao limpar diretório {extract_path}: {e}") from e
+
+
+def process_crf_zip_files(
+    project_id: str,
+    bucket_name: str,
+    folder_prefix: str,
+    table_id: str,
+    extract_base_path: str,
+    data_inicio: date | str | None = None,
+    data_fim: date | str | None = None,
+) -> str | None:
+    """Processa sequencialmente todos os arquivos ZIP CRF do GCS.
+
+    Realiza o ciclo completo para cada arquivo ZIP dentro do intervalo de datas:
+    1. Listar arquivos ZIP no GCS filtrados pelo intervalo ``(data_inicio, data_fim]``.
+    2. Baixar e descompactar o arquivo ZIP em ``extract_base_path``.
+    3. Ler o arquivo FWF correspondente ao ``table_id`` e salvar como parquet.
+    4. Limpar o diretório descompactado (sempre, via ``try/finally``).
+
+    :param project_id: Google Cloud project ID.
+    :param bucket_name: GCS bucket name contendo os arquivos ZIP.
+    :param folder_prefix: Prefixo do caminho da pasta no bucket.
+    :param table_id: Identificador da tabela CRF a processar.
+    :param extract_base_path: Diretório base local para descompactação e saída parquet.
+    :param data_inicio: Data de início do intervalo (``YYYY-MM-DD`` ou ``date``).
+        Arquivos com data igual ou anterior são ignorados. Se ``None``, sem limite inferior.
+    :param data_fim: Data de fim do intervalo (``YYYY-MM-DD`` ou ``date``).
+        Arquivos com data posterior são ignorados. Se ``None``, sem limite superior.
+    :returns: Caminho local (``data_path``) onde os arquivos parquet foram salvos,
+        ou ``None`` se nenhum arquivo ZIP foi encontrado para processar.
+    """
+    bucket = get_gcs_bucket(project_id, bucket_name)
+
+    zip_files = list_zip_files_in_gcs_folder(
+        bucket=bucket,
+        folder_prefix=folder_prefix,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+
+    log(f"Processando {len(zip_files)} arquivos ZIP")
+
+    if not zip_files:
+        log("Nenhum arquivo ZIP encontrado para processar")
+        return None
+
+    total = 0
+    data_path = None
+
+    for blob_name in zip_files:
+        zip_filename = blob_name.split("/")[-1].replace(".zip", "")
+        extract_path = f"{extract_base_path}/{zip_filename}"
+
+        log(f"Iniciando processamento de {blob_name}")
+
+        try:
+            extracted_dir = download_and_extract_zip_from_gcs(bucket, blob_name, extract_path)
+
+            extracted_files = list_extracted_files(extract_path=extracted_dir)
+            log(f"Descompactados {len(extracted_files)} arquivos de {blob_name}")
+
+            df, data_path = read_extracted_fwf_file(
+                extract_path=extracted_dir,
+                table_id=table_id,
+                extract_base_path=extract_base_path,
+            )
+            total += len(df)
+            log(f"Processadas {len(df)} linhas de {table_id}")
+
+        finally:
+            cleanup_extracted_directory(extract_path=extract_path)
+            log(f"Diretório limpo: {extract_path}")
+
+        log(f"Concluído processamento de {blob_name}")
+
+    log(f"Processamento concluído. Total de linhas em {table_id}: {total}")
+
+    return data_path

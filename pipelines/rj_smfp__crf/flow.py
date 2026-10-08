@@ -1,17 +1,19 @@
 """Flow for rj_smfp__crf.."""
 
-from loguru import logger
+from typing import Literal
+
 from prefect import flow
+from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from pipelines.rj_smfp__crf.tasks import get_max_date_from_bigquery_task, process_all_crf_zip_files_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from pipelines.rj_smfp__crf.env import CRF__BUCKET_NAME, CRF__FOLDER_PREFIX_PERIODOS_EVENTOS
+from pipelines.rj_smfp__crf.utils_env.env import CRF__BUCKET_NAME, CRF__FOLDER_PREFIX_PERIODOS_EVENTOS
 
 
 @flow(log_prints=True)
 def rj_smfp__crf(
-    table_id: str,
+    table_id: Literal["periodos_simples", "periodos_mei", "eventos_simples", "eventos_mei"],
     project_id: str = "rj-iplanrio",
     dataset_id: str = "brutos_crf",
     data_inicio: str | None = None,
@@ -40,15 +42,7 @@ def rj_smfp__crf(
     :param data_fim: Data de fim do intervalo no formato ``YYYY-MM-DD``.
         Arquivos com data posterior são ignorados. Se ``None``, não aplica
         limite superior. Requer que ``data_inicio`` também seja fornecido.
-    :raises ValueError: Se ``table_id`` não for um dos valores válidos.
     """
-    valid_table_ids = ("periodos_simples", "periodos_mei", "eventos_simples", "eventos_mei")
-    if table_id not in valid_table_ids:
-        raise ValueError(
-            f"table_id '{table_id}' inválido. "
-            f"Válidos: {', '.join(repr(t) for t in valid_table_ids)}."
-        )
-
     rename_current_flow_run_task(new_name=f"{project_id}.{dataset_id}.{table_id}")
     inject_bd_credentials_task(environment="prod")
 
@@ -69,13 +63,13 @@ def rj_smfp__crf(
     )
 
     if data_path is None:
-        logger.info("Nenhum arquivo ZIP encontrado no intervalo especificado — flow encerrado sem upload.")
+        log("Nenhum arquivo ZIP encontrado no intervalo especificado — flow encerrado sem upload.")
         return
 
     create_table_and_upload_to_gcs_task(
-            data_path=data_path,
-            dataset_id=dataset_id,
-            dump_mode="append",
-            source_format="parquet",
-            table_id=table_id,
-        )
+        data_path=data_path,
+        dataset_id=dataset_id,
+        dump_mode="append",
+        source_format="parquet",
+        table_id=table_id,
+    )
