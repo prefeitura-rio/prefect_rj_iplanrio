@@ -1,8 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-This flow is used to dump the database to the BIGQUERY
-"""
-
 from typing import Optional
 
 from iplanrio.pipelines_templates.dump_db.tasks import (
