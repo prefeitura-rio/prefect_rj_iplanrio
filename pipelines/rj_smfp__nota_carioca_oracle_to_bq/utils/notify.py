@@ -21,7 +21,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import (
     DiscordStatusMessage,
     Warner,
     never_raises,
-    webhook_from_env,
+    resolve_webhook,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord_embed import (
     RunStatus,
@@ -104,10 +104,10 @@ class ParentNotifier:
 
     @classmethod
     def create(cls, config: NotifierConfig) -> "ParentNotifier":
-        """Cria o notificador; o webhook vem de ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` (ausente = desligado)."""
+        """Cria o notificador; webhook da variável do Infisical ou do Secret block (sem nenhum = desligado)."""
         if not config.enabled:
             return cls(config, None, None)
-        message = DiscordStatusMessage(webhook_from_env())
+        message = DiscordStatusMessage(resolve_webhook())
         store = ProgressStore(config.project, config.bucket, config.run_id) if message.enabled else None
         return cls(config, message if message.enabled else None, store)
 

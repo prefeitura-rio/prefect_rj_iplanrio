@@ -8,6 +8,7 @@ import pytest
 from google.api_core import exceptions as api_exceptions
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq import flow as flow_module
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq import table_run as table_run_module
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq import tasks as tasks_module
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX, PROGRESS_PREFIX
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import discord as discord_module
@@ -21,7 +22,10 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord_embed import (
     ItemStatus,
     RunStatus,
     build_payload,
+    format_validation_line,
 )
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import ColumnChecksum
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractOptions, ExtractResult
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify import (
     NotifierConfig,
@@ -36,8 +40,10 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify_view import (
     overall_fraction,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import Snapshot
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import RunInfo
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import RunInfo, TableRunContext
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.plan import TablePlan
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import Progress
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.schema import TableLayout
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.supervise import Supervision, supervise
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.table_progress import (
     ProgressStore,
@@ -87,6 +93,8 @@ def test_progress_json_round_trips_every_field() -> None:
         chunks_total=395,
         rows_read=1_234_567,
         oracle_rows=193_000_000,
+        bq_rows=193_000_000,
+        checksum_columns=("VALOR_SERVICO", "NUMERO_DPS"),
         bytes_uploaded=9_999,
         elapsed_seconds=61.5,
         extract_seconds=60.25,
@@ -100,6 +108,16 @@ def test_progress_json_round_trips_every_field() -> None:
     # Then nothing is lost, and the stage is serialized by its Portuguese value
     assert restored == original
     assert json.loads(original.to_json())["stage"] == "falhou"
+
+
+def test_progress_json_without_the_validation_fields_still_parses_with_defaults() -> None:
+    # Given a JSON written by an older child, before bq_rows and checksum_columns existed
+    old = '{"table": "DPS", "stage": "validada", "oracle_rows": 7, "rows_read": 7}'
+    # When the parent reads it
+    restored = TableProgress.from_json(old)
+    # Then the new fields take their defaults
+    assert (restored.bq_rows, restored.checksum_columns) == (None, ())
+    assert restored.oracle_rows == 7
 
 
 @pytest.mark.parametrize("text", ["not json", "[]", '{"table": "DPS"}', '{"table": "DPS", "stage": "inexistente"}'])
@@ -133,6 +151,31 @@ def test_reporter_turns_extraction_ticks_and_stages_into_progress() -> None:
     reporter.stage(TableStage.VALIDATION)
     assert seen[-1].eta_seconds is None
     assert seen[-1].chunks_total == 395
+
+
+def test_reporter_records_checksum_columns_and_bigquery_rows_without_changing_the_stage() -> None:
+    # Given a reporter after the extraction of a table with two checksum columns
+    seen: list[TableProgress] = []
+    reporter = TableReporter("DPS", [seen.append])
+    result = ExtractResult(
+        table="DPS",
+        rows=10,
+        bytes_written=1,
+        chunks=2,
+        files=2,
+        prefix="p",
+        seconds=1.0,
+        checksums={"VALOR_SERVICO": ColumnChecksum(10, "5"), "NUMERO_DPS": ColumnChecksum(10, "9")},
+        oracle_rows=10,
+        max_pending_files=1,
+        max_local_files=1,
+    )
+    reporter.extracted(result)
+    # When the load and then the validation report the BigQuery rows
+    reporter.bigquery_rows(10)
+    # Then the columns and rows travel in the progress and the stage stays on the load
+    assert seen[-1].checksum_columns == ("VALOR_SERVICO", "NUMERO_DPS")
+    assert (seen[-1].stage, seen[-1].bq_rows) == (TableStage.LOAD, 10)
 
 
 def test_reporter_guard_marks_the_failed_stage_even_for_base_exceptions_and_reraises() -> None:
@@ -419,6 +462,63 @@ def test_failed_child_shows_its_stage_and_clipped_error() -> None:
     assert [item.status for item in view.checklist][4] is ItemStatus.PENDING
 
 
+def validated_tables(**fields: object) -> dict[str, TableProgress]:
+    counts = {"oracle_rows": 1_000, "rows_read": 1_000, "bq_rows": 1_000, "checksum_columns": ("A", "B")}
+    return {name: tp(name, TableStage.VALIDATED, **{**counts, **fields}) for name in TABLES}
+
+
+def test_success_view_compares_oracle_files_and_bigquery_per_table() -> None:
+    # Given three validated tables
+    view = build_view(state(status=RunStatus.SUCCESS, stage=ParentStage.CLEANUP, tables=validated_tables()))
+    # Then each table has one green comparison line, with the checksum columns in the note
+    assert [format_validation_line(line) for line in view.validation] == [
+        f"✅ {name} · Oracle (SCN) 1.000 = arquivos 1.000 = BigQuery 1.000 · Σ A, B iguais" for name in TABLES
+    ]
+
+
+def test_running_view_has_no_validation_section_yet() -> None:
+    # Given a running parent with a validated table
+    view = build_view(state(tables=validated_tables()))
+    # Then the comparison waits for the final message
+    assert view.validation == ()
+
+
+def test_failure_view_keeps_full_comparisons_and_shows_what_is_known_of_the_failing_table() -> None:
+    # Given DPS validated, NOTAS failed while loading (Oracle and files known) and PESSOAS never started
+    tables = {
+        "DPS": validated_tables()["DPS"],
+        "NOTAS_NACIONAIS": tp(
+            "NOTAS_NACIONAIS", TableStage.FAILED, failed_stage=TableStage.LOAD, oracle_rows=50, rows_read=50, error="x"
+        ),
+    }
+    view = build_view(
+        state(status=RunStatus.FAILED, tables=tables, failed_stage=ParentStage.LOAD, error="ParallelRunError: x")
+    )
+    # Then the validated one is complete, the failing one has a dash for BigQuery, the untouched one is pending
+    assert [format_validation_line(line) for line in view.validation] == [
+        "✅ DPS · Oracle (SCN) 1.000 = arquivos 1.000 = BigQuery 1.000 · Σ A, B iguais",
+        "❌ NOTAS_NACIONAIS · Oracle (SCN) 50 = arquivos 50 · BigQuery —",
+        "⬜ PESSOAS_NACIONAIS · Oracle (SCN) — · arquivos — · BigQuery —",
+    ]
+
+
+def test_a_count_mismatch_in_a_validated_child_renders_red() -> None:
+    # Given a child whose BigQuery count differs from the Oracle one
+    tables = validated_tables(bq_rows=999)
+    view = build_view(state(status=RunStatus.FAILED, tables=tables, failed_stage=ParentStage.VALIDATION))
+    # Then the line is ❌ with "≠" and no checksum note
+    assert format_validation_line(view.validation[0]) == "❌ DPS · Oracle (SCN) 1.000 = arquivos 1.000 ≠ BigQuery 999"
+
+
+def test_files_count_is_ignored_until_the_extraction_ends() -> None:
+    # Given a table still extracting (rows_read is partial, oracle_rows unknown)
+    view = build_view(
+        state(status=RunStatus.FAILED, tables={"DPS": tp("DPS", TableStage.EXTRACTION, rows_read=42)}, error="x")
+    )
+    # Then the partial count is not shown as the files count
+    assert format_validation_line(view.validation[0]) == "⬜ DPS · Oracle (SCN) — · arquivos — · BigQuery —"
+
+
 # --- notifier ----------------------------------------------------------------------------------------------------
 
 
@@ -555,6 +655,76 @@ def test_sequential_updates_arrive_in_memory_and_stage_changes_publish_immediate
     assert sent == 2
     assert len(discord.calls) == sent
     assert parent.state.tables["DPS"].chunks_uploaded == 1
+
+
+def fields_by_name(embed: dict[str, object]) -> dict[str, str]:
+    fields = embed["fields"]
+    assert isinstance(fields, list)
+    return {field["name"]: field["value"] for field in fields}
+
+
+def test_success_message_has_the_validation_section_and_the_announcement_summary() -> None:
+    # Given a sequential parent whose three tables validated through the reporter path
+    discord = Discord()
+    parent = notifier(discord)
+    parent.begin()
+    for table in validated_tables().values():
+        parent.update_table(table)
+    # When it succeeds
+    parent.succeed()
+    # Then the final embed has one line per table and the standalone line counts them
+    section = fields_by_name(discord.embeds[-1])["🔎 Validação"].splitlines()
+    assert section[0] == "✅ DPS · Oracle (SCN) 1.000 = arquivos 1.000 = BigQuery 1.000 · Σ A, B iguais"
+    assert len(section) == 3
+    assert discord.standalone[0].endswith("· 3/3 tabelas validadas (linhas iguais na origem e no destino)")
+    # and no earlier (running) embed carried the section
+    assert all("🔎 Validação" not in fields_by_name(embed) for embed in discord.embeds[:-1])
+
+
+def test_failure_message_counts_only_the_tables_that_validated() -> None:
+    # Given one validated table and a failure in the next while loading
+    discord = Discord()
+    parent = notifier(discord)
+    parent.begin()
+    parent.update_table(validated_tables()["DPS"])
+    parent.update_table(tp("NOTAS_NACIONAIS", TableStage.LOAD, oracle_rows=5, rows_read=5))
+    parent.fail(RuntimeError("load exploded"))
+    # Then the section keeps the full line of DPS and the partial one, and the summary says 1/3
+    section = fields_by_name(discord.embeds[-1])["🔎 Validação"].splitlines()
+    assert section[0].startswith("✅ DPS")
+    assert section[1] == "❌ NOTAS_NACIONAIS · Oracle (SCN) 5 = arquivos 5 · BigQuery —"
+    assert discord.standalone[0].endswith("`RuntimeError: load exploded` · 1/3 tabelas validadas")
+
+
+def test_sequential_process_table_reports_bigquery_rows_and_checksum_columns(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given process_table with fake tasks, a Oracle COUNT, files and BigQuery counts, and a recording reporter
+    extracted = ExtractResult(
+        table="DPS",
+        rows=7,
+        bytes_written=1,
+        chunks=1,
+        files=1,
+        prefix="p",
+        seconds=1.0,
+        checksums={"VALOR_SERVICO": ColumnChecksum(7, "1")},
+        oracle_rows=7,
+        max_pending_files=1,
+        max_local_files=1,
+    )
+    monkeypatch.setattr(table_run_module, "extract_table_task", lambda **_: extracted)
+    monkeypatch.setattr(table_run_module, "load_table_task", lambda **_: 7)
+    monkeypatch.setattr(table_run_module, "validate_table_task", lambda **_: 7)
+    monkeypatch.setattr(table_run_module, "stamp_validated_task", lambda **_: None)
+    seen: list[TableProgress] = []
+    reporter = TableReporter("DPS", [seen.append])
+    ctx = TableRunContext("s", "p", "d", "b", "r", Snapshot(scn=1, taken_at=NOW), ExtractOptions())
+    plan = TablePlan("DPS", "DFEN", (), (), TableLayout("DAY", "_airbyte_extracted_at", ("DPS",)), None)
+    # When the table is processed
+    table_run_module.process_table(plan, ctx, reporter)
+    # Then the final progress carries every side of the comparison
+    final = seen[-1]
+    assert (final.stage, final.oracle_rows, final.rows_read, final.bq_rows) == (TableStage.VALIDATED, 7, 7, 7)
+    assert final.checksum_columns == ("VALOR_SERVICO",)
 
 
 def test_disabled_notifier_still_tracks_state_and_sends_nothing() -> None:

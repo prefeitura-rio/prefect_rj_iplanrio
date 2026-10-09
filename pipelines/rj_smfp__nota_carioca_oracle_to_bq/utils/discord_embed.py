@@ -14,6 +14,7 @@ from typing import assert_never
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord_format import (
     clip,
     format_clock,
+    format_count,
     format_duration,
     format_percent,
     format_short_duration,
@@ -37,6 +38,8 @@ TOTAL_BUDGET = 5800
 MIN_DESCRIPTION = 300
 CONTENT_LIMIT = 2000
 SHORT_ERROR_LIMIT = 200
+VALIDATION_LINE_LIMIT = 300
+MISSING_COUNT = "—"
 NO_MENTIONS = {"parse": []}
 
 
@@ -73,6 +76,43 @@ class Fact:
     name: str
     value: str
     inline: bool = True
+
+
+@dataclass(frozen=True)
+class CountSide:
+    """Um lado da comparação de contagens.
+
+    :param label: Nome do lado, como ``Oracle (SCN)`` ou ``BigQuery``.
+    :param rows: Linhas contadas nesse lado; ``None`` se ainda não se sabe (aparece como ``—``).
+    """
+
+    label: str
+    rows: int | None
+
+
+@dataclass(frozen=True)
+class ValidationLine:
+    """A comparação de contagens de uma tabela entre a origem e o destino.
+
+    :param table: Nome da tabela.
+    :param sides: Contagens a comparar, na ordem em que aparecem.
+    :param note: Complemento mostrado só quando todas as contagens são iguais (por exemplo, o checksum conferido).
+    """
+
+    table: str
+    sides: tuple[CountSide, ...]
+    note: str = ""
+
+    @property
+    def has_counts(self) -> bool:
+        """Indica se ao menos um lado já tem contagem."""
+        return any(side.rows is not None for side in self.sides)
+
+    @property
+    def is_valid(self) -> bool:
+        """Indica se todos os lados têm contagem e elas são iguais."""
+        rows = {side.rows for side in self.sides}
+        return bool(self.sides) and None not in rows and len(rows) == 1
 
 
 @dataclass(frozen=True)
@@ -114,6 +154,7 @@ class RunView:
     :param eta_seconds: Segundos que faltam para o fim; ``None`` esconde a previsão.
     :param error: Mensagem do erro, em caso de falha.
     :param failed_stage: Etapa em que a falha ocorreu.
+    :param validation: Comparação de contagens por tabela, mostrada na mensagem final; vazio a esconde.
     """
 
     flow_label: str
@@ -131,6 +172,7 @@ class RunView:
     eta_seconds: float | None = None
     error: str | None = None
     failed_stage: str | None = None
+    validation: tuple[ValidationLine, ...] = ()
 
     @property
     def title(self) -> str:
@@ -178,6 +220,59 @@ def table_block(table: TableView, status: RunStatus) -> str:
     return "\n".join(lines)
 
 
+def _count_text(side: CountSide) -> str:
+    return f"{side.label} {format_count(side.rows) if side.rows is not None else MISSING_COUNT}"
+
+
+def _count_separator(left: CountSide, right: CountSide) -> str:
+    if left.rows is None or right.rows is None:
+        return " · "
+    return " = " if left.rows == right.rows else " ≠ "
+
+
+def format_validation_line(line: ValidationLine) -> str:
+    """Formata a comparação de uma tabela em uma linha.
+
+    ✅ quando todas as contagens existem e são iguais; ⬜ se nenhuma foi medida ainda; ❌ nos demais casos (diferem ou
+    falta um lado, mostrado como ``—``). Entre dois lados: ``=`` se iguais, ``≠`` se diferem, ``·`` se falta um.
+
+    :param line: Contagens da tabela.
+    :returns: Por exemplo ``✅ DPS · Oracle (SCN) 10 = BigQuery 10 · Σ VALOR iguais``.
+    """
+    icon = "✅" if line.is_valid else "❌" if line.has_counts else "⬜"
+    chain = _count_chain(line.sides)
+    note = f" · {line.note}" if line.note and line.is_valid else ""
+    return clip(f"{icon} {line.table} · {chain}{note}", VALIDATION_LINE_LIMIT)
+
+
+def count_validated(lines: tuple[ValidationLine, ...]) -> int:
+    """Conta as tabelas cujas contagens são todas iguais."""
+    return sum(line.is_valid for line in lines)
+
+
+def _count_chain(sides: tuple[CountSide, ...]) -> str:
+    if not sides:
+        return ""
+    parts = [_count_text(sides[0])]
+    for left, right in zip(sides, sides[1:], strict=False):
+        parts.append(_count_separator(left, right) + _count_text(right))
+    return "".join(parts)
+
+
+def validation_summary(view: RunView) -> str:
+    """Resumo da validação para a mensagem final avulsa; vazio se não há linhas de validação.
+
+    :param view: Estado final.
+    :returns: Por exemplo `` · 3/3 tabelas validadas (linhas iguais na origem e no destino)``.
+    """
+    total = len(view.validation)
+    if not total:
+        return ""
+    valid = count_validated(view.validation)
+    text = f" · {valid}/{total} {'tabela validada' if total == 1 else 'tabelas validadas'}"
+    return text + (" (linhas iguais na origem e no destino)" if valid == total else "")
+
+
 def build_description(view: RunView) -> str:
     """Monta a descrição: estado, etapa, barra geral e um bloco por tabela."""
     parts = [
@@ -204,6 +299,8 @@ def build_fields(view: RunView) -> list[dict[str, object]]:
         fields.append(
             ("Etapas", "\n".join(f"{_ITEM_ICON[item.status]} {item.label}" for item in view.checklist), False)
         )
+    if view.validation:
+        fields.append(("🔎 Validação", "\n".join(format_validation_line(line) for line in view.validation), False))
     fields.extend((fact.name, fact.value, fact.inline) for fact in view.facts)
     if view.error:
         fields.append(("❌ Erro", f"```\n{clip(view.error.replace('```', "'''"), FIELD_VALUE_LIMIT - 8)}\n```", False))
@@ -260,12 +357,14 @@ def build_announcement(view: RunView) -> dict[str, object]:
     link = f" · <{view.url}>" if view.url else ""
     took = format_short_duration(view.elapsed_seconds)
     stage = f"**{view.failed_stage or view.stage}**"
+    summary = validation_summary(view)
     match view.status:
         case RunStatus.SUCCESS:
             count = len(view.tables)
-            text = f"✅ {name} concluído em {took} · {count} {'tabela' if count == 1 else 'tabelas'}{link}"
+            tables = summary or f" · {count} {'tabela' if count == 1 else 'tabelas'}"
+            text = f"✅ {name} concluído em {took}{tables}{link}"
         case RunStatus.FAILED:
-            text = f"❌ {name} falhou na etapa {stage} após {took}: `{short_error(view.error)}`{link}"
+            text = f"❌ {name} falhou na etapa {stage} após {took}: `{short_error(view.error)}`{summary}{link}"
         case RunStatus.CANCELLED:
             text = f"⚪ {name} cancelado na etapa {stage} após {took}{link}"
         case RunStatus.RUNNING:

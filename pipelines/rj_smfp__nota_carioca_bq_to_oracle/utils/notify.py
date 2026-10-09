@@ -23,7 +23,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import (
     DiscordStatusMessage,
     Warner,
     never_raises,
-    webhook_from_env,
+    resolve_webhook,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     RunStatus,
@@ -102,8 +102,8 @@ class LoadNotifier:
 
     @classmethod
     def create(cls, config: NotifierConfig) -> "LoadNotifier":
-        """Cria o notificador; o webhook vem de ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` (ausente = desligado)."""
-        message = DiscordStatusMessage(webhook_from_env()) if config.enabled else None
+        """Cria o notificador; webhook da variável do Infisical ou do Secret block (sem nenhum = desligado)."""
+        message = DiscordStatusMessage(resolve_webhook()) if config.enabled else None
         return cls(config, message if message is not None and message.enabled else None)
 
     @property
@@ -170,6 +170,37 @@ class LoadNotifier:
             self._table_started.setdefault(table, time.monotonic())
             current = self._state.tables.get(table)
             self._change_table(table, step=step, slot=slot or (current.slot if current else None))
+
+    @never_raises
+    def set_bigquery_rows(self, rows: Mapping[str, object]) -> None:
+        """Guarda as linhas de cada tabela na foto do BigQuery, o lado de origem da comparação.
+
+        :param rows: Linhas por tabela, como vêm do schema da foto exportada (``num_rows``); a conversão acontece
+            aqui, dentro do ``never_raises``, para um valor inesperado não chegar ao flow.
+        """
+        counts = {name: int(str(count)) for name, count in rows.items() if count is not None}
+        with self._lock:
+            known = self._state.tables
+            tables = {
+                **known,
+                **{name: replace(known.get(name) or TableState(name), bq_rows=count) for name, count in counts.items()},
+            }
+            self._change(force=False, tables=tables)
+
+    @never_raises
+    def set_physical_table(self, table: str, physical_table: str) -> None:
+        """Guarda a tabela física do Oracle (slot) que recebe a carga da tabela."""
+        self._change_table(table, force=False, physical_table=physical_table)
+
+    @never_raises
+    def table_loaded(self, table: str, rows: int) -> None:
+        """Guarda as linhas carregadas pelo SQL*Loader na tabela."""
+        self._change_table(table, force=False, loaded_rows=rows)
+
+    @never_raises
+    def table_validated(self, table: str, rows: int) -> None:
+        """Guarda as linhas contadas no Oracle na validação da tabela."""
+        self._change_table(table, force=False, oracle_rows=rows)
 
     @never_raises
     def table_done(self, table: str, rows: int) -> None:

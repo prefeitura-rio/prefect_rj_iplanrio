@@ -98,6 +98,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             dbt_finished_at=dbt_finished_at,
         )
         notifier.set_tables({name: sum(file.size for file in snapshot[name].files) for name in tables})
+        notifier.set_bigquery_rows({name: snapshot[name].schema.get("num_rows") for name in tables})
         notifier.enter(Step.TABLES)
 
         loaded = []
@@ -119,6 +120,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             )
             slots = resolve_slots_task(infisical_secret_path=infisical_secret_path, table_id=table_id)
             notifier.table_step(table_id, TableStep.PREPARATION, slot=slots.slot)
+            notifier.set_physical_table(table_id, slots.inactive)
             oracle_table = ensure_oracle_table_task(
                 infisical_secret_path=infisical_secret_path,
                 project=project,
@@ -140,6 +142,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 sessions=sqlldr_sessions,
                 progress_interval_seconds=progress_interval_seconds,
             )
+            notifier.table_loaded(table_id, loaded_rows)
             notifier.table_step(table_id, TableStep.VALIDATION)
             validated_rows = validate_row_count_task(
                 infisical_secret_path=infisical_secret_path,
@@ -147,6 +150,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 table_schema=exported.schema,
                 loaded_rows=loaded_rows,
             )
+            notifier.table_validated(table_id, validated_rows)
             delete_gcs_files_task(project=project, bucket=gcs_bucket, files=exported.files, wait_for=[validated_rows])
             notifier.table_step(table_id, TableStep.INDEXES)
             indexed_table = create_oracle_indexes_task(

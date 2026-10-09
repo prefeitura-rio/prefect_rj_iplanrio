@@ -20,6 +20,7 @@ import httpx
 from iplanrio.pipelines_utils.logging import log
 
 WEBHOOK_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
+WEBHOOK_SECRET_BLOCK = "discord-webhook-nota-carioca"
 TIMEOUT_SECONDS = 10.0
 DEFAULT_MIN_INTERVAL_SECONDS = 20.0
 MAX_BACKOFF_SECONDS = 300.0
@@ -90,6 +91,37 @@ def webhook_from_env(environ: Mapping[str, str] | None = None) -> str | None:
     """
     value = (environ if environ is not None else os.environ).get(WEBHOOK_ENV, "").strip()
     return value or None
+
+
+def _load_secret_block(name: str) -> str:
+    """Lê o valor de um Secret block do Prefect (import tardio: só quem precisa paga o import)."""
+    from prefect.blocks.system import Secret  # noqa: PLC0415
+
+    return str(Secret.load(name).get())
+
+
+def webhook_from_secret_block(load: Callable[[str], str] | None = None) -> str | None:
+    """Lê a URL do webhook do Secret block ``discord-webhook-nota-carioca`` do Prefect.
+
+    :param load: Leitor do bloco pelo nome; o padrão consulta a API do Prefect.
+    :returns: A URL, ou ``None`` se o bloco não existir, estiver vazio ou a leitura falhar.
+    """
+    try:
+        value = (load if load is not None else _load_secret_block)(WEBHOOK_SECRET_BLOCK).strip()
+    except Exception as error:  # bloco ausente ou API fora do ar: notificação desligada, a carga segue
+        info(f"Webhook do Discord não lido do Secret block {WEBHOOK_SECRET_BLOCK}: {type(error).__name__}")
+        return None
+    return value or None
+
+
+def resolve_webhook(environ: Mapping[str, str] | None = None, load: Callable[[str], str] | None = None) -> str | None:
+    """URL do webhook: a variável ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` (Infisical) ou, sem ela, o Secret block.
+
+    :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
+    :param load: Leitor do Secret block; o padrão consulta a API do Prefect.
+    :returns: A URL, ou ``None`` se nenhuma das duas fontes tiver o webhook.
+    """
+    return webhook_from_env(environ) or webhook_from_secret_block(load)
 
 
 class DiscordStatusMessage:

@@ -51,6 +51,8 @@ class TableProgress:
     :param chunks_total: Faixas planejadas (0 antes de a extração começar).
     :param rows_read: Linhas lidas do Oracle (ao fim da extração, as gravadas).
     :param oracle_rows: Linhas no Oracle ``AS OF SCN``, conhecidas só ao fim da extração.
+    :param bq_rows: Linhas na tabela temporária do BigQuery: as da carga e, depois, as contadas na validação.
+    :param checksum_columns: Colunas cujo checksum (não nulos e soma) foi extraído; só está conferido com ``VALIDATED``.
     :param bytes_uploaded: Bytes de Parquet enviados.
     :param elapsed_seconds: Tempo desde que o repórter da tabela começou.
     :param extract_seconds: Duração da extração até agora (base da taxa de linhas/s).
@@ -67,6 +69,8 @@ class TableProgress:
     chunks_total: int = 0
     rows_read: int = 0
     oracle_rows: int | None = None
+    bq_rows: int | None = None
+    checksum_columns: tuple[str, ...] = ()
     bytes_uploaded: int = 0
     elapsed_seconds: float = 0.0
     extract_seconds: float = 0.0
@@ -95,6 +99,7 @@ class TableProgress:
                     **data,
                     "stage": TableStage(data["stage"]),
                     "failed_stage": TableStage(failed) if failed else None,
+                    "checksum_columns": tuple(data.get("checksum_columns", ())),
                 }
             )
         except (KeyError, TypeError, AttributeError) as error:
@@ -227,10 +232,15 @@ class TableReporter:
             chunks_total=result.chunks,
             rows_read=result.rows,
             oracle_rows=result.oracle_rows,
+            checksum_columns=tuple(result.checksums),
             bytes_uploaded=result.bytes_written,
             extract_seconds=result.seconds,
             eta_seconds=None,
         )
+
+    def bigquery_rows(self, rows: int) -> None:
+        """Registra as linhas da tabela temporária no BigQuery (da carga e, depois, da validação); mantém a etapa."""
+        self._emit(bq_rows=rows)
 
     def failed(self, error: BaseException) -> None:
         """Marca a tabela como falha, guardando a etapa em que estava e a mensagem."""

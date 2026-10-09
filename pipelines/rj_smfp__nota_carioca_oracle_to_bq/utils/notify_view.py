@@ -13,11 +13,13 @@ from enum import IntEnum
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord_embed import (
     ChecklistItem,
+    CountSide,
     Fact,
     ItemStatus,
     RunStatus,
     RunView,
     TableView,
+    ValidationLine,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord_format import (
     BRT,
@@ -38,6 +40,7 @@ PUBLISH_BASE = SETUP_SHARE + TABLES_SHARE
 CLEANUP_BASE = 0.98
 SNAPSHOT_SHARE = 0.02
 ERROR_DETAIL_LIMIT = 300
+VALIDATION_LABELS = ("Oracle (SCN)", "arquivos", "BigQuery")
 
 
 class ParentStage(IntEnum):
@@ -228,6 +231,28 @@ def table_view(name: str, progress: TableProgress | None) -> TableView:
     )
 
 
+def validation_line(name: str, progress: TableProgress | None) -> ValidationLine:
+    """Compara, para uma tabela, as linhas do Oracle (SCN), dos arquivos e do BigQuery com o que já se sabe.
+
+    As linhas dos arquivos só valem ao fim da extração (antes disso são parciais). O checksum só entra na nota da tabela
+    ``VALIDATED``, que é quando ele foi conferido contra o BigQuery.
+
+    :param name: Nome da tabela.
+    :param progress: Último progresso conhecido, ou ``None`` se o filho nunca escreveu.
+    :returns: A linha de validação; sem progresso, todos os lados ficam ausentes.
+    """
+    if progress is None:
+        return ValidationLine(name, tuple(CountSide(label, None) for label in VALIDATION_LABELS))
+    files = progress.rows_read if progress.oracle_rows is not None else None
+    sides = (
+        CountSide(VALIDATION_LABELS[0], progress.oracle_rows),
+        CountSide(VALIDATION_LABELS[1], files),
+        CountSide(VALIDATION_LABELS[2], progress.bq_rows),
+    )
+    checked = progress.stage is TableStage.VALIDATED and bool(progress.checksum_columns)
+    return ValidationLine(name, sides, f"Σ {', '.join(progress.checksum_columns)} iguais" if checked else "")
+
+
 def _step_status(step: ParentStage, state: ParentState, stage: ParentStage) -> ItemStatus:
     """Estado de uma etapa do checklist: no fim, falha e cancelamento marcam a etapa em que pararam."""
     if state.status is RunStatus.SUCCESS:
@@ -289,4 +314,9 @@ def build_view(state: ParentState) -> RunView:
         eta_seconds=_overall_eta(state),
         error=state.error,
         failed_stage=STAGE_LABELS[failed_stage] if failed_stage is not None else None,
+        validation=(
+            tuple(validation_line(name, state.tables.get(name)) for name in names)
+            if state.status is not RunStatus.RUNNING
+            else ()
+        ),
     )

@@ -38,6 +38,7 @@ def process_table(table_plan: TablePlan, ctx: TableRunContext, reporter: TableRe
     loaded_rows = load_table_task(
         project=ctx.project, dataset_id=ctx.dataset_id, bucket=ctx.bucket, table_plan=table_plan, extracted=extracted
     )
+    reporter.bigquery_rows(loaded_rows)
     reporter.stage(TableStage.VALIDATION)
     rows = validate_table_task(
         project=ctx.project,
@@ -48,6 +49,7 @@ def process_table(table_plan: TablePlan, ctx: TableRunContext, reporter: TableRe
         snapshot=ctx.snapshot,
         loaded_rows=loaded_rows,
     )
+    reporter.bigquery_rows(rows)
     stamp_validated_task(
         project=ctx.project,
         dataset_id=ctx.dataset_id,

@@ -11,7 +11,9 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord as discor
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import (
     DiscordStatusMessage,
     never_raises,
+    resolve_webhook,
     webhook_from_env,
+    webhook_from_secret_block,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     COLOR_CANCELLED,
@@ -19,13 +21,16 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     COLOR_RUNNING,
     COLOR_SUCCESS,
     ChecklistItem,
+    CountSide,
     Fact,
     ItemStatus,
     RunStatus,
     RunView,
     TableView,
+    ValidationLine,
     build_announcement,
     build_payload,
+    format_validation_line,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_format import (
     flow_run_url,
@@ -421,3 +426,112 @@ def test_never_raises_swallows_and_warns(warnings: list[str]) -> None:
     # Then no exception escapes and a warning names it
     assert len(warnings) == 1
     assert "broken" in warnings[0]
+
+
+# --- validation comparison ---------------------------------------------------------------------------------------
+
+
+def equal_line() -> ValidationLine:
+    sides = (CountSide("Oracle (SCN)", 193_000_000), CountSide("arquivos", 193_000_000), CountSide("BigQuery", 193_000_000))
+    return ValidationLine("DPS", sides, "Σ VALOR_SERVICO, NUMERO_DPS iguais")
+
+
+def test_equal_counts_render_a_green_line_with_the_note() -> None:
+    # Given equal counts on every side
+    # Then the line is ✅, joined by "=", in pt-BR format, with the note
+    assert equal_line().is_valid
+    assert format_validation_line(equal_line()) == (
+        "✅ DPS · Oracle (SCN) 193.000.000 = arquivos 193.000.000 = BigQuery 193.000.000 · "
+        "Σ VALOR_SERVICO, NUMERO_DPS iguais"
+    )
+
+
+def test_a_mismatch_renders_a_red_line_and_drops_the_note() -> None:
+    # Given a destination with fewer rows
+    line = replace(equal_line(), sides=(CountSide("Oracle (SCN)", 10), CountSide("BigQuery", 9)))
+    # Then the line is ❌, marks the difference with "≠" and does not claim the checksum matched
+    assert not line.is_valid
+    assert format_validation_line(line) == "❌ DPS · Oracle (SCN) 10 ≠ BigQuery 9"
+
+
+def test_a_missing_side_is_a_dash_and_never_valid_and_no_counts_at_all_is_pending() -> None:
+    # Given a table with only the source counted, and one never reached
+    partial = ValidationLine("DPS", (CountSide("Oracle (SCN)", 5), CountSide("BigQuery", None)))
+    untouched = ValidationLine("NOTAS", (CountSide("Oracle (SCN)", None), CountSide("BigQuery", None)))
+    # Then the first is ❌ with "—", the second is ⬜ and neither counts as validated
+    assert format_validation_line(partial) == "❌ DPS · Oracle (SCN) 5 · BigQuery —"
+    assert format_validation_line(untouched) == "⬜ NOTAS · Oracle (SCN) — · BigQuery —"
+    assert not partial.is_valid
+    assert not untouched.is_valid
+
+
+def test_validation_field_is_in_the_final_embed_only_when_there_are_lines() -> None:
+    # Given a success view with one validation line, and one without
+    with_lines = embed_of(build_payload(view(RunStatus.SUCCESS, validation=(equal_line(),))))
+    without = embed_of(build_payload(view(RunStatus.SUCCESS)))
+    # Then the section is a field named 🔎 Validação with the line, and absent otherwise
+    values = {field["name"]: field["value"] for field in fields_of(with_lines)}
+    assert values["🔎 Validação"] == format_validation_line(equal_line())
+    assert "🔎 Validação" not in [field["name"] for field in fields_of(without)]
+
+
+def test_announcement_summarizes_how_many_tables_were_validated() -> None:
+    # Given 3 tables of which all, or only 1, validated
+    good = equal_line()
+    bad = replace(good, sides=(CountSide("Oracle (SCN)", 1), CountSide("BigQuery", None)))
+    done = build_announcement(view(RunStatus.SUCCESS, url=None, validation=(good, good, good)))["content"]
+    failed = build_announcement(
+        view(RunStatus.FAILED, url=None, failed_stage="Carga", error="boom", validation=(good, bad, bad))
+    )["content"]
+    single = build_announcement(view(RunStatus.SUCCESS, url=None, validation=(good,)))["content"]
+    # Then success says all equal at source and destination; failure only counts; one table is singular
+    assert str(done).endswith("em 12min · 3/3 tabelas validadas (linhas iguais na origem e no destino)")
+    assert str(failed).endswith("`boom` · 1/3 tabelas validadas")
+    assert "· 1/1 tabela validada (linhas iguais" in str(single)
+
+
+def test_many_long_validation_lines_stay_inside_the_discord_limits() -> None:
+    # Given 40 tables with huge names and notes
+    sides = (CountSide("Oracle (SCN)", 1), CountSide("BigQuery", 1))
+    lines = tuple(ValidationLine("T" * 200, sides, "n" * 400) for _ in range(40))
+    # When the final payload is built
+    embed = embed_of(build_payload(view(RunStatus.SUCCESS, validation=lines)))
+    # Then every line, field and the total respect the limits
+    assert all(len(format_validation_line(line)) <= 300 for line in lines)
+    assert all(len(field["value"]) <= 1024 for field in fields_of(embed))
+    assert len(str(embed["description"])) <= 4096
+    assert total_chars(embed) <= 6000
+
+
+def test_webhook_prefers_the_environment_variable_over_the_secret_block() -> None:
+    # Given both sources holding a webhook
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        return "https://discord.test/block"
+
+    # When the webhook is resolved, Then the variable wins and the block is not read
+    assert resolve_webhook({"DISCORD_WEBHOOK_URL_NOTA_CARIOCA": URL}, load) == URL
+    assert loaded == []
+
+
+def test_webhook_falls_back_to_the_secret_block_without_the_variable() -> None:
+    # Given no variable and a Secret block with surrounding spaces
+    def load(name: str) -> str:
+        assert name == "discord-webhook-nota-carioca"
+        return f"  {URL} "
+
+    # When the webhook is resolved, Then the block value is used
+    assert resolve_webhook({}, load) == URL
+
+
+def test_unreadable_or_empty_secret_block_disables_notifications() -> None:
+    # Given a block that fails to load and one that is empty
+    def missing(name: str) -> str:
+        raise ValueError(f"block {name} not found")
+
+    # When it is read, Then no webhook is returned and nothing is raised
+    assert webhook_from_secret_block(missing) is None
+    assert webhook_from_secret_block(lambda _name: "   ") is None
+    assert resolve_webhook({}, missing) is None

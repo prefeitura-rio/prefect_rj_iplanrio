@@ -15,11 +15,13 @@ from typing import Literal
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     ChecklistItem,
+    CountSide,
     Fact,
     ItemStatus,
     RunStatus,
     RunView,
     TableView,
+    ValidationLine,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_format import format_count, format_duration, format_size
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import ProgressSnapshot
@@ -48,6 +50,10 @@ class TableState:
     :param indexes_done: Índices já criados.
     :param indexes_total: Índices a criar.
     :param rows: Linhas validadas, na tabela concluída.
+    :param physical_table: Tabela física do Oracle que recebe a carga (``BQLOAD_<tabela>_A`` ou ``_B``).
+    :param bq_rows: Linhas da tabela no BigQuery, na foto exportada.
+    :param loaded_rows: Linhas carregadas pelo SQL*Loader.
+    :param oracle_rows: Linhas contadas no Oracle depois da carga, na validação.
     :param seconds: Duração da tabela, na concluída.
     :param failed: Se a tabela falhou.
     """
@@ -60,6 +66,10 @@ class TableState:
     indexes_done: int = 0
     indexes_total: int = 0
     rows: int | None = None
+    physical_table: str | None = None
+    bq_rows: int | None = None
+    loaded_rows: int | None = None
+    oracle_rows: int | None = None
     seconds: float | None = None
     failed: bool = False
 
@@ -180,6 +190,21 @@ def table_view(table: TableState) -> TableView:
     return TableView(table.name, stage, ItemStatus.RUNNING, table_fraction(table), detail, eta)
 
 
+def validation_line(table: TableState) -> ValidationLine:
+    """Compara as linhas do BigQuery (foto), do SQL*Loader e do Oracle (tabela física) com o que já se sabe.
+
+    :param table: Estado da tabela.
+    :returns: A linha de validação; o lado Oracle leva o nome da tabela física quando conhecido.
+    """
+    oracle_label = f"Oracle ({table.physical_table})" if table.physical_table else "Oracle"
+    sides = (
+        CountSide("BigQuery", table.bq_rows),
+        CountSide("SQL*Loader", table.loaded_rows),
+        CountSide(oracle_label, table.oracle_rows),
+    )
+    return ValidationLine(table.name, sides)
+
+
 def _stage_text(state: RunState, step: Step) -> str:
     table = state.tables.get(state.current_table or "")
     if step is Step.TABLES and table is not None and table.step is not None:
@@ -253,4 +278,9 @@ def build_view(state: RunState) -> RunView:
         eta_seconds=_overall_eta(state),
         error=state.error,
         failed_stage=_stage_text(state, step) if state.failed_step is not None else None,
+        validation=(
+            tuple(validation_line(table) for table in state.tables.values())
+            if state.status is not RunStatus.RUNNING and state.mode == "full"
+            else ()
+        ),
     )

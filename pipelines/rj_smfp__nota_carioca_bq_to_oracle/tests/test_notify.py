@@ -22,6 +22,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     COLOR_SUCCESS,
     ItemStatus,
     RunStatus,
+    format_validation_line,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig, current
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify_view import (
@@ -270,6 +271,86 @@ def test_a_bug_in_the_notifier_never_reaches_the_flow(monkeypatch: pytest.Monkey
     assert notifier.state.status is RunStatus.SUCCESS
 
 
+# --- validation comparison ---------------------------------------------------------------------------------------
+
+
+def fields_by_name(embed: dict[str, object]) -> dict[str, str]:
+    fields = embed["fields"]
+    assert isinstance(fields, list)
+    return {field["name"]: field["value"] for field in fields}
+
+
+def count_tables(notifier: LoadNotifier, names: tuple[str, ...], validated: tuple[str, ...]) -> None:
+    notifier.set_bigquery_rows({name: 73_891_343 for name in names})
+    for name in validated:
+        notifier.set_physical_table(name, f"BQLOAD_{name}_B")
+        notifier.table_loaded(name, 73_891_343)
+        notifier.table_validated(name, 73_891_343)
+
+
+def test_success_message_compares_bigquery_sqlloader_and_oracle_with_the_physical_table() -> None:
+    # Given two tables loaded and validated
+    discord = Discord()
+    notifier = make(discord)
+    with notifier.guard():
+        notifier.begin()
+        notifier.enter(Step.TABLES)
+        count_tables(notifier, ("A", "B"), ("A", "B"))
+        notifier.table_done("A", 73_891_343)
+        notifier.table_done("B", 73_891_343)
+    # Then the final embed has a line per table naming the slot, and the standalone line sums them up
+    section = fields_by_name(discord.embeds[-1])["🔎 Validação"].splitlines()
+    assert section[0] == (
+        "✅ A · BigQuery 73.891.343 = SQL*Loader 73.891.343 = Oracle (BQLOAD_A_B) 73.891.343"
+    )
+    assert len(section) == 2
+    assert discord.standalone[0].endswith("· 2/2 tabelas validadas (linhas iguais na origem e no destino)")
+    assert all("🔎 Validação" not in fields_by_name(embed) for embed in discord.embeds[:-1])
+
+
+def test_failure_keeps_validated_tables_and_shows_what_is_known_of_the_failing_one() -> None:
+    # Given A validated and B failing in the SQL*Loader, after its slot is known
+    discord = Discord()
+    notifier = make(discord)
+    with pytest.raises(RuntimeError, match="sqlldr"), notifier.guard():
+        notifier.begin()
+        notifier.enter(Step.TABLES)
+        count_tables(notifier, ("A", "B"), ("A",))
+        notifier.set_physical_table("B", "BQLOAD_B_A")
+        notifier.table_step("B", TableStep.LOAD)
+        raise RuntimeError("sqlldr exited 1")
+    # Then A shows its full comparison, B has dashes for what never happened, and the summary says 1/2
+    section = fields_by_name(discord.embeds[-1])["🔎 Validação"].splitlines()
+    assert section[0].startswith("✅ A · BigQuery 73.891.343 = SQL*Loader")
+    assert section[1] == "❌ B · BigQuery 73.891.343 · SQL*Loader — · Oracle (BQLOAD_B_A) —"
+    assert discord.standalone[0].endswith("· 1/2 tabelas validadas")
+
+
+def test_a_count_mismatch_renders_red_with_the_difference() -> None:
+    # Given a table whose Oracle count differs from BigQuery
+    notifier = make(None, tables=("A",))
+    notifier.set_bigquery_rows({"A": 10})
+    notifier.set_physical_table("A", "BQLOAD_A_A")
+    notifier.table_loaded("A", 10)
+    notifier.table_validated("A", 9)
+    notifier.fail(ValueError("contagens divergentes"))
+    # Then the line is ❌ and marks the difference
+    line = build_view(notifier.state).validation[0]
+    assert format_validation_line(line) == "❌ A · BigQuery 10 = SQL*Loader 10 ≠ Oracle (BQLOAD_A_A) 9"
+
+
+def test_running_and_synonyms_only_views_have_no_validation_section() -> None:
+    # Given a running view with counts, and a finished synonyms-only run
+    running = make(None, tables=("A",))
+    running.set_bigquery_rows({"A": 10})
+    synonyms = make(None, tables=(), mode="synonyms_only")
+    synonyms.set_tables({"A": 1})
+    synonyms.succeed()
+    # Then neither shows the comparison
+    assert build_view(running.state).validation == ()
+    assert build_view(synonyms.state).validation == ()
+
+
 # --- reachability from tasks -------------------------------------------------------------------------------------
 
 
@@ -378,6 +459,8 @@ def test_flow_reports_every_table_step_in_order(monkeypatch: pytest.MonkeyPatch)
     ]
     assert notifier.state.tables["A"].slot == "B"
     assert notifier.state.tables["A"].rows == 7
+    table = notifier.state.tables["A"]
+    assert (table.bq_rows, table.loaded_rows, table.oracle_rows, table.physical_table) == (7, 7, 7, "BQLOAD_A_B")
     assert discord.embeds[-1]["color"] == COLOR_SUCCESS
 
 
