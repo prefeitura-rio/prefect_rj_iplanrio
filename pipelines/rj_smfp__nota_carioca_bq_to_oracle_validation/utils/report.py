@@ -50,7 +50,9 @@ def metric_specs(bq_fields: list[dict[str, str]], target_types: dict[str, str]) 
     Só entram as colunas carregadas (as que existem na tabela original). Strings
     vazias do BigQuery viram ``NULL`` no Oracle, então os não-nulos de ``STRING``
     desconsideram ``''`` no BigQuery. Datas guardadas como texto no BigQuery são
-    convertidas como na carga antes de comparar mínimo e máximo. Nenhuma métrica
+    convertidas como na carga antes de comparar mínimo e máximo. ``RAW`` guardado em
+    base64 no BigQuery é decodificado, e comprimento (em bytes), mínimo e máximo
+    (em hexadecimal) são comparados com os do Oracle. Nenhuma métrica
     expõe valores de linhas de texto, apenas contagens e comprimentos.
 
     :param bq_fields: Campos do schema do BigQuery (``name``, ``type``, ``mode``).
@@ -87,6 +89,16 @@ def metric_specs(bq_fields: list[dict[str, str]], target_types: dict[str, str]) 
                     f"FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MAX({bq_date}))",
                     f"TO_CHAR(MAX({ora}), 'YYYY-MM-DD HH24:MI:SS')",
                 ),
+            ]
+        elif field["type"] == "STRING" and target == "RAW":
+            bq_bytes = f"FROM_BASE64(NULLIF({bq}, ''))"
+            specs += [
+                MetricSpec(field["name"], "nao_nulos", f"COUNTIF({bq} IS NOT NULL AND {bq} != '')", f"COUNT({ora})"),
+                MetricSpec(
+                    field["name"], "comprimento_total", f"SUM(BYTE_LENGTH({bq_bytes}))", f"SUM(UTL_RAW.LENGTH({ora}))"
+                ),
+                MetricSpec(field["name"], "minimo", f"UPPER(TO_HEX(MIN({bq_bytes})))", f"RAWTOHEX(MIN({ora}))"),
+                MetricSpec(field["name"], "maximo", f"UPPER(TO_HEX(MAX({bq_bytes})))", f"RAWTOHEX(MAX({ora}))"),
             ]
         elif field["type"] == "STRING":
             specs += [

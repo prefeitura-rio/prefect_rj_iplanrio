@@ -21,6 +21,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     validate_identifier,
 )
 import io
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, slots
@@ -38,10 +39,12 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     IndexDefinition,
+    IndexExpression,
     Partitioning,
     TableLayout,
     TablePartition,
     index_from_dictionary,
+    index_key,
     index_statement_parts,
     inmemory_from_dictionary,
     layout_differences,
@@ -829,3 +832,175 @@ def test_refresh_synonyms_changes_nothing_without_an_active_a_b_table(monkeypatc
     with pytest.raises(error):
         slots.refresh_synonyms(slots_config(), "BQLOAD_X")
     assert cursor.ddl == []
+
+
+NN_DETALHES_TEMPLATE = [
+    ora("CHAVE_ACESSO", "VARCHAR2", 50, "B"),
+    ora("PESSOA_EMITENTE", "RAW", 16),
+    ora("PESSOA_PRESTADOR", "RAW", 16),
+    ora("PESSOA_TOMADOR", "RAW", 16),
+    ora("PESSOA_INTERMEDIARIO", "RAW", 16),
+    ora("CPF_CNPJ_INTERMEDIARIO", "VARCHAR2", 14, "B", nullable=True),
+    ora("DATA_VALIDACAO", "DATE", 7),
+    ora("DATA_COMPETENCIA_MUNICIPIO", "DATE", 7),
+    ora("STATUS_NOTA", "NUMBER", 22, precision=1, scale=0),
+    ora("NOTA_NACIONAL", "NUMBER", 22, precision=15, scale=0),
+    ora("NN_ROWID", "ROWID", 10, nullable=True),
+    ora("DPS_ROWID", "ROWID", 10, nullable=True),
+    ora("PE_ROWID", "ROWID", 10, nullable=True),
+]
+NN_DETALHES_BQ = [
+    field("_bigquery_uid", "STRING"),
+    field("chave_acesso", "STRING"),
+    field("pessoa_emitente", "STRING"),
+    field("pessoa_prestador", "STRING"),
+    field("pessoa_tomador", "STRING"),
+    field("pessoa_intermediario", "STRING"),
+    field("cpf_cnpj_intermediario", "STRING"),
+    field("data_validacao", "STRING"),
+    field("data_competencia_municipio", "STRING"),
+    field("status_nota", "NUMERIC"),
+    field("nota_nacional", "NUMERIC"),
+    field("_bigquery_particao_data", "DATE"),
+    field("_bigquery_updated_at", "DATETIME"),
+]
+STATUS_EXPRESSIONS = (
+    IndexExpression('CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END '),
+    IndexExpression('CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END '),
+)
+
+
+def function_based_index(columns=STATUS_EXPRESSIONS, **extra):
+    return index("IX_MVT_NN_CANC_COMP_NN", columns, index_type="FUNCTION-BASED NORMAL", tablespace=None, **extra)
+
+
+def test_raw_ddl_type_and_definition():
+    assert ora("PESSOA_EMITENTE", "RAW", 16).ddl_type == "RAW(16)"
+    assert ora("PESSOA_EMITENTE", "RAW", 16).definition == '"PESSOA_EMITENTE" RAW(16) NOT NULL'
+    assert ora("PESSOA_OPCIONAL", "RAW", 8, nullable=True).definition == '"PESSOA_OPCIONAL" RAW(8)'
+
+
+def test_raw_loader_spec_decodes_base64_text():
+    assert loader_spec(ora("PESSOA_EMITENTE", "RAW", 16), "STRING") == (
+        'CHAR(64) "CASE WHEN :PESSOA_EMITENTE IS NOT NULL THEN '
+        'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_EMITENTE)) END"'
+    )
+    assert loader_spec(ora("BLOB_GRANDE", "RAW", 2000), "STRING").startswith("CHAR(2668) ")
+
+
+@pytest.mark.parametrize(
+    ("column", "bq_type"),
+    [(ora("PESSOA", "RAW", 16), "BYTES"), (ora("PESSOA", "RAW", 16), "INTEGER"), (ora("_PESSOA", "RAW", 16), "STRING")],
+)
+def test_raw_loader_spec_rejects_other_sources_and_quoted_names(column, bq_type):
+    with pytest.raises(NotImplementedError):
+        loader_spec(column, bq_type)
+
+
+def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decodes_raw():
+    plan = build_load_plan(NN_DETALHES_BQ, NN_DETALHES_TEMPLATE)
+    assert plan.excluded == ["NN_ROWID", "DPS_ROWID", "PE_ROWID"]
+    assert plan.ignored == ["_BIGQUERY_UID", "_BIGQUERY_PARTICAO_DATA", "_BIGQUERY_UPDATED_AT"]
+    specs = {loader.name: loader.spec for loader in plan.fields}
+    assert specs["PESSOA_INTERMEDIARIO"] == (
+        'CHAR(64) "CASE WHEN :PESSOA_INTERMEDIARIO IS NOT NULL THEN '
+        'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_INTERMEDIARIO)) END"'
+    )
+    assert specs["DATA_VALIDACAO"].startswith('CHAR(64) "TO_DATE(')
+    assert specs["STATUS_NOTA"] == "CHAR(64)"
+    assert specs["_BIGQUERY_UPDATED_AT"] == "FILLER CHAR(4000)"
+    assert [column.definition for column in plan.columns][1] == '"PESSOA_EMITENTE" RAW(16) NOT NULL'
+    control = build_control_file("DFEN", "BQLOAD_X_A", plan.fields)
+    assert '  "PESSOA_TOMADOR" CHAR(64) "CASE WHEN :PESSOA_TOMADOR IS NOT NULL THEN ' in control
+    assert '  "_BIGQUERY_PARTICAO_DATA" FILLER CHAR(4000),' in control
+
+
+def test_index_key_reads_column_expression_and_descending_columns():
+    assert index_key({"column_name": "A", "descend": "ASC", "column_expression": None}) == "A"
+    row = {"column_name": "SYS_NC1$", "descend": "ASC", "column_expression": ' CASE WHEN "A"=1 THEN 1 END'}
+    expression = index_key(row)
+    assert isinstance(expression, IndexExpression)
+    assert expression == 'CASE WHEN "A"=1 THEN 1 END'
+    descending = index_key({"column_name": "SYS_NC2$", "descend": "DESC", "column_expression": '"B"'})
+    assert isinstance(descending, IndexExpression)
+    assert descending == '"B" DESC'
+
+
+def test_index_from_dictionary_keeps_expressions_of_function_based_index():
+    row = {
+        "owner": "DFEN",
+        "index_name": "IX_MVT_NN_CANC_COMP_NN",
+        "index_type": "FUNCTION-BASED NORMAL",
+        "uniqueness": "NONUNIQUE",
+        "locality": "LOCAL",
+        "tablespace_name": None,
+        "degree": "1",
+        "status": "N/A",
+    }
+    parsed = index_from_dictionary(row, list(STATUS_EXPRESSIONS))
+    assert parsed == function_based_index()
+    assert all(isinstance(key, IndexExpression) for key in parsed.columns)
+
+
+LOADED = ["STATUS_NOTA", "DATA_COMPETENCIA_MUNICIPIO", "NOTA_NACIONAL", "CHAVE_ACESSO"]
+
+
+def test_plan_structure_accepts_local_function_based_index_and_renames_it():
+    template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, (function_based_index(),))
+    plan = plan_structure(template, LOADED, "BQLOAD_")
+    assert plan.layout.indexes == (replace(function_based_index(), name="BQLOAD_IX_MVT_NN_CANC_COMP_NN"),)
+    (renamed,) = slot_indexes(plan.layout.indexes, "A")
+    assert renamed.name == "BQLOAD_IX_MVT_NN_CANC_COMP_NN_A"
+    assert all(isinstance(key, IndexExpression) for key in renamed.columns)
+    long_name = "IX_MVTNND_RESPONSAVEL_DV_CA"
+    long_template = TableLayout(None, None, (index(long_name, ["CHAVE_ACESSO"]),))
+    (long_index,) = slot_indexes(plan_structure(long_template, LOADED, "BQLOAD_").layout.indexes, "B")
+    assert long_index.name == "BQLOAD_IX_MVTNND_RESPONSAVEL_DV_CA_B"
+
+
+def test_plan_structure_rejects_function_based_index_on_column_that_is_not_loaded():
+    template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, (function_based_index(),))
+    with pytest.raises(ValueError, match="STATUS_NOTA"):
+        plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO", "NOTA_NACIONAL"], "BQLOAD_")
+
+
+@pytest.mark.parametrize(
+    "unsupported",
+    [
+        function_based_index(locality="GLOBAL"),
+        index("IX_BM", STATUS_EXPRESSIONS, index_type="FUNCTION-BASED BITMAP"),
+        index("IX_DOM", ["A"], index_type="DOMAIN"),
+        function_based_index(columns=("SYS_NC00001$",)),
+    ],
+)
+def test_plan_structure_still_rejects_other_function_based_and_unknown_indexes(unsupported):
+    with pytest.raises(NotImplementedError):
+        plan_structure(TableLayout(None, None, (unsupported,)), LOADED, "BQLOAD_")
+
+
+def test_index_statement_emits_expressions_verbatim_with_local_and_parallel():
+    parts = index_statement_parts(function_based_index(), 4)
+    assert parts == {
+        "kind": "",
+        "columns": 'CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
+        'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END ',
+        "options": "LOCAL PARALLEL 4",
+    }
+    statement = load_query(
+        QUERIES_ANCHOR,
+        "create_index",
+        schema="DFEN",
+        table="BQLOAD_MVT_NOTAS_NACIONAIS_DETALHES_A",
+        index="BQLOAD_IX_MVT_NN_CANC_COMP_NN_A",
+        **parts,
+    )
+    assert statement.startswith(
+        'CREATE  INDEX "DFEN"."BQLOAD_IX_MVT_NN_CANC_COMP_NN_A" ON "DFEN"."BQLOAD_MVT_NOTAS_NACIONAIS_DETALHES_A" '
+        '(CASE  WHEN "STATUS_NOTA"<>0 THEN "DATA_COMPETENCIA_MUNICIPIO" END , '
+        'CASE  WHEN "STATUS_NOTA"<>0 THEN "NOTA_NACIONAL" END )'
+    )
+    assert statement.rstrip().endswith("LOCAL PARALLEL 4")
+
+
+def test_function_based_index_description_shows_expressions():
+    assert function_based_index().description.startswith('LOCAL FUNCTION-BASED NORMAL (CASE  WHEN "STATUS_NOTA"<>0')

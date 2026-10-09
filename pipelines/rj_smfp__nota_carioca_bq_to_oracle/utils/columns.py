@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from math import ceil
 
 COLUMN_NAME_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_$#]{0,127}$")
 SIMPLE_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
@@ -13,6 +14,10 @@ TIMESTAMP_TZ_FIELD = 'TIMESTAMP WITH TIME ZONE "YYYY-MM-DD HH24:MI:SS.FF TZR"'
 TEXT_FIELD = "CHAR(4000)"
 NUMBER_FIELD = "CHAR(64)"
 DATE_TEXT_FIELD = "CHAR(64)"
+# O BigQuery guarda os bytes do RAW como STRING em base64 padrão (4 caracteres a cada 3 bytes, com preenchimento).
+# O BASE64_DECODE falha com ORA-29261 em valor nulo; o CASE mantém nulo e vazio como nulo.
+RAW_FROM_BASE64 = "CASE WHEN :{name} IS NOT NULL THEN UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:{name})) END"
+RAW_TEXT_MIN_CHARS = 64
 
 
 @dataclass(frozen=True)
@@ -49,6 +54,8 @@ class OracleColumn:
             if self.precision is None:
                 return "NUMBER" if self.scale is None else f"NUMBER(*,{self.scale})"
             return f"NUMBER({self.precision},{self.scale or 0})"
+        if self.data_type == "RAW":
+            return f"RAW({self.data_length})"
         if self.data_type == "DATE" or TIMESTAMP_TYPE_PATTERN.match(self.data_type):
             return self.data_type
         raise NotImplementedError(f"Coluna {self.name}: tipo {self.data_type} sem suporte na carga.")
@@ -110,14 +117,15 @@ def loader_spec(column: OracleColumn, bq_type: str) -> str:
 
     Datas guardadas como texto no BigQuery (``AAAA-MM-DDTHH:MI:SS``, com ou sem
     frações de segundo) viram ``DATE``; as frações são descartadas, como no tipo
-    ``DATE`` do Oracle.
+    ``DATE`` do Oracle. ``RAW`` guardado como texto em base64 no BigQuery é
+    decodificado para os bytes originais; valor nulo ou vazio continua nulo.
 
     :param column: Coluna de destino.
     :param bq_type: Tipo do campo no BigQuery.
     :returns: Especificação do campo no control file.
     :raises NotImplementedError: Se a combinação de tipos não tiver suporte, ou se
-        a coluna de data tiver um nome que exige aspas (a expressão SQL do control
-        file já é delimitada por aspas duplas).
+        a coluna de data ou ``RAW`` tiver um nome que exige aspas (a expressão SQL
+        do control file já é delimitada por aspas duplas).
     """
     ddl_type = column.ddl_type
     if column.data_type in CHARACTER_TYPES and bq_type in ("STRING", "JSON"):
@@ -128,6 +136,11 @@ def loader_spec(column: OracleColumn, bq_type: str) -> str:
         if not SIMPLE_NAME_PATTERN.match(column.name):
             raise NotImplementedError(f"Coluna {column.name}: conversão de data exige nome sem aspas no Oracle.")
         return f'{DATE_TEXT_FIELD} "{DATE_FROM_TEXT.format(name=column.name)}"'
+    if column.data_type == "RAW" and bq_type == "STRING":
+        if not SIMPLE_NAME_PATTERN.match(column.name):
+            raise NotImplementedError(f"Coluna {column.name}: conversão de RAW exige nome sem aspas no Oracle.")
+        size = max(RAW_TEXT_MIN_CHARS, 4 * ceil(int(column.data_length or 0) / 3))
+        return f'CHAR({size}) "{RAW_FROM_BASE64.format(name=column.name)}"'
     if ddl_type.endswith("WITH TIME ZONE") and bq_type == "TIMESTAMP":
         return TIMESTAMP_TZ_FIELD
     raise NotImplementedError(f"Coluna {column.name}: carga de {bq_type} do BigQuery em {ddl_type} sem suporte.")

@@ -58,6 +58,14 @@ deployments:
     collision_strategy: ENQUEUE
   parameters:
     dataset_id: brutos_nota_fiscal
+    # 6 processos de leitura por pod (era 2) e 6 envios simultâneos ao GCS: mais envios contornam as conexões que a
+    # saída de rede prende em ~3 MB/s. Memória: 512 MiB do processo principal + 6 x 640 MiB = ~4,4 GiB, dentro do
+    # pod_memory_mb, que precisa ficar abaixo do memory_request dos job_variables menos folga (5 GiB - 256 MiB).
+    # No Oracle de prod são 3 x 6 sessões de leitura + 3 de contagem; para aliviar o banco, Custom run com workers=4.
+    workers: 6
+    pod_memory_mb: 4608
+    upload_concurrency: 6
+    max_pending_files: 6
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -66,3 +74,9 @@ deployments:
       command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
+      # Cada pod (pai e filhos) reserva o que os 6 workers usam: os nós não têm reserva de sistema e um pod acima do
+      # request já derrubou um nó. Os nós são de 8 vCPU / 15,5 GiB; a conversão para Parquet é limitada por CPU.
+      cpu_request: "3"
+      cpu_limit: "6"
+      memory_request: 5Gi
+      memory_limit: 6Gi

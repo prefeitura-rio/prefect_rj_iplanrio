@@ -24,7 +24,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import (
     validate_identifier,
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.overlap import BackgroundCount
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_progress, format_size
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import Progress, format_progress, format_size
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.scheduler import ChunkRun, Limits, run_chunks
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.worker import ChunkJob, ChunkResult, init_worker, process_chunk
 from prefect_rj_iplanrio.sql import load_query
@@ -38,9 +38,9 @@ class ExtractOptions:
     :param chunk_size_blocks: Tamanho aproximado de cada faixa de ROWID, em blocos.
     :param batch_rows: Teto de linhas por lote lido do Oracle; o lote real sai de ``worker_memory_mb``.
     :param worker_memory_mb: Orçamento de memória de cada worker, em MiB; define o lote de cada tabela.
-    :param pod_memory_mb: Orçamento de memória do pod, em MiB: o REQUEST de memória do pod (2 GiB no template de job
-        do K3s aplicado) menos 256 MiB de folga, e não o limite de 8 GiB. Usar mais que o request deixa o scheduler
-        superalocar o nó, que ficou NotReady no incidente; a extração falha antes de começar se não couber.
+    :param pod_memory_mb: Orçamento de memória do pod, em MiB: o REQUEST de memória do deployment (``memory_request`` em
+        ``job_variables``) menos a folga, e não o limite do pod. Usar mais que o request deixa o scheduler superalocar o
+        nó, que ficou NotReady no incidente; a extração falha antes de começar se não couber.
     :param progress_interval_seconds: Intervalo entre linhas de progresso.
     :param upload_concurrency: Uploads ao GCS simultâneos no pod, em threads do processo principal; o link até o
         bucket é irregular (alguns fluxos TCP se arrastam a ~3 MB/s), então mais fluxos em paralelo compensam os lentos.
@@ -205,7 +205,12 @@ def upload_and_remove(bucket: storage.Bucket, job: ChunkJob, result: ChunkResult
     result.path.unlink()
 
 
-def run_extraction(request: ExtractRequest, jobs: list[ChunkJob], report: Callable[[str], None]) -> ChunkRun:
+def run_extraction(
+    request: ExtractRequest,
+    jobs: list[ChunkJob],
+    report: Callable[[str], None],
+    on_progress: Callable[[Progress], None] | None = None,
+) -> ChunkRun:
     """Lê as faixas em processos e as envia ao GCS em threads, usando um spool local temporário.
 
     O spool é apagado ao sair, com sucesso ou falha, depois de encerrado o pool de processos.
@@ -213,6 +218,8 @@ def run_extraction(request: ExtractRequest, jobs: list[ChunkJob], report: Callab
     :param request: Tabela e destino.
     :param jobs: Faixas a extrair; vazio não abre nenhum processo.
     :param report: Função que publica uma linha de log.
+    :param on_progress: Recebe o :class:`Progress` estruturado: um retrato zerado ao começar (com o total de faixas) e
+        um a cada intervalo, junto com a linha de log. Não deve levantar exceção.
     :returns: Resultados das faixas e os picos do spool.
     """
     if not jobs:
@@ -222,6 +229,14 @@ def run_extraction(request: ExtractRequest, jobs: list[ChunkJob], report: Callab
         options.workers, options.upload_concurrency, options.max_pending_files, options.progress_interval_seconds
     )
     bucket = open_bucket(request)
+
+    def publish(progress: Progress) -> None:
+        report(format_progress(request.table, progress))
+        if on_progress is not None:
+            on_progress(progress)
+
+    if on_progress is not None:
+        on_progress(Progress(0, 0, len(jobs), 0, 0, 0, 0.0))
     with (
         tempfile.TemporaryDirectory(prefix="oracle_to_bq_") as directory,
         open_pool(request, Path(directory), len(jobs)) as pool,
@@ -232,14 +247,16 @@ def run_extraction(request: ExtractRequest, jobs: list[ChunkJob], report: Callab
                 lambda job: pool.submit(process_chunk, job),
                 partial(upload_and_remove, bucket),
                 limits,
-                lambda progress: report(format_progress(request.table, progress)),
+                publish,
             )
         except BaseException:
             pool.shutdown(wait=True, cancel_futures=True)
             raise
 
 
-def extract_table(request: ExtractRequest, report: Callable[[str], None]) -> ExtractResult:
+def extract_table(
+    request: ExtractRequest, report: Callable[[str], None], on_progress: Callable[[Progress], None] | None = None
+) -> ExtractResult:
     """Extrai a tabela inteira, ``AS OF SCN``, para Parquet no GCS e, ao mesmo tempo, conta as linhas no Oracle.
 
     Os processos leem e gravam Parquet num spool local; threads do processo principal os enviam. A contagem
@@ -247,6 +264,7 @@ def extract_table(request: ExtractRequest, report: Callable[[str], None]) -> Ext
 
     :param request: Tabela e destino.
     :param report: Função que publica uma linha de log.
+    :param on_progress: Recebe o progresso estruturado da extração (ver :func:`run_extraction`).
     :returns: Totais da extração, incluindo a contagem do Oracle.
     :raises Exception: A falha de um worker, de um upload ou da contagem, depois de encerrar workers e threads.
     """
@@ -275,7 +293,7 @@ def extract_table(request: ExtractRequest, report: Callable[[str], None]) -> Ext
         )
         count.start()
         try:
-            run = run_extraction(request, jobs, report)
+            run = run_extraction(request, jobs, report, on_progress)
         except BaseException:
             count.abandon()
             raise
