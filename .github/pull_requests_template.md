@@ -52,7 +52,7 @@ corpo opcional explicando o "porquê" da mudança
 | `docs` | Documentação | `docs(readme): update pipeline execution instructions` |
 | `test` | Testes | `test(transform): add unit test for normalize_date` |
 | `chore` | Manutenção | `chore(deps): bump prefect to 2.14.0` |
-| `data` | Dados em produção | `data(caged): upload competencia 2024-01` |
+| `data` | Dados em produção | `data(smtr): upload competencia 2024-01` |
 
 
 **Evite:**
