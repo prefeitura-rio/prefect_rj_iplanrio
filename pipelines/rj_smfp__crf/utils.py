@@ -2,24 +2,106 @@
 
 import io
 import re
+import shutil
 import zipfile
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
-import shutil
+
 import pandas as pd
 from google.cloud import bigquery
 from google.cloud.storage import Bucket, Client
-from iplanrio.pipelines_utils.pandas import to_partitions
 from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.pandas import to_partitions
+
 from prefect_rj_iplanrio.sql import load_query
 
-from pipelines.rj_smfp__crf.constants import (
-    FwfTableConfig,
-    FWF_PERIODOS_CONFIG,
-    FWF_PERIODOS_MEI_CONFIG,
-    FWF_EVENTOS_CONFIG,
-    FWF_EVENTOS_MEI_CONFIG,
+EXTRACT_BASE_PATH = "/tmp/rj_smfp__crf"
+
+
+@dataclass(frozen=True)
+class FwfTableConfig:
+    """Configuração de leitura de uma tabela em formato de largura fixa (FWF).
+
+    :param colspecs: Posições das colunas como tuplas ``(início, fim)``.
+    :param names: Nomes das colunas, na mesma ordem de ``colspecs``.
+    :param file_pattern: Padrão glob do arquivo dentro do ZIP.
+    :param encoding: Codificação do arquivo.
+    """
+
+    colspecs: list[tuple[int, int]]
+    names: list[str]
+    file_pattern: str = "*.txt"
+    encoding: str = "utf-8"
+
+
+# Padrão de nome: 00-PER-AAAAMMDD.txt (períodos), 00-PERMEI-AAAAMMDD.txt (períodos MEI),
+# 00-EVE-AAAAMMDD.txt (eventos), 00-EVEMEI-AAAAMMDD.txt (eventos MEI).
+# As versões MEI têm o mesmo layout das versões Simples; só muda o ``file_pattern``.
+FWF_PERIODOS_CONFIG = FwfTableConfig(
+    colspecs=[
+        (0, 8),  # CNPJ
+        (8, 16),  # Data início
+        (16, 24),  # Data fim
+        (24, 25),  # Identificador cancelamento
+        (25, 34),  # Número opção
+    ],
+    names=[
+        "cnpj",
+        "data_inicio",
+        "data_fim",
+        "identificador_cancelamento",
+        "numero_opcao",
+    ],
+    file_pattern="00-PER-*.txt",
 )
+
+FWF_PERIODOS_MEI_CONFIG = replace(FWF_PERIODOS_CONFIG, file_pattern="00-PERMEI-*.txt")
+
+FWF_EVENTOS_CONFIG = FwfTableConfig(
+    colspecs=[
+        (0, 8),  # CNPJ
+        (8, 9),  # Natureza do evento
+        (9, 12),  # Código do evento
+        (12, 20),  # Data do fato motivador
+        (20, 28),  # Data efeito
+        (28, 78),  # Número do processo judicial
+        (78, 103),  # Número do processo administrativo
+        (103, 353),  # Observações
+        (353, 360),  # Código UA
+        (360, 362),  # Código UF
+        (362, 366),  # Código Município
+        (366, 374),  # Data de ocorrência
+        (374, 380),  # Hora de ocorrência
+        (380, 389),  # Número da Opção
+    ],
+    names=[
+        "cnpj",
+        "natureza_evento",
+        "codigo_evento",
+        "data_fato_motivador",
+        "data_efeito",
+        "numero_processo_judicial",
+        "numero_processo_administrativo",
+        "observacoes",
+        "codigo_ua",
+        "codigo_uf",
+        "codigo_municipio",
+        "data_ocorrencia",
+        "hora_ocorrencia",
+        "numero_opcao",
+    ],
+    file_pattern="00-EVE-*.txt",
+)
+
+FWF_EVENTOS_MEI_CONFIG = replace(FWF_EVENTOS_CONFIG, file_pattern="00-EVEMEI-*.txt")
+
+FWF_CONFIGS: dict[str, FwfTableConfig] = {
+    "periodos_simples": FWF_PERIODOS_CONFIG,
+    "periodos_mei": FWF_PERIODOS_MEI_CONFIG,
+    "eventos_simples": FWF_EVENTOS_CONFIG,
+    "eventos_mei": FWF_EVENTOS_MEI_CONFIG,
+}
 
 
 def get_max_date_from_bigquery(
@@ -260,18 +342,10 @@ def read_extracted_fwf_file(extract_path: str, table_id: str, extract_base_path:
     :raises ValueError: Se múltiplos arquivos forem encontrados ou table_id inválido.
     :raises pd.errors.ParserError: Se houver erro ao fazer parsing do arquivo.
     """
-    # Mapa de configurações por table_id
-    config_map = {
-        "periodos_simples": FWF_PERIODOS_CONFIG,
-        "periodos_mei": FWF_PERIODOS_MEI_CONFIG,
-        "eventos_simples": FWF_EVENTOS_CONFIG,
-        "eventos_mei": FWF_EVENTOS_MEI_CONFIG,
-    }
+    if table_id not in FWF_CONFIGS:
+        raise ValueError(f"table_id '{table_id}' inválido. Válidos: {', '.join(FWF_CONFIGS)}")
 
-    if table_id not in config_map:
-        raise ValueError(f"table_id '{table_id}' inválido. Válidos: {', '.join(config_map.keys())}")
-
-    config = config_map[table_id]
+    config = FWF_CONFIGS[table_id]
     extract_dir = Path(extract_path)
 
     if not extract_dir.exists():
@@ -363,9 +437,9 @@ def process_crf_zip_files(
     bucket_name: str,
     folder_prefix: str,
     table_id: str,
-    extract_base_path: str,
     data_inicio: date | str | None = None,
     data_fim: date | str | None = None,
+    extract_base_path: str = EXTRACT_BASE_PATH,
 ) -> str | None:
     """Processa sequencialmente todos os arquivos ZIP CRF do GCS.
 
@@ -379,11 +453,11 @@ def process_crf_zip_files(
     :param bucket_name: GCS bucket name contendo os arquivos ZIP.
     :param folder_prefix: Prefixo do caminho da pasta no bucket.
     :param table_id: Identificador da tabela CRF a processar.
-    :param extract_base_path: Diretório base local para descompactação e saída parquet.
     :param data_inicio: Data de início do intervalo (``YYYY-MM-DD`` ou ``date``).
         Arquivos com data igual ou anterior são ignorados. Se ``None``, sem limite inferior.
     :param data_fim: Data de fim do intervalo (``YYYY-MM-DD`` ou ``date``).
         Arquivos com data posterior são ignorados. Se ``None``, sem limite superior.
+    :param extract_base_path: Diretório base local para descompactação e saída parquet.
     :returns: Caminho local (``data_path``) onde os arquivos parquet foram salvos,
         ou ``None`` se nenhum arquivo ZIP foi encontrado para processar.
     """

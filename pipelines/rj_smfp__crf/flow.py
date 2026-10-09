@@ -8,7 +8,6 @@ from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from pipelines.rj_smfp__crf.tasks import get_max_date_from_bigquery_task, process_all_crf_zip_files_task
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from pipelines.rj_smfp__crf.utils_env.env import CRF__BUCKET_NAME, CRF__FOLDER_PREFIX_PERIODOS_EVENTOS
 
 
 @flow(log_prints=True)
@@ -55,8 +54,6 @@ def rj_smfp__crf(
 
     data_path = process_all_crf_zip_files_task(
         project_id=project_id,
-        bucket_name=CRF__BUCKET_NAME,
-        folder_prefix=CRF__FOLDER_PREFIX_PERIODOS_EVENTOS,
         table_id=table_id,
         data_inicio=data_inicio,
         data_fim=data_fim,
