@@ -23,6 +23,8 @@ class Supervision:
     :param read: Lê o estado atual dos flow runs pelos ids.
     :param cancel: Pede o cancelamento dos flow runs pelos ids.
     :param report: Publica uma linha de log.
+    :param on_poll: Gancho chamado a cada leitura com o ``RunInfo`` de cada filho, por tabela (o pai o usa para
+        atualizar o Discord). Uma exceção dele é registrada e não interrompe a supervisão.
     :param poll_seconds: Intervalo entre leituras.
     :param cancel_grace_seconds: Tempo máximo esperando os filhos cancelados terminarem.
     :param sleep: Função de espera (substituível nos testes).
@@ -31,6 +33,7 @@ class Supervision:
     read: Callable[[Sequence[str]], list[RunInfo]]
     cancel: Callable[[Sequence[str]], None]
     report: Callable[[str], None]
+    on_poll: Callable[[Mapping[str, RunInfo]], None] | None = None
     poll_seconds: float = 30.0
     cancel_grace_seconds: float = 300.0
     sleep: Callable[[float], None] = time.sleep
@@ -41,6 +44,11 @@ def _read_and_report(children: Mapping[str, str], supervision: Supervision) -> l
     runs = [by_id[run_id] for run_id in children.values()]
     for table_id, run in zip(children, runs, strict=True):
         supervision.report(format_child_status(table_id, run))
+    if supervision.on_poll is not None:
+        try:
+            supervision.on_poll(dict(zip(children, runs, strict=True)))
+        except Exception as error:
+            supervision.report(f"Gancho de acompanhamento falhou: {error!r}")
     return runs
 
 
