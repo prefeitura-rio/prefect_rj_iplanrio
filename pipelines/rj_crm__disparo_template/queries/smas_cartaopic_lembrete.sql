@@ -17,7 +17,6 @@ IF target_date IS NULL THEN
     SELECT
         CAST(NULL AS STRING) AS telefone,
         CAST(NULL AS STRING) AS SubscriberKey,
-        CAST(NULL AS STRING) AS externalId,
         CAST(NULL AS STRING) AS nome_sobrenome,
         CAST(NULL AS STRING) AS endereco,
         CAST(NULL AS STRING) AS data,
@@ -147,17 +146,12 @@ ELSE
         WHERE celular_disparo IS NOT NULL AND data_evento_date IS NOT NULL
     )
 
-    -- Tabela simples (sem TO_JSON_STRING). 'externalId' é controle interno (dedup por
-    -- CPF) e é descartado do CSV pelo de_columns antes do envio à Data Extension.
-    -- telefone, SubscriberKey e LOCALE já são tratados por padrão pelo flow (LOCALE é
-    -- preenchido automaticamente como 'BR' em save_csv_for_sftp).
     SELECT
         celular_disparo AS telefone,
         cpf AS SubscriberKey,
-        cpf AS externalId,
         nome_sobrenome,
         endereco_evento AS endereco,
-        data_formatada AS data,
+        data_formatada AS dia,
         horario_evento AS horario
     FROM formatted
     WHERE celular_disparo IS NOT NULL;
