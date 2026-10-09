@@ -46,14 +46,14 @@ corpo opcional explicando o "porquê" da mudança
 
 | Tipo | Quando usar | Exemplo de mensagem |
 |------|-------------|---------------------|
-| `feat` | Nova funcionalidade | `feat(rj_iplanrio__taxirio): add column tipo_veiculo` |
-| `fix` | Correção de bug | `fix(rj_smfp__nota_carioca_oracle_to_bq): troca tudo-ou-nada e checksums` |
-| `perf` | Melhoria de desempenho | `perf(rj_smfp__nota_carioca_oracle_to_bq): contagem do Oracle em paralelo` |
-| `refactor` | Refatoração | `refactor(rj_cor__precipitacao_alertario): simplify extraction logic` |
-| `docs` | Documentação | `docs(rj_cgm__osinfo_rh): add tables descriptions` |
-| `test` | Testes | `test(rj_iplanrio__sicop): add unit test for normalize_date` |
-| `chore` | Manutenção | `chore(deps): bump prefect to 3.4.9` |
-| `data` | Dados em produção | `data(rj_smas__cadunico): upload competencia 2024-01` |
+| `feat` | Nova funcionalidade | `feat(smtr): add column municipio_id` |
+| `fix` | Correção de bug | `fix(schema): correct data type for cpf field` |
+| `refactor` | Refatoração | `refactor(flow): simplify extraction logic` |
+| `docs` | Documentação | `docs(readme): update pipeline execution instructions` |
+| `test` | Testes | `test(transform): add unit test for normalize_date` |
+| `chore` | Manutenção | `chore(deps): bump prefect to 2.14.0` |
+| `data` | Dados em produção | `data(caged): upload competencia 2024-01` |
+
 
 **Evite:**
 - `fix bug`, `update`, `changes` — mensagens vagas não descrevem o que foi feito
