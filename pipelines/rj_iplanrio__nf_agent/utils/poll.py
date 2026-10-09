@@ -183,21 +183,45 @@ def finish_extraction(client: OpenAI, settings: Settings, event: JobEvent, batch
     finish_session(settings, start, classifications, extractions)
 
 
+def fail_if_status_unreachable(session_count: int, status_errors: Sequence[str]) -> None:
+    """Falha o run se o status de nenhuma sessão ativa pôde ser consultado.
+
+    Quando todas as consultas falham, o problema não é de uma sessão (chave inativa,
+    spend cap, Bifrost fora do ar). Levantar aqui faz a causa aparecer no estado do run
+    no Prefect, em vez de ficar só em avisos de log.
+
+    :param session_count: Sessões ativas consultadas.
+    :param status_errors: Mensagens das consultas que falharam.
+    :raises RuntimeError: Se havia sessões ativas e todas as consultas falharam.
+    """
+    if session_count and len(status_errors) == session_count:
+        raise RuntimeError(
+            f"Não foi possível consultar o status de nenhuma das {session_count} sessões ativas "
+            f"(chave inativa, spend cap ou Bifrost fora do ar?). Primeira falha: {status_errors[0][:500]}"
+        )
+
+
 def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
     """Consulta cada sessão ativa uma vez e avança as que terminaram.
 
-    Erros de consulta de status são tratados como transitórios. Erros ao avançar
-    uma sessão concluída são acumulados e levantados juntos no fim, depois de
-    todas as sessões serem tentadas; a sessão continua ativa para o próximo run.
+    Erros de consulta de status são tratados como transitórios, a menos que atinjam
+    todas as sessões ativas: aí o problema não é de uma sessão (chave inativa, spend
+    cap, Bifrost fora do ar) e o run falha com a primeira mensagem, para aparecer no
+    estado do run no Prefect. Erros ao avançar uma sessão concluída são acumulados e
+    levantados juntos no fim, depois de todas as sessões serem tentadas; a sessão
+    continua ativa para o próximo run.
 
     :param client: Cliente do Bifrost.
     :param settings: Configuração de runtime.
     :returns: Sessões por desfecho.
-    :raises RuntimeError: Se alguma sessão concluída não puder ser avançada.
+    :raises RuntimeError: Se o status de nenhuma sessão ativa puder ser consultado, ou
+        se alguma sessão concluída não puder ser avançada.
     """
     summary = PollSummary()
     errors: list[str] = []
-    for event in active_sessions(settings.nf_batch_jobs_table):
+    status_errors: list[str] = []
+    sessions = active_sessions(settings.nf_batch_jobs_table)
+    for event in sessions:
         if not event.batch_id:
             errors.append(f"sessão {event.session_id} ({event.phase}): evento ativo sem batch_id")
             continue
@@ -205,6 +229,7 @@ def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
             batch = retrieve_batch(client, event.batch_id)
         except Exception as exc:
             logger.warning("Sessão %s: falha ao consultar status: %s", event.session_id, exc)
+            status_errors.append(f"sessão {event.session_id} ({event.phase}): {exc}")
             summary.waiting.append(event.session_id)
             continue
 
@@ -243,6 +268,7 @@ def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
         except Exception as exc:
             errors.append(f"sessão {event.session_id} ({event.phase}): {exc}\n{traceback.format_exc()}")
 
+    fail_if_status_unreachable(len(sessions), status_errors)
     if errors:
         raise RuntimeError(
             f"Falha ao avançar {len(errors)} sessão(ões); continuam ativas para o próximo run:\n"

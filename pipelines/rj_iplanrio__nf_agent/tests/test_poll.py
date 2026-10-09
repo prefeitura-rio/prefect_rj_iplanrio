@@ -171,3 +171,25 @@ def test_legacy_session_without_context(io):
     rows = io.write.call_args.args[2]
     assert [row["pagina"] for row in rows] == [1, 2, 3]
     assert rows[1]["pipeline_status"] == "erro_processamento"
+
+
+def test_status_errors_on_every_active_session_fail_the_run_with_the_first_message(io):
+    io.active.return_value = [START, JobEvent("s2", PHASE_CLASSIFICATION, "b2", STATE_SUBMITTED)]
+    io.retrieve.side_effect = RuntimeError("403 virtualkey is inactive")
+    with pytest.raises(RuntimeError, match=r"(?s)nenhuma das 2 sessões.*s1.*virtualkey is inactive"):
+        poll.poll_sessions(MagicMock(), SETTINGS)
+    assert io.appended == []
+
+
+def test_status_error_on_the_only_active_session_fails_the_run(io):
+    io.active.return_value = [START]
+    io.retrieve.side_effect = RuntimeError("conexão")
+    with pytest.raises(RuntimeError, match="nenhuma das 1 sessões"):
+        poll.poll_sessions(MagicMock(), SETTINGS)
+
+
+def test_no_active_sessions_is_not_a_status_failure(io):
+    io.active.return_value = []
+    summary = poll.poll_sessions(MagicMock(), SETTINGS)
+    assert summary.waiting == []
+    io.retrieve.assert_not_called()
