@@ -25,7 +25,7 @@ O título deve seguir o formato: `[WIP][Tipo] escopo: descrição curta e objeti
 | `[Refactor]` | Refatoração sem mudança de comportamento | `[WIP][Refactor] rj_smfp__nota_carioca_oracle_to_bq: simplify extraction flow` |
 | `[Docs]` | Atualização de documentação | `[WIP][Docs] rj_cgm__osinfo_rh: add tables descriptions` |
 | `[Test]` | Mudanças em testes | `[WIP][Test] rj_iplanrio__sicop: add unit tests for transform step` |
-| `[Chore]` | Manutenção e tarefas menores | `[WIP][Chore] bump prefect to 3.4.9` |
+| `[Chore]` | Manutenção e tarefas menores | `[WIP][Chore] deps: bump prefect to 3.4.9` |
 | `[Deactivate]` | Desativação de schedule de pipeline | `[WIP][Deactivate] rj_cvl__osinfo: disable schedule` |
 
 > Remova o prefixo `[WIP]` apenas ao marcar o PR como **Ready for Review**.
@@ -66,7 +66,7 @@ corpo opcional explicando o "porquê" da mudança
 **O que muda?**
 _Descreva objetivamente o que foi alterado neste PR._
 
-**Por quê muda?**
+**Por que muda?**
 _Explique a motivação e o problema que esta mudança resolve._
 
 ---
