@@ -100,6 +100,19 @@ def test_metric_specs_only_loaded_columns_and_convert_text_dates():
     assert specs[3].bigquery_expression == "COUNTIF(`nome` IS NOT NULL AND `nome` != '')"
 
 
+def test_metric_specs_decode_raw_stored_as_base64_and_compare_bytes():
+    specs = metric_specs([field("pessoa_emitente", "STRING")], {"PESSOA_EMITENTE": "RAW"})
+    assert [(spec.kind, spec.oracle_expression) for spec in specs] == [
+        ("nao_nulos", 'COUNT("PESSOA_EMITENTE")'),
+        ("comprimento_total", 'SUM(UTL_RAW.LENGTH("PESSOA_EMITENTE"))'),
+        ("minimo", 'RAWTOHEX(MIN("PESSOA_EMITENTE"))'),
+        ("maximo", 'RAWTOHEX(MAX("PESSOA_EMITENTE"))'),
+    ]
+    assert specs[1].bigquery_expression == "SUM(BYTE_LENGTH(FROM_BASE64(NULLIF(`pessoa_emitente`, ''))))"
+    assert specs[2].bigquery_expression == "UPPER(TO_HEX(MIN(FROM_BASE64(NULLIF(`pessoa_emitente`, '')))))"
+    assert describe_column(ora("PESSOA_EMITENTE", "RAW", 16)) == "RAW(16) NOT NULL"
+
+
 def test_normalize_metric_treats_equivalent_decimals_as_equal():
     assert normalize_metric("soma", "1.50") == normalize_metric("soma", Decimal("1.5")) == "1.5"
     assert normalize_metric("soma", ".25") == "0.25"

@@ -14,6 +14,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     IndexDefinition,
     TableLayout,
     index_from_dictionary,
+    index_key,
     index_statement_parts,
     inmemory_from_dictionary,
     layout_differences,
@@ -280,7 +281,7 @@ def read_table_layout(cursor: oracledb.Cursor, owner: str, table: str) -> TableL
 
     columns: dict[tuple[object, object], list[str]] = {}
     for row in fetch_rows(cursor, "get_index_columns", binds):
-        columns.setdefault((row["index_owner"], row["index_name"]), []).append(str(row["column_name"]))
+        columns.setdefault((row["index_owner"], row["index_name"]), []).append(index_key(row))
     indexes = tuple(
         index_from_dictionary(row, columns.get((row["owner"], row["index_name"]), []))
         for row in fetch_rows(cursor, "get_indexes", binds)

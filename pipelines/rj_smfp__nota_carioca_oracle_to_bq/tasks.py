@@ -22,8 +22,10 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import (
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import format_checksums
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify import active_parent
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import format_duration, format_size
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.supervise import Supervision, supervise
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.table_progress import ProgressStore, active_reporter
 
 POLL_SECONDS = 30.0
 
@@ -127,7 +129,8 @@ def extract_table_task(  # noqa: PLR0913
         run_id=run_id,
         options=options,
     )
-    result = extract.extract_table(request, report=log)
+    # O repórter da tabela (do filho ou do pai sequencial) vem do ponteiro de módulo; sem ele, não faz nada.
+    result = extract.extract_table(request, report=log, on_progress=active_reporter(table_plan.table_id).extraction)
     log(
         f"{result.table}: extração concluída em {format_duration(result.seconds)}: {result.rows:,} linhas, "
         f"{format_size(result.bytes_written)} em {result.files} arquivos enviados ({result.chunks} faixas); "
@@ -210,8 +213,16 @@ def launch_children_task(
 @task(cache_policy=NO_CACHE)
 def wait_children_task(children: dict[str, str]) -> None:
     """Acompanha os filhos a cada 30 s; se algum falhar, cancela os irmãos e falha sem publicar."""
+    notifier = active_parent()
     supervise(
-        children, Supervision(read=runs.read_runs, cancel=runs.cancel_runs, report=log, poll_seconds=POLL_SECONDS)
+        children,
+        Supervision(
+            read=runs.read_runs,
+            cancel=runs.cancel_runs,
+            report=log,
+            on_poll=notifier.observe if notifier is not None else None,
+            poll_seconds=POLL_SECONDS,
+        ),
     )
 
 
@@ -229,10 +240,24 @@ def publish_tables_task(
 
 @task(cache_policy=NO_CACHE)
 def cleanup_task(  # noqa: PLR0913
-    project: str, dataset_id: str, bucket: str, plans: list[plan.TablePlan], run_id: str, drop_temp: bool = True
+    project: str,
+    dataset_id: str,
+    bucket: str,
+    plans: list[plan.TablePlan],
+    run_id: str,
+    drop_temp: bool = True,
+    drop_progress: bool = True,
 ) -> None:
-    """Apaga os arquivos do GCS de ``run_id`` e, com ``drop_temp``, as tabelas temporárias; com sucesso ou falha."""
+    """Apaga os arquivos do GCS de ``run_id`` e, com ``drop_temp``, as tabelas temporárias; com sucesso ou falha.
+
+    Com ``drop_progress`` apaga também os JSONs de progresso do Discord (``oracle_to_bq_progress/<run_id>/``), mesmo
+    que a limpeza do resto falhe. Só o pai os apaga: o filho passa ``False``, porque o pai ainda precisa lê-los.
+    """
     prefixes = [blob_prefix(GCS_PREFIX, table_plan.table_id, run_id) for table_plan in plans]
-    load.cleanup(load.Destination(project, dataset_id, bucket), plans, prefixes, drop_temp)
+    try:
+        load.cleanup(load.Destination(project, dataset_id, bucket), plans, prefixes, drop_temp)
+    finally:
+        if drop_progress:
+            ProgressStore(project, bucket, run_id).delete()
     names = [table_plan.table_id for table_plan in plans]
     log(f"Arquivos do GCS apagados{' e tabelas temporárias' if drop_temp else ''} ({names})")

@@ -7,7 +7,11 @@ INDEX_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 # O Oracle cria I_SNAP$_<mview> sozinho para o fast refresh de views materializadas; numa tabela comum não tem uso.
 SNAPSHOT_INDEX_PREFIX = "I_SNAP$"
 SUPPORTED_PARTITIONING = ("RANGE", "LIST")
-SUPPORTED_INDEX_TYPES = ("NORMAL", "BITMAP")
+SUPPORTED_INDEX_TYPES = ("NORMAL", "BITMAP", "FUNCTION-BASED NORMAL")
+FUNCTION_BASED_INDEX_TYPE = "FUNCTION-BASED NORMAL"
+# Identificadores entre aspas duplas, como o dicionário do Oracle grava as colunas dentro de uma expressão de índice.
+QUOTED_IDENTIFIER_PATTERN = re.compile(r'"([^"]+)"')
+STRING_LITERAL_PATTERN = re.compile(r"'(?:[^']|'')*'")
 USABLE_INDEX_STATUSES = ("VALID", "N/A")
 # Valores de all_tables e all_part_tables aceitos no INMEMORY; o texto entra no DDL como está.
 INMEMORY_PRIORITIES = ("NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
@@ -70,6 +74,20 @@ class Partitioning:
         return text + (f" INTERVAL {self.interval}" if self.interval else "")
 
 
+class IndexExpression(str):
+    """Chave de índice que é uma expressão SQL (índice baseado em função), e não o nome de uma coluna.
+
+    O texto vem de ``all_ind_expressions.column_expression`` e entra no
+    ``CREATE INDEX`` como está. Compara e calcula o hash como uma ``str``; o tipo
+    só distingue a expressão de um nome de coluna, que recebe aspas.
+    """
+
+    @property
+    def columns(self) -> set[str]:
+        """Colunas citadas na expressão, entre aspas duplas, fora de literais de texto."""
+        return set(QUOTED_IDENTIFIER_PATTERN.findall(STRING_LITERAL_PATTERN.sub("''", self)))
+
+
 @dataclass(frozen=True)
 class IndexDefinition:
     """Índice de uma tabela, como em ``all_indexes`` e ``all_ind_columns``.
@@ -80,7 +98,8 @@ class IndexDefinition:
     :param index_type: Tipo no dicionário (``NORMAL``, ``BITMAP``,
         ``FUNCTION-BASED NORMAL``...).
     :param unique: Se o índice é único.
-    :param columns: Colunas do índice, na ordem.
+    :param columns: Chaves do índice, na ordem: nomes de coluna ou, nas posições de
+        um índice baseado em função, :class:`IndexExpression`.
     :param locality: ``LOCAL`` ou ``GLOBAL`` se o índice for particionado;
         ``None`` se não for.
     :param tablespace: Tablespace do índice (o padrão das partições, se for
@@ -217,12 +236,31 @@ def inmemory_from_dictionary(row: dict[str, object]) -> str | None:
     return " ".join(parts)
 
 
+def index_key(row: dict[str, object]) -> str:
+    """Lê a chave de uma posição do índice a partir do dicionário do Oracle.
+
+    Nas posições de um índice baseado em função, ``all_ind_columns`` traz só um
+    nome oculto (``SYS_NC...$``); a expressão vem de ``all_ind_expressions``. Uma
+    coluna descendente também é guardada como expressão, e o ``DESC`` entra no texto.
+
+    :param row: Linha com ``column_name``, ``descend`` e ``column_expression``
+        (nulo se a posição for uma coluna comum).
+    :returns: Nome da coluna, ou :class:`IndexExpression` com a expressão.
+    """
+    expression = row["column_expression"]
+    if expression is None:
+        return str(row["column_name"])
+    text = str(expression).strip()
+    return IndexExpression(f"{text} DESC" if row["descend"] == "DESC" else text)
+
+
 def index_from_dictionary(row: dict[str, object], columns: list[str]) -> IndexDefinition:
     """Monta a definição de um índice a partir das linhas do dicionário do Oracle.
 
     :param row: Linha com ``owner``, ``index_name``, ``index_type``,
         ``uniqueness``, ``locality``, ``tablespace_name``, ``degree`` e ``status``.
-    :param columns: Colunas do índice, na ordem.
+    :param columns: Chaves do índice, na ordem: nomes de coluna ou
+        :class:`IndexExpression` nas posições com expressão.
     :returns: Definição do índice.
     """
     return IndexDefinition(
@@ -273,7 +311,14 @@ def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefi
             raise NotImplementedError(
                 f"Índice {index.name}: {index.locality or 'não particionado'} {index.index_type} sem suporte na carga."
             )
-        missing = [name for name in index.columns if name not in available]
+        used = {
+            column for key in index.columns for column in (key.columns if isinstance(key, IndexExpression) else {key})
+        }
+        if index.index_type == FUNCTION_BASED_INDEX_TYPE and not any(
+            isinstance(key, IndexExpression) for key in index.columns
+        ):
+            raise NotImplementedError(f"Índice {index.name}: expressão do índice baseado em função não foi lida.")
+        missing = sorted(used - available)
         if missing:
             raise ValueError(f"Índice {index.name} usa colunas que não são carregadas: {missing}")
         name = f"{index_prefix}{index.name}"
@@ -358,15 +403,20 @@ def index_statement_parts(index: IndexDefinition, parallel_degree: int) -> dict[
 
     :param index: Índice a criar.
     :param parallel_degree: Grau de paralelismo da criação.
-    :returns: ``kind`` (``UNIQUE``, ``BITMAP`` ou vazio), ``columns`` e
-        ``options`` (tablespace, ``LOCAL`` e ``PARALLEL``).
+    :returns: ``kind`` (``UNIQUE``, ``BITMAP`` ou vazio), ``columns`` (colunas
+        entre aspas e expressões como estão) e ``options`` (tablespace, ``LOCAL``
+        e ``PARALLEL``).
     """
     kind = "UNIQUE" if index.unique else ("BITMAP" if index.index_type == "BITMAP" else "")
     options = [f"TABLESPACE {quote(index.tablespace)}"] if index.tablespace else []
     if index.locality == "LOCAL":
         options.append("LOCAL")
     options.append(f"PARALLEL {parallel_degree}")
-    return {"kind": kind, "columns": ", ".join(quote(name) for name in index.columns), "options": " ".join(options)}
+    return {
+        "kind": kind,
+        "columns": ", ".join(key if isinstance(key, IndexExpression) else quote(key) for key in index.columns),
+        "options": " ".join(options),
+    }
 
 
 def layout_differences(existing: TableLayout, expected: TableLayout) -> list[str]:

@@ -58,16 +58,20 @@ deployments:
     dataset_id: nota_carioca
     # dbt antes da carga (falha do dbt falha a carga); para carregar sem dbt, Custom run com run_dbt=false.
     run_dbt: true
-    # Só as tabelas já homologadas no Oracle. Sem esta lista a carga pegaria todas as tabelas do dataset,
-    # inclusive MVT_NOTAS_NACIONAIS_DETALHES, que ainda não foi liberada (DDL, espaço e prazo a combinar).
+    # Tabelas levadas ao Oracle, cada uma espelhando a original de mesmo nome em DFEN. Lista explícita: uma tabela
+    # nova no dataset só entra no Oracle depois de conferida contra a original.
     table_ids:
     - MVT_NOTAS_NACIONAIS_EXIGIVEIS
     - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
-    # dbt só dos models dessas duas tabelas (e dos testes deles). A tag:nota_carioca inclui o model novo, cuja
-    # query passa do timeout de 5 min do profile. Precisa da lista completa: a pipeline não mescla com os padrões.
+    - MVT_NOTAS_NACIONAIS_DETALHES
+    # dbt só dos models dessas tabelas (e dos testes deles). Precisa da lista completa: a pipeline não mescla com
+    # os padrões.
     dbt_parameters:
       command: build
-      select: mart_nota_carioca__notas_nacionais_exigiveis mart_nota_carioca__notas_nacionais_exigiveis_detalhes
+      select: >-
+        mart_nota_carioca__notas_nacionais_exigiveis
+        mart_nota_carioca__notas_nacionais_exigiveis_detalhes
+        mart_nota_carioca__notas_nacionais_detalhes
       send_discord_report: false
       github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
       bigquery_project: rj-iplanrio
@@ -75,6 +79,10 @@ deployments:
       gcs_buckets:
         prod: rj-iplanrio_dbt
         dev: rj-iplanrio-dev_dbt
+    # 4 sessões do SQL*Loader (era 2). Cada uma usa ~1,3 core e ~20 MB por coluna de texto (o campo é declarado como
+    # CHAR(4000)): ~0,5 GB na MVT_NOTAS_NACIONAIS_DETALHES. Índices e estatísticas com grau 8 (era 4) no Oracle.
+    sqlldr_sessions: 4
+    index_parallel_degree: 8
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -83,6 +91,11 @@ deployments:
       command: uv run --package rj_smfp__nota_carioca_bq_to_oracle -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
+      # Reserva o que as 4 sessões usam (~2 GB do SQL*Loader + ~0,5 GB do processo e dos downloads do GCS).
+      cpu_request: "4"
+      cpu_limit: "6"
+      memory_request: 4Gi
+      memory_limit: 6Gi
   schedules:
   - cron: "0 9,18 * * *"
     timezone: America/Sao_Paulo

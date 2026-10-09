@@ -12,6 +12,7 @@ from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_POLL_SECONDS
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, dbt, inmemory, oracle, runs, slots, sqlldr
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, build_load_plan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import current as current_notifier
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     StructurePlan,
     describe_partitioning,
@@ -187,9 +188,13 @@ def load_into_oracle_task(  # noqa: PLR0913
         f"({sqlldr.format_size(sum(exported.size for exported in files))}) em {min(sessions, len(files))} sessão(ões)"
     )
 
+    notifier = current_notifier()
+
     def report(snapshot: sqlldr.ProgressSnapshot) -> None:
         log(sqlldr.format_progress(table, snapshot))
         update_progress_artifact(artifact_id=artifact_id, progress=sqlldr.progress_percent(snapshot))
+        if notifier is not None:
+            notifier.loading(snapshot)
 
     result = sqlldr.load_from_gcs(
         config=oracle.read_oracle_config(infisical_secret_path),
@@ -256,6 +261,9 @@ def create_oracle_indexes_task(
         log(f"{table}: a original não tem índices para replicar")
         return table
     artifact_id = create_progress_artifact(progress=0.0, description=f"Índices de {table}")
+    notifier = current_notifier()
+    if notifier is not None:
+        notifier.indexes(0, len(indexes))
     started = time.monotonic()
     for position, index in enumerate(indexes, start=1):
         log(
@@ -265,6 +273,8 @@ def create_oracle_indexes_task(
         index_started = time.monotonic()
         oracle.create_index(config=config, table=table, index=index, parallel_degree=parallel_degree)
         update_progress_artifact(artifact_id=artifact_id, progress=100.0 * position / len(indexes))
+        if notifier is not None:
+            notifier.indexes(position, len(indexes))
         log(f"{table}: índice {index.name} criado em {sqlldr.format_duration(time.monotonic() - index_started)}")
     log(f"{table}: {len(indexes)} índice(s) criado(s) em {sqlldr.format_duration(time.monotonic() - started)}")
     return table
