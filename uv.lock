@@ -22,6 +22,7 @@ members = [
     "rj-cor-precipitacao-cemaden",
     "rj-cor-precipitacao-inea",
     "rj-cor-precipitacao-websirene",
+    "rj-crm-agent-quality-registry",
     "rj-crm-agentforce-classificacao-llm",
     "rj-crm-api-wetalkie",
     "rj-crm-callcenter-attendances-weekly",
@@ -4019,6 +4020,27 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
+
+[[package]]
+name = "rj-crm-agent-quality-registry"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_crm__agent_quality_registry" }
+dependencies = [
+    { name = "google-cloud-bigquery" },
+    { name = "prefect" },
+    { name = "prefect-docker" },
+    { name = "prefect-rj-iplanrio" },
+    { name = "requests" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "google-cloud-bigquery", specifier = ">=3.11.0" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-docker", specifier = ">=0.6.5" },
+    { name = "prefect-rj-iplanrio", editable = "." },
+    { name = "requests", specifier = ">=2.31.0" },
+]
 
 [[package]]
 name = "rj-crm-agentforce-classificacao-llm"
