@@ -8,6 +8,7 @@
 
 - [ ] O título do PR segue o padrão `[WIP][Tipo] descrição curta`
 - [ ] O PR foi aberto como **Draft**
+- [ ] O PR possui ao menos um **Assignee** definido
 - [ ] Cada commit tem sua própria mensagem descritiva seguindo Conventional Commits
 - [ ] O código foi testado localmente antes de solicitar revisão
 
