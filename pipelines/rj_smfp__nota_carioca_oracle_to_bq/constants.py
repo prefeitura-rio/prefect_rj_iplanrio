@@ -4,6 +4,9 @@
 QUERIES_ANCHOR = __file__
 
 GCS_PREFIX = "oracle_to_bq"
+# JSONs de progresso dos filhos, lidos pelo pai para o Discord. Irmão de GCS_PREFIX, nunca dentro dele: o load lista
+# ``oracle_to_bq/<tabela>/<run id>/`` e não pode enxergá-los.
+PROGRESS_PREFIX = "oracle_to_bq_progress"
 TEMP_TABLE_SUFFIX = "__oracle_to_bq_tmp"
 DEFAULT_TABLES = ("DPS", "NOTAS_NACIONAIS", "PESSOAS_NACIONAIS")
 

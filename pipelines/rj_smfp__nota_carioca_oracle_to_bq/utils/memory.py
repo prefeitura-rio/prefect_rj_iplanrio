@@ -23,10 +23,12 @@ DATE_BYTES_PER_ROW = 256
 # Interpretador, pyarrow, Instant Client, client do GCS e do Prefect num worker recém-iniciado (medido ~220-270 MB).
 WORKER_BASE_MB = 320
 # Processo principal (engine do Prefect, clients do BigQuery e do GCS). Cobre também as threads de upload da
-# extração (``upload_concurrency`` = 4 por padrão): cada uma lê o Parquet do disco em pedaços de 8 MiB (~32 MiB de
-# buffers, mais ~10-20 MiB de TLS e requests), bem abaixo dos 256 MiB de folga que ``pod_memory_mb`` já deixa abaixo do
-# request; os workers, por sua vez, não seguram mais buffers de upload. O spool vive em disco (``/tmp`` do pod); se
-# ele fosse tmpfs, os arquivos locais (até ``max_pending_files``) contariam como memória.
+# extração (``upload_concurrency``): cada uma lê o Parquet do disco em pedaços de 8 MiB (~8 MiB de buffer por thread,
+# ~32 MiB com 4 e ~48 MiB com 6, mais ~10-30 MiB de TLS e requests no total), bem abaixo da folga de pelo menos 256
+# MiB que ``pod_memory_mb`` deixa abaixo do request de memória do deployment; o custo cresce de forma linear com
+# ``upload_concurrency``, então com 6 threads (~60-80 MiB) a folga ainda sobra e a constante continua valendo. Os
+# workers, por sua vez, não seguram mais buffers de upload. O spool vive em disco (``/tmp`` do pod); se ele fosse
+# tmpfs, os arquivos locais (até ``max_pending_files``) contariam como memória.
 MAIN_BASE_MB = 512
 MIN_BATCH_ROWS = 500
 
@@ -104,14 +106,15 @@ def plan_worker_memory(columns: tuple[OracleColumn, ...], worker_memory_mb: int,
 def check_pod_budget(worker_mb_by_table: Mapping[str, int], workers: int, pod_memory_mb: int) -> int:
     """Confere que o processo principal mais os workers cabem no orçamento de memória do pod.
 
-    O orçamento é o REQUEST de memória do pod (2 GiB no template de job do K3s aplicado) menos 256 MiB de folga,
-    não o limite de 8 GiB: acima do request o scheduler superaloca o nó e ele pode ficar NotReady.
+    O orçamento deve ficar abaixo do REQUEST de memória do deployment (``memory_request`` em ``job_variables``) menos
+    uma folga (256 MiB no padrão do código; o deployment de produção usa 512 MiB), não do limite do pod: acima do
+    request o scheduler superaloca o nó e ele pode ficar NotReady.
 
     As tabelas são extraídas uma de cada vez, então vale a mais pesada.
 
     :param worker_mb_by_table: Memória estimada de um worker em cada tabela, em MiB.
     :param workers: Processos de leitura simultâneos.
-    :param pod_memory_mb: Orçamento do pod, em MiB: request de memória menos folga.
+    :param pod_memory_mb: Orçamento do pod, em MiB: o request de memória do deployment menos a folga.
     :returns: A maior estimativa total, em MiB.
     :raises MemoryBudgetError: Se alguma tabela estourar o orçamento.
     """
@@ -121,7 +124,7 @@ def check_pod_budget(worker_mb_by_table: Mapping[str, int], workers: int, pod_me
         raise MemoryBudgetError(
             f"{worst_table}: {workers} workers de ~{worker_mb_by_table[worst_table]} MiB + {MAIN_BASE_MB} MiB do "
             f"processo principal somam ~{totals[worst_table]} MiB, acima do orçamento de {pod_memory_mb} MiB do pod "
-            "(o request de memória, 2 GiB no template de job do K3s aplicado, menos folga; passar do request deixa o "
-            "scheduler superalocar o nó); reduza workers ou worker_memory_mb."
+            "(o request de memória do deployment menos a folga; passar do request deixa o scheduler superalocar o nó); "
+            "reduza workers ou worker_memory_mb, ou aumente memory_request e pod_memory_mb juntos."
         )
     return totals[worst_table]
