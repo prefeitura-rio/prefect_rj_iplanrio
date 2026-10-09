@@ -39,9 +39,6 @@ deployments:
         command: uv run --package rj_crm__whitelist_whatsapp_relatorio -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
-        env:
-          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
-          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_crm__whitelist_whatsapp_relatorio
     parameters:
       environment: staging
       query_ocorrencias:
@@ -72,9 +69,6 @@ deployments:
         command: uv run --package rj_crm__whitelist_whatsapp_relatorio -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
-        env:
-          # Sem isto o Prefect ignora os loggers da pipeline e só WARNING+ aparece.
-          PREFECT_LOGGING_EXTRA_LOGGERS: pipelines.rj_crm__whitelist_whatsapp_relatorio
     parameters:
       environment: prod
       query_ocorrencias:

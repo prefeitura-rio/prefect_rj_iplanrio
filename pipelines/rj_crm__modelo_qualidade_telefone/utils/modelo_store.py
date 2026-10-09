@@ -22,7 +22,7 @@ import lightgbm as lgb
 from google.cloud import storage
 from google.cloud.exceptions import NotFound
 
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 logger = get_logger(__name__)
 

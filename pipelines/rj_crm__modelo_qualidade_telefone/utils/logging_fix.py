@@ -4,7 +4,7 @@ compartilhado por todo o monorepo; outras pipelines usam ``get_logger`` sem esse
 Algumas das nossas dependências pesadas (LightGBM, Optuna, SHAP, numba — importadas
 transitivamente por ``tasks/retreino/treinar.py`` e ``relatorio.py``, e que nenhuma outra
 pipeline deste repo carrega) mexem na configuração do logger raiz do Python na hora da
-importação, e isso pode abafar o nível ``INFO`` que ``prefect_rj_iplanrio.logging.get_logger``
+importação, e isso pode abafar o nível ``INFO`` que ``iplanrio.pipelines_utils.logging.get_logger``
 espera que já esteja ligado — os logs desta pipeline (e só desta) somem, mesmo chamando
 ``logger.info(...)`` do jeito certo.
 """

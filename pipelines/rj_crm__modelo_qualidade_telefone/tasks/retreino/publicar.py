@@ -10,7 +10,7 @@ from google.api_core.exceptions import NotFound
 from google.cloud import bigquery
 from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query
 
 from pipelines.rj_crm__modelo_qualidade_telefone import constants

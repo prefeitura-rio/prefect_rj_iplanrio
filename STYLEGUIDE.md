@@ -275,11 +275,11 @@ Não use `_` como prefixo para indicar nomes internos/privados. Use fronteiras d
 
 ### 5.5 Logging
 
-`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa o objeto pré-configurado de `prefect_rj_iplanrio.logging`, que integra OpenTelemetry e garante formato e destino uniformes em todas as pipelines.
+`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa o `get_logger` de `iplanrio.pipelines_utils.logging`. O nível vem de `PREFECT_LOGGING_LEVEL` (padrão `DEBUG`) e os logs chegam à UI do Prefect via `PREFECT_LOGGING_EXTRA_LOGGERS`, definida globalmente no Infisical — não declare essa variável no `prefect.yaml`.
 
 ```python
 # ✅ correto
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -720,7 +720,7 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 | Módulo                        | Símbolo                                   | Propósito                                                                                             |
 | ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna um logger pré-configurado com integração OpenTelemetry. Passe `__name__` como argumento.      |
+| `iplanrio.pipelines_utils.logging` | `get_logger(name)`                        | Retorna o logger do módulo (nível via `PREFECT_LOGGING_LEVEL`, padrão `DEBUG`). Passe `__name__`.      |
 | `prefect_rj_iplanrio.sql`     | `load_query(caller_file, name, **params)` | Carrega e renderiza um arquivo `.sql` do diretório `queries/` relativo ao chamador. Passe `__file__`. |
 
 ## 12. Higiene do repositório
