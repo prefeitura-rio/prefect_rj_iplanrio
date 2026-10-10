@@ -5,6 +5,7 @@ from prefect.cache_policies import NO_CACHE
 
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import list_tables
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import RawTextEncoding
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import read_oracle_config, validate_identifier
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.inspect import (
     ValidationRequest,
@@ -35,6 +36,7 @@ def validate_table_task(  # noqa: PLR0913
     template_schema: str | None,
     excluded_template_columns: list[str] | None,
     compute_column_metrics: bool,
+    raw_text_encoding: RawTextEncoding,
 ) -> dict[str, object]:
     """Valida uma tabela, registra o relatório no log e retorna o resumo."""
     config = read_oracle_config(infisical_secret_path)
@@ -45,6 +47,7 @@ def validate_table_task(  # noqa: PLR0913
         template_schema=validate_identifier(template_schema or config.schema),
         excluded_columns=tuple(excluded_template_columns or ()),
         compute_column_metrics=compute_column_metrics,
+        raw_text_encoding=raw_text_encoding,
     )
     report = validate_table(config=config, request=request)
     status = "OK" if report.divergences == 0 else f"{report.divergences} DIVERGÊNCIA(S)"

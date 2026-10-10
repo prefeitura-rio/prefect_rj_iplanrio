@@ -48,6 +48,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
     excluded_template_columns: list[str] | None = None,
     progress_interval_seconds: int = 30,
     index_parallel_degree: int = 4,
+    raw_text_encoding: Literal["base64", "hex"] = "base64",
     bigquery_quiet_minutes: int = 5,
     inmemory_wait_minutes: int = 30,
     mode: Literal["full", "synonyms_only"] = "full",
@@ -102,6 +103,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         notifier.enter(Step.TABLES)
 
         loaded = []
+        cleanups = []
         for table_id in tables:
             exported = snapshot[table_id]
             notifier.table_step(table_id, TableStep.PREPARATION)
@@ -111,6 +113,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 excluded_template_columns=excluded_template_columns,
                 table_id=table_id,
                 table_schema=exported.schema,
+                raw_text_encoding=raw_text_encoding,
             )
             structure = plan_structure_task(
                 infisical_secret_path=infisical_secret_path,
@@ -149,9 +152,12 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
                 table=empty_table,
                 table_schema=exported.schema,
                 loaded_rows=loaded_rows,
+                parallel_degree=index_parallel_degree,
             )
             notifier.table_validated(table_id, validated_rows)
-            delete_gcs_files_task(project=project, bucket=gcs_bucket, files=exported.files, wait_for=[validated_rows])
+            # A remoção dos arquivos só é submetida depois da validação (que levanta se a contagem divergir) e roda
+            # em paralelo aos índices; o resultado é esperado no fim, para que uma falha ainda falhe o flow.
+            cleanups.append(delete_gcs_files_task.submit(project=project, bucket=gcs_bucket, files=exported.files))
             notifier.table_step(table_id, TableStep.INDEXES)
             indexed_table = create_oracle_indexes_task(
                 infisical_secret_path=infisical_secret_path,
@@ -190,3 +196,5 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         )
         notifier.enter(Step.SWAP)
         swap_synonyms_task(infisical_secret_path=infisical_secret_path, plans=populated)
+        for cleanup in cleanups:
+            cleanup.result()
