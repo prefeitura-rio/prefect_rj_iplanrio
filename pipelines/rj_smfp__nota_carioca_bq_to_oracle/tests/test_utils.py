@@ -126,15 +126,11 @@ def test_build_load_plan_follows_original_and_ignores_extra_bigquery_columns():
     assert plan.ignored == ["_BIGQUERY_UID", "_BIGQUERY_PARTICAO_DATA"]
     assert [(f.name, f.spec) for f in plan.fields] == [
         ("_BIGQUERY_UID", "FILLER CHAR(4000)"),
-        ("CPF_CNPJ_RESPONSAVEL", "CHAR(4000)"),
-        (
-            "DATA_COMPETENCIA_MUNICIPIO",
-            "CHAR(64) \"TO_DATE(SUBSTR(REPLACE(:DATA_COMPETENCIA_MUNICIPIO, 'T', ' '), 1, 19), "
-            "'YYYY-MM-DD HH24:MI:SS')\"",
-        ),
+        ("CPF_CNPJ_RESPONSAVEL", "CHAR(56)"),
+        ("DATA_COMPETENCIA_MUNICIPIO", 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'),
         ("NOTA_FISCAL", "CHAR(64)"),
         ("VALOR", "CHAR(64)"),
-        ("NOME", "CHAR(4000)"),
+        ("NOME", "CHAR(1200)"),
         ("_BIGQUERY_PARTICAO_DATA", "FILLER CHAR(4000)"),
     ]
 
@@ -170,7 +166,6 @@ def test_build_load_plan_excludes_requested_columns_and_ignores_them_if_in_bigqu
         (ora("DATA", "DATE", 7), "INTEGER"),
         (ora("VALOR", "NUMBER", 22), "STRING"),
         (ora("TEXTO", "CLOB", 4000), "STRING"),
-        (ora("_DATA", "DATE", 7), "STRING"),
     ],
 )
 def test_loader_spec_rejects_unsupported_combinations(column, bq_type):
@@ -906,7 +901,7 @@ def test_build_load_plan_for_notas_nacionais_detalhes_excludes_rowids_and_decode
         'CHAR(64) "CASE WHEN :PESSOA_INTERMEDIARIO IS NOT NULL THEN '
         'UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:PESSOA_INTERMEDIARIO)) END"'
     )
-    assert specs["DATA_VALIDACAO"].startswith('CHAR(64) "TO_DATE(')
+    assert specs["DATA_VALIDACAO"] == 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
     assert specs["STATUS_NOTA"] == "CHAR(64)"
     assert specs["_BIGQUERY_UPDATED_AT"] == "FILLER CHAR(4000)"
     assert [column.definition for column in plan.columns][1] == '"PESSOA_EMITENTE" RAW(16) NOT NULL'
@@ -1004,3 +999,141 @@ def test_index_statement_emits_expressions_verbatim_with_local_and_parallel():
 
 def test_function_based_index_description_shows_expressions():
     assert function_based_index().description.startswith('LOCAL FUNCTION-BASED NORMAL (CASE  WHEN "STATUS_NOTA"<>0')
+
+
+@pytest.mark.parametrize(
+    ("column", "expected"),
+    [
+        (ora("CPF", "VARCHAR2", 14, "B"), "CHAR(56)"),
+        (ora("NOME", "VARCHAR2", 300, "C"), "CHAR(1200)"),
+        (ora("GRANDE", "VARCHAR2", 1500, "B"), "CHAR(4000)"),
+        (ora("MAXIMO", "VARCHAR2", 4000, "B"), "CHAR(4000)"),
+        (ora("FIXO", "CHAR", 1, "B"), "CHAR(4)"),
+        (ora("NACIONAL", "NVARCHAR2", 20, "C"), "CHAR(80)"),
+    ],
+)
+def test_text_loader_spec_is_sized_from_the_column_with_utf8_headroom(column, expected):
+    assert loader_spec(column, "STRING") == expected
+    assert loader_spec(column, "JSON") == expected
+
+
+def test_text_loader_spec_holds_a_max_length_multibyte_value_in_a_char_semantics_column():
+    column = ora("NOME", "VARCHAR2", 1200, "C")  # VARCHAR2(300 CHAR) num banco AL32UTF8: 1200 bytes
+    declared = int(loader_spec(column, "STRING").removeprefix("CHAR(").removesuffix(")"))
+    assert declared >= len(("😀" * 300).encode()) == 1200
+
+
+def test_date_loader_spec_is_native_without_sql_expression():
+    assert loader_spec(ora("DATA", "DATE", 7), "STRING") == 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
+    assert loader_spec(ora("_DATA", "DATE", 7), "STRING") == 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
+
+
+@pytest.mark.parametrize(("length", "chars"), [(16, 32), (8, 16), (2000, 4000)])
+def test_raw_hex_loader_spec_is_a_plain_char_field_sized_by_two_chars_per_byte(length, chars):
+    spec = loader_spec(ora("PESSOA", "RAW", length), "STRING", "hex")
+    assert spec == f"CHAR({chars})"
+
+
+def test_raw_hex_loader_spec_does_not_need_an_unquoted_name_and_base64_stays_the_default():
+    assert loader_spec(ora("_PESSOA", "RAW", 16), "STRING", "hex") == "CHAR(32)"
+    assert loader_spec(ora("PESSOA", "RAW", 16), "STRING", "base64") == loader_spec(ora("PESSOA", "RAW", 16), "STRING")
+
+
+def test_build_load_plan_propagates_raw_text_encoding_to_pessoa_columns_only():
+    hex_plan = build_load_plan(NN_DETALHES_BQ, NN_DETALHES_TEMPLATE, raw_text_encoding="hex")
+    specs = {loader.name: loader.spec for loader in hex_plan.fields}
+    assert [specs[name] for name in ("PESSOA_EMITENTE", "PESSOA_PRESTADOR", "PESSOA_TOMADOR")] == ["CHAR(32)"] * 3
+    assert specs["PESSOA_INTERMEDIARIO"] == "CHAR(32)"
+    assert specs["STATUS_NOTA"] == "CHAR(64)"
+    control = build_control_file("DFEN", "BQLOAD_X_A", hex_plan.fields)
+    assert "UTL_ENCODE" not in control
+    assert '  "PESSOA_TOMADOR" CHAR(32),' in control
+
+
+def test_count_rows_query_runs_parallel_with_the_requested_degree():
+    sql = load_query(QUERIES_ANCHOR, "count_rows", schema="DFEN", table="BQLOAD_X_A", degree=4)
+    assert sql == 'SELECT /*+ PARALLEL(4) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n'
+
+
+@pytest.mark.parametrize(("requested", "hinted"), [(4, 4), (1, 1), (0, 1), (-3, 1)])
+def test_count_rows_sends_the_parallel_hint_to_oracle(monkeypatch, requested, hinted):
+    from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import oracle
+
+    executed = []
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, sql):
+            executed.append(sql)
+
+        def fetchone(self):
+            return (7,)
+
+    class Connection(Cursor):
+        def cursor(self):
+            return Cursor()
+
+    config = oracle.OracleConfig("DFEN", "p", "h", "1", "s", "DFEN")
+    monkeypatch.setattr(oracle, "connect", lambda _config: Connection())
+    assert oracle.count_rows(config, "BQLOAD_X_A", parallel_degree=requested) == 7
+    assert executed == [f'SELECT /*+ PARALLEL({hinted}) */ COUNT(*)\nFROM "DFEN"."BQLOAD_X_A"\n']
+
+
+class FakeBatch:
+    def __init__(self, log):
+        self.log = log
+
+    def __enter__(self):
+        self.log.append("batch-open")
+        return self
+
+    def __exit__(self, *exc):
+        self.log.append("batch-close")
+        return False
+
+
+class FakeStorageClient:
+    def __init__(self, log):
+        self.log = log
+
+    def batch(self, raise_exception=True):
+        assert raise_exception is True
+        return FakeBatch(self.log)
+
+    def bucket(self, name):
+        log = self.log
+
+        class Bucket:
+            def blob(self, blob_name):
+                return type("Blob", (), {"delete": staticmethod(lambda: log.append(blob_name))})()
+
+        return Bucket()
+
+
+def test_delete_blobs_removes_every_object_in_batches_of_at_most_100(monkeypatch):
+    log = []
+    monkeypatch.setattr(bigquery.storage, "Client", lambda project: FakeStorageClient(log))
+    names = [f"p/part-{n}.csv.gz" for n in range(250)]
+    bigquery.delete_blobs("proj", "bucket", names)
+    batches, current = [], None
+    for item in log:
+        if item == "batch-open":
+            current = []
+        elif item == "batch-close":
+            batches.append(current)
+        else:
+            current.append(item)
+    assert [len(batch) for batch in batches] == [100, 100, 50]
+    assert [name for batch in batches for name in batch] == names
+
+
+def test_delete_blobs_with_no_objects_makes_no_request(monkeypatch):
+    log = []
+    monkeypatch.setattr(bigquery.storage, "Client", lambda project: FakeStorageClient(log))
+    bigquery.delete_blobs("proj", "bucket", [])
+    assert log == []

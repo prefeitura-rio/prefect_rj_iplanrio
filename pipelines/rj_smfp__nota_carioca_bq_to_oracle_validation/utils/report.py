@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn, RawTextEncoding
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     USABLE_INDEX_STATUSES,
     IndexDefinition,
@@ -44,20 +44,24 @@ class MetricSpec:
     oracle_expression: str
 
 
-def metric_specs(bq_fields: list[dict[str, str]], target_types: dict[str, str]) -> list[MetricSpec]:
+def metric_specs(
+    bq_fields: list[dict[str, str]], target_types: dict[str, str], raw_text_encoding: RawTextEncoding = "base64"
+) -> list[MetricSpec]:
     """Define as métricas por coluna que comparam o conteúdo das duas tabelas.
 
     Só entram as colunas carregadas (as que existem na tabela original). Strings
     vazias do BigQuery viram ``NULL`` no Oracle, então os não-nulos de ``STRING``
     desconsideram ``''`` no BigQuery. Datas guardadas como texto no BigQuery são
     convertidas como na carga antes de comparar mínimo e máximo. ``RAW`` guardado em
-    base64 no BigQuery é decodificado, e comprimento (em bytes), mínimo e máximo
-    (em hexadecimal) são comparados com os do Oracle. Nenhuma métrica
-    expõe valores de linhas de texto, apenas contagens e comprimentos.
+    base64 ou em hexadecimal no BigQuery (``raw_text_encoding``, o mesmo da carga)
+    é decodificado, e comprimento (em bytes), mínimo e máximo (em hexadecimal) são
+    comparados com os do Oracle. Nenhuma métrica expõe valores de linhas de texto,
+    apenas contagens e comprimentos.
 
     :param bq_fields: Campos do schema do BigQuery (``name``, ``type``, ``mode``).
     :param target_types: Tipo base no Oracle de cada coluna carregada, pelo nome
         em maiúsculas.
+    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery.
     :returns: Métricas na ordem das colunas do BigQuery.
     """
     specs = []
@@ -91,7 +95,8 @@ def metric_specs(bq_fields: list[dict[str, str]], target_types: dict[str, str]) 
                 ),
             ]
         elif field["type"] == "STRING" and target == "RAW":
-            bq_bytes = f"FROM_BASE64(NULLIF({bq}, ''))"
+            decode = "FROM_HEX" if raw_text_encoding == "hex" else "FROM_BASE64"
+            bq_bytes = f"{decode}(NULLIF({bq}, ''))"
             specs += [
                 MetricSpec(field["name"], "nao_nulos", f"COUNTIF({bq} IS NOT NULL AND {bq} != '')", f"COUNT({ora})"),
                 MetricSpec(

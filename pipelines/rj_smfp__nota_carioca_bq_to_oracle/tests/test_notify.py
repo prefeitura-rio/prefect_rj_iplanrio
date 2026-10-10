@@ -413,7 +413,6 @@ def run_flow_with_fakes(
         "truncate_oracle_table_task": "BQLOAD_A_B",
         "load_into_oracle_task": 7,
         "validate_row_count_task": 7,
-        "delete_gcs_files_task": None,
         "create_oracle_indexes_task": "BQLOAD_A_B",
         "gather_oracle_stats_task": "BQLOAD_A_B",
         "grant_access_task": "BQLOAD_A_B",
@@ -427,6 +426,9 @@ def run_flow_with_fakes(
     }
     for name, result in plain.items():
         monkeypatch.setattr(flow_module, name, fake(name, result))
+    monkeypatch.setattr(
+        flow_module, "delete_gcs_files_task", SimpleNamespace(submit=lambda **_: SimpleNamespace(result=lambda: None))
+    )
     monkeypatch.setattr(flow_module.LoadNotifier, "create", lambda _: notifier)
     flow_module.rj_smfp__nota_carioca_bq_to_oracle.fn(mode=mode)
     return order

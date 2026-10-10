@@ -8,7 +8,7 @@ import oracledb
 from google.cloud import bigquery
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import get_last_modified, get_table_schema
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import build_load_plan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import RawTextEncoding, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.inmemory import oracle_message, read_status
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     MANAGED_TABLE_MARKER,
@@ -60,6 +60,8 @@ class ValidationRequest:
         ``ROWID`` ausentes no BigQuery, excluídas automaticamente).
     :param compute_column_metrics: Se calcula as métricas por coluna, que leem a
         tabela inteira nos dois bancos.
+    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery
+        (``base64`` ou ``hex``), a mesma usada na carga.
     """
 
     project: str
@@ -68,6 +70,7 @@ class ValidationRequest:
     template_schema: str
     excluded_columns: tuple[str, ...]
     compute_column_metrics: bool
+    raw_text_encoding: RawTextEncoding = "base64"
 
 
 @dataclass
@@ -435,7 +438,7 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
 
         bq_types = {field["name"].upper(): f"{field['type']} ({field['mode']})" for field in bq_fields}
         try:
-            plan = build_load_plan(bq_fields, template, list(request.excluded_columns))
+            plan = build_load_plan(bq_fields, template, list(request.excluded_columns), request.raw_text_encoding)
         except (NotImplementedError, ValueError) as error:
             report.divergences += 1
             report.sections.append(f"O schema do BigQuery não pode ser carregado na original: {error}")
@@ -476,7 +479,9 @@ def validate_table(config: OracleConfig, request: ValidationRequest) -> TableRep
             report.sections.append("Métricas por coluna: não calculadas, porque as colunas divergem.")
             return report
 
-        specs = metric_specs(bq_fields, {column.name: column.data_type for column in plan.columns})
+        specs = metric_specs(
+            bq_fields, {column.name: column.data_type for column in plan.columns}, request.raw_text_encoding
+        )
         cursor.execute(
             load_query(
                 QUERIES_ANCHOR,
