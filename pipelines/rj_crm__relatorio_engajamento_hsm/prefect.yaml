@@ -1,21 +1,28 @@
-# Relatório de Engajamento por HSM -> Google Drive
+# Relatório de Engajamento por campanha de WhatsApp -> Google Drive
 #
-# Entrypoint: flow.py:rj_crm__relatorio_engajamento_hsm
+# Entrypoint: flow.py:rj_crm__relatorio_engajamento_hsm (docstring = documentação completa)
 #
-# Roda 2x/dia, às 8h e às 18h (America/Sao_Paulo): olha
-# brutos_salesforce_staging.disparos_ativos procurando disparo(s) com
-# relatorio_engajamento_data_geracao == hoje, classifica as conversas do HSM por LLM e
-# publica o relatório (.docx + 2 csv) no Drive. A rodada da tarde é idempotente com a da
-# manhã (ja_existe_relatorio checa por data de geração, não por horário) — só pega HSM
-# que ainda não tinha relatório publicado hoje.
+# Roda 3x/dia, às 8h, 13h e 18h (America/Sao_Paulo): processa as solicitações do Google
+# Form "Solicitação de Relatório de Engajamento" (Sheet de respostas em
+# config.SOLICITACOES_SHEET_ID) com Data de geração até hoje — material de validação do
+# catálogo, relatório de engajamento ou relatório rápido — e grava o status de cada uma
+# no próprio Sheet.
 #
-# Credenciais necessárias no secret do work pool (mesmo secretName usado por
-# rj_crm__agentforce_classificacao_llm):
+# Liberar uma campanha acima do teto de conversas: Custom run deste deployment com
+#   campanhas_liberadas: ["<campanha>"]
+#
+# Credenciais no secret do work pool (mesmo secretName de rj_crm__agentforce_classificacao_llm):
 #   BF_KEY                        : API key do gateway Bifrost
-#   BASEDOSDADOS_CREDENTIALS_PROD : já presente no secret padrão — a service account
-#                                    dele precisa ter a pasta "Relatórios de Engajamento"
-#                                    do Drive compartilhada com ela (Editor), ver
-#                                    docstring de flow.py.
+#   BASEDOSDADOS_CREDENTIALS_PROD : a service account dele precisa de
+#       - Editor na pasta "Relatórios de Engajamento" do Drive (config.DRIVE_PASTA_RAIZ_ID)
+#       - Editor no Sheet de solicitações (config.SOLICITACOES_SHEET_ID)
+#       - leitura em rj-crm-registry.rmi_conversas.chatbot
+#       - criar tabela / insert / delete em rj-crm-registry.brutos_salesforce
+#         (banco de exemplos do RAG: config.RAG_TABLE, criada pelo flow se não existir)
+#
+# A imagem leva torch (só-CPU) + o modelo de embedding (~430MB, ver Dockerfile): se o pod
+# morrer por falta de memória ao carregar o modelo, configurar memória no job_variables
+# conforme o padrão do work pool.
 
 name: rj_crm__relatorio_engajamento_hsm
 prefect-version: 3.4.3
@@ -64,7 +71,7 @@ deployments:
         image_pull_policy: Always
 
   # -----------------------------------------------------------------------
-  # Deployment de produção — cron 2x/dia, 8h e 18h (America/Sao_Paulo)
+  # Deployment de produção — cron 3x/dia, 8h, 13h e 18h (America/Sao_Paulo)
   # -----------------------------------------------------------------------
   - name: rj-crm--relatorio-engajamento-hsm--prod
     tags:
@@ -86,6 +93,10 @@ deployments:
         timezone: America/Sao_Paulo
         active: true
         slug: relatorio-engajamento-hsm-diario-8h
+      - cron: "0 13 * * *"
+        timezone: America/Sao_Paulo
+        active: true
+        slug: relatorio-engajamento-hsm-diario-13h
       - cron: "0 18 * * *"
         timezone: America/Sao_Paulo
         active: true

@@ -1,197 +1,202 @@
 # -*- coding: utf-8 -*-
 """
-Flow diário — Relatório de Engajamento por HSM.
+Flow — Relatório de Engajamento por campanha de WhatsApp (HSM).
 
 OBJETIVO
 --------
-Mede como os cidadãos responderam a um disparo de WhatsApp (HSM/template) da
-Prefeitura: classifica por LLM o assunto de cada resposta, audita essa
-classificação com uma segunda LLM ("juiz") e publica um relatório com volume e
-precisão por categoria de assunto — pra quem enviou o HSM entender do que os
-cidadãos trataram e o quanto confiar nessa classificação automática.
+Mede como os cidadãos responderam às campanhas de WhatsApp (HSM/template) da
+Prefeitura: classifica por LLM o assunto de cada conversa com resposta, num catálogo de
+categorias validado pela secretaria responsável, audita a classificação com uma segunda
+LLM ("juiz") e publica o relatório no Google Drive. As revisões que a secretaria faz
+nas conversas classificadas viram exemplos (RAG) que melhoram as classificações
+seguintes da mesma campanha.
 
-FREQUÊNCIA
-----------
-1x por dia, às 8h (America/Sao_Paulo) — ver schedule de produção em prefect.yaml.
+GATILHO — Google Form "Solicitação de Relatório de Engajamento"
+----------------------------------------------------------------
+As respostas do Form caem no Sheet de solicitações (config.SOLICITACOES_SHEET_ID), que
+o flow lê e onde grava o status de cada pedido. Campos do Form: Campanha (lista
+sincronizada com nome_campanha_limpo da disparos_ativos — bate com hsm.nome_campanha
+na rmi_conversas.chatbot), Tipo de solicitação, Data de início e de fim dos disparos,
+Data de geração.
 
-GATILHO — o que o flow observa na tabela de disparos
------------------------------------------------------
-Tabela: `rj-crm-registry.brutos_salesforce_staging.disparos_ativos` (planilha
-Google Sheets importada no BigQuery, preenchida manualmente pelo time de CRM).
-A cada execução, processa toda linha que tiver as 3 colunas abaixo preenchidas:
-  - nome_campanha: identifica o HSM (mesmo valor de hsm.nome_hsm em
-    rmi_conversas.chatbot — é o que o flow usa pra filtrar as conversas).
-  - relatorio_engajamento_data_geracao: dispara o processamento quando essa
-    data bate com a data de referência da execução (por padrão, hoje).
-  - relatorio_engajamento_data_disparo: data a partir da qual o flow busca as
-    conversas desse HSM.
+FREQUÊNCIA: 3x por dia, 8h, 13h e 18h (America/Sao_Paulo) — ver prefect.yaml. Cada
+execução processa as solicitações com status vazio e Data de geração até hoje: data
+futura sai às 8h do dia escolhido; data de hoje sai na próxima execução.
 
-RESULTADOS E ONDE FICAM
-------------------------
-Publicados no Google Drive, pasta "Relatórios de Engajamento":
-https://drive.google.com/drive/folders/1wpZzSMv6dQ5Y50qWIooqRikpkVCh5u2f
-— numa subpasta por HSM. Cada rodada (1 HSM + 1 data de geração) gera 3
-arquivos, e é idempotente: rodar de novo no mesmo dia pro mesmo HSM não duplica
-nada (só uma nova data de geração produz uma rodada nova).
-  - relatorio_engajamento_<hsm>__geracao_<data>.docx — o relatório em si.
-  - categorias_<...>.csv — 1 linha por categoria de assunto encontrada.
-  - classificacoes_<...>.csv — 1 linha por conversa classificada.
+TIPOS DE SOLICITAÇÃO
+--------------------
+1. Material de validação (Fase 1, primeiro disparo) — tasks/material_validacao.py.
+   Descobre as categorias por LLM e publica na pasta da campanha o Sheet `Catálogo`
+   (Categoria, Descrição, Exemplos de conversas, Decisão [lista suspensa
+   Manter/Excluir/Nova], Justificativa, Data da decisão) e o
+   `exemplos_nao_classificado` (todas as conversas do período). Se já existir um
+   `Catálogo` (nome exato) na pasta, nada é gerado — renomeie o atual (ex.:
+   Catálogo_old) pra gerar de novo.
+2. Relatório de engajamento (Fase 2 e recorrente) — tasks/relatorio.py.
+   Usa o Catálogo validado (só a coluna Decisão importa: Manter/Nova = ativa, Excluir =
+   fora, vazia = ignorada com aviso). Antes de classificar, ingere no banco de exemplos
+   as planilhas `conversas_classificadas_revisada_AAAA-MM-DD` da campanha. Classifica
+   cada conversa (1 chamada de LLM por conversa; few-shot com as 3 revisões mais
+   parecidas da MESMA campanha, ou zero-shot se ainda não há), roda o juiz e publica.
+   Também roda a descoberta partindo do Catálogo e lista no fim do relatório as
+   categorias NOVAS sugeridas — só sugestão: não entram no Catálogo nem na
+   classificação (pra usar, a secretaria inclui no Catálogo com Decisão "Nova").
+3. Relatório rápido (catálogo automático) — mesma task, sem Catálogo validado nem RAG:
+   descobre as categorias do zero e classifica com elas. Não cria/altera o Catálogo e
+   nunca alimenta o banco de exemplos.
 
-COMO OS RESULTADOS SÃO PRODUZIDOS
------------------------------------
-1. Extração (tasks/extract.py): busca em rmi_conversas.chatbot todas as
-   sessões que receberam o HSM desde a data de disparo e reconstrói cada uma
-   como 1 conversa (falas do CIDADÃO e do AGENTE de IA, em ordem cronológica)
-   — só entram sessões com pelo menos 1 resposta do cidadão.
-2. Descoberta de categoria — LLM, passada 1 (tasks/discovery.py): olha uma
-   amostra ALEATÓRIA das conversas e descobre quais assuntos aparecem,
-   montando um catálogo (nome + descrição por categoria). Só esta etapa pode
-   criar categoria nova — existe pra evitar viés de ordem (ninguém fica preso
-   a um catálogo incompleto de quem foi classificado primeiro).
-3. Classificação — LLM, passada 2 (tasks/classify.py): classifica CADA
-   conversa numa categoria JÁ EXISTENTE no catálogo (nunca cria uma nova),
-   com resumo de 1 frase e justificativa.
-4. Julgamento / LLM como juiz (tasks/judge.py): uma segunda chamada de LLM
-   audita uma amostra da classificação (100% se a categoria é pequena, uma
-   fração se é grande — ver parâmetro limiar_julga_tudo) e diz se concorda
-   (CORRETO/INCORRETO). Isso alimenta a precisão por categoria (com margem de
-   erro, intervalo de confiança de 95%) mostrada no relatório.
-5. Geração e publicação (tasks/report.py): monta o .docx e os 2 CSVs com o
-   resultado acima e sobe tudo pro Drive.
+RESULTADOS NO DRIVE (pasta raiz: drive_pasta_raiz_id)
+-------------------------------------------------------
+  <campanha>/Catálogo, <campanha>/exemplos_nao_classificado        (material de validação)
+  <campanha>/<data>_<hora>h__disparos_<inicio>_a_<fim>[__catalogo_automatico]/
+      relatorio_engajamento (Google Doc), conversas_classificadas (Google Sheet;
+      no relatório de engajamento com as colunas revisao [Certo/Errado],
+      categorias_corretas, justificativa_revisao), catalogo_automatico (só no rápido)
+Cada geração cria uma subpasta nova — nunca substitui uma anterior (que pode ter uma
+planilha revisada). CPF e telefone não vão pra nenhum arquivo.
 
-O QUE O RELATÓRIO (.docx) MOSTRA
+STATUS (coluna `status` do Sheet de solicitações; `link_resultado` aponta o resultado)
+--------------------------------------------------------------------------------------
+  vazio                    aguardando a data de geração
+  processando              em execução (preso há mais de 6h -> vira erro na próxima)
+  concluido                gerado (pode vir com " — N categoria(s) sem decisão...")
+  pulado: <motivo>         não gerou de propósito (Catálogo já existe, sem conversas...)
+  aguardando liberação: N  mais conversas que teto_conversas — ver LIBERAR ABAIXO
+  erro: <motivo>           falhou; corrigir a causa e enviar o Form de novo
+
+LIBERAR UMA CAMPANHA ACIMA DO TETO
 ----------------------------------
-  - Cabeçalho: nome do HSM, campanha, eixo, data de geração.
-  - Resumo: total de disparos, quantos tiveram resposta do cidadão (taxa de
-    engajamento), quantos foram classificados, quantos foram avaliados pelo
-    juiz, e a precisão média da classificação (com margem de erro).
-  - Texto do HSM enviado (contexto do disparo).
-  - Observações importantes: é uma análise pontual do disparo (não é
-    monitoramento contínuo); é gerado por LLM e pode conter erro; os 2 CSVs
-    anexos na mesma pasta usam ";" (ponto e vírgula) como separador de coluna.
-  - A query SQL usada pra extrair as conversas (pra reprodutibilidade).
-  - Tabela com todas as categorias: nome, quantidade, % do engajamento,
-    precisão (do juiz).
-  - Por categoria: descrição, métricas, e até N exemplos reais de conversa
-    (com o resumo gerado pela LLM) — N é o parâmetro n_exemplos_por_categoria.
+Rodar o deployment manualmente (Custom run) com campanhas_liberadas=["<campanha>"].
+Só as solicitações dessa campanha que JÁ estavam "aguardando liberação" passam do teto;
+pedidos novos dela seguem a regra normal. Vale só pra essa execução.
 
-COLUNAS DO CSV categorias_<...>.csv (1 linha por categoria)
---------------------------------------------------------------
-  - categoria: nome da categoria.
-  - descricao: descrição da categoria (definida na descoberta).
-  - qtd: quantas conversas caíram nessa categoria.
-  - pct_do_engajamento: % que a categoria representa do total de conversas
-    classificadas nesse disparo.
-  - n_avaliadas_juiz: quantas conversas dessa categoria foram auditadas pelo
-    juiz LLM.
-  - precisao: fração de veredito "CORRETO" entre as avaliadas pelo juiz
-    (0 a 1; vazio se nenhuma foi avaliada).
-  - margem_erro_wilson_95: margem de erro (intervalo de confiança de 95%,
-    Wilson com correção de população finita) dessa precisão.
-
-COLUNAS DO CSV classificacoes_<...>.csv (1 linha por conversa classificada)
--------------------------------------------------------------------------------
-  - id_sessao_48h: identificador da sessão de conversa no chatbot.
-  - cpf, telefone: identificação do cidadão que respondeu.
-  - categoria: categoria atribuída pela LLM na classificação.
-  - categoria_justificativa: explicação da LLM pra essa categoria.
-  - resumo_gerado: resumo em 1 frase do que o cidadão pediu/tratou.
-  - juiz_veredito: "CORRETO", "INCORRETO", ou vazio se essa conversa não foi
-    sorteada pra auditoria do juiz.
-  - juiz_categoria_esperada: preenchido só se juiz_veredito = INCORRETO — a
-    categoria que o juiz considera correta.
-  - juiz_justificativa: explicação do juiz pra esse veredito.
+FALHA NO PREFECT
+----------------
+Cada solicitação é processada isolada: erro numa não impede as outras. Erro esperado
+(Catálogo ausente/não validado) só vai pro status. Erro inesperado (LLM/Drive/BQ fora
+do ar, bug) vai pro status com o id do run E faz o flow terminar como Failed, depois de
+processar todas — pra disparar o alerta de falha.
 """
 
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+import traceback
+from collections import Counter
+from datetime import date
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+from prefect.runtime import flow_run
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     BIFROST_MODEL,
+    CONCORRENCIA_LLM,
     DRIVE_PASTA_RAIZ_ID,
-    LIMIAR_JULGA_TUDO,
     N_EXEMPLOS_POR_CATEGORIA,
-    PCT_AMOSTRA_CATEGORIA_GRANDE,
-    TAMANHO_LOTE_CLASSIFICACAO,
+    N_EXEMPLOS_RAG,
+    PISO_JUIZ_POR_CATEGORIA,
     TAMANHO_LOTE_DESCOBERTA,
     TAMANHO_LOTE_JUIZ,
     TETO_AMOSTRA_DESCOBERTA,
+    TETO_CONVERSAS,
+    TETO_JUIZ,
+    TIPO_MATERIAL_VALIDACAO,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.classify import classifica_conversas
-from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.extract import extrai_conversas
-from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.judge import julga_classificacoes
-from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.report import (
-    ja_existe_relatorio,
-    monta_e_publica_relatorio,
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.material_validacao import gera_material_validacao
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.relatorio import ParametrosRelatorio, gera_relatorio
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.solicitacoes import (
+    ResultadoSolicitacao,
+    Solicitacao,
+    SolicitacaoError,
+    agora_brt,
+    carrega_solicitacoes,
+    registra_status,
+    status_erro,
 )
-from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.trigger import carrega_disparos_pendentes
+from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bifrost import BifrostClient
 
 
-def _hoje_brt() -> date:
-    return datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+def _processa(solicitacao: Solicitacao, bifrost: BifrostClient, params: ParametrosRelatorio) -> ResultadoSolicitacao:
+    if solicitacao.tipo == TIPO_MATERIAL_VALIDACAO:
+        return gera_material_validacao(
+            solicitacao,
+            params.drive_pasta_raiz_id,
+            bifrost,
+            params.tamanho_lote_descoberta,
+            params.teto_amostra_descoberta,
+        )
+    return gera_relatorio(solicitacao, bifrost, params)
+
+
+def _categoria_status(status: str) -> str:
+    """'pulado: X' -> 'pulado'; 'concluido — obs' -> 'concluido' (só pro resumo do log)."""
+    return status.split(":")[0].split(" —")[0].strip()
 
 
 @flow(log_prints=True)
-def rj_crm__relatorio_engajamento_hsm(
+def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow, documentados abaixo
+    campanhas_liberadas: list[str] | None = None,
     data_referencia: str | None = None,
-    drive_pasta_raiz_id: str = DRIVE_PASTA_RAIZ_ID,
-    bifrost_model: str = BIFROST_MODEL,
-    tamanho_lote_classificacao: int = TAMANHO_LOTE_CLASSIFICACAO,
-    tamanho_lote_descoberta: int = TAMANHO_LOTE_DESCOBERTA,
-    tamanho_lote_juiz: int = TAMANHO_LOTE_JUIZ,
+    teto_conversas: int = TETO_CONVERSAS,
+    teto_juiz: int = TETO_JUIZ,
+    piso_juiz_por_categoria: int = PISO_JUIZ_POR_CATEGORIA,
     teto_amostra_descoberta: int = TETO_AMOSTRA_DESCOBERTA,
-    limiar_julga_tudo: int = LIMIAR_JULGA_TUDO,
-    pct_amostra_categoria_grande: float = PCT_AMOSTRA_CATEGORIA_GRANDE,
+    concorrencia_llm: int = CONCORRENCIA_LLM,
+    n_exemplos_rag: int = N_EXEMPLOS_RAG,
+    tamanho_lote_juiz: int = TAMANHO_LOTE_JUIZ,
+    tamanho_lote_descoberta: int = TAMANHO_LOTE_DESCOBERTA,
     n_exemplos_por_categoria: int = N_EXEMPLOS_POR_CATEGORIA,
+    sugerir_categorias: bool = True,
+    bifrost_model: str = BIFROST_MODEL,
+    drive_pasta_raiz_id: str = DRIVE_PASTA_RAIZ_ID,
 ) -> None:
-    """Gera e publica o relatório de engajamento dos HSMs pendentes numa data de referência.
-
-    Olha `disparos_ativos` procurando linhas com `relatorio_engajamento_data_geracao`
-    igual à data de referência (por padrão, hoje) e com `nome_campanha`/
-    `relatorio_engajamento_data_disparo` preenchidos. Pra cada uma: extrai as conversas
-    do HSM desde a data de disparo, classifica por LLM em 2 passadas (descoberta de
-    categoria + classificação), julga a classificação como LLM juiz, monta o relatório
-    em .docx e publica no Drive — 1 relatório + 2 csv complementares (categorias e
-    classificações, separados por ";") por rodada, na subpasta do HSM.
-
-    Idempotente por (hsm, data de geração): rodar de novo no mesmo dia não duplica nada.
+    """Processa as solicitações pendentes do Form de relatório de engajamento.
 
     Args:
-        data_referencia: Data no formato 'YYYY-MM-DD' usada pra decidir quais disparos
-            processar (comparada com relatorio_engajamento_data_geracao). None usa a
-            data de hoje em America/Sao_Paulo — use um valor explícito só pra reprocessar
-            manualmente uma data passada.
-        drive_pasta_raiz_id: ID da pasta raiz no Google Drive onde os relatórios são
-            publicados. Precisa estar compartilhada (Editor) com a service account de
-            BASEDOSDADOS_CREDENTIALS_PROD. Staging pode apontar pra uma pasta de teste
-            diferente da usada em produção.
-        bifrost_model: Modelo (Gemini via gateway Bifrost) usado nas 3 chamadas de LLM
-            do flow: descoberta de categoria, classificação e julgamento.
-        tamanho_lote_classificacao: Conversas por chamada de LLM na classificação
-            (passada 2 — só escolhe entre categorias já existentes no catálogo).
-        tamanho_lote_descoberta: Conversas por chamada de LLM na descoberta de
-            categoria (passada 1 — a única que pode criar categoria nova).
-        tamanho_lote_juiz: Conversas por chamada de LLM no julgamento (LLM as a judge)
-            da classificação.
-        teto_amostra_descoberta: Teto de conversas amostradas aleatoriamente na
-            descoberta antes de saturar — reduzir deixa uma rodada de teste mais
-            barata/rápida, às custas de um catálogo de categoria menos completo.
-        limiar_julga_tudo: Categoria com menos conversas que isso é julgada 100% pelo
-            juiz; categoria maior é julgada só na fração de pct_amostra_categoria_grande.
-        pct_amostra_categoria_grande: Fração (%) julgada em categorias que atingem
-            limiar_julga_tudo — mais alto aumenta a precisão do relatório e o custo de LLM.
+        campanhas_liberadas: Campanhas (nome exato do Form) cujas solicitações em
+            "aguardando liberação" podem passar do teto_conversas NESTA execução. Ex.:
+            ["smas_cadunico_desatualizado"]. Pedidos novos dessas campanhas não são
+            liberados. Vazio (padrão) = ninguém passa do teto.
+        data_referencia: "Hoje" no formato AAAA-MM-DD, pra decidir quais solicitações
+            já chegaram na Data de geração. Vazio (padrão) = hoje em America/Sao_Paulo.
+            Use só pra testar/reprocessar.
+        teto_conversas: LIMITE DE LLM — máximo de conversas com resposta num relatório
+            (de engajamento ou rápido). Acima disso o relatório não é gerado: a
+            solicitação fica "aguardando liberação" (ver campanhas_liberadas). Mudar
+            aqui vale pra TODAS as campanhas da execução.
+        teto_juiz: LIMITE DE LLM — máximo de conversas avaliadas pelo juiz. Até esse
+            número ele avalia todas; acima (só em campanha liberada), uma amostra
+            estratificada por categoria, e o relatório mostra margem de erro.
+        piso_juiz_por_categoria: Na amostra do juiz (acima de teto_juiz), quantas
+            conversas cada categoria recebe antes da divisão proporcional — garante
+            precisão medida até nas categorias pequenas.
+        teto_amostra_descoberta: LIMITE DE LLM — máximo de conversas lidas na descoberta
+            de categorias (material de validação e relatório rápido). Acima disso a
+            descoberta usa uma amostra aleatória desse tamanho.
+        concorrencia_llm: Quantas chamadas de LLM da classificação (1 por conversa)
+            rodam em paralelo. Mais rápido com mais, mas sujeito ao rate limit do
+            Bifrost.
+        n_exemplos_rag: Quantos exemplos revisados (conversas parecidas da mesma
+            campanha) vão no prompt de cada conversa no relatório de engajamento.
+            0 = zero-shot sempre.
+        tamanho_lote_juiz: Conversas por chamada de LLM do juiz.
+        tamanho_lote_descoberta: Conversas por chamada de LLM da descoberta de
+            categorias.
         n_exemplos_por_categoria: Quantos exemplos de conversa aparecem por categoria
-            no .docx final — só afeta o relatório, não o custo de LLM.
+            no documento do relatório (não afeta custo de LLM).
+        sugerir_categorias: No relatório de engajamento, roda também a descoberta de
+            categorias partindo do Catálogo e lista no fim do relatório os temas novos
+            que surgiram (não entram no Catálogo nem na classificação). Custa até
+            ~teto_amostra_descoberta/tamanho_lote_descoberta chamadas de LLM a mais.
+            Desligar = relatório sem a seção de sugestões.
+        bifrost_model: Modelo (via gateway Bifrost) usado em todas as etapas de LLM.
+        drive_pasta_raiz_id: ID da pasta raiz no Drive ("Relatórios de Engajamento").
+            Precisa estar compartilhada (Editor) com a service account de
+            BASEDOSDADOS_CREDENTIALS_PROD. Staging pode apontar pra uma pasta de teste.
     """
-    rename_current_flow_run_task(new_name="relatorio_engajamento_hsm")
+    rename_current_flow_run_task(new_name="relatorio_engajamento")
     inject_bd_credentials_task(environment="prod")
 
     bf_key = os.environ.get("BF_KEY")
@@ -201,57 +206,46 @@ def rj_crm__relatorio_engajamento_hsm(
             "pool (mesmo secretName usado por rj_crm__agentforce_classificacao_llm)."
         )
 
-    ref = date.fromisoformat(data_referencia) if data_referencia else _hoje_brt()
-
-    disparos = carrega_disparos_pendentes(ref)
-    if not disparos:
-        log(f"[FLOW] Nenhum disparo com relatório de engajamento pedido pra {ref}.")
+    hoje = date.fromisoformat(data_referencia) if data_referencia else agora_brt().date()
+    run_id = flow_run.id
+    solicitacoes = carrega_solicitacoes(hoje, run_id, campanhas_liberadas or [])
+    if not solicitacoes:
+        print(f"[FLOW] Nenhuma solicitação a processar ({hoje}).")
         return
 
-    for disparo in disparos:
-        nome_hsm = disparo["nome_hsm"]
-        data_disparo = disparo["data_disparo"]
+    bifrost = BifrostClient(api_key=bf_key, model=bifrost_model)
+    params = ParametrosRelatorio(
+        drive_pasta_raiz_id=drive_pasta_raiz_id,
+        teto_conversas=teto_conversas,
+        concorrencia_llm=concorrencia_llm,
+        n_exemplos_rag=n_exemplos_rag,
+        tamanho_lote_juiz=tamanho_lote_juiz,
+        teto_juiz=teto_juiz,
+        piso_juiz_por_categoria=piso_juiz_por_categoria,
+        tamanho_lote_descoberta=tamanho_lote_descoberta,
+        teto_amostra_descoberta=teto_amostra_descoberta,
+        n_exemplos_por_categoria=n_exemplos_por_categoria,
+        sugerir_categorias=sugerir_categorias,
+    )
 
-        if ja_existe_relatorio(nome_hsm, ref, drive_pasta_raiz_id):
-            log(f"[FLOW] {nome_hsm}: relatório da geração {ref} já existe no Drive — pulando.")
-            continue
+    resumo: Counter = Counter()
+    inesperados: list[str] = []
+    for solicitacao in solicitacoes:
+        print(f"[FLOW] {solicitacao.descricao()} iniciando...")
+        try:
+            resultado = _processa(solicitacao, bifrost, params)
+        except SolicitacaoError as exc:
+            resultado = ResultadoSolicitacao(status_erro(str(exc)))
+        except Exception as exc:  # isola a solicitação; o flow falha no fim (ver docstring do módulo)
+            print(f"[FLOW] {solicitacao.descricao()} erro inesperado:\n{traceback.format_exc()}")
+            inesperados.append(f"{solicitacao.descricao()} {type(exc).__name__}: {exc}")
+            resultado = ResultadoSolicitacao(status_erro(f"{type(exc).__name__}: {exc}", run_id))
+        registra_status(solicitacao, resultado.status, resultado.link)
+        resumo[_categoria_status(resultado.status)] += 1
 
-        df_sessoes, total_disparos, total_engajados = extrai_conversas(nome_hsm, data_disparo)
-        if df_sessoes.empty:
-            log(f"[FLOW] {nome_hsm}: nenhuma sessão engajada desde {data_disparo} — nada a classificar.")
-            continue
-
-        df_classificada, catalogo = classifica_conversas(
-            df_sessoes,
-            bf_key,
-            bifrost_model,
-            tamanho_lote_classificacao,
-            tamanho_lote_descoberta,
-            teto_amostra_descoberta,
+    print(f"[FLOW] Concluído: {dict(resumo)}.")
+    if inesperados:
+        raise RuntimeError(
+            f"{len(inesperados)} solicitação(ões) com erro inesperado (status já gravado no Sheet):\n"
+            + "\n".join(inesperados)
         )
-        if df_classificada.empty:
-            log(f"[FLOW] {nome_hsm}: nenhuma conversa classificada com sucesso — relatório não gerado.")
-            continue
-
-        df_julgada = julga_classificacoes(
-            df_classificada,
-            catalogo,
-            bf_key,
-            bifrost_model,
-            tamanho_lote_juiz,
-            limiar_julga_tudo,
-            pct_amostra_categoria_grande,
-        )
-        monta_e_publica_relatorio(
-            nome_hsm=nome_hsm,
-            data_disparo=data_disparo,
-            data_referencia=ref,
-            df=df_julgada,
-            catalogo=catalogo,
-            total_disparos=total_disparos,
-            total_engajados=total_engajados,
-            drive_pasta_raiz_id=drive_pasta_raiz_id,
-            n_exemplos_por_categoria=n_exemplos_por_categoria,
-        )
-
-    log("[FLOW] Concluído.")
