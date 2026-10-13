@@ -144,6 +144,7 @@ ABA_CATALOGO = "catalogo"
 ABA_LEGENDA_CATALOGO = "legenda"
 ABA_EXEMPLOS = "exemplos"
 ABA_CONVERSAS = "conversas"
+ABA_LEGENDA_CONVERSAS = "legenda"
 ABA_CATALOGO_AUTOMATICO = "catalogo_automatico"
 MARCADOR_REVISADA = "revisada"
 # Sufixo da subpasta do relatório rápido — a ingestão do RAG ignora qualquer arquivo
@@ -174,6 +175,14 @@ COL_JUSTIFICATIVA_REVISAO = "justificativa_revisao"
 REVISAO_CERTO = "Certo"
 REVISAO_ERRADO = "Errado"
 OPCOES_REVISAO = (REVISAO_CERTO, REVISAO_ERRADO)  # lista suspensa da coluna revisao
+
+# Colunas de avaliação do bot — preenchidas manualmente, não usadas pelo classificador.
+COL_AVALIACAO_BOT = "avaliacao_resposta_bot"
+COL_JUSTIFICATIVA_AVALIACAO_BOT = "justificativa_avaliacao_bot"
+AVALIACAO_BOT_BOA = "Boa"
+AVALIACAO_BOT_REGULAR = "Regular"
+AVALIACAO_BOT_RUIM = "Ruim"
+OPCOES_AVALIACAO_BOT = (AVALIACAO_BOT_BOA, AVALIACAO_BOT_REGULAR, AVALIACAO_BOT_RUIM)
 # Demais colunas de conversas_classificadas (mesmos nomes do material de exemplo).
 COL_CONV_JUSTIFICATIVA = "justificativa"
 COL_CONV_RESUMO = "resumo"
@@ -194,6 +203,7 @@ COR_CABECALHO_SECRETARIA = (1.0, 0.812, 0.196)  # amarelo
 COR_DECISAO_MANTER = (0.714, 0.843, 0.659)   # verde claro
 COR_DECISAO_EXCLUIR = (0.918, 0.600, 0.600)  # vermelho claro
 COR_DECISAO_NOVA = (1.0, 0.949, 0.667)       # amarelo claro
+COR_AVALIACAO_REGULAR = (0.988, 0.737, 0.427)  # laranja claro
 
 # ============================================================================
 # RAG — banco de conversas revisadas (few-shot da classificação recorrente)
