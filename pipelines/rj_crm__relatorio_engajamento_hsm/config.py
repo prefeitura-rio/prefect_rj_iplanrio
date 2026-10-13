@@ -178,6 +178,11 @@ SEP_CATEGORIAS = ";"  # separador de várias categorias numa mesma célula
 # Limite de caracteres por célula do Google Sheets (conversas longas são truncadas).
 SHEETS_MAX_CHARS_CELULA = 50000
 
+# Cores dos cabeçalhos dos Sheets gerados (RGB em [0, 1]).
+# Azul: colunas preenchidas pelo flow. Amarelo: colunas preenchidas pela secretaria.
+COR_CABECALHO_FLOW = (0.267, 0.490, 0.792)      # azul
+COR_CABECALHO_SECRETARIA = (1.0, 0.812, 0.196)  # amarelo
+
 # ============================================================================
 # RAG — banco de conversas revisadas (few-shot da classificação recorrente)
 # ============================================================================

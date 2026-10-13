@@ -44,6 +44,8 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COL_CONV_RESUMO,
     COL_JUSTIFICATIVA_REVISAO,
     COL_REVISAO,
+    COR_CABECALHO_FLOW,
+    COR_CABECALHO_SECRETARIA,
     DOCX_MIME,
     DRIVE_DOC_MIME,
     MARCADOR_REVISADA,
@@ -54,7 +56,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import SugestaoCategoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.judge import metricas_por_categoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import garante_pasta, link_pasta, upload_bytes
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import aplica_lista_suspensa, cria_sheet
+from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import aplica_lista_suspensa, colore_cabecalho, cria_sheet
 
 _Z_IC_95 = 1.959963985  # z crítico do intervalo de confiança de 95%
 SEP_CELULA = "; "  # várias categorias numa célula (a ingestão separa por ";" e tira espaços)
@@ -470,10 +472,33 @@ def publica_relatorio(
 
     conversas = monta_conversas_df(dados.df, com_revisao=not dados.rapido)
     arquivo = cria_sheet(drive, sheets, subpasta_id, ARQUIVO_CONVERSAS, conversas)
+    _cores_conversas_flow = {
+        COL_CONV_ID_SESSAO: COR_CABECALHO_FLOW,
+        COL_CONV_CATEGORIA: COR_CABECALHO_FLOW,
+        COL_CONV_JUSTIFICATIVA: COR_CABECALHO_FLOW,
+        COL_CONV_RESUMO: COR_CABECALHO_FLOW,
+        COL_CONV_CONVERSA: COR_CABECALHO_FLOW,
+        COL_CONV_JUIZ_VEREDITO: COR_CABECALHO_FLOW,
+        COL_CONV_JUIZ_ESPERADA: COR_CABECALHO_FLOW,
+        COL_CONV_JUIZ_JUSTIFICATIVA: COR_CABECALHO_FLOW,
+    }
     if not dados.rapido:
         aplica_lista_suspensa(sheets, arquivo["id"], COL_REVISAO, list(OPCOES_REVISAO), ate_linha=len(conversas) + 1)
+        colore_cabecalho(sheets, arquivo["id"], {
+            **_cores_conversas_flow,
+            COL_REVISAO: COR_CABECALHO_SECRETARIA,
+            COL_CATEGORIAS_CORRETAS: COR_CABECALHO_SECRETARIA,
+            COL_JUSTIFICATIVA_REVISAO: COR_CABECALHO_SECRETARIA,
+        })
     else:
-        cria_sheet(
+        colore_cabecalho(sheets, arquivo["id"], _cores_conversas_flow)
+        arquivo_cat = cria_sheet(
             drive, sheets, subpasta_id, ARQUIVO_CATALOGO_AUTOMATICO, monta_catalogo_automatico_df(dados, categorias)
         )
+        colore_cabecalho(sheets, arquivo_cat["id"], {
+            COL_CAT_CATEGORIA: COR_CABECALHO_FLOW,
+            COL_CAT_DESCRICAO: COR_CABECALHO_FLOW,
+            COL_CAT_EXEMPLOS: COR_CABECALHO_FLOW,
+            "Qtd. de conversas": COR_CABECALHO_FLOW,
+        })
     return link_pasta(subpasta_id)

@@ -30,6 +30,8 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COL_CAT_JUSTIFICATIVA,
     COL_CONV_CONVERSA,
     COL_CONV_ID_SESSAO,
+    COR_CABECALHO_FLOW,
+    COR_CABECALHO_SECRETARIA,
     DRIVE_SHEET_MIME,
     OPCOES_DECISAO,
     STATUS_CONCLUIDO,
@@ -52,6 +54,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import (
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import (
     aplica_lista_suspensa,
+    colore_cabecalho,
     cria_sheet,
     get_sheets_service,
     publica_sheet,
@@ -129,7 +132,19 @@ def gera_material_validacao(
 
     arquivo_catalogo = cria_sheet(drive, sheets, pasta_id, ARQUIVO_CATALOGO, monta_catalogo_df(catalogo, exemplos))
     aplica_lista_suspensa(sheets, arquivo_catalogo["id"], COL_CAT_DECISAO, list(OPCOES_DECISAO))
-    publica_sheet(drive, sheets, pasta_id, ARQUIVO_EXEMPLOS, monta_exemplos_df(df_sessoes))
+    colore_cabecalho(sheets, arquivo_catalogo["id"], {
+        COL_CAT_CATEGORIA: COR_CABECALHO_FLOW,
+        COL_CAT_DESCRICAO: COR_CABECALHO_FLOW,
+        COL_CAT_EXEMPLOS: COR_CABECALHO_FLOW,
+        COL_CAT_DECISAO: COR_CABECALHO_SECRETARIA,
+        COL_CAT_JUSTIFICATIVA: COR_CABECALHO_SECRETARIA,
+        COL_CAT_DATA_DECISAO: COR_CABECALHO_SECRETARIA,
+    })
+    arquivo_exemplos = publica_sheet(drive, sheets, pasta_id, ARQUIVO_EXEMPLOS, monta_exemplos_df(df_sessoes))
+    colore_cabecalho(sheets, arquivo_exemplos["id"], {
+        COL_CONV_ID_SESSAO: COR_CABECALHO_FLOW,
+        COL_CONV_CONVERSA: COR_CABECALHO_FLOW,
+    })
 
     sem_exemplo = [nome for nome, ids in exemplos.items() if not ids]
     log(

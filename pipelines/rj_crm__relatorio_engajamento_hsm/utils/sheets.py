@@ -159,6 +159,54 @@ def atualiza_linha(sheets: Resource, spreadsheet_id: str, aba: str, linha: int, 
     ).execute()
 
 
+def colore_cabecalho(
+    sheets: Resource,
+    spreadsheet_id: str,
+    cores: dict[str, tuple[float, float, float]],
+) -> None:
+    """Colore células do cabeçalho (linha 1) pelo nome da coluna.
+
+    `cores` mapeia nome da coluna -> (red, green, blue) em [0, 1].
+    Colunas ausentes no cabeçalho são ignoradas silenciosamente."""
+    meta = sheets.spreadsheets().get(
+        spreadsheetId=spreadsheet_id, fields="sheets.properties(sheetId,title)"
+    ).execute()
+    propriedades = meta["sheets"][0]["properties"]
+    sheet_id = propriedades["sheetId"]
+    cabecalho = sheets.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id, range=_range_aba(propriedades["title"], "1:1")
+    ).execute().get("values", [[]])[0]
+    posicao = {str(c).strip(): i for i, c in enumerate(cabecalho)}
+
+    requests = []
+    for col, (r, g, b) in cores.items():
+        if col not in posicao:
+            continue
+        idx = posicao[col]
+        requests.append({
+            "repeatCell": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "startRowIndex": 0,
+                    "endRowIndex": 1,
+                    "startColumnIndex": idx,
+                    "endColumnIndex": idx + 1,
+                },
+                "cell": {
+                    "userEnteredFormat": {
+                        "backgroundColor": {"red": r, "green": g, "blue": b},
+                        "textFormat": {"bold": True},
+                    }
+                },
+                "fields": "userEnteredFormat(backgroundColor,textFormat)",
+            }
+        })
+    if requests:
+        sheets.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id, body={"requests": requests}
+        ).execute()
+
+
 def aplica_lista_suspensa(
     sheets: Resource, spreadsheet_id: str, coluna: str, opcoes: list[str], ate_linha: int = 1000
 ) -> None:
