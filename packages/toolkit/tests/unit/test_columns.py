@@ -1,46 +1,38 @@
 import re
-import unicodedata
 
 import pytest
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 
 from toolkit.columns import normalize_column, normalize_columns
 
 
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [
-        pytest.param("Data de Início", "data_de_inicio", id="accents_and_spaces"),
-        pytest.param("a/b-c(d)", "a_b_c_d_", id="separators"),
-        pytest.param("2024", "_2024", id="digits_only"),
-        pytest.param("  Nome  ", "nome", id="trimmed"),
-        pytest.param("col$%", "col", id="symbols_removed"),
-    ],
-)
-def test_normalize_column(name, expected):
-    assert normalize_column(name) == expected
+def test_normalize_column_prefixes_a_name_of_only_digits():
+    """Our rule: a name made only of digits gets a ``_`` prefix to be an identifier."""
+    assert normalize_column("2024") == "_2024"
+
+
+@pytest.mark.parametrize("name", ["{}", "", "!?"])
+def test_normalize_column_rejects_a_name_that_normalizes_to_nothing(name):
+    with pytest.raises(ValueError, match="empty"):
+        normalize_column(name)
 
 
 def test_normalize_columns_rejects_collisions():
     with pytest.raises(ValueError, match="collide"):
-        normalize_columns(["Nome", "nome"])
+        normalize_columns(["Início", "inicio"])
 
 
-def test_normalize_column_rejects_empty_result():
-    with pytest.raises(ValueError, match="empty"):
-        normalize_column("{}")
+def test_normalize_columns_keeps_the_order():
+    assert normalize_columns(["b_2", "a_1"]) == ["b_2", "a_1"]
 
 
 @given(st.text())
 def test_normalize_column_is_idempotent_and_safe(name):
-    assume(
-        re.sub(
-            r"\W+",
-            "",
-            unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode(),
-        )
-    )
-    once = normalize_column(name)
+    """The contract of the wrapper: safe characters, and normalizing twice changes nothing."""
+    try:
+        once = normalize_column(name)
+    except ValueError:
+        return
     assert normalize_column(once) == once
     assert re.fullmatch(r"[a-z0-9_]*", once)

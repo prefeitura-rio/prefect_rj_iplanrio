@@ -1,25 +1,22 @@
 """Column name normalization for BigQuery-safe schemas."""
 
-import re
-import unicodedata
+from slugify import slugify
 
 
 def normalize_column(name: str) -> str:
     """Return a BigQuery-safe column name: ASCII, lowercase, words joined by ``_``.
 
-    A name made only of digits gets a ``_`` prefix.
+    ``slugify`` transliterates the non-ASCII characters (``Straße`` becomes
+    ``strasse``) and collapses runs of separators (``Nome (Completo)`` becomes
+    ``nome_completo``).
 
     :param name: The source column name.
     :returns: The normalized name.
     :raises ValueError: If nothing is left after normalization.
     """
-    ascii_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
-    lowered = re.sub(r"[\s/\-()]", "_", ascii_name.strip()).lower()
-    cleaned = re.sub(r"\W+", "", lowered)
-
+    cleaned = slugify(name, separator="_")
     if not cleaned:
         raise ValueError(f"Column name is empty after normalization: {name!r}")
-
     return f"_{cleaned}" if cleaned.isdigit() else cleaned
 
 

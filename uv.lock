@@ -6581,6 +6581,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "python-slugify" },
     { name = "requests" },
 ]
 
@@ -6619,6 +6620,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.4" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
+    { name = "python-slugify", specifier = ">=8.0.4" },
     { name = "requests", specifier = ">=2.32.4" },
 ]
 
