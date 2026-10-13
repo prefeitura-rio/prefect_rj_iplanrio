@@ -12,8 +12,8 @@ from ..types import QueryParams, StepValue, TemplateValue
 from .constants import TEMPLATES_DIR
 from .engines.duckdb import load_extensions
 from .engines.protocol import Engine
+from .render import render_template
 from .sources.protocols import Fetcher, Source
-from .templates import render_template
 from .utils import validate_rows
 
 

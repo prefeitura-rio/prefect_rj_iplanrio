@@ -3,7 +3,7 @@ from jinja2 import TemplateNotFound, UndefinedError
 from psycopg.sql import Identifier, Literal
 
 from toolkit.executor.constants import TEMPLATES_DIR
-from toolkit.executor.templates import render_template, to_sql
+from toolkit.executor.render import render_template, to_sql
 
 
 @pytest.mark.parametrize(

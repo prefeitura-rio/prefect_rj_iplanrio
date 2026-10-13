@@ -8,7 +8,7 @@ from psycopg.sql import SQL, Composable, Literal
 from ....partitions import Selection
 from ....settings import settings
 from ...engines.duckdb import Extension
-from ...templates import render_template
+from ...render import render_template
 from ...utils import window_mapping
 from ..base import SourceBase
 

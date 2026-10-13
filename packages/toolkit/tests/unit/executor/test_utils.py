@@ -3,7 +3,7 @@ from datetime import date
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from toolkit.executor.templates import to_sql
+from toolkit.executor.render import to_sql
 from toolkit.executor.utils import (
     rows_to_records,
     safe_column,

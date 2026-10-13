@@ -13,7 +13,7 @@ from psycopg.sql import Composable
 from ....extraction import parquet_scan
 from ....partitions import Selection
 from ...engines.duckdb import Extension
-from ...templates import render_template
+from ...render import render_template
 from ...utils import window_mapping
 from ..base import SourceBase
 from ..protocols import DBConn, SourceContext

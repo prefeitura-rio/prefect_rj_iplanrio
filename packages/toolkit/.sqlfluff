@@ -6,7 +6,7 @@ exclude_rules = AL01,AL05,AL07,CP02,CP03,CV09,LT02,LT05,LT08,LT09,LT14,RF04,RF06
 
 [sqlfluff:templater:jinja]
 apply_dbt_builtins = False
-loader_search_path = toolkit/templates
+loader_search_path = toolkit/executor/templates
 
 [sqlfluff:templater:jinja:context]
 columns = [{"source":"a","alias":"b","clean":true}]

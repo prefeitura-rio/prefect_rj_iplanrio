@@ -9,7 +9,7 @@ from ...partitions import Selection
 from ...types import TemplateValue
 from ..constants import ALIAS, SECRET
 from ..engines.duckdb import Extension
-from ..templates import render_template
+from ..render import render_template
 from ..utils import window_mapping
 from .base import SourceBase
 from .protocols import DBConn, SourceContext

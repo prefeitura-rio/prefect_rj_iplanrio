@@ -16,7 +16,7 @@ from psycopg.sql import Literal
 
 from ...settings import Settings, settings
 from ...types import DatabaseRecord, DatabaseRow, QueryParams, TemplateValue
-from ..templates import render_template
+from ..render import render_template
 from ..utils import rows_to_records
 from .protocol import Engine
 
