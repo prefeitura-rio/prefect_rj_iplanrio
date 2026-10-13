@@ -23,8 +23,8 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.extract import sql_query_
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import (
     busca_pasta,
     confirma_pasta_raiz,
+    garante_pasta,
     get_drive_service,
-    pasta_hsm_id,
     upload_bytes,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.texto import hsm_sane
@@ -351,7 +351,7 @@ def monta_e_publica_relatorio(
 
     drive = get_drive_service()
     confirma_pasta_raiz(drive, drive_pasta_raiz_id)
-    pasta_id = pasta_hsm_id(drive, drive_pasta_raiz_id, nome_hsm)
+    pasta_id = garante_pasta(drive, drive_pasta_raiz_id, nome_hsm)
 
     upload_bytes(
         drive, pasta_id, f"{slug}.docx", buffer_docx.getvalue(),
