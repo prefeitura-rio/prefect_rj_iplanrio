@@ -1181,4 +1181,4 @@ deployments:
                 dt_retificacao,
                 licenca_retificadora,
                 tipo_licenca
-            FROM vwLic_licencas_Resumo
+            FROM SMU_PRD.dbo.vwLic_licencas_Resumo
