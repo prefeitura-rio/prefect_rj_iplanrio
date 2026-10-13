@@ -1,7 +1,7 @@
 [project]
 name = "rj_crm__relatorio_engajamento_hsm"
 version = "0.1.0"
-description = "Relatório de engajamento por HSM (classificação + julgamento por LLM, .docx) publicado no Google Drive"
+description = "Relatório de engajamento por campanha (catálogo validado, classificação few-shot com RAG + LLM juiz) publicado no Google Drive"
 dependencies = [
     "prefect_rj_iplanrio",
     "google-cloud-bigquery>=3.25.0",
@@ -11,7 +11,20 @@ dependencies = [
     "requests>=2.32.4",
     "pandas>=2.3.1",
     "python-docx>=1.1.0",
+    "numpy>=2.0",
+    "pyarrow>=15.0",
+    "db-dtypes>=1.2.0",
+    "sentence-transformers>=5.0",
+    "torch>=2.6",
 ]
 
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
+# torch só-CPU no Linux (imagem do deployment): o wheel padrão do PyPI no Linux vem
+# com CUDA e passa de 2GB. No macOS (dev local) o wheel do PyPI já é só-CPU.
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
