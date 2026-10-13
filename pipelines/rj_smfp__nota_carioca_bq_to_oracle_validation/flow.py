@@ -1,5 +1,7 @@
 """Flow for rj_smfp__nota_carioca_bq_to_oracle_validation."""
 
+from typing import Literal
+
 from prefect import flow
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
@@ -22,6 +24,7 @@ def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
     fail_on_divergence: bool = True,
     template_schema: str | None = None,
     excluded_template_columns: list[str] | None = None,
+    raw_text_encoding: Literal["base64", "hex"] = "base64",
 ) -> None:
     rename_current_flow_run_task(new_name=f"validacao-{dataset_id}")
     inject_bd_credentials_task(environment="prod")
@@ -37,6 +40,7 @@ def rj_smfp__nota_carioca_bq_to_oracle_validation(  # noqa: PLR0913
             template_schema=template_schema,
             excluded_template_columns=excluded_template_columns,
             compute_column_metrics=compute_column_metrics,
+            raw_text_encoding=raw_text_encoding,
         )
         for table_id in tables
     ]
