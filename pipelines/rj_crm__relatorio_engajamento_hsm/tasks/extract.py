@@ -131,9 +131,9 @@ def _monta_conversas(df_raw: pd.DataFrame) -> tuple[pd.DataFrame, int, int]:
 def textos_hsm(df_sessoes: pd.DataFrame) -> dict[str, str]:
     """{nome_hsm: texto de exemplo} — 1 por HSM distinto de um conjunto de sessões, pros
     prompts em lote (descoberta/juiz), que podem misturar HSMs da mesma campanha, e pro
-    relatório. Deduplica pelo NOME do HSM, não pelo texto: o texto costuma ser
-    personalizado por cidadão (nome da criança, data...) e deduplicar por ele daria
-    quase 1 texto por sessão."""
+    relatório. Deduplica pelo NOME do HSM, não pelo texto: hoje a chatbot guarda o
+    template (com ${...} sem preencher), mas se algum dia guardar o texto já
+    personalizado, deduplicar pelo texto daria quase 1 texto por sessão."""
     if df_sessoes.empty:
         return {}
     com_texto = df_sessoes[df_sessoes["hsm_texto"].fillna("").str.strip() != ""].copy()

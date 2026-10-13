@@ -339,7 +339,7 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
     precisao.add_run(texto_precisao(n_corretas, len(julgadas), n_classificadas)).bold = True
 
     if dados.textos_hsm:
-        doc.add_paragraph().add_run("HSM(s) enviado(s) (texto de exemplo — o texto real é personalizado):").bold = True
+        doc.add_paragraph().add_run("HSM(s) enviado(s) (texto do template):").bold = True
         for nome, texto in dados.textos_hsm.items():
             doc.add_paragraph(nome, style="List Bullet")
             doc.add_paragraph(style="Intense Quote").add_run(_trunca(texto))

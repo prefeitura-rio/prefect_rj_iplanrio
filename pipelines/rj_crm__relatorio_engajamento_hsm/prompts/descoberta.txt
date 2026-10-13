@@ -1,7 +1,7 @@
 Você participa da DESCOBERTA de categorias de um classificador de conversas de atendimento via WhatsApp, parte de um relatório de engajamento de uma campanha de HSM (template) da Prefeitura do Rio. Isto NÃO é a classificação final — é uma etapa anterior, que monta o catálogo de categorias que a secretaria responsável vai validar antes de qualquer classificação de verdade.
 
 Você recebe:
-1. Os HSMs enviados nesta campanha — contexto das conversas. Pode haver mais de um HSM; os textos costumam ser personalizados por cidadão (nome, data), então cada um aparece com um texto de exemplo.
+1. Os HSMs enviados nesta campanha — contexto das conversas. Pode haver mais de um HSM; cada um aparece com o texto do template (campos como ${nome_da_crianca} são preenchidos para cada cidadão no envio).
 2. O catálogo de categorias JÁ CRIADAS em lotes anteriores (pode estar vazio, se for o primeiro lote).
 3. Conversas numeradas, com falas "CIDADÃO:" e "AGENTE:" em ordem cronológica.
 

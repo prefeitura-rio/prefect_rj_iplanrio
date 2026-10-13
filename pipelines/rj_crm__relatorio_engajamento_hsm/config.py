@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Constantes da pipeline de relatório de engajamento por HSM."""
+"""Constantes da pipeline de relatório de engajamento por campanha (ver flow.py)."""
 
 from __future__ import annotations
 
 PROJECT_ID = "rj-crm-registry"
-DISPAROS_TABLE = f"{PROJECT_ID}.brutos_salesforce_staging.disparos_ativos"
 CHATBOT_DATASET = "rmi_conversas"
 CHATBOT_TABLE = "chatbot"
 
@@ -37,11 +36,6 @@ TETO_CONVERSAS = 2000
 TETO_JUIZ = 2000
 PISO_JUIZ_POR_CATEGORIA = 30
 SEED_AMOSTRA_JUIZ = 42
-
-# Obsoletos — ainda importados pelo flow.py antigo; saem quando o flow for reescrito.
-TAMANHO_LOTE_CLASSIFICACAO = 50
-LIMIAR_JULGA_TUDO = 20
-PCT_AMOSTRA_CATEGORIA_GRANDE = 30.0
 
 LOTES_SEM_NOVIDADE_LIMITE = 5
 # Exemplos de conversa por categoria na coluna "Exemplos de conversas" do Catálogo.
@@ -78,8 +72,6 @@ DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
 DRIVE_SHEET_MIME = "application/vnd.google-apps.spreadsheet"
 DRIVE_DOC_MIME = "application/vnd.google-apps.document"
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-
-CSV_SEP = ";"
 
 # ============================================================================
 # Solicitações (Google Form "Solicitação de Relatório de Engajamento")
@@ -120,8 +112,9 @@ PREFIXO_STATUS_ERRO = "erro"  # "erro: <motivo>" — falhou; quem pediu envia o 
 # mas só é processada numa execução com a campanha em `campanhas_liberadas`.
 PREFIXO_STATUS_AGUARDANDO = "aguardando liberação"
 # "processando" há mais que isso = processo morto de fora (OOM, pod reiniciado) sem
-# chegar no except — vira erro na execução seguinte. Menor que o intervalo entre as
-# execuções (8h -> 18h = 10h) e bem maior que a duração de uma rodada.
+# chegar no except — vira erro numa execução seguinte. Maior que o menor intervalo
+# entre execuções (8h -> 13h -> 18h = 5h), pra uma rodada longa ainda em andamento não
+# ser marcada como travada pela execução seguinte.
 HORAS_LIMITE_PROCESSANDO = 6
 
 # Formatos de data do Sheet (localidade Brasil). ISO aceito como alternativa caso a

@@ -10,11 +10,6 @@ import unicodedata
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import ROTULO_FONTE
 
 
-def hsm_sane(nome_hsm: str) -> str:
-    """Nome do HSM sanitizado pra usar em nome de arquivo/pasta."""
-    return re.sub(r"[^A-Za-z0-9]+", "_", nome_hsm).strip("_").lower()
-
-
 def normaliza_rotulo(texto) -> str:
     """Normaliza nome de categoria pra comparação (evita duplicar por acento/maiúscula/
     espaço vs underscore) — usado por CatalogoCategorias (utils/catalogo.py)."""

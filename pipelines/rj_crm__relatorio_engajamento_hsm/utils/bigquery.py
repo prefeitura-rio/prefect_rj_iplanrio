@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """Cliente BigQuery autenticado com a credencial de produção do secret do work pool —
-mesmo padrão de rj_crm__agentforce_classificacao_llm/utils/bigquery.py. Escopo Drive
-(default de get_bd_credentials_from_env) é necessário mesmo pra BQ aqui:
-disparos_ativos é uma tabela externa (Google Sheet importada)."""
+mesmo padrão de rj_crm__agentforce_classificacao_llm/utils/bigquery.py. Usado na
+extração (rmi_conversas.chatbot) e no banco de exemplos do RAG (tasks/rag.py)."""
 
 from google.cloud import bigquery
 from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
