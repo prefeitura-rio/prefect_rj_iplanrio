@@ -83,6 +83,9 @@ deployments:
     # CHAR(4000)): ~0,5 GB na MVT_NOTAS_NACIONAIS_DETALHES. Índices e estatísticas com grau 8 (era 4) no Oracle.
     sqlldr_sessions: 4
     index_parallel_degree: 8
+    # PESSOA_* chegam em hexadecimal do dbt (queries-rj-iplanrio#330): o SQL*Loader converte para RAW sem expressão
+    # SQL por linha. Precisa casar com o model; trocar só um dos lados reprova a carga antes da troca de sinônimos.
+    raw_text_encoding: hex
   work_pool:
     name: onprem-pool
     work_queue_name: default

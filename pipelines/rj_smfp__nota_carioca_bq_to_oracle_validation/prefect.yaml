@@ -48,6 +48,8 @@ deployments:
   entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle_validation/flow.py:rj_smfp__nota_carioca_bq_to_oracle_validation
   parameters:
     dataset_id: nota_carioca
+    # Mesma codificação das colunas RAW usada pela carga (hex, desde queries-rj-iplanrio#330).
+    raw_text_encoding: hex
   work_pool:
     name: onprem-pool
     work_queue_name: default
