@@ -23,7 +23,7 @@ from iplanrio.pipelines_utils.logging import log
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import DRIVE_FOLDER_MIME
 
-_CAMPOS_ARQUIVO = "id, name, mimeType, webViewLink"
+_CAMPOS_ARQUIVO = "id, name, mimeType, webViewLink, modifiedTime"
 
 
 def get_drive_service() -> Resource:

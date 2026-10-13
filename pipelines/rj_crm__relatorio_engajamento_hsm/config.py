@@ -123,6 +123,7 @@ SUFIXO_PASTA_RAPIDO = "__catalogo_automatico"
 
 # Colunas do Catálogo — preenchidas pelo flow na Fase 1 (as 3 primeiras) e pela
 # secretaria na validação (as 3 últimas). O flow só LÊ o Catálogo depois de criado.
+# Só a Decisão importa pro flow; Justificativa e Data da decisão são de auditoria.
 COL_CAT_CATEGORIA = "Categoria"
 COL_CAT_DESCRICAO = "Descrição"
 COL_CAT_EXEMPLOS = "Exemplos de conversas"
@@ -132,6 +133,10 @@ COL_CAT_DATA_DECISAO = "Data da decisão"
 DECISOES_VALIDAS = {"Manter", "Excluir", "Nova"}
 DECISOES_ATIVAS = {"Manter", "Nova"}
 
+# Colunas de conversas_classificadas geradas pelo flow e lidas de volta na ingestão.
+COL_CONV_ID_SESSAO = "id_sessao"
+COL_CONV_CATEGORIA = "categoria"
+COL_CONV_CONVERSA = "conversa"
 # Colunas de revisão em conversas_classificadas — preenchidas pela secretaria.
 COL_REVISAO = "revisao"
 COL_CATEGORIAS_CORRETAS = "categorias_corretas"
