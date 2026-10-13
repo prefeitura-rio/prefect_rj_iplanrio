@@ -18,6 +18,9 @@ pipelines/
 src/
 └── prefect_rj_iplanrio/
     └── __init__.py
+packages/
+└── iplanrio/
+    └── iplanrio/
 Dockerfile
 pyproject.toml
 uv.lock
@@ -44,6 +47,8 @@ Este repositório utiliza um modelo monorepo para gerenciar múltiplas pipelines
   - Cada subdiretório em `pipelines/` representa um módulo Python independente, mas todos são importados automaticamente como membros do workspace.
   - As pipelines declaram `prefect_rj_iplanrio` como dependência com `{ workspace = true }`, herdando automaticamente as dependências base (`iplanrio`, `prefect`, `pandas`, etc.).
   - Novas pipelines adicionadas à pasta `pipelines/` são automaticamente reconhecidas e integradas ao workspace, sem necessidade de configuração manual adicional.
+
+- **Pacote `iplanrio`**: o diretório `packages/iplanrio/` é um membro do workspace com os primitivos compartilhados (upload para o BigQuery, credenciais, conectores de banco, templates de extração). As regras estão em [`packages/iplanrio/STYLEGUIDE.md`](packages/iplanrio/STYLEGUIDE.md).
 
 - **Código compartilhado**: o diretório `src/prefect_rj_iplanrio/` contém código Python compartilhado entre as pipelines.
   - Funções utilitárias, classes base, helpers e lógica comum podem ser adicionados neste pacote.
@@ -169,13 +174,14 @@ uv lock
 
 ### Erro: Dependências base não instaladas no container
 
-**Causa**: O Dockerfile não está copiando o diretório `src/`.
+**Causa**: O Dockerfile não está copiando os diretórios `src/` e `packages/`.
 
 **Solução**: Verifique se o Dockerfile da pipeline contém:
 
 ```dockerfile
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
+COPY ./packages ./packages/
 COPY ./pipelines/<nome-da-pipeline> ./pipelines/<nome-da-pipeline>/
 RUN uv sync --package <nome-da-pipeline>
 ```
@@ -197,4 +203,4 @@ uv lock
 **Solução**: Verifique se:
 1. O diretório `src/prefect_rj_iplanrio/` existe e contém `__init__.py`
 2. A pipeline declara `prefect_rj_iplanrio` como dependência com `workspace = true`
-3. O Dockerfile copia o diretório `src/`
+3. O Dockerfile copia os diretórios `src/` e `packages/`

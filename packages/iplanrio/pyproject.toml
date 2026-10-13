@@ -1,0 +1,32 @@
+[project]
+name = "iplanrio"
+version = "1.0.0"
+description = "Shared utilities and Prefect task wrappers for iplanrio data pipelines, providing BigQuery upload, credential injection, database connectors and DataFrame transformations."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "basedosdados[upload]==2.0.3",
+    "croniter>=6.0.0",
+    "oracledb>=2.0.0",
+    "dbt-bigquery==1.11.1",
+    "geopandas>=1.1.1",
+    "gitpython==3.1.44",
+    "google-api-python-client>=2.179.0",
+    "gspread>=6.2.1",
+    "pandas>=2.3.1",
+    "prefect==3.4.9",
+    "prefect-dbt==0.7.5",
+    "psycopg2-binary>=2.9.10",
+    "pymysql>=1.1.1",
+    "pyodbc>=5.2.0",
+    "pytz>=2025.2",
+    "requests>=2.32.4",
+    "setuptools>=82.0.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["iplanrio"]

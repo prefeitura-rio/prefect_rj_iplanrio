@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = "==3.13.*"
 resolution-markers = [
     "sys_platform == 'win32'",
@@ -10,6 +10,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "iplanrio",
     "prefect-rj-iplanrio",
     "rj-cetrio-ocr-radar",
     "rj-cetrio-transporte-rodoviario-radar-transito",
@@ -1798,8 +1799,8 @@ wheels = [
 
 [[package]]
 name = "iplanrio"
-version = "0.1.0"
-source = { git = "https://github.com/prefeitura-rio/iplanrio.git#fda88406e677516f5a2d7d511930b89b7c0357bb" }
+version = "1.0.0"
+source = { editable = "packages/iplanrio" }
 dependencies = [
     { name = "basedosdados", extra = ["upload"] },
     { name = "croniter" },
@@ -1818,6 +1819,27 @@ dependencies = [
     { name = "pytz" },
     { name = "requests" },
     { name = "setuptools" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "basedosdados", extras = ["upload"], specifier = "==2.0.3" },
+    { name = "croniter", specifier = ">=6.0.0" },
+    { name = "dbt-bigquery", specifier = "==1.11.1" },
+    { name = "geopandas", specifier = ">=1.1.1" },
+    { name = "gitpython", specifier = "==3.1.44" },
+    { name = "google-api-python-client", specifier = ">=2.179.0" },
+    { name = "gspread", specifier = ">=6.2.1" },
+    { name = "oracledb", specifier = ">=2.0.0" },
+    { name = "pandas", specifier = ">=2.3.1" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-dbt", specifier = "==0.7.5" },
+    { name = "psycopg2-binary", specifier = ">=2.9.10" },
+    { name = "pymysql", specifier = ">=1.1.1" },
+    { name = "pyodbc", specifier = ">=5.2.0" },
+    { name = "pytz", specifier = ">=2025.2" },
+    { name = "requests", specifier = ">=2.32.4" },
+    { name = "setuptools", specifier = ">=82.0.1" },
 ]
 
 [[package]]
@@ -3037,7 +3059,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "idna", specifier = ">=3.10" },
-    { name = "iplanrio", git = "https://github.com/prefeitura-rio/iplanrio.git" },
+    { name = "iplanrio", editable = "packages/iplanrio" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "prefect", specifier = "==3.4.9" },

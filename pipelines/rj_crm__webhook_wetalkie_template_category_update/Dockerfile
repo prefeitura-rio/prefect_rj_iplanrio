@@ -11,6 +11,7 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
+COPY ./packages ./packages/
 
 COPY ./pipelines/rj_crm__webhook_wetalkie_template_category_update ./pipelines/rj_crm__webhook_wetalkie_template_category_update/
 

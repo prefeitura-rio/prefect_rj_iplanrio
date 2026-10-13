@@ -34,7 +34,7 @@ O código neste repositório vive em um de três níveis. O nível determina ond
 
 | Camada                    | Local                        | Regra                                                                                        |
 | ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
-| **Compartilhado externo** | `iplanrio` (git dependency)  | Utilitários cross-repo. Consuma, não modifique aqui.                                         |
+| **Compartilhado de primitivos** | `packages/iplanrio/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/iplanrio/STYLEGUIDE.md`](packages/iplanrio/STYLEGUIDE.md). |
 | **Compartilhado do repo** | `src/prefect_rj_iplanrio/`   | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline. |
 | **Interno à pipeline**    | `pipelines/rj_x__y/utils.py` | Lógica que pertence a exatamente uma pipeline.                                               |
 
@@ -46,6 +46,7 @@ O código neste repositório vive em um de três níveis. O nível determina ond
 
 Todo diretório de pipeline deve conter estes três arquivos obrigatórios.
 Arquivos condicionais da Seção 3.2 podem ser adicionados quando necessários.
+
 ```
 pipelines/rj_secretaria__pipeline/
 ├── flow.py          ← a função @flow
@@ -469,6 +470,7 @@ Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arqu
 ### 7.2 Sintaxe de template
 
 Use `string.Template` da biblioteca padrão do Python. Os placeholders usam a sintaxe `$variable` ou `${variable}`. O caractere `$` pode ter significado próprio em alguns dialetos. Para um `$` literal em `string.Template`, use `$$` e valide o SQL renderizado.
+
 ```sql
 -- queries/get_last_update.sql
 SELECT max(last_update) AS last_update
@@ -760,6 +762,7 @@ Na dúvida, pergunte: "Um novo membro do time lendo este arquivo entenderia por 
 ### 13.1 O que são tags
 
 Toda pipeline **deve ter tags de metadados** definidas no `prefect.yaml` para indicar:
+
 - **Code owner**: GitHub username do desenvolvedor responsável
 - **Severidade**: Criticidade da pipeline (`low`, `medium`, `high`, `critical`)
 - **Ambiente**: Estágio de execução (`staging`, `prod`)
@@ -809,27 +812,28 @@ deployments:
 
 ### 13.3 Valores válidos
 
-| Tag                | Valores válidos           | Descrição                                                    |
-| ------------------ | ------------------------- | ------------------------------------------------------------ |
-| `environment`      | `staging`, `prod`         | Estágio de execução — obrigatório em todo deployment        |
-| `severity`         | `low`, `medium`, `high`, `critical` | Criticidade da pipeline — obrigatório em todo deployment    |
-| `code_owner`       | GitHub username           | Responsável pelo código — obrigatório em todo deployment    |
+| Tag           | Valores válidos                     | Descrição                                                |
+| ------------- | ----------------------------------- | -------------------------------------------------------- |
+| `environment` | `staging`, `prod`                   | Estágio de execução — obrigatório em todo deployment     |
+| `severity`    | `low`, `medium`, `high`, `critical` | Criticidade da pipeline — obrigatório em todo deployment |
+| `code_owner`  | GitHub username                     | Responsável pelo código — obrigatório em todo deployment |
 
 ### 13.4 Por que tags em vez de parâmetros
 
-| Aspecto              | Tags                                           | Parâmetros                                     |
-| -------------------- | ---------------------------------------------- | ---------------------------------------------- |
-| **Definição**        | Metadados imutáveis da infraestrutura           | Configuração mutável do flow                   |
-| **Escopo**           | Visíveis no Prefect Cloud; usado em filtros    | Passados como argumentos ao flow               |
-| **Mutabilidade**     | Alteradas apenas no `prefect.yaml`             | Podem ser sobrescritas em tempo de execução    |
-| **Observabilidade**  | Automaticamente propagadas aos logs estruturados | Requerem injeção manual no flow                |
-| **Contaminação**     | O flow fica limpo; sem parâmetros "framework"  | O flow acumula parâmetros de infraestrutura    |
+| Aspecto             | Tags                                             | Parâmetros                                  |
+| ------------------- | ------------------------------------------------ | ------------------------------------------- |
+| **Definição**       | Metadados imutáveis da infraestrutura            | Configuração mutável do flow                |
+| **Escopo**          | Visíveis no Prefect Cloud; usado em filtros      | Passados como argumentos ao flow            |
+| **Mutabilidade**    | Alteradas apenas no `prefect.yaml`               | Podem ser sobrescritas em tempo de execução |
+| **Observabilidade** | Automaticamente propagadas aos logs estruturados | Requerem injeção manual no flow             |
+| **Contaminação**    | O flow fica limpo; sem parâmetros "framework"    | O flow acumula parâmetros de infraestrutura |
 
 Tags separam **infraestrutura** (Prefect) de **negócio** (parâmetros do flow).
 
 ### 13.5 Validação
 
 O CI valida em todo PR que modifica `prefect.yaml`. Cada deployment deve incluir:
+
 - `environment:staging` ou `environment:prod`
 - `severity` com um dos 4 valores válidos
 - `code_owner` com um GitHub username válido

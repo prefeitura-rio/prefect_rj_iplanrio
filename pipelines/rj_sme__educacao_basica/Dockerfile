@@ -6,6 +6,7 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
+COPY ./packages ./packages/
 
 COPY ./pipelines/rj_sme__educacao_basica ./pipelines/rj_sme__educacao_basica/
 

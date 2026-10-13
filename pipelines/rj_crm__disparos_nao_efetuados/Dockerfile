@@ -13,6 +13,7 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
+COPY ./packages ./packages/
 
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
 COPY ./pipelines/rj_crm__disparos_nao_efetuados ./pipelines/rj_crm__disparos_nao_efetuados/

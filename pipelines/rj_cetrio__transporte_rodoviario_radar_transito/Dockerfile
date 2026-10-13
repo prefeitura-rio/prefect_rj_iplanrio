@@ -6,6 +6,7 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
+COPY ./packages ./packages/
 
 COPY ./pipelines/rj_cetrio__transporte_rodoviario_radar_transito ./pipelines/rj_cetrio__transporte_rodoviario_radar_transito/
 

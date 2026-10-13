@@ -6,6 +6,7 @@ WORKDIR /opt/prefect/prefect_rj_iplanrio
 
 COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
 COPY ./src ./src/
+COPY ./packages ./packages/
 
 # A pipeline rj_crm__salesforce_api importa create_date_partitions de rj_crm__disparo_template
 COPY ./pipelines/rj_crm__disparo_template ./pipelines/rj_crm__disparo_template/
