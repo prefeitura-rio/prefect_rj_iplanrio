@@ -214,3 +214,23 @@ def test_compare_grants_accepts_extra_privileges_and_flags_missing_ones():
         ["NFSE_OWNER", "ALTER, DELETE, SELECT", "DELETE, SELECT", "DIVERGE"],
     ]
     assert compare_grants((("RL_NFSE", "SELECT"),), []) == [["RL_NFSE", "SELECT", "(nenhum)", "DIVERGE"]]
+
+
+def test_metric_specs_decode_raw_stored_as_hex_when_the_load_used_hex():
+    specs = metric_specs([field("pessoa_emitente", "STRING")], {"PESSOA_EMITENTE": "RAW"}, "hex")
+    assert [(spec.kind, spec.oracle_expression) for spec in specs] == [
+        ("nao_nulos", 'COUNT("PESSOA_EMITENTE")'),
+        ("comprimento_total", 'SUM(UTL_RAW.LENGTH("PESSOA_EMITENTE"))'),
+        ("minimo", 'RAWTOHEX(MIN("PESSOA_EMITENTE"))'),
+        ("maximo", 'RAWTOHEX(MAX("PESSOA_EMITENTE"))'),
+    ]
+    assert specs[1].bigquery_expression == "SUM(BYTE_LENGTH(FROM_HEX(NULLIF(`pessoa_emitente`, ''))))"
+    assert specs[2].bigquery_expression == "UPPER(TO_HEX(MIN(FROM_HEX(NULLIF(`pessoa_emitente`, '')))))"
+    assert specs[3].bigquery_expression == "UPPER(TO_HEX(MAX(FROM_HEX(NULLIF(`pessoa_emitente`, '')))))"
+
+
+def test_metric_specs_keep_base64_decoding_by_default_and_ignore_the_encoding_for_other_types():
+    raw = [field("pessoa_emitente", "STRING")]
+    assert metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}) == metric_specs(raw, {"PESSOA_EMITENTE": "RAW"}, "base64")
+    text = [field("nome", "STRING")]
+    assert metric_specs(text, {"NOME": "VARCHAR2"}, "hex") == metric_specs(text, {"NOME": "VARCHAR2"}, "base64")
