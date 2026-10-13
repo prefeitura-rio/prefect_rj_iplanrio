@@ -1,0 +1,55 @@
+name: rj_smfp__nota_carioca_carga_completa
+prefect-version: 3.4.3
+
+build:
+- prefect.deployments.steps.run_shell_script:
+    id: get-commit-hash
+    script: git rev-parse --short HEAD
+    stream_output: false
+- prefect_docker.deployments.steps.build_docker_image:
+    id: build-image
+    requires: prefect-docker>=0.6.5
+    image_name: ghcr.io/prefeitura-rio/prefect_rj_iplanrio/deployments
+    tag: "rj_smfp__nota_carioca_carga_completa-{{ get-commit-hash.stdout }}"
+    dockerfile: pipelines/rj_smfp__nota_carioca_carga_completa/Dockerfile
+
+push:
+- prefect_docker.deployments.steps.push_docker_image:
+    requires: prefect-docker>=0.6.5
+    image_name: "{{ build-image.image_name }}"
+    tag: "{{ build-image.tag }}"
+
+pull:
+- prefect.deployments.steps.set_working_directory:
+    directory: /opt/prefect/prefect_rj_iplanrio
+
+deployments:
+# Só prod: a cadeia dispara os deployments de prod e opera sobre dados reais. Encadear os de staging não faz sentido:
+# eles rodam sobre datasets de teste e não formam uma carga completa de ponta a ponta. O deploy de staging do CI pula
+# esta pipeline por não haver deployment terminado em --staging.
+- name: rj-smfp--nota-carioca-carga-completa--prod
+  tags:
+  - environment:prod
+  - severity:medium
+  - code_owner:fredzolio
+  version: "{{ get-commit-hash.stdout }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_carga_completa/flow.py:rj_smfp__nota_carioca_carga_completa
+  # Uma carga completa por vez. A exclusão contra disparos manuais dos deployments encadeados é feita no código
+  # (trava antes de cada disparo), e cada um deles também recusa rodar em paralelo.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # Sem schedule: o disparo é manual ou pelo bot do Discord (tags disparo:discord e discord-user:<id>).
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_carga_completa -- prefect flow-run execute
+      secretName: prefect-jobs-secrets
+      image_pull_policy: Always
+      # O pod só espera os filhos (consulta a API do Prefect); a carga roda nos pods deles.
+      cpu_request: "100m"
+      cpu_limit: "500m"
+      memory_request: 256Mi
+      memory_limit: 512Mi
