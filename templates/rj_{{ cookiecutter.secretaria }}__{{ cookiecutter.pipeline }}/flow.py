@@ -10,6 +10,8 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
+from pipelines.rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}.tasks import QueryParam, load_query_task
+
 
 @flow(log_prints=True)
 def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
@@ -18,7 +20,7 @@ def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
     db_port: str = "port",
     db_type: str = "db_type",
     db_charset: str | None = "utf8",
-    execute_query: str = "execute_query",
+    query: QueryParam = {"name": "extract_data", "replacements": {}},  # noqa: B006
     dataset_id: str = "dataset_id",
     table_id: str = "table_id",
     infisical_secret_path: str = "/db-secret_path",
@@ -42,6 +44,7 @@ def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
     inject_bd_credentials_task(environment="prod")
     secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
     partition_columns_list = parse_comma_separated_string_to_list_task(text=partition_columns)
+    execute_query = load_query_task(query=query)
 
     formated_query = format_partitioned_query_task(
         query=execute_query,

@@ -37,7 +37,7 @@ deployments:
     job_variables:
       image: "{% raw %}{{ build-image.image_name }}:{{ build-image.tag }}{% endraw %}"
       command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
-      secretName: prefect-jobs-secrets
+      secretName: prefect-jobs-secrets-staging
       image_pull_policy: Always
 - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--prod
   tags:
@@ -63,12 +63,9 @@ deployments:
     slug: slug # slug do schedule
     parameters:
       table_id: table_id # Nome da tabela no BigQuery
-      execute_query: |
-        SELECT
-          column1,
-          column2,
-          column3
-        FROM database.table_name
+      query:
+        name: extract_data # arquivo queries/extract_data.sql
+        replacements: {} # valores dos $placeholders do SQL
   # Exemplo de schedule incremental
   - interval: 86400
     anchor_date: "2022-01-01T02:32:00"
@@ -82,9 +79,6 @@ deployments:
       break_query_frequency: day # Frequencia de particionamento
       break_query_start: current_day # Data de inicio do particionamento
       break_query_end: current_day # Data de fim do particionamento
-      execute_query: |
-        SELECT
-          column1,
-          column2,
-          column3
-        FROM database.table_name
+      query:
+        name: extract_data # arquivo queries/extract_data.sql
+        replacements: {} # valores dos $placeholders do SQL
