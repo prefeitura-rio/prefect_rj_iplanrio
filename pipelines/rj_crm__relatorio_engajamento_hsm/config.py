@@ -138,6 +138,13 @@ ARQUIVO_EXEMPLOS = "exemplos_nao_classificado"
 ARQUIVO_RELATORIO = "relatorio_engajamento"
 ARQUIVO_CONVERSAS = "conversas_classificadas"
 ARQUIVO_CATALOGO_AUTOMATICO = "catalogo_automatico"
+
+# Nomes das abas principais dos sheets gerados.
+ABA_CATALOGO = "catalogo"
+ABA_LEGENDA_CATALOGO = "legenda"
+ABA_EXEMPLOS = "exemplos"
+ABA_CONVERSAS = "conversas"
+ABA_CATALOGO_AUTOMATICO = "catalogo_automatico"
 MARCADOR_REVISADA = "revisada"
 # Sufixo da subpasta do relatório rápido — a ingestão do RAG ignora qualquer arquivo
 # abaixo de uma pasta com esse sufixo, mesmo que alguém renomeie para "_revisada".

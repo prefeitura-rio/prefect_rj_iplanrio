@@ -20,6 +20,9 @@ from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
+    ABA_CATALOGO,
+    ABA_EXEMPLOS,
+    ABA_LEGENDA_CATALOGO,
     ARQUIVO_CATALOGO,
     ARQUIVO_EXEMPLOS,
     COL_CAT_CATEGORIA,
@@ -56,6 +59,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import (
     link_pasta,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import (
+    adiciona_aba_valores,
     aplica_formatacao_condicional_por_valor,
     aplica_lista_suspensa,
     colore_cabecalho,
@@ -65,6 +69,27 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import (
 )
 
 SEP_EXEMPLOS = "; "
+
+_LEGENDA_CATALOGO: list[list[str]] = [
+    ["Coluna", "O que significa"],
+    ["Categoria", "Nome da categoria proposta pela LLM ou criada pela secretaria."],
+    ["Descrição", "O que entra nessa categoria."],
+    ["Exemplos de conversas", "Lista de id_sessao, separados por ponto e vírgula, de conversas que se encaixam nessa categoria."],
+    ["Decisão", "Escolha na lista: Manter, Excluir ou Nova."],
+    ["Justificativa", "Motivo da decisão, em uma frase."],
+    ["Data da decisão", "Dia em que a secretaria decidiu manter, excluir ou criar a categoria (AAAA-MM-DD)."],
+    ["", ""],
+    ["Decisão", "Quando usar"],
+    ["Manter", "A categoria fica no catálogo, com o nome e a descrição como estão ou ajustados."],
+    ["Excluir", "A categoria sai do catálogo. Na justificativa, indique para onde vão as conversas dela."],
+    ["Nova", "Categoria criada pela secretaria. Adicione uma linha no fim da tabela com nome, descrição e exemplos."],
+    ["", ""],
+    ["Observações", ""],
+    ["Mais de uma categoria", "Uma conversa pode ter mais de uma categoria. Por isso, o mesmo id_sessao pode aparecer em mais de uma linha."],
+    ["Exemplos", "Os exemplos são conversas em que pelo menos parte do conteúdo se encaixa na categoria, não necessariamente a conversa inteira."],
+    ["Identificador", "Os exemplos usam o id_sessao dos csvs."],
+]
+
 COLUNAS_CATALOGO = [
     COL_CAT_CATEGORIA,
     COL_CAT_DESCRICAO,
@@ -134,7 +159,9 @@ def gera_material_validacao(
     if not catalogo.como_dict():
         raise RuntimeError("a descoberta não gerou nenhuma categoria (todos os lotes de LLM falharam?)")
 
-    arquivo_catalogo = cria_sheet(drive, sheets, pasta_id, ARQUIVO_CATALOGO, monta_catalogo_df(catalogo, exemplos))
+    arquivo_catalogo = cria_sheet(
+        drive, sheets, pasta_id, ARQUIVO_CATALOGO, monta_catalogo_df(catalogo, exemplos), nome_aba=ABA_CATALOGO
+    )
     aplica_lista_suspensa(sheets, arquivo_catalogo["id"], COL_CAT_DECISAO, list(OPCOES_DECISAO))
     aplica_formatacao_condicional_por_valor(sheets, arquivo_catalogo["id"], COL_CAT_DECISAO, [
         ("Manter", COR_DECISAO_MANTER),
@@ -149,7 +176,8 @@ def gera_material_validacao(
         COL_CAT_JUSTIFICATIVA: COR_CABECALHO_SECRETARIA,
         COL_CAT_DATA_DECISAO: COR_CABECALHO_SECRETARIA,
     })
-    arquivo_exemplos = publica_sheet(drive, sheets, pasta_id, ARQUIVO_EXEMPLOS, monta_exemplos_df(df_sessoes))
+    adiciona_aba_valores(sheets, arquivo_catalogo["id"], ABA_LEGENDA_CATALOGO, _LEGENDA_CATALOGO)
+    arquivo_exemplos = publica_sheet(drive, sheets, pasta_id, ARQUIVO_EXEMPLOS, monta_exemplos_df(df_sessoes), nome_aba=ABA_EXEMPLOS)
     colore_cabecalho(sheets, arquivo_exemplos["id"], {
         COL_CONV_ID_SESSAO: COR_CABECALHO_FLOW,
         COL_CONV_CONVERSA: COR_CABECALHO_FLOW,

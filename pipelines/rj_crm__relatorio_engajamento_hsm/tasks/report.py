@@ -24,6 +24,8 @@ from docx.shared import Pt, RGBColor
 from googleapiclient.discovery import Resource
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
+    ABA_CATALOGO_AUTOMATICO,
+    ABA_CONVERSAS,
     ARQUIVO_CATALOGO_AUTOMATICO,
     ARQUIVO_CONVERSAS,
     ARQUIVO_RELATORIO,
@@ -471,7 +473,7 @@ def publica_relatorio(
     upload_bytes(drive, subpasta_id, ARQUIVO_RELATORIO, buffer.getvalue(), DOCX_MIME, converter_para=DRIVE_DOC_MIME)
 
     conversas = monta_conversas_df(dados.df, com_revisao=not dados.rapido)
-    arquivo = cria_sheet(drive, sheets, subpasta_id, ARQUIVO_CONVERSAS, conversas)
+    arquivo = cria_sheet(drive, sheets, subpasta_id, ARQUIVO_CONVERSAS, conversas, nome_aba=ABA_CONVERSAS)
     _cores_conversas_flow = {
         COL_CONV_ID_SESSAO: COR_CABECALHO_FLOW,
         COL_CONV_CATEGORIA: COR_CABECALHO_FLOW,
@@ -493,7 +495,8 @@ def publica_relatorio(
     else:
         colore_cabecalho(sheets, arquivo["id"], _cores_conversas_flow)
         arquivo_cat = cria_sheet(
-            drive, sheets, subpasta_id, ARQUIVO_CATALOGO_AUTOMATICO, monta_catalogo_automatico_df(dados, categorias)
+            drive, sheets, subpasta_id, ARQUIVO_CATALOGO_AUTOMATICO, monta_catalogo_automatico_df(dados, categorias),
+            nome_aba=ABA_CATALOGO_AUTOMATICO,
         )
         colore_cabecalho(sheets, arquivo_cat["id"], {
             COL_CAT_CATEGORIA: COR_CABECALHO_FLOW,
