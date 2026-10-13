@@ -4,8 +4,8 @@ from typing import Literal
 
 from prefect import flow
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.tasks import (
     list_tables_task,
     log_session_task,

@@ -30,8 +30,8 @@ from __future__ import annotations
 import time
 from datetime import date
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__salesforce_datacloud.constants import DataCloudConstants

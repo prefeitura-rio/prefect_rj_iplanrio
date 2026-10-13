@@ -10,7 +10,7 @@ import pandas as pd
 import gspread
 from google.oauth2 import service_account
 from prefect import task, get_run_logger
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 @task
 def get_1746_credentials():

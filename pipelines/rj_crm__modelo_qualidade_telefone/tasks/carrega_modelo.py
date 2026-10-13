@@ -2,7 +2,7 @@
 (exige um champion) e retreino (tolera não haver nenhum ainda, na 1ª execução)."""
 
 from google.cloud import storage
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
 from prefect_rj_iplanrio.logging import get_logger
 

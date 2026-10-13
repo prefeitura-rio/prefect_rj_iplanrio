@@ -8,7 +8,7 @@ from typing import List, Union
 import croniter
 import ruamel.yaml as ryaml
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 def determine_whether_to_execute_or_not(
@@ -63,10 +63,10 @@ def get_root_path() -> Path:
     Returns the root path of the project.
     """
     try:
-        import iplanrio
+        import toolkit
     except ImportError as exc:
         raise ImportError("pipelines package not found") from exc
-    root_path = Path(iplanrio.__file__).parent.parent
+    root_path = Path(toolkit.__file__).parent.parent
     # If the root path is site-packages, we're running in a Docker container. Thus, we
     # need to change the root path to /app
     if str(root_path).endswith("site-packages"):

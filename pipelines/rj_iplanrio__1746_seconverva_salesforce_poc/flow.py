@@ -1,6 +1,6 @@
 from prefect import flow, task
 from prefect.logging import get_run_logger
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
 import pymssql
 import pandas as pd
 import traceback

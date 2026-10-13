@@ -10,8 +10,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
 from prefect import task
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action
 
 from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstants
 

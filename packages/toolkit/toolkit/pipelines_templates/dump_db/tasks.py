@@ -3,13 +3,13 @@ from typing import List, Optional
 
 from prefect import task
 
-from iplanrio.pipelines_templates.dump_db.utils import (
+from toolkit.pipelines_templates.dump_db.utils import (
     dump_upload_batch,
     format_partitioned_query,
     parse_comma_separated_string_to_list,
 )
-from iplanrio.pipelines_utils.constants import NOT_SET
-from iplanrio.pipelines_utils.env import (
+from toolkit.pipelines_utils.constants import NOT_SET
+from toolkit.pipelines_utils.env import (
     get_database_username_and_password_from_secret_env,
 )
 

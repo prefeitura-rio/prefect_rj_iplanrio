@@ -4,9 +4,9 @@ SISREG SMS Dispatch Pipeline
 Sends SMS reminders for next day appointments via Wetalkie API
 """
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from .constants import SisregConstants
@@ -108,6 +108,6 @@ def rj_sms__sisreg_disparo_lembretes(
     elif not api_status:
         raise Exception("Wetalkie API is not accessible")
     else:
-        from iplanrio.pipelines_utils.logging import log
+        from toolkit.pipelines_utils.logging import log
 
         log("No destinations found for dispatch. Skipping flow execution.")

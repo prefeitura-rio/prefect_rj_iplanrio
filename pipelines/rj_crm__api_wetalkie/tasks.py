@@ -2,7 +2,7 @@
 """
 Tasks migradas do Prefect 1.4 para 3.0 - CRM API Wetalkie
 
-⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no iplanrio:
+⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no toolkit:
 - handler_initialize_sentry: SEM EQUIVALENTE
 """
 
@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Union
 
 import pandas as pd
 import requests
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 from pytz import timezone
 

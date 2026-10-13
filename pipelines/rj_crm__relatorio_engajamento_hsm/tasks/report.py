@@ -15,7 +15,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt, RGBColor
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import CHATBOT_DATASET, CHATBOT_TABLE, CSV_SEP, PROJECT_ID

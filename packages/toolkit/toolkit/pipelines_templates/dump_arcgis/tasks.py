@@ -9,8 +9,8 @@ import requests
 from prefect import task
 from shapely.geometry import LineString, Point, Polygon
 
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.pandas import remove_columns_accents
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.pandas import remove_columns_accents
 
 
 @task

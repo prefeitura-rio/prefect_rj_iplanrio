@@ -2,8 +2,8 @@
 
 from prefect import flow
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_oracle_probe.constants import (
     DEFAULT_COMPRESSIONS,
     DEFAULT_TABLES,

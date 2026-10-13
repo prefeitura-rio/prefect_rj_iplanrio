@@ -8,8 +8,8 @@ from typing import List
 
 import pandas as pd
 
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.pandas import (
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.pandas import (
     clean_dataframe,
     dataframe_to_csv,
     parse_date_columns,

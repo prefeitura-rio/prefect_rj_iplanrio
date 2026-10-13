@@ -12,7 +12,7 @@ import asyncio
 from typing import Optional
 
 import httpx
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from tenacity import (
     RetryCallState,
     retry,

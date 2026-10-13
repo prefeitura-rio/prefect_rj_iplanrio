@@ -10,8 +10,8 @@ import pandas as pd
 import pendulum
 import requests
 from geopy.geocoders import Nominatim
-from iplanrio.pipelines_utils.env import getenv_or_action
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log
 from openlocationcode import openlocationcode as olc
 from unidecode import unidecode
 

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from google.cloud import storage
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
 from prefect_rj_iplanrio.logging import get_logger
 

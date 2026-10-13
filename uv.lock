@@ -10,7 +10,6 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "iplanrio",
     "prefect-rj-iplanrio",
     "rj-cetrio-ocr-radar",
     "rj-cetrio-transporte-rodoviario-radar-transito",
@@ -91,6 +90,7 @@ members = [
     "rj-smi-siscob",
     "rj-sms-sisreg-disparo-lembretes",
     "rj-ssm-run-dbt",
+    "toolkit",
 ]
 overrides = [
     { name = "click", specifier = ">=8.3.0,<9.0" },
@@ -1798,51 +1798,6 @@ wheels = [
 ]
 
 [[package]]
-name = "iplanrio"
-version = "1.0.0"
-source = { editable = "packages/iplanrio" }
-dependencies = [
-    { name = "basedosdados", extra = ["upload"] },
-    { name = "croniter" },
-    { name = "dbt-bigquery" },
-    { name = "geopandas" },
-    { name = "gitpython" },
-    { name = "google-api-python-client" },
-    { name = "gspread" },
-    { name = "oracledb" },
-    { name = "pandas" },
-    { name = "prefect" },
-    { name = "prefect-dbt" },
-    { name = "psycopg2-binary" },
-    { name = "pymysql" },
-    { name = "pyodbc" },
-    { name = "pytz" },
-    { name = "requests" },
-    { name = "setuptools" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "basedosdados", extras = ["upload"], specifier = "==2.0.3" },
-    { name = "croniter", specifier = ">=6.0.0" },
-    { name = "dbt-bigquery", specifier = "==1.11.1" },
-    { name = "geopandas", specifier = ">=1.1.1" },
-    { name = "gitpython", specifier = "==3.1.44" },
-    { name = "google-api-python-client", specifier = ">=2.179.0" },
-    { name = "gspread", specifier = ">=6.2.1" },
-    { name = "oracledb", specifier = ">=2.0.0" },
-    { name = "pandas", specifier = ">=2.3.1" },
-    { name = "prefect", specifier = "==3.4.9" },
-    { name = "prefect-dbt", specifier = "==0.7.5" },
-    { name = "psycopg2-binary", specifier = ">=2.9.10" },
-    { name = "pymysql", specifier = ">=1.1.1" },
-    { name = "pyodbc", specifier = ">=5.2.0" },
-    { name = "pytz", specifier = ">=2025.2" },
-    { name = "requests", specifier = ">=2.32.4" },
-    { name = "setuptools", specifier = ">=82.0.1" },
-]
-
-[[package]]
 name = "isodate"
 version = "0.7.2"
 source = { registry = "https://pypi.org/simple" }
@@ -3043,11 +2998,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "idna" },
-    { name = "iplanrio" },
     { name = "pandas" },
     { name = "pre-commit" },
     { name = "prefect" },
     { name = "prefect-docker" },
+    { name = "toolkit" },
     { name = "unidecode" },
 ]
 
@@ -3059,11 +3014,11 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "idna", specifier = ">=3.10" },
-    { name = "iplanrio", editable = "packages/iplanrio" },
     { name = "pandas", specifier = ">=2.2.3" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "prefect", specifier = "==3.4.9" },
     { name = "prefect-docker", specifier = ">=0.7.1" },
+    { name = "toolkit", editable = "packages/toolkit" },
     { name = "unidecode", specifier = ">=1.3.8" },
 ]
 
@@ -6051,6 +6006,51 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/51/db/03eaf4331631ef6b27d6e3c9b68c54dc6f0d63d87201fed600cc409307fd/tomlkit-0.15.0.tar.gz", hash = "sha256:7d1a9ecba3086638211b13814ea79c90dd54dd11993564376f3aa92271f5c7a3", size = 161875, upload-time = "2026-05-10T07:38:22.245Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6a/43/8bd850ee71a191bf072e31302c73a66be413fecdd98fdcd111ecbcce13ca/tomlkit-0.15.0-py3-none-any.whl", hash = "sha256:4dbc8f0fc024412b57ced8757ac7461305126a648ff8c2c807fcb8e133a78738", size = 41328, upload-time = "2026-05-10T07:38:23.517Z" },
+]
+
+[[package]]
+name = "toolkit"
+version = "1.0.0"
+source = { editable = "packages/toolkit" }
+dependencies = [
+    { name = "basedosdados", extra = ["upload"] },
+    { name = "croniter" },
+    { name = "dbt-bigquery" },
+    { name = "geopandas" },
+    { name = "gitpython" },
+    { name = "google-api-python-client" },
+    { name = "gspread" },
+    { name = "oracledb" },
+    { name = "pandas" },
+    { name = "prefect" },
+    { name = "prefect-dbt" },
+    { name = "psycopg2-binary" },
+    { name = "pymysql" },
+    { name = "pyodbc" },
+    { name = "pytz" },
+    { name = "requests" },
+    { name = "setuptools" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "basedosdados", extras = ["upload"], specifier = "==2.0.3" },
+    { name = "croniter", specifier = ">=6.0.0" },
+    { name = "dbt-bigquery", specifier = "==1.11.1" },
+    { name = "geopandas", specifier = ">=1.1.1" },
+    { name = "gitpython", specifier = "==3.1.44" },
+    { name = "google-api-python-client", specifier = ">=2.179.0" },
+    { name = "gspread", specifier = ">=6.2.1" },
+    { name = "oracledb", specifier = ">=2.0.0" },
+    { name = "pandas", specifier = ">=2.3.1" },
+    { name = "prefect", specifier = "==3.4.9" },
+    { name = "prefect-dbt", specifier = "==0.7.5" },
+    { name = "psycopg2-binary", specifier = ">=2.9.10" },
+    { name = "pymysql", specifier = ">=1.1.1" },
+    { name = "pyodbc", specifier = ">=5.2.0" },
+    { name = "pytz", specifier = ">=2025.2" },
+    { name = "requests", specifier = ">=2.32.4" },
+    { name = "setuptools", specifier = ">=82.0.1" },
 ]
 
 [[package]]

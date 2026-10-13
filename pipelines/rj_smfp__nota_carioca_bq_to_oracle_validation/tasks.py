@@ -3,7 +3,7 @@
 from prefect import task
 from prefect.cache_policies import NO_CACHE
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import list_tables
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import RawTextEncoding
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import read_oracle_config, validate_identifier

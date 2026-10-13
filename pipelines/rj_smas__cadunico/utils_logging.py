@@ -8,7 +8,7 @@ Fornece logs estruturados, consolidados e informativos.
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 class PipelineLogger:

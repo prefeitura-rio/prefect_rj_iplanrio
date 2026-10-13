@@ -7,7 +7,7 @@ from prefect.cache_policies import NO_CACHE
 from prefect.runtime import deployment, flow_run
 from prefect.settings import PREFECT_UI_URL
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import (
     chunks,

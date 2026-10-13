@@ -12,9 +12,9 @@ from prefect.client.schemas.sorting import FlowRunSort
 from prefect.context import get_run_context
 from prefect.schedules import Interval
 
-from iplanrio.pipelines_utils.constants import NOT_SET
-from iplanrio.pipelines_utils.io import query_to_line
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.constants import NOT_SET
+from toolkit.pipelines_utils.io import query_to_line
+from toolkit.pipelines_utils.logging import log
 
 
 @task

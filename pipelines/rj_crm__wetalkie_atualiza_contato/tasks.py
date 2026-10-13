@@ -2,7 +2,7 @@
 """
 Tasks migradas do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 
-⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no iplanrio:
+⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no toolkit:
 - handler_initialize_sentry: SEM EQUIVALENTE
 - ENDRUN/Skipped: Substituído por return/exception padrão
 - LocalDaskExecutor: Removido no Prefect 3.0
@@ -13,7 +13,7 @@ Tasks migradas do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 import json
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 
 

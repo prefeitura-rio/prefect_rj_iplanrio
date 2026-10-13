@@ -10,7 +10,7 @@ from uuid import uuid4
 import numpy as np
 import pandas as pd
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 def batch_to_dataframe(batch: List[List], columns: List[str]) -> pd.DataFrame:

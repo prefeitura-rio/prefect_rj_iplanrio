@@ -16,8 +16,8 @@ import pandas as pd
 import requests
 from basedosdados import Base
 from google.cloud import bigquery, speech
-from iplanrio.pipelines_utils.env import getenv_or_action
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log
 from mutagen.mp3 import MP3
 from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis

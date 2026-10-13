@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 
 import httpx
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
     CORAlertAggregatorConstants,

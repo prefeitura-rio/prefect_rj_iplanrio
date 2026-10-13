@@ -15,7 +15,7 @@ import aiohttp  # pylint: disable=E0611, E0401
 from discord import Webhook  # pylint: disable=E0611, E0401
 from pytz import timezone
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 # pylint: disable=E0611, E0401
 from pipelines.rj_crm__disparo_template.utils.tasks import (

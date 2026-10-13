@@ -18,7 +18,7 @@ from basedosdados import Base
 from google.cloud import bigquery
 from prefect import task
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 from pipelines.rj_iplanrio__cor_alerts_aggregator.constants import (
     CORAlertAggregatorConstants,
@@ -771,7 +771,7 @@ def mark_alerts_as_sent(
     Returns:
         Numero de alertas registrados
     """
-    from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+    from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
 
     env_validated = validate_environment(environment)
 

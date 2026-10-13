@@ -9,9 +9,9 @@ converte os dados de XML para CSV, e faz upload para o BigQuery.
 from prefect import flow
 from prefect.logging import get_run_logger
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from pipelines.rj_iplanrio__sici.tasks import (
     get_sici_api_credentials,
     get_data_from_api_soap_sici,

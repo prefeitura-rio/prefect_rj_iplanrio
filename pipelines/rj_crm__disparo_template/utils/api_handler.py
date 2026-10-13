@@ -10,7 +10,7 @@ Migrated from pipelines_rj_crm_registry for prefect_rj_iplanrio
 from typing import Any, Dict, Optional
 
 import requests
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 
 class ApiHandler:

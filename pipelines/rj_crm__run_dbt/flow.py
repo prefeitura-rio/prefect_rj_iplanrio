@@ -9,8 +9,8 @@ import shutil
 from typing import Optional, TypedDict
 
 import git
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task
+from toolkit.pipelines_utils.logging import log
 from prefect import flow, runtime, task
 from prefect.states import Failed
 from prefect_dbt import PrefectDbtRunner

@@ -7,7 +7,7 @@ Whitelist utility functions for template pipelines.
 from typing import Dict, List, Optional
 import requests
 
-from iplanrio.pipelines_utils.env import getenv_or_action  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.env import getenv_or_action  # pylint: disable=E0611, E0401
 
 
 TIMEOUT_SECONDS = 60

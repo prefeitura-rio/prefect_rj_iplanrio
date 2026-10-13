@@ -8,8 +8,8 @@ from typing import List
 
 import pandas as pd
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.logging import log
 
 
 def historico_table_schema() -> List[bigquery.SchemaField]:

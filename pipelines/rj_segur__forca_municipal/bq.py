@@ -4,8 +4,8 @@
 import pandas as pd
 from basedosdados.upload.storage import Storage
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.logging import log
 
 
 def _get_bq_client(project_id: str) -> bigquery.Client:

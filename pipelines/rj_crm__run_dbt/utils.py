@@ -9,8 +9,8 @@ import prefect
 from dbt.contracts.results import RunResult, SourceFreshnessResult
 from discord import AllowedMentions, Embed, File, Webhook
 from google.cloud import storage
-from iplanrio.pipelines_utils.env import getenv_or_action
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log
 
 
 def get_environment():

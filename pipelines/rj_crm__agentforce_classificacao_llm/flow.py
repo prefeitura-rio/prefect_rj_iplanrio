@@ -27,7 +27,7 @@ from __future__ import annotations
 import os
 
 import pandas as pd
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__agentforce_classificacao_llm.constants import ClassificacaoConstants as C

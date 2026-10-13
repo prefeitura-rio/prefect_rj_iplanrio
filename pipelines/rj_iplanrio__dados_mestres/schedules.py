@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from iplanrio.pipelines_utils.prefect import create_schedules
+from toolkit.pipelines_utils.prefect import create_schedules
 
 schedules_parameters = [
     {

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.env import getenv_or_action
 
 # if file .env exists, load it
 if os.path.exists("pipelines/rj_segur__forca_municipal/.env"):  # noqa

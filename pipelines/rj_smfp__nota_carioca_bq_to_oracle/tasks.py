@@ -8,7 +8,7 @@ from prefect.artifacts import create_progress_artifact, update_progress_artifact
 from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_POLL_SECONDS
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, dbt, inmemory, oracle, runs, slots, sqlldr
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, RawTextEncoding, build_load_plan

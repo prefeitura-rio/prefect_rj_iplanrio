@@ -10,7 +10,7 @@ from typing import Callable, Dict, Tuple
 
 import requests
 import simplejson
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 class ApiHandler:

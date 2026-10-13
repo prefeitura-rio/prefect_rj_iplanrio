@@ -13,7 +13,7 @@ import pandas as pd
 import requests
 from prefect import task
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
     AlertaRioConstants,

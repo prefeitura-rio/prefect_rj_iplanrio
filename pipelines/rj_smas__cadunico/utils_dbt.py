@@ -4,7 +4,7 @@ import os
 import shutil
 
 import git
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smas__cadunico.utils_logging import log_git_operation_result, log_dbt_execution_result
 from prefect_dbt import PrefectDbtRunner
 

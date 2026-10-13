@@ -18,8 +18,8 @@ from prefect import task  # pylint: disable=E0611, E0401
 
 # Disable SSL warnings for internal APIs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-from iplanrio.pipelines_utils.env import getenv_or_action
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 
 @task
@@ -60,7 +60,7 @@ def get_datametrica_credentials(
     infisical_secret_path: str | None = None,
 ) -> Dict[str, str]:
     """
-    Recupera as credenciais da API da Datametrica e do proxy brasileiro usando iplanrio.
+    Recupera as credenciais da API da Datametrica e do proxy brasileiro usando toolkit.
 
     Args:
         infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)
@@ -200,7 +200,7 @@ def get_bigquery_config(
     infisical_secret_path: str | None = None,
 ) -> Dict[str, str]:
     """
-    Recupera dataset_id e table_id do BigQuery usando iplanrio.
+    Recupera dataset_id e table_id do BigQuery usando toolkit.
 
     Args:
         infisical_secret_path: Caminho dos secrets no Infisical (usado pelo sidecar)

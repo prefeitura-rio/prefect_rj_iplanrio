@@ -12,7 +12,7 @@ Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a s
 
 1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines`. O template cria o diretório com `flow.py`, `tasks.py`, `queries/`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
 2. **Descreva a pipeline.** Escreva o `description` no `pyproject.toml` ([Seção 10](#10-pyprojecttoml)).
-3. **Escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho real fica em `utils.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure no [Apêndice B](#apêndice-b--helpers-do-iplanrio).
+3. **Escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho real fica em `utils.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure no [Apêndice B](#apêndice-b--helpers-do-toolkit).
 4. **Configure o deploy.** No `prefect.yaml`, defina as tags, o agendamento da produção e o work pool ([Seções 8, 9 e 13](#8-agendamento)).
 5. **Teste e abra o PR.** Escreva testes para a lógica de `utils.py` ([Seção 14](#14-testes)) e passe pelo [checklist](#15-checklist-antes-do-pull-request).
 
@@ -29,8 +29,8 @@ Uma pipeline que baixa uma lista de itens de uma API e salva em Parquet. Os come
 # pipelines/rj_secretaria__pipeline/flow.py  — Seção 4.1
 """Flow for rj_secretaria__pipeline."""
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task
@@ -142,7 +142,7 @@ Este exemplo não usa SQL. Se a sua pipeline executa SQL, crie `queries/` e leia
 Apêndices:
 
 - [Apêndice A — Por que tags em vez de parâmetros](#apêndice-a--por-que-tags-em-vez-de-parâmetros)
-- [Apêndice B — Helpers do iplanrio](#apêndice-b--helpers-do-iplanrio)
+- [Apêndice B — Helpers do toolkit](#apêndice-b--helpers-do-toolkit)
 
 ## 1. Filosofia
 
@@ -156,7 +156,7 @@ O código neste repositório vive em um de três níveis. O nível determina ond
 
 | Camada                          | Local                            | Regra                                                                                                                            |
 | ------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| **Compartilhado de primitivos** | `packages/iplanrio/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/iplanrio/STYLEGUIDE.md`](packages/iplanrio/STYLEGUIDE.md). |
+| **Compartilhado de primitivos** | `packages/toolkit/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md). |
 | **Compartilhado do repo**       | `src/prefect_rj_iplanrio/`       | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                     |
 | **Interno à pipeline**          | `pipelines/rj_x__y/utils.py`     | Lógica que pertence a exatamente uma pipeline.                                                                                   |
 
@@ -224,8 +224,8 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 """Flow for rj_secretaria__pipeline."""
 
 from prefect import flow
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 
 from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task, upload_task
 
@@ -250,7 +250,7 @@ def rj_secretaria__pipeline(
 
 ### 4.2 `tasks.py`
 
-**Contém:** exclusivamente funções decoradas com `@task`. Cada task é um wrapper fino que chama uma função de `utils.py` ou da biblioteca `iplanrio`.
+**Contém:** exclusivamente funções decoradas com `@task`. Cada task é um wrapper fino que chama uma função de `utils.py` ou da biblioteca `toolkit`.
 
 **Papel:** fronteira entre o engine de orquestração do Prefect e o Python puro. Tasks dão visibilidade ao Prefect — retries, rastreamento de estado, limites de concorrência — sem acoplar essa maquinaria à lógica em si.
 
@@ -387,11 +387,11 @@ def process(
 
 ```python
 # ✅ correto
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
 
 # ❌ errado
-from iplanrio.pipelines_utils.bd import *
+from toolkit.pipelines_utils.bd import *
 ```
 
 ### 5.4 Nomenclatura
@@ -899,7 +899,7 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 ### 11.3 Antes de escrever um helper
 
-Procure primeiro no [Apêndice B](#apêndice-b--helpers-do-iplanrio). O pacote `iplanrio` já oferece credenciais, upload para o BigQuery, dbt, conectores de banco e templates de extração.
+Procure primeiro no [Apêndice B](#apêndice-b--helpers-do-toolkit). O pacote `toolkit` já oferece credenciais, upload para o BigQuery, dbt, conectores de banco e templates de extração.
 
 ## 12. Higiene do repositório
 
@@ -1103,19 +1103,19 @@ Marque cada item antes de pedir revisão.
 
 Tags separam **infraestrutura** (Prefect) de **negócio** (parâmetros do flow).
 
-## Apêndice B — Helpers do iplanrio
+## Apêndice B — Helpers do toolkit
 
-O pacote `packages/iplanrio/` já oferece estes helpers. Procure aqui antes de escrever o seu.
+O pacote `packages/toolkit/` já oferece estes helpers. Procure aqui antes de escrever o seu.
 
 | Import                                                            | Uso                                                                                 |
 | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `iplanrio.pipelines_utils.env.inject_bd_credentials_task`         | Injeta as credenciais do BigQuery no ambiente. Use no início do flow.               |
-| `iplanrio.pipelines_utils.prefect.rename_current_flow_run_task`   | Renomeia a execução atual do flow na UI do Prefect.                                 |
-| `iplanrio.pipelines_utils.bd.create_table_and_upload_to_gcs_task` | Cria a tabela no BigQuery e envia os dados para o GCS.                              |
-| `iplanrio.pipelines_utils.dbt.execute_dbt_task`                   | Executa um comando dbt (`run`, `test`, `build`) no repositório de queries.          |
-| `iplanrio.pipelines_utils.logging.log`                            | Escreve no logger da execução do Prefect. Use em uma `@task`.                       |
-| `iplanrio.pipelines_utils.gcs`                                    | Funções para listar, enviar e apagar arquivos no GCS.                               |
-| `iplanrio.pipelines_utils.database_sql`                           | Conectores `Oracle`, `Postgres`, `MySql` e `SqlServer`.                             |
-| `iplanrio.pipelines_templates.dump_db.tasks`                      | Tasks de dump de banco para o BigQuery (usadas pelo template).                      |
-| `iplanrio.pipelines_templates.dump_url.tasks`                     | Tasks para baixar arquivos de uma URL, Google Sheets ou Google Drive e carregá-los. |
-| `iplanrio.pipelines_templates.dump_arcgis.tasks`                  | Task para baixar dados do ArcGIS.                                                   |
+| `toolkit.pipelines_utils.env.inject_bd_credentials_task`         | Injeta as credenciais do BigQuery no ambiente. Use no início do flow.               |
+| `toolkit.pipelines_utils.prefect.rename_current_flow_run_task`   | Renomeia a execução atual do flow na UI do Prefect.                                 |
+| `toolkit.pipelines_utils.bd.create_table_and_upload_to_gcs_task` | Cria a tabela no BigQuery e envia os dados para o GCS.                              |
+| `toolkit.pipelines_utils.dbt.execute_dbt_task`                   | Executa um comando dbt (`run`, `test`, `build`) no repositório de queries.          |
+| `toolkit.pipelines_utils.logging.log`                            | Escreve no logger da execução do Prefect. Use em uma `@task`.                       |
+| `toolkit.pipelines_utils.gcs`                                    | Funções para listar, enviar e apagar arquivos no GCS.                               |
+| `toolkit.pipelines_utils.database_sql`                           | Conectores `Oracle`, `Postgres`, `MySql` e `SqlServer`.                             |
+| `toolkit.pipelines_templates.dump_db.tasks`                      | Tasks de dump de banco para o BigQuery (usadas pelo template).                      |
+| `toolkit.pipelines_templates.dump_url.tasks`                     | Tasks para baixar arquivos de uma URL, Google Sheets ou Google Drive e carregá-los. |
+| `toolkit.pipelines_templates.dump_arcgis.tasks`                  | Task para baixar dados do ArcGIS.                                                   |

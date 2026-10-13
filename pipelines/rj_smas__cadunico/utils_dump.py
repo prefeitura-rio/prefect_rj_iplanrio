@@ -15,16 +15,16 @@ import basedosdados as bd
 import pandas as pd
 from prefect.utilities.asyncutils import run_sync_in_worker_thread
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smas__cadunico.utils_logging import (
     FileProcessingLogger,
     log_partition_comparison,
     log_ingestion_summary,
 )
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
-from iplanrio.pipelines_utils.gcs import get_gcs_client
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.gcs import (
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
+from toolkit.pipelines_utils.gcs import get_gcs_client
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.gcs import (
     list_blobs_with_prefix,
     parse_blobs_to_partition_list,
 )

@@ -12,7 +12,7 @@ deve passar por get_bq_client, nunca instanciar bigquery.Client direto.
 """
 
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 
 
 def get_bq_client(project_id: str) -> bigquery.Client:

@@ -12,7 +12,7 @@ import pandas as pd
 import pendulum
 import requests
 from bs4 import BeautifulSoup
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
 
 from pipelines.rj_cor__precipitacao_alertario.utils import (

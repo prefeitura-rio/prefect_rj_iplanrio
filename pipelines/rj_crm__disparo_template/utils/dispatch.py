@@ -17,9 +17,9 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import asyncssh
 import pandas as pd
-from iplanrio.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.env import getenv_or_action
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from prefect import task  # pylint: disable=E0611, E0401
 from prefect.exceptions import PrefectException  # pylint: disable=E0611, E0401
 from pytz import timezone

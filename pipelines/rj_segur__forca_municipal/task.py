@@ -16,9 +16,9 @@ from typing import Optional
 import httpx
 import pandas as pd
 from fastkml import KML
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.pandas import parse_date_columns, to_partitions
 from prefect import task
 
 from pipelines.rj_segur__forca_municipal.bq import (

@@ -9,7 +9,7 @@ Registry of functions that process queries at runtime
 
 from datetime import datetime
 
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
 

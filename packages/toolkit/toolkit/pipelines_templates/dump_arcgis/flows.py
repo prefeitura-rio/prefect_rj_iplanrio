@@ -5,12 +5,12 @@ This flow is used to download the equipamentos from the ARCGIS and upload to BIG
 
 from prefect import flow
 
-from iplanrio.pipelines_templates.dump_arcgis.tasks import (
+from toolkit.pipelines_templates.dump_arcgis.tasks import (
     download_data_from_arcgis_task,
 )
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 
 
 @flow(log_prints=True)

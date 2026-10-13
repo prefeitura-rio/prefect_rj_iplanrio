@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import os
 from prefect import flow
-from iplanrio.pipelines_utils.bd import (
+from toolkit.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 
 from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstants
 from pipelines.rj_iplanrio__betterstack_api.tasks import (

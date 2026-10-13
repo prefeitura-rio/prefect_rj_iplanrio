@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from iplanrio.pipelines_utils.prefect import create_schedules
+from toolkit.pipelines_utils.prefect import create_schedules
 
 # https://www.arcgis.com/apps/mapviewer/index.html?url=https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer&source=sd
 

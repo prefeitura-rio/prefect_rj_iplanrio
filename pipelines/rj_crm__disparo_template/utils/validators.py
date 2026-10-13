@@ -11,7 +11,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 from pydantic import ValidationError
 
 from pipelines.rj_crm__disparo_template.utils.discord import send_discord_notification  # pylint: disable=E0611, E0401

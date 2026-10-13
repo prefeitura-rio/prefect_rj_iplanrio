@@ -1,8 +1,8 @@
 from prefect import flow, task
 from prefect.artifacts import create_markdown_artifact
 from prefect.logging import get_run_logger
-from iplanrio.pipelines_templates.dump_db.tasks import get_database_username_and_password_from_secret_task
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_templates.dump_db.tasks import get_database_username_and_password_from_secret_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
 import pymssql
 import pandas as pd
 import traceback

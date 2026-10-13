@@ -17,7 +17,7 @@ from functools import wraps
 
 import httpx
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 WEBHOOK_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
 WEBHOOK_SECRET_BLOCK = "discord-webhook-nota-carioca"
@@ -40,7 +40,7 @@ def _log_safely(message: str, level: str) -> None:
 
 
 def warn(message: str) -> None:
-    """Registra um aviso de notificação pelo log do Prefect (``iplanrio.pipelines_utils.logging.log``)."""
+    """Registra um aviso de notificação pelo log do Prefect (``toolkit.pipelines_utils.logging.log``)."""
     _log_safely(message, "warning")
 
 

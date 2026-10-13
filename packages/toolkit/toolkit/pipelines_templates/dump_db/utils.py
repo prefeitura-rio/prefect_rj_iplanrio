@@ -12,26 +12,26 @@ import basedosdados as bd
 import pytz
 from prefect.utilities.asyncutils import run_sync_in_worker_thread
 
-from iplanrio.pipelines_utils.bd import _delete_prod_dataset, get_storage_blobs
-from iplanrio.pipelines_utils.constants import NOT_SET
-from iplanrio.pipelines_utils.database_sql import (
+from toolkit.pipelines_utils.bd import _delete_prod_dataset, get_storage_blobs
+from toolkit.pipelines_utils.constants import NOT_SET
+from toolkit.pipelines_utils.database_sql import (
     Database,
     MySql,
     Oracle,
     Postgres,
     SqlServer,
 )
-from iplanrio.pipelines_utils.gcs import (
+from toolkit.pipelines_utils.gcs import (
     delete_blobs_list,
     list_blobs_with_prefix,
     parse_blobs_to_partition_dict,
 )
-from iplanrio.pipelines_utils.io import (
+from toolkit.pipelines_utils.io import (
     extract_last_partition_date,
     remove_tabs_from_query,
 )
-from iplanrio.pipelines_utils.logging import log, log_mod
-from iplanrio.pipelines_utils.pandas import (
+from toolkit.pipelines_utils.logging import log, log_mod
+from toolkit.pipelines_utils.pandas import (
     add_ingestion_timestamp,
     batch_to_dataframe,
     build_query_new_columns,

@@ -11,7 +11,7 @@ from collections import Counter
 from pathlib import Path
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import SENTINELA_SEM_CATEGORIA

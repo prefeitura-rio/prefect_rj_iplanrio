@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import requests
-from iplanrio.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.logging import log  # pylint: disable=E0611, E0401
 
 DEFAULT_API_URL = "https://services.pref.rio/mcp/consulta_debitos"
 

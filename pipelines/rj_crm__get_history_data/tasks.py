@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import pandas as pd
 import requests
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 from prefect.cache_policies import NO_CACHE
 

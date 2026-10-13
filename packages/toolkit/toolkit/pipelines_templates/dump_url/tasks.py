@@ -24,10 +24,10 @@ from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload
 from prefect import task
 
-from iplanrio.pipelines_templates.dump_url.utils import handle_dataframe_chunk
-from iplanrio.pipelines_utils.env import get_credentials_from_env
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.pandas import remove_columns_accents
+from toolkit.pipelines_templates.dump_url.utils import handle_dataframe_chunk
+from toolkit.pipelines_utils.env import get_credentials_from_env
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.pandas import remove_columns_accents
 
 
 @task

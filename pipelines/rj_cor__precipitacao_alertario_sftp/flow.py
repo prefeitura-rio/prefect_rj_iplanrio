@@ -1,13 +1,13 @@
 """Flow para coleta de precipitação do AlertaRio via SFTP em landing zone GCS."""
 
 from prefect import flow
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect_rj_iplanrio.logging import get_logger
-from iplanrio.pipelines_utils.bd import (
+from toolkit.pipelines_utils.bd import (
     create_table_and_upload_to_gcs_task,
 )
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.env import getenv_or_action
 from tasks import (
     get_max_date_from_bigquery_task,
     get_bucket_files_with_datetime_filter_task,

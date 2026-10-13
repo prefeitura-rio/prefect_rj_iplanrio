@@ -11,10 +11,10 @@ from datetime import datetime
 from pathlib import Path
 import pandas as pd
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.dbt import execute_dbt_task  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.env import getenv_or_action, inject_bd_credentials_task  # pylint: disable=E0611, E0401
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
 from prefect import flow  # pylint: disable=E0611, E0401
 from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
 

@@ -5,7 +5,7 @@ mesmo padrão de rj_crm__agentforce_classificacao_llm/utils/bigquery.py. Escopo 
 disparos_ativos é uma tabela externa (Google Sheet importada)."""
 
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import PROJECT_ID
 

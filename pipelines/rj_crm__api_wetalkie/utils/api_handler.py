@@ -7,7 +7,7 @@ Migrated from pipelines_rj_crm_registry for prefect_rj_iplanrio
 from typing import Any, Dict, Optional
 
 import requests
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 class ApiHandler:

@@ -12,13 +12,13 @@ import basedosdados as bd
 import numpy as np
 import pandas as pd
 import ruamel.yaml as ryaml
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
-from iplanrio.pipelines_utils.gcs import (
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
+from toolkit.pipelines_utils.gcs import (
     list_blobs_with_prefix,
 )
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smas__cadunico.utils_logging import PipelineLogger
-from iplanrio.pipelines_utils.pandas import to_partitions
+from toolkit.pipelines_utils.pandas import to_partitions
 from unidecode import unidecode
 
 

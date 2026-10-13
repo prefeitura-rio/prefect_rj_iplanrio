@@ -17,7 +17,7 @@ import requests
 from basedosdados import Base
 from google.cloud import bigquery
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 INTENSE_PRECIPITATION_KEYWORDS = (
     "chuva moderada a forte",

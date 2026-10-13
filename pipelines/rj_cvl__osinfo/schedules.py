@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from iplanrio.pipelines_utils.prefect import create_dump_db_schedules
+from toolkit.pipelines_utils.prefect import create_dump_db_schedules
 
 OSINFO_QUERIES = [
     {

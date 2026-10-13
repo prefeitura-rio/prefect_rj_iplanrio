@@ -3,7 +3,7 @@
 import os
 from typing import Any, Dict, List, Optional
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
 from prefect import flow
 
 from pipelines.rj_crm__get_history_data.constants import GetHistoryDataConstants

@@ -1,6 +1,6 @@
 """Flow for rj_crm__whitelist_whatsapp_relatorio."""
 
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.tasks import (

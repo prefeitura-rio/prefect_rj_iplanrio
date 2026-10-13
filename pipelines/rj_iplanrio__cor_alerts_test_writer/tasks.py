@@ -13,8 +13,8 @@ from typing import Any, Dict, List
 import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_iplanrio__cor_alerts_test_writer.constants import (

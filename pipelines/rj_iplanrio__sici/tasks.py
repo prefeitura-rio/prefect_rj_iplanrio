@@ -6,7 +6,7 @@ from prefect import task
 from prefect.logging import get_run_logger
 from zeep import Client
 
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.env import getenv_or_action
 from pipelines.rj_iplanrio__sici.utils import xml_to_dataframe
 
 

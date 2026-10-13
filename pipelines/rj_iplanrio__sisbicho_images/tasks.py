@@ -14,7 +14,7 @@ import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery, storage
 from google.cloud.exceptions import NotFound
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_iplanrio__sisbicho_images.utils.tasks import (

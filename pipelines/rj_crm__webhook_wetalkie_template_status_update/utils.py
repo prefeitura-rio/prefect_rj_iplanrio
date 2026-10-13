@@ -5,7 +5,7 @@ from time import sleep
 import pandas as pd
 import requests
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 def send_discord_webhook_message(

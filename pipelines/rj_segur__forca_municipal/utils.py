@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Generator, Iterator, Optional
 
 from fastkml import Placemark
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 from pipelines.rj_segur__forca_municipal.constants import SP_TZ
 

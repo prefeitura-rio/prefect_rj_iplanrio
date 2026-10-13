@@ -10,7 +10,7 @@ from typing import Literal
 import pandas as pd
 from datetime import datetime
 from prefect import task
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 @task

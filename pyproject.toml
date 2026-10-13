@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "idna>=3.10",
-  "iplanrio",
+  "toolkit",
   "pandas>=2.2.3",
   "pre-commit>=4.5.1",
   "prefect==3.4.9",
@@ -19,7 +19,7 @@ link-mode = "copy"
 override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0", "click>=8.3.0,<9.0"]
 
 [tool.uv.sources]
-iplanrio = { workspace = true }
+toolkit = { workspace = true }
 
 [tool.uv.workspace]
 members = ["pipelines/*", "packages/*"]

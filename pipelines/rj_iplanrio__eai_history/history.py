@@ -9,8 +9,8 @@ import traceback
 from datetime import datetime
 import pandas as pd
 
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.pandas import to_partitions
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.pandas import to_partitions
 
 # from langchain_core.runnables import RunnableConfig
 from langgraph.version import __version__ as langraph_version

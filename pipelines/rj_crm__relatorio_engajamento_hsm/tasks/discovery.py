@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import LOTES_SEM_NOVIDADE_LIMITE, SEED_DESCOBERTA
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bifrost import BifrostClient, max_output_tokens_para

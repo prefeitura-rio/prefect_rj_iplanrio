@@ -2,7 +2,7 @@
 """
 Flow migrado do Prefect 1.4 para 3.0 - CRM Geolocalização Residência
 
-⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no iplanrio:
+⚠️ ATENÇÃO: Algumas funções da biblioteca prefeitura_rio NÃO têm equivalente no toolkit:
 - handler_initialize_sentry: SEM EQUIVALENTE
 - LocalDaskExecutor: Removido no Prefect 3.0
 - KubernetesRun: Removido no Prefect 3.0 (configurado no YAML)
@@ -11,9 +11,9 @@ Flow migrado do Prefect 1.4 para 3.0 - CRM Geolocalização Residência
 - case (conditional execution): Substituído por if/else padrão
 """
 
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__geolocalizacao_residencia.constants import GeolocalizacaoConstants

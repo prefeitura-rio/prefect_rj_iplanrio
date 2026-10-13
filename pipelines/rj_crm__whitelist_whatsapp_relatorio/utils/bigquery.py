@@ -1,6 +1,6 @@
 """Leitura do BigQuery.
 
-A credencial vem de ``get_bd_credentials_from_env``, API pública do ``iplanrio`` (D42).
+A credencial vem de ``get_bd_credentials_from_env``, API pública do ``toolkit`` (D42).
 Mesmo caminho de `rj_crm__get_history_data`, `rj_crm__agentforce_classificacao_llm` e
 `rj_crm__salesforce_datacloud`, que leem este mesmo projeto.
 
@@ -14,7 +14,7 @@ from time import sleep
 import pandas as pd
 from google.auth.credentials import Credentials
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env, getenv_or_action
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env, getenv_or_action
 
 from pipelines.rj_crm__whitelist_whatsapp_relatorio.utils.log import logger_da_pipeline
 
@@ -42,7 +42,7 @@ VARIAVEIS_CREDENCIAIS = (
     "BASEDOSDADOS_CREDENTIALS_STAGING",
     "BASEDOSDADOS_CONFIG",
 )
-"""Variáveis exigidas pelo ``iplanrio`` para ler ou injetar credenciais.
+"""Variáveis exigidas pelo ``toolkit`` para ler ou injetar credenciais.
 
 Tanto ``get_bd_credentials_from_env`` quanto ``inject_bd_credentials`` chamam
 ``validate_bd_credentials`` antes de qualquer coisa, e essa função levanta se **qualquer

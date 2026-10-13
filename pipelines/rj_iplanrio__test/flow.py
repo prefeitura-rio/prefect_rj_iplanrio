@@ -5,7 +5,7 @@ This flow is used to dump the database to the BIGQUERY
 
 import time
 
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 

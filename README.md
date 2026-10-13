@@ -19,8 +19,8 @@ src/
 └── prefect_rj_iplanrio/
     └── __init__.py
 packages/
-└── iplanrio/
-    └── iplanrio/
+└── toolkit/
+    └── toolkit/
 Dockerfile
 pyproject.toml
 uv.lock
@@ -45,10 +45,10 @@ Este repositório utiliza um modelo monorepo para gerenciar múltiplas pipelines
 
 - **`pyproject.toml` centralizado com uv workspaces**: o `pyproject.toml` na raiz do projeto gerencia as dependências Python de todas as pipelines utilizando [uv workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/).
   - Cada subdiretório em `pipelines/` representa um módulo Python independente, mas todos são importados automaticamente como membros do workspace.
-  - As pipelines declaram `prefect_rj_iplanrio` como dependência com `{ workspace = true }`, herdando automaticamente as dependências base (`iplanrio`, `prefect`, `pandas`, etc.).
+  - As pipelines declaram `prefect_rj_iplanrio` como dependência com `{ workspace = true }`, herdando automaticamente as dependências base (`toolkit`, `prefect`, `pandas`, etc.).
   - Novas pipelines adicionadas à pasta `pipelines/` são automaticamente reconhecidas e integradas ao workspace, sem necessidade de configuração manual adicional.
 
-- **Pacote `iplanrio`**: o diretório `packages/iplanrio/` é um membro do workspace com os primitivos compartilhados (upload para o BigQuery, credenciais, conectores de banco, templates de extração). As regras estão em [`packages/iplanrio/STYLEGUIDE.md`](packages/iplanrio/STYLEGUIDE.md).
+- **Pacote `toolkit`**: o diretório `packages/toolkit/` é um membro do workspace com os primitivos compartilhados (upload para o BigQuery, credenciais, conectores de banco, templates de extração). As regras estão em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md).
 
 - **Código compartilhado**: o diretório `src/prefect_rj_iplanrio/` contém código Python compartilhado entre as pipelines.
   - Funções utilitárias, classes base, helpers e lógica comum podem ser adicionados neste pacote.

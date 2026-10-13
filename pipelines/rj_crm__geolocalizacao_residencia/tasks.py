@@ -10,8 +10,8 @@ from uuid import uuid4
 import pandas as pd
 from basedosdados import Base
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.env import getenv_or_action
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__geolocalizacao_residencia.utils.async_utils import (

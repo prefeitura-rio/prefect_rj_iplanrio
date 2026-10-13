@@ -8,7 +8,7 @@ from pathlib import Path
 
 import oracledb
 
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.env import getenv_or_action
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn, oracle_column
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     IndexDefinition,
@@ -79,7 +79,7 @@ class OracleConfig:
 def secret_env_key(infisical_secret_path: str, key: str) -> str:
     """Monta o nome da variável de ambiente de uma chave do Infisical.
 
-    Segue a convenção da lib ``iplanrio``: ``/db-oracle-x`` e ``DB_HOST`` viram
+    Segue a convenção da lib ``toolkit``: ``/db-oracle-x`` e ``DB_HOST`` viram
     ``DB_ORACLE_X__DB_HOST``.
 
     :param infisical_secret_path: Pasta do segredo no Infisical.

@@ -4,7 +4,7 @@ from typing import Optional
 from pathlib import Path
 
 import basedosdados as bd
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_iplanrio__eai_history import env

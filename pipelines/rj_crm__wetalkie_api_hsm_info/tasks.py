@@ -9,8 +9,8 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 from prefect import task
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action
 
 from pipelines.rj_crm__wetalkie_api_hsm_info.constants import Constants
 

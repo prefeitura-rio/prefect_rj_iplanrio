@@ -6,7 +6,7 @@ import git
 from prefect import task
 from prefect_dbt import PrefectDbtRunner
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 def download_repository(git_repository_path: str) -> str:

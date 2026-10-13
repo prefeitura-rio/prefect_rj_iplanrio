@@ -18,8 +18,8 @@ from dataclasses import dataclass
 from prefect import flow
 from prefect.runtime import flow_run
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import DEFAULT_TABLES
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.table_run import process_table, run_child
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (

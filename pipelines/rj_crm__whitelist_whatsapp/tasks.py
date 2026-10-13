@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from prefect import task
-from iplanrio.pipelines_utils.logging import log
-from iplanrio.pipelines_utils.env import getenv_or_action
+from toolkit.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import getenv_or_action
 
 from pipelines.rj_crm__whitelist_whatsapp.constants import WhitelistConstants
 

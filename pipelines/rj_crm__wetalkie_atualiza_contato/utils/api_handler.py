@@ -7,7 +7,7 @@ Reutilizado do pipeline rj_crm__api_wetalkie
 from typing import Any, Dict, Optional
 
 import requests
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 
 
 class ApiHandler:

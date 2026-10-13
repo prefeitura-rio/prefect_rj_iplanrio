@@ -4,7 +4,7 @@ from typing import List
 from google.cloud import storage
 from google.cloud.storage.blob import Blob
 
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 
 
 def delete_blobs_list(bucket_name: str, blobs: List[Blob], mode: str = "prod") -> None:

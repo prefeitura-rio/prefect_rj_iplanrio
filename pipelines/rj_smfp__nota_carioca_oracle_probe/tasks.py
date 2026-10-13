@@ -7,7 +7,7 @@ from prefect.artifacts import create_markdown_artifact
 from prefect.cache_policies import NO_CACHE
 from prefect.runtime import flow_run
 
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import read_oracle_config, validate_identifier
 from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.database import DatabaseInfo, collect_database
 from pipelines.rj_smfp__nota_carioca_oracle_probe.utils.environment import EnvironmentInfo, describe_environment

@@ -30,7 +30,7 @@ dependencies = [
     "pendulum==3.0.0",
     "pytz>=2025.2",
 
-    # iplanrio utilities
+    # toolkit utilities
     "prefeitura-rio[actions] @ git+https://github.com/prefeitura-rio/prefeitura-rio@54593ddff444158b0ecbab5514c5cde4d44012c0",
 
     # Configuration and environment

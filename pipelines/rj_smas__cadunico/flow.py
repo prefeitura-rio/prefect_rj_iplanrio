@@ -4,7 +4,7 @@
 Dump CADUNICO TO BQ..
 """
 
-from iplanrio.pipelines_utils.env import inject_bd_credentials
+from toolkit.pipelines_utils.env import inject_bd_credentials
 from prefect import flow
 
 from pipelines.rj_smas__cadunico.tasks import (

@@ -9,12 +9,12 @@ from typing import Optional
 
 from prefect import flow
 
-from iplanrio.pipelines_templates.dump_db.tasks import (
+from toolkit.pipelines_templates.dump_db.tasks import (
     parse_comma_separated_string_to_list_task,
 )
-from iplanrio.pipelines_templates.dump_url.tasks import download_url, dump_files
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.pipelines_templates.dump_url.tasks import download_url, dump_files
+from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 
 
 @flow(log_prints=True)

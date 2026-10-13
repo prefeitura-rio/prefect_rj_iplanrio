@@ -3,7 +3,7 @@ eventos candidatos pra simulação (``extrai_eventos``)."""
 
 import pandas as pd
 from google.cloud import bigquery, bigquery_storage_v1
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
 from prefect import task
 from prefect_rj_iplanrio.logging import get_logger
 from prefect_rj_iplanrio.sql import load_query

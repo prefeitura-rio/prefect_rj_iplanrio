@@ -56,7 +56,7 @@ uma e `load_query` levanta `KeyError` na hora, antes de qualquer consulta.
 
 ## Variáveis de ambiente
 
-Todas obrigatórias, lidas com `getenv_or_action` (`iplanrio`) do que o Infisical injeta
+Todas obrigatórias, lidas com `getenv_or_action` (`toolkit`) do que o Infisical injeta
 no container. São validadas na primeira task: faltando qualquer uma, o flow falha antes
 de qualquer envio, nomeando **todas** as que faltam de uma vez — a validação usa
 `action="ignore"` justamente para juntar as ausências, e rejeita também variável definida

@@ -4,7 +4,7 @@ Fronteira entre o Prefect e o Python puro (§4.2 do styleguide): cada task lê o
 ambiente de execução sabe — variáveis de ambiente e contexto do flow run — e delega o
 trabalho para ``utils``. Nenhuma regra de negócio mora aqui.
 
-Variável de ambiente se lê com ``getenv_or_action`` (API pública do ``iplanrio``), que é
+Variável de ambiente se lê com ``getenv_or_action`` (API pública do ``toolkit``), que é
 como o repo lê o que o Infisical injeta no container. ``action="raise"`` nos pontos de
 uso e ``action="ignore"`` na validação, que precisa juntar todas as ausências antes de
 falhar em vez de morrer na primeira.
@@ -13,7 +13,7 @@ falhar em vez de morrer na primeira.
 from datetime import datetime
 from typing import TypedDict
 
-from iplanrio.pipelines_utils.env import getenv_or_action, inject_bd_credentials
+from toolkit.pipelines_utils.env import getenv_or_action, inject_bd_credentials
 from prefect import task
 from prefect.runtime import deployment, flow_run
 

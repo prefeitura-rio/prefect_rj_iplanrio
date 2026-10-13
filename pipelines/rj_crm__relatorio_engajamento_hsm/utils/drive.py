@@ -17,8 +17,8 @@ import io
 from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
-from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.env import get_bd_credentials_from_env
+from toolkit.pipelines_utils.logging import log
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import DRIVE_FOLDER_MIME
 

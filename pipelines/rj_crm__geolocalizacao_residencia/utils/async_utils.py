@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 import aiohttp
 import pandas as pd
 import pendulum
-from iplanrio.pipelines_utils.logging import log
+from toolkit.pipelines_utils.logging import log
 from unidecode import unidecode
 
 from .geo_utils import (

@@ -4,7 +4,7 @@ lang: pt-br
 
 # Guia de Estilo
 
-Regras para escrever, estruturar e manter o pacote `iplanrio`. Cada regra declara o que é, por que existe e apresenta um exemplo concreto extraído do código.
+Regras para escrever, estruturar e manter o pacote `toolkit`. Cada regra declara o que é, por que existe e apresenta um exemplo concreto extraído do código.
 
 ## Índice
 
@@ -20,11 +20,11 @@ Regras para escrever, estruturar e manter o pacote `iplanrio`. Cada regra declar
 
 ## 1. Filosofia
 
-`iplanrio` é a **camada compartilhada de primitivos** na arquitetura de três camadas documentada no `STYLEGUIDE.md` raiz. É um membro do workspace uv (`packages/iplanrio/`) consumido por todas as pipelines deste monorepo.
+`toolkit` é a **camada compartilhada de primitivos** na arquitetura de três camadas documentada no `STYLEGUIDE.md` raiz. É um membro do workspace uv (`packages/toolkit/`) consumido por todas as pipelines deste monorepo.
 
 | Camada                    | Local                         | Regra                                                                   |
 | ------------------------- | ----------------------------- | ----------------------------------------------------------------------- |
-| **Compartilhado de primitivos** | `packages/iplanrio/` (este pacote) | Primitivos reutilizáveis sem lógica de pipeline. Consuma, não duplique. |
+| **Compartilhado de primitivos** | `packages/toolkit/` (este pacote) | Primitivos reutilizáveis sem lógica de pipeline. Consuma, não duplique. |
 | **Compartilhado do repo** | `src/prefect_rj_iplanrio/`    | Utilitários usados por 2+ pipelines no mesmo monorepo.                  |
 | **Interno à pipeline**    | `pipelines/rj_x__y/utils.py`  | Lógica que pertence a exatamente uma pipeline.                          |
 
@@ -34,7 +34,7 @@ Regras para escrever, estruturar e manter o pacote `iplanrio`. Cada regra declar
 
 ### 2.1 Quando promover
 
-Uma função sobe para `iplanrio` quando **todas** as condições forem verdadeiras simultaneamente:
+Uma função sobe para `toolkit` quando **todas** as condições forem verdadeiras simultaneamente:
 
 1. Duas ou mais pipelines precisam dela e ela é um primitivo genérico, sem relação com o domínio de nenhuma delas (caso contrário, pertence ao `src/` do repo).
 2. Não contém lógica específica de nenhuma pipeline, secretaria ou dataset.
@@ -120,11 +120,11 @@ A função pura é o que os testes chamam. O `@task` é o que o Prefect vê.
 
 ### 4.1 Caminhos de import são contratos
 
-Como `iplanrio` é consumido por todas as pipelines sem versionamento semântico formal, cada caminho de import é um contrato implícito. Renomear ou mover um símbolo público quebra todos os consumidores silenciosamente — sem erro de compilação, sem aviso de deprecação automático.
+Como `toolkit` é consumido por todas as pipelines sem versionamento semântico formal, cada caminho de import é um contrato implícito. Renomear ou mover um símbolo público quebra todos os consumidores silenciosamente — sem erro de compilação, sem aviso de deprecação automático.
 
 ```python
 # Consumidor em prefect_rj_iplanrio depende deste import exato
-from iplanrio.utils.bd import create_table_and_upload_to_gcs_task
+from toolkit.utils.bd import create_table_and_upload_to_gcs_task
 ```
 
 Renomear `bd.py` para `bigquery.py` ou mover `create_table_and_upload_to_gcs_task` para outro módulo quebra esse consumidor na próxima vez que o container for construído.
@@ -162,7 +162,7 @@ Ao renomear um módulo público, mantenha o caminho antigo re-exportando tudo do
 ```python
 # old_name/__init__.py  ← arquivo temporário de migração
 # Não adicione novos símbolos aqui. Atualize os consumidores e remova este arquivo.
-from iplanrio.new_name import *  # noqa: F401, F403
+from toolkit.new_name import *  # noqa: F401, F403
 ```
 
 O alias é a única situação em que `import *` e `# noqa: F401, F403` são tolerados — exclusivamente no arquivo de compatibilidade, jamais em código de produção.
@@ -218,11 +218,11 @@ O módulo `typing` ainda é usado para `TypedDict`, `Protocol` e `TYPE_CHECKING`
 
 ```python
 # ✅ correto
-from iplanrio.utils.bd import create_table_and_upload_to_gcs
-from iplanrio.utils.env import get_bd_credentials_from_env
+from toolkit.utils.bd import create_table_and_upload_to_gcs
+from toolkit.utils.env import get_bd_credentials_from_env
 
 # ❌ errado
-from iplanrio.utils.bd import *
+from toolkit.utils.bd import *
 ```
 
 ### 5.4 Nomenclatura
@@ -573,7 +573,7 @@ def inject_bd_credentials_task(environment: str = "prod") -> None:
 **Justificativa:** um flow aqui só pode ser executado com os parâmetros padrão ou com parâmetros hardcoded. Isso transforma uma biblioteca reutilizável em uma pipeline específica mal disfarçada. Os repositórios consumidores declaram flows usando as tasks deste pacote como blocos de construção.
 
 ```python
-# ❌ proibido em qualquer arquivo de iplanrio
+# ❌ proibido em qualquer arquivo de toolkit
 from prefect import flow
 
 @flow(log_prints=True)
@@ -611,8 +611,8 @@ A estrutura de `tests/` espelha a do pacote: cada módulo de produção tem um a
 
 ```
 # módulo de produção                          → arquivo de teste
-iplanrio/utils/polars.py                      → tests/utils/test_polars.py
-iplanrio/utils/io.py                          → tests/utils/test_io.py
+toolkit/utils/polars.py                      → tests/utils/test_polars.py
+toolkit/utils/io.py                          → tests/utils/test_io.py
 pipelines_templates/<t>/utils.py              → tests/pipelines_templates/<t>/test_utils.py
 ```
 
@@ -623,7 +623,7 @@ Funções determinísticas com múltiplos casos de entrada usam `@pytest.mark.pa
 ```python
 # ✅ correto
 import pytest
-from iplanrio.utils.io import query_to_line
+from toolkit.utils.io import query_to_line
 
 
 @pytest.mark.parametrize(
@@ -672,7 +672,7 @@ Casos de uso típicos neste pacote:
 import polars as pl
 from hypothesis import given
 from hypothesis import strategies as st
-from iplanrio.utils.polars import normalize_columns
+from toolkit.utils.polars import normalize_columns
 
 
 @given(st.lists(st.text(min_size=1), min_size=1, unique=True))
@@ -690,7 +690,7 @@ def test_normalize_columns_is_idempotent(columns: list[str]) -> None:
 import polars as pl
 from hypothesis import given
 from hypothesis import strategies as st
-from iplanrio.utils.polars import batch_to_frame
+from toolkit.utils.polars import batch_to_frame
 
 
 @given(st.integers(min_value=1, max_value=1000))
@@ -707,7 +707,7 @@ def test_batch_to_frame_preserves_row_count(n_rows: int) -> None:
 # ✅ correto — ausência de quebras de linha após normalização de query
 from hypothesis import given
 from hypothesis import strategies as st
-from iplanrio.utils.io import query_to_line
+from toolkit.utils.io import query_to_line
 
 
 @given(st.text())
@@ -746,7 +746,7 @@ def test_build_single_partition_query_oracle_format() -> None:
 # ❌ errado — mock que testa o mock, não a lógica
 def test_create_table_calls_bd(monkeypatch):
     mock_table = MagicMock()
-    monkeypatch.setattr("iplanrio.utils.bd.bd.Table", mock_table)
+    monkeypatch.setattr("toolkit.utils.bd.bd.Table", mock_table)
     create_table_and_upload_to_gcs(data_path=..., ...)
     mock_table.assert_called_once()  # só verifica que o mock foi chamado
 ```
@@ -798,7 +798,7 @@ Uma frase que diga a um leitor — que nunca viu este pacote — o que ele faz e
 
 ```toml
 # ✅ correto
-description = "Shared utilities and Prefect task wrappers for iplanrio data pipelines, providing BigQuery upload, credential injection, database connectors and Polars DataFrame transformations."
+description = "Shared utilities and Prefect task wrappers for data pipelines, providing BigQuery upload, credential injection, database connectors and Polars DataFrame transformations."
 
 # ❌ errado — texto padrão sem informação
 description = "Add your description here"
