@@ -292,8 +292,11 @@ def carrega_solicitacoes(
       - 'processando' travado há mais de HORAS_LIMITE_PROCESSANDO -> erro (interrompida);
       - status vazio com dado inválido -> erro com o motivo (não espera a data de geração:
         quem pediu fica sabendo logo que precisa reenviar)."""
+    log("[SOLICITACOES] iniciando — obtendo serviço do Sheets...")
     sheets = get_sheets_service()
+    log("[SOLICITACOES] serviço obtido — lendo sheet de solicitações...")
     df = _le_solicitacoes(sheets)
+    log(f"[SOLICITACOES] sheet lido — {len(df)} linha(s) encontrada(s).")
     agora = agora_brt()
 
     for _, linha in df.iterrows():
