@@ -6,7 +6,7 @@ from pathlib import Path
 from asyncer import asyncify
 from prefect import task
 
-from .dbt import execute_dbt
+from .dbt import DbtRun, execute_dbt
 from .dump import DumpRequest, StageRequest, run_dump, stage_scan
 from .dump_arcgis import dump_arcgis
 from .dump_url import UrlType, csv_scan, download
@@ -59,14 +59,6 @@ async def dump_arcgis_task(url: str, crs: str, request: StageRequest) -> None:
 
 
 @task
-def execute_dbt_task(
-    command: str = "run",
-    target: str = "dev",
-    select: str = "",
-    exclude: str = "",
-    state: str = "",
-    flag: str = "",
-    git_repository_path: str = "https://github.com/prefeitura-rio/queries-rj-iplanrio",
-) -> None:
+def execute_dbt_task(request: DbtRun) -> None:
     """Run one dbt command."""
-    execute_dbt(command, target, select, exclude, state, flag, git_repository_path)
+    execute_dbt(request)
