@@ -83,6 +83,7 @@ members = [
     "rj-smfp-iptu-inadimplentes",
     "rj-smfp-nota-carioca-bq-to-oracle",
     "rj-smfp-nota-carioca-bq-to-oracle-validation",
+    "rj-smfp-nota-carioca-carga-completa",
     "rj-smfp-nota-carioca-oracle-probe",
     "rj-smfp-nota-carioca-oracle-to-bq",
     "rj-smfp-porte-empresa",
@@ -5477,6 +5478,17 @@ requires-dist = [
     { name = "oracledb", specifier = ">=4.0.1" },
     { name = "prefect-rj-iplanrio", editable = "." },
 ]
+
+[[package]]
+name = "rj-smfp-nota-carioca-carga-completa"
+version = "1.0.0"
+source = { virtual = "pipelines/rj_smfp__nota_carioca_carga_completa" }
+dependencies = [
+    { name = "prefect-rj-iplanrio" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-smfp-nota-carioca-oracle-probe"
