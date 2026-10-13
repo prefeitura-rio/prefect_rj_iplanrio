@@ -36,6 +36,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import (
 )
 
 FLOW_LABEL = "BigQuery → Oracle"
+MIN_STEP_ELAPSED_SECONDS = 60.0
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,7 @@ class RunState:
     :param dbt_seconds: Duração do dbt, quando concluído.
     :param error: Mensagem do erro, na falha.
     :param failed_step: Passo em que a execução parou (falha ou cancelamento).
+    :param step_elapsed_seconds: Há quanto tempo a etapa atual (passo e, nas tabelas, etapa da tabela) está em curso.
     """
 
     dataset_id: str
@@ -110,6 +112,16 @@ class RunState:
     dbt_seconds: float | None = None
     error: str | None = None
     failed_step: Step | None = None
+    step_elapsed_seconds: float = 0.0
+
+
+def stage_key(state: RunState) -> tuple[Step, str | None, TableStep | None]:
+    """Identifica a etapa exibida em "Etapa atual": o passo, a tabela em processamento e a etapa dela.
+
+    Enquanto a chave não muda, a etapa é a mesma e o relógio de ``step_elapsed_seconds`` segue correndo.
+    """
+    table = state.tables.get(state.current_table or "")
+    return state.step, state.current_table, table.step if table is not None else None
 
 
 def active_steps(state: RunState) -> list[Step]:
@@ -212,6 +224,15 @@ def _stage_text(state: RunState, step: Step) -> str:
     return STEP_LABELS[step]
 
 
+def _stage_elapsed(state: RunState) -> str:
+    """Sufixo ``· há 3min 05s`` da etapa em curso; vazio abaixo de 1 min, fora da execução e com a tabela concluída."""
+    table = state.tables.get(state.current_table or "")
+    concluded = state.step is Step.TABLES and table is not None and table.step is TableStep.DONE
+    if state.status is not RunStatus.RUNNING or concluded or state.step_elapsed_seconds < MIN_STEP_ELAPSED_SECONDS:
+        return ""
+    return f" · há {format_duration(state.step_elapsed_seconds)}"
+
+
 def _checklist(state: RunState) -> tuple[ChecklistItem, ...]:
     items = []
     marker = state.step if state.failed_step is None else state.failed_step
@@ -267,7 +288,7 @@ def build_view(state: RunState) -> RunView:
         dataset_id=state.dataset_id,
         url=state.url,
         status=state.status,
-        stage=_stage_text(state, step),
+        stage=_stage_text(state, step) + _stage_elapsed(state),
         fraction=overall_fraction(state),
         elapsed_seconds=state.elapsed_seconds,
         run_name=state.run_name,
