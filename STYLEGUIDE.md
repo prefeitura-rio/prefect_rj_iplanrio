@@ -4,7 +4,9 @@ lang: pt-br
 
 # Guia de Estilo
 
-Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra declara o que é, por que existe e apresenta um exemplo concreto extraído do código.
+Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra declara o que é, por que existe e apresenta um exemplo concreto.
+
+As regras de Python, dados e testes valem também para `packages/toolkit/`. As regras só do toolkit estão em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md).
 
 ## Início rápido
 
@@ -12,7 +14,7 @@ Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a s
 
 1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines`. O template cria o diretório com `flow.py`, `tasks.py`, `queries/`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
 2. **Descreva a pipeline.** Escreva o `description` no `pyproject.toml` ([Seção 10](#10-pyprojecttoml)).
-3. **Escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho real fica em `utils.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure no [Apêndice B](#apêndice-b--helpers-do-toolkit).
+3. **Escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho real fica em `utils.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure no [README do toolkit](packages/toolkit/README.md).
 4. **Configure o deploy.** No `prefect.yaml`, defina as tags, o agendamento da produção e o work pool ([Seções 8, 9 e 13](#8-agendamento)).
 5. **Teste e abra o PR.** Escreva testes para a lógica de `utils.py` ([Seção 14](#14-testes)) e passe pelo [checklist](#15-checklist-antes-do-pull-request).
 
@@ -29,8 +31,8 @@ Uma pipeline que baixa uma lista de itens de uma API e salva em Parquet. Os come
 # pipelines/rj_secretaria__pipeline/flow.py  — Seção 4.1
 """Flow for rj_secretaria__pipeline."""
 
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.env import inject_bd_credentials_task
+from toolkit.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task
@@ -139,10 +141,9 @@ Este exemplo não usa SQL. Se a sua pipeline executa SQL, crie `queries/` e leia
 15. [Checklist antes do pull request](#15-checklist-antes-do-pull-request)
 16. [Glossário](#16-glossário)
 
-Apêndices:
+Apêndice:
 
 - [Apêndice A — Por que tags em vez de parâmetros](#apêndice-a--por-que-tags-em-vez-de-parâmetros)
-- [Apêndice B — Helpers do toolkit](#apêndice-b--helpers-do-toolkit)
 
 ## 1. Filosofia
 
@@ -154,11 +155,11 @@ Qualquer pessoa deve conseguir abrir um diretório de pipeline e entender imedia
 
 O código neste repositório vive em um de três níveis. O nível determina onde uma função é escrita, não sua importância.
 
-| Camada                          | Local                            | Regra                                                                                                                            |
-| ------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Camada                          | Local                           | Regra                                                                                                                          |
+| ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | **Compartilhado de primitivos** | `packages/toolkit/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md). |
-| **Compartilhado do repo**       | `src/prefect_rj_iplanrio/`       | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                     |
-| **Interno à pipeline**          | `pipelines/rj_x__y/utils.py`     | Lógica que pertence a exatamente uma pipeline.                                                                                   |
+| **Compartilhado do repo**       | `src/prefect_rj_iplanrio/`      | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                   |
+| **Interno à pipeline**          | `pipelines/rj_x__y/utils.py`    | Lógica que pertence a exatamente uma pipeline.                                                                                 |
 
 **Regra de promoção:** uma função sobe de `utils.py` para `src/prefect_rj_iplanrio/` quando uma segunda pipeline precisar dela. Nunca sobe por reutilização especulativa.
 
@@ -224,8 +225,8 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 """Flow for rj_secretaria__pipeline."""
 
 from prefect import flow
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from toolkit.env import inject_bd_credentials_task
+from toolkit.prefect import rename_current_flow_run_task
 
 from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task, upload_task
 
@@ -357,7 +358,7 @@ def fetch_items(dataset_id, table_id):
 
 ### 5.2 Sintaxe de tipos
 
-Use a sintaxe de union do Python 3.10+ e os tipos genéricos embutidos. Não importe tipos de container do módulo `typing`.
+Use a sintaxe de union do Python 3.10+ e os tipos genéricos embutidos. Não importe tipos de container do módulo `typing`. `TypedDict`, `Protocol` e `TYPE_CHECKING` continuam vindo de `typing`, pois não têm equivalente embutido.
 
 ```python
 # ✅ correto
@@ -384,19 +385,37 @@ def process(
 - Sem imports com wildcard (`from x import *`).
 - Sem cabeçalho de encoding (`# -*- coding: utf-8 -*-`). UTF-8 é o padrão no Python 3; o cabeçalho é ruído e o hook de pre-commit o removerá.
 - Imports explícitos apenas: liste cada nome que você usa.
+- Sem `# noqa` nem `# pylint: disable=...` sem o id da regra e o motivo. Corrija o problema. Se o silêncio for inevitável, escreva `# noqa: EXXX  # motivo`.
 
 ```python
 # ✅ correto
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
+from toolkit.bd import create_table_and_upload_to_gcs_task
+from toolkit.env import inject_bd_credentials_task
 
 # ❌ errado
-from toolkit.pipelines_utils.bd import *
+from toolkit.bd import *
 ```
 
 ### 5.4 Nomenclatura
 
 Não use `_` como prefixo para indicar nomes internos/privados. Use fronteiras de módulo para controlar visibilidade — se algo não deve ser importado por outros módulos, mantenha-o no módulo onde pertence, não em um módulo globalmente visível com uma dica no nome.
+
+Use `UPPER_SNAKE_CASE` apenas para constantes no nível do módulo. Dentro de funções, use `snake_case`.
+
+```python
+# ✅ correto — constante real no nível do módulo
+DEFAULT_TMP_PATH = "/tmp/dump"
+
+
+def dump(url: str) -> str:
+    data_path = DEFAULT_TMP_PATH
+    ...
+
+# ❌ errado — variável local com nome de constante
+def dump(url: str) -> str:
+    DATA_PATH = "/tmp/dump"
+    ...
+```
 
 ### 5.5 Logging
 
@@ -518,14 +537,57 @@ def fetch_records(**params: Unpack[FetchParams]) -> pl.DataFrame:
 
 Use **Polars** para DataFrames e **DuckDB** para SQL sobre arquivos Parquet ou dados locais. `pandas` é proibido. Parquet é o formato intermediário padrão. CSV só é aceito quando a API de destino exigir.
 
+**Eager (`pl.DataFrame`)** quando os dados cabem em memória e o processamento é em lote. **Lazy (`pl.LazyFrame`)** quando a fonte é um arquivo Parquet e a transformação pode ser otimizada pelo motor: use `scan_parquet` e `sink_parquet`.
+
 ```python
-# ✅ correto
-import duckdb
+# ✅ correto — eager para um lote em memória
 import polars as pl
 
-df = pl.read_parquet(path)
-totals = duckdb.sql("SELECT station_id, sum(mm) AS mm FROM df GROUP BY station_id").pl()
-df.write_parquet(output_path)
+
+def batch_to_frame(batch: list[list], columns: list[str]) -> pl.DataFrame:
+    """Converte um lote de linhas em um DataFrame.
+
+    :param batch: Lista de linhas, cada uma como lista de valores.
+    :param columns: Nomes das colunas na mesma ordem dos valores.
+    :returns: DataFrame com os dados do lote.
+    """
+    return pl.DataFrame(dict(zip(columns, zip(*batch, strict=True), strict=True)))
+```
+
+```python
+# ✅ correto — lazy para arquivo → arquivo, e DuckDB para SQL sobre Parquet
+from pathlib import Path
+
+import duckdb
+import polars as pl
+from prefect_rj_iplanrio.sql import load_query
+
+
+def normalize_parquet(source: Path, dest: Path) -> None:
+    """Normaliza os nomes das colunas de um Parquet.
+
+    :param source: Parquet de entrada.
+    :param dest: Parquet de saída.
+    """
+    lf = pl.scan_parquet(source)
+    lf.rename({col: col.lower().replace(" ", "_") for col in lf.collect_schema().names()}).sink_parquet(dest)
+
+
+def totals_by_station(source: Path) -> pl.DataFrame:
+    """Soma os valores por estação com SQL do DuckDB.
+
+    :param source: Parquet com as colunas ``station_id`` e ``mm``.
+    :returns: Uma linha por estação.
+    """
+    query = load_query(__file__, "totals_by_station", source=source)
+    return duckdb.sql(query).pl()
+```
+
+```sql
+-- queries/totals_by_station.sql
+SELECT station_id, sum(mm) AS mm
+FROM '$source'
+GROUP BY station_id
 ```
 
 ```python
@@ -535,6 +597,73 @@ import pandas as pd
 df = pd.read_csv(path)
 df.to_csv(output_path, index=False)
 ```
+
+### 5.9 Exceções
+
+Não levante `BaseException`. Use o tipo de exceção mais específico ou crie uma subclasse.
+
+```python
+# ❌ errado
+raise BaseException("Data need to be a polars DataFrame")
+
+# ✅ correto
+raise TypeError(f"Esperado pl.DataFrame, recebido {type(data).__name__}.")
+```
+
+### 5.10 Validação
+
+Valide na borda, onde o dado entra. Duas ferramentas, cada uma com um papel:
+
+| Camada                     | Ferramenta                  | Quando usar                                |
+| -------------------------- | --------------------------- | ------------------------------------------ |
+| Estrutura de DataFrame     | Polars nativo (`pl.Schema`) | Dado externo: banco, GCS, API              |
+| Parâmetros e configurações | Pydantic v2 `BaseModel`     | Parâmetros de `@flow` e configs de conexão |
+
+Declare o schema esperado ao ler dado externo. O Polars levanta `SchemaError` na hora, perto da origem. Use `@field_validator` do Pydantic v2. `@validator` (v1) é proibido.
+
+```python
+# ✅ correto — schema declarado na borda
+import polars as pl
+from pathlib import Path
+
+ITEMS_SCHEMA = pl.Schema({"item_id": pl.String, "value": pl.Float64})
+
+
+def read_items(path: Path) -> pl.DataFrame:
+    """Lê os itens do Parquet e valida o schema.
+
+    :param path: Caminho do Parquet.
+    :returns: DataFrame com o schema de itens.
+    :raises polars.exceptions.SchemaError: Se o arquivo não respeitar o schema.
+    """
+    return pl.read_parquet(path, schema=ITEMS_SCHEMA)
+```
+
+```python
+# ✅ correto — Pydantic v2
+from pydantic import BaseModel, field_validator
+
+
+class UploadConfig(BaseModel):
+    """Configuração de upload para o BigQuery."""
+
+    dataset_id: str
+    dump_mode: str
+
+    @field_validator("dump_mode")
+    @classmethod
+    def validate_dump_mode(cls, value: str) -> str:
+        """Aceita apenas ``append`` ou ``overwrite``."""
+        if value not in {"append", "overwrite"}:
+            raise ValueError(f"dump_mode inválido: {value!r}")
+        return value
+```
+
+Não faça isto:
+
+- I/O dentro de um validador (consulta ao BigQuery, leitura do GCS, chamada de API). O validador verifica estrutura e formato. O I/O fica na função que usa o dado.
+- `assert` fora de testes para validar dado.
+- Revalidar um dado que já passou pela borda.
 
 ## 6. Padrões do Prefect 3.0
 
@@ -899,7 +1028,7 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 ### 11.3 Antes de escrever um helper
 
-Procure primeiro no [Apêndice B](#apêndice-b--helpers-do-toolkit). O pacote `toolkit` já oferece credenciais, upload para o BigQuery, dbt, conectores de banco e templates de extração.
+Procure primeiro no [README do toolkit](packages/toolkit/README.md).
 
 ## 12. Higiene do repositório
 
@@ -930,6 +1059,11 @@ pipelines/**/*.egg-info/
 ### 12.2 O que nunca deve ser commitado
 
 Veja a [Seção 3.3](#33-proibidos-nos-diretórios-de-pipeline) para a lista completa. A versão resumida: se um arquivo foi criado para depurar algo, corrigir uma migração ou guardar dados temporários durante o desenvolvimento, ele não pertence ao repositório.
+
+Também não entram no repositório:
+
+- Código comentado em bloco. Use `git log` para recuperar código removido.
+- Arquivos `.py` completamente vazios.
 
 Na dúvida, pergunte: "Um novo membro do time lendo este arquivo entenderia por que ele existe e o que fazer com ele?" Se a resposta for não, apague-o.
 
@@ -1029,7 +1163,7 @@ pipelines/rj_secretaria__pipeline/
 
 ### 14.3 Estilo
 
-Use `pytest` e `@pytest.mark.parametrize`, com `ids` que descrevem o cenário. Os testes não usam rede, credenciais nem o runtime do Prefect.
+Use `pytest` e `@pytest.mark.parametrize`, com `ids` que descrevem o cenário. Os testes não usam rede, credenciais nem o runtime do Prefect. Use mocks só para verificar um contrato de interface (por exemplo, que uma função recebeu a query correta), nunca para testar lógica de negócio. Para funções puras de transformação, `hypothesis` é permitido para verificar propriedades como idempotência e preservação do número de linhas.
 
 ```python
 import pytest
@@ -1102,20 +1236,3 @@ Marque cada item antes de pedir revisão.
 | **Contaminação**    | O flow fica limpo; sem parâmetros "framework"    | O flow acumula parâmetros de infraestrutura |
 
 Tags separam **infraestrutura** (Prefect) de **negócio** (parâmetros do flow).
-
-## Apêndice B — Helpers do toolkit
-
-O pacote `packages/toolkit/` já oferece estes helpers. Procure aqui antes de escrever o seu.
-
-| Import                                                            | Uso                                                                                 |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `toolkit.pipelines_utils.env.inject_bd_credentials_task`         | Injeta as credenciais do BigQuery no ambiente. Use no início do flow.               |
-| `toolkit.pipelines_utils.prefect.rename_current_flow_run_task`   | Renomeia a execução atual do flow na UI do Prefect.                                 |
-| `toolkit.pipelines_utils.bd.create_table_and_upload_to_gcs_task` | Cria a tabela no BigQuery e envia os dados para o GCS.                              |
-| `toolkit.pipelines_utils.dbt.execute_dbt_task`                   | Executa um comando dbt (`run`, `test`, `build`) no repositório de queries.          |
-| `toolkit.pipelines_utils.logging.log`                            | Escreve no logger da execução do Prefect. Use em uma `@task`.                       |
-| `toolkit.pipelines_utils.gcs`                                    | Funções para listar, enviar e apagar arquivos no GCS.                               |
-| `toolkit.pipelines_utils.database_sql`                           | Conectores `Oracle`, `Postgres`, `MySql` e `SqlServer`.                             |
-| `toolkit.pipelines_templates.dump_db.tasks`                      | Tasks de dump de banco para o BigQuery (usadas pelo template).                      |
-| `toolkit.pipelines_templates.dump_url.tasks`                     | Tasks para baixar arquivos de uma URL, Google Sheets ou Google Drive e carregá-los. |
-| `toolkit.pipelines_templates.dump_arcgis.tasks`                  | Task para baixar dados do ArcGIS.                                                   |
