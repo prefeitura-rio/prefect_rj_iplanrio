@@ -86,6 +86,15 @@ def fetch_features(url: str) -> list[dict[str, JsonValue]]:
     return features
 
 
+def json_mapping(value: JsonValue) -> Mapping[str, JsonValue]:
+    """Return the value when it is a JSON object, and an empty mapping otherwise."""
+    match value:
+        case dict():
+            return value
+        case _:
+            return {}
+
+
 def features_to_frame(features: Sequence[Mapping[str, JsonValue]]) -> pl.DataFrame:
     """Build a frame of attributes plus a ``geometry`` GeoJSON string column.
 
@@ -95,16 +104,11 @@ def features_to_frame(features: Sequence[Mapping[str, JsonValue]]) -> pl.DataFra
     """
     rows: list[dict[str, JsonValue]] = []
     for feature in features:
-        geometry = feature.get("geometry")
-        attributes = feature.get("attributes")
-        geojson = esri_to_geojson(geometry) if isinstance(geometry, dict) else None
+        geometry = json_mapping(feature.get("geometry"))
+        geojson = esri_to_geojson(geometry) if geometry else None
         if geojson is not None:
-            rows.append(
-                {
-                    **(attributes if isinstance(attributes, dict) else {}),
-                    "geometry": json.dumps(geojson),
-                }
-            )
+            attributes = json_mapping(feature.get("attributes"))
+            rows.append({**attributes, "geometry": json.dumps(geojson)})
     return pl.from_dicts(rows, infer_schema_length=None)
 
 

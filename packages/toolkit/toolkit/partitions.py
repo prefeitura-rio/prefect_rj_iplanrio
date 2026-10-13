@@ -232,8 +232,14 @@ def keys_in_selection(keys: list[str], selection: Selection) -> list[str]:
     :param keys: Object keys under the table prefix.
     :param selection: The selection about to be written.
     """
-    if isinstance(selection, AllSelection):
-        return []
+    match selection:
+        case AllSelection():
+            return []
+        case FromDateSelection(lower=lower):
+            lower_bound, upper_bound = lower, None
+        case TimeRangeSelection(lower=lower, upper=upper):
+            lower_bound, upper_bound = lower, upper
+
     matched: list[str] = []
     for key in keys:
         value = partition_values([key]).get(HIVE_DATE, [""])[0]
@@ -241,9 +247,7 @@ def keys_in_selection(keys: list[str], selection: Selection) -> list[str]:
             day = date.fromisoformat(value)
         except ValueError:
             continue
-        if day >= selection.lower and (
-            isinstance(selection, FromDateSelection) or day < selection.upper
-        ):
+        if day >= lower_bound and (upper_bound is None or day < upper_bound):
             matched.append(key)
     return matched
 

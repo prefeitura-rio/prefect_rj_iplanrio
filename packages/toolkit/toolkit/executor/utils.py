@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 from psycopg.sql import Literal
 from pydantic import TypeAdapter
 
-from ..partitions import AllSelection, Selection
+from ..partitions import AllSelection, FromDateSelection, Selection, TimeRangeSelection
 from ..types import DatabaseRecord, DatabaseRow, TemplateValue
 from .constants import COLUMN_PATTERN
 
@@ -58,10 +58,14 @@ def window_mapping(query: str, selection: Selection) -> dict[str, TemplateValue]
     :raises ValueError: If the selection column is not a plain identifier.
     """
     mapping: dict[str, TemplateValue] = {"query": query, "kind": selection.type}
-    if isinstance(selection, AllSelection):
-        return mapping
-    mapping["column"] = safe_column(selection.column)
-    mapping["lower"] = Literal(selection.lower.isoformat())
-    if selection.type == "time_range":
-        mapping["upper"] = Literal(selection.upper.isoformat())
+    match selection:
+        case AllSelection():
+            return mapping
+        case FromDateSelection(column=column, lower=lower):
+            mapping["column"] = safe_column(column)
+            mapping["lower"] = Literal(lower.isoformat())
+        case TimeRangeSelection(column=column, lower=lower, upper=upper):
+            mapping["column"] = safe_column(column)
+            mapping["lower"] = Literal(lower.isoformat())
+            mapping["upper"] = Literal(upper.isoformat())
     return mapping

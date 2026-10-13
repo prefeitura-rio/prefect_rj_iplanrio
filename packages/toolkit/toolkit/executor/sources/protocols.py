@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar, Protocol, runtime_checkable
+from typing import ClassVar, Protocol, cast, runtime_checkable
 
 from psycopg.sql import Composable
 
@@ -81,6 +81,17 @@ class Fetcher(Protocol):
         :returns: The files. Empty when the query has no rows.
         """
         ...
+
+
+def as_fetcher(source: object) -> Fetcher | None:
+    """Return the source as a ``Fetcher`` when it has ``fetch``, and ``None`` otherwise.
+
+    The check is on the method, so a source needs no base class: any object with
+    ``fetch`` is used as a ``Fetcher``.
+
+    :param source: A source, or any other object.
+    """
+    return cast(Fetcher, source) if hasattr(source, "fetch") else None
 
 
 type SourceFactory = Callable[[SourceContext], Source]

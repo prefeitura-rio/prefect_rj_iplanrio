@@ -13,7 +13,7 @@ from .constants import TEMPLATES_DIR
 from .engines.duckdb import load_extensions
 from .engines.protocol import Engine
 from .render import render_template
-from .sources.protocols import Fetcher, Source
+from .sources.protocols import Source, as_fetcher
 from .utils import validate_rows
 
 
@@ -114,7 +114,8 @@ class Executor:
         source = self.source
         if source is None:
             raise ValueError("The executor has no source")
-        if isinstance(source, Fetcher) and not await source.fetch(remote_query):
+        fetcher = as_fetcher(source)
+        if fetcher is not None and not await fetcher.fetch(remote_query):
             return None
         await load_extensions(self.engine, source.extensions)
         if (setup := source.setup()) is not None:

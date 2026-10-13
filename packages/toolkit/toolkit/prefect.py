@@ -12,9 +12,11 @@ async def rename_current_flow_run(new_name: str) -> None:
     :param new_name: The new flow run name.
     """
     context = get_run_context()
-    flow_run_id = (
-        context.task_run.flow_run_id if isinstance(context, TaskRunContext) else None
-    )
+    match context:
+        case TaskRunContext():
+            flow_run_id = context.task_run.flow_run_id
+        case _:
+            flow_run_id = None
     if flow_run_id is None:
         raise RuntimeError("Rename the flow run from a task that has a flow run")
     async with get_client() as client:
