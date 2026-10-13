@@ -1,0 +1,10 @@
+[project]
+name = "rj_smfp__nota_carioca_carga_completa"
+version = "1.0.0"
+description = "Chains the Nota Carioca full refresh: runs the prod Oracle to BigQuery deployment and, only if it completes, the prod BigQuery to Oracle deployment."
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
