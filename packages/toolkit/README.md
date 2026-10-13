@@ -44,7 +44,7 @@ dump_database_task(
 | `toolkit.executor`         | `Executor`: roda templates SQL num `Engine` (`DuckDBEngine` é o fornecido) lendo de um `Source` que só descreve o sistema remoto; valida as linhas em modelos Pydantic.                   |
 | `toolkit.settings`         | `Settings` (variáveis de ambiente) e `read_database_credentials`.                                                                                                                         |
 | `toolkit.gcs`              | `create_client`, `list_keys`, `upload_file`, `delete_keys`, `clear_prefix` (aiobotocore, chaves HMAC).                                                                                    |
-| `toolkit.bigquery`         | `BigQuery`: `table_exists`, `create_dataset`, `delete_dataset`, `drop_table`, `create_external_table`.                                                                                    |
+| `toolkit.bigquery`         | `BigQuery`: `query`, `table_exists`, `create_dataset`, `delete_dataset`, `drop_table`, `create_external_table`.                                                                           |
 | `toolkit.executor.sources` | O protocolo `Source`, a base `DuckDBSource` (`duckdb.py`), as fontes fornecidas em `backends/` e `base.py` (`SourceBase`, que registra as subclasses) e `registry.py` (`load_sources()`). |
 | `toolkit.partitions`       | Seleções de partição e janelas de data (`plan_selections`, `chunk_windows`).                                                                                                              |
 | `toolkit.extraction`       | `COPY` para o bucket de staging, com colunas normalizadas e partições `ano/mes/data_particao`.                                                                                            |
