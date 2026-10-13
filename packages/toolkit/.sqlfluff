@@ -1,0 +1,48 @@
+[sqlfluff]
+dialect = duckdb
+templater = jinja
+max_line_length = 88
+exclude_rules = AL01,AL05,AL07,CP02,CP03,CV09,LT02,LT05,LT08,LT09,LT14,RF04,RF06,ST03,ST07,ST09,TQ01,TQ02,TQ03,TQ04,AM04
+
+[sqlfluff:templater:jinja]
+apply_dbt_builtins = False
+loader_search_path = toolkit/templates
+
+[sqlfluff:templater:jinja:context]
+columns = [{"source":"a","alias":"b","clean":true}]
+date_column = d
+year_column = y
+month_column = m
+day_column = dd
+add_timestamp = true
+timestamp_column = ts
+path = "'gs://b/p/'"
+format = PARQUET
+partition_columns = y
+pattern = "'x_{i}'"
+source = "t"
+secret = s
+alias = a
+type = postgres
+host = "'h'"
+port = 1
+database = "'d'"
+user = "'u'"
+password = "'p'"
+read_only = true
+extensions = []
+has_gcs_secret = false
+gcs_key_id = "'k'"
+gcs_secret = "'s'"
+kind = all
+column = c
+lower = "'2024-01-01'"
+upper = "'2024-02-01'"
+query = "select 1"
+dest = "'x'"
+crs = "'EPSG:4326'"
+has_points = true
+memory_limit = "'1GiB'"
+temp_directory = "'/tmp/duck'"
+view = v
+select = "select 1"

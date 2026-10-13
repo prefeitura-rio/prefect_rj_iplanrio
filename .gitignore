@@ -1,4 +1,6 @@
 **/**/test*
+!packages/toolkit/tests/
+!packages/toolkit/tests/**
 **/**/api.pdf
 /data/
 test.py
