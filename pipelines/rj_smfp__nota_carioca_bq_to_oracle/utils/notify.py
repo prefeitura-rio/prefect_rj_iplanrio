@@ -5,6 +5,13 @@ carga e de índices informam o andamento pelo notificador ativo (``current``), u
 ``LoadNotifier.guard``. As tasks usam ``NO_CACHE``; passar o notificador (com trava e cliente HTTP) como parâmetro
 faria o Prefect percorrê-lo ao registrar as entradas, e há um flow run por processo, então o ponteiro é seguro.
 Nada aqui levanta exceção para a carga.
+
+Batimento (``heartbeat``): com o Discord ligado, ``begin`` inicia uma thread daemon que, a cada ``heartbeat_seconds``,
+republica a visão atual (sem forçar; o intervalo mínimo do cliente continua valendo). Sem ele a mensagem parece
+congelada nos passos que não informam andamento (``DROP`` de índices, ``TRUNCATE``, contagem, estatísticas, espera do
+In-Memory): o "Decorrido" e o "há X" da etapa só avançam quando algo publica. A thread para quando a execução é
+finalizada (``succeed``/``fail``) e quando o ``guard`` termina, e o batimento publica sob a mesma trava das demais
+mudanças, então nunca sobrescreve a mensagem final.
 """
 
 import asyncio
@@ -37,10 +44,13 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify_view import (
     TableState,
     TableStep,
     build_view,
+    stage_key,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.sqlldr import ProgressSnapshot
 
 CANCELLATIONS = (KeyboardInterrupt, SystemExit, asyncio.CancelledError, TerminationSignal)
+DEFAULT_HEARTBEAT_SECONDS = 60.0
+HEARTBEAT_JOIN_TIMEOUT_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -55,6 +65,7 @@ class NotifierConfig:
     :param run_dbt: Se o dbt roda antes.
     :param mode: ``full`` ou ``synonyms_only``.
     :param enabled: ``False`` (``discord_notifications=false``) desliga o Discord.
+    :param heartbeat_seconds: Intervalo do batimento que republica a mensagem; ``0`` ou menos desliga o batimento.
     """
 
     dataset_id: str
@@ -65,6 +76,7 @@ class NotifierConfig:
     run_dbt: bool
     mode: Literal["full", "synonyms_only"]
     enabled: bool
+    heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS
 
 
 def is_cancellation(error: BaseException) -> bool:
@@ -82,10 +94,14 @@ class LoadNotifier:
     def __init__(self, config: NotifierConfig, message: DiscordStatusMessage | None) -> None:
         self._message = message
         self._started = time.monotonic()
+        self._step_started = self._started
         self._table_started: dict[str, float] = {}
         self._lock = threading.RLock()
         self._finalized = False
         self._warn = Warner()
+        self._heartbeat_seconds = config.heartbeat_seconds
+        self._heartbeat_stop = threading.Event()
+        self._heartbeat_thread: threading.Thread | None = None
         self._state = RunState(
             dataset_id=config.dataset_id,
             run_name=config.run_name,
@@ -108,9 +124,15 @@ class LoadNotifier:
 
     @property
     def state(self) -> RunState:
-        """Estado atual, com o tempo decorrido e a hora de agora."""
+        """Estado atual, com o tempo decorrido (da execução e da etapa) e a hora de agora."""
         with self._lock:
-            return replace(self._state, elapsed_seconds=time.monotonic() - self._started, updated_at=datetime.now(UTC))
+            now = time.monotonic()
+            return replace(
+                self._state,
+                elapsed_seconds=now - self._started,
+                step_elapsed_seconds=now - self._step_started,
+                updated_at=datetime.now(UTC),
+            )
 
     def _push(self, force: bool) -> None:
         if self._message is None:
@@ -126,7 +148,10 @@ class LoadNotifier:
         with self._lock:
             if self._finalized:
                 return
+            before = stage_key(self._state)
             self._state = replace(self._state, **changes)
+            if stage_key(self._state) != before:
+                self._step_started = time.monotonic()
             self._push(force)
 
     def _change_table(self, name: str, force: bool = True, **changes: object) -> None:
@@ -136,8 +161,43 @@ class LoadNotifier:
 
     @never_raises
     def begin(self) -> None:
-        """Cria a mensagem do Discord."""
+        """Cria a mensagem do Discord e, com ele ligado, inicia o batimento que a mantém atualizada."""
+        with self._lock:
+            self._step_started = time.monotonic()
         self._push(force=True)
+        self._start_heartbeat()
+
+    def _start_heartbeat(self) -> None:
+        """Inicia a thread do batimento (uma só); sem Discord, sem intervalo ou depois do fim, não faz nada."""
+        with self._lock:
+            if self._message is None or self._heartbeat_seconds <= 0 or self._finalized:
+                return
+            if self._heartbeat_thread is not None:
+                return
+            thread = threading.Thread(target=self._heartbeat_loop, name="discord-heartbeat", daemon=True)
+            thread.start()
+            self._heartbeat_thread = thread
+
+    def _heartbeat_loop(self) -> None:
+        while not self._heartbeat_stop.wait(self._heartbeat_seconds):
+            self._beat()
+
+    def _beat(self) -> None:
+        """Republica a visão atual sem forçar; uma falha é avisada uma vez e o laço segue vivo."""
+        with self._lock:
+            if self._finalized or self._heartbeat_stop.is_set():
+                return
+            try:
+                self._push(force=False)
+            except Exception as error:
+                self._warn(f"Batimento do Discord falhou: {type(error).__name__}: {error}")
+
+    def _stop_heartbeat(self) -> None:
+        """Para a thread do batimento e a espera um instante; chamar fora da trava, que a thread pode estar pedindo."""
+        self._heartbeat_stop.set()
+        thread = self._heartbeat_thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=HEARTBEAT_JOIN_TIMEOUT_SECONDS)
 
     @never_raises
     def enter(self, step: Step) -> None:
@@ -229,6 +289,7 @@ class LoadNotifier:
             if not self._finalized:
                 self._state = replace(self._state, status=RunStatus.SUCCESS)
                 self._finalize()
+        self._stop_heartbeat()
 
     @never_raises
     def fail(self, error: BaseException) -> None:
@@ -249,9 +310,11 @@ class LoadNotifier:
                 error=None if cancelled else f"{type(error).__name__}: {error}",
             )
             self._finalize()
+        self._stop_heartbeat()
 
     def _finalize(self) -> None:
         self._finalized = True
+        self._heartbeat_stop.set()
         self._push(force=True)
         if self._message is not None:
             try:
@@ -273,6 +336,7 @@ class LoadNotifier:
             self.succeed()
         finally:
             _current = previous
+            self._stop_heartbeat()
 
 
 _current: LoadNotifier | None = None
