@@ -1,9 +1,8 @@
-"""Preconfigured logging with OpenTelemetry integration for all pipelines.
+"""Single entry point for logging in all pipelines.
 
 Every pipeline must obtain its logger through :func:`get_logger` rather than
-calling :func:`logging.getLogger` directly. This ensures that OpenTelemetry
-export, log format, and any future workspace-wide configuration are applied
-uniformly across all pipelines.
+calling :func:`logging.getLogger` directly. This is the place to apply any
+workspace-wide log configuration (format, destination).
 
 Usage::
 

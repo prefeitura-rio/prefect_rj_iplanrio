@@ -6,7 +6,121 @@ lang: pt-br
 
 Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra declara o que é, por que existe e apresenta um exemplo concreto extraído do código.
 
+## Início rápido
+
+Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a seção com a regra completa.
+
+1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines`. O template cria o diretório com `flow.py`, `tasks.py`, `queries/`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
+2. **Descreva a pipeline.** Escreva o `description` no `pyproject.toml` ([Seção 10](#10-pyprojecttoml)).
+3. **Escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho real fica em `utils.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure no [Apêndice B](#apêndice-b--helpers-do-iplanrio).
+4. **Configure o deploy.** No `prefect.yaml`, defina as tags, o agendamento da produção e o work pool ([Seções 8, 9 e 13](#8-agendamento)).
+5. **Teste e abra o PR.** Escreva testes para a lógica de `utils.py` ([Seção 14](#14-testes)) e passe pelo [checklist](#15-checklist-antes-do-pull-request).
+
+Existem dois pontos de partida:
+
+- **Pipeline de dump (banco para BigQuery):** use o template como ele vem. Você só edita `queries/extract_data.sql` e os parâmetros no `prefect.yaml`.
+- **Pipeline própria:** adicione `utils.py` com a lógica e, se precisar, mais tasks em `tasks.py`.
+
+### Exemplo mínimo completo
+
+Uma pipeline que baixa uma lista de itens de uma API e salva em Parquet. Os comentários indicam a seção que explica cada arquivo.
+
+```python
+# pipelines/rj_secretaria__pipeline/flow.py  — Seção 4.1
+"""Flow for rj_secretaria__pipeline."""
+
+from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
+from prefect import flow
+
+from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task
+
+
+@flow(log_prints=True)
+def rj_secretaria__pipeline(
+    dataset_id: str = "brutos_example",
+    table_id: str = "items",
+) -> None:
+    rename_current_flow_run_task(new_name=table_id)
+    inject_bd_credentials_task(environment="prod")
+    fetch_items_task(dataset_id=dataset_id, table_id=table_id)
+```
+
+```python
+# pipelines/rj_secretaria__pipeline/tasks.py  — Seção 4.2
+"""Tasks for rj_secretaria__pipeline."""
+
+from prefect import task
+
+from pipelines.rj_secretaria__pipeline import utils
+
+
+@task
+def fetch_items_task(dataset_id: str, table_id: str) -> str:
+    """Baixa os itens e retorna o caminho do Parquet."""
+    return utils.fetch_items(dataset_id=dataset_id, table_id=table_id)
+```
+
+```python
+# pipelines/rj_secretaria__pipeline/utils.py  — Seções 4.3, 5.5 e 5.8
+"""Funções puras da pipeline rj_secretaria__pipeline."""
+
+import polars as pl
+import requests
+from prefect_rj_iplanrio.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def fetch_items(dataset_id: str, table_id: str) -> str:
+    """Baixa os itens da API e salva em Parquet.
+
+    :param dataset_id: Dataset de destino no BigQuery.
+    :param table_id: Tabela de destino no BigQuery.
+    :returns: Caminho do arquivo Parquet.
+    :raises requests.HTTPError: Se a API responder com erro.
+    """
+    response = requests.get("https://api.example.com/items", timeout=30)
+    response.raise_for_status()
+    logger.info("Itens recebidos: %d", len(response.json()))
+    path = f"/tmp/{dataset_id}/{table_id}.parquet"
+    pl.DataFrame(response.json()).write_parquet(path)
+    return path
+```
+
+```yaml
+# pipelines/rj_secretaria__pipeline/prefect.yaml (trecho)  — Seções 8, 9 e 13
+deployments:
+  - name: rj-secretaria--pipeline--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:seu_username
+    schedules:
+      - cron: "0 6 * * *"
+        timezone: America/Sao_Paulo
+        slug: daily
+    work_pool:
+      name: default-pool
+```
+
+```toml
+# pipelines/rj_secretaria__pipeline/pyproject.toml  — Seção 10
+[project]
+name = "rj_secretaria__pipeline"
+version = "1.0.0"
+description = "Fetches the item list from the Example API and loads it into BigQuery for the secretaria's monitoring."
+dependencies = ["prefect_rj_iplanrio", "polars>=1.35.2"]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
+```
+
+Este exemplo não usa SQL. Se a sua pipeline executa SQL, crie `queries/` e leia a [Seção 7](#7-sql).
+
 ## Índice
+
+- [Início rápido](#início-rápido)
 
 1. [Filosofia](#1-filosofia)
 2. [Arquitetura de código em três camadas](#2-arquitetura-de-código-em-três-camadas)
@@ -21,6 +135,14 @@ Regras para escrever, estruturar e manter pipelines neste monorepo. Cada regra d
 11. [`src/prefect_rj_iplanrio/` — código compartilhado do workspace](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)
 12. [Higiene do repositório](#12-higiene-do-repositório)
 13. [Tags de pipeline](#13-tags-de-pipeline)
+14. [Testes](#14-testes)
+15. [Checklist antes do pull request](#15-checklist-antes-do-pull-request)
+16. [Glossário](#16-glossário)
+
+Apêndices:
+
+- [Apêndice A — Por que tags em vez de parâmetros](#apêndice-a--por-que-tags-em-vez-de-parâmetros)
+- [Apêndice B — Helpers do iplanrio](#apêndice-b--helpers-do-iplanrio)
 
 ## 1. Filosofia
 
@@ -32,11 +154,11 @@ Qualquer pessoa deve conseguir abrir um diretório de pipeline e entender imedia
 
 O código neste repositório vive em um de três níveis. O nível determina onde uma função é escrita, não sua importância.
 
-| Camada                    | Local                        | Regra                                                                                        |
-| ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
+| Camada                          | Local                            | Regra                                                                                                                            |
+| ------------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | **Compartilhado de primitivos** | `packages/iplanrio/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/iplanrio/STYLEGUIDE.md`](packages/iplanrio/STYLEGUIDE.md). |
-| **Compartilhado do repo** | `src/prefect_rj_iplanrio/`   | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline. |
-| **Interno à pipeline**    | `pipelines/rj_x__y/utils.py` | Lógica que pertence a exatamente uma pipeline.                                               |
+| **Compartilhado do repo**       | `src/prefect_rj_iplanrio/`       | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                     |
+| **Interno à pipeline**          | `pipelines/rj_x__y/utils.py`     | Lógica que pertence a exatamente uma pipeline.                                                                                   |
 
 **Regra de promoção:** uma função sobe de `utils.py` para `src/prefect_rj_iplanrio/` quando uma segunda pipeline precisar dela. Nunca sobe por reutilização especulativa.
 
@@ -65,14 +187,16 @@ Adicione apenas quando a necessidade existir concretamente:
 │   ├── api.py       ← nomeado pelo domínio, não pelo papel (nunca utils/tasks.py)
 │   └── schemas.py
 ├── constants.py     ← quando constantes são compartilhadas entre 2+ módulos
-└── queries/         ← quando a pipeline executa SQL
-    ├── fetch_data.sql
-    └── get_last_update.sql
+├── queries/         ← quando a pipeline executa SQL
+│   ├── fetch_data.sql
+│   └── get_last_update.sql
+└── tests/           ← quando utils.py tem lógica com ramificações ou parsing (Seção 14)
+    └── test_utils.py
 ```
 
 ### 3.3 Proibidos nos diretórios de pipeline
 
-O seguinte nunca deve ser commitado num diretório de pipeline:
+O seguinte nunca deve ser commitado em um diretório de pipeline:
 
 | Arquivo / padrão                                                       | Motivo                                                                                               |
 | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -97,23 +221,23 @@ O seguinte nunca deve ser commitado num diretório de pipeline:
 
 ```python
 # ✅ correto
-"""Flow for rj_cor__meteorologia_inmet."""
+"""Flow for rj_secretaria__pipeline."""
 
 from prefect import flow
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 
-from pipelines.rj_cor__meteorologia_inmet.tasks import fetch_stations_task, upload_task
+from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task, upload_task
 
 
 @flow(log_prints=True)
-def rj_cor__meteorologia_inmet(
-    dataset_id: str = "brutos_meteorologia_inmet",
-    table_id: str = "estacoes",
+def rj_secretaria__pipeline(
+    dataset_id: str = "brutos_example",
+    table_id: str = "items",
 ) -> None:
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
-    data_path = fetch_stations_task(dataset_id=dataset_id, table_id=table_id)
+    data_path = fetch_items_task(dataset_id=dataset_id, table_id=table_id)
     upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
 ```
 
@@ -133,18 +257,18 @@ def rj_cor__meteorologia_inmet(
 ```python
 # ✅ correto — task delega para utils, permanece fina
 from prefect import task
-from pipelines.rj_cor__meteorologia_inmet import utils
+from pipelines.rj_secretaria__pipeline import utils
 
 
 @task
-def fetch_stations_task(dataset_id: str, table_id: str) -> str:
-    return utils.fetch_stations(dataset_id=dataset_id, table_id=table_id)
+def fetch_items_task(dataset_id: str, table_id: str) -> str:
+    return utils.fetch_items(dataset_id=dataset_id, table_id=table_id)
 ```
 
 ```python
 # ❌ errado — 80 linhas de lógica de API dentro de um @task
 @task
-def fetch_stations_task(dataset_id: str, table_id: str) -> str:
+def fetch_items_task(dataset_id: str, table_id: str) -> str:
     session = requests.Session()
     session.headers.update(...)
     response = session.get(...)
@@ -161,16 +285,16 @@ def fetch_stations_task(dataset_id: str, table_id: str) -> str:
 
 ```python
 # ✅ correto — sem Prefect, totalmente testável
+import polars as pl
 import requests
-import pandas as pd
 
 
-def fetch_stations(dataset_id: str, table_id: str) -> str:
-    response = requests.get("https://api.inmet.gov.br/estacoes/T")
+def fetch_items(dataset_id: str, table_id: str) -> str:
+    response = requests.get("https://api.example.com/items")
     response.raise_for_status()
-    df = pd.DataFrame(response.json())
-    path = f"/tmp/{dataset_id}/{table_id}.csv"
-    df.to_csv(path, index=False)
+    df = pl.DataFrame(response.json())
+    path = f"/tmp/{dataset_id}/{table_id}.parquet"
+    df.write_parquet(path)
     return path
 ```
 
@@ -223,11 +347,11 @@ Todas as assinaturas de função — parâmetros e tipo de retorno — devem ter
 
 ```python
 # ✅ correto
-def fetch_stations(dataset_id: str, table_id: str) -> str:
+def fetch_items(dataset_id: str, table_id: str) -> str:
     ...
 
 # ❌ errado — tipo de retorno ausente, tipos dos parâmetros ausentes
-def fetch_stations(dataset_id, table_id):
+def fetch_items(dataset_id, table_id):
     ...
 ```
 
@@ -276,7 +400,7 @@ Não use `_` como prefixo para indicar nomes internos/privados. Use fronteiras d
 
 ### 5.5 Logging
 
-`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa o objeto pré-configurado de `prefect_rj_iplanrio.logging`, que integra OpenTelemetry e garante formato e destino uniformes em todas as pipelines.
+`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa `get_logger` de `prefect_rj_iplanrio.logging`, o ponto de entrada único de logging e o lugar da configuração de logs comum a todo o workspace (formato, destino). Em uma `@task`, `get_run_logger()` do Prefect também é permitido quando a mensagem precisa aparecer na UI do Prefect.
 
 ```python
 # ✅ correto
@@ -285,10 +409,10 @@ from prefect_rj_iplanrio.logging import get_logger
 logger = get_logger(__name__)
 
 
-def fetch_stations(dataset_id: str, table_id: str) -> str:
-    logger.info("Buscando estações para dataset_id=%s", dataset_id)
+def fetch_items(dataset_id: str, table_id: str) -> str:
+    logger.info("Buscando itens para dataset_id=%s", dataset_id)
     ...
-    logger.warning("Nenhuma estação encontrada")
+    logger.warning("Nenhum item encontrado")
 ```
 
 ```python
@@ -297,8 +421,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 # ❌ errado — proibido
-def fetch_stations(dataset_id: str, table_id: str) -> str:
-    print("Buscando estações")
+def fetch_items(dataset_id: str, table_id: str) -> str:
+    print("Buscando itens")
 ```
 
 ### 5.6 Docstrings
@@ -349,7 +473,7 @@ def fetch_records(
     environment: str,
     page_size: int = 500,
     timeout: int = 30,
-) -> pd.DataFrame:
+) -> pl.DataFrame:
     ...
 ```
 
@@ -368,13 +492,13 @@ class FetchConfig:
     timeout: int = 30
 
 
-def fetch_records(config: FetchConfig) -> pd.DataFrame:
+def fetch_records(config: FetchConfig) -> pl.DataFrame:
     ...
 ```
 
 ```python
 # ✅ TypedDict — quando o caller monta o dict e passa com **params
-from typing import TypedDict
+from typing import TypedDict, Unpack
 
 
 class FetchParams(TypedDict):
@@ -386,8 +510,30 @@ class FetchParams(TypedDict):
     timeout: int
 
 
-def fetch_records(**params: FetchParams) -> pd.DataFrame:
+def fetch_records(**params: Unpack[FetchParams]) -> pl.DataFrame:
     ...
+```
+
+### 5.8 Dados tabulares
+
+Use **Polars** para DataFrames e **DuckDB** para SQL sobre arquivos Parquet ou dados locais. `pandas` é proibido. Parquet é o formato intermediário padrão. CSV só é aceito quando a API de destino exigir.
+
+```python
+# ✅ correto
+import duckdb
+import polars as pl
+
+df = pl.read_parquet(path)
+totals = duckdb.sql("SELECT station_id, sum(mm) AS mm FROM df GROUP BY station_id").pl()
+df.write_parquet(output_path)
+```
+
+```python
+# ❌ errado — pandas e CSV intermediário
+import pandas as pd
+
+df = pd.read_csv(path)
+df.to_csv(output_path, index=False)
 ```
 
 ## 6. Padrões do Prefect 3.0
@@ -411,7 +557,7 @@ from prefect import task
 
 
 @task
-def fetch_data_task(url: str, timeout: int = 30) -> pd.DataFrame:
+def fetch_data_task(url: str, timeout: int = 30) -> pl.DataFrame:
     return utils.fetch_data(url=url, timeout=timeout)
 ```
 
@@ -423,12 +569,12 @@ def fetch_data_task(url: str, timeout: int = 30) -> pd.DataFrame:
 
 No Prefect 3, o grafo de execução é inferido a partir das dependências de dados. Quando a task B recebe o valor de retorno da task A como argumento, o Prefect sabe que A deve terminar antes de B começar. Esta é a forma correta de expressar ordenação.
 
-`wait_for` é uma saída de emergência para o caso raro em que a task B deve rodar após a task A, mas não consome o valor de retorno de A **e** o Prefect não consegue inferir a dependência pelo grafo de chamadas.
+`wait_for` é uma saída de emergência. Use-o apenas no caso raro em que a task B deve rodar após a task A, mas não consome o valor de retorno de A, e o Prefect não consegue inferir a dependência pelo grafo de chamadas.
 
 ```python
 # ✅ correto — ordenação expressa por data flow
 @flow(log_prints=True)
-def rj_iplanrio__eai_history(dataset_id: str, table_id: str) -> None:
+def rj_secretaria__pipeline(dataset_id: str, table_id: str) -> None:
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")           # sequencial, sem output necessário
     last_update = get_last_update_task(dataset_id=dataset_id, table_id=table_id)
@@ -465,7 +611,12 @@ path = download_task(url=url, wait_for=[credentials])  # apenas se download_task
 
 Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arquivos `.sql` dentro de `queries/`.
 
-**Justificativa:** SQL embutido em strings Python é invisível para linters e editores de SQL, não pode ser testado isoladamente e é mais difícil de revisar em pull requests. f-strings tornam a query dinâmica de um modo que não pode ser analisado estaticamente. `str.format()` colide com a sintaxe do BigQuery — `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{` que `str.format()` trata como placeholder. SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos de centenas de linhas de SQL escapado em YAML — ilegível para revisão em pull requests e invisível para qualquer linter de SQL.
+**Justificativa:**
+
+- SQL embutido em strings Python é invisível para linters e editores de SQL, não pode ser testado isoladamente e é mais difícil de revisar em pull requests.
+- As f-strings tornam a query dinâmica de um modo que não pode ser analisado estaticamente.
+- `str.format()` colide com a sintaxe do BigQuery: `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{`, que `str.format()` trata como placeholder.
+- SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos com centenas de linhas de SQL escapado em YAML, ilegíveis para revisão e invisíveis para qualquer linter de SQL.
 
 ### 7.2 Sintaxe de template
 
@@ -493,7 +644,7 @@ from prefect_rj_iplanrio.sql import load_query
 query = load_query(
     __file__,
     "get_last_update",
-    project="rj-iplanrio",
+    project="my-project",
     dataset_id=dataset_id,
     table_id=table_id,
     environment=environment,
@@ -553,14 +704,14 @@ parameters:
   query:
     name: get_eligible_contacts
     replacements:
-      dataset_id: brutos_wetalkie
+      dataset_id: brutos_example
       environment: production
 ```
 
 ```sql
 -- ✅ queries/get_eligible_contacts.sql
 SELECT *
-FROM `rj-iplanrio.$dataset_id.contacts`
+FROM `my-project.$dataset_id.contacts`
 WHERE environment = '$environment'
 ```
 
@@ -568,7 +719,7 @@ WHERE environment = '$environment'
 # ✅ flow.py — recebe query do Prefect e repassa para a task
 from prefect import flow
 
-from .tasks import QueryParam, fetch_data_task
+from pipelines.rj_secretaria__pipeline.tasks import QueryParam, fetch_data_task
 
 
 @flow(log_prints=True)
@@ -580,6 +731,8 @@ def rj_secretaria__pipeline(query: QueryParam) -> None:
 # ✅ tasks.py
 from typing import TypedDict
 
+import polars as pl
+from prefect import task
 from prefect_rj_iplanrio.sql import load_query
 
 
@@ -588,14 +741,17 @@ class QueryParam(TypedDict):
     replacements: dict[str, object]
 
 
-def fetch_data_task(query: QueryParam) -> pd.DataFrame:
+@task
+def fetch_data_task(query: QueryParam) -> pl.DataFrame:
     sql = load_query(__file__, query["name"], **query["replacements"])
     ...
 ```
 
+**Pipelines de dump** (banco para BigQuery) seguem a mesma regra: o template usa `query: {name: extract_data, replacements: {}}` e o SQL fica em `queries/extract_data.sql`.
+
 **Contrato:** as chaves de `replacements` devem corresponder exatamente aos placeholders `$variable` no arquivo `.sql`. `load_query` usa `string.Template.substitute()`, que levanta `KeyError` se um placeholder obrigatório estiver ausente — falha explícita e imediata.
 
-Cada variante de campanha que exija SQL diferente recebe um arquivo `.sql` próprio em `queries/`. O diretório `queries/` é a única fonte de verdade do SQL da pipeline.
+Cada variante que exija SQL diferente recebe um arquivo `.sql` próprio em `queries/`. O diretório `queries/` é a única fonte de verdade do SQL da pipeline.
 
 ### 7.6 O que nunca fazer
 
@@ -603,7 +759,7 @@ Cada variante de campanha que exija SQL diferente recebe um arquivo `.sql` próp
 # ❌ SQL em f-string — não testável, não pesquisável
 query = f"""
     SELECT max(last_update)
-    FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
+    FROM `my-project.{dataset_id}_staging.{table_id}`
     WHERE environment = '{environment}'
 """
 
@@ -665,7 +821,7 @@ Use letras minúsculas e hífens apenas. O `--` duplo separa segmentos lógicos.
 
 ### 9.2 Work pool e secrets
 
-Staging e produção usam `onprem-pool`:
+O work pool depende do acesso de rede da pipeline: `default-pool` para o trabalho geral e `onprem-pool` para sistemas internos que exigem VPN (veja o README). Staging e prod de uma mesma pipeline usam o mesmo pool. Exemplo com `onprem-pool`:
 
 ```yaml
 work_pool:
@@ -694,10 +850,10 @@ Uma frase que diga a um leitor — que nunca viu a pipeline antes — o que ela 
 
 ```toml
 # ✅ correto
-description = "Fetches hourly precipitation data from INMET weather stations and loads it into BigQuery for COR's meteorological monitoring."
+description = "Fetches the item list from the Example API and loads it into BigQuery for the secretaria's monitoring."
 
 # ❌ errado — texto gerado automaticamente sem informação
-description = "Pipeline meteorologia_inmet da secretaria cor"
+description = "Pipeline items da secretaria example"
 
 # ❌ errado — padrão do cookiecutter não substituído
 description = "TODO: replace with one sentence describing what this pipeline does and why."
@@ -706,6 +862,22 @@ description = "TODO: replace with one sentence describing what this pipeline doe
 ### 10.2 `version`
 
 Sempre `1.0.0`. O versionamento é tratado no nível do workspace via git tags e pela tag da imagem Docker construída a partir do hash do commit. Versões individuais de pacotes de pipeline não têm significado em um monorepo.
+
+### 10.3 Dependências
+
+Use limite inferior (`>=`) por padrão. Use `==` apenas com um comentário que explique o motivo (incompatibilidade conhecida, correção de segurança). O `uv.lock` garante a reprodutibilidade. A pipeline declara apenas os pacotes que importa e não repete pacotes que `prefect_rj_iplanrio` já fornece. Não adicione `pandas` (Seção 5.8).
+
+```toml
+# ✅ correto
+dependencies = [
+    "prefect_rj_iplanrio",
+    "polars>=1.35.2",
+    "lxml==6.1.1", # 6.2 quebra o parser HTML de x
+]
+
+# ❌ errado — pin exato sem motivo de pacote que o workspace já fornece
+dependencies = ["prefect==3.4.9"]
+```
 
 ## 11. `src/prefect_rj_iplanrio/` — código compartilhado do workspace
 
@@ -722,8 +894,12 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 | Módulo                        | Símbolo                                   | Propósito                                                                                             |
 | ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna um logger pré-configurado com integração OpenTelemetry. Passe `__name__` como argumento.      |
+| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna o logger do módulo, pelo ponto de entrada único de logging. Passe `__name__` como argumento.  |
 | `prefect_rj_iplanrio.sql`     | `load_query(caller_file, name, **params)` | Carrega e renderiza um arquivo `.sql` do diretório `queries/` relativo ao chamador. Passe `__file__`. |
+
+### 11.3 Antes de escrever um helper
+
+Procure primeiro no [Apêndice B](#apêndice-b--helpers-do-iplanrio). O pacote `iplanrio` já oferece credenciais, upload para o BigQuery, dbt, conectores de banco e templates de extração.
 
 ## 12. Higiene do repositório
 
@@ -804,8 +980,8 @@ deployments:
       job_variables:
         image: "{{ build-image.image_name }}:{{ build-image.tag }}"
         command: uv run --package rj_secretaria__pipeline -- prefect flow-run execute
-      secretName: prefect-jobs-secrets
-      image_pull_policy: Always
+        secretName: prefect-jobs-secrets
+        image_pull_policy: Always
 ```
 
 **Padrão de tags:** Use `chave:valor` para facilitar filtros e buscas no Prefect Cloud.
@@ -818,7 +994,104 @@ deployments:
 | `severity`    | `low`, `medium`, `high`, `critical` | Criticidade da pipeline — obrigatório em todo deployment |
 | `code_owner`  | GitHub username                     | Responsável pelo código — obrigatório em todo deployment |
 
-### 13.4 Por que tags em vez de parâmetros
+### 13.4 Por que tags e não parâmetros
+
+Tags são metadados da infraestrutura. Parâmetros são configuração do flow. Veja a comparação no [Apêndice A](#apêndice-a--por-que-tags-em-vez-de-parâmetros).
+
+### 13.5 Verificação
+
+A revisão do PR verifica as tags sempre que o `prefect.yaml` muda. Ainda não existe verificação automática no CI. Cada deployment deve incluir:
+
+- `environment:staging` ou `environment:prod`
+- `severity` com um dos 4 valores válidos
+- `code_owner` com um GitHub username válido
+
+Quem revisa o PR deve recusar um deployment sem tags.
+
+## 14. Testes
+
+### 14.1 O que testar
+
+Lógica com ramificações ou parsing em `utils.py` **deve** ter teste. Tasks finas e flows não precisam de teste: não têm lógica própria (Seções 4.1 e 4.2).
+
+### 14.2 Estrutura
+
+`tests/` fica dentro do diretório da pipeline e espelha os módulos: `utils.py` é testado por `tests/test_utils.py`. Fixtures ficam em `tests/fixtures/`. `pytest` é dependência de desenvolvimento da pipeline.
+
+```
+pipelines/rj_secretaria__pipeline/
+├── utils.py
+└── tests/
+    ├── test_utils.py
+    └── fixtures/
+        └── response.json
+```
+
+### 14.3 Estilo
+
+Use `pytest` e `@pytest.mark.parametrize`, com `ids` que descrevem o cenário. Os testes não usam rede, credenciais nem o runtime do Prefect.
+
+```python
+import pytest
+
+from pipelines.rj_secretaria__pipeline.utils import parse_value
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("1,5", 1.5), ("", None)],
+    ids=["decimal_comma", "empty"],
+)
+def test_parse_value(raw: str, expected: float | None) -> None:
+    assert parse_value(raw) == expected
+```
+
+## 15. Checklist antes do pull request
+
+Marque cada item antes de pedir revisão.
+
+- [ ] O diretório se chama `rj_<secretaria>__<pipeline>` e tem `flow.py`, `pyproject.toml` e `Dockerfile` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
+- [ ] Não há `__init__.py`, `env.py`, `schedules.py`, `.python-version` nem arquivos avulsos ([Seção 3.3](#33-proibidos-nos-diretórios-de-pipeline)).
+- [ ] O `flow.py` só orquestra. A função `@flow` tem o mesmo nome do diretório ([Seção 4.1](#41-flowpy)).
+- [ ] As tasks são wrappers finos e a lógica fica em `utils.py` ([Seções 4.2 e 4.3](#42-taskspy)).
+- [ ] Não há `print()`. O logging usa `get_logger` ([Seção 5.5](#55-logging)).
+- [ ] Toda função tem type hints e docstring reST ([Seções 5.1 e 5.6](#51-type-hints)).
+- [ ] O código novo usa Polars e DuckDB, sem pandas ([Seção 5.8](#58-dados-tabulares)).
+- [ ] Não há SQL em Python nem em YAML. O SQL está em `queries/*.sql` ([Seção 7](#7-sql)).
+- [ ] O agendamento está só no `prefect.yaml`, em `America/Sao_Paulo`. O staging não tem `schedules` ([Seções 8 e 9](#8-agendamento)).
+- [ ] Cada deployment tem as tags `environment`, `severity` e `code_owner` ([Seção 13](#13-tags-de-pipeline)).
+- [ ] O `pyproject.toml` tem `version = "1.0.0"`, um `description` real e dependências com `>=` ([Seção 10](#10-pyprojecttoml)).
+- [ ] Existe teste para a lógica com ramificações ou parsing de `utils.py` ([Seção 14](#14-testes)).
+
+### Quem verifica cada regra
+
+| Regra                                    | Verificação hoje                                                     |
+| ---------------------------------------- | -------------------------------------------------------------------- |
+| Estrutura de arquivos, estilo, SQL, tags | Revisão do PR (ainda não há verificação automática)                  |
+| Formatação e lint (`ruff`)               | Configurado no `pyproject.toml`; o hook de pre-commit está desligado |
+| Build, deploy dos flows, análise SAST    | CI do GitHub (`.github/workflows/`)                                  |
+
+## 16. Glossário
+
+| Termo                          | Significado                                                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| flow                           | A função `@flow` do Prefect. Define quais tasks rodam e em que ordem.                                                                                                                |
+| task                           | A função `@task` do Prefect. Tem retries e estado visíveis na UI.                                                                                                                    |
+| deployment                     | Um flow registrado no Prefect com agendamento, parâmetros e infraestrutura. Fica no `prefect.yaml` ([Seção 9](#9-convenções-do-prefectyaml)).                                        |
+| work pool                      | Onde o Prefect executa o deployment: `default-pool` (geral) ou `onprem-pool` (acesso interno por VPN).                                                                               |
+| work queue                     | Fila dentro do work pool. Neste repositório sempre `default`.                                                                                                                        |
+| `secretName`                   | Nome do Kubernetes Secret montado no container. Guarda credenciais como variáveis de ambiente.                                                                                       |
+| Infisical                      | Serviço de segredos. As credenciais chegam ao código por variáveis de ambiente injetadas em runtime.                                                                                 |
+| tag                            | Metadado `chave:valor` do deployment (`environment`, `severity`, `code_owner`) ([Seção 13](#13-tags-de-pipeline)).                                                                   |
+| imagem / `Dockerfile`          | Cada pipeline roda em uma imagem Docker construída a partir da imagem base do repositório.                                                                                           |
+| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --package <pipeline>` executa uma pipeline com as dependências dela.                                                                   |
+| staging e prod                 | Os dois ambientes. Staging não tem agendamento. Prod tem.                                                                                                                            |
+| promoção                       | Mover uma função de `utils.py` para `src/prefect_rj_iplanrio/` quando uma segunda pipeline precisa dela ([Seção 11](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)). |
+| pipeline de dump               | Pipeline que copia dados de um banco para o BigQuery. O template do repositório cria esse tipo.                                                                                      |
+| `{{ build-image.tag }}`        | Valor que o Prefect preenche no deploy com a tag da imagem construída. Vem do passo `build-image` do `prefect.yaml`.                                                                 |
+| `{{ get-commit-hash.stdout }}` | Valor que o Prefect preenche no deploy com o hash curto do commit. Vem do passo `get-commit-hash`.                                                                                   |
+
+## Apêndice A — Por que tags em vez de parâmetros
 
 | Aspecto             | Tags                                             | Parâmetros                                  |
 | ------------------- | ------------------------------------------------ | ------------------------------------------- |
@@ -830,12 +1103,19 @@ deployments:
 
 Tags separam **infraestrutura** (Prefect) de **negócio** (parâmetros do flow).
 
-### 13.5 Validação
+## Apêndice B — Helpers do iplanrio
 
-O CI valida em todo PR que modifica `prefect.yaml`. Cada deployment deve incluir:
+O pacote `packages/iplanrio/` já oferece estes helpers. Procure aqui antes de escrever o seu.
 
-- `environment:staging` ou `environment:prod`
-- `severity` com um dos 4 valores válidos
-- `code_owner` com um GitHub username válido
-
-Se um deployment violar essas regras, o workflow rejeita o PR. Deployments sem tags são sinalizados como erro.
+| Import                                                            | Uso                                                                                 |
+| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `iplanrio.pipelines_utils.env.inject_bd_credentials_task`         | Injeta as credenciais do BigQuery no ambiente. Use no início do flow.               |
+| `iplanrio.pipelines_utils.prefect.rename_current_flow_run_task`   | Renomeia a execução atual do flow na UI do Prefect.                                 |
+| `iplanrio.pipelines_utils.bd.create_table_and_upload_to_gcs_task` | Cria a tabela no BigQuery e envia os dados para o GCS.                              |
+| `iplanrio.pipelines_utils.dbt.execute_dbt_task`                   | Executa um comando dbt (`run`, `test`, `build`) no repositório de queries.          |
+| `iplanrio.pipelines_utils.logging.log`                            | Escreve no logger da execução do Prefect. Use em uma `@task`.                       |
+| `iplanrio.pipelines_utils.gcs`                                    | Funções para listar, enviar e apagar arquivos no GCS.                               |
+| `iplanrio.pipelines_utils.database_sql`                           | Conectores `Oracle`, `Postgres`, `MySql` e `SqlServer`.                             |
+| `iplanrio.pipelines_templates.dump_db.tasks`                      | Tasks de dump de banco para o BigQuery (usadas pelo template).                      |
+| `iplanrio.pipelines_templates.dump_url.tasks`                     | Tasks para baixar arquivos de uma URL, Google Sheets ou Google Drive e carregá-los. |
+| `iplanrio.pipelines_templates.dump_arcgis.tasks`                  | Task para baixar dados do ArcGIS.                                                   |

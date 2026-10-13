@@ -115,6 +115,8 @@ Para criar uma nova pipeline, instale `uv` e rode:
 uvx cookiecutter templates --output-dir=pipelines
 ```
 
+O template cria `flow.py`, `tasks.py`, `queries/`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. Veja o [Início rápido](STYLEGUIDE.md#início-rápido) do guia de estilo.
+
 Você será solicitado a informar valores como `secretaria` e `pipeline`, que serão utilizados para preencher os nomes dos diretórios, arquivos e variáveis nos templates. O template gerado já segue o padrão de nomenclatura definido anteriormente.
 
 ### Work pools
