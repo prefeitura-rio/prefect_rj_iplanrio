@@ -1,9 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Descoberta de categorias (passada 1 de 2) — estabiliza o catálogo com uma amostra
-ALEATÓRIA do disparo antes de qualquer conversa ser classificada de verdade, pra evitar
-viés de ordem: numa classificação direta, quem é classificado cedo ficaria preso ao
-catálogo como ele estava naquele momento, mesmo que uma categoria melhor devesse existir.
-Só esta etapa pode CRIAR categoria — classify.py só escolhe entre as já existentes."""
+"""Descoberta de categorias — monta o catálogo a partir de uma amostra ALEATÓRIA das
+conversas, em lotes. Usada pelo material de validação (o catálogo vira o Sheet
+Catálogo que a secretaria valida) e pelo relatório rápido (catálogo automático, sem
+validação). Só esta etapa pode CRIAR categoria — a classificação só escolhe entre as
+existentes.
+
+Amostra aleatória pra evitar viés de ordem: numa classificação direta, quem é
+classificado cedo ficaria preso ao catálogo como ele estava naquele momento, mesmo
+que uma categoria melhor devesse existir.
+
+Cada categoria nova vem com até N_EXEMPLOS_DESCOBERTA conversas do lote em que foi
+criada, que a LLM aponta como exemplos claros (a evidência que a fez criar a
+categoria) — vão pra coluna "Exemplos de conversas" do Catálogo. Lotes seguintes não
+completam exemplos de categoria antiga: tema raro fica com poucos exemplos, o que também
+informa a secretaria."""
 
 from __future__ import annotations
 
@@ -13,7 +23,12 @@ from pathlib import Path
 import pandas as pd
 from iplanrio.pipelines_utils.logging import log
 
-from pipelines.rj_crm__relatorio_engajamento_hsm.config import LOTES_SEM_NOVIDADE_LIMITE, SEED_DESCOBERTA
+from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
+    LOTES_SEM_NOVIDADE_LIMITE,
+    N_EXEMPLOS_DESCOBERTA,
+    SEED_DESCOBERTA,
+)
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.extract import textos_hsm_prompt
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.bifrost import BifrostClient, max_output_tokens_para
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.catalogo import CatalogoCategorias
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.texto import strip_code_fence
@@ -22,61 +37,96 @@ _PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
 _PROMPT_DESCOBERTA = (_PROMPTS_DIR / "descoberta.txt").read_text(encoding="utf-8")
 
 
-def _descobre_lote(lote: pd.DataFrame, bifrost: BifrostClient, catalogo: CatalogoCategorias, max_output_tokens: int) -> tuple[int, int]:
+def interpreta_resposta_lote(
+    parsed: object, lote: pd.DataFrame, catalogo: CatalogoCategorias
+) -> tuple[dict[str, list[str]], int]:
+    """Resposta JSON de 1 lote -> registra as categorias novas no catálogo e devolve
+    ({categoria nova canônica: [id_sessao_48h dos exemplos]}, nº de itens inválidos).
+
+    Exemplos só de categoria criada NESTE lote — se a LLM "propõe" de novo uma que já
+    existe (mesmo nome, outra grafia), ela não é recriada e os exemplos dela são
+    ignorados. Número de conversa fora do lote (a LLM às vezes inventa) é descartado;
+    no máximo N_EXEMPLOS_DESCOBERTA por categoria, sem repetir."""
+    if not isinstance(parsed, list):
+        raise ValueError(f"resposta não é uma lista JSON (veio {type(parsed).__name__})")
+
+    ids_lote = lote["id_sessao_48h"].tolist()
+    novas: dict[str, list[str]] = {}
+    n_invalidos = 0
+    for item in parsed:
+        nome = str(item.get("categoria") or "").strip() if isinstance(item, dict) else ""
+        if not nome:
+            n_invalidos += 1
+            continue
+        if catalogo.busca(nome) is not None:
+            continue  # já existia: não recria nem pega exemplos
+        canonica = catalogo.registra(nome, str(item.get("descricao") or "").strip())
+        ids: list[str] = []
+        for bruto in item.get("exemplos") or []:
+            try:
+                posicao = int(bruto)
+            except (TypeError, ValueError):
+                n_invalidos += 1
+                continue
+            if not 1 <= posicao <= len(ids_lote):
+                n_invalidos += 1
+                continue
+            if ids_lote[posicao - 1] not in ids and len(ids) < N_EXEMPLOS_DESCOBERTA:
+                ids.append(ids_lote[posicao - 1])
+        novas[canonica] = ids
+    return novas, n_invalidos
+
+
+def _descobre_lote(
+    lote: pd.DataFrame, bifrost: BifrostClient, catalogo: CatalogoCategorias, max_output_tokens: int
+) -> tuple[dict[str, list[str]], int]:
     conversas_texto = "\n\n".join(
         f"### CONVERSA {i} (id_sessao_48h={row.id_sessao_48h})\n{row.conversa_completa}"
         for i, row in enumerate(lote.itertuples(), start=1)
     )
-    hsm_texto = next((t for t in lote["hsm_texto"] if t), "")
     prompt = (
-        _PROMPT_DESCOBERTA.replace("<<HSM_TEXTO>>", hsm_texto)
+        _PROMPT_DESCOBERTA.replace("<<HSM_TEXTO>>", textos_hsm_prompt(lote))
         .replace("<<CATALOGO_CATEGORIAS>>", catalogo.texto_prompt())
         .replace("<<CONVERSAS>>", conversas_texto)
     )
     try:
         resposta = bifrost.ask(prompt, max_output_tokens=max_output_tokens)
         texto = BifrostClient.extract_text(resposta)
-        parsed = json.loads(strip_code_fence(texto), strict=False)
-        if not isinstance(parsed, list):
-            raise ValueError(f"resposta não é uma lista JSON (bruto: {texto[:200]!r})")
-    except Exception as exc:
+        return interpreta_resposta_lote(json.loads(strip_code_fence(texto), strict=False), lote, catalogo)
+    except Exception as exc:  # lote que falha não derruba a descoberta — os outros seguem
         log(f"  [FALHA LOTE DESCOBERTA] {len(lote)} conversa(s): {exc}")
-        return 0, len(lote)
-
-    n_novas = n_falhas = 0
-    for item in parsed:
-        if not isinstance(item, dict):
-            n_falhas += 1
-            continue
-        nome = str(item.get("categoria_nova") or "").strip()
-        if not nome:
-            n_falhas += 1
-            continue
-        n_antes = len(catalogo.como_dict())
-        catalogo.registra(nome, str(item.get("categoria_nova_descricao") or "").strip())
-        if len(catalogo.como_dict()) > n_antes:
-            n_novas += 1
-    return n_novas, n_falhas
+        return {}, len(lote)
 
 
 def descobre_categorias(
-    df_pendentes: pd.DataFrame,
+    df_sessoes: pd.DataFrame,
     bifrost: BifrostClient,
     catalogo: CatalogoCategorias,
     tamanho_lote_descoberta: int,
     teto_amostra_descoberta: int,
-) -> None:
-    if len(df_pendentes) > teto_amostra_descoberta:
-        amostra = df_pendentes.sample(n=teto_amostra_descoberta, random_state=SEED_DESCOBERTA)
+) -> dict[str, list[str]]:
+    """Preenche `catalogo` com as categorias descobertas e devolve os exemplos:
+    {categoria: [id_sessao_48h, ...]} (do lote em que cada uma foi criada), na ordem em
+    que as categorias foram criadas. Para cedo quando LOTES_SEM_NOVIDADE_LIMITE
+    lotes seguidos não trazem categoria nova."""
+    if len(df_sessoes) > teto_amostra_descoberta:
+        amostra = df_sessoes.sample(n=teto_amostra_descoberta, random_state=SEED_DESCOBERTA)
     else:
-        amostra = df_pendentes.sample(frac=1, random_state=SEED_DESCOBERTA)
+        amostra = df_sessoes.sample(frac=1, random_state=SEED_DESCOBERTA)
 
     max_output_tokens = max_output_tokens_para(tamanho_lote_descoberta)
+    exemplos: dict[str, list[str]] = {}
     lotes_sem_novidade = 0
     for i in range(0, len(amostra), tamanho_lote_descoberta):
         lote = amostra.iloc[i : i + tamanho_lote_descoberta]
-        n_novas, n_falhas = _descobre_lote(lote, bifrost, catalogo, max_output_tokens)
-        log(f"[DESCOBERTA] lote {i // tamanho_lote_descoberta + 1}: {n_novas} categoria(s) nova(s), {n_falhas} falha(s). Catálogo com {len(catalogo.como_dict())}.")
+        novas, n_invalidos = _descobre_lote(lote, bifrost, catalogo, max_output_tokens)
+        exemplos.update(novas)
+        n_novas = len(novas)
+        log(
+            f"[DESCOBERTA] lote {i // tamanho_lote_descoberta + 1}: {n_novas} categoria(s) nova(s), "
+            f"{sum(len(ids) for ids in novas.values())} exemplo(s), {n_invalidos} item(ns) inválido(s). "
+            f"Catálogo com {len(catalogo.como_dict())}."
+        )
         if n_novas == 0:
             lotes_sem_novidade += 1
             if lotes_sem_novidade >= LOTES_SEM_NOVIDADE_LIMITE:
@@ -84,3 +134,6 @@ def descobre_categorias(
                 break
         else:
             lotes_sem_novidade = 0
+
+    # Ordem de criação das categorias (como_dict preserva a ordem de registro).
+    return {nome: exemplos.get(nome, []) for nome in catalogo.como_dict()}

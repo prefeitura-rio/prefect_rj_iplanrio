@@ -157,3 +157,36 @@ def atualiza_linha(sheets: Resource, spreadsheet_id: str, aba: str, linha: int, 
     sheets.spreadsheets().values().batchUpdate(
         spreadsheetId=spreadsheet_id, body={"valueInputOption": "RAW", "data": dados}
     ).execute()
+
+
+def aplica_lista_suspensa(
+    sheets: Resource, spreadsheet_id: str, coluna: str, opcoes: list[str], ate_linha: int = 1000
+) -> None:
+    """Restringe a coluna `coluna` (pelo cabeçalho, 1ª aba) a uma lista suspensa com
+    `opcoes`, da linha 2 até `ate_linha` — sobra espaço pra linhas que a secretaria
+    acrescentar (ex.: categoria Nova). strict: valor fora da lista é rejeitado na hora,
+    em vez de virar um erro de digitação que o flow trataria como "sem decisão"."""
+    meta = sheets.spreadsheets().get(
+        spreadsheetId=spreadsheet_id, fields="sheets.properties(sheetId,title)"
+    ).execute()
+    propriedades = meta["sheets"][0]["properties"]
+    cabecalho = sheets.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id, range=_range_aba(propriedades["title"], "1:1")
+    ).execute().get("values", [[]])[0]
+    posicao = [str(c).strip() for c in cabecalho].index(coluna)
+    regra = {
+        "condition": {"type": "ONE_OF_LIST", "values": [{"userEnteredValue": o} for o in opcoes]},
+        "strict": True,
+        "showCustomUi": True,
+    }
+    intervalo = {
+        "sheetId": propriedades["sheetId"],
+        "startRowIndex": 1,
+        "endRowIndex": ate_linha,
+        "startColumnIndex": posicao,
+        "endColumnIndex": posicao + 1,
+    }
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id,
+        body={"requests": [{"setDataValidation": {"range": intervalo, "rule": regra}}]},
+    ).execute()

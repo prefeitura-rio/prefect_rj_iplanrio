@@ -101,6 +101,14 @@ class Solicitacao:
         return f"[{self.campanha} | {self.tipo} | {self.data_inicio}..{self.data_fim} | linha {self.linha}]"
 
 
+@dataclass(frozen=True)
+class ResultadoSolicitacao:
+    """O que o processamento de 1 solicitação devolve pro flow gravar no Sheet."""
+
+    status: str
+    link: str = ""
+
+
 # ============================================================================
 # Funções puras (sem rede) — regras de leitura, validação e quando processar
 # ============================================================================

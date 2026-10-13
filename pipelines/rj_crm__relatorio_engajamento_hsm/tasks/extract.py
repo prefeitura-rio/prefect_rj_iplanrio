@@ -142,6 +142,14 @@ def textos_hsm(df_sessoes: pd.DataFrame) -> dict[str, str]:
     return {chave: grupo["hsm_texto"].iloc[0] for chave, grupo in com_texto.groupby("_chave", sort=True)}
 
 
+def textos_hsm_prompt(df_sessoes: pd.DataFrame) -> str:
+    """Bloco <<HSM_TEXTO>> dos prompts em lote: 1 texto de exemplo por HSM do lote."""
+    textos = textos_hsm(df_sessoes)
+    if not textos:
+        return "(texto do HSM indisponível)"
+    return "\n\n".join(f"[{nome}]\n{texto}" for nome, texto in textos.items())
+
+
 @task
 def extrai_conversas(campanha: str, data_inicio: date, data_fim: date) -> tuple[pd.DataFrame, int, int]:
     """Sessões engajadas da campanha no período (1 linha por sessão, colunas em

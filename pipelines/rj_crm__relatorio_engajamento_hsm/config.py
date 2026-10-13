@@ -28,6 +28,8 @@ TAMANHO_LOTE_JUIZ = 50
 N_EXEMPLOS_POR_CATEGORIA = 5
 
 LOTES_SEM_NOVIDADE_LIMITE = 5
+# Exemplos de conversa por categoria na coluna "Exemplos de conversas" do Catálogo.
+N_EXEMPLOS_DESCOBERTA = 5
 SEED_DESCOBERTA = 42
 SEED_AMOSTRA_JUIZ = 42
 
@@ -130,7 +132,8 @@ COL_CAT_EXEMPLOS = "Exemplos de conversas"
 COL_CAT_DECISAO = "Decisão"
 COL_CAT_JUSTIFICATIVA = "Justificativa"
 COL_CAT_DATA_DECISAO = "Data da decisão"
-DECISOES_VALIDAS = {"Manter", "Excluir", "Nova"}
+OPCOES_DECISAO = ("Manter", "Excluir", "Nova")  # ordem da lista suspensa no Sheet
+DECISOES_VALIDAS = set(OPCOES_DECISAO)
 DECISOES_ATIVAS = {"Manter", "Nova"}
 
 # Colunas de conversas_classificadas geradas pelo flow e lidas de volta na ingestão.
