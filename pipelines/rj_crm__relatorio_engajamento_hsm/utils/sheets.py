@@ -207,6 +207,57 @@ def colore_cabecalho(
         ).execute()
 
 
+def aplica_formatacao_condicional_por_valor(
+    sheets: Resource,
+    spreadsheet_id: str,
+    coluna: str,
+    regras: list[tuple[str, tuple[float, float, float]]],
+    ate_linha: int = 1000,
+) -> None:
+    """Aplica formatação condicional de fundo na coluna `coluna` (pelo cabeçalho):
+    para cada (valor, cor_rgb) em `regras`, pinta o fundo das células cujo texto
+    exato seja `valor`. Da linha 2 até `ate_linha`."""
+    meta = sheets.spreadsheets().get(
+        spreadsheetId=spreadsheet_id, fields="sheets.properties(sheetId,title)"
+    ).execute()
+    propriedades = meta["sheets"][0]["properties"]
+    sheet_id = propriedades["sheetId"]
+    cabecalho = sheets.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id, range=_range_aba(propriedades["title"], "1:1")
+    ).execute().get("values", [[]])[0]
+    posicao = [str(c).strip() for c in cabecalho].index(coluna)
+
+    requests = [
+        {
+            "addConditionalFormatRule": {
+                "rule": {
+                    "ranges": [{
+                        "sheetId": sheet_id,
+                        "startRowIndex": 1,
+                        "endRowIndex": ate_linha,
+                        "startColumnIndex": posicao,
+                        "endColumnIndex": posicao + 1,
+                    }],
+                    "booleanRule": {
+                        "condition": {
+                            "type": "TEXT_EQ",
+                            "values": [{"userEnteredValue": valor}],
+                        },
+                        "format": {
+                            "backgroundColor": {"red": r, "green": g, "blue": b}
+                        },
+                    },
+                },
+                "index": 0,
+            }
+        }
+        for valor, (r, g, b) in regras
+    ]
+    sheets.spreadsheets().batchUpdate(
+        spreadsheetId=spreadsheet_id, body={"requests": requests}
+    ).execute()
+
+
 def aplica_lista_suspensa(
     sheets: Resource, spreadsheet_id: str, coluna: str, opcoes: list[str], ate_linha: int = 1000
 ) -> None:

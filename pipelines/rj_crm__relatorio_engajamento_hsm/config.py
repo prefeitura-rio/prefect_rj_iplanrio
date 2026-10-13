@@ -183,6 +183,11 @@ SHEETS_MAX_CHARS_CELULA = 50000
 COR_CABECALHO_FLOW = (0.267, 0.490, 0.792)      # azul
 COR_CABECALHO_SECRETARIA = (1.0, 0.812, 0.196)  # amarelo
 
+# Cores condicionais da coluna Decisão do Catálogo (fundo da célula por valor).
+COR_DECISAO_MANTER = (0.714, 0.843, 0.659)   # verde claro
+COR_DECISAO_EXCLUIR = (0.918, 0.600, 0.600)  # vermelho claro
+COR_DECISAO_NOVA = (1.0, 0.949, 0.667)       # amarelo claro
+
 # ============================================================================
 # RAG — banco de conversas revisadas (few-shot da classificação recorrente)
 # ============================================================================

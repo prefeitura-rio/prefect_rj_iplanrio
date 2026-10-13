@@ -32,6 +32,9 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COL_CONV_ID_SESSAO,
     COR_CABECALHO_FLOW,
     COR_CABECALHO_SECRETARIA,
+    COR_DECISAO_EXCLUIR,
+    COR_DECISAO_MANTER,
+    COR_DECISAO_NOVA,
     DRIVE_SHEET_MIME,
     OPCOES_DECISAO,
     STATUS_CONCLUIDO,
@@ -53,6 +56,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import (
     link_pasta,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import (
+    aplica_formatacao_condicional_por_valor,
     aplica_lista_suspensa,
     colore_cabecalho,
     cria_sheet,
@@ -132,6 +136,11 @@ def gera_material_validacao(
 
     arquivo_catalogo = cria_sheet(drive, sheets, pasta_id, ARQUIVO_CATALOGO, monta_catalogo_df(catalogo, exemplos))
     aplica_lista_suspensa(sheets, arquivo_catalogo["id"], COL_CAT_DECISAO, list(OPCOES_DECISAO))
+    aplica_formatacao_condicional_por_valor(sheets, arquivo_catalogo["id"], COL_CAT_DECISAO, [
+        ("Manter", COR_DECISAO_MANTER),
+        ("Excluir", COR_DECISAO_EXCLUIR),
+        ("Nova", COR_DECISAO_NOVA),
+    ])
     colore_cabecalho(sheets, arquivo_catalogo["id"], {
         COL_CAT_CATEGORIA: COR_CABECALHO_FLOW,
         COL_CAT_DESCRICAO: COR_CABECALHO_FLOW,
