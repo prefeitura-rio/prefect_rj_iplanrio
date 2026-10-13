@@ -111,7 +111,8 @@ No diretório `packages/toolkit/` (use `UV_PROJECT_ENVIRONMENT=<repo>/.venv` se 
 ```sh
 uv run ruff check . && uv run ruff format --check .
 uv run basedpyright
-uv run sqlfluff lint toolkit/templates
+uv run pyrefly check
+uv run sqlfluff lint toolkit/executor/templates
 uv run pytest
 ```
 
