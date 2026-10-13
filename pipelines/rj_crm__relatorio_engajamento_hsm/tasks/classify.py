@@ -3,8 +3,6 @@
 catálogo (nunca cria; isso é trabalho exclusivo de discovery.py). Roda sempre depois da
 descoberta terminar de estabilizar o catálogo pra esse disparo."""
 
-from __future__ import annotations
-
 import json
 import math
 from collections import Counter

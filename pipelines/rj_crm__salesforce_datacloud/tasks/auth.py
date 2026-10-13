@@ -13,8 +13,6 @@ messaging_end_user) reaproveita esta mesma sessão (client_credentials serve
 pros dois); não tem autenticação própria.
 """
 
-from __future__ import annotations
-
 import requests
 from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task

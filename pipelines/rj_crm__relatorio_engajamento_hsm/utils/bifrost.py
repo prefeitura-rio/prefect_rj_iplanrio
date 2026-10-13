@@ -2,8 +2,6 @@
 """Cliente Bifrost (gateway LLM) — self-contido, sem dependência de config específica
 de uma etapa (descoberta/classificação/juiz passam a URL/modelo/chave que quiserem)."""
 
-from __future__ import annotations
-
 import math
 import time
 

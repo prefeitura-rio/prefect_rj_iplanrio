@@ -6,8 +6,6 @@ Texto simples com markdown do Discord no campo `content` do webhook, mesmo
 formato de pipelines/rj_crm__agentforce_classificacao_llm/tasks/notify.py.
 """
 
-from __future__ import annotations
-
 NOME = "salesforce-datacloud"
 LIMITE_CARACTERES = 2000  # teto do `content` num webhook do Discord
 

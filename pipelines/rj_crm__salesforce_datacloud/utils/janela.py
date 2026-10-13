@@ -29,8 +29,6 @@ datetime.now(tz=timezone.utc) aqui, como o checkpoint.py antigo fazia,
 introduziria ~3h de descompasso com o "agora" da fonte.
 """
 
-from __future__ import annotations
-
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 

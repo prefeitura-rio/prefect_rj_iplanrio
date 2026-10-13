@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Tasks do fluxo rj_iplanrio__sisbicho_images."""
 
-from __future__ import annotations
-
 import hashlib
 import json
 from datetime import datetime, timezone

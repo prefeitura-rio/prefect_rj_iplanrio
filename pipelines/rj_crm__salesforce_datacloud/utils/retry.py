@@ -10,8 +10,6 @@ retries=3 e espera de 30/60/120s uma tabela quebrada segurava o run ~3,5min
 2026-09-29 ao tirar o pre-flight, que antes pulava tabela inexistente.
 """
 
-from __future__ import annotations
-
 import requests
 
 

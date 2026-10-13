@@ -3,8 +3,6 @@
 Idempotência mora aqui: `ja_existe_relatorio` confere, pelo prefixo determinístico do
 nome de arquivo, se já existe relatório pra esse HSM + data de geração."""
 
-from __future__ import annotations
-
 import io
 import math
 from dataclasses import dataclass, field

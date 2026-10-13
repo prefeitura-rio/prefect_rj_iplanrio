@@ -7,8 +7,6 @@ Quem cria as tabelas é tasks/bigquery.py:ensure_bq_tables (a cada execução,
 idempotente); load_chunk_to_staging usa SCHEMAS pro schema da carga.
 """
 
-from __future__ import annotations
-
 from google.cloud import bigquery
 
 _TIMESTAMP = bigquery.enums.SqlTypeNames.TIMESTAMP

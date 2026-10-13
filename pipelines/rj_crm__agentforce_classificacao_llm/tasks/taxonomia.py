@@ -22,8 +22,6 @@ re/unicodedata, eval/exec/open/os/subprocess, acesso a atributo dunder) e rejeit
 que dependa de algo fora dela mesma (garante que regra_python é autocontida).
 """
 
-from __future__ import annotations
-
 import ast
 import re
 import unicodedata

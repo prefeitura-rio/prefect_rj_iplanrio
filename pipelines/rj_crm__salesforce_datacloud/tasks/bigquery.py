@@ -19,8 +19,6 @@ falso alarme quando o MERGE cobria mais de uma partição (ex.: sobra de staging
 de dias anteriores).
 """
 
-from __future__ import annotations
-
 import pandas as pd
 from google.cloud import bigquery
 from prefect import task

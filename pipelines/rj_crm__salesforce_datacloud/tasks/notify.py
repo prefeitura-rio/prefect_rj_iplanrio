@@ -14,8 +14,6 @@ Webhook não configurado = notificação pulada com aviso no log. Notificação
 nunca derruba o flow.
 """
 
-from __future__ import annotations
-
 import os
 
 import requests

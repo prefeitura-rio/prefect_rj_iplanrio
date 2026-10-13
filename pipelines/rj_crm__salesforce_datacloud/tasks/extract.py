@@ -60,8 +60,6 @@ IMPORTANTE:
     determinística por OFFSET (order_by_col em tabelas.yaml)
 """
 
-from __future__ import annotations
-
 import pandas as pd
 import requests
 from prefect import task

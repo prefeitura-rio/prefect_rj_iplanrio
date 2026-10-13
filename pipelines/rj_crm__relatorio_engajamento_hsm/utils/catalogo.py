@@ -5,8 +5,6 @@ entre dias porque a extração já é 1x só, do início ao fim, num único flow
 Compartilhado entre discovery (só quem registra categoria nova) e classify (só busca,
 nunca cria)."""
 
-from __future__ import annotations
-
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.texto import normaliza_rotulo
 
 

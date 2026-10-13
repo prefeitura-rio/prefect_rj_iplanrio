@@ -5,8 +5,6 @@ Amostragem por categoria: categoria pequena (< LIMIAR_JULGA_TUDO) julga 100% del
 categoria grande julga só uma fração (a margem de erro já fica pequena bem antes de
 julgar tudo)."""
 
-from __future__ import annotations
-
 import json
 import math
 from pathlib import Path

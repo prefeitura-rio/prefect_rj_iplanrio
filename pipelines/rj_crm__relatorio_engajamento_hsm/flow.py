@@ -103,8 +103,6 @@ COLUNAS DO CSV classificacoes_<...>.csv (1 linha por conversa classificada)
   - juiz_justificativa: explicação do juiz pra esse veredito.
 """
 
-from __future__ import annotations
-
 import os
 from datetime import date, datetime
 from zoneinfo import ZoneInfo

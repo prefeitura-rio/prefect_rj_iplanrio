@@ -22,8 +22,6 @@ tabelas mart do dbt (chatbot/v2_chatbot_conversas). Usar quando a taxonomia muda
 sessões já classificadas precisarem refletir isso — ver tasks/taxonomia.py.
 """
 
-from __future__ import annotations
-
 import os
 
 import pandas as pd

@@ -13,8 +13,6 @@ sessão com HSM e não marcada como resposta_atrasada_btn -> prompt "com_hsm"; s
 nenhuma mensagem do usuário -> descartada (nunca é classificada, igual ao notebook).
 """
 
-from __future__ import annotations
-
 import json
 import re
 import time

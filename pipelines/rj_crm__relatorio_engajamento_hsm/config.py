@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Constantes da pipeline de relatório de engajamento por HSM."""
 
-from __future__ import annotations
-
 PROJECT_ID = "rj-crm-registry"
 DISPAROS_TABLE = f"{PROJECT_ID}.brutos_salesforce_staging.disparos_ativos"
 CHATBOT_DATASET = "rmi_conversas"

@@ -10,8 +10,6 @@ no list). Sem esse parâmetro a API do Drive trata item de Unidade Compartilhada
 inexistente e devolve 404 mesmo com a service account tendo acesso — não confundir com
 falta de compartilhamento de fato."""
 
-from __future__ import annotations
-
 import io
 
 from googleapiclient.discovery import Resource, build

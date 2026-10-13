@@ -3,8 +3,6 @@
 Utilidades para geração e envio de alertas de precipitação no Discord.
 """
 
-from __future__ import annotations
-
 import hashlib
 from collections import OrderedDict
 from dataclasses import dataclass

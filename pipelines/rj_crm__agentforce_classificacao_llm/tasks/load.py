@@ -10,8 +10,6 @@ no ON como a pipeline irmã faz). Nome da tabela intermediária (`_tmp`, não `_
 segue pipelines/rj_crm__get_history_data em vez do salesforce_datacloud.
 """
 
-from __future__ import annotations
-
 import pandas as pd
 from google.api_core.exceptions import Forbidden, NotFound
 from google.cloud import bigquery

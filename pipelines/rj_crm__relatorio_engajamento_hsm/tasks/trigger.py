@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Decide QUAIS HSMs processar hoje — olha disparos_ativos, não toca em rmi_conversas."""
 
-from __future__ import annotations
-
 from datetime import date
 from pathlib import Path
 

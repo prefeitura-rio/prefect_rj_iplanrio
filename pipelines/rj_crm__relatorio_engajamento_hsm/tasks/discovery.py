@@ -5,8 +5,6 @@ viés de ordem: numa classificação direta, quem é classificado cedo ficaria p
 catálogo como ele estava naquele momento, mesmo que uma categoria melhor devesse existir.
 Só esta etapa pode CRIAR categoria — classify.py só escolhe entre as já existentes."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
 

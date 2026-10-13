@@ -10,8 +10,6 @@ Todas usam {data_inicio}/{data_fim} (e, se precisar, outros placeholders),
 preenchidos em flow.py (processar_tabela) via str.format.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 _SQL_DIR = Path(__file__).parent.parent / "sql"

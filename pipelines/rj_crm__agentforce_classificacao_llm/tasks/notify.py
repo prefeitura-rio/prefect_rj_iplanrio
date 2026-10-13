@@ -9,8 +9,6 @@ Credenciais esperadas (env var, via secret do work pool):
                                                     de erro já usado por outras pipelines)
 """
 
-from __future__ import annotations
-
 import asyncio
 import os
 

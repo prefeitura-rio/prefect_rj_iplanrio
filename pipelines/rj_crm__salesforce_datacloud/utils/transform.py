@@ -12,8 +12,6 @@ Operações:
   - Cast de colunas para os tipos esperados pelo schema BQ
 """
 
-from __future__ import annotations
-
 import json
 import re
 from datetime import date, datetime, timezone

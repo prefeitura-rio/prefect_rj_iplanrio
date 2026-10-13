@@ -9,8 +9,6 @@ clustering/modules/hsm_enrichment.py — mesma lógica, adaptada para produção
   - anti-join contra a tabela destino já embutido na query (ver queries/extract_sessoes.sql).
 """
 
-from __future__ import annotations
-
 import json
 import re
 import unicodedata

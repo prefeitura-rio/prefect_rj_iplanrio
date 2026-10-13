@@ -2,8 +2,6 @@
 """Helpers de texto puros, sem estado — usados por várias etapas (descoberta,
 classificação, juiz, relatório)."""
 
-from __future__ import annotations
-
 import re
 import unicodedata
 

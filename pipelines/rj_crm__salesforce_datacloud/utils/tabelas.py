@@ -8,8 +8,6 @@ errado, source inválido, arquivo de query inexistente ou nome repetido dão
 erro aqui, antes de qualquer run começar.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Literal

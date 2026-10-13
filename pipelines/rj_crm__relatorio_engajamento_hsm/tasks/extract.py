@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """Extrai e reconstrói as conversas de 1 disparo de HSM já identificado pelo trigger."""
 
-from __future__ import annotations
-
 from datetime import date
 from pathlib import Path
 

@@ -25,8 +25,6 @@ prefect.yaml pros dois schedules e o concurrency_limit que impede as duas
 passadas de escreverem na mesma tabela ao mesmo tempo.
 """
 
-from __future__ import annotations
-
 import time
 from datetime import date
 
