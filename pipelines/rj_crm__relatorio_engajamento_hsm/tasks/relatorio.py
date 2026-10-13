@@ -8,7 +8,9 @@ zero, zero-shot, sem tocar no Catálogo nem no banco de exemplos).
      algumas sem decisão -> segue, com observação no status e no relatório
   3. extração; nenhuma conversa -> pulado; acima do teto e campanha não liberada ->
      "aguardando liberação" (nada vai pra LLM)
-  4. (engajamento) ingere as revisões e carrega os exemplos / (rápido) descoberta
+  4. (engajamento) ingere as revisões, carrega os exemplos e, se sugerir_categorias,
+     roda a descoberta partindo do Catálogo pra sugerir categorias novas (só vão pro
+     relatório) / (rápido) descoberta do zero
   5. classificação (1 chamada por conversa) -> juiz (lotes) -> publica"""
 
 from __future__ import annotations
@@ -33,7 +35,11 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     TIPO_RELATORIO_RAPIDO,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.classify import classifica_conversas
-from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import descobre_categorias
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import (
+    SugestaoCategoria,
+    descobre_categorias,
+    sugere_categorias,
+)
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.extract import extrai_conversas, sql_query_utilizada, textos_hsm
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.judge import julga_classificacoes
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.rag import carrega_exemplos, ingere_revisoes
@@ -72,6 +78,7 @@ class ParametrosRelatorio:
     tamanho_lote_descoberta: int = TAMANHO_LOTE_DESCOBERTA
     teto_amostra_descoberta: int = TETO_AMOSTRA_DESCOBERTA
     n_exemplos_por_categoria: int = N_EXEMPLOS_POR_CATEGORIA
+    sugerir_categorias: bool = True
     gerado_em: datetime = field(default_factory=agora_brt)  # nome da subpasta da rodada
 
 
@@ -117,6 +124,8 @@ def gera_relatorio(
 
     banco = None
     exemplos_descoberta: dict[str, list[str]] = {}
+    sugestoes: list[SugestaoCategoria] | None = None
+    sugestoes_erro = ""
     if rapido:
         catalogo = CatalogoCategorias()
         exemplos_descoberta = descobre_categorias(
@@ -128,6 +137,19 @@ def gera_relatorio(
         catalogo = catalogo_validado.ativas
         ingere_revisoes(campanha, pasta_id, catalogo_validado)
         banco = carrega_exemplos(campanha, catalogo_validado)
+        if params.sugerir_categorias:
+            try:
+                sugestoes = sugere_categorias(
+                    df_sessoes,
+                    bifrost,
+                    catalogo_validado.todas,
+                    params.tamanho_lote_descoberta,
+                    params.teto_amostra_descoberta,
+                )
+                log(f"[RELATORIO] {campanha}: {len(sugestoes)} sugestão(ões) de categoria nova.")
+            except Exception as exc:  # sugestão é acessória: não derruba o relatório
+                sugestoes_erro = f"{type(exc).__name__}: {exc}"[:200]
+                log(f"[RELATORIO] {campanha}: falha nas sugestões de categoria — {sugestoes_erro}")
 
     df = classifica_conversas(
         df_sessoes, catalogo, bifrost, params.concorrencia_llm, banco=banco, n_exemplos_rag=params.n_exemplos_rag
@@ -151,6 +173,8 @@ def gera_relatorio(
         n_exemplos_rag=0 if banco is None else len(banco.exemplos),
         categorias_sem_decisao=[] if catalogo_validado is None else catalogo_validado.pendentes,
         exemplos_descoberta=exemplos_descoberta,
+        sugestoes=sugestoes,
+        sugestoes_erro=sugestoes_erro,
         nome_eixo=next((e for e in df_sessoes["nome_eixo"].dropna() if str(e).strip()), None),
     )
     link = publica_relatorio(drive, sheets, pasta_id, dados, params.n_exemplos_por_categoria)

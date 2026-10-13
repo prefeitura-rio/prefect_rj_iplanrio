@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """Descoberta de categorias — monta o catálogo a partir de uma amostra ALEATÓRIA das
 conversas, em lotes. Usada pelo material de validação (o catálogo vira o Sheet
-Catálogo que a secretaria valida) e pelo relatório rápido (catálogo automático, sem
-validação). Só esta etapa pode CRIAR categoria — a classificação só escolhe entre as
-existentes.
+Catálogo que a secretaria valida), pelo relatório rápido (catálogo automático, sem
+validação) e pelo relatório de engajamento, pra SUGERIR categorias novas a partir do
+Catálogo existente (sugere_categorias — só aparecem no relatório, não entram no
+Catálogo nem na classificação). Só esta etapa pode CRIAR categoria — a classificação
+só escolhe entre as existentes.
 
 Amostra aleatória pra evitar viés de ordem: numa classificação direta, quem é
 classificado cedo ficaria preso ao catálogo como ele estava naquele momento, mesmo
@@ -18,6 +20,7 @@ informa a secretaria."""
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
@@ -137,3 +140,34 @@ def descobre_categorias(
 
     # Ordem de criação das categorias (como_dict preserva a ordem de registro).
     return {nome: exemplos.get(nome, []) for nome in catalogo.como_dict()}
+
+
+@dataclass(frozen=True)
+class SugestaoCategoria:
+    nome: str
+    descricao: str
+    ids_exemplo: tuple[str, ...]  # id_sessao_48h das conversas que levaram a LLM a sugerir
+
+
+def sugere_categorias(
+    df_sessoes: pd.DataFrame,
+    bifrost: BifrostClient,
+    ja_no_catalogo: CatalogoCategorias,
+    tamanho_lote_descoberta: int,
+    teto_amostra_descoberta: int,
+) -> list[SugestaoCategoria]:
+    """Sugestões de categorias NOVAS pro relatório de engajamento: roda a descoberta
+    partindo de todas as categorias que já estão no Sheet do Catálogo (a LLM só propõe
+    o que não está lá) e devolve só as que surgiram. Não altera `ja_no_catalogo` nem o
+    Catálogo — as sugestões só aparecem no relatório."""
+    partida = CatalogoCategorias()
+    for nome, descricao in ja_no_catalogo.como_dict().items():
+        partida.registra(nome, descricao)
+    existentes = set(partida.como_dict())
+    exemplos = descobre_categorias(df_sessoes, bifrost, partida, tamanho_lote_descoberta, teto_amostra_descoberta)
+    descricoes = partida.como_dict()
+    return [
+        SugestaoCategoria(nome, descricoes[nome], tuple(ids))
+        for nome, ids in exemplos.items()
+        if nome not in existentes
+    ]

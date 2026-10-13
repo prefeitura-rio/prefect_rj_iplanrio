@@ -38,6 +38,9 @@ TIPOS DE SOLICITAÇÃO
    as planilhas `conversas_classificadas_revisada_AAAA-MM-DD` da campanha. Classifica
    cada conversa (1 chamada de LLM por conversa; few-shot com as 3 revisões mais
    parecidas da MESMA campanha, ou zero-shot se ainda não há), roda o juiz e publica.
+   Também roda a descoberta partindo do Catálogo e lista no fim do relatório as
+   categorias NOVAS sugeridas — só sugestão: não entram no Catálogo nem na
+   classificação (pra usar, a secretaria inclui no Catálogo com Decisão "Nova").
 3. Relatório rápido (catálogo automático) — mesma task, sem Catálogo validado nem RAG:
    descobre as categorias do zero e classifica com elas. Não cria/altera o Catálogo e
    nunca alimenta o banco de exemplos.
@@ -146,6 +149,7 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
     tamanho_lote_juiz: int = TAMANHO_LOTE_JUIZ,
     tamanho_lote_descoberta: int = TAMANHO_LOTE_DESCOBERTA,
     n_exemplos_por_categoria: int = N_EXEMPLOS_POR_CATEGORIA,
+    sugerir_categorias: bool = True,
     bifrost_model: str = BIFROST_MODEL,
     drive_pasta_raiz_id: str = DRIVE_PASTA_RAIZ_ID,
 ) -> None:
@@ -183,6 +187,11 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
             categorias.
         n_exemplos_por_categoria: Quantos exemplos de conversa aparecem por categoria
             no documento do relatório (não afeta custo de LLM).
+        sugerir_categorias: No relatório de engajamento, roda também a descoberta de
+            categorias partindo do Catálogo e lista no fim do relatório os temas novos
+            que surgiram (não entram no Catálogo nem na classificação). Custa até
+            ~teto_amostra_descoberta/tamanho_lote_descoberta chamadas de LLM a mais.
+            Desligar = relatório sem a seção de sugestões.
         bifrost_model: Modelo (via gateway Bifrost) usado em todas as etapas de LLM.
         drive_pasta_raiz_id: ID da pasta raiz no Drive ("Relatórios de Engajamento").
             Precisa estar compartilhada (Editor) com a service account de
@@ -217,6 +226,7 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
         tamanho_lote_descoberta=tamanho_lote_descoberta,
         teto_amostra_descoberta=teto_amostra_descoberta,
         n_exemplos_por_categoria=n_exemplos_por_categoria,
+        sugerir_categorias=sugerir_categorias,
     )
 
     resumo: Counter = Counter()

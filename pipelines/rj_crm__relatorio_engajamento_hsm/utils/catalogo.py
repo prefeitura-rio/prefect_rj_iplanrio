@@ -77,9 +77,14 @@ class CatalogoValidado:
     rodada segue e avisa no status da solicitação (ver observacao).
 
     A data da decisão é só de auditoria: NÃO influencia nada (categoria ativa sem data
-    vale normalmente — `ativas_sem_data` só pro log)."""
+    vale normalmente — `ativas_sem_data` só pro log).
+
+    `todas`: toda categoria do Sheet, qualquer decisão — ponto de partida da descoberta
+    de sugestões no relatório (pra não sugerir de novo o que já está no Sheet, inclusive
+    o que a secretaria excluiu ou ainda não decidiu)."""
 
     ativas: CatalogoCategorias = field(default_factory=CatalogoCategorias)
+    todas: CatalogoCategorias = field(default_factory=CatalogoCategorias)
     excluidas: list[str] = field(default_factory=list)
     pendentes: list[str] = field(default_factory=list)
     ativas_sem_data: list[str] = field(default_factory=list)
@@ -116,6 +121,7 @@ def interpreta_catalogo(df: pd.DataFrame) -> CatalogoValidado:
         nome = str(linha[COL_CAT_CATEGORIA]).strip()
         if not nome:
             continue
+        catalogo.todas.registra(nome, str(linha[COL_CAT_DESCRICAO]))
         decisao = _DECISOES_POR_CHAVE.get(str(linha[COL_CAT_DECISAO]).strip().casefold())
         if decisao in DECISOES_ATIVAS:
             catalogo.ativas.registra(nome, str(linha[COL_CAT_DESCRICAO]))

@@ -51,6 +51,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     PROJECT_ID,
     SUFIXO_PASTA_RAPIDO,
 )
+from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import SugestaoCategoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.judge import metricas_por_categoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import garante_pasta, link_pasta, upload_bytes
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import aplica_lista_suspensa, cria_sheet
@@ -113,6 +114,10 @@ class DadosRelatorio:
     categorias_sem_decisao: list[str] = field(default_factory=list)
     exemplos_descoberta: dict[str, list[str]] = field(default_factory=dict)  # só relatório rápido
     nome_eixo: str | None = None
+    # Sugestões de categorias novas (só relatório de engajamento). None = não rodou
+    # (relatório rápido ou sugerir_categorias desligado); [] = rodou e não achou nada.
+    sugestoes: list[SugestaoCategoria] | None = None
+    sugestoes_erro: str = ""
 
 
 @dataclass
@@ -265,6 +270,11 @@ def observacoes(dados: DadosRelatorio) -> list[str]:
         f"Conversas em {CATEGORIA_SEM_CATALOGO} não se encaixaram em nenhuma categoria do catálogo e podem indicar "
         "um tema que ainda não tem categoria.",
     ]
+    if dados.sugestoes:
+        itens.append(
+            f"A seção 'Sugestões de novas categorias', no fim deste relatório, traz {len(dados.sugestoes)} tema(s) "
+            "que apareceram nas conversas e não têm categoria no Catálogo. Eles não foram usados nesta classificação."
+        )
     if dados.categorias_sem_decisao:
         itens.append(
             f"O Catálogo desta campanha tinha {len(dados.categorias_sem_decisao)} categoria(s) sem decisão "
@@ -390,7 +400,54 @@ def gera_docx(dados: DadosRelatorio, categorias: list[Categoria]) -> Document:
             doc.add_paragraph()
         else:
             doc.add_paragraph().add_run("Sem exemplo disponível.").italic = True
+
+    if dados.sugestoes is not None or dados.sugestoes_erro:
+        _secao_sugestoes(doc, dados)
     return doc
+
+
+def _secao_sugestoes(doc: Document, dados: DadosRelatorio) -> None:
+    """Categorias que a descoberta (partindo do Catálogo) encontrou e o Catálogo não
+    tem. Só sugestão: não entram no Catálogo nem na classificação desta rodada."""
+    doc.add_heading("Sugestões de novas categorias", level=1)
+    if dados.sugestoes_erro:
+        doc.add_paragraph().add_run(
+            f"Não foi possível gerar sugestões nesta rodada ({dados.sugestoes_erro})."
+        ).italic = True
+        return
+    if not dados.sugestoes:
+        doc.add_paragraph(
+            "Nenhuma categoria nova sugerida: os temas das conversas deste período já estão cobertos pelas "
+            "categorias do Catálogo."
+        )
+        return
+    doc.add_paragraph(
+        "A LLM leu as conversas deste período partindo de todas as categorias que já estão no Catálogo (inclusive "
+        "as excluídas e as ainda sem decisão) e encontrou os temas abaixo, que não têm categoria. Eles NÃO foram "
+        "usados nesta classificação — as conversas desses temas foram classificadas nas categorias existentes ou em "
+        f'{CATEGORIA_SEM_CATALOGO}. Para usar uma sugestão, inclua a categoria no Catálogo com Decisão "Nova": '
+        "ela passa a valer no próximo relatório."
+    )
+    por_id = dados.df.set_index("id_sessao_48h")
+    for sugestao in dados.sugestoes:
+        h = doc.add_heading(sugestao.nome, level=2)
+        h.runs[0].font.color.rgb = _COR_ACCENT
+        doc.add_paragraph(sugestao.descricao or "(sem descrição)")
+        ids = [i for i in sugestao.ids_exemplo if i in por_id.index]
+        if not ids:
+            doc.add_paragraph().add_run("Sem exemplo disponível.").italic = True
+            continue
+        doc.add_paragraph().add_run("Exemplos:").bold = True
+        tabela = doc.add_table(rows=1, cols=2)
+        tabela.style = "Light Grid Accent 2"
+        for cel, texto in zip(tabela.rows[0].cells, ["Conversa", "Classificada nesta rodada como"], strict=True):
+            cel.paragraphs[0].add_run(texto).bold = True
+        for id_sessao in ids:
+            linha = por_id.loc[id_sessao]
+            celulas = tabela.add_row().cells
+            celulas[0].text = _trunca(linha["conversa_completa"])
+            celulas[1].text = SEP_CELULA.join(linha["categorias"]) or "(falha na classificação)"
+        doc.add_paragraph()
 
 
 # ============================================================================
