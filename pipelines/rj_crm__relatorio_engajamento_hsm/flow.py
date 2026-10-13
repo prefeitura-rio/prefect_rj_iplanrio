@@ -86,7 +86,6 @@ from collections import Counter
 from datetime import date
 
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
-from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 from prefect.runtime import flow_run
@@ -211,7 +210,7 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
     run_id = flow_run.id
     solicitacoes = carrega_solicitacoes(hoje, run_id, campanhas_liberadas or [])
     if not solicitacoes:
-        log(f"[FLOW] Nenhuma solicitação a processar ({hoje}).")
+        print(f"[FLOW] Nenhuma solicitação a processar ({hoje}).")
         return
 
     bifrost = BifrostClient(api_key=bf_key, model=bifrost_model)
@@ -232,19 +231,19 @@ def rj_crm__relatorio_engajamento_hsm(  # noqa: PLR0913 — parâmetros de flow,
     resumo: Counter = Counter()
     inesperados: list[str] = []
     for solicitacao in solicitacoes:
-        log(f"[FLOW] {solicitacao.descricao()} iniciando...")
+        print(f"[FLOW] {solicitacao.descricao()} iniciando...")
         try:
             resultado = _processa(solicitacao, bifrost, params)
         except SolicitacaoError as exc:
             resultado = ResultadoSolicitacao(status_erro(str(exc)))
         except Exception as exc:  # isola a solicitação; o flow falha no fim (ver docstring do módulo)
-            log(f"[FLOW] {solicitacao.descricao()} erro inesperado:\n{traceback.format_exc()}")
+            print(f"[FLOW] {solicitacao.descricao()} erro inesperado:\n{traceback.format_exc()}")
             inesperados.append(f"{solicitacao.descricao()} {type(exc).__name__}: {exc}")
             resultado = ResultadoSolicitacao(status_erro(f"{type(exc).__name__}: {exc}", run_id))
         registra_status(solicitacao, resultado.status, resultado.link)
         resumo[_categoria_status(resultado.status)] += 1
 
-    log(f"[FLOW] Concluído: {dict(resumo)}.")
+    print(f"[FLOW] Concluído: {dict(resumo)}.")
     if inesperados:
         raise RuntimeError(
             f"{len(inesperados)} solicitação(ões) com erro inesperado (status já gravado no Sheet):\n"

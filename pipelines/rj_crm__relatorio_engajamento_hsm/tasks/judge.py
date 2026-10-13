@@ -19,7 +19,6 @@ from collections import Counter
 from pathlib import Path
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
@@ -109,8 +108,8 @@ def _julga_lote(lote: pd.DataFrame, bifrost: BifrostClient, catalogo: CatalogoCa
             return interpreta_resposta_lote(json.loads(strip_code_fence(texto), strict=False), lote, catalogo)
         except Exception as exc:  # tenta o lote de novo; depois desiste só deste lote
             ultimo_erro = exc
-            log(f"  [FALHA LOTE JUIZ] tentativa {tentativa}/{_TENTATIVAS_LOTE}, {len(lote)} conversa(s): {exc}")
-    log(f"  [JUIZ] lote de {len(lote)} conversa(s) ficou sem veredito: {ultimo_erro}")
+            print(f"  [FALHA LOTE JUIZ] tentativa {tentativa}/{_TENTATIVAS_LOTE}, {len(lote)} conversa(s): {exc}")
+    print(f"  [JUIZ] lote de {len(lote)} conversa(s) ficou sem veredito: {ultimo_erro}")
     return {}
 
 
@@ -149,7 +148,7 @@ def seleciona_para_juiz(df: pd.DataFrame, teto: int, piso: int) -> pd.DataFrame:
     return pd.concat(partes).sort_index()
 
 
-@task
+@task(log_prints=True)
 def julga_classificacoes(
     df: pd.DataFrame,
     catalogo: CatalogoCategorias,
@@ -167,12 +166,12 @@ def julga_classificacoes(
     classificadas = df[df["falha_classificacao"] == ""]
     a_julgar = seleciona_para_juiz(classificadas, teto_juiz, piso_juiz_por_categoria)
     if len(a_julgar) < len(classificadas):
-        log(
+        print(
             f"[JUIZ] {len(classificadas)} conversa(s) acima do teto ({teto_juiz}) — "
             f"amostra estratificada de {len(a_julgar)}."
         )
     if a_julgar.empty:
-        log("[JUIZ] nada a julgar.")
+        print("[JUIZ] nada a julgar.")
         return df
 
     vereditos: dict[str, dict] = {}
@@ -180,7 +179,7 @@ def julga_classificacoes(
     for n, i in enumerate(range(0, len(a_julgar), tamanho_lote_juiz), start=1):
         resultado = _julga_lote(a_julgar.iloc[i : i + tamanho_lote_juiz], bifrost, catalogo)
         vereditos.update(resultado)
-        log(f"[JUIZ] lote {n}/{n_lotes}: {len(resultado)} veredito(s).")
+        print(f"[JUIZ] lote {n}/{n_lotes}: {len(resultado)} veredito(s).")
 
     posicao = {id_sessao: i for i, id_sessao in enumerate(df["id_sessao_48h"])}
     for id_sessao, valores in vereditos.items():
@@ -189,7 +188,7 @@ def julga_classificacoes(
             df.at[df.index[linha], coluna] = valor
 
     n_corretos = sum(1 for v in vereditos.values() if v["juiz_veredito"] == "CORRETO")
-    log(f"[JUIZ] {len(vereditos)} de {len(a_julgar)} conversa(s) julgada(s); {n_corretos} CORRETO.")
+    print(f"[JUIZ] {len(vereditos)} de {len(a_julgar)} conversa(s) julgada(s); {n_corretos} CORRETO.")
     return df
 
 

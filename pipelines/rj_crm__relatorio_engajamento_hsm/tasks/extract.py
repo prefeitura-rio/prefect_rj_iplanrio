@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pandas as pd
 from google.cloud import bigquery
-from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
@@ -150,17 +149,17 @@ def textos_hsm_prompt(df_sessoes: pd.DataFrame) -> str:
     return "\n\n".join(f"[{nome}]\n{texto}" for nome, texto in textos.items())
 
 
-@task
+@task(log_prints=True)
 def extrai_conversas(campanha: str, data_inicio: date, data_fim: date) -> tuple[pd.DataFrame, int, int]:
     """Sessões engajadas da campanha no período (1 linha por sessão, colunas em
     COLUNAS_SESSOES), total de sessões que receberam HSM e total com resposta do cidadão."""
     client = get_bq_client()
-    log(f"[EXTRACAO] {campanha}: buscando sessões de {data_inicio} a {data_fim}...")
+    print(f"[EXTRACAO] {campanha}: buscando sessões de {data_inicio} a {data_fim}...")
     df_raw = _busca_mensagens(client, campanha, data_inicio, data_fim)
     df_sessoes, total_disparos, total_engajados = _monta_conversas(df_raw)
     taxa = 100 * total_engajados / total_disparos if total_disparos else 0.0
     n_hsms = len(textos_hsm(df_sessoes))
-    log(
+    print(
         f"[EXTRACAO] {campanha}: {total_disparos} sessão(ões) com disparo, {total_engajados} engajada(s) "
         f"({taxa:.1f}%), {n_hsms} HSM(s) distinto(s)."
     )

@@ -15,7 +15,6 @@ from __future__ import annotations
 import pandas as pd
 from googleapiclient.discovery import Resource, build
 from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
-from iplanrio.pipelines_utils.logging import log
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import DRIVE_SHEET_MIME, SHEETS_MAX_CHARS_CELULA
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import busca_arquivo
@@ -123,7 +122,7 @@ def cria_sheet(
         renomeia_aba(sheets, sid, nome_aba)
         aba = nome_aba
     _escreve(sheets, sid, aba, df)
-    log(f"[SHEETS] '{nome}' criado ({len(df)} linha(s)).")
+    print(f"[SHEETS] '{nome}' criado ({len(df)} linha(s)).")
     return arquivo
 
 
@@ -160,7 +159,7 @@ def publica_sheet(
     if existente is None:
         return cria_sheet(drive, sheets, pasta_id, nome, df, nome_aba=nome_aba)
     substitui_sheet(sheets, existente["id"], df, nome_aba=nome_aba)
-    log(f"[SHEETS] '{nome}' substituído ({len(df)} linha(s)).")
+    print(f"[SHEETS] '{nome}' substituído ({len(df)} linha(s)).")
     return existente
 
 

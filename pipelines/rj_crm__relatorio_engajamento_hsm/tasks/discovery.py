@@ -24,8 +24,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
-
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     LOTES_SEM_NOVIDADE_LIMITE,
     N_EXEMPLOS_DESCOBERTA,
@@ -97,7 +95,7 @@ def _descobre_lote(
         texto = BifrostClient.extract_text(resposta)
         return interpreta_resposta_lote(json.loads(strip_code_fence(texto), strict=False), lote, catalogo)
     except Exception as exc:  # lote que falha não derruba a descoberta — os outros seguem
-        log(f"  [FALHA LOTE DESCOBERTA] {len(lote)} conversa(s): {exc}")
+        print(f"  [FALHA LOTE DESCOBERTA] {len(lote)} conversa(s): {exc}")
         return {}, len(lote)
 
 
@@ -125,7 +123,7 @@ def descobre_categorias(
         novas, n_invalidos = _descobre_lote(lote, bifrost, catalogo, max_output_tokens)
         exemplos.update(novas)
         n_novas = len(novas)
-        log(
+        print(
             f"[DESCOBERTA] lote {i // tamanho_lote_descoberta + 1}: {n_novas} categoria(s) nova(s), "
             f"{sum(len(ids) for ids in novas.values())} exemplo(s), {n_invalidos} item(ns) inválido(s). "
             f"Catálogo com {len(catalogo.como_dict())}."
@@ -133,7 +131,7 @@ def descobre_categorias(
         if n_novas == 0:
             lotes_sem_novidade += 1
             if lotes_sem_novidade >= LOTES_SEM_NOVIDADE_LIMITE:
-                log(f"[DESCOBERTA] {lotes_sem_novidade} lote(s) seguido(s) sem novidade — catálogo estável, parando.")
+                print(f"[DESCOBERTA] {lotes_sem_novidade} lote(s) seguido(s) sem novidade — catálogo estável, parando.")
                 break
         else:
             lotes_sem_novidade = 0

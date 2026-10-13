@@ -19,7 +19,6 @@ from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
-from iplanrio.pipelines_utils.logging import log
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import DRIVE_FOLDER_MIME
 
@@ -66,7 +65,7 @@ def busca_arquivo(drive: Resource, nome: str, parent_id: str, mime_type: str | N
         query += f" and mimeType = '{mime_type}'"
     arquivos = _lista(drive, query)
     if len(arquivos) > 1:
-        log(f"[DRIVE] {len(arquivos)} arquivos chamados '{nome}' na mesma pasta — usando o 1º ({arquivos[0]['id']}).")
+        print(f"[DRIVE] {len(arquivos)} arquivos chamados '{nome}' na mesma pasta — usando o 1º ({arquivos[0]['id']}).")
     return arquivos[0] if arquivos else None
 
 
@@ -99,7 +98,7 @@ def garante_pasta(drive: Resource, parent_id: str, nome: str) -> str:
         return pasta_id
     metadata = {"name": nome, "mimeType": DRIVE_FOLDER_MIME, "parents": [parent_id]}
     pasta = drive.files().create(body=metadata, fields="id", supportsAllDrives=True).execute()
-    log(f"[DRIVE] subpasta '{nome}' criada.")
+    print(f"[DRIVE] subpasta '{nome}' criada.")
     return pasta["id"]
 
 
@@ -144,5 +143,5 @@ def upload_bytes(
     arquivo = drive.files().create(
         body=metadata, media_body=media, fields=_CAMPOS_ARQUIVO, supportsAllDrives=True
     ).execute()
-    log(f"[DRIVE] '{nome_arquivo}' publicado.")
+    print(f"[DRIVE] '{nome_arquivo}' publicado.")
     return arquivo

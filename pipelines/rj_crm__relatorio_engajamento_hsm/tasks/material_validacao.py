@@ -16,7 +16,6 @@ exemplos_nao_classificado é substituído a cada geração."""
 from __future__ import annotations
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
@@ -127,7 +126,7 @@ def monta_exemplos_df(df_sessoes: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-@task
+@task(log_prints=True)
 def gera_material_validacao(
     solicitacao: Solicitacao,
     drive_pasta_raiz_id: str,
@@ -144,7 +143,7 @@ def gera_material_validacao(
 
     existente = busca_arquivo(drive, ARQUIVO_CATALOGO, pasta_id, mime_type=DRIVE_SHEET_MIME)
     if existente is not None:
-        log(f"[VALIDACAO] {campanha}: '{ARQUIVO_CATALOGO}' já existe — nada gerado.")
+        print(f"[VALIDACAO] {campanha}: '{ARQUIVO_CATALOGO}' já existe — nada gerado.")
         return ResultadoSolicitacao(
             status_pulado(f"{ARQUIVO_CATALOGO} já existe (renomeie o atual para gerar de novo)"),
             existente.get("webViewLink", link_pasta(pasta_id)),
@@ -184,7 +183,7 @@ def gera_material_validacao(
     })
 
     sem_exemplo = [nome for nome, ids in exemplos.items() if not ids]
-    log(
+    print(
         f"[VALIDACAO] {campanha}: Catálogo com {len(catalogo.como_dict())} categoria(s) a partir de "
         f"{total_engajados} conversa(s)" + (f"; sem exemplo: {sem_exemplo}" if sem_exemplo else "") + "."
     )

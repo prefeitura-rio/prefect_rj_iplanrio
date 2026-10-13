@@ -20,7 +20,6 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 from googleapiclient.discovery import Resource
-from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
@@ -243,7 +242,7 @@ def _le_solicitacoes(sheets: Resource) -> pd.DataFrame:
 def _grava(sheets: Resource, alvo: _Alvo, status: str, link: str, agora: datetime) -> bool:
     linha_atual = _localiza_linha(_le_solicitacoes(sheets), alvo.carimbo, alvo.email, alvo.linha)
     if linha_atual is None:
-        log(
+        print(
             f"[SOLICITACOES] linha de '{alvo.carimbo}' / '{alvo.email}' não encontrada (ou duplicada) — "
             f"status '{status}' NÃO gravado."
         )
@@ -262,7 +261,7 @@ def _grava(sheets: Resource, alvo: _Alvo, status: str, link: str, agora: datetim
     return True
 
 
-@task
+@task(log_prints=True)
 def registra_status(solicitacao: Solicitacao, status: str, link: str = "") -> bool:
     """Grava status/link/processado_em na linha da solicitação. Nunca levanta exceção:
     falhar ao gravar status de uma solicitação não pode derrubar as outras da rodada
@@ -270,14 +269,14 @@ def registra_status(solicitacao: Solicitacao, status: str, link: str = "") -> bo
     try:
         gravou = _grava(get_sheets_service(), solicitacao.alvo, status, link, agora_brt())
     except Exception as exc:  # ver docstring: status de uma solicitação não derruba as outras
-        log(f"[SOLICITACOES] {solicitacao.descricao()} falha ao gravar status '{status}': {exc}")
+        print(f"[SOLICITACOES] {solicitacao.descricao()} falha ao gravar status '{status}': {exc}")
         return False
     if gravou:
-        log(f"[SOLICITACOES] {solicitacao.descricao()} status -> {status}")
+        print(f"[SOLICITACOES] {solicitacao.descricao()} status -> {status}")
     return gravou
 
 
-@task
+@task(log_prints=True)
 def carrega_solicitacoes(
     hoje: date, flow_run_id: str | None = None, campanhas_liberadas: list[str] | None = None
 ) -> list[Solicitacao]:
@@ -292,18 +291,18 @@ def carrega_solicitacoes(
       - 'processando' travado há mais de HORAS_LIMITE_PROCESSANDO -> erro (interrompida);
       - status vazio com dado inválido -> erro com o motivo (não espera a data de geração:
         quem pediu fica sabendo logo que precisa reenviar)."""
-    log("[SOLICITACOES] iniciando — obtendo serviço do Sheets...")
+    print("[SOLICITACOES] iniciando — obtendo serviço do Sheets...")
     sheets = get_sheets_service()
-    log("[SOLICITACOES] serviço obtido — lendo sheet de solicitações...")
+    print("[SOLICITACOES] serviço obtido — lendo sheet de solicitações...")
     df = _le_solicitacoes(sheets)
-    log(f"[SOLICITACOES] sheet lido — {len(df)} linha(s) encontrada(s).")
+    print(f"[SOLICITACOES] sheet lido — {len(df)} linha(s) encontrada(s).")
     agora = agora_brt()
 
     for _, linha in df.iterrows():
         if processando_travada(linha[COL_SHEET_STATUS], linha[COL_SHEET_PROCESSADO_EM], agora):
             status = status_erro("execução interrompida, envie a solicitação novamente", flow_run_id)
             _grava(sheets, _Alvo.da_linha(linha), status, "", agora)
-            log(
+            print(
                 f"[SOLICITACOES] linha {linha[COL_LINHA]} estava 'processando' desde "
                 f"{linha[COL_SHEET_PROCESSADO_EM]} — marcada como erro."
             )
@@ -320,7 +319,7 @@ def carrega_solicitacoes(
             solicitacao = interpreta_linha(linha)
         except ValueError as exc:
             _grava(sheets, _Alvo.da_linha(linha), status_erro(str(exc), flow_run_id), "", agora)
-            log(f"[SOLICITACOES] linha {linha[COL_LINHA]} inválida: {exc}")
+            print(f"[SOLICITACOES] linha {linha[COL_LINHA]} inválida: {exc}")
             continue
         if not esta_pronta(solicitacao, hoje):
             n_aguardando += 1
@@ -330,7 +329,7 @@ def carrega_solicitacoes(
         if _grava(sheets, solicitacao.alvo, STATUS_PROCESSANDO, "", agora):
             prontas.append(solicitacao)
 
-    log(
+    print(
         f"[SOLICITACOES] {len(prontas)} solicitação(ões) a processar hoje ({hoje}); "
         f"{n_aguardando} aguardando a data de geração."
     )

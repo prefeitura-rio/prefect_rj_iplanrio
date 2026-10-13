@@ -26,7 +26,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
-from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
@@ -145,7 +144,7 @@ def _classifica_uma(bifrost: BifrostClient, prompt: str, catalogo: CatalogoCateg
         return ResultadoClassificacao(falha=f"{type(exc).__name__}: {exc}"[:300])
 
 
-@task
+@task(log_prints=True)
 def classifica_conversas(
     df_sessoes: pd.DataFrame,
     catalogo: CatalogoCategorias,
@@ -170,7 +169,7 @@ def classifica_conversas(
         return _classifica_uma(por_thread.cliente, prompt, catalogo)
 
     modo = "zero-shot" if all(b == SEM_EXEMPLOS for b in blocos) else "few-shot"
-    log(f"[CLASSIFICACAO] {len(prompts)} conversa(s), {modo}, até {concorrencia_llm} chamada(s) em paralelo...")
+    print(f"[CLASSIFICACAO] {len(prompts)} conversa(s), {modo}, até {concorrencia_llm} chamada(s) em paralelo...")
     with ThreadPoolExecutor(max_workers=max(1, concorrencia_llm)) as executor:
         resultados = list(executor.map(classifica, prompts))
 
@@ -182,7 +181,7 @@ def classifica_conversas(
 
     n_falhas = sum(1 for r in resultados if r.falha)
     por_categoria = Counter(c for r in resultados for c in r.categorias)
-    log(
+    print(
         f"[CLASSIFICACAO] {len(resultados) - n_falhas} classificada(s), {n_falhas} falha(s). "
         f"Por categoria: {dict(por_categoria.most_common())}"
     )

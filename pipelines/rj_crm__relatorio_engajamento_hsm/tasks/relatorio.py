@@ -18,7 +18,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
@@ -82,7 +81,7 @@ class ParametrosRelatorio:
     gerado_em: datetime = field(default_factory=agora_brt)  # nome da subpasta da rodada
 
 
-@task
+@task(log_prints=True)
 def gera_relatorio(
     solicitacao: Solicitacao, bifrost: BifrostClient, params: ParametrosRelatorio
 ) -> ResultadoSolicitacao:
@@ -108,7 +107,7 @@ def gera_relatorio(
             )
         if catalogo_validado.vazio:
             raise SolicitacaoError("Catálogo ainda não validado (nenhuma categoria com decisão Manter ou Nova)")
-        log(f"[RELATORIO] {campanha}: Catálogo — {catalogo_validado.resumo()}.")
+        print(f"[RELATORIO] {campanha}: Catálogo — {catalogo_validado.resumo()}.")
 
     df_sessoes, total_disparos, total_engajados = extrai_conversas(
         campanha, solicitacao.data_inicio, solicitacao.data_fim
@@ -116,7 +115,7 @@ def gera_relatorio(
     if df_sessoes.empty:
         return ResultadoSolicitacao(status_pulado("nenhuma conversa com resposta do cidadão no período"))
     if total_engajados > params.teto_conversas and not solicitacao.liberada:
-        log(
+        print(
             f"[RELATORIO] {campanha}: {total_engajados} conversa(s) > teto {params.teto_conversas} — "
             "aguardando liberação."
         )
@@ -146,10 +145,10 @@ def gera_relatorio(
                     params.tamanho_lote_descoberta,
                     params.teto_amostra_descoberta,
                 )
-                log(f"[RELATORIO] {campanha}: {len(sugestoes)} sugestão(ões) de categoria nova.")
+                print(f"[RELATORIO] {campanha}: {len(sugestoes)} sugestão(ões) de categoria nova.")
             except Exception as exc:  # sugestão é acessória: não derruba o relatório
                 sugestoes_erro = f"{type(exc).__name__}: {exc}"[:200]
-                log(f"[RELATORIO] {campanha}: falha nas sugestões de categoria — {sugestoes_erro}")
+                print(f"[RELATORIO] {campanha}: falha nas sugestões de categoria — {sugestoes_erro}")
 
     df = classifica_conversas(
         df_sessoes, catalogo, bifrost, params.concorrencia_llm, banco=banco, n_exemplos_rag=params.n_exemplos_rag
@@ -182,5 +181,5 @@ def gera_relatorio(
     status = STATUS_CONCLUIDO
     if catalogo_validado is not None and catalogo_validado.observacao():
         status += f" — {catalogo_validado.observacao()}"
-    log(f"[RELATORIO] {campanha}: publicado em '{subpasta}'.")
+    print(f"[RELATORIO] {campanha}: publicado em '{subpasta}'.")
     return ResultadoSolicitacao(status, link)

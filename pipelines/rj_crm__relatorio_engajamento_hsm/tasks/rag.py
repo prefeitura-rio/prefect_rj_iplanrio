@@ -30,7 +30,6 @@ import numpy as np
 import pandas as pd
 from google.cloud import bigquery
 from googleapiclient.discovery import Resource
-from iplanrio.pipelines_utils.logging import log
 from prefect import task
 
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
@@ -227,7 +226,7 @@ def _insere(client: bigquery.Client, df: pd.DataFrame) -> None:
 def _linhas_do_arquivo(sheets: Resource, arquivo: dict, campanha: str, catalogo: CatalogoValidado) -> list[dict]:
     exemplos, descartes = exemplos_da_planilha(le_sheet(sheets, arquivo["id"], com_linha=True), catalogo)
     for motivo in descartes:
-        log(f"[RAG] {arquivo['name']}: {motivo} — descartada.")
+        print(f"[RAG] {arquivo['name']}: {motivo} — descartada.")
     revisado_em = data_revisao(arquivo["name"], arquivo.get("modifiedTime", ""))
     return [
         {
@@ -242,7 +241,7 @@ def _linhas_do_arquivo(sheets: Resource, arquivo: dict, campanha: str, catalogo:
     ]
 
 
-@task
+@task(log_prints=True)
 def ingere_revisoes(campanha: str, pasta_campanha_id: str, catalogo: CatalogoValidado) -> dict:
     """Sincroniza a tabela RAG com os Sheets revisados da pasta da campanha (ver
     docstring do módulo). Devolve um resumo pra log/relatório."""
@@ -277,7 +276,7 @@ def ingere_revisoes(campanha: str, pasta_campanha_id: str, catalogo: CatalogoVal
         "arquivos_removidos": len(plano.remover),
         "exemplos_gravados": len(df_novas),
     }
-    log(f"[RAG] {campanha}: {resumo}")
+    print(f"[RAG] {campanha}: {resumo}")
     return resumo
 
 
@@ -294,7 +293,7 @@ class BancoExemplos:
         return self.exemplos.empty
 
 
-@task
+@task(log_prints=True)
 def carrega_exemplos(campanha: str, catalogo: CatalogoValidado) -> BancoExemplos:
     """Exemplos revisados da campanha embedados com o modelo atual, filtrados pelo
     Catálogo atual (ver seleciona_exemplos). Banco vazio = classificação zero-shot."""
@@ -317,7 +316,7 @@ def carrega_exemplos(campanha: str, catalogo: CatalogoValidado) -> BancoExemplos
         np.vstack(df["embedding"].map(np.asarray).tolist()).astype(np.float32) if not df.empty else np.empty((0, 0))
     )
     por_categoria = Counter(c for cats in df["categorias"] for c in cats) if not df.empty else Counter()
-    log(
+    print(
         f"[RAG] {campanha}: {len(df)} exemplo(s) válido(s) de {len(bruto)} na tabela"
         + (f" — por categoria: {dict(por_categoria.most_common())}" if por_categoria else " — classificação zero-shot.")
     )
