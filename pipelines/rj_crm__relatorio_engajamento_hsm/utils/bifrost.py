@@ -33,6 +33,12 @@ class BifrostClient:
         self.timeout = timeout
         self._session = requests.Session()
 
+    def clone(self) -> BifrostClient:
+        """Cliente novo com a mesma configuração e sessão HTTP própria — pra usar 1 por
+        thread nas chamadas em paralelo (requests.Session não é garantidamente
+        thread-safe)."""
+        return BifrostClient(api_key=self.api_key, base=self.base, model=self.model, timeout=self.timeout)
+
     def ask(
         self,
         prompt: str,
@@ -75,7 +81,9 @@ class BifrostClient:
             raise RuntimeError(f"Bifrost retornou corpo não-JSON (status {resp.status_code})") from e
         if isinstance(parsed, dict) and "error" in parsed:
             erro = parsed["error"]
-            raise RuntimeError(f"Bifrost/API retornou erro {erro.get('code')} ({erro.get('status')}): {erro.get('message')}")
+            raise RuntimeError(
+                f"Bifrost/API retornou erro {erro.get('code')} ({erro.get('status')}): {erro.get('message')}"
+            )
         resp.raise_for_status()
         return parsed
 
