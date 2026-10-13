@@ -11,7 +11,7 @@ from prefect.runtime import flow_run
 from iplanrio.pipelines_utils.logging import log
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_POLL_SECONDS
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import bigquery, dbt, inmemory, oracle, runs, slots, sqlldr
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, build_load_plan
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan, RawTextEncoding, build_load_plan
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import current as current_notifier
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     StructurePlan,
@@ -76,12 +76,13 @@ def export_snapshot_task(  # noqa: PLR0913
 
 
 @task(cache_policy=NO_CACHE)
-def plan_load_task(
+def plan_load_task(  # noqa: PLR0913
     infisical_secret_path: str,
     template_schema: str | None,
     excluded_template_columns: list[str] | None,
     table_id: str,
     table_schema: dict[str, object],
+    raw_text_encoding: RawTextEncoding,
 ) -> LoadPlan:
     """Monta o plano de carga a partir da tabela original no Oracle e do schema do BigQuery."""
     config = oracle.read_oracle_config(infisical_secret_path)
@@ -90,7 +91,7 @@ def plan_load_task(
         template_schema=oracle.validate_identifier(template_schema or config.schema),
         table=oracle.validate_identifier(table_id),
     )
-    plan = build_load_plan(table_schema["fields"], template, excluded_template_columns)
+    plan = build_load_plan(table_schema["fields"], template, excluded_template_columns, raw_text_encoding)
     if plan.excluded:
         log(f"{table_id}: colunas da original que não são criadas na BQLOAD_ (ROWID ou excluídas): {plan.excluded}")
     if plan.ignored:
@@ -216,14 +217,18 @@ def load_into_oracle_task(  # noqa: PLR0913
 
 @task(cache_policy=NO_CACHE)
 def validate_row_count_task(
-    infisical_secret_path: str, table: str, table_schema: dict[str, object], loaded_rows: int
+    infisical_secret_path: str, table: str, table_schema: dict[str, object], loaded_rows: int, parallel_degree: int
 ) -> int:
     """Confere se o BigQuery, o SQL*Loader e o Oracle têm o mesmo número de linhas.
+
+    O ``COUNT(*)`` no Oracle roda com a dica ``PARALLEL(parallel_degree)``.
 
     :raises ValueError: Se as contagens divergirem.
     """
     expected = int(table_schema["num_rows"])
-    oracle_rows = oracle.count_rows(config=oracle.read_oracle_config(infisical_secret_path), table=table)
+    oracle_rows = oracle.count_rows(
+        config=oracle.read_oracle_config(infisical_secret_path), table=table, parallel_degree=parallel_degree
+    )
     counts = ", ".join(
         f"{label}={sqlldr.format_count(value)}"
         for label, value in (("BigQuery", expected), ("SQL*Loader", loaded_rows), ("Oracle", oracle_rows))
@@ -245,7 +250,11 @@ def grant_access_task(infisical_secret_path: str, table: str) -> str:
 
 @task(cache_policy=NO_CACHE)
 def delete_gcs_files_task(project: str, bucket: str, files: list[bigquery.ExportedFile]) -> None:
-    """Remove do GCS os arquivos exportados."""
+    """Remove do GCS os arquivos exportados, em lotes.
+
+    O flow submete esta task em segundo plano, depois da validação da contagem, e espera o resultado antes de
+    terminar: uma falha na remoção continua falhando o flow, sem atrasar a criação dos índices.
+    """
     bigquery.delete_blobs(project=project, bucket=bucket, blob_names=[exported.name for exported in files])
     log(f"Removidos {len(files)} arquivos temporários de gs://{bucket}")
 
