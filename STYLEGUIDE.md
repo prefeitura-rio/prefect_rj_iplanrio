@@ -31,8 +31,7 @@ Uma pipeline que baixa uma lista de itens de uma API e salva em Parquet. Os come
 # pipelines/rj_secretaria__pipeline/flow.py  — Seção 4.1
 """Flow for rj_secretaria__pipeline."""
 
-from toolkit.env import inject_bd_credentials_task
-from toolkit.prefect import rename_current_flow_run_task
+from toolkit.tasks import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task
@@ -44,7 +43,6 @@ def rj_secretaria__pipeline(
     table_id: str = "items",
 ) -> None:
     rename_current_flow_run_task(new_name=table_id)
-    inject_bd_credentials_task(environment="prod")
     fetch_items_task(dataset_id=dataset_id, table_id=table_id)
 ```
 
@@ -225,8 +223,7 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 """Flow for rj_secretaria__pipeline."""
 
 from prefect import flow
-from toolkit.env import inject_bd_credentials_task
-from toolkit.prefect import rename_current_flow_run_task
+from toolkit.tasks import rename_current_flow_run_task
 
 from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task, upload_task
 
@@ -237,7 +234,6 @@ def rj_secretaria__pipeline(
     table_id: str = "items",
 ) -> None:
     rename_current_flow_run_task(new_name=table_id)
-    inject_bd_credentials_task(environment="prod")
     data_path = fetch_items_task(dataset_id=dataset_id, table_id=table_id)
     upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
 ```
@@ -389,11 +385,11 @@ def process(
 
 ```python
 # ✅ correto
-from toolkit.bd import create_table_and_upload_to_gcs_task
-from toolkit.env import inject_bd_credentials_task
+from toolkit.dump import DumpRequest
+from toolkit.gcs import list_keys
 
 # ❌ errado
-from toolkit.bd import *
+from toolkit.gcs import *
 ```
 
 ### 5.4 Nomenclatura
@@ -555,12 +551,21 @@ def batch_to_frame(batch: list[list], columns: list[str]) -> pl.DataFrame:
 ```
 
 ```python
-# ✅ correto — lazy para arquivo → arquivo, e DuckDB para SQL sobre Parquet
+# ✅ correto — lazy para arquivo → arquivo, e o Executor do toolkit para SQL no DuckDB
 from pathlib import Path
 
-import duckdb
 import polars as pl
-from prefect_rj_iplanrio.sql import load_query
+from psycopg.sql import Literal
+from pydantic import BaseModel
+from toolkit.executor.engines.duckdb import DuckDBEngine
+from toolkit.executor.executor import Executor
+
+
+class StationTotal(BaseModel):
+    """Uma linha do resultado de ``totals_by_station``."""
+
+    station_id: str
+    mm: float
 
 
 def normalize_parquet(source: Path, dest: Path) -> None:
@@ -573,22 +578,27 @@ def normalize_parquet(source: Path, dest: Path) -> None:
     lf.rename({col: col.lower().replace(" ", "_") for col in lf.collect_schema().names()}).sink_parquet(dest)
 
 
-def totals_by_station(source: Path) -> pl.DataFrame:
+async def totals_by_station(source: Path) -> list[StationTotal]:
     """Soma os valores por estação com SQL do DuckDB.
 
     :param source: Parquet com as colunas ``station_id`` e ``mm``.
     :returns: Uma linha por estação.
     """
-    query = load_query(__file__, "totals_by_station", source=source)
-    return duckdb.sql(query).pl()
+    async with DuckDBEngine.connect() as engine:
+        executor = Executor(engine, templates=Path(__file__).parent / "queries")
+        return await executor.query(
+            "totals_by_station", {"source": Literal(str(source))}, expect=StationTotal
+        )
 ```
 
 ```sql
 -- queries/totals_by_station.sql
 SELECT station_id, sum(mm) AS mm
-FROM '$source'
+FROM read_parquet({{ source }})
 GROUP BY station_id
 ```
+
+Uma pipeline nunca importa `duckdb`: o SQL que roda no DuckDB passa pelo `Executor` do toolkit (Seção 7.6).
 
 ```python
 # ❌ errado — pandas e CSV intermediário
@@ -705,7 +715,7 @@ No Prefect 3, o grafo de execução é inferido a partir das dependências de da
 @flow(log_prints=True)
 def rj_secretaria__pipeline(dataset_id: str, table_id: str) -> None:
     rename_current_flow_run_task(new_name=table_id)
-    inject_bd_credentials_task(environment="prod")           # sequencial, sem output necessário
+    prepare_workdir_task()                                   # sequencial, sem output necessário
     last_update = get_last_update_task(dataset_id=dataset_id, table_id=table_id)
     data_path = fetch_history_task(last_update=last_update)  # dependência de dados — Prefect infere a ordem
     upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
@@ -713,14 +723,14 @@ def rj_secretaria__pipeline(dataset_id: str, table_id: str) -> None:
 
 ```python
 # ❌ errado — wait_for usado onde existe uma dependência de dados
-inject_bd_credentials_task(environment="prod", wait_for=[rename_task])
-path = download_task(url=url, wait_for=[inject_task])
+prepare_workdir_task(wait_for=[rename_task])
+path = download_task(url=url, wait_for=[prepare_task])
 ```
 
 ```python
 # ✅ wait_for aceitável — task de efeito colateral sem valor de retorno significativo
-credentials = inject_bd_credentials_task(environment="prod")
-path = download_task(url=url, wait_for=[credentials])  # apenas se download_task não usa o output de inject
+workdir = prepare_workdir_task()
+path = download_task(url=url, wait_for=[workdir])  # apenas se download_task não usa o output de prepare
 ```
 
 **Resumo:** se a task downstream puder aceitar o valor de retorno da task upstream como argumento, faça isso. Use `wait_for` apenas quando não há nenhuma relação de dados.
@@ -882,7 +892,11 @@ def fetch_data_task(query: QueryParam) -> pl.DataFrame:
 
 Cada variante que exija SQL diferente recebe um arquivo `.sql` próprio em `queries/`. O diretório `queries/` é a única fonte de verdade do SQL da pipeline.
 
-### 7.6 O que nunca fazer
+### 7.6 SQL que roda no DuckDB
+
+O SQL que roda no DuckDB vive em `queries/*.sql` como template Jinja, e o `Executor` do toolkit o renderiza e o executa: `Executor(engine, templates=Path(__file__).parent / "queries")`. Valores entram como `Identifier()` e `Literal()` de `psycopg.sql`, não por `string.Template`. Passos de limpeza ordenados são uma lista de `Step` (`Executor.clean`, ou `steps=` e `templates=` em `run_dump`). A limpeza que o DuckDB não faz é trabalho da task da pipeline. As Seções 7.2 a 7.5 valem para o SQL do BigQuery, que continua com `load_query`. Veja a Seção 5.4 do [guia do toolkit](packages/toolkit/STYLEGUIDE.md).
+
+### 7.7 O que nunca fazer
 
 ```python
 # ❌ SQL em f-string — não testável, não pesquisável

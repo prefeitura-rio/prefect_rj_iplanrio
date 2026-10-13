@@ -48,7 +48,7 @@ Este repositório utiliza um modelo monorepo para gerenciar múltiplas pipelines
   - As pipelines declaram `prefect_rj_iplanrio` como dependência com `{ workspace = true }`, herdando automaticamente as dependências base (`toolkit`, `prefect`, `pandas`, etc.).
   - Novas pipelines adicionadas à pasta `pipelines/` são automaticamente reconhecidas e integradas ao workspace, sem necessidade de configuração manual adicional.
 
-- **Pacote `toolkit`**: o diretório `packages/toolkit/` é um membro do workspace com os primitivos compartilhados (upload para o BigQuery, credenciais, conectores de banco, templates de extração). As regras estão em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md).
+- **Pacote `toolkit`**: o diretório `packages/toolkit/` é um membro do workspace com os primitivos compartilhados (execução de SQL no DuckDB, staging no GCS, tabelas externas no BigQuery, extração de bancos). As regras estão em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md).
 
 - **Código compartilhado**: o diretório `src/prefect_rj_iplanrio/` contém código Python compartilhado entre as pipelines.
   - Funções utilitárias, classes base, helpers e lógica comum podem ser adicionados neste pacote.
