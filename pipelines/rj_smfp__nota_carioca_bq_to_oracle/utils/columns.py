@@ -3,21 +3,28 @@
 import re
 from dataclasses import dataclass
 from math import ceil
+from typing import Literal
 
 COLUMN_NAME_PATTERN = re.compile(r"^[A-Z_][A-Z0-9_$#]{0,127}$")
 SIMPLE_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_$#]{0,127}$")
 CHARACTER_TYPES = ("VARCHAR2", "CHAR", "NVARCHAR2", "NCHAR")
 ROWID_TYPES = ("ROWID", "UROWID")
 TIMESTAMP_TYPE_PATTERN = re.compile(r"^TIMESTAMP\(\d\)( WITH TIME ZONE)?$")
-DATE_FROM_TEXT = "TO_DATE(SUBSTR(REPLACE(:{name}, 'T', ' '), 1, 19), 'YYYY-MM-DD HH24:MI:SS')"
+# Data guardada como texto no BigQuery é sempre ``AAAA-MM-DDTHH:MI:SS`` (19 caracteres, sem fração, fuso ou espaço).
+# O campo ``DATE`` com máscara é convertido pelo próprio SQL*Loader, sem expressão SQL por linha. O ``T`` literal vai
+# entre aspas duplas escapadas dentro da máscara. Valor fora desse formato é rejeitado, e como a carga usa
+# ``ERRORS=0`` a carga inteira falha: nenhuma linha é truncada ou perdida em silêncio.
+DATE_FIELD = 'DATE "YYYY-MM-DD\\"T\\"HH24:MI:SS"'
 TIMESTAMP_TZ_FIELD = 'TIMESTAMP WITH TIME ZONE "YYYY-MM-DD HH24:MI:SS.FF TZR"'
-TEXT_FIELD = "CHAR(4000)"
+TEXT_FIELD_MAX_BYTES = 4000
+FILLER_TEXT_FIELD = f"FILLER CHAR({TEXT_FIELD_MAX_BYTES})"
+UTF8_MAX_BYTES_PER_CHAR = 4
 NUMBER_FIELD = "CHAR(64)"
-DATE_TEXT_FIELD = "CHAR(64)"
 # O BigQuery guarda os bytes do RAW como STRING em base64 padrão (4 caracteres a cada 3 bytes, com preenchimento).
 # O BASE64_DECODE falha com ORA-29261 em valor nulo; o CASE mantém nulo e vazio como nulo.
 RAW_FROM_BASE64 = "CASE WHEN :{name} IS NOT NULL THEN UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW(:{name})) END"
 RAW_TEXT_MIN_CHARS = 64
+RawTextEncoding = Literal["base64", "hex"]
 
 
 @dataclass(frozen=True)
@@ -112,31 +119,52 @@ def oracle_column(row: dict[str, object]) -> OracleColumn:
     )
 
 
-def loader_spec(column: OracleColumn, bq_type: str) -> str:
+def text_field(column: OracleColumn) -> str:
+    """Define o campo de texto do CSV (UTF-8) para uma coluna de caracteres.
+
+    O control file declara ``CHARACTERSET AL32UTF8`` e a sessão usa ``NLS_LANG`` em UTF-8, então o tamanho do
+    ``CHAR(n)`` é em bytes do CSV. Um valor que cabe na coluna nunca pode ser rejeitado por tamanho: com
+    semântica de bytes num banco UTF-8 ele ocupa no máximo ``data_length`` bytes, mas num banco de byte único
+    (ou com semântica de caracteres) cada caractere pode ocupar até 4 bytes no CSV. Por isso o campo tem
+    ``4 * data_length`` bytes, limitado a 4000, que é o máximo de um ``VARCHAR2``. Tamanhos pequenos mantêm
+    a reserva de memória do SQL*Loader por coluna muito menor que os 4000 bytes fixos.
+
+    :param column: Coluna de destino do tipo caractere.
+    :returns: Especificação do campo no control file.
+    """
+    if column.data_length is None:
+        return f"CHAR({TEXT_FIELD_MAX_BYTES})"
+    return f"CHAR({min(TEXT_FIELD_MAX_BYTES, UTF8_MAX_BYTES_PER_CHAR * column.data_length)})"
+
+
+def loader_spec(column: OracleColumn, bq_type: str, raw_text_encoding: RawTextEncoding = "base64") -> str:
     """Define como o SQL*Loader lê um campo do CSV para a coluna de destino.
 
-    Datas guardadas como texto no BigQuery (``AAAA-MM-DDTHH:MI:SS``, com ou sem
-    frações de segundo) viram ``DATE``; as frações são descartadas, como no tipo
-    ``DATE`` do Oracle. ``RAW`` guardado como texto em base64 no BigQuery é
-    decodificado para os bytes originais; valor nulo ou vazio continua nulo.
+    Datas guardadas como texto no BigQuery (``AAAA-MM-DDTHH:MI:SS``) são lidas
+    como ``DATE`` com máscara pelo próprio SQL*Loader; nulo ou vazio é nulo.
+    ``RAW`` guardado como texto no BigQuery vem em base64, decodificado por
+    SQL para os bytes originais, ou em hexadecimal, que o SQL*Loader converte
+    sozinho ao carregar um campo ``CHAR`` numa coluna ``RAW``. Em ambos, valor
+    nulo ou vazio continua nulo.
 
     :param column: Coluna de destino.
     :param bq_type: Tipo do campo no BigQuery.
+    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery.
     :returns: Especificação do campo no control file.
     :raises NotImplementedError: Se a combinação de tipos não tiver suporte, ou se
-        a coluna de data ou ``RAW`` tiver um nome que exige aspas (a expressão SQL
+        a coluna ``RAW`` em base64 tiver um nome que exige aspas (a expressão SQL
         do control file já é delimitada por aspas duplas).
     """
     ddl_type = column.ddl_type
     if column.data_type in CHARACTER_TYPES and bq_type in ("STRING", "JSON"):
-        return TEXT_FIELD
+        return text_field(column)
     if column.data_type == "NUMBER" and bq_type in ("NUMERIC", "INTEGER"):
         return NUMBER_FIELD
     if column.data_type == "DATE" and bq_type == "STRING":
-        if not SIMPLE_NAME_PATTERN.match(column.name):
-            raise NotImplementedError(f"Coluna {column.name}: conversão de data exige nome sem aspas no Oracle.")
-        return f'{DATE_TEXT_FIELD} "{DATE_FROM_TEXT.format(name=column.name)}"'
+        return DATE_FIELD
     if column.data_type == "RAW" and bq_type == "STRING":
+        if raw_text_encoding == "hex":
+            return f"CHAR({2 * int(column.data_length or 0)})"
         if not SIMPLE_NAME_PATTERN.match(column.name):
             raise NotImplementedError(f"Coluna {column.name}: conversão de RAW exige nome sem aspas no Oracle.")
         size = max(RAW_TEXT_MIN_CHARS, 4 * ceil(int(column.data_length or 0) / 3))
@@ -147,7 +175,10 @@ def loader_spec(column: OracleColumn, bq_type: str) -> str:
 
 
 def build_load_plan(
-    bq_fields: list[dict[str, str]], template_columns: list[OracleColumn], excluded_columns: list[str] | None = None
+    bq_fields: list[dict[str, str]],
+    template_columns: list[OracleColumn],
+    excluded_columns: list[str] | None = None,
+    raw_text_encoding: RawTextEncoding = "base64",
 ) -> LoadPlan:
     """Monta o plano de carga a partir do schema do BigQuery e da tabela original.
 
@@ -161,6 +192,7 @@ def build_load_plan(
     :param bq_fields: Campos do schema do BigQuery (``name``, ``type``, ``mode``).
     :param template_columns: Colunas da tabela original, na ordem dela.
     :param excluded_columns: Outras colunas da original que não devem ser criadas.
+    :param raw_text_encoding: Codificação do texto das colunas ``RAW`` no BigQuery.
     :returns: Plano com colunas de destino, campos do CSV e colunas ignoradas e
         excluídas.
     :raises ValueError: Se faltar no BigQuery alguma coluna da original que não
@@ -191,8 +223,8 @@ def build_load_plan(
         if field["mode"] == "REPEATED" or field["type"] in ("RECORD", "STRUCT"):
             raise NotImplementedError(f"Coluna {field['name']}: tipo {field['type']} {field['mode']} sem suporte.")
         if name in by_name:
-            fields.append(LoaderField(name=name, spec=loader_spec(by_name[name], field["type"])))
+            fields.append(LoaderField(name=name, spec=loader_spec(by_name[name], field["type"], raw_text_encoding)))
         else:
-            fields.append(LoaderField(name=name, spec=f"FILLER {TEXT_FIELD}"))
+            fields.append(LoaderField(name=name, spec=FILLER_TEXT_FIELD))
             ignored.append(name)
     return LoadPlan(columns=columns, fields=fields, ignored=ignored, excluded=excluded)

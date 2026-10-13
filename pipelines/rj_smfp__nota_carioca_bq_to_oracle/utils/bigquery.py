@@ -12,6 +12,9 @@ from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
 
+DELETE_BATCH_SIZE = 100
+"""Máximo de objetos por requisição batch do GCS."""
+
 
 @dataclass(frozen=True)
 class ExportedFile:
@@ -100,15 +103,22 @@ def extract_table_to_gcs(project: str, dataset_id: str, table_id: str, bucket: s
 
 
 def delete_blobs(project: str, bucket: str, blob_names: list[str]) -> None:
-    """Remove do GCS os arquivos exportados.
+    """Remove do GCS os arquivos exportados, em lotes de até 100 objetos por requisição.
+
+    Cada lote é uma única requisição HTTP (batch do GCS), em vez de uma por objeto.
 
     :param project: Projeto usado pelo client do GCS.
     :param bucket: Bucket dos arquivos.
     :param blob_names: Nomes dos objetos a remover.
+    :raises google.api_core.exceptions.GoogleAPICallError: Se algum objeto não puder ser removido,
+        depois de tentar todos os do lote.
     """
-    storage_bucket = storage.Client(project=project).bucket(bucket)
-    for name in blob_names:
-        storage_bucket.blob(name).delete()
+    client = storage.Client(project=project)
+    storage_bucket = client.bucket(bucket)
+    for start in range(0, len(blob_names), DELETE_BATCH_SIZE):
+        with client.batch(raise_exception=True):
+            for name in blob_names[start : start + DELETE_BATCH_SIZE]:
+                storage_bucket.blob(name).delete()
     logger.info("Removidos %d arquivos de gs://%s", len(blob_names), bucket)
 
 
