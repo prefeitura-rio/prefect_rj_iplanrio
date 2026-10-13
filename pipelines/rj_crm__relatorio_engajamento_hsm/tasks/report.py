@@ -48,17 +48,26 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COL_REVISAO,
     COR_CABECALHO_FLOW,
     COR_CABECALHO_SECRETARIA,
+    COR_DECISAO_EXCLUIR,
+    COR_DECISAO_MANTER,
     DOCX_MIME,
     DRIVE_DOC_MIME,
     MARCADOR_REVISADA,
     OPCOES_REVISAO,
     PROJECT_ID,
+    REVISAO_CERTO,
+    REVISAO_ERRADO,
     SUFIXO_PASTA_RAPIDO,
 )
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import SugestaoCategoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.judge import metricas_por_categoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import garante_pasta, link_pasta, upload_bytes
-from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import aplica_lista_suspensa, colore_cabecalho, cria_sheet
+from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import (
+    aplica_formatacao_condicional_por_valor,
+    aplica_lista_suspensa,
+    colore_cabecalho,
+    cria_sheet,
+)
 
 _Z_IC_95 = 1.959963985  # z crítico do intervalo de confiança de 95%
 SEP_CELULA = "; "  # várias categorias numa célula (a ingestão separa por ";" e tira espaços)
@@ -486,6 +495,10 @@ def publica_relatorio(
     }
     if not dados.rapido:
         aplica_lista_suspensa(sheets, arquivo["id"], COL_REVISAO, list(OPCOES_REVISAO), ate_linha=len(conversas) + 1)
+        aplica_formatacao_condicional_por_valor(sheets, arquivo["id"], COL_REVISAO, [
+            (REVISAO_CERTO, COR_DECISAO_MANTER),
+            (REVISAO_ERRADO, COR_DECISAO_EXCLUIR),
+        ], ate_linha=len(conversas) + 1)
         colore_cabecalho(sheets, arquivo["id"], {
             **_cores_conversas_flow,
             COL_REVISAO: COR_CABECALHO_SECRETARIA,
