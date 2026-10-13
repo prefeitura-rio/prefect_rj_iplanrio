@@ -45,7 +45,7 @@ def validate_rows[Expected](
     :returns: The validated rows.
     :raises pydantic.ValidationError: If a row does not fit ``expect``.
     """
-    adapter = TypeAdapter(list[expect])  # pyright: ignore[reportInvalidTypeForm]
+    adapter = TypeAdapter(list[expect])
     return adapter.validate_python(rows)
 
 

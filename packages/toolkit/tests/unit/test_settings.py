@@ -1,4 +1,5 @@
 import pytest
+from pydantic import SecretStr
 
 from toolkit.settings import Settings, read_database_credentials
 
@@ -18,6 +19,6 @@ def test_missing_credentials_raise(monkeypatch):
 
 
 def test_hmac_secret_is_hidden():
-    settings = Settings(GCS_HMAC_SECRET="top-secret")  # pyright: ignore[reportArgumentType]
+    settings = Settings(GCS_HMAC_SECRET=SecretStr("top-secret"))
     assert "top-secret" not in repr(settings)
     assert settings.GCS_HMAC_SECRET.get_secret_value() == "top-secret"

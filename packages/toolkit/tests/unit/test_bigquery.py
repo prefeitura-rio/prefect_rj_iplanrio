@@ -1,7 +1,15 @@
+from typing import cast
+
 import pytest
 from google.api_core.exceptions import NotFound
+from google.cloud.bigquery import Client
 
 from toolkit.bigquery import BigQuery
+
+
+def bigquery_with(client: "FakeClient") -> BigQuery:
+    """Wrap the fake in the real class; it has only the methods the toolkit calls."""
+    return BigQuery(cast("Client", cast("object", client)))
 
 
 class FakeClient:
@@ -27,12 +35,14 @@ class FakeClient:
     [pytest.param(True, True, id="found"), pytest.param(False, False, id="not_found")],
 )
 async def test_table_exists(exists, expected):
-    assert await BigQuery(FakeClient(exists=exists)).table_exists("p.d.t") is expected  # pyright: ignore[reportArgumentType]
+    assert (
+        await bigquery_with(FakeClient(exists=exists)).table_exists("p.d.t") is expected
+    )
 
 
 async def test_external_table_is_recreated_with_hive_partitioning_and_connection():
     client = FakeClient(exists=True)
-    await BigQuery(client).create_external_table(  # pyright: ignore[reportArgumentType]
+    await bigquery_with(client).create_external_table(
         "p.d_staging.t",
         "gs://b/staging/d/t",
         "PARQUET",

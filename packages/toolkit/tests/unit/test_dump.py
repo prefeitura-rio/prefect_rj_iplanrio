@@ -191,7 +191,7 @@ async def test_with_retries_returns_the_last_error_when_all_attempts_fail():
 def test_stage_request_is_frozen():
     stage = StageRequest(dataset_id="ds", table_id="tb")
     with pytest.raises(ValidationError):
-        stage.dataset_id = "other"  # pyright: ignore[reportAttributeAccessIssue]
+        stage.dataset_id = "other"
 
 
 class FakeSource:

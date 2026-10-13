@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from aiobotocore.session import get_session
+from pydantic import SecretStr
 
 from toolkit import gcs
 from toolkit.settings import Settings
@@ -39,7 +40,7 @@ async def client(moto_endpoint: str):
         GCS_ENDPOINT=moto_endpoint,
         GCS_USE_SSL=False,
         GCS_HMAC_ACCESS_ID="id",
-        GCS_HMAC_SECRET="secret",  # pyright: ignore[reportArgumentType]
+        GCS_HMAC_SECRET=SecretStr("secret"),
         GCS_REGION="us-east-1",
     )
     async with gcs.create_client(config, get_session()) as s3:

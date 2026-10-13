@@ -7,6 +7,14 @@ from . import backends
 from .base import SourceBase
 
 
+def get_source(name: str) -> type[SourceBase]:
+    """Return the registered source class for a name. The lookup ignores case.
+
+    :raises KeyError: If the name is unknown.
+    """
+    return load_sources()[name]
+
+
 def load_sources() -> type[SourceBase]:
     """Import every module of ``backends/`` and return the registry.
 

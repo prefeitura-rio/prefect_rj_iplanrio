@@ -119,7 +119,7 @@ def test_a_step_accepts_safe_values(values):
 )
 def test_a_step_rejects_plain_text_and_names_the_key(values):
     with pytest.raises(TypeError, match="'key' must not be a plain string"):
-        Step("x", values)  # pyright: ignore[reportArgumentType]
+        Step("x", values)
 
 
 async def test_an_error_in_a_step_names_the_step(templates, duckdb_memory):

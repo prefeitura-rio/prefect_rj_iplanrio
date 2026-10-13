@@ -2,11 +2,13 @@
 
 from enum import StrEnum
 from pathlib import Path
+from typing import cast
 
 import google.auth
 import gspread
 import polars as pl
 import requests
+from google.auth.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from psycopg.sql import SQL, Composable, Literal
@@ -52,9 +54,15 @@ def download_direct(url: str, path: Path) -> None:
                 file.write(chunk)
 
 
+def workload_credentials(scopes: list[str]) -> Credentials:
+    """Return the workload identity credentials for the scopes."""
+    credentials, _ = google.auth.default(scopes=scopes)
+    return cast("Credentials", credentials)
+
+
 def download_drive(url: str, path: Path) -> None:
     """Download a Drive file with the workload identity credentials."""
-    credentials, _ = google.auth.default(scopes=DRIVE_SCOPES)
+    credentials = workload_credentials(DRIVE_SCOPES)
     service = build("drive", "v3", credentials=credentials)
     request = service.files().get_media(fileId=drive_file_id(url))
     with path.open("wb") as file:
@@ -77,15 +85,16 @@ def download_sheet(
     """
     if not url.startswith(SHEETS_PREFIX):
         raise ValueError(f"Google Sheets URL must start with {SHEETS_PREFIX}: {url}")
-    credentials, _ = google.auth.default(scopes=SHEETS_SCOPES)
+    credentials = workload_credentials(SHEETS_SCOPES)
     sheet = gspread.authorize(credentials).open_by_url(url)
     worksheet = (
         sheet.worksheet(sheet_name) if sheet_name else sheet.get_worksheet(sheet_order)
     )
-    values = (
+    values = cast(
+        "list[list[str]]",
         worksheet.batch_get((sheet_range,))[0]
         if sheet_range
-        else worksheet.get_values()
+        else worksheet.get_values(),
     )
     if len(values) < 2:
         raise ValueError("No data found in the selected worksheet")

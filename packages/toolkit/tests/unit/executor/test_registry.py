@@ -12,7 +12,7 @@ from toolkit.executor.sources import backends
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.base import SourceBase
 from toolkit.executor.sources.duckdb import DuckDBSource
-from toolkit.executor.sources.registry import load_sources
+from toolkit.executor.sources.registry import get_source, load_sources
 from toolkit.partitions import Selection
 
 PROVIDED_NAMES = {"postgres", "mysql", "mssql", "oracle", "bigquery"}
@@ -24,13 +24,13 @@ def test_the_registry_has_the_provided_sources_and_no_base_class():
 
 @pytest.mark.parametrize("name", sorted(PROVIDED_NAMES))
 def test_each_source_is_found_by_name_and_builds_a_source(name, make_context):
-    source = load_sources()[name].from_context(make_context())
+    source = get_source(name).from_context(make_context())
     assert source.name == name
 
 
 @pytest.mark.parametrize("name", ["Postgres", "POSTGRES", "postgres"])
 def test_lookup_ignores_case(name):
-    assert load_sources()[name].name == "postgres"
+    assert get_source(name).name == "postgres"
 
 
 def test_the_intermediate_class_is_not_registered_but_its_children_are():
@@ -40,20 +40,20 @@ def test_the_intermediate_class_is_not_registered_but_its_children_are():
 
 def test_an_unknown_name_raises_key_error():
     with pytest.raises(KeyError):
-        load_sources()["db2"]
+        get_source("db2")
 
 
 def test_two_classes_with_the_same_name_are_rejected():
     with pytest.raises(KeyCollisionError):
 
-        class PostgresSource(SourceBase):  # pyright: ignore[reportImplicitAbstractClass]
+        class PostgresSource(SourceBase):
             pass
 
 
 def test_a_class_name_must_end_with_source():
     with pytest.raises(InvalidNameError, match="must end with"):
 
-        class Postgres(SourceBase):  # pyright: ignore[reportImplicitAbstractClass]
+        class Postgres(SourceBase):
             pass
 
 

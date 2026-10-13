@@ -7,7 +7,7 @@ from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from typing import Literal as TypingLiteral
 from zoneinfo import ZoneInfo
 
@@ -22,7 +22,7 @@ from .executor.engines.duckdb import DuckDBEngine, Extension
 from .executor.engines.protocol import Engine
 from .executor.executor import Executor, Step
 from .executor.sources.protocols import DBConn, SourceContext, SourceFactory
-from .executor.sources.registry import load_sources
+from .executor.sources.registry import get_source, load_sources
 from .extraction import ExtractionPlan, FileFormat, run_extraction
 from .log import logger
 from .partitions import (
@@ -50,7 +50,7 @@ type EngineFactory = Callable[
 class StageRequest(BaseModel):
     """Where and how a dataset lands in the staging bucket."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
 
     dataset_id: str = Field(pattern=IDENTIFIER)
     table_id: str = Field(pattern=IDENTIFIER)
@@ -66,7 +66,7 @@ class StageRequest(BaseModel):
 class ConnectionRequest(BaseModel):
     """Connection data of a source database."""
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid", frozen=True)
 
     hostname: NonEmptyString
     port: int = Field(gt=0)
@@ -277,7 +277,7 @@ async def run_dump(
     if make_source is None:
         if request.database_type is None:
             raise ValueError("Give make_source or set database_type")
-        make_source = load_sources()[request.database_type].from_context
+        make_source = get_source(request.database_type).from_context
     conn = request.connection.to_conn() if request.connection else None
     context = DumpContext(request, config, open_engine)
     today = datetime.now(ZoneInfo(TIMEZONE)).date()
