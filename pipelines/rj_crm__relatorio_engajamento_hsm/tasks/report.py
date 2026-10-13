@@ -26,12 +26,17 @@ from googleapiclient.discovery import Resource
 from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     ABA_CATALOGO_AUTOMATICO,
     ABA_CONVERSAS,
+    ABA_LEGENDA_CONVERSAS,
     ARQUIVO_CATALOGO_AUTOMATICO,
     ARQUIVO_CONVERSAS,
     ARQUIVO_RELATORIO,
+    AVALIACAO_BOT_BOA,
+    AVALIACAO_BOT_REGULAR,
+    AVALIACAO_BOT_RUIM,
     CATEGORIA_SEM_CATALOGO,
     CHATBOT_DATASET,
     CHATBOT_TABLE,
+    COL_AVALIACAO_BOT,
     COL_CAT_CATEGORIA,
     COL_CAT_DESCRICAO,
     COL_CAT_EXEMPLOS,
@@ -44,8 +49,10 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     COL_CONV_JUIZ_VEREDITO,
     COL_CONV_JUSTIFICATIVA,
     COL_CONV_RESUMO,
+    COL_JUSTIFICATIVA_AVALIACAO_BOT,
     COL_JUSTIFICATIVA_REVISAO,
     COL_REVISAO,
+    COR_AVALIACAO_REGULAR,
     COR_CABECALHO_FLOW,
     COR_CABECALHO_SECRETARIA,
     COR_DECISAO_EXCLUIR,
@@ -53,6 +60,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     DOCX_MIME,
     DRIVE_DOC_MIME,
     MARCADOR_REVISADA,
+    OPCOES_AVALIACAO_BOT,
     OPCOES_REVISAO,
     PROJECT_ID,
     REVISAO_CERTO,
@@ -63,6 +71,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.discovery import Sugestao
 from pipelines.rj_crm__relatorio_engajamento_hsm.tasks.judge import metricas_por_categoria
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.drive import garante_pasta, link_pasta, upload_bytes
 from pipelines.rj_crm__relatorio_engajamento_hsm.utils.sheets import (
+    adiciona_aba_valores,
     aplica_formatacao_condicional_por_valor,
     aplica_lista_suspensa,
     colore_cabecalho,
@@ -206,7 +215,13 @@ def monta_conversas_df(df: pd.DataFrame, com_revisao: bool) -> pd.DataFrame:
             COL_CONV_JUIZ_JUSTIFICATIVA: r.juiz_justificativa,
         }
         if com_revisao:
-            linha |= {COL_REVISAO: "", COL_CATEGORIAS_CORRETAS: "", COL_JUSTIFICATIVA_REVISAO: ""}
+            linha |= {
+                COL_REVISAO: "",
+                COL_CATEGORIAS_CORRETAS: "",
+                COL_JUSTIFICATIVA_REVISAO: "",
+                COL_AVALIACAO_BOT: "",
+                COL_JUSTIFICATIVA_AVALIACAO_BOT: "",
+            }
         linhas.append(linha)
     return pd.DataFrame(linhas)
 
@@ -467,6 +482,29 @@ def _secao_sugestoes(doc: Document, dados: DadosRelatorio) -> None:
 # Publicação
 # ============================================================================
 
+_LEGENDA_CONVERSAS: list[list[str]] = [
+    ["Coluna", "O que significa"],
+    ["id_sessao", "Identificador único da conversa."],
+    ["categoria", "Categoria(s) atribuída(s) pela LLM, separadas por ponto e vírgula."],
+    ["justificativa", "Motivo da classificação dado pela LLM."],
+    ["resumo", "Resumo da conversa gerado pela LLM."],
+    ["conversa", "Texto completo da conversa com o cidadão."],
+    ["juiz_veredito", "Avaliação do juiz (segunda LLM): CORRETO ou INCORRETO."],
+    ["juiz_categoria_esperada", "Categoria(s) que o juiz esperava, quando INCORRETO."],
+    ["juiz_justificativa", "Motivo do juiz."],
+    ["", ""],
+    ["Revisão da classificação", "Preenchida pela secretaria para corrigir a categorização da LLM."],
+    ["revisao", "Certo: a categoria atribuída está correta. Errado: está incorreta."],
+    ["categorias_corretas", "Quando Errado, as categorias corretas (separadas por ponto e vírgula)."],
+    ["justificativa_revisao", "Motivo da revisão da classificação."],
+    ["", ""],
+    ["Avaliação do bot", "Preenchida pela secretaria para avaliar a qualidade da resposta do bot. "
+                         "Não tem relação com a categorização da LLM e não é usada como feedback para o classificador."],
+    ["avaliacao_resposta_bot", "Boa: o bot respondeu bem ao cidadão. Regular: resposta aceitável mas com ressalvas. "
+                               "Ruim: o bot respondeu mal."],
+    ["justificativa_avaliacao_bot", "Motivo da avaliação do bot."],
+]
+
 
 def publica_relatorio(
     drive: Resource, sheets: Resource, pasta_campanha_id: str, dados: DadosRelatorio, n_exemplos_por_categoria: int
@@ -494,17 +532,27 @@ def publica_relatorio(
         COL_CONV_JUIZ_JUSTIFICATIVA: COR_CABECALHO_FLOW,
     }
     if not dados.rapido:
-        aplica_lista_suspensa(sheets, arquivo["id"], COL_REVISAO, list(OPCOES_REVISAO), ate_linha=len(conversas) + 1)
+        n_linhas = len(conversas) + 1
+        aplica_lista_suspensa(sheets, arquivo["id"], COL_REVISAO, list(OPCOES_REVISAO), ate_linha=n_linhas)
         aplica_formatacao_condicional_por_valor(sheets, arquivo["id"], COL_REVISAO, [
             (REVISAO_CERTO, COR_DECISAO_MANTER),
             (REVISAO_ERRADO, COR_DECISAO_EXCLUIR),
-        ], ate_linha=len(conversas) + 1)
+        ], ate_linha=n_linhas)
+        aplica_lista_suspensa(sheets, arquivo["id"], COL_AVALIACAO_BOT, list(OPCOES_AVALIACAO_BOT), ate_linha=n_linhas)
+        aplica_formatacao_condicional_por_valor(sheets, arquivo["id"], COL_AVALIACAO_BOT, [
+            (AVALIACAO_BOT_BOA, COR_DECISAO_MANTER),
+            (AVALIACAO_BOT_REGULAR, COR_AVALIACAO_REGULAR),
+            (AVALIACAO_BOT_RUIM, COR_DECISAO_EXCLUIR),
+        ], ate_linha=n_linhas)
         colore_cabecalho(sheets, arquivo["id"], {
             **_cores_conversas_flow,
             COL_REVISAO: COR_CABECALHO_SECRETARIA,
             COL_CATEGORIAS_CORRETAS: COR_CABECALHO_SECRETARIA,
             COL_JUSTIFICATIVA_REVISAO: COR_CABECALHO_SECRETARIA,
+            COL_AVALIACAO_BOT: COR_CABECALHO_SECRETARIA,
+            COL_JUSTIFICATIVA_AVALIACAO_BOT: COR_CABECALHO_SECRETARIA,
         })
+        adiciona_aba_valores(sheets, arquivo["id"], ABA_LEGENDA_CONVERSAS, _LEGENDA_CONVERSAS)
     else:
         colore_cabecalho(sheets, arquivo["id"], _cores_conversas_flow)
         arquivo_cat = cria_sheet(
