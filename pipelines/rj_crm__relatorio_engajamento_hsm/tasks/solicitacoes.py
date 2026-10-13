@@ -14,7 +14,7 @@ pediu envia o Form de novo, igual a qualquer outro erro."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -38,6 +38,7 @@ from pipelines.rj_crm__relatorio_engajamento_hsm.config import (
     FORMATOS_DATA_HORA_SHEET,
     FORMATOS_DATA_SHEET,
     HORAS_LIMITE_PROCESSANDO,
+    PREFIXO_STATUS_AGUARDANDO,
     PREFIXO_STATUS_ERRO,
     PREFIXO_STATUS_PULADO,
     SOLICITACOES_ABA,
@@ -92,6 +93,9 @@ class Solicitacao:
     data_inicio: date
     data_fim: date
     data_geracao: date
+    # True só pra solicitação que estava "aguardando liberação" e cuja campanha está em
+    # `campanhas_liberadas` nesta execução: pode passar do TETO_CONVERSAS.
+    liberada: bool = False
 
     @property
     def alvo(self) -> _Alvo:
@@ -99,6 +103,11 @@ class Solicitacao:
 
     def descricao(self) -> str:
         return f"[{self.campanha} | {self.tipo} | {self.data_inicio}..{self.data_fim} | linha {self.linha}]"
+
+
+class SolicitacaoError(Exception):
+    """Erro "esperado" de uma solicitação (ex.: Catálogo não encontrado) — a mensagem
+    vai como está pro status ("erro: <mensagem>"), pra quem pediu entender o que fazer."""
 
 
 @dataclass(frozen=True)
@@ -185,6 +194,14 @@ def status_pulado(motivo: str) -> str:
     return f"{PREFIXO_STATUS_PULADO}: {motivo}"
 
 
+def status_aguardando(n_conversas: int, teto: int) -> str:
+    return f"{PREFIXO_STATUS_AGUARDANDO}: {n_conversas} conversas com resposta no período (teto: {teto})"
+
+
+def aguardando_liberacao(status: str) -> bool:
+    return status.strip().startswith(PREFIXO_STATUS_AGUARDANDO)
+
+
 def status_erro(motivo: str, flow_run_id: str | None = None) -> str:
     """Motivo curto (cabe numa célula legível) + id curto do flow run pra achar o log
     completo no Prefect."""
@@ -261,8 +278,15 @@ def registra_status(solicitacao: Solicitacao, status: str, link: str = "") -> bo
 
 
 @task
-def carrega_solicitacoes(hoje: date, flow_run_id: str | None = None) -> list[Solicitacao]:
-    """Solicitações a processar nesta execução, já marcadas como 'processando' no Sheet.
+def carrega_solicitacoes(
+    hoje: date, flow_run_id: str | None = None, campanhas_liberadas: list[str] | None = None
+) -> list[Solicitacao]:
+    """Solicitações a processar nesta execução, já marcadas como 'processando' no Sheet:
+    as de status vazio com data de geração até hoje e, das campanhas em
+    `campanhas_liberadas`, também as que estavam 'aguardando liberação' — só ESSAS podem
+    passar do TETO_CONVERSAS. Solicitação nova de uma campanha liberada segue a regra
+    normal (se passar do teto, também vai pra 'aguardando liberação'): a liberação vale
+    só pro que já foi barrado e visto.
 
     Antes, fecha as pendências da planilha:
       - 'processando' travado há mais de HORAS_LIMITE_PROCESSANDO -> erro (interrompida);
@@ -281,9 +305,14 @@ def carrega_solicitacoes(hoje: date, flow_run_id: str | None = None) -> list[Sol
                 f"{linha[COL_SHEET_PROCESSADO_EM]} — marcada como erro."
             )
 
+    liberadas = {c.strip() for c in campanhas_liberadas or [] if c.strip()}
+    pendentes = df[
+        (df[COL_SHEET_STATUS].str.strip() == "")
+        | (df[COL_SHEET_STATUS].map(aguardando_liberacao) & df[COL_SHEET_CAMPANHA].str.strip().isin(liberadas))
+    ]
     prontas: list[Solicitacao] = []
     n_aguardando = 0
-    for _, linha in df[df[COL_SHEET_STATUS].str.strip() == ""].iterrows():
+    for _, linha in pendentes.iterrows():
         try:
             solicitacao = interpreta_linha(linha)
         except ValueError as exc:
@@ -293,6 +322,8 @@ def carrega_solicitacoes(hoje: date, flow_run_id: str | None = None) -> list[Sol
         if not esta_pronta(solicitacao, hoje):
             n_aguardando += 1
             continue
+        if aguardando_liberacao(linha[COL_SHEET_STATUS]):
+            solicitacao = replace(solicitacao, liberada=True)
         if _grava(sheets, solicitacao.alvo, STATUS_PROCESSANDO, "", agora):
             prontas.append(solicitacao)
 
