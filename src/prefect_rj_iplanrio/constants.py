@@ -10,3 +10,6 @@ RETRIES: Final = 2
 
 RETRY_DELAY_SECONDS: Final = 60
 """How long a dump waits before it runs a failed step again."""
+
+DISCORD_LIMIT: Final = 2000
+"""The most characters that Discord accepts in one message."""
