@@ -3,7 +3,7 @@
   "kind": "template",
   "description": "Copy one window of a source to a single local Parquet file, even when it has no rows, so the file keeps the schema.",
   "inputs": {
-    "type": "Source name: postgres, mysql, mssql, oracle, bigquery, arcgis, gsheets, parquet, csv or json.",
+    "type": "Source name: postgres, mysql, mssql, bigquery, arcgis, gsheets, parquet, csv or json.",
     "alias": "SQL literal with the name of the attached database.",
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query, the layer URL, the spreadsheet id or the file path or glob. Optional when there is a table.",

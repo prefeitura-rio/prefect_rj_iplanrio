@@ -1,13 +1,16 @@
 from contextlib import nullcontext
+from os import environ
+from subprocess import run as run_process
+from sys import executable
 
-import polars as pl
 import pytest
+from polars import DataFrame, Int64, Schema, String
 
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.settings import settings
 
 
-async def collect(engine, sql: str, **options) -> list[pl.DataFrame]:
+async def collect(engine, sql: str, **options) -> list[DataFrame]:
     """Read every batch of a query."""
     return [frame async for frame in engine.query(sql, **options)]
 
@@ -19,21 +22,21 @@ async def collect(engine, sql: str, **options) -> list[pl.DataFrame]:
             "SELECT i FROM range(10) r(i)",
             4,
             [4, 4, 2],
-            pl.Schema({"i": pl.Int64}),
+            Schema({"i": Int64}),
             id="split_in_batches",
         ),
         pytest.param(
             "SELECT i FROM range(3) r(i)",
             100,
             [3],
-            pl.Schema({"i": pl.Int64}),
+            Schema({"i": Int64}),
             id="one_batch",
         ),
         pytest.param(
             "SELECT 1::BIGINT AS a, 'x' AS b WHERE false",
             100,
             [0],
-            pl.Schema({"a": pl.Int64, "b": pl.String}),
+            Schema({"a": Int64, "b": String}),
             id="no_rows_still_gives_the_columns",
         ),
     ],
@@ -96,3 +99,27 @@ async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
         )
 
     assert frame.rows() == [("1.0 GiB", str(tmp_path))]
+
+
+@pytest.mark.parametrize("machine", ["UTC", "Asia/Tokyo"])
+def test_regression_the_time_zone_does_not_follow_the_machine(machine):
+    """Regression: DuckDB took the zone of the machine, so a pod in UTC cut the days of a `TIMESTAMPTZ` elsewhere."""
+    code = (
+        "import asyncio\n"
+        "from toolkit.executor.engines.duckdb import DuckDBEngine\n"
+        "async def main():\n"
+        "    async with DuckDBEngine.connect() as engine:\n"
+        "        async for frame in engine.query(\"SELECT current_setting('TimeZone') AS zone\"):\n"
+        "            print(frame['zone'][0])\n"
+        "asyncio.run(main())\n"
+    )
+
+    done = run_process(
+        [executable, "-c", code],
+        env={**environ, "TZ": machine},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert done.stdout.strip() == "America/Sao_Paulo"

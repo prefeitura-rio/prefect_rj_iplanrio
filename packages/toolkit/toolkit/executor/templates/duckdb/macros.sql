@@ -20,7 +20,7 @@ ST_Read('ESRIJSON:' || {{ url }} || '/query?outFields=*&f=json&where=' || url_en
   "name": "duckdb.native_query",
   "description": "Run a query in the dialect of a source database, through the function of its extension.",
   "inputs": {
-    "type": "Source name: postgres, mysql, mssql, oracle or bigquery.",
+    "type": "Source name: postgres, mysql, mssql or bigquery.",
     "alias": "SQL literal with the name of the attached database.",
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query."
@@ -35,8 +35,6 @@ postgres_query({{ alias }}, {{ query }})
 mysql_query({{ alias }}, {{ query }})
 {%- elif type == "mssql" -%}
 mssql_scan({{ alias }}, {{ query }})
-{%- elif type == "oracle" -%}
-oracle_query({{ secret }}, {{ query }})
 {%- elif type == "bigquery" -%}
 bigquery_query({{ alias }}, {{ query }})
 {%- endif -%}
@@ -48,7 +46,7 @@ bigquery_query({{ alias }}, {{ query }})
   "name": "duckdb.source_table",
   "description": "Read what a dump copies: a native query, an ArcGIS layer, a Google Sheet or local files.",
   "inputs": {
-    "type": "Source name: postgres, mysql, mssql, oracle, bigquery, arcgis, gsheets, parquet, csv or json.",
+    "type": "Source name: postgres, mysql, mssql, bigquery, arcgis, gsheets, parquet, csv or json.",
     "alias": "SQL literal with the name of the attached database.",
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query, the layer URL, the spreadsheet id or the file path or glob.",
@@ -102,7 +100,7 @@ WHERE {% for item in predicates -%}
   "name": "duckdb.select_columns",
   "description": "List the columns of a result, each renamed and, if it has a function, computed by it.",
   "inputs": {
-    "columns": "Each column as a mapping with its source and target identifiers, and an optional function identifier. Build them with select_columns."
+    "columns": "Each column as a mapping with its source and target identifiers, and an optional function identifier or cast type. Build them with select_columns."
   },
   "returns": "A select list such as clean_text(\"Nome Completo\") AS \"nome_completo\"."
 }
@@ -111,6 +109,8 @@ WHERE {% for item in predicates -%}
 {%- for column in columns -%}
 {%- if column.function is defined -%}
 {{ column.function }}({{ column.source }})
+{%- elif column.cast is defined -%}
+CAST({{ column.source }} AS {{ column.cast }})
 {%- else -%}
 {{ column.source }}
 {%- endif %} AS {{ column.target }}{{ ", " if not loop.last }}

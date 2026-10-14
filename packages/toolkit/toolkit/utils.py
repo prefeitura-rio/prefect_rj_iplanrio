@@ -4,7 +4,7 @@ from collections.abc import Collection, Mapping, Sequence
 
 from psycopg.sql import SQL, Composable, Identifier, Literal
 
-from .constants import FILTER_OPERATORS
+from .constants import DELTA_CASTS, FILTER_OPERATORS, TEXT_TYPE
 from .functions.native import normalize
 from .functions.registry import get_functions
 from .types import Filter
@@ -53,7 +53,8 @@ def select_columns(
     `select` keeps only those columns, in that order. A column is one that the result
     has, by its own name. A function is one of the Arrow functions, and it reads the
     column as text: a date or a timestamp is cast first, in the time zone of São Paulo.
-    Anything else raises a `ValueError`.
+    Anything else raises a `ValueError`. A column of a type that a Delta table cannot
+    hold (`DELTA_CASTS`: a time, a UUID, an unsigned number) is cast.
 
     They are the values of the `select_columns` macro of `duckdb/macros.sql`.
 
@@ -84,7 +85,7 @@ def select_columns(
             transforms.get(name)
             or (
                 "clean_text"
-                if normalize_values and columns[name] == "VARCHAR"
+                if normalize_values and TEXT_TYPE.fullmatch(columns[name])
                 else None
             ),
         )
@@ -96,13 +97,17 @@ def select_column(
     source: str, kind: str, target: str, function: str | None
 ) -> dict[str, Composable]:
     """Return one column of the select list, with `function` if there is one."""
-    if function is None:
-        return {"source": Identifier(source), "target": Identifier(target)}
-    return {
-        "source": as_text(source, kind),
+    if function is not None:
+        return {
+            "source": as_text(source, kind),
+            "target": Identifier(target),
+            "function": Identifier(function),
+        }
+    column: dict[str, Composable] = {
+        "source": Identifier(source),
         "target": Identifier(target),
-        "function": Identifier(function),
     }
+    return {**column, "cast": SQL(DELTA_CASTS[kind])} if kind in DELTA_CASTS else column
 
 
 def as_text(name: str, kind: str) -> Composable:

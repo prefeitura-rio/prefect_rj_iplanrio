@@ -19,13 +19,13 @@ database = "'d'"
 user = "'u'"
 read_only = true
 extensions = []
-has_gcs_secret = false
+time_zone = "'America/Sao_Paulo'"
 memory_limit = "'1GiB'"
 temp_directory = "'/tmp/duck'"
 source = "'a.csv'"
 target = "'b.parquet'"
 query = "'select 1'"
-service = "'FREEPDB1'"
+seconds = "3600"
 columns = [{"source": "\"a\"", "target": "\"b\""}]
 predicates = [{"column": "\"a\"", "op": ">=", "value": "1"}]
 table = t

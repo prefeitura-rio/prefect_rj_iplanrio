@@ -9,11 +9,12 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Self
 
-import duckdb
-import polars as pl
 from duckdb import DuckDBPyConnection
+from duckdb import connect as duckdb_connect
+from polars import DataFrame, Schema
 from psycopg.sql import Literal
 
+from ...constants import TIMEZONE
 from ...functions.registry import register_functions
 from ...settings import settings
 from ...types import QueryParams, TemplateValue
@@ -61,6 +62,7 @@ def setup_sql(extensions: Sequence[Extension]) -> str:
         "duckdb/setup",
         {
             "extensions": extension_values(extensions),
+            "time_zone": Literal(TIMEZONE),
             "memory_limit": quoted(settings.DUCKDB_MEMORY_LIMIT),
             "temp_directory": quoted(settings.DUCKDB_TEMP_DIRECTORY),
         },
@@ -72,13 +74,13 @@ def open_batches(
     sql: str,
     params: QueryParams | None,
     batch_size: int,
-) -> tuple[pl.Schema, Iterator[pl.DataFrame]]:
+) -> tuple[Schema, Iterator[DataFrame]]:
     """Run `sql` and return its columns and a lazy stream of Polars batches."""
     lazy = connection.execute(sql, params).pl(lazy=True)
     return lazy.collect_schema(), lazy.collect_batches(chunk_size=batch_size)
 
 
-def next_batch(batches: Iterator[pl.DataFrame]) -> pl.DataFrame | None:
+def next_batch(batches: Iterator[DataFrame]) -> DataFrame | None:
     """Return the next batch, or `None` when the stream is done."""
     return next(batches, None)
 
@@ -103,7 +105,7 @@ class DuckDBEngine:
     ) -> AsyncGenerator[Self]:
         """Open an in-memory connection with the extensions loaded."""
         async with AsyncExitStack() as stack:
-            connection = await to_thread(duckdb.connect)
+            connection = await to_thread(duckdb_connect)
             stack.push_async_callback(to_thread, connection.close)
             engine = cls(connection)
 
@@ -121,7 +123,7 @@ class DuckDBEngine:
         *,
         params: QueryParams | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> AsyncGenerator[pl.DataFrame]:
+    ) -> AsyncGenerator[DataFrame]:
         """Run one query and yield Polars frames of up to `batch_size` rows."""
         schema, batches = await to_thread(
             open_batches, self.connection, sql, params, batch_size
@@ -129,7 +131,7 @@ class DuckDBEngine:
 
         first = await to_thread(next_batch, batches)
 
-        yield pl.DataFrame(schema=schema) if first is None else first
+        yield DataFrame(schema=schema) if first is None else first
 
         while (batch := await to_thread(next_batch, batches)) is not None:
             yield batch

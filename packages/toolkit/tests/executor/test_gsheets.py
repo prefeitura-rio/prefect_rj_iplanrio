@@ -1,11 +1,11 @@
-import asyncio
+from asyncio import run as run_async
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
-import httpx2
 import pytest
 from google.auth.exceptions import TransportError
+from httpx2 import Client
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -20,7 +20,7 @@ def test_the_access_token_is_a_bound_value_that_never_reaches_the_statement_text
     """Bind the access token, so it never reaches the statement text."""
     engines = [fake_engine(), fake_engine()]
     for engine, token in zip(engines, (first, second), strict=True):
-        asyncio.run(GSheetsSource(token=lambda token=token: token).setup(engine))
+        run_async(GSheetsSource(token=lambda token=token: token).setup(engine))
 
     assert engines[0].statements == engines[1].statements
     assert [engine.params for engine in engines] == [[[first]], [[second]]]
@@ -75,7 +75,7 @@ def test_the_google_auth_transport_reads_the_response_of_an_httpx2_request(
     http_server, method, body, expected
 ):
     """Read the response of an `httpx2` request through the `google-auth` transport."""
-    with httpx2.Client() as client:
+    with Client() as client:
         response = HttpxRequest(client)(
             http_server, method, body, headers={"X-Send": "yes"}, timeout=5
         )
@@ -86,5 +86,5 @@ def test_the_google_auth_transport_reads_the_response_of_an_httpx2_request(
 
 def test_a_failed_connection_is_a_transport_error():
     """Raise a transport error if the connection fails."""
-    with httpx2.Client() as client, pytest.raises(TransportError):
+    with Client() as client, pytest.raises(TransportError):
         HttpxRequest(client)("http://127.0.0.1:1", timeout=2)

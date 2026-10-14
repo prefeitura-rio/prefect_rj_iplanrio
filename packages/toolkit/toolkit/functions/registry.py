@@ -12,10 +12,10 @@ from itertools import chain
 from pkgutil import iter_modules
 from typing import cast
 
-import polars as pl
 from duckdb import DuckDBPyConnection
 from duckdb.func import ARROW, SPECIAL
 from duckdb.sqltypes import VARCHAR, DuckDBPyType
+from polars import Expr, Series, lit, select
 
 from ..types import ArrowColumn, NativeResult, TextColumn
 
@@ -51,16 +51,16 @@ class ArrowFunction:
     """
 
     name: str
-    expression: Callable[[pl.Expr], pl.Expr]
+    expression: Callable[[Expr], Expr]
     return_type: DuckDBPyType
 
-    def __call__(self, column: pl.Expr) -> pl.Expr:
+    def __call__(self, column: Expr) -> Expr:
         """Apply the expression to a column."""
         return self.expression(column)
 
     def vectorized(self, values: TextColumn) -> ArrowColumn:
         """Evaluate the expression on one batch of the column, for DuckDB."""
-        series = pl.select(self.expression(pl.lit(pl.Series(values)))).to_series()
+        series = select(self.expression(lit(Series(values)))).to_series()
         return cast("ArrowColumn", series.to_arrow())
 
     def register(self, conn: DuckDBPyConnection) -> None:

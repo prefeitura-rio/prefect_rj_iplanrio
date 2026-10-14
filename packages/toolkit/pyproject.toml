@@ -19,6 +19,7 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-http>=1.45.1",
   "opentelemetry-instrumentation-logging>=0.66b1",
   "opentelemetry-sdk>=1.45.1",
+  "oracledb>=4.0.1",
   "polars[pyarrow]>=2.0.0",
   "prefect==3.4.9",
   "prefect-dbt==0.7.5",
@@ -31,7 +32,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "arro3-core>=0.6.0",  # obstore.list names its RecordBatch type; without it the overload is unknown
+  "arro3-core>=0.6.0",
   "basedpyright>=1.30.0",
   "hypothesis>=6.165.10",
   "moto[server]>=5.1.0",
@@ -111,17 +112,18 @@ ignore = [
 "obstore".msg = "Import obstore only in toolkit/gcs.py."
 
 [tool.ruff.lint.per-file-ignores]
-"toolkit/gcs.py" = ["TID251"]
+"toolkit/gcs.py" = ["TID251"] # the one module that imports obstore
 "tests/**" = [
-  "D100", # a test module has no module docstring
-  "D101", # the schema classes of a test are named by the test
-  "D106", # same cause, for a nested class
-  "S101",
-  "S105",
-  "S106",
-  "S608",
-  "TID251",
-  "PLR2004",
+  "D100",    # a test module has no module docstring
+  "D101",    # the schema classes of a test are named by the test
+  "D106",    # same cause, for a nested class
+  "S101",    # a test checks with `assert`
+  "S105",    # a test holds fake passwords and tokens
+  "S106",    # same cause, as arguments
+  "S603",    # a test runs the interpreter in a subprocess, with fixed code
+  "S608",    # a test builds SQL for a throwaway table from fixed values
+  "TID251",  # a test imports obstore and the database drivers to set up or check a fake
+  "PLR2004", # a test compares with the literal that it expects
 ]
 
 [tool.basedpyright]
@@ -129,37 +131,47 @@ typeCheckingMode = "all"
 venvPath = "../.."
 venv = ".venv"
 include = ["toolkit", "tests"]
-# Disabled for the whole package. Every other rule of "all" stays on.
-reportUnusedCallResult = false  # side-effect calls return handles that nobody needs (BigQuery, dbt, DuckDB)
+reportUnusedCallResult = false # side-effect calls return handles that nobody needs (BigQuery, dbt, DuckDB)
 reportUnusedParameter = false  # a source may ignore the `client` or the `engine` that the `Source` protocol passes it
 
-# One file each. No inline ignore comments: every suppression lives here, with its reason.
 [[tool.basedpyright.executionEnvironments]]
 root = "toolkit/dbt.py"
-reportMissingTypeStubs = false  # prefect_dbt ships no stubs
+reportMissingTypeStubs = false # prefect_dbt ships no stubs
 
 [[tool.basedpyright.executionEnvironments]]
 root = "toolkit/functions/registry.py"
-reportUnknownMemberType = false  # the stubs of duckdb type create_function with a pyarrow Array that has no type argument
+reportUnknownMemberType = false        # the stubs of duckdb type create_function with a pyarrow Array that has no type argument
 
 [[tool.basedpyright.executionEnvironments]]
 root = "toolkit/executor/sources/backends/gsheets.py"
-reportUnknownVariableType = false  # google-auth types its credentials loosely
-reportUnknownMemberType = false  # same cause
+reportUnknownVariableType = false                     # google-auth types its credentials loosely
+reportUnknownMemberType = false                       # same cause
 
-# The tests keep type safety on the toolkit code; these rules are noise for pytest code.
+[[tool.basedpyright.executionEnvironments]]
+root = "toolkit/oracle.py"
+reportUnknownMemberType = false   # oracledb types its cursors and descriptions loosely
+reportUnknownVariableType = false # same cause
+reportUnknownArgumentType = false # same cause
+reportAny = false                 # same cause
+
+[[tool.basedpyright.executionEnvironments]]
+root = "toolkit/executor/sources/backends/oracle.py"
+reportUnknownMemberType = false   # pyarrow and oracledb type the parquet writer and the errors loosely
+reportUnknownVariableType = false # same cause, for the imported writer
+reportAny = false                 # the code of an oracledb error is untyped
+
 [[tool.basedpyright.executionEnvironments]]
 root = "tests"
-extraPaths = ["."]  # resolve `import toolkit` from the tests folder
-reportMissingParameterType = false  # pytest fixtures and parametrized arguments arrive untyped
-reportUnknownParameterType = false  # same cause as above
-reportUnknownArgumentType = false  # values from untyped fixtures
-reportUnknownMemberType = false  # members of untyped fixtures
-reportUnknownVariableType = false  # variables built from untyped fixtures
-reportUnknownLambdaType = false  # lambdas passed to fakes
-reportUnannotatedClassAttribute = false  # small fake classes
-reportImplicitStringConcatenation = false  # multi-line SQL and file contents
-reportAny = false  # values from untyped fakes
+extraPaths = ["."]                        # resolve `import toolkit` from the tests folder
+reportMissingParameterType = false        # pytest fixtures and parametrized arguments arrive untyped
+reportUnknownParameterType = false        # same cause as above
+reportUnknownArgumentType = false         # values from untyped fixtures
+reportUnknownMemberType = false           # members of untyped fixtures
+reportUnknownVariableType = false         # variables built from untyped fixtures
+reportUnknownLambdaType = false           # lambdas passed to fakes
+reportUnannotatedClassAttribute = false   # small fake classes
+reportImplicitStringConcatenation = false # multi-line SQL and file contents
+reportAny = false                         # values from untyped fakes
 
 [tool.vulture]
 ignore_decorators = ["@pytest.fixture", "@model_validator"]
@@ -171,9 +183,8 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 strict = true
 addopts = ["--import-mode=importlib"]
-# Each filter names one warning that third-party code raises and that we cannot fix.
 filterwarnings = [
-  "ignore:Config key .* is set in model_config:UserWarning:pydantic_settings",  # pydantic-settings warns about its own default config
+  "ignore:Config key .* is set in model_config:UserWarning:pydantic_settings", # pydantic-settings warns about its own default config
 ]
 markers = [
   "s3: tests that start a local S3 server",
@@ -186,19 +197,15 @@ python-version = "3.13"
 python-interpreter-path = "../../.venv/bin/python"
 preset = "strict"
 
-# No inline ignore comments: every suppression lives here, with its reason.
-# A file takes the first sub-config that matches it, so a file listed on its own
-# repeats the test rules it would get from "tests/**".
 [[tool.pyrefly.sub-config]]
 matches = "toolkit/executor/sources/registry.py"
 
 [tool.pyrefly.sub-config.errors]
-unsupported-operation = false  # the registry class is subscriptable through its metaclass
+unsupported-operation = false # the registry class is subscriptable through its metaclass
 
-# The tests keep type safety on the toolkit code; these rules are noise for pytest code.
 [[tool.pyrefly.sub-config]]
 matches = "tests/**"
 
 [tool.pyrefly.sub-config.errors]
-implicit-any-parameter = false  # pytest fixtures and parametrized arguments arrive untyped
-implicit-any-lambda = false  # lambdas passed to fakes
+implicit-any-parameter = false # pytest fixtures and parametrized arguments arrive untyped
+implicit-any-lambda = false    # lambdas passed to fakes

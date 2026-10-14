@@ -1,31 +1,51 @@
-"""Oracle, read through the community DuckDB `oracle_scanner` extension."""
+"""Oracle: an engine of its own, whose windows are copied to local Parquet for DuckDB."""
 
-from dataclasses import dataclass
+from collections.abc import AsyncGenerator, Mapping
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import ClassVar, Self, override
 
-from psycopg.sql import Identifier, Literal
+from oracledb import DatabaseError
+from psycopg.sql import Literal
+from pyarrow.parquet import ParquetWriter
 
-from ....types import TemplateValue
-from ...constants import SECRET
+from ....batches import Rows
+from ....constants import (
+    ORACLE_BATCH_ROWS,
+    ORACLE_SNAPSHOT_FALLBACK_CODES,
+    TIMEZONE,
+)
+from ....oracle import Oracle, WindowRead, predicates, source_sql
+from ....telemetry import logger
+from ....types import Snapshot, TemplateValue
+from ...constants import ALIAS, SECRET
 from ...engines.duckdb import Extension
 from ...engines.protocol import Engine
-from ...render import render_template
+from ...executor import Executor
+from ...schema import Column, frame_columns
 from ..base import SourceBase
 from ..protocols import DBConn, SourceContext
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class OracleSource(SourceBase):
-    """Oracle, read through the community DuckDB `oracle_scanner` extension.
+    """Oracle, read through an `Oracle` engine of its own.
 
-    The extension needs no Oracle client. A template reads with `oracle_query`.
+    DuckDB cannot read Oracle without limits, so each window is copied to a local
+    Parquet file with the client, and the filters and the window are applied by Oracle.
+    A table is read `AS OF SCN`, so every window of a dump sees the same data, if the
+    user may read the system change number and flash the table back. Otherwise the dump
+    goes on without it.
     """
 
-    extensions: ClassVar[tuple[Extension, ...]] = (
-        Extension("oracle_scanner", community=True),
-    )
+    extensions: ClassVar[tuple[Extension, ...]] = ()
 
     conn: DBConn
+    scn: int | None = field(default=None, init=False)
+    columns: dict[str, dict[str, Column]] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     @override
     @classmethod
@@ -37,20 +57,124 @@ class OracleSource(SourceBase):
         return cls(context.require_conn(cls.name))
 
     @override
-    async def setup(self, client: Engine) -> None:
-        """Create the secret that `oracle_query` reads.
+    @asynccontextmanager
+    async def open(self, engine: Engine) -> AsyncGenerator[Oracle]:
+        """Open the Oracle engine, which closes on exit. DuckDB itself reads the copies."""
+        async with Oracle.connect(self.conn) as oracle:
+            yield oracle
 
-        The password is a bound value. `database` is the Oracle service name.
+    @override
+    async def setup(self, client: Engine) -> None:
+        """Set the time zone of the session, and read the system change number.
+
+        The session is in São Paulo, so that a window over a time stamp with a time zone
+        is the same on every machine. Every window of the dump reads as of the number.
         """
-        connection = self.conn
-        values: dict[str, TemplateValue] = {
-            "secret": Identifier(SECRET),
-            "host": Literal(connection.hostname),
-            "port": Literal(connection.port),
-            "service": Literal(connection.database),
-            "user": Literal(connection.user),
+        executor = Executor(client)
+        await executor.execute("oracle/set_time_zone", {"zone": Literal(TIMEZONE)})
+
+        self.scn = None
+
+        for flashback in (True, False):
+            try:
+                snapshot = await executor.query(
+                    "oracle/snapshot", {"flashback": flashback}, expect=Snapshot
+                )
+            except DatabaseError:
+                continue
+            self.scn = snapshot.frame["scn"][0]
+            break
+
+        if self.scn is None:
+            logger.warning(
+                "Oracle system change number not readable, so no window is read as of one: %s",
+                "grant EXECUTE on SYS.DBMS_FLASHBACK or SELECT on SYS.V_$DATABASE",
+            )
+
+    async def stage(
+        self,
+        client: Engine,
+        values: Mapping[str, TemplateValue],
+        rows: Rows,
+        folder: Path,
+    ) -> Mapping[str, TemplateValue]:
+        """Copy the rows of a table or query to Parquet, and return the values that read the copy."""
+        source, is_table = source_sql(values)
+        target = folder / "_stage" / "oracle.parquet"
+
+        target.parent.mkdir()
+
+        if source not in self.columns:
+            self.columns[source] = await self.copy(
+                client, WindowRead(source, is_table, [], {}), target
+            )
+        if not rows.empty:
+            found, binds = predicates(
+                rows.filters, rows.column, rows.window, list(self.columns[source])
+            )
+            await self.copy(
+                client,
+                WindowRead(source, is_table, found, binds),
+                target,
+                self.columns[source],
+            )
+
+        return {
+            "type": "parquet",
+            "alias": Literal(ALIAS),
+            "secret": Literal(SECRET),
+            "query": Literal(str(target)),
         }
-        await client.execute(
-            render_template("duckdb/create_oracle_secret", values),
-            params=[connection.password],
-        )
+
+    async def copy(
+        self,
+        client: Engine,
+        read: WindowRead,
+        target: Path,
+        columns: dict[str, Column] | None = None,
+    ) -> dict[str, Column]:
+        """Write a read to a Parquet file, and return its columns.
+
+        Without `columns` the read returns no row, only the columns, and they are the
+        result. With them every frame is checked against them, so a column that changes
+        between two windows raises `SchemaError`. A table is read as of the system change
+        number if there is one. A user who may not flash the table back gets the window
+        without it, once.
+        """
+        scn = self.scn if read.is_table else None
+        params = [*([scn] if scn is not None else []), *read.binds.values()]
+        values = {
+            "source": read.source,
+            "scn": scn is not None,
+            "empty": columns is None,
+            "predicates": list(read.found),
+        }
+        writer: ParquetWriter | None = None
+        found = columns
+
+        try:
+            async for dataset in Executor(client).query(
+                "oracle/select_window",
+                values,
+                params=params,
+                expect=columns,
+                batch_size=ORACLE_BATCH_ROWS,
+            ):
+                table = dataset.frame.to_arrow()
+                if writer is None:
+                    writer = ParquetWriter(target, table.schema)
+                    found = columns or frame_columns(dataset.frame)
+                writer.write_table(table)
+        except DatabaseError as error:
+            if scn is None or error.args[0].code not in ORACLE_SNAPSHOT_FALLBACK_CODES:
+                raise
+            logger.warning(
+                "Oracle refused AS OF SCN, so the table is read without it: %s", error
+            )
+            self.scn = None
+            return await self.copy(client, read, target, columns)
+        finally:
+            if writer is not None:
+                writer.close()
+
+        return found or {}

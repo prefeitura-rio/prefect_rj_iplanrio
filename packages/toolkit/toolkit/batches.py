@@ -1,15 +1,15 @@
 """Cut a table into windows, so a dump can load, skip and replace one window at a time."""
 
-import hashlib
-import json
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta
+from hashlib import md5
+from json import dumps
 
 from psycopg.sql import Composable, Identifier, Literal
 
 from .constants import BATCH_COLUMN
-from .types import Batches, DateWidth
+from .types import Batches, DateWidth, Filter
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +19,23 @@ class Window:
     key: str
     start: date | int
     stop: date | int
+
+
+NULL_WINDOW = Window("null", 0, 0)
+"""The rows whose batch column is NULL, which no range holds. A dump adds it after the others."""
+
+
+@dataclass(frozen=True, slots=True)
+class Rows:
+    """The rows that one step of a dump reads: the filters, and one window of a column.
+
+    `empty` reads no row, only to learn the columns.
+    """
+
+    filters: Sequence[Filter] = ()
+    column: str | None = None
+    window: Window | None = None
+    empty: bool = False
 
 
 def first_day(unit: DateWidth, day: date) -> date:
@@ -103,7 +120,13 @@ def windows(batches: Batches, today: date) -> list[Window]:
 
 
 def window_predicates(column: str, window: Window) -> list[dict[str, Composable | str]]:
-    """Return the filter `column >= start AND column < stop`, as typed values."""
+    """Return the filter `column >= start AND column < stop`, as typed values.
+
+    The filter of `NULL_WINDOW` is `column IS NULL`.
+    """
+    if window == NULL_WINDOW:
+        return [{"column": Identifier(column), "op": "is null"}]
+
     return [
         {"column": Identifier(column), "op": ">=", "value": Literal(window.start)},
         {"column": Identifier(column), "op": "<", "value": Literal(window.stop)},
@@ -121,13 +144,19 @@ def pending(
     """Return the windows to read: the unknown ones, and the last `lookback` known ones.
 
     `known` holds the keys that the ledger has for the current config. A window never
-    loaded is always read. `lookback=None` reads them all.
+    loaded is always read. `lookback=None` reads them all. `NULL_WINDOW` is always read,
+    and it does not count for the `lookback`: no range tells when its rows change.
     """
     if lookback is None:
         return list(cut)
 
-    recent = {window.key for window in cut[max(len(cut) - lookback, 0) :]}
-    return [window for window in cut if window.key not in known or window.key in recent]
+    ranges = [window for window in cut if window != NULL_WINDOW]
+    recent = {window.key for window in ranges[max(len(ranges) - lookback, 0) :]}
+    return [
+        window
+        for window in cut
+        if window == NULL_WINDOW or window.key not in known or window.key in recent
+    ]
 
 
 def config_hash(parts: Mapping[str, object]) -> str:
@@ -136,8 +165,8 @@ def config_hash(parts: Mapping[str, object]) -> str:
     The order of the keys does not matter. A new hash means a new config, so the ledger
     treats every window as not loaded.
     """
-    text = json.dumps(parts, sort_keys=True, default=str)
-    return hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()[:8]
+    text = dumps(parts, sort_keys=True, default=str)
+    return md5(text.encode(), usedforsecurity=False).hexdigest()[:8]
 
 
 def ledger_id(config: str, key: str) -> str:

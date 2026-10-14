@@ -8,27 +8,30 @@ BigLake connection, a dataset and a service account in `TOOLKIT_GCP_PROJECT`. It
 scratch resources with a random suffix and deletes all of them at the end.
 """
 
-import asyncio
-import io
-import json
-import os
-import shutil
-import subprocess
-import time
+from asyncio import gather
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from io import BytesIO
+from json import loads
+from os import environ
 from secrets import token_hex
+from shutil import which
+from subprocess import run as run_process
+from time import sleep
 from typing import Protocol, Unpack, cast
 
-import polars as pl
-import pyarrow as pa
 import pytest
 from deltalake import DeltaTable
 from fixtures import FakeBigQuery, FakeDatabase, FakeGcs
 from google.cloud.bigquery import Client
 from obstore.store import ObjectStore
+from polars import DataFrame, col, from_arrow, read_parquet
+from pyarrow import Table, decimal128
+from pyarrow import array as arrow_array
+from pyarrow import table as arrow_table
+from pyarrow import timestamp as arrow_timestamp
 from pydantic import SecretStr
 from toolkit.constants import BATCH_COLUMN
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
@@ -67,7 +70,7 @@ class Cloud(Protocol):
         """Create or refresh the BigQuery table of a destination."""
         ...
 
-    def read(self, destination: Destination) -> pl.DataFrame:
+    def read(self, destination: Destination) -> DataFrame:
         """Return what BigQuery returns for the table of a destination."""
         ...
 
@@ -97,12 +100,10 @@ class SimulatedCloud:
         """Create or refresh the fake BigQuery table of a destination."""
         await publish(destination, self.project, f"{self.project}.us.connection")
 
-    def read(self, destination: Destination) -> pl.DataFrame:
+    def read(self, destination: Destination) -> DataFrame:
         """Return the rows that the fake BigQuery returns, with the columns it detected."""
         detected = self.bigquery.tables[destination.table(self.project)]
-        return cast(
-            "pl.DataFrame", pl.from_arrow(DeltaTable(detected.uri).to_pyarrow_table(columns=list(detected.schema)))
-        )
+        return cast("DataFrame", from_arrow(DeltaTable(detected.uri).to_pyarrow_table(columns=list(detected.schema))))
 
     def types(self, destination: Destination) -> dict[str, str]:
         """Return the types that the fake BigQuery detected."""
@@ -137,10 +138,10 @@ class RealCloud:
         """Create or refresh the BigQuery table of a destination."""
         await publish(destination, self.project, self.connection)
 
-    def read(self, destination: Destination) -> pl.DataFrame:
+    def read(self, destination: Destination) -> DataFrame:
         """Return what BigQuery returns for the table of a destination."""
         rows = self.client.query(f"SELECT * FROM `{destination.table(self.project)}`").to_arrow()
-        return cast("pl.DataFrame", pl.from_arrow(rows))
+        return cast("DataFrame", from_arrow(rows))
 
     def types(self, destination: Destination) -> dict[str, str]:
         """Return the BigQuery type of each column of the table of a destination."""
@@ -154,24 +155,24 @@ class RealCloud:
 
 def run(*command: str, check: bool = True) -> str:
     """Run a command line tool and return its output."""
-    done = subprocess.run(command, capture_output=True, text=True, timeout=240, check=check)
+    done = run_process(command, capture_output=True, text=True, timeout=240, check=check)
     return done.stdout
 
 
 def retry(command: list[str], attempts: int = 8) -> None:
     """Run a command again while IAM has not caught up with a new resource."""
     for _ in range(attempts):
-        if subprocess.run(command, capture_output=True, timeout=120, check=False).returncode == 0:
+        if run_process(command, capture_output=True, timeout=120, check=False).returncode == 0:
             return
-        time.sleep(6)
+        sleep(6)
     run(*command)
 
 
 @pytest.fixture(scope="module")
 def real_cloud() -> Iterator[RealCloud]:
     """Create a bucket, a BigLake connection, a dataset name and an HMAC key, and delete them after."""
-    project = os.environ.get("TOOLKIT_GCP_PROJECT")
-    if not project or not shutil.which("gcloud") or not shutil.which("bq"):
+    project = environ.get("TOOLKIT_GCP_PROJECT")
+    if not project or not which("gcloud") or not which("bq"):
         pytest.skip("Set TOOLKIT_GCP_PROJECT and install gcloud and bq")
 
     token = token_hex(3)
@@ -200,7 +201,7 @@ def real_cloud() -> Iterator[RealCloud]:
             "--connection_type=CLOUD_RESOURCE",
             connection,
         )
-        info = json.loads(run("bq", "show", "--connection", "--format=json", f"{project}.{LOCATION}.{connection}"))
+        info = loads(run("bq", "show", "--connection", "--format=json", f"{project}.{LOCATION}.{connection}"))
         member = f"serviceAccount:{info['cloudResource']['serviceAccountId']}"
         retry(
             [
@@ -233,7 +234,7 @@ def real_cloud() -> Iterator[RealCloud]:
                 "--role=roles/storage.objectAdmin",
             ]
         )
-        hmac = json.loads(run("gcloud", "storage", "hmac", "create", email, f"--project={project}", "--format=json"))
+        hmac = loads(run("gcloud", "storage", "hmac", "create", email, f"--project={project}", "--format=json"))
         key = hmac["metadata"]["accessId"]
 
         with pytest.MonkeyPatch.context() as patch:
@@ -263,9 +264,9 @@ def cloud(request: pytest.FixtureRequest) -> Cloud:
     return cast("Cloud", request.getfixturevalue(fixture))
 
 
-def sample(rows: list[dict[str, object]]) -> pa.Table:
+def sample(rows: list[dict[str, object]]) -> Table:
     """Return rows as an Arrow table."""
-    return pa.Table.from_pylist(rows)
+    return Table.from_pylist(rows)
 
 
 SAMPLE: list[dict[str, object]] = [
@@ -335,7 +336,7 @@ async def test_a_changed_window_is_replaced_in_bigquery_without_duplicates(cloud
     await dump(database, destination, batches=MONTHS)
 
     frame = cloud.read(destination)
-    assert frame.filter(pl.col("id") == 1)["valor"].to_list() == [9999.0]
+    assert frame.filter(col("id") == 1)["valor"].to_list() == [9999.0]
     assert (frame.height, frame["id"].n_unique()) == (300, 300)
 
 
@@ -388,16 +389,16 @@ async def test_publishing_twice_refreshes_the_table_instead_of_failing(cloud, da
 async def test_the_types_of_the_pipelines_survive_delta_and_bigquery(cloud):
     """Read integers, decimals, dates and both kinds of timestamp with the types that dbt expects."""
     destination = cloud.destination(name("types"))
-    frame = pa.table(
+    frame = arrow_table(
         {
             "id": [1],
             "texto": ["a"],
             "numero": [1.5],
-            "decimal": pa.array([Decimal("1.25")], pa.decimal128(10, 2)),
+            "decimal": arrow_array([Decimal("1.25")], decimal128(10, 2)),
             "flag": [True],
-            "dia": pa.array([date(2024, 3, 1)]),
-            "instante": pa.array([INSTANT.replace(tzinfo=None)], pa.timestamp("us")),
-            "instante_utc": pa.array([INSTANT], pa.timestamp("us", "UTC")),
+            "dia": arrow_array([date(2024, 3, 1)]),
+            "instante": arrow_array([INSTANT.replace(tzinfo=None)], arrow_timestamp("us")),
+            "instante_utc": arrow_array([INSTANT], arrow_timestamp("us", "UTC")),
         }
     )
     await dump(FakeDatabase({"public.types": frame}), destination, table="public.types")
@@ -428,7 +429,7 @@ async def test_runs_that_write_the_same_table_at_the_same_time_lose_no_window(cl
         batches: Batches = {"column": "dia", "width": "month", "begin": begin, "end": end}
         await dump(FakeDatabase({"public.orders": sample(rows)}), destination, batches=batches)
 
-    await asyncio.gather(*(one(begin, end) for begin, end in months))
+    await gather(*(one(begin, end) for begin, end in months))
 
     windows = cast("list[str]", DeltaTable(destination.uri).to_pyarrow_table().column(BATCH_COLUMN).to_pylist())
     assert sorted(set(windows)) == [begin for begin, _ in months]
@@ -482,5 +483,5 @@ async def test_bigquery_is_copied_to_the_bucket_in_batches(real_cloud):
     rows = 0
     for key in keys:
         body = bytes(await (await store.get_async(key)).bytes_async())
-        rows += pl.read_parquet(io.BytesIO(body)).height
+        rows += read_parquet(BytesIO(body)).height
     assert (len(keys), rows) == (3, 2500)

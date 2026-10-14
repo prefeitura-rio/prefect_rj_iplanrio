@@ -1,30 +1,34 @@
-import asyncio
+from asyncio import run as run_async
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from psycopg.sql import Literal
 
+from toolkit.executor.engines.duckdb import DuckDBEngine
+from toolkit.executor.render import render_template
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.backends.mssql import MSSQLSource
 from toolkit.executor.sources.backends.mysql import MySQLSource
 from toolkit.executor.sources.backends.oracle import OracleSource
 from toolkit.executor.sources.backends.postgres import PostgresSource
 from toolkit.executor.sources.protocols import DBConn, SourceContext
+from toolkit.settings import settings
 from toolkit.types import QueryParams
 
 BACKENDS = [PostgresSource, MySQLSource, MSSQLSource]
 
 
 def setup_statements(
-    source_class: type[PostgresSource] | type[OracleSource], conn: DBConn, fake_engine
+    source_class: type[PostgresSource], conn: DBConn, fake_engine
 ) -> tuple[list[str], list[QueryParams | None]]:
     """Run the setup of a source and return its statements."""
     client = fake_engine()
-    asyncio.run(source_class.from_context(SourceContext(conn)).setup(client))
+    run_async(source_class.from_context(SourceContext(conn)).setup(client))
     return client.statements, client.params
 
 
-@pytest.mark.parametrize("source", [*BACKENDS, OracleSource])
+@pytest.mark.parametrize("source", BACKENDS)
 @given(
     first=st.text(min_size=1),
     second=st.text(min_size=1),
@@ -65,6 +69,31 @@ async def test_the_database_is_attached_as_src(source, read_only, fake_engine):
     attach = client.statements[1]
     assert 'AS "src"' in attach
     assert ("READ_ONLY" in attach) is read_only
+
+
+async def test_regression_the_sql_server_query_timeout_follows_the_settings(
+    fake_engine, monkeypatch
+):
+    """Regression: SQL Server cut every query at 30 s, and a slow window failed with a cryptic error."""
+    monkeypatch.setattr(settings, "DB_QUERY_TIMEOUT_SECONDS", 60)
+    client = fake_engine()
+
+    await MSSQLSource.from_context(SourceContext(DBConn("h", 1, "d", "u", "p"))).setup(
+        client
+    )
+
+    assert "SET mssql_query_timeout = 60;" in [
+        text.strip().splitlines()[-1] for text in client.statements
+    ]
+
+
+@pytest.mark.extensions
+async def test_the_timeout_setting_exists_in_the_extension():
+    """Load the extension and set its timeout, so a rename in a new version shows up."""
+    sql = render_template("duckdb/set_mssql_timeout", {"seconds": Literal(1)})
+
+    async with DuckDBEngine.connect(MSSQLSource.extensions) as engine:
+        await engine.execute(sql)
 
 
 @pytest.mark.parametrize("source", [*BACKENDS, OracleSource])

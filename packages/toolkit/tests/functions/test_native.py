@@ -1,5 +1,6 @@
-import duckdb
 import pytest
+from duckdb import BinderException
+from duckdb import connect as duckdb_connect
 
 from toolkit.executor.engines.duckdb import DuckDBEngine
 
@@ -51,13 +52,13 @@ async def test_a_call_with_the_wrong_types_is_rejected_before_it_runs(
     duckdb_memory, call
 ):
     """Reject the wrong types and the wrong count when DuckDB binds the call."""
-    with pytest.raises(duckdb.BinderException, match="No function matches"):
+    with pytest.raises(BinderException, match="No function matches"):
         _ = [frame async for frame in duckdb_memory.query(f"SELECT {call}")]
 
 
 async def test_every_engine_has_the_functions_however_it_is_built():
     """Register `normalize` when the engine is built, not only in `connect`."""
-    with duckdb.connect() as connection:
+    with duckdb_connect() as connection:
         engine = DuckDBEngine(connection)
 
         sql = "SELECT normalize('A b', '_', true)"

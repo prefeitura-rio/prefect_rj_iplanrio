@@ -5,10 +5,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import ClassVar, cast, override
 
-import google.auth
-import httpx2
+from google.auth import default
 from google.auth.exceptions import TransportError
 from google.auth.transport import Request
+from httpx2 import USE_CLIENT_DEFAULT, Client, HTTPError
 from psycopg.sql import Identifier
 
 from ...constants import SECRET, SHEETS_SCOPES
@@ -31,7 +31,7 @@ class HttpResponse:
 class HttpxRequest(Request):
     """The HTTP transport of `google-auth`, on an `httpx2` client."""
 
-    client: httpx2.Client
+    client: Client
 
     @override
     def __call__(
@@ -53,17 +53,17 @@ class HttpxRequest(Request):
                 url,
                 content=body,
                 headers=headers,
-                timeout=timeout or httpx2.USE_CLIENT_DEFAULT,
+                timeout=timeout or USE_CLIENT_DEFAULT,
             )
-        except httpx2.HTTPError as error:
+        except HTTPError as error:
             raise TransportError(error) from error
         return HttpResponse(response.status_code, response.headers, response.content)
 
 
 def sheets_token() -> str:
     """Return a fresh access token of the workload identity for the Sheets scopes."""
-    credentials, _ = google.auth.default(scopes=list(SHEETS_SCOPES))
-    with httpx2.Client() as client:
+    credentials, _ = default(scopes=list(SHEETS_SCOPES))
+    with Client() as client:
         credentials.refresh(HttpxRequest(client))
     return cast("str", cast("object", credentials.token))
 

@@ -15,7 +15,19 @@ from inspect import isclass
 from types import NoneType, UnionType
 from typing import ClassVar, Literal, cast, get_args, get_origin, get_type_hints
 
-import polars as pl
+from polars import (
+    DataFrame,
+    DataType,
+    Extension,
+    Float64,
+    Int64,
+    List,
+    Null,
+    Series,
+    String,
+    Struct,
+    exceptions,
+)
 
 from .constants import SCALAR_TYPES
 
@@ -28,7 +40,7 @@ class SchemaError(ValueError):
 class Column:
     """What a schema class expects of one column."""
 
-    dtype: pl.DataType | type[pl.DataType]
+    dtype: DataType | type[DataType]
     nullable: bool
 
 
@@ -52,6 +64,18 @@ def schema_of(schema: type) -> dict[str, Column]:
         name: column_of(name, annotation)
         for name, annotation in hints.items()
         if get_origin(annotation) is not ClassVar
+    }
+
+
+def frame_columns(frame: DataFrame) -> dict[str, Column]:
+    """Return the columns that a frame has, each nullable, with the widest integer and float.
+
+    It is the schema of a read whose columns are known only at run time. The first frame
+    of a read gives it, and the next frames are checked against it.
+    """
+    return {
+        name: Column(widen(dtype), nullable=True)
+        for name, dtype in frame.schema.items()
     }
 
 
@@ -84,14 +108,14 @@ def split_nullable(annotation: object) -> tuple[object, bool]:
     return others[0], True
 
 
-def dtype_of(annotation: object) -> pl.DataType | type[pl.DataType]:
+def dtype_of(annotation: object) -> DataType | type[DataType]:
     """Return the Polars type of an annotation without `| None`."""
     if get_origin(annotation) is list:
         (item,) = cast("tuple[object]", get_args(annotation))
-        return pl.List(dtype_of(item))
+        return List(dtype_of(item))
 
     if get_origin(annotation) is Literal:
-        return pl.String
+        return String
 
     if isclass(annotation):
         if annotation in SCALAR_TYPES:
@@ -99,22 +123,22 @@ def dtype_of(annotation: object) -> pl.DataType | type[pl.DataType]:
 
         if get_type_hints(annotation):
             fields = schema_of(annotation)
-            return pl.Struct({name: column.dtype for name, column in fields.items()})
+            return Struct({name: column.dtype for name, column in fields.items()})
 
     raise TypeError(f"unsupported annotation: {annotation!r}")
 
 
-def validate_frame(frame: pl.DataFrame, columns: dict[str, Column]) -> pl.DataFrame:
+def validate_frame(frame: DataFrame, columns: dict[str, Column]) -> DataFrame:
     """Check a frame against the columns and return it in schema order.
 
     Raise `SchemaError` with every problem found. A frame with no rows and no columns
     becomes an empty frame with the schema.
     """
     if frame.shape == (0, 0):
-        return pl.DataFrame(schema={name: c.dtype for name, c in columns.items()})
+        return DataFrame(schema={name: c.dtype for name, c in columns.items()})
 
     problems = name_problems(frame, columns)
-    fitted: list[pl.Series] = []
+    fitted: list[Series] = []
 
     for name in columns:
         if name not in frame.columns:
@@ -128,10 +152,10 @@ def validate_frame(frame: pl.DataFrame, columns: dict[str, Column]) -> pl.DataFr
     if problems:
         raise SchemaError("; ".join(problems))
 
-    return pl.DataFrame(fitted)
+    return DataFrame(fitted)
 
 
-def name_problems(frame: pl.DataFrame, columns: dict[str, Column]) -> list[str]:
+def name_problems(frame: DataFrame, columns: dict[str, Column]) -> list[str]:
     """Return one message for the missing columns and one for the unexpected ones."""
     missing = [name for name in columns if name not in frame.columns]
     unexpected = [name for name in frame.columns if name not in columns]
@@ -143,12 +167,12 @@ def name_problems(frame: pl.DataFrame, columns: dict[str, Column]) -> list[str]:
     ]
 
 
-def fit(series: pl.Series, column: Column) -> pl.Series:
+def fit(series: Series, column: Column) -> Series:
     """Return the series with the type that the column expects.
 
     Raise `SchemaError` if the type, the nulls or a value do not fit.
     """
-    if series.dtype == pl.Null:
+    if series.dtype == Null:
         series = series.cast(column.dtype)
 
     dtype = widen(series.dtype)
@@ -165,34 +189,34 @@ def fit(series: pl.Series, column: Column) -> pl.Series:
 
     try:
         return series.cast(dtype, strict=True)
-    except pl.exceptions.PolarsError as error:
+    except exceptions.PolarsError as error:
         raise SchemaError(f"{series.name}: {error}") from error
 
 
-def widen(dtype: pl.DataType) -> pl.DataType:
+def widen(dtype: DataType) -> DataType:
     """Return the type with integers as `Int64` and floats as `Float64`.
 
     This holds inside lists and structs.
 
     ```python
-    widen(pl.Int8)  # Int64
-    widen(pl.List(pl.Float32))  # List(Float64)
-    widen(pl.Decimal(10, 2))  # Decimal(10, 2)
+    widen(Int8)  # Int64
+    widen(List(Float32))  # List(Float64)
+    widen(Decimal(10, 2))  # Decimal(10, 2)
     ```
     """
     if dtype.is_integer():
-        return pl.Int64()
+        return Int64()
 
     if dtype.is_float():
-        return pl.Float64()
+        return Float64()
 
     match dtype:
-        case pl.List():
-            return pl.List(widen(cast("pl.DataType", dtype.inner)))
-        case pl.Struct():
-            return pl.Struct(
+        case List():
+            return List(widen(cast("DataType", dtype.inner)))
+        case Struct():
+            return Struct(
                 {
-                    field.name: widen(cast("pl.DataType", field.dtype))
+                    field.name: widen(cast("DataType", field.dtype))
                     for field in dtype.fields
                 }
             )
@@ -200,23 +224,23 @@ def widen(dtype: pl.DataType) -> pl.DataType:
             return dtype
 
 
-def same_type(actual: pl.DataType, expected: pl.DataType | type[pl.DataType]) -> bool:
+def same_type(actual: DataType, expected: DataType | type[DataType]) -> bool:
     """Return whether two types are equal.
 
     Extension types compare by name only. Their metadata, such as a geometry CRS, does
     not make them another type.
     """
     match actual, expected:
-        case pl.Extension(), pl.Extension():
+        case Extension(), Extension():
             return actual.ext_name() == expected.ext_name()
         case _:
             return actual == expected
 
 
-def label(dtype: pl.DataType | type[pl.DataType]) -> str:
+def label(dtype: DataType | type[DataType]) -> str:
     """Return the type as text for an error message, without extension metadata."""
     match dtype:
-        case pl.Extension():
+        case Extension():
             return f"Extension({dtype.ext_name()})"
         case _:
             return str(dtype)

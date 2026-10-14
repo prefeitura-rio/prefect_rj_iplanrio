@@ -1,5 +1,5 @@
-import polars as pl
 from duckdb.sqltypes import VARCHAR
+from polars import Expr, lit, select
 
 from toolkit.functions.decorators import arrow, native
 
@@ -18,7 +18,7 @@ def test_a_declared_function_keeps_its_name_unless_another_is_given():
         return value.upper()
 
     @arrow(VARCHAR)
-    def whisper(column: pl.Expr) -> pl.Expr:
+    def whisper(column: Expr) -> Expr:
         """Return the column in lower case."""
         return column.str.to_lowercase()
 
@@ -34,9 +34,9 @@ def test_a_declared_function_still_runs_as_the_function_it_wraps():
         return value.upper()
 
     @arrow(VARCHAR)
-    def whisper(column: pl.Expr) -> pl.Expr:
+    def whisper(column: Expr) -> Expr:
         """Return the column in lower case."""
         return column.str.to_lowercase()
 
     assert shout("a") == "A"
-    assert pl.select(whisper(pl.lit("A"))).item() == "a"
+    assert select(whisper(lit("A"))).item() == "a"

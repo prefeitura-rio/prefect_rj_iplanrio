@@ -1,14 +1,14 @@
 from pathlib import Path
 from typing import TypedDict
 
-import duckdb
-import polars as pl
 import pytest
+from duckdb import CatalogException
+from polars import Int64, Schema, String, read_parquet
 from psycopg.sql import Identifier, Literal
 
 from toolkit.executor.engines.duckdb import DuckDBEngine, Extension
 from toolkit.executor.executor import Executor
-from toolkit.executor.schema import SchemaError
+from toolkit.executor.schema import SchemaError, frame_columns
 from toolkit.types import Geometry
 from toolkit.utils import select_columns
 
@@ -61,7 +61,7 @@ async def test_a_query_is_read_whole_or_batch_by_batch(
 
     assert batches == sizes
     assert whole.frame["n"].to_list() == list(range(10))
-    assert whole.frame.schema == pl.Schema({"n": pl.Int64})
+    assert whole.frame.schema == Schema({"n": Int64})
 
 
 async def test_a_result_with_no_rows_keeps_the_declared_columns(
@@ -73,7 +73,7 @@ async def test_a_result_with_no_rows_keeps_the_declared_columns(
     dataset = await Executor(duckdb_memory, templates).query("none", expect=Pair)
 
     assert len(dataset) == 0
-    assert dataset.frame.schema == pl.Schema({"a": pl.Int64, "b": pl.String})
+    assert dataset.frame.schema == Schema({"a": Int64, "b": String})
 
 
 async def test_rows_that_do_not_fit_the_schema_are_rejected(
@@ -181,7 +181,7 @@ async def test_a_window_is_one_local_file_with_the_schema_even_when_it_is_empty(
             {**values, "predicates": predicates, "target": Literal(str(target))},
         )
 
-        frame = pl.read_parquet(target)
+        frame = read_parquet(target)
         assert frame.height == rows
         assert frame.columns == ["id", "Nome Completo", "ano"]
 
@@ -228,7 +228,7 @@ async def test_a_window_reads_local_files_in_a_folder_with_a_hive_name(
         },
     )
 
-    frame = pl.read_parquet(target)
+    frame = read_parquet(target)
     assert frame.columns == ["code", "amount"]
     assert frame.rows() == rows
 
@@ -259,7 +259,7 @@ async def test_a_window_cleans_and_transforms_the_values_with_the_functions(
         },
     )
 
-    assert pl.read_parquet(target).rows() == [("x y", "52998224725", 2024)]
+    assert read_parquet(target).rows() == [("x y", "52998224725", 2024)]
 
 
 @pytest.mark.parametrize(
@@ -320,8 +320,59 @@ async def test_normalize_columns_never_reaches_an_attached_source(duckdb_memory)
     await duckdb_memory.execute("ATTACH ':memory:' AS src")
     await duckdb_memory.execute('CREATE TABLE src.t ("A b" INT)')
 
-    with pytest.raises(duckdb.CatalogException):
+    with pytest.raises(CatalogException):
         await Executor(duckdb_memory).normalize_columns("src.t")
 
     [frame] = [f async for f in duckdb_memory.query("SELECT * FROM src.t")]
     assert frame.columns == ["A b"]
+
+
+async def test_a_query_with_no_expect_yields_the_frames_unchecked(
+    duckdb_memory, tmp_path: Path
+):
+    """Read a result whose columns the caller does not declare, batch by batch."""
+    executor = Executor(
+        duckdb_memory,
+        templates=write(
+            tmp_path, "numbers", "SELECT i, i::VARCHAR AS t FROM range(5) r(i)"
+        ),
+    )
+
+    datasets = [dataset async for dataset in executor.query("numbers", batch_size=2)]
+
+    assert [len(dataset) for dataset in datasets] == [2, 2, 1]
+    assert datasets[0].frame.columns == ["i", "t"]
+
+
+async def test_a_query_with_no_expect_counts_the_rows_like_any_other(
+    duckdb_memory, tmp_path: Path, caplog
+):
+    """Log the template and the rows when the result ends."""
+    executor = Executor(
+        duckdb_memory,
+        templates=write(tmp_path, "numbers", "SELECT i FROM range(3) r(i)"),
+    )
+
+    with caplog.at_level("INFO"):
+        await executor.query("numbers")
+
+    assert "Query finished: template=numbers rows=3" in caplog.text
+
+
+async def test_the_columns_of_a_first_read_check_the_next_ones(
+    duckdb_memory, tmp_path: Path
+):
+    """Keep the columns of the first read, so a column that changes later raises."""
+    first = write(tmp_path, "first", "SELECT 1 AS id, 'a' AS name")
+    changed = write(tmp_path, "changed", "SELECT 1 AS id, 2 AS name")
+    columns = frame_columns(
+        (await Executor(duckdb_memory, templates=first).query("first")).frame
+    )
+
+    same = await Executor(duckdb_memory, templates=first).query("first", expect=columns)
+    with pytest.raises(SchemaError, match="name"):
+        await Executor(duckdb_memory, templates=changed).query(
+            "changed", expect=columns
+        )
+
+    assert same.frame.columns == ["id", "name"]

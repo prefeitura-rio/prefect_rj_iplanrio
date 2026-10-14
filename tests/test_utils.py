@@ -1,21 +1,25 @@
-import io
-import json
-import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from io import BytesIO
+from json import loads
 from pathlib import Path
+from re import compile as compile_pattern
 from typing import Unpack, cast
 
-import duckdb
-import httpx2
-import polars as pl
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytest
 from deltalake import DeltaTable
 from deltalake.exceptions import SchemaMismatchError
+from duckdb import DuckDBPyConnection, Error
+from duckdb import connect as duckdb_connect
+from httpx2 import ConnectError, ConnectTimeout, HTTPStatusError, Request, Response
+from polars import read_parquet
 from psycopg.sql import Composable
+from pyarrow import Table, decimal128
+from pyarrow import array as arrow_array
+from pyarrow import table as arrow_table
+from pyarrow import timestamp as arrow_timestamp
+from pyarrow.parquet import write_table
 from toolkit import gcs
 from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.types import Batches, TemplateValue
@@ -79,11 +83,11 @@ def test_the_path_of_the_files_to_read_is_a_file_or_a_glob(tmp_path: Path, is_fo
     assert files_glob(path, file_format) == expected.format(root=tmp_path)
 
 
-def status_error(status: int) -> httpx2.HTTPStatusError:
+def status_error(status: int) -> HTTPStatusError:
     """Return the error that `raise_for_status` gives for a status code."""
-    request = httpx2.Request("GET", "https://x")
-    response = httpx2.Response(status, request=request)
-    return httpx2.HTTPStatusError("failed", request=request, response=response)
+    request = Request("GET", "https://x")
+    response = Response(status, request=request)
+    return HTTPStatusError("failed", request=request, response=response)
 
 
 @pytest.mark.parametrize(
@@ -94,8 +98,8 @@ def status_error(status: int) -> httpx2.HTTPStatusError:
         pytest.param(status_error(429), True, id="too_many_requests"),
         pytest.param(status_error(404), False, id="a_missing_page_stays_missing"),
         pytest.param(status_error(401), False, id="a_wrong_token_stays_wrong"),
-        pytest.param(httpx2.ConnectTimeout("slow"), True, id="a_timeout"),
-        pytest.param(httpx2.ConnectError("down"), True, id="a_network_error"),
+        pytest.param(ConnectTimeout("slow"), True, id="a_timeout"),
+        pytest.param(ConnectError("down"), True, id="a_network_error"),
         pytest.param(ValueError("bug"), False, id="a_bug_is_not_a_transient_error"),
         pytest.param(None, False, id="no_error"),
     ],
@@ -133,6 +137,7 @@ ROWS = [
     {"id": 3, "nome": "Caio", "dia": date(2024, 3, 2), "valor": 30.0},
     {"id": 4, "nome": "Dani", "dia": date(2024, 3, 3), "valor": 40.0},
 ]
+NULL_WINDOW = 1  # a dump with `batches` also has the window of the rows with no value
 DAYS: Batches = {"column": "dia", "width": "day", "begin": "2024-03-01", "end": "2024-03-03"}
 
 
@@ -147,7 +152,14 @@ class Lake:
 
     def put(self, rows: Sequence[Mapping[str, object]]) -> None:
         """Replace the rows of the source."""
-        pq.write_table(pa.Table.from_pylist(rows), self.source / "rows.parquet")
+        write_table(Table.from_pylist(rows), self.source / "rows.parquet")
+
+    def put_expression(self, expression: str) -> None:
+        """Replace the source with one row, `id` 1 and a column `valor` that DuckDB computes."""
+        with duckdb_connect() as connection:
+            connection.execute(
+                f"COPY (SELECT 1 AS id, {expression} AS valor) TO '{self.source / 'rows.parquet'}' (FORMAT parquet)"
+            )
 
     async def dump(self, dump_mode: DumpMode = "append", **options: Unpack[DumpOptions]) -> int:
         """Dump the source and return how many commits the table has."""
@@ -177,7 +189,7 @@ async def test_the_first_dump_loads_every_window(lake):
     """Write each day as its own window, and normalize the names of the columns."""
     commits = await lake.dump(batches=DAYS)
 
-    assert commits == 3
+    assert commits == 3 + NULL_WINDOW
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
     assert sorted(cast("list[str]", DeltaTable(lake.uri).to_pyarrow_table().column("batch").to_pylist())) == [
         "2024-03-01",
@@ -218,6 +230,54 @@ async def test_a_window_that_became_empty_loses_its_rows(lake):
     assert [row[0] for row in lake.rows()] == [1, 2, 3]
 
 
+async def test_regression_rows_with_no_value_in_the_batch_column_are_loaded(lake):
+    """Regression: a real table had NULL dates, and the windows left them out silently."""
+    lake.put([*ROWS, {"id": 5, "nome": "Eli", "dia": None, "valor": 50.0}])
+
+    await lake.dump(batches=DAYS)
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4, 5]
+    batch = DeltaTable(lake.uri).to_pyarrow_table().to_pylist()
+    assert next(row for row in batch if row["id"] == 5)["batch"] == "null"
+
+
+async def test_the_day_of_a_timestamp_with_a_time_zone_is_the_day_in_sao_paulo(lake):
+    """Cut the days of an instant in São Paulo, as `to_sao_paulo` does, wherever the dump runs."""
+    zone = arrow_timestamp("us", tz="UTC")
+    write_table(
+        arrow_table(
+            {
+                "id": [1, 2, 3],
+                "instante": arrow_array(
+                    [
+                        datetime(2024, 3, 1, 1, 0, tzinfo=UTC),
+                        datetime(2024, 3, 1, 23, 30, tzinfo=UTC),
+                        datetime(2024, 3, 2, 2, 0, tzinfo=UTC),
+                    ],
+                    zone,
+                ),
+            }
+        ),
+        lake.source / "rows.parquet",
+    )
+
+    await lake.dump(batches={"column": "instante", "width": "day", "begin": "2024-02-28", "end": "2024-03-03"})
+
+    table = DeltaTable(lake.uri).to_pyarrow_table().to_pylist()
+    assert {row["id"]: row["batch"] for row in table} == {1: "2024-02-29", 2: "2024-03-01", 3: "2024-03-01"}
+
+
+async def test_the_rows_with_no_value_change_with_the_source(lake):
+    """Replace the NULL window like any other, so a removed row goes away."""
+    lake.put([*ROWS, {"id": 5, "nome": "Eli", "dia": None, "valor": 50.0}])
+    await lake.dump(batches=DAYS)
+
+    lake.put(ROWS)
+    await lake.dump(batches=DAYS)
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
 async def test_filters_and_select_narrow_the_rows_and_the_columns(lake):
     """Keep the rows that pass the filters, and only the columns that were asked for."""
     await lake.dump(
@@ -229,6 +289,36 @@ async def test_filters_and_select_narrow_the_rows_and_the_columns(lake):
     table = DeltaTable(lake.uri).to_pyarrow_table()
     assert table.column_names == ["id", "dia", "batch"]
     assert sorted(cast("list[int]", table.column("id").to_pylist())) == [2, 3, 4]
+
+
+@pytest.mark.parametrize(
+    ("expression", "arrow_type", "value"),
+    [
+        pytest.param("TIME '10:30:00'", "string", "10:30:00", id="time_as_text"),
+        pytest.param("TIMETZ '10:30:00+00'", "string", "10:30:00+00", id="time_with_zone_as_text"),
+        pytest.param(
+            "'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::UUID", "string", "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", id="uuid"
+        ),
+        pytest.param("200::UTINYINT", "int16", 200, id="unsigned_tiny"),
+        pytest.param("60000::USMALLINT", "int32", 60000, id="unsigned_small"),
+        pytest.param("4000000000::UINTEGER", "int64", 4_000_000_000, id="unsigned_int"),
+        pytest.param(
+            "18446744073709551615::UBIGINT", "decimal128(20, 0)", Decimal(18446744073709551615), id="unsigned_big"
+        ),
+        pytest.param("INTERVAL 1 DAY", "string", "1 day", id="interval_as_text"),
+    ],
+)
+async def test_regression_a_type_that_delta_lacks_arrives_as_text_or_a_wider_number(
+    lake, expression, arrow_type, value
+):
+    """Regression: real databases gave `TIME`, `UUID` and unsigned numbers, which `deltalake` refused."""
+    lake.put_expression(expression)
+
+    await lake.dump()
+
+    table = DeltaTable(lake.uri).to_pyarrow_table()
+    assert str(table.schema.field("valor").type) == arrow_type
+    assert table.column("valor").to_pylist() == [value]
 
 
 async def test_normalize_values_cleans_the_text_columns(lake):
@@ -244,7 +334,7 @@ async def test_a_new_config_loads_every_window_again(lake):
 
     second = await lake.dump(batches=DAYS, columns={"normalize_values": True})
 
-    assert second == first + 3
+    assert second == first + 3 + NULL_WINDOW
 
 
 async def test_append_refuses_a_change_of_columns_and_overwrite_applies_it(lake):
@@ -268,7 +358,7 @@ async def test_overwrite_writes_every_window_again_and_sweeps_the_old_ones(lake)
 
     await lake.dump("overwrite", batches={**DAYS, "begin": "2024-03-02"})
 
-    assert lake.writes() == before + 2
+    assert lake.writes() == before + 2 + NULL_WINDOW
     assert [row[0] for row in lake.rows()] == [3, 4]
 
 
@@ -279,7 +369,7 @@ async def test_overwrite_ignores_lookback_and_rebuilds_every_window(lake):
 
     await lake.dump("overwrite", batches={**DAYS, "lookback": 1})
 
-    assert lake.writes() == before + 3
+    assert lake.writes() == before + 3 + NULL_WINDOW
 
 
 async def test_an_earlier_window_never_loaded_is_loaded_even_with_lookback(lake):
@@ -400,7 +490,6 @@ def test_a_table_is_attached_and_a_query_is_a_literal(db_type, read, batched, ex
     [
         pytest.param("postgres", {}, False, "exactly one", id="neither"),
         pytest.param("postgres", {"table": "a.b", "query": "SELECT 1"}, False, "exactly one", id="both"),
-        pytest.param("oracle", {"table": "app.orders"}, False, "Oracle", id="a_table_on_oracle"),
         pytest.param("postgres", {"query": "SELECT 1"}, True, "one window", id="windows_over_a_query"),
     ],
 )
@@ -415,7 +504,7 @@ async def stored_rows(store, prefix: str) -> list[int]:
     ids: list[int] = []
     for key in await gcs.list_keys(store, prefix):
         data = bytes(await (await store.get_async(key)).bytes_async())
-        ids += pl.read_parquet(io.BytesIO(data))["id"].to_list()
+        ids += read_parquet(BytesIO(data))["id"].to_list()
     return sorted(ids)
 
 
@@ -517,7 +606,7 @@ async def test_a_number_width_cuts_an_integer_column_into_runs_of_ids(lake):
     """Window by runs of ids, and keep every row."""
     commits = await lake.dump(batches={"column": "id", "width": 2, "begin": 1, "end": 4})
 
-    assert commits == 2
+    assert commits == 2 + NULL_WINDOW
     assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
 
 
@@ -538,7 +627,7 @@ async def test_a_date_width_also_cuts_a_timestamp_column(lake):
 
     commits = await lake.dump(batches=DAYS)
 
-    assert commits == 3
+    assert commits == 3 + NULL_WINDOW
     assert [row[0] for row in lake.rows()] == [1, 2, 3]
 
 
@@ -569,7 +658,7 @@ async def test_the_batch_column_must_have_the_type_that_the_windows_need(lake, b
 
 READABLE = {"timestampNtz", "columnMapping", "deletionVectors"}
 """The reader features that BigQuery supports, with reader version 3 as the most it reads."""
-IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+IDENTIFIER = compile_pattern(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def delta_log(uri: str) -> tuple[dict[str, object], dict[str, str]]:
@@ -578,11 +667,11 @@ def delta_log(uri: str) -> tuple[dict[str, object], dict[str, str]]:
     schema: dict[str, str] = {}
     for entry in sorted(Path(uri, "_delta_log").glob("*.json")):
         for line in entry.read_text().splitlines():
-            action = json.loads(line)
+            action = loads(line)
             if "protocol" in action:
                 protocol = action["protocol"]
             if "metaData" in action:
-                fields = json.loads(action["metaData"]["schemaString"])["fields"]
+                fields = loads(action["metaData"]["schemaString"])["fields"]
                 schema = {field["name"]: field["type"] for field in fields}
     return protocol, schema
 
@@ -599,13 +688,13 @@ def assert_bigquery_can_read(uri: str) -> None:
 
 
 @pytest.fixture(scope="module")
-def delta_reader() -> duckdb.DuckDBPyConnection:
+def delta_reader() -> DuckDBPyConnection:
     """Return a DuckDB connection with the delta extension, an independent reader of the log."""
-    connection = duckdb.connect()
+    connection = duckdb_connect()
     try:
         connection.execute("INSTALL delta")
         connection.execute("LOAD delta")
-    except duckdb.Error:
+    except Error:
         pytest.skip("The DuckDB delta extension is not available")
     return connection
 
@@ -660,19 +749,19 @@ async def test_a_reader_that_is_not_ours_sees_what_we_wrote_and_the_log_fits_big
 async def test_the_types_of_the_pipelines_get_the_delta_types_that_bigquery_maps(tmp_path):
     """Pin the Delta type of each column, which BigQuery reads as INTEGER, NUMERIC, DATETIME and so on."""
     instant = datetime(2024, 3, 1, 10, tzinfo=UTC)
-    frame = pa.table(
+    frame = arrow_table(
         {
             "id": [1],
             "texto": ["a"],
             "numero": [1.5],
-            "decimal": pa.array([Decimal("1.25")], pa.decimal128(10, 2)),
+            "decimal": arrow_array([Decimal("1.25")], decimal128(10, 2)),
             "flag": [True],
-            "dia": pa.array([date(2024, 3, 1)]),
-            "instante": pa.array([instant.replace(tzinfo=None)], pa.timestamp("us")),
-            "instante_utc": pa.array([instant], pa.timestamp("us", "UTC")),
+            "dia": arrow_array([date(2024, 3, 1)]),
+            "instante": arrow_array([instant.replace(tzinfo=None)], arrow_timestamp("us")),
+            "instante_utc": arrow_array([instant], arrow_timestamp("us", "UTC")),
         }
     )
-    pq.write_table(frame, tmp_path / "types.parquet")
+    write_table(frame, tmp_path / "types.parquet")
     uri = str(tmp_path / "table")
 
     await dump_to_delta(FilesSource(), source_values("parquet", str(tmp_path / "types.parquet")), uri, "append", {})

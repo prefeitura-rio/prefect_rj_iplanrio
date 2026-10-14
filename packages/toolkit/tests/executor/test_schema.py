@@ -3,10 +3,35 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal, NamedTuple, TypedDict
 
-import polars as pl
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from polars import (
+    Binary,
+    Boolean,
+    DataFrame,
+    DataType,
+    Date,
+    Datetime,
+    Extension,
+    Float32,
+    Float64,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    List,
+    Schema,
+    Series,
+    String,
+    Struct,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+    lit,
+)
+from polars import Decimal as polars_Decimal
 
 from toolkit.executor.constants import GEOMETRY_EXTENSION
 from toolkit.executor.schema import Column, SchemaError, schema_of, validate_frame
@@ -59,20 +84,20 @@ class Price(TypedDict):
     at: datetime
 
 
-GEOMETRY = pl.Extension(GEOMETRY_EXTENSION, pl.Binary)
-WITH_CRS = pl.Extension(GEOMETRY_EXTENSION, pl.Binary, '{"crs": "EPSG:4326"}')
+GEOMETRY = Extension(GEOMETRY_EXTENSION, Binary)
+WITH_CRS = Extension(GEOMETRY_EXTENSION, Binary, '{"crs": "EPSG:4326"}')
 DAY = date(2024, 1, 1)
 
 
-def order(**columns: object) -> pl.DataFrame:
+def order(**columns: object) -> DataFrame:
     """Build a frame of one order, with extra columns."""
-    return pl.DataFrame({"id": [1], "name": ["a"], "day": [DAY], **columns})
+    return DataFrame({"id": [1], "name": ["a"], "day": [DAY], **columns})
 
 
-def place(dtype: pl.DataType) -> pl.DataFrame:
+def place(dtype: DataType) -> DataFrame:
     """Build a frame of one place whose geometry has the type."""
-    wkb = pl.Series("geom", [b"\x01\x01\x00\x00\x00" + bytes(16)], dtype=pl.Binary)
-    return pl.DataFrame({"id": [1], "geom": wkb.cast(dtype)})
+    wkb = Series("geom", [b"\x01\x01\x00\x00\x00" + bytes(16)], dtype=Binary)
+    return DataFrame({"id": [1], "geom": wkb.cast(dtype)})
 
 
 @pytest.mark.parametrize(
@@ -81,35 +106,33 @@ def place(dtype: pl.DataType) -> pl.DataFrame:
         pytest.param(
             Order,
             {
-                "id": Column(pl.Int64, nullable=False),
-                "name": Column(pl.String, nullable=True),
-                "day": Column(pl.Date, nullable=False),
+                "id": Column(Int64, nullable=False),
+                "name": Column(String, nullable=True),
+                "day": Column(Date, nullable=False),
             },
             id="typed_dict_with_optional",
         ),
         pytest.param(
             Point,
-            {"x": Column(pl.Float64, False), "y": Column(pl.Float64, False)},
+            {"x": Column(Float64, False), "y": Column(Float64, False)},
             id="named_tuple",
         ),
         pytest.param(
             Customer,
             {
-                "tags": Column(pl.List(pl.String), nullable=False),
-                "address": Column(
-                    pl.Struct({"street": pl.String, "number": pl.Int64}), False
-                ),
-                "kind": Column(pl.String, False),
-                "at": Column(pl.Datetime, False),
-                "price": Column(pl.Decimal, False),
-                "raw": Column(pl.Binary, False),
-                "active": Column(pl.Boolean, False),
+                "tags": Column(List(String), nullable=False),
+                "address": Column(Struct({"street": String, "number": Int64}), False),
+                "kind": Column(String, False),
+                "at": Column(Datetime, False),
+                "price": Column(polars_Decimal, False),
+                "raw": Column(Binary, False),
+                "active": Column(Boolean, False),
             },
             id="nested_and_scalar_types",
         ),
         pytest.param(
             Place,
-            {"id": Column(pl.Int64, False), "geom": Column(GEOMETRY, False)},
+            {"id": Column(Int64, False), "geom": Column(GEOMETRY, False)},
             id="geometry",
         ),
     ],
@@ -141,47 +164,47 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
         pytest.param(
             Order,
             order().select("day", "id", "name"),
-            pl.Schema({"id": pl.Int64, "name": pl.String, "day": pl.Date}),
+            Schema({"id": Int64, "name": String, "day": Date}),
             id="columns_follow_the_schema_order",
         ),
         pytest.param(
             Reading,
-            pl.DataFrame({"mm": pl.Series([1.5], dtype=pl.Float32)}),
-            pl.Schema({"mm": pl.Float64}),
+            DataFrame({"mm": Series([1.5], dtype=Float32)}),
+            Schema({"mm": Float64}),
             id="float32_widens",
         ),
         pytest.param(
             Price,
-            pl.DataFrame(
+            DataFrame(
                 {
-                    "price": pl.Series([Decimal("1.250")], dtype=pl.Decimal(18, 3)),
-                    "at": pl.Series([DAY]).cast(pl.Datetime("ms")),
+                    "price": Series([Decimal("1.250")], dtype=polars_Decimal(18, 3)),
+                    "at": Series([DAY]).cast(Datetime("ms")),
                 }
             ),
-            pl.Schema({"price": pl.Decimal(18, 3), "at": pl.Datetime("ms")}),
+            Schema({"price": polars_Decimal(18, 3), "at": Datetime("ms")}),
             id="decimal_and_timestamp_keep_their_precision",
         ),
         pytest.param(
             Order,
             order(name=[None]),
-            pl.Schema({"id": pl.Int64, "name": pl.String, "day": pl.Date}),
+            Schema({"id": Int64, "name": String, "day": Date}),
             id="a_column_of_nulls_takes_the_declared_type",
         ),
         pytest.param(
             Nested,
-            pl.DataFrame(
+            DataFrame(
                 {
-                    "ids": pl.Series([[1]], dtype=pl.List(pl.Int32)),
-                    "point": pl.Series(
+                    "ids": Series([[1]], dtype=List(Int32)),
+                    "point": Series(
                         [{"x": 1.5, "y": 2.5}],
-                        dtype=pl.Struct({"x": pl.Float32, "y": pl.Float32}),
+                        dtype=Struct({"x": Float32, "y": Float32}),
                     ),
                 }
             ),
-            pl.Schema(
+            Schema(
                 {
-                    "ids": pl.List(pl.Int64),
-                    "point": pl.Struct({"x": pl.Float64, "y": pl.Float64}),
+                    "ids": List(Int64),
+                    "point": Struct({"x": Float64, "y": Float64}),
                 }
             ),
             id="widening_reaches_lists_and_structs",
@@ -189,13 +212,13 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
         pytest.param(
             Place,
             place(WITH_CRS),
-            pl.Schema({"id": pl.Int64, "geom": WITH_CRS}),
+            Schema({"id": Int64, "geom": WITH_CRS}),
             id="geometry_keeps_the_crs",
         ),
         pytest.param(
             Order,
-            pl.DataFrame(),
-            pl.Schema({"id": pl.Int64, "name": pl.String, "day": pl.Date}),
+            DataFrame(),
+            Schema({"id": Int64, "name": String, "day": Date}),
             id="no_rows_and_no_columns_is_an_empty_result",
         ),
     ],
@@ -223,25 +246,25 @@ def test_a_frame_that_fits_is_returned_with_the_schema_types(schema, frame, expe
         ),
         pytest.param(
             Order,
-            order(id=pl.Series([2**63], dtype=pl.UInt64)),
+            order(id=Series([2**63], dtype=UInt64)),
             "id",
             id="an_unsigned_value_beyond_int64",
         ),
         pytest.param(
             Nested,
-            pl.DataFrame({"ids": [["x"]], "point": [{"x": 1.5, "y": 2.5}]}),
+            DataFrame({"ids": [["x"]], "point": [{"x": 1.5, "y": 2.5}]}),
             "ids",
             id="a_list_of_the_wrong_type",
         ),
         pytest.param(
             Place,
-            pl.DataFrame({"id": [1], "geom": [b"x"]}),
+            DataFrame({"id": [1], "geom": [b"x"]}),
             "geom: Binary is not Extension",
             id="plain_binary_for_a_geometry",
         ),
         pytest.param(
             Order,
-            place(GEOMETRY).rename({"geom": "name"}).with_columns(day=pl.lit(DAY)),
+            place(GEOMETRY).rename({"geom": "name"}).with_columns(day=lit(DAY)),
             "name: Extension",
             id="geometry_for_a_string",
         ),
@@ -258,7 +281,7 @@ def test_a_frame_that_does_not_fit_is_rejected_naming_the_column(
 def test_every_problem_is_reported_at_once():
     """Report every problem at once."""
     with pytest.raises(SchemaError) as error:
-        validate_frame(pl.DataFrame({"id": ["1"], "extra": [1]}), schema_of(Order))
+        validate_frame(DataFrame({"id": ["1"], "extra": [1]}), schema_of(Order))
 
     assert str(error.value).split("; ")[:2] == [
         "missing columns: name, day",
@@ -267,13 +290,13 @@ def test_every_problem_is_reported_at_once():
 
 
 INTEGERS = [
-    (pl.Int8, -(2**7), 2**7 - 1),
-    (pl.Int16, -(2**15), 2**15 - 1),
-    (pl.Int32, -(2**31), 2**31 - 1),
-    (pl.Int64, -(2**63), 2**63 - 1),
-    (pl.UInt8, 0, 2**8 - 1),
-    (pl.UInt16, 0, 2**16 - 1),
-    (pl.UInt32, 0, 2**32 - 1),
+    (Int8, -(2**7), 2**7 - 1),
+    (Int16, -(2**15), 2**15 - 1),
+    (Int32, -(2**31), 2**31 - 1),
+    (Int64, -(2**63), 2**63 - 1),
+    (UInt8, 0, 2**8 - 1),
+    (UInt16, 0, 2**16 - 1),
+    (UInt32, 0, 2**32 - 1),
 ]
 
 
@@ -288,8 +311,8 @@ def test_any_integer_type_widens_to_int64_and_keeps_its_values(data):
     values = data.draw(st.lists(st.integers(low, high), min_size=1))
 
     result = validate_frame(
-        pl.DataFrame({"id": pl.Series(values, dtype=dtype)}), schema_of(OnlyId)
+        DataFrame({"id": Series(values, dtype=dtype)}), schema_of(OnlyId)
     )
 
-    assert result.schema == pl.Schema({"id": pl.Int64})
+    assert result.schema == Schema({"id": Int64})
     assert result["id"].to_list() == values

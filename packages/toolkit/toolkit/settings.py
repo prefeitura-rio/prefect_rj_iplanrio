@@ -1,7 +1,7 @@
 """Application settings loaded from environment variables."""
 
-import os
 from dataclasses import dataclass, field
+from os import environ
 from typing import ClassVar, Literal
 
 from pydantic import SecretStr
@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     }
 
     BIGQUERY_PROJECT: str = ""
+    DB_QUERY_TIMEOUT_SECONDS: int = 3600
     DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")
     DUCKDB_MEMORY_LIMIT: str = ""
     DUCKDB_TEMP_DIRECTORY: str = ""
@@ -31,6 +32,7 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
     OTEL_EXPORTER_OTLP_HEADERS: SecretStr = SecretStr("")
     OTEL_SERVICE_NAME: str = "prefect-rj-iplanrio"
+    ORACLE_CLIENT_LIB_DIR: str = ""
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
 
@@ -53,6 +55,6 @@ def read_database_credentials(secret_path: str) -> DatabaseCredentials:
     """
     prefix = secret_path.upper().replace("-", "_").replace("/", "")
     return DatabaseCredentials(
-        username=os.environ[f"{prefix}__DB_USERNAME"],
-        password=os.environ[f"{prefix}__DB_PASSWORD"],
+        username=environ[f"{prefix}__DB_USERNAME"],
+        password=environ[f"{prefix}__DB_PASSWORD"],
     )

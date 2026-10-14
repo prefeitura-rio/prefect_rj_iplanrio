@@ -4,19 +4,20 @@ They name no toolkit class, so every module may import them.
 """
 
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Literal, NotRequired, TypedDict
 
-import pyarrow as pa
 from psycopg.sql import Composable
+from pyarrow import Array, DataType, StringScalar
+from pyarrow import Scalar as arrow_Scalar
 from pydantic import Field
 
-type DatabaseValue = bool | int | float | str | datetime | None
+type DatabaseValue = bool | int | float | str | date | datetime | None
 type QueryValue = DatabaseValue | Sequence[str]
 type QueryParams = Sequence[QueryValue]
 type NonEmptyString = Annotated[str, Field(min_length=1)]
-type TextColumn = pa.Array[pa.StringScalar]
-type ArrowColumn = pa.Array[pa.Scalar[pa.DataType]]
+type TextColumn = Array[StringScalar]
+type ArrowColumn = Array[arrow_Scalar[DataType]]
 type NativeResult = str | datetime
 type DateWidth = Literal["day", "month", "year"]
 type Scalar = str | int | float | bool
@@ -42,6 +43,12 @@ class Geometry(bytes):
 
     Polars reads it as the `geoarrow.wkb` extension type, with the CRS.
     """
+
+
+class Snapshot(TypedDict):
+    """The system change number of an Oracle database."""
+
+    scn: int
 
 
 class Described(TypedDict):

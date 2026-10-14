@@ -1,7 +1,7 @@
 """Find the provided sources: every class of `backends/` registers itself."""
 
-import importlib
-import pkgutil
+from importlib import import_module
+from pkgutil import iter_modules
 
 from . import backends
 from .base import SourceBase
@@ -24,7 +24,7 @@ def load_sources() -> type[SourceBase]:
     load_sources()["postgres"]  # PostgresSource
     ```
     """
-    for module in pkgutil.iter_modules(backends.__path__):
-        importlib.import_module(f"{backends.__name__}.{module.name}")
+    for module in iter_modules(backends.__path__):
+        import_module(f"{backends.__name__}.{module.name}")
 
     return SourceBase

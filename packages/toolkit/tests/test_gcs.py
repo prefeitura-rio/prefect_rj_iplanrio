@@ -1,13 +1,14 @@
-import asyncio
-import socket
-import subprocess
-import sys
-import time
+from asyncio import run as run_async
+from asyncio import sleep as async_sleep
 from collections.abc import Iterator
 from pathlib import Path
+from socket import socket as socket_socket
+from subprocess import DEVNULL, Popen
+from sys import executable
+from time import sleep
 
-import httpx2
 import pytest
+from httpx2 import put
 from hypothesis import given
 from hypothesis import strategies as st
 from obstore.store import MemoryStore, ObjectStore
@@ -104,11 +105,11 @@ def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(calls, 
         nonlocal running, peak, finished
         running += 1
         peak = max(peak, running)
-        await asyncio.sleep(0)
+        await async_sleep(0)
         running -= 1
         finished += 1
 
-    asyncio.run(gcs.gather_limited((call() for _ in range(calls)), limit))
+    run_async(gcs.gather_limited((call() for _ in range(calls)), limit))
 
     assert (finished, peak <= limit) == (calls, True)
 
@@ -116,19 +117,19 @@ def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(calls, 
 @pytest.fixture(scope="module")
 def s3_endpoint() -> Iterator[str]:
     """Serve S3 with moto on a free port, and yield its endpoint."""
-    with socket.socket() as probe:
+    with socket_socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    server = subprocess.Popen(  # noqa: S603
-        [sys.executable, "-m", "moto.server", "-p", str(port)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    server = Popen(
+        [executable, "-m", "moto.server", "-p", str(port)],
+        stdout=DEVNULL,
+        stderr=DEVNULL,
     )
     for _ in range(50):
-        with socket.socket() as probe:
+        with socket_socket() as probe:
             if probe.connect_ex(("127.0.0.1", port)) == 0:
                 break
-        time.sleep(0.1)
+        sleep(0.1)
     yield f"127.0.0.1:{port}"
     server.terminate()
 
@@ -143,6 +144,6 @@ async def test_the_store_built_from_the_settings_works_over_the_s3_protocol(
     monkeypatch.setattr(settings, "GCS_HMAC_ACCESS_ID", "id")
     monkeypatch.setattr(settings, "GCS_HMAC_SECRET", SecretStr("secret"))
     monkeypatch.setattr(settings, "GCS_REGION", "us-east-1")
-    httpx2.put(f"http://{s3_endpoint}/bucket").raise_for_status()
+    put(f"http://{s3_endpoint}/bucket").raise_for_status()
 
     await upload_list_and_delete(gcs.create_store("bucket"), tmp_path)

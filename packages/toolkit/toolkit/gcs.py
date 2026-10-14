@@ -1,10 +1,11 @@
 """Google Cloud Storage operations through the S3-compatible API with HMAC keys."""
 
-import asyncio
+from asyncio import Semaphore, gather
 from collections.abc import Coroutine, Iterable
 from pathlib import Path
 
-import obstore
+from obstore import delete_async, put_async
+from obstore import list as list_objects
 from obstore.store import ObjectStore, S3Store
 
 from .constants import DELETE_SPAN, UPLOAD_SPAN
@@ -28,7 +29,7 @@ def create_store(bucket: str) -> S3Store:
 async def list_keys(store: ObjectStore, prefix: str) -> list[str]:
     """List every object key under one prefix, in listing order."""
     return [
-        item["path"] async for batch in obstore.list(store, prefix) for item in batch
+        item["path"] async for batch in list_objects(store, prefix) for item in batch
     ]
 
 
@@ -67,14 +68,14 @@ async def gather_limited(
     calls: Iterable[Coroutine[object, object, object]], concurrency: int
 ) -> None:
     """Await the calls together, with at most `concurrency` running at once."""
-    semaphore = asyncio.Semaphore(concurrency)
+    semaphore = Semaphore(concurrency)
 
     async def run(call: Coroutine[object, object, object]) -> None:
         """Await one call while it holds a slot."""
         async with semaphore:
             await call
 
-    await asyncio.gather(*(run(call) for call in calls))
+    await gather(*(run(call) for call in calls))
 
 
 async def upload(
@@ -96,10 +97,7 @@ async def upload(
         keys = {name: f"{prefix.rstrip('/')}/{name}" for name in files}
 
         await gather_limited(
-            (
-                obstore.put_async(store, keys[name], file)
-                for name, file in files.items()
-            ),
+            (put_async(store, keys[name], file) for name, file in files.items()),
             concurrency,
         )
 
@@ -119,9 +117,7 @@ async def delete_keys(
     with tracer.start_as_current_span(
         DELETE_SPAN, attributes={"toolkit.objects": len(keys)}
     ):
-        await gather_limited(
-            (obstore.delete_async(store, key) for key in keys), concurrency
-        )
+        await gather_limited((delete_async(store, key) for key in keys), concurrency)
 
     DELETED_FILES.add(len(keys))
     logger.info("Objects deleted: objects=%d", len(keys))

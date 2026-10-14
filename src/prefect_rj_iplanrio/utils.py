@@ -1,6 +1,6 @@
 """Helpers of the shared tasks: where a table lives, and the steps around it."""
 
-import asyncio
+from asyncio import to_thread
 from collections.abc import Mapping
 from dataclasses import dataclass
 from http import HTTPStatus
@@ -13,6 +13,8 @@ from httpx2 import HTTPStatusError, TransportError
 from obstore.store import ObjectStore
 from psycopg.sql import Composable, Identifier, Literal
 from toolkit.batches import (
+    NULL_WINDOW,
+    Rows,
     Window,
     batch_column,
     config_hash,
@@ -33,8 +35,7 @@ from toolkit.delta import (
 from toolkit.executor.constants import ALIAS, SECRET
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.executor import Executor
-from toolkit.executor.render import render_template
-from toolkit.executor.sources.protocols import Source
+from toolkit.executor.sources.protocols import Source, Stager
 from toolkit.functions.native import now_sao_paulo
 from toolkit.gcs import create_store, delete_keys, list_keys, upload
 from toolkit.telemetry import logger
@@ -116,7 +117,7 @@ def files_glob(data_path: Path, source_format: FileFormat) -> str:
     return str(data_path)
 
 
-async def describe_columns(executor: Executor, values: dict[str, TemplateValue]) -> dict[str, str]:
+async def describe_columns(executor: Executor, values: Mapping[str, TemplateValue]) -> dict[str, str]:
     """Return the name and the DuckDB type of each column that a source returns."""
     described = await executor.query("duckdb/describe_source", values, expect=Described)
     return dict(
@@ -204,7 +205,8 @@ async def dump_to_delta(
     Windows that were never loaded under the same config are always read, and `lookback`
     limits the re-checks of the others. `overwrite` writes every window again, then
     deletes the windows outside the config. No `batches` means one window for the whole
-    source.
+    source. With `batches`, the rows whose column is NULL go in a last window, `null`, that
+    every run reads.
 
     `values` are those of `source_values`, plus the ones that the source type needs.
     """
@@ -212,17 +214,22 @@ async def dump_to_delta(
     columns = options.get("columns", {})
 
     config = config_of(values, options)
-    cut = windows(batches, now_sao_paulo().date()) if batches else [Window("all", 0, 0)]
+    cut = [*windows(batches, now_sao_paulo().date()), NULL_WINDOW] if batches else [Window("all", 0, 0)]
     ids = {window.key: ledger_id(config, window.key) for window in cut}
-    known = await asyncio.to_thread(known_fingerprints, uri, list(ids.values()))
+    known = await to_thread(known_fingerprints, uri, list(ids.values()))
     seen = {key for key, name in ids.items() if name in known}
     todo = cut if dump_mode == "overwrite" else pending(cut, seen, (batches or {}).get("lookback"))
     written = skipped = 0
 
+    stager = source if isinstance(source, Stager) else None
+    filters = options.get("filters", [])
+
     async with DuckDBEngine.connect() as engine, source.open(engine) as client:
         await source.setup(client)
-        executor = Executor(client)
-        described = await describe_columns(executor, values)
+        executor = Executor(engine)
+        with TemporaryDirectory() as directory:
+            read = await stager.stage(client, values, Rows(empty=True), Path(directory)) if stager else values
+            described = await describe_columns(executor, read)
         if BATCH_COLUMN in described or (batches and batches["column"] not in described):
             raise ValueError(f"The column {BATCH_COLUMN!r} is reserved, and the batch column must exist")
         if batches:
@@ -235,17 +242,20 @@ async def dump_to_delta(
             transforms=columns.get("transforms"),
             select=options.get("select"),
         )
-        where = filter_predicates(options.get("filters", []), described)
+        where = filter_predicates(filters, described)
 
         for window in todo:
             with TemporaryDirectory() as directory:
                 folder = Path(directory)
+                rows = Rows(filters, batches["column"] if batches else None, window if batches else None)
+                read = await stager.stage(client, values, rows, folder) if stager else values
+                window_filter = window_predicates(batches["column"], window) if batches else []
                 await executor.execute(
                     "duckdb/extract_window",
                     {
-                        **values,
+                        **read,
                         "columns": [*base, batch_column(window.key)],
-                        "predicates": [*where, *(window_predicates(batches["column"], window) if batches else [])],
+                        "predicates": [] if stager else [*where, *window_filter],
                         "target": Literal(str(folder / "out.parquet")),
                     },
                 )
@@ -255,7 +265,7 @@ async def dump_to_delta(
                     skipped += 1
                     continue
 
-                await asyncio.to_thread(
+                await to_thread(
                     write_window,
                     uri,
                     folder,
@@ -267,10 +277,10 @@ async def dump_to_delta(
                 written += 1
 
     if dump_mode == "overwrite":
-        await asyncio.to_thread(sweep, uri, [window.key for window in cut])
+        await to_thread(sweep, uri, [window.key for window in cut])
 
     if written:
-        await asyncio.to_thread(maintain, uri)
+        await to_thread(maintain, uri)
 
     logger.info("Delta dump finished: uri=%s windows=%d written=%d skipped=%d", uri, len(cut), written, skipped)
 
@@ -279,14 +289,15 @@ def read_values(db_type: str, read: Read, batched: bool) -> dict[str, TemplateVa
     """Return the template values that read a table or a native query of a database.
 
     A table is attached as `src`, so DuckDB pushes the filters and the windows down to
-    the database. A native query runs as it is, so it cannot be cut into windows. Raise
-    `ValueError` unless `read` has exactly one of `table` and `query`, or for a table
-    on Oracle, which DuckDB cannot attach, or for windows over a query.
+    the database. A native query runs as it is, so it cannot be cut into windows. Oracle
+    is the exception: it applies the filters and the windows itself, on a table or on a
+    query. Raise `ValueError` unless `read` has exactly one of `table` and `query`, or for
+    windows over a query.
     """
     match read.get("table"), read.get("query"):
         case str() as table, None:
             if db_type == "oracle":
-                raise ValueError("Oracle cannot be attached: read it with a query")
+                return {"type": db_type, "table": table}
             return {
                 "type": db_type,
                 "alias": Literal(ALIAS),
@@ -294,6 +305,8 @@ def read_values(db_type: str, read: Read, batched: bool) -> dict[str, TemplateVa
                 "table": Identifier(ALIAS, *table.split(".")),
             }
         case None, str() as query:
+            if db_type == "oracle":
+                return {"type": db_type, "query": query}
             if batched:
                 raise ValueError("A native query is one window: set a table to cut it")
             return source_values(db_type, query)
@@ -306,7 +319,7 @@ async def clear_legacy(destination: Destination, dump_mode: DumpMode) -> None:
 
     A Delta table is never deleted: `overwrite` rewrites its windows instead.
     """
-    if dump_mode == "overwrite" and not await asyncio.to_thread(DeltaTable.is_deltatable, destination.uri):
+    if dump_mode == "overwrite" and not await to_thread(DeltaTable.is_deltatable, destination.uri):
         await clear_prefix(create_store(destination.bucket), destination)
 
 
@@ -355,13 +368,11 @@ async def dump_in_batches(
     if dump_mode == "overwrite":
         await clear_prefix(store, destination)
 
-    sql = render_template("duckdb/select_source", values)
-
     async with DuckDBEngine.connect() as engine, source.open(engine) as client:
         await source.setup(client)
 
-        async for frame in client.query(sql, batch_size=batch_size):
+        async for dataset in Executor(client).query("duckdb/select_source", values, batch_size=batch_size):
             with TemporaryDirectory() as directory:
                 path = Path(directory) / f"part-{uuid4().hex}.parquet"
-                await asyncio.to_thread(frame.write_parquet, path)
+                await to_thread(dataset.frame.write_parquet, path)
                 await upload(store, destination.prefix, path)

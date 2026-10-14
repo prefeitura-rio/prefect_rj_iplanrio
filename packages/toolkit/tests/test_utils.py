@@ -1,5 +1,5 @@
-import re
 from collections.abc import Mapping, Sequence
+from re import fullmatch
 
 import pytest
 from hypothesis import given
@@ -40,7 +40,7 @@ def test_every_target_name_starts_with_a_letter_or_an_underscore(names):
     for name, alias in zip(names, aliases, strict=True):
         assert alias["source"] == Identifier(name)
         target = alias["target"].as_string(None).strip('"')
-        assert re.fullmatch(r"[A-Za-z_][0-9A-Za-z_]*", target)
+        assert fullmatch(r"[A-Za-z_][0-9A-Za-z_]*", target)
 
 
 COLUMNS = {"Nome": "VARCHAR", "id": "INTEGER", "dia": "DATE"}
@@ -107,6 +107,45 @@ def rendered(**options) -> list[str]:
 def test_the_select_list_follows_the_options(options, expected):
     """Rename, clean and transform each column as the options say."""
     assert rendered(**options) == expected
+
+
+@pytest.mark.parametrize(
+    ("kind", "cast"),
+    [
+        pytest.param("TIME", "VARCHAR", id="a_time_becomes_text"),
+        pytest.param("UUID", "VARCHAR", id="a_uuid_becomes_text"),
+        pytest.param(
+            "UINTEGER", "BIGINT", id="an_unsigned_int_gets_a_wider_signed_one"
+        ),
+        pytest.param(
+            "UBIGINT", "DECIMAL(20, 0)", id="an_unsigned_bigint_becomes_a_decimal"
+        ),
+        pytest.param("BIGINT", None, id="a_type_that_delta_holds_is_left_alone"),
+    ],
+)
+def test_a_type_that_delta_lacks_gets_a_cast(kind, cast):
+    """Cast the types that a Delta table cannot hold, and no other."""
+    [column] = select_columns({"c": kind})
+
+    assert (column["cast"].as_string(None) if "cast" in column else None) == cast
+
+
+@pytest.mark.parametrize(
+    ("kind", "cleaned"),
+    [
+        pytest.param("VARCHAR", True, id="text"),
+        pytest.param("MSSQL_NVARCHAR(100)", True, id="sql_server_nvarchar"),
+        pytest.param("MSSQL_VARCHAR(20)", True, id="sql_server_varchar"),
+        pytest.param("MSSQL_NCHAR(3)", True, id="sql_server_nchar"),
+        pytest.param("INTEGER", False, id="a_number_is_left_alone"),
+        pytest.param("BLOB", False, id="bytes_are_left_alone"),
+    ],
+)
+def test_regression_the_text_of_every_source_is_cleaned(kind, cleaned):
+    """Regression: SQL Server text came as `MSSQL_NVARCHAR(100)`, so `normalize_values` skipped it."""
+    [column] = select_columns({"c": kind}, normalize_values=True)
+
+    assert ("function" in column) is cleaned
 
 
 def test_a_timestamp_with_a_time_zone_is_read_in_sao_paulo():

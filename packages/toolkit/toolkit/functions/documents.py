@@ -6,8 +6,8 @@ is not valid gives `false` (`is_*`) or NULL (`normalize_*`).
 
 from collections.abc import Callable, Sequence
 
-import polars as pl
 from duckdb.sqltypes import BOOLEAN, VARCHAR
+from polars import Expr, Int64, element, lit, when
 
 from ..constants import AREA_CODES
 from .decorators import arrow
@@ -23,19 +23,19 @@ def cnpj_weights(count: int) -> Sequence[int]:
     return [position % 8 + 2 for position in reversed(range(count))]
 
 
-def check_digit(values: Sequence[pl.Expr], weights: Sequence[int]) -> pl.Expr:
+def check_digit(values: Sequence[Expr], weights: Sequence[int]) -> Expr:
     """Return the mod 11 check digit of the weighted values, or NULL if one is NULL."""
     total = sum(
         (value * weight for value, weight in zip(values, weights, strict=True)),
-        pl.lit(0),
+        lit(0),
     )
     remainder = total % 11
-    return pl.when(remainder < 2).then(0).otherwise(11 - remainder)
+    return when(remainder < 2).then(0).otherwise(11 - remainder)
 
 
 def has_check_digits(
-    values: pl.Expr, size: int, weights: Callable[[int], Sequence[int]]
-) -> pl.Expr:
+    values: Expr, size: int, weights: Callable[[int], Sequence[int]]
+) -> Expr:
     """Tell if `size` values end in the two check digits of the others, and differ."""
     value = [values.list.get(position, null_on_oob=True) for position in range(size)]
     first = check_digit(value[: size - 2], weights(size - 2))
@@ -48,36 +48,36 @@ def has_check_digits(
     )
 
 
-def cpf_text(column: pl.Expr) -> pl.Expr:
+def cpf_text(column: Expr) -> Expr:
     """Keep the digits of a text."""
     return column.str.replace_all(r"\D", "")
 
 
-def cpf_valid(text: pl.Expr) -> pl.Expr:
+def cpf_valid(text: Expr) -> Expr:
     """Tell if a text of digits is a CPF."""
-    digits = text.str.extract_all(r"\d").list.eval(pl.element().cast(pl.Int64))
+    digits = text.str.extract_all(r"\d").list.eval(element().cast(Int64))
     return has_check_digits(digits, 11, cpf_weights)
 
 
-def cnpj_text(column: pl.Expr) -> pl.Expr:
+def cnpj_text(column: Expr) -> Expr:
     """Keep the digits and the upper case letters of a text."""
     return column.str.to_uppercase().str.replace_all(r"[^0-9A-Z]", "")
 
 
-def cnpj_valid(text: pl.Expr) -> pl.Expr:
+def cnpj_valid(text: Expr) -> Expr:
     """Tell if a text of digits and letters is a CNPJ, with the new letters too.
 
     The value of a character is its ASCII code minus 48, so `A` is 17.
     """
-    code = pl.element().str.to_integer(base=36)
+    code = element().str.to_integer(base=36)
     values = text.str.extract_all(r"[0-9A-Z]").list.eval(
-        pl.when(code >= 10).then(code + 7).otherwise(code)
+        when(code >= 10).then(code + 7).otherwise(code)
     )
     return has_check_digits(values, 14, cnpj_weights)
 
 
 @arrow(BOOLEAN)
-def is_cpf(column: pl.Expr) -> pl.Expr:
+def is_cpf(column: Expr) -> Expr:
     """Tell if a text is a CPF, with or without punctuation.
 
     ```sql
@@ -88,7 +88,7 @@ def is_cpf(column: pl.Expr) -> pl.Expr:
 
 
 @arrow(VARCHAR)
-def normalize_cpf(column: pl.Expr) -> pl.Expr:
+def normalize_cpf(column: Expr) -> Expr:
     """Return the 11 digits of a CPF, or NULL if it is not one.
 
     ```sql
@@ -96,11 +96,11 @@ def normalize_cpf(column: pl.Expr) -> pl.Expr:
     ```
     """
     text = cpf_text(column)
-    return pl.when(cpf_valid(text)).then(text)
+    return when(cpf_valid(text)).then(text)
 
 
 @arrow(BOOLEAN)
-def is_cnpj(column: pl.Expr) -> pl.Expr:
+def is_cnpj(column: Expr) -> Expr:
     """Tell if a text is a CNPJ, with or without punctuation, and with letters too.
 
     ```sql
@@ -111,7 +111,7 @@ def is_cnpj(column: pl.Expr) -> pl.Expr:
 
 
 @arrow(VARCHAR)
-def normalize_cnpj(column: pl.Expr) -> pl.Expr:
+def normalize_cnpj(column: Expr) -> Expr:
     """Return the 14 characters of a CNPJ in upper case, or NULL if it is not one.
 
     ```sql
@@ -119,11 +119,11 @@ def normalize_cnpj(column: pl.Expr) -> pl.Expr:
     ```
     """
     text = cnpj_text(column)
-    return pl.when(cnpj_valid(text)).then(text)
+    return when(cnpj_valid(text)).then(text)
 
 
 @arrow(BOOLEAN)
-def is_phone(column: pl.Expr) -> pl.Expr:
+def is_phone(column: Expr) -> Expr:
     """Tell if a text is a landline or mobile phone of Brazil, with `55` or without.
 
     A number is a valid area code, then 8 digits that start with 2 to 5 (landline), or
@@ -135,6 +135,6 @@ def is_phone(column: pl.Expr) -> pl.Expr:
     """
     digits = column.str.replace_all(r"\D", "")
     with_country = digits.str.starts_with("55") & digits.str.len_chars().is_in([12, 13])
-    number = pl.when(with_country).then(digits.str.slice(2)).otherwise(digits)
+    number = when(with_country).then(digits.str.slice(2)).otherwise(digits)
     shape = number.str.contains(r"^\d{2}([2-5]\d{7}|9\d{8})$")
     return number.str.slice(0, 2).is_in(sorted(AREA_CODES)) & shape

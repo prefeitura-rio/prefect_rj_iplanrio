@@ -1,7 +1,9 @@
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator
+from types import SimpleNamespace
 
-import polars as pl
 import pytest
+from polars import DataFrame
+from pyarrow import Schema, Table
 
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
 from toolkit.executor.engines.duckdb import DuckDBEngine
@@ -47,11 +49,11 @@ class FakeEngine:
         *,
         params: QueryParams | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> AsyncGenerator[pl.DataFrame]:
+    ) -> AsyncGenerator[DataFrame]:
         """Record the query and yield the canned rows in batches."""
         self.statements.append(sql)
         self.params.append(params)
-        frame = pl.DataFrame(self.rows)
+        frame = DataFrame(self.rows)
         for offset in range(0, max(frame.height, 1), batch_size):
             yield frame.slice(offset, batch_size)
 
@@ -60,3 +62,74 @@ class FakeEngine:
 def fake_engine() -> type[FakeEngine]:
     """Return the fake engine class."""
     return FakeEngine
+
+
+class FakeCode:
+    """The error of an Oracle call, with the number that `oracledb` reports."""
+
+    def __init__(self, code: int) -> None:
+        """Keep the number of the error."""
+        self.code = code
+
+
+class FakeOracle:
+    """An Oracle connection that describes columns, records what it is asked and returns canned batches."""
+
+    def __init__(
+        self,
+        columns: list[tuple[str, str, int | None, int | None]],
+        batches: list[Table],
+    ) -> None:
+        """Start with the description of the columns and the batches to return."""
+        self.description = [
+            SimpleNamespace(
+                name=name,
+                type=SimpleNamespace(name=kind),
+                precision=precision,
+                scale=scale,
+            )
+            for name, kind, precision, scale in columns
+        ]
+        self.batches = batches
+        self.queries: list[tuple[str, list[object]]] = []
+        self.requested: list[Schema] = []
+        self.closed = False
+
+    def cursor(self) -> "FakeOracle":
+        """Return itself as the cursor."""
+        return self
+
+    def __enter__(self) -> "FakeOracle":
+        """Enter the cursor."""
+        return self
+
+    def __exit__(self, *error: object) -> None:
+        """Leave the cursor."""
+
+    def parse(self, sql: str) -> None:
+        """Record the statement that a cursor describes."""
+        self.queries.append((sql, []))
+
+    def execute(self, sql: str, params: list[object]) -> None:
+        """Record a statement and its params."""
+        self.queries.append((sql, params))
+
+    def fetch_df_batches(
+        self, sql: str, params: list[object], size: int, requested_schema: Schema
+    ) -> Iterator[Table]:
+        """Record the query and the schema it asks for, and yield the canned batches."""
+        self.queries.append((sql, params))
+        self.requested.append(requested_schema)
+        yield from self.batches
+
+    def close(self) -> None:
+        """Record that the connection closed."""
+        self.closed = True
+
+
+@pytest.fixture
+def fake_oracle() -> Callable[
+    [list[tuple[str, str, int | None, int | None]], list[Table]], FakeOracle
+]:
+    """Return a function that builds a fake Oracle connection."""
+    return FakeOracle

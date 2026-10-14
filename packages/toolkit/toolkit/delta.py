@@ -5,16 +5,16 @@ fingerprint is the same is skipped, and a window that changed is replaced in one
 commit. The table lives in a bucket and is read through ADC, or on a local path.
 """
 
-import hashlib
-import time
 from collections.abc import Collection, Sequence
+from hashlib import md5
 from pathlib import Path
+from time import sleep
 from typing import cast
 
-import pyarrow.dataset as ds
 from deltalake import CommitProperties, DeltaTable, Transaction, write_deltalake
 from deltalake.exceptions import CommitFailedError
 from psycopg.sql import Literal
+from pyarrow.dataset import dataset
 
 from .constants import BATCH_COLUMN, COMMIT_ATTEMPTS, VACUUM_RETENTION_HOURS
 from .executor.executor import Executor
@@ -24,7 +24,7 @@ from .types import Fingerprint
 
 def fingerprint_of(rows: int, low: str, high: str) -> int:
     """Turn a content summary into the 60 bit number that the ledger stores."""
-    digest = hashlib.md5(f"{rows}:{low}:{high}".encode(), usedforsecurity=False)
+    digest = md5(f"{rows}:{low}:{high}".encode(), usedforsecurity=False)
     return int(digest.hexdigest()[:15], 16)
 
 
@@ -80,7 +80,7 @@ def write_window(
     properties = CommitProperties(app_transactions=[Transaction(ledger, number)])
 
     for attempt in range(1, COMMIT_ATTEMPTS + 1):
-        reader = ds.dataset(directory, format="parquet").scanner().to_reader()
+        reader = dataset(directory, format="parquet").scanner().to_reader()
         try:
             write_deltalake(
                 uri,
@@ -95,7 +95,7 @@ def write_window(
             if attempt == COMMIT_ATTEMPTS:
                 raise
             logger.info("Delta commit conflict: window=%s attempt=%d", key, attempt)
-            time.sleep(attempt * 0.2)
+            sleep(attempt * 0.2)
         else:
             return
 

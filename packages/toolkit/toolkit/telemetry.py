@@ -5,7 +5,7 @@ query, statement, upload and delete. Counters cover only the totals that a span 
 give.
 """
 
-import logging
+from logging import getLogger
 
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
@@ -52,7 +52,7 @@ def configure_telemetry() -> None:
     prefect`, which rebuilds the logging.
     """
     endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
-    prefect_logger = logging.getLogger(PREFECT_LOGGER)
+    prefect_logger = getLogger(PREFECT_LOGGER)
 
     if not endpoint or any(
         handler.get_name() == OTEL_HANDLER_NAME for handler in prefect_logger.handlers

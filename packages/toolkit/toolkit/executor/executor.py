@@ -3,6 +3,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import overload
 
 from psycopg.sql import Identifier
 
@@ -14,7 +15,7 @@ from .constants import DEFAULT_BATCH_SIZE, TEMPLATES_DIR
 from .dataset import Result
 from .engines.protocol import Engine
 from .render import render_template
-from .schema import schema_of
+from .schema import Column, schema_of
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +49,7 @@ class Executor:
 
         logger.info("Statement executed: template=%s", path)
 
+    @overload
     def query[Schema](
         self,
         path: str,
@@ -56,22 +58,54 @@ class Executor:
         params: QueryParams | None = None,
         expect: type[Schema],
         batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> Result[Schema]:
+    ) -> Result[Schema]: ...
+
+    @overload
+    def query(
+        self,
+        path: str,
+        mapping: Mapping[str, TemplateValue] | None = None,
+        *,
+        params: QueryParams | None = None,
+        expect: Mapping[str, Column] | None = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Result[dict[str, object]]: ...
+
+    def query[Schema](
+        self,
+        path: str,
+        mapping: Mapping[str, TemplateValue] | None = None,
+        *,
+        params: QueryParams | None = None,
+        expect: type[Schema] | Mapping[str, Column] | None = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Result[Schema] | Result[dict[str, object]]:
         """Render a query and return its result, checked against `expect`.
 
-        Raise `SchemaError` if a batch does not fit.
+        `expect` is a schema class, or a map of the columns when they are known only at
+        run time, or nothing to check nothing. Raise `SchemaError` if a batch does not fit.
 
         ```python
         orders = await executor.query("orders", {"source": scan}, expect=Order)
 
         async for batch in executor.query("orders", expect=Order, batch_size=10_000):
             ...
+
+        # a dump: the first read gives the columns, and the next reads must keep them
+        first = await executor.query("window", values)
+        async for batch in executor.query("window", values, expect=frame_columns(first.frame)):
+            ...
         ```
         """
-        columns = schema_of(expect)
         sql = render_template(path, mapping or {}, roots=self.roots)
         frames = self.client.query(sql, params=params, batch_size=batch_size)
-        return Result(expect, columns, path, frames)
+        match expect:
+            case None:
+                return Result(dict, None, path, frames)
+            case Mapping():
+                return Result(dict, dict(expect), path, frames)
+            case _:
+                return Result(expect, schema_of(expect), path, frames)
 
     async def normalize_columns(
         self,

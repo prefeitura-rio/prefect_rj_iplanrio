@@ -1,14 +1,14 @@
-import sys
 from pathlib import Path
+from sys import modules
 
-import duckdb
 import pytest
+from duckdb import connect as duckdb_connect
 
 from toolkit import functions
 from toolkit.functions import registry
 
 EXTRA = """\
-import polars as pl
+from polars import Expr
 from duckdb.sqltypes import VARCHAR
 from toolkit.functions.decorators import arrow, native
 
@@ -19,7 +19,7 @@ def found() -> str:
 
 
 @arrow(VARCHAR, name="whisper")
-def lower(column: pl.Expr) -> pl.Expr:
+def lower(column: Expr) -> Expr:
     return column.str.to_lowercase()
 """
 
@@ -29,13 +29,13 @@ def extra(tmp_path: Path, monkeypatch) -> None:
     """Add a module with one function of each kind to the package."""
     (tmp_path / "extra.py").write_text(EXTRA)
     monkeypatch.setattr(functions, "__path__", [str(tmp_path), *functions.__path__])
-    monkeypatch.delitem(sys.modules, f"{functions.__name__}.extra", raising=False)
+    monkeypatch.delitem(modules, f"{functions.__name__}.extra", raising=False)
 
 
 @pytest.mark.usefixtures("extra")
 def test_a_new_module_in_the_package_is_found_and_registered():
     """Import every module of the package, so a new one needs no other change."""
-    with duckdb.connect() as connection:
+    with duckdb_connect() as connection:
         registry.register_functions(connection)
         rows = connection.execute("SELECT found(), whisper('A'), whisper(NULL)")
 

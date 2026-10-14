@@ -1,7 +1,7 @@
-import polars as pl
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from polars import Expr, lit, select
 
 from toolkit.constants import AREA_CODES
 from toolkit.functions import documents
@@ -27,9 +27,9 @@ def cnpj_with_digits(base: list[int]) -> str:
     return "".join(map(str, base))
 
 
-def evaluate(expression: pl.Expr) -> object:
+def evaluate(expression: Expr) -> object:
     """Return the value of an expression on no frame."""
-    return pl.select(expression).item()
+    return select(expression).item()
 
 
 @pytest.mark.parametrize(
@@ -123,8 +123,8 @@ def test_a_cpf_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(b
     cpf = cpf_with_digits(base)
     changed = cpf[:10] + str((int(cpf[10]) + 1) % 10)
 
-    assert evaluate(documents.is_cpf(pl.lit(cpf))) == (len(set(cpf)) > 1)
-    assert evaluate(documents.is_cpf(pl.lit(changed))) is False
+    assert evaluate(documents.is_cpf(lit(cpf))) == (len(set(cpf)) > 1)
+    assert evaluate(documents.is_cpf(lit(changed))) is False
 
 
 @given(st.lists(st.integers(0, 9), min_size=12, max_size=12))
@@ -133,8 +133,8 @@ def test_a_cnpj_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(
     cnpj = cnpj_with_digits(base)
     changed = cnpj[:13] + str((int(cnpj[13]) + 1) % 10)
 
-    assert evaluate(documents.is_cnpj(pl.lit(cnpj))) == (len(set(cnpj)) > 1)
-    assert evaluate(documents.is_cnpj(pl.lit(changed))) is False
+    assert evaluate(documents.is_cnpj(lit(cnpj))) == (len(set(cnpj)) > 1)
+    assert evaluate(documents.is_cnpj(lit(changed))) is False
 
 
 @given(
@@ -143,4 +143,4 @@ def test_a_cnpj_with_the_right_check_digits_is_valid_and_a_changed_digit_is_not(
 )
 def test_every_area_code_with_a_valid_number_is_a_phone(area_code, number):
     """Accept any assigned area code with a landline or a mobile number."""
-    assert evaluate(documents.is_phone(pl.lit(area_code + number))) is True
+    assert evaluate(documents.is_phone(lit(area_code + number))) is True

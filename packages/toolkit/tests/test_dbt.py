@@ -1,9 +1,10 @@
+from os import environ
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
 
-import git
 import pytest
+from git import Actor, Repo
 from pydantic import ValidationError
 
 from toolkit import dbt
@@ -114,6 +115,21 @@ def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_p
     ]
 
 
+@pytest.mark.parametrize("has_profile", [True, False])
+def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(
+    fake_runner, tmp_path, has_profile
+):
+    """Regression: dbt read `~/.dbt` only, so a `profiles.yml` in the repository was ignored."""
+    if has_profile:
+        (tmp_path / "queries" / "profiles.yml").write_text("p: {}\n")
+
+    dbt.execute_dbt(DbtRun(repository=REPOSITORY))
+
+    [runner] = fake_runner.instances
+    assert (runner.settings.profiles_dir == tmp_path / "queries") is has_profile
+    assert "DBT_PROFILES_DIR" not in environ
+
+
 def test_a_failed_dbt_command_raises(fake_runner):
     """Raise if a dbt command fails."""
     fake_runner.error = ValueError("dbt failed")
@@ -127,12 +143,12 @@ def make_repository(path: Path, *, queries: bool) -> Path:
 
     The project is in `queries` or at the root.
     """
-    repository = git.Repo.init(path)
+    repository = Repo.init(path)
     project = path / "queries" if queries else path
     project.mkdir(exist_ok=True)
     (project / "dbt_project.yml").write_text("name: test\n")
     repository.index.add([str(project / "dbt_project.yml")])
-    actor = git.Actor("tester", "tester@example.com")
+    actor = Actor("tester", "tester@example.com")
     repository.index.commit("init", author=actor, committer=actor)
     return path
 

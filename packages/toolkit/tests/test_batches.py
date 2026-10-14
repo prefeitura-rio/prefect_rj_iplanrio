@@ -8,6 +8,7 @@ from hypothesis import strategies as st
 from psycopg.sql import Identifier, Literal
 
 from toolkit.batches import (
+    NULL_WINDOW,
     config_hash,
     ledger_id,
     pending,
@@ -160,6 +161,37 @@ def test_a_number_window_filters_a_run_of_ids_with_typed_values():
         {"column": Identifier("id"), "op": ">=", "value": Literal(10)},
         {"column": Identifier("id"), "op": "<", "value": Literal(20)},
     ]
+
+
+def test_the_null_window_filters_the_rows_that_have_no_value():
+    """Select the rows whose batch column is NULL, which no range holds."""
+    assert window_predicates("d", NULL_WINDOW) == [
+        {"column": Identifier("d"), "op": "is null"}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("known", "lookback", "expected"),
+    [
+        pytest.param({0, 1, 2}, 1, [2, "null"], id="the_null_window_is_always_read"),
+        pytest.param(
+            {0, 1, 2}, 0, ["null"], id="and_it_does_not_count_for_the_lookback"
+        ),
+        pytest.param(
+            set(), None, [0, 1, 2, "null"], id="every_window_without_a_lookback"
+        ),
+    ],
+)
+def test_the_null_window_is_read_every_time(known, lookback, expected):
+    """Read the rows with no value on every run, because no range tells when they change."""
+    ranges = windows({"column": "id", "width": 1, "begin": 0, "end": 2}, TODAY)
+    cut = [*ranges, NULL_WINDOW]
+
+    chosen = pending(cut, {ranges[index].key for index in known}, lookback)
+
+    assert [
+        ranges.index(window) if window != NULL_WINDOW else "null" for window in chosen
+    ] == expected
 
 
 @pytest.mark.parametrize(

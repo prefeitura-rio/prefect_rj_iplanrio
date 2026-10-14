@@ -1,6 +1,6 @@
 """Prefect tasks that more than one pipeline uses, built on the toolkit."""
 
-import asyncio
+from asyncio import to_thread
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -261,4 +261,4 @@ async def fetch_json(
 @task
 async def run_dbt(request: DbtRun) -> None:
     """Run one dbt command from a cloned queries repository."""
-    await asyncio.to_thread(execute_dbt, request)
+    await to_thread(execute_dbt, request)

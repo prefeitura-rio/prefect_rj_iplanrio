@@ -3,7 +3,7 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Generator
 from dataclasses import dataclass
 
-import polars as pl
+from polars import DataFrame, concat
 
 from ..constants import QUERY_SPAN, TEMPLATE_ATTRIBUTE
 from ..telemetry import QUERY_ROWS, logger, tracer
@@ -15,11 +15,32 @@ class Dataset[Schema]:
     """A Polars frame that fits a schema class, the type parameter."""
 
     schema: type[Schema]
-    frame: pl.DataFrame
+    frame: DataFrame
 
     def __len__(self) -> int:
         """Return the number of rows."""
         return self.frame.height
+
+
+async def observe(
+    template: str, frames: AsyncIterator[DataFrame]
+) -> AsyncGenerator[DataFrame]:
+    """Yield the frames of a query, with a span, a row counter and a log line.
+
+    `template` labels all three.
+    """
+    rows = 0
+
+    with tracer.start_as_current_span(
+        QUERY_SPAN, attributes={TEMPLATE_ATTRIBUTE: template}
+    ) as span:
+        async for frame in frames:
+            rows += frame.height
+            span.set_attribute("toolkit.rows", rows)
+            QUERY_ROWS.add(frame.height, {"template": template})
+            yield frame
+
+    logger.info("Query finished: template=%s rows=%d", template, rows)
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,35 +51,25 @@ class Result[Schema]:
     """
 
     schema: type[Schema]
-    columns: dict[str, Column]
+    columns: dict[str, Column] | None
+    """The columns to check each frame against, or `None` to check nothing."""
     template: str
     """The template that made the query. It labels the metrics and the log."""
-    frames: AsyncIterator[pl.DataFrame]
+    frames: AsyncIterator[DataFrame]
 
     async def __aiter__(self) -> AsyncGenerator[Dataset[Schema]]:
         """Yield one checked dataset per batch."""
-        rows = 0
+        async for frame in observe(self.template, self.frames):
+            yield Dataset(self.schema, self.checked(frame))
 
-        with tracer.start_as_current_span(
-            QUERY_SPAN, attributes={TEMPLATE_ATTRIBUTE: self.template}
-        ) as span:
-            async for frame in self.frames:
-                dataset = Dataset(self.schema, validate_frame(frame, self.columns))
-                rows += len(dataset)
-                span.set_attribute("toolkit.rows", rows)
-                QUERY_ROWS.add(len(dataset), {"template": self.template})
-                yield dataset
-
-        logger.info("Query finished: template=%s rows=%d", self.template, rows)
+    def checked(self, frame: DataFrame) -> DataFrame:
+        """Return the frame checked against the columns, or as it is when there are none."""
+        return frame if self.columns is None else validate_frame(frame, self.columns)
 
     async def collect(self) -> Dataset[Schema]:
         """Read every batch and join them into one dataset."""
         frames = [batch.frame async for batch in self]
-        frame = (
-            pl.concat(frames)
-            if frames
-            else validate_frame(pl.DataFrame(), self.columns)
-        )
+        frame = concat(frames) if frames else self.checked(DataFrame())
         return Dataset(self.schema, frame)
 
     def __await__(self) -> Generator[object, None, Dataset[Schema]]:

@@ -6,7 +6,18 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Final
 
-import polars as pl
+from polars import (
+    Binary,
+    Boolean,
+    DataType,
+    Date,
+    Datetime,
+    Extension,
+    Float64,
+    Int64,
+    String,
+)
+from polars import Decimal as polars_Decimal
 
 from ..types import Geometry
 
@@ -25,16 +36,16 @@ SHEETS_SCOPES: Final = (
 GEOMETRY_EXTENSION: Final = "geoarrow.wkb"
 """The Arrow extension type that DuckDB uses for `GEOMETRY`."""
 
-SCALAR_TYPES: Final[Mapping[type, pl.DataType | type[pl.DataType]]] = {
-    int: pl.Int64,
-    float: pl.Float64,
-    str: pl.String,
-    bool: pl.Boolean,
-    bytes: pl.Binary,
-    date: pl.Date,
-    datetime: pl.Datetime,
-    Decimal: pl.Decimal,
-    Geometry: pl.Extension(GEOMETRY_EXTENSION, pl.Binary),
+SCALAR_TYPES: Final[Mapping[type, DataType | type[DataType]]] = {
+    int: Int64,
+    float: Float64,
+    str: String,
+    bool: Boolean,
+    bytes: Binary,
+    date: Date,
+    datetime: Datetime,
+    Decimal: polars_Decimal,
+    Geometry: Extension(GEOMETRY_EXTENSION, Binary),
 }
 """The Polars type of each Python type that a schema class may annotate a column with."""
 

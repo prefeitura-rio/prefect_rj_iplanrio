@@ -1,8 +1,12 @@
 """Run dbt commands from a cloned queries repository."""
 
-import tempfile
+from collections.abc import Generator
+from contextlib import contextmanager
+from os import environ
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import ClassVar
+from unittest.mock import patch
 
 from git import GitCommandError, Repo
 from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
@@ -79,21 +83,37 @@ def dbt_project_dir(repository_path: Path) -> Path:
     return queries_path if queries_path.is_dir() else repository_path
 
 
+@contextmanager
+def project_profiles(project_dir: Path) -> Generator[None]:
+    """Point dbt at the `profiles.yml` of the project, if it has one.
+
+    dbt looks in `~/.dbt` otherwise, and it refuses to run if that folder does not exist.
+    """
+    if (project_dir / "profiles.yml").exists():
+        with patch.dict(environ, {"DBT_PROFILES_DIR": str(project_dir)}):
+            yield
+    else:
+        yield
+
+
 def execute_dbt(request: DbtRun) -> None:
     """Clone the repository and run one dbt command in it.
 
-    The clone is temporary, and dbt runs `deps` before the command. Raise `RuntimeError`
-    if the clone fails, and `ValueError` if dbt fails.
+    The clone is temporary, and dbt runs `deps` before the command. A `profiles.yml` in
+    the project wins over the one in `~/.dbt`. Raise `RuntimeError` if the clone fails,
+    and `ValueError` if dbt fails.
     """
-    with tempfile.TemporaryDirectory(prefix="dbt_repository_") as directory:
+    with TemporaryDirectory(prefix="dbt_repository_") as directory:
         project_dir = dbt_project_dir(
             clone_repository(request.repository, Path(directory) / "repository")
         )
 
-        settings = PrefectDbtSettings(project_dir=project_dir)
-        runner = PrefectDbtRunner(settings=settings)
-        runner.invoke(["deps"])
-        runner.invoke(request.arguments())
+        with project_profiles(project_dir):
+            runner = PrefectDbtRunner(
+                settings=PrefectDbtSettings(project_dir=project_dir)
+            )
+            runner.invoke(["deps"])
+            runner.invoke(request.arguments())
         logger.info(
             "dbt command finished: command=%s project=%s", request.command, project_dir
         )

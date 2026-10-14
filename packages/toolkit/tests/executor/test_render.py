@@ -1,6 +1,6 @@
 import pytest
 from jinja2 import UndefinedError
-from psycopg.sql import Identifier, Literal
+from psycopg.sql import SQL, Identifier, Literal
 
 from toolkit.executor.constants import TEMPLATES_DIR
 from toolkit.executor.render import render_template, to_sql
@@ -89,6 +89,17 @@ def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(columns, expecte
     assert f"SELECT {expected}\n" in sql
 
 
+def test_a_cast_column_is_cast_in_the_select_list():
+    """Cast the column that the select list marks with a type."""
+    values = dump_values(
+        columns=[{"source": SQL('"h"'), "target": SQL('"h"'), "cast": SQL("VARCHAR")}]
+    )
+
+    assert 'SELECT CAST("h" AS VARCHAR) AS "h"\n' in render_template(
+        "duckdb/extract_window", values
+    )
+
+
 @pytest.mark.parametrize(
     ("db_type", "expected"),
     [
@@ -106,7 +117,6 @@ def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(columns, expecte
         pytest.param("postgres", "postgres_query('src', 'q')", id="postgres"),
         pytest.param("mysql", "mysql_query('src', 'q')", id="mysql"),
         pytest.param("mssql", "mssql_scan('src', 'q')", id="mssql"),
-        pytest.param("oracle", "oracle_query('src_secret', 'q')", id="oracle"),
     ],
 )
 def test_each_source_runs_a_native_query_through_its_own_function(db_type, expected):

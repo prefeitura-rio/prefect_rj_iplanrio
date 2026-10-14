@@ -1,11 +1,14 @@
-import threading
 from pathlib import Path
+from threading import Thread
 
-import pyarrow as pa
-import pyarrow.parquet as pq
 import pytest
 from deltalake import DeltaTable, write_deltalake
 from deltalake.exceptions import SchemaMismatchError
+from pyarrow import Table
+from pyarrow import int64 as arrow_int64
+from pyarrow import schema as arrow_schema
+from pyarrow import string as arrow_string
+from pyarrow.parquet import write_table
 
 from toolkit.delta import (
     fingerprint,
@@ -17,14 +20,16 @@ from toolkit.delta import (
 )
 from toolkit.executor.executor import Executor
 
-SCHEMA = pa.schema([("id", pa.int64()), ("nome", pa.string()), ("batch", pa.string())])
+SCHEMA = arrow_schema(
+    [("id", arrow_int64()), ("nome", arrow_string()), ("batch", arrow_string())]
+)
 
 
 def window_files(directory: Path, key: str, ids: list[int]) -> Path:
     """Write one Parquet file for a window, as the extract step does, and return its folder."""
     rows = [{"id": i, "nome": f"n{i}", "batch": key} for i in ids]
     directory.mkdir(parents=True, exist_ok=True)
-    pq.write_table(pa.Table.from_pylist(rows, schema=SCHEMA), directory / "out.parquet")
+    write_table(Table.from_pylist(rows, schema=SCHEMA), directory / "out.parquet")
     return directory
 
 
@@ -83,8 +88,8 @@ def test_a_window_with_other_columns_is_refused_unless_the_schema_is_overwritten
     write_window(uri, window_files(tmp_path / "a", "w1", [1]), "w1", "c:w1", 1)
     narrow = tmp_path / "b"
     narrow.mkdir()
-    only_id = pa.Table.from_pylist([{"id": 2, "batch": "w2"}])
-    pq.write_table(only_id, narrow / "out.parquet")
+    only_id = Table.from_pylist([{"id": 2, "batch": "w2"}])
+    write_table(only_id, narrow / "out.parquet")
 
     with pytest.raises(SchemaMismatchError):
         write_window(uri, narrow, "w2", "c:w2", 2)
@@ -124,7 +129,7 @@ def test_regression_windows_written_at_the_same_time_all_land(uri, tmp_path):
         except BaseException as error:
             errors.append(error)
 
-    threads = [threading.Thread(target=put, args=(i,)) for i in range(8)]
+    threads = [Thread(target=put, args=(i,)) for i in range(8)]
     for thread in threads:
         thread.start()
     for thread in threads:
@@ -180,10 +185,10 @@ async def test_a_changed_value_changes_the_fingerprint(duckdb_memory, tmp_path):
     one = window_files(tmp_path / "a", "w1", [1])
     two = tmp_path / "b"
     two.mkdir()
-    changed = pa.Table.from_pylist(
+    changed = Table.from_pylist(
         [{"id": 1, "nome": "outro", "batch": "w1"}], schema=SCHEMA
     )
-    pq.write_table(changed, two / "out.parquet")
+    write_table(changed, two / "out.parquet")
 
     assert await fingerprint(executor, one) != await fingerprint(executor, two)
 

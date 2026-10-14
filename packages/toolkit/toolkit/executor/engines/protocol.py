@@ -3,7 +3,7 @@
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-import polars as pl
+from polars import DataFrame
 
 from ...types import QueryParams
 from ..constants import DEFAULT_BATCH_SIZE
@@ -25,7 +25,7 @@ class Engine(Protocol):
         *,
         params: QueryParams | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> AsyncIterator[pl.DataFrame]:
+    ) -> AsyncIterator[DataFrame]:
         """Run one query and yield Polars frames of up to `batch_size` rows.
 
         A result with no rows still yields one frame. The frame has no columns if the

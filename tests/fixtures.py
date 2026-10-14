@@ -1,33 +1,41 @@
 """The fake services that the tests use, each one with its fixture.
 
 They are the fakes of GCS, BigQuery (one that detects the schema of a Delta table and one that
-records calls), a database and an object store. They run in the process, with no network and no
+records calls), a database, Oracle and an object store. They run in the process, with no network and no
 container, and they follow what the real services did in the runs of `test_cloud.py` with
 `-m gcp`. `conftest.py` registers this module as a plugin, so a test asks for a fixture by name.
 """
 
-import hashlib
-import json
-import re
-import threading
-from collections.abc import AsyncGenerator, Iterator, Mapping
+from collections.abc import AsyncGenerator, Callable, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from hashlib import md5
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from json import loads
 from multiprocessing import get_context
 from multiprocessing.connection import Connection
+from re import findall
+from threading import Lock
+from types import SimpleNamespace
 from typing import ClassVar, cast, override
 from urllib.parse import parse_qs, unquote, urlparse
 from xml.sax.saxutils import escape, unescape
 
-import pyarrow as pa
 import pytest
 from deltalake import DeltaTable
 from obstore.store import MemoryStore
+from oracledb import Connection as oracle_Connection
+from oracledb import DatabaseError
+from pyarrow import Schema, Table
+from pyarrow import array as arrow_array
+from pyarrow import int64 as arrow_int64
+from pyarrow import table as arrow_table
 from pydantic import SecretStr
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.engines.protocol import Engine
+from toolkit.executor.sources.protocols import DBConn
+from toolkit.oracle import Oracle
 from toolkit.settings import settings
 
 from prefect_rj_iplanrio import utils
@@ -69,7 +77,7 @@ class FakeBlob:
     @property
     def etag(self) -> str:
         """Return the entity tag of the content."""
-        return hashlib.md5(self.data, usedforsecurity=False).hexdigest()
+        return md5(self.data, usedforsecurity=False).hexdigest()
 
 
 @dataclass
@@ -77,7 +85,7 @@ class FakeBucket:
     """The objects of a fake GCS, and the lock that keeps a conditional write atomic."""
 
     blobs: dict[tuple[str, str], FakeBlob] = field(default_factory=dict)
-    lock: threading.Lock = field(default_factory=threading.Lock)
+    lock: Lock = field(default_factory=Lock)
     generation: int = 0
     writes: list[tuple[str, str | None]] = field(default_factory=list)
 
@@ -249,7 +257,7 @@ def make_handler(state: FakeBucket) -> type[BaseHTTPRequestHandler]:
             if "delete" not in query:
                 return self.answer(NOT_IMPLEMENTED)
 
-            keys = [unescape(key) for key in re.findall(r"<Key>(.*?)</Key>", body)]
+            keys = [unescape(key) for key in findall(r"<Key>(.*?)</Key>", body)]
 
             with state.lock:
                 for key in keys:
@@ -330,7 +338,7 @@ class FakeTable:
     @property
     def schema(self) -> dict[str, str]:
         """Return the BigQuery type of each column, from the schema of the Delta log now."""
-        fields = json.loads(DeltaTable(self.uri).schema().to_json())["fields"]
+        fields = loads(DeltaTable(self.uri).schema().to_json())["fields"]
 
         return {field["name"]: bigquery_type(field["type"]) for field in fields}
 
@@ -381,7 +389,7 @@ class FakeDatabase:
     """
 
     name: ClassVar[str] = "fake"
-    tables: dict[str, pa.Table] = field(default_factory=dict)
+    tables: dict[str, Table] = field(default_factory=dict)
 
     @asynccontextmanager
     async def open(self, engine: Engine) -> AsyncGenerator[Engine]:
@@ -472,3 +480,99 @@ def fake_bigquery() -> Iterator[type[FakeBigQuery]]:
 def fake_database() -> FakeDatabase:
     """Return an empty database in memory."""
     return FakeDatabase()
+
+
+class FakeOracleError(Exception):
+    """The error of an Oracle call, with the number that `oracledb` reports."""
+
+    def __init__(self, code: int) -> None:
+        """Keep the number of the error."""
+        super().__init__(code)
+        self.code = code
+
+
+class FakeOracle:
+    """An Oracle connection that describes canned columns and answers each read with `rows_for`.
+
+    It records every read. `snapshot_error` fails the read of the system change number,
+    and `read_errors` fail the next windows that are read as of one.
+    """
+
+    def __init__(
+        self,
+        columns: Sequence[tuple[str, str, int | None, int | None]],
+        rows_for: Callable[[str, Sequence[object]], Table],
+    ) -> None:
+        """Start with the description of the columns and the function that answers a read."""
+        self.columns = [self.column(*column) for column in columns]
+        self.description = self.columns
+        self.rows_for = rows_for
+        self.reads: list[tuple[str, list[object]]] = []
+        self.snapshot_error: int | None = None
+        self.read_errors: list[int] = []
+        self.closed = False
+
+    @staticmethod
+    def column(name: str, kind: str, precision: int | None, scale: int | None) -> SimpleNamespace:
+        """Return the description of one column, as a cursor gives it."""
+        return SimpleNamespace(name=name, type=SimpleNamespace(name=kind), precision=precision, scale=scale)
+
+    def cursor(self) -> "FakeOracle":
+        """Return itself as the cursor."""
+        return self
+
+    def __enter__(self) -> "FakeOracle":
+        """Enter the cursor."""
+        return self
+
+    def __exit__(self, *error: object) -> None:
+        """Leave the cursor."""
+
+    def parse(self, sql: str) -> None:
+        """Describe a statement: the system change number has one column, and a read has the table's."""
+        if self.snapshot_error is not None and ("v$database" in sql or "DBMS_FLASHBACK" in sql):
+            raise DatabaseError(FakeOracleError(self.snapshot_error))
+        self.description = [self.column("scn", "DB_TYPE_NUMBER", 18, 0)] if '"scn"' in sql else self.columns
+
+    def execute(self, sql: str, params: Sequence[object]) -> None:
+        """Run a statement of the session, which the fake only needs to accept."""
+
+    def fetch_df_batches(
+        self, sql: str, params: Sequence[object], size: int, requested_schema: Schema
+    ) -> Iterator[Table]:
+        """Record the read, fail if asked to, and yield what `rows_for` answers."""
+        if '"scn"' in sql:
+            yield arrow_table({"scn": arrow_array([4242], arrow_int64())})
+            return
+        if self.read_errors and "AS OF SCN" in sql:
+            raise DatabaseError(FakeOracleError(self.read_errors.pop(0)))
+        if "WHERE 1 = 0" in sql:
+            yield self.rows_for(sql, params).slice(0, 0)
+            return
+        self.reads.append((sql, list(params)))
+        yield self.rows_for(sql, params)
+
+    def close(self) -> None:
+        """Record that the connection closed."""
+        self.closed = True
+
+
+@pytest.fixture
+def fake_oracle(monkeypatch: pytest.MonkeyPatch) -> Callable[[FakeOracle], FakeOracle]:
+    """Return a function that makes the Oracle source connect to a fake."""
+
+    def install(connection: FakeOracle) -> FakeOracle:
+        """Replace `Oracle.connect` with one that yields the fake, and close it on exit."""
+
+        @asynccontextmanager
+        async def connect(_: DBConn) -> AsyncGenerator[Oracle]:
+            """Yield an `Oracle` over the fake connection."""
+            try:
+                yield Oracle(connection=cast("oracle_Connection", cast("object", connection)))
+            finally:
+                connection.close()
+
+        monkeypatch.setattr(Oracle, "connect", staticmethod(connect))
+        return connection
+
+    return install

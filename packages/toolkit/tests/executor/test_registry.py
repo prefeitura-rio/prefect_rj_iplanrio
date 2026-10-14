@@ -1,5 +1,5 @@
-import sys
 from pathlib import Path
+from sys import modules
 
 from toolkit.executor.sources import backends
 from toolkit.executor.sources.base import SourceBase
@@ -19,7 +19,7 @@ def test_a_new_module_in_backends_is_found(tmp_path: Path, monkeypatch):
         "    pass\n"
     )
     monkeypatch.setattr(backends, "__path__", [str(tmp_path), *backends.__path__])
-    monkeypatch.delitem(sys.modules, f"{backends.__name__}.newone", raising=False)
+    monkeypatch.delitem(modules, f"{backends.__name__}.newone", raising=False)
     try:
         assert "newone" in load_sources()
     finally:

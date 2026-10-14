@@ -1,9 +1,13 @@
 """The contract of a source: the system the statements run in."""
 
+from collections.abc import Mapping
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
-from typing import ClassVar, Protocol
+from pathlib import Path
+from typing import ClassVar, Protocol, runtime_checkable
 
+from ...batches import Rows
+from ...types import TemplateValue
 from ..engines.protocol import Engine
 
 
@@ -50,10 +54,29 @@ class Source(Protocol):
         """Open the client that runs statements in this system.
 
         Close the client on exit. A system that DuckDB attaches yields the `engine`
-        itself. Oracle, which DuckDB cannot attach, yields a client of its own.
+        itself. One that DuckDB cannot read, such as Oracle, yields an engine of its own.
         """
         ...
 
     async def setup(self, client: Engine) -> None:
         """Run the statements that prepare the client, such as `ATTACH`."""
+        ...
+
+
+@runtime_checkable
+class Stager(Protocol):
+    """A source whose client is not DuckDB: it copies the rows to local Parquet, and DuckDB reads the copy."""
+
+    async def stage(
+        self,
+        client: Engine,
+        values: Mapping[str, TemplateValue],
+        rows: Rows,
+        folder: Path,
+    ) -> Mapping[str, TemplateValue]:
+        """Copy the rows to Parquet in `folder` with the client, and return the values that read the copy.
+
+        The copy has the filters and the window already applied, and it keeps the schema
+        when there are no rows.
+        """
         ...

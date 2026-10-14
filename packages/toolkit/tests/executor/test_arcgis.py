@@ -1,6 +1,6 @@
-import json
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from json import dumps
 from pathlib import Path
 from threading import Thread
 from typing import TypedDict
@@ -61,7 +61,7 @@ def layer() -> Iterator[tuple[str, list[dict[str, list[str]]]]]:
                         {"name": "name", "type": "esriFieldTypeString"},
                     ],
                 }
-            payload = json.dumps(body).encode()
+            payload = dumps(body).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(payload)))
