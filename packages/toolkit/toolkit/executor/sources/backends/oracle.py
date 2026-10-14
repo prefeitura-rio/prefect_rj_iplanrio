@@ -1,20 +1,17 @@
-"""Oracle: DuckDB has no Oracle extension, so a driver fetches Parquet batches."""
+"""Oracle: DuckDB has no Oracle extension, so the source opens an ``oracledb`` client."""
 
-from collections.abc import Callable
+from asyncio import to_thread
+from collections.abc import AsyncGenerator, Callable, Iterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import ClassVar, Self, override
+from typing import Protocol, Self, cast, override
 
 import oracledb
 import polars as pl
-from asyncer import asyncify
-from psycopg.sql import Composable
 
-from ....extraction import parquet_scan
-from ....partitions import Selection
-from ...engines.duckdb import Extension
-from ...render import render_template
-from ...utils import window_mapping
+from ....types import QueryParams, QueryValue
+from ...constants import DEFAULT_BATCH_SIZE
+from ...engines.protocol import Engine
 from ..base import SourceBase
 from ..protocols import DBConn, SourceContext
 
@@ -28,57 +25,102 @@ def connect_oracle(connection: DBConn) -> oracledb.Connection:
     )
 
 
+class Cursor(Protocol):
+    """The part of a DB-API cursor that the client uses. ``oracledb`` types it loosely."""
+
+    def execute(self, sql: str, params: list[QueryValue]) -> object: ...
+
+    def close(self) -> None: ...
+
+
+def run_statement(
+    connection: oracledb.Connection, sql: str, params: QueryParams | None
+) -> None:
+    """Run one statement on ``connection`` and commit."""
+    cursor = cast("Cursor", cast("object", connection.cursor()))
+    try:
+        cursor.execute(sql, list(params or []))
+        connection.commit()
+    finally:
+        cursor.close()
+
+
+def open_batches(
+    connection: oracledb.Connection,
+    sql: str,
+    params: QueryParams | None,
+    batch_size: int,
+) -> Iterator[pl.DataFrame]:
+    """Run ``sql`` and return a lazy stream of Polars batches."""
+    options = {"parameters": list(params)} if params else None
+    return iter(
+        pl.read_database(
+            sql,
+            connection,
+            iter_batches=True,
+            batch_size=batch_size,
+            execute_options=options,
+        )
+    )
+
+
+def next_batch(batches: Iterator[pl.DataFrame]) -> pl.DataFrame | None:
+    """Return the next batch, or ``None`` when the stream is done."""
+    return next(batches, None)
+
+
+@dataclass(frozen=True, slots=True)
+class OracleClient:
+    """Runs Oracle SQL on an ``oracledb`` connection. It follows the ``Engine`` protocol.
+
+    A column keeps the name Oracle returns, which is upper case for an unquoted name,
+    and its Polars type comes from the Python values of the first batch.
+    """
+
+    connection: oracledb.Connection
+
+    async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
+        """Run one statement and commit."""
+        await to_thread(run_statement, self.connection, sql, params)
+
+    async def query(
+        self,
+        sql: str,
+        *,
+        params: QueryParams | None = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> AsyncGenerator[pl.DataFrame]:
+        """Run one query and yield the result as Polars frames of up to ``batch_size`` rows."""
+        batches = await to_thread(
+            open_batches, self.connection, sql, params, batch_size
+        )
+        first = await to_thread(next_batch, batches)
+        yield pl.DataFrame() if first is None else first
+
+        while (batch := await to_thread(next_batch, batches)) is not None:
+            yield batch
+
+
 @dataclass(frozen=True, slots=True)
 class OracleSource(SourceBase):
-    """Read Oracle with ``oracledb`` (thin mode) and Polars."""
-
-    extensions: ClassVar[tuple[Extension, ...]] = ()
+    """Read Oracle with ``oracledb`` (thin mode). The client runs Oracle SQL."""
 
     conn: DBConn
-    workdir: Path
-    batch_size: int
     connect: Callable[[DBConn], oracledb.Connection] = field(default=connect_oracle)
 
     @classmethod
-    @override
     def from_context(cls, context: SourceContext) -> Self:
         """Build the Oracle source.
 
         :raises ValueError: If the context has no connection data.
         """
-        return cls(context.require_conn("oracle"), context.workdir, context.batch_size)
+        return cls(context.require_conn("oracle"))
 
     @override
-    def window(self, query: str, selection: Selection) -> str:
-        """Return the remote query restricted to the selection."""
-        return render_template("oracle/window", window_mapping(query, selection))
-
-    async def fetch(self, query: str) -> list[Path]:
-        """Run the query and write each batch to Parquet in the work directory.
-
-        :param query: Oracle SQL.
-        :returns: The written files, in order. Empty when the query has no rows.
-        """
-
-        def run() -> list[Path]:
-            paths: list[Path] = []
-            with self.connect(self.conn) as db:
-                batches = pl.read_database(
-                    query, db, iter_batches=True, batch_size=self.batch_size
-                )
-                for index, frame in enumerate(batches):
-                    path = self.workdir / f"batch_{index:06d}.parquet"
-                    frame.write_parquet(path)
-                    paths.append(path)
-            return paths
-
-        return await asyncify(run)()
-
-    @override
-    def setup(self) -> None:
-        """Return ``None``: there is nothing to attach."""
-
-    @override
-    def scan(self, query: str) -> Composable:
-        """Return ``read_parquet`` over the files that :meth:`fetch` wrote."""
-        return parquet_scan(f"{self.workdir}/*.parquet")
+    @asynccontextmanager
+    async def open(self, engine: Engine) -> AsyncGenerator[Engine]:
+        """Connect to Oracle and yield an :class:`OracleClient`. The DuckDB ``engine`` is not used."""
+        async with AsyncExitStack() as stack:
+            connection = await to_thread(self.connect, self.conn)
+            stack.push_async_callback(to_thread, connection.close)
+            yield OracleClient(connection)

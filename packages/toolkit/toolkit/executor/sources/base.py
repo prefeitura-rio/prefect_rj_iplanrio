@@ -1,14 +1,14 @@
 """The base class of the provided sources: it registers each subclass by name."""
 
-from abc import ABC, abstractmethod
-from typing import ClassVar, Self
+from abc import ABC
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import ClassVar
 
 from autoregistry import Registry
-from psycopg.sql import Composable
 
-from ...partitions import Selection
-from ..engines.duckdb import Extension
-from .protocols import SourceContext
+from ..engines.duckdb import Extension, load_extensions
+from ..engines.protocol import Engine
 
 
 class SourceBase(Registry, ABC, suffix="Source"):
@@ -26,22 +26,11 @@ class SourceBase(Registry, ABC, suffix="Source"):
         super().__init_subclass__(**kwargs)
         cls.name = cls.__registry__.name
 
-    @classmethod
-    def from_context(cls, context: SourceContext) -> Self:
-        """Build the source from a context. The default needs nothing from it.
+    @asynccontextmanager
+    async def open(self, engine: Engine) -> AsyncGenerator[Engine]:
+        """Load the extensions and yield the DuckDB engine, which attaches the system."""
+        await load_extensions(engine, self.extensions)
+        yield engine
 
-        A source with required fields, like a connection, overrides this method.
-        """
-        return cls()
-
-    @abstractmethod
-    def window(self, query: str, selection: Selection) -> str:
-        """Return the remote query restricted to the selection, in the source dialect."""
-
-    @abstractmethod
-    def setup(self) -> str | None:
-        """Return the SQL to run on the engine before the scan, or ``None``."""
-
-    @abstractmethod
-    def scan(self, query: str) -> Composable:
-        """Return the ``FROM`` expression that reads the query result."""
+    async def setup(self, client: Engine) -> None:
+        """Prepare the client. The default has nothing to prepare."""
