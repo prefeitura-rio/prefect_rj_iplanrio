@@ -33,16 +33,15 @@ async with DuckDBEngine.connect() as engine, source.open(engine) as client:
 
 ## Módulos
 
-| Módulo                             | O que faz                                                                                                                                                                                                                                      |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `toolkit.executor`                 | `Executor`: renderiza templates SQL e os roda num cliente (`execute` e `query`); `query` devolve um `Dataset` do Polars checado contra uma classe de schema (`dataset.py` e `schema.py`). O cliente vem do `DuckDBEngine` ou de `Source.open`. |
-| `toolkit.settings`                 | `Settings` (variáveis de ambiente) e `read_database_credentials`.                                                                                                                                                                              |
-| `toolkit.log`, `toolkit.telemetry` | `log.info(mensagem, campos)` loga no logger do Prefect com os campos na mensagem e como atributos. `configure_telemetry()` manda logs, traces e métricas a um coletor OpenTelemetry (OTLP/HTTP).                                               |
-| `toolkit.gcs`                      | `create_store` (um bucket), `list_keys`, `upload` (arquivo ou pasta) e `delete_keys` (obstore, chaves HMAC).                                                                                                                                   |
-| `toolkit.bigquery`                 | `BigQuery`: `table_exists`, `create_dataset`, `create_external_table`. Para ler dados, use o `BigQuerySource`.                                                                                                                                 |
-| `toolkit.executor.sources`         | O protocolo `Source` (`open` e `setup`), a base `DuckDBSource` (`duckdb.py`), as fontes fornecidas em `backends/` e `base.py` (`SourceBase`, que registra as subclasses) e `registry.py` (`load_sources()`).                                   |
-| `toolkit.dbt`                      | Clona o repositório de queries e executa um comando dbt.                                                                                                                                                                                       |
-| `toolkit.prefect`                  | `rename_current_flow_run` e `schedules_yaml`.                                                                                                                                                                                                  |
+| Módulo                     | O que faz                                                                                                                                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolkit.executor`         | `Executor`: renderiza templates SQL e os roda num cliente (`execute` e `query`); `query` devolve um `Dataset` do Polars checado contra uma classe de schema (`dataset.py` e `schema.py`). O cliente vem do `DuckDBEngine` ou de `Source.open`. |
+| `toolkit.settings`         | `Settings` (variáveis de ambiente) e `read_database_credentials`.                                                                                                                                                                              |
+| `toolkit.telemetry`        | `logger` (o logger do Prefect, `prefect.toolkit`) e `configure_telemetry()`, que manda logs, traces e métricas a um coletor OpenTelemetry (OTLP/HTTP).                                                                                         |
+| `toolkit.gcs`              | `create_store` (um bucket), `list_keys`, `upload` (arquivo ou pasta) e `delete_keys` (obstore, chaves HMAC).                                                                                                                                   |
+| `toolkit.bigquery`         | `BigQuery`: `table_exists`, `create_dataset`, `create_external_table`. Para ler dados, use o `BigQuerySource`.                                                                                                                                 |
+| `toolkit.executor.sources` | O protocolo `Source` (`open` e `setup`), a base `DuckDBSource` (`duckdb.py`), as fontes fornecidas em `backends/` e `base.py` (`SourceBase`, que registra as subclasses) e `registry.py` (`load_sources()`).                                   |
+| `toolkit.dbt`              | Clona o repositório de queries e executa um comando dbt.                                                                                                                                                                                       |
 
 ## Executor com uma fonte
 
@@ -113,11 +112,10 @@ A autenticação do Google é por workload identity (ADC). Não há arquivo de s
 ## Logs, traces e métricas
 
 ```python
-from toolkit import log
-from toolkit.telemetry import configure_telemetry
+from toolkit.telemetry import configure_telemetry, logger
 
 configure_telemetry()  # uma vez, depois de importar o Prefect; sem o endpoint não faz nada
-log.info("Files uploaded", {"prefix": "ds/tb", "files": 3})
+logger.info("Files uploaded: prefix=%s files=%d", "ds/tb", 3)
 ```
 
 A configuração são três settings, lidas do ambiente ou do `.env`: `OTEL_EXPORTER_OTLP_ENDPOINT` (como `http://coletor:4318`) liga o envio, `OTEL_EXPORTER_OTLP_HEADERS` (`chave=valor,chave2=valor2`, um segredo) e `OTEL_SERVICE_NAME` (padrão `prefect-rj-iplanrio`). O toolkit acrescenta `/v1/logs`, `/v1/traces` e `/v1/metrics` ao endpoint.
@@ -135,7 +133,7 @@ OTEL_EXPORTER_OTLP_HEADERS=signoz-ingestion-key=<chave>
 
 A chave de ingestão é um segredo: injete `OTEL_EXPORTER_OTLP_HEADERS` como as outras credenciais, nunca no código nem no `prefect.yaml`. O SigNoz calcula a duração e a taxa de erro de cada operação a partir dos spans, então o toolkit não envia métrica de duração.
 
-**Logs.** O logger é `prefect.toolkit`, então o log vai para a UI do Prefect e, com o endpoint, para o coletor. Todo log da árvore `prefect` (os do Prefect, os das runs e os do toolkit) segue sozinho. Um log dentro de uma run leva o `trace_id` da run, e `log.info` leva os campos como atributos. A UI do Prefect mostra só a mensagem, por isso `log.info` repete os campos nela como `chave=valor`. O nome de um campo não pode ser um atributo de `logging.LogRecord` (`name`, `args`, `msg`).
+**Logs.** O logger é `prefect.toolkit`, então o log tem o formato padrão do Prefect e vai para a UI do Prefect. Com o endpoint, todo log da árvore `prefect` (os do Prefect, os das runs e os do toolkit) segue sozinho para o coletor, e um log dentro de uma run leva o `trace_id` da run. A mensagem é uma frase `<Componente> <ação> <estado>: chave=valor` escrita com `%s`.
 
 **Traces.** O Prefect já cria um span para cada flow run e cada task run (`prefect.run.type`, `prefect.run.id`, tags e os tipos dos parâmetros), com status OK ou ERROR e o mesmo trace para runs aninhadas. O toolkit cria um span para cada operação, filho da run que a chamou:
 
@@ -182,10 +180,10 @@ Esta versão removeu a API anterior sem alias. Use a tabela para migrar as pipel
 | `inject_bd_credentials_task`, `get_bd_credentials_from_env`, `get_credentials_from_env` | Removidos. Use ADC: `google.auth.default(scopes=...)`.                                                                                                   |
 | `get_database_username_and_password_from_secret_env`                                    | `toolkit.settings.read_database_credentials`                                                                                                             |
 | `getenv_or_action`                                                                      | `os.environ` ou `toolkit.settings.Settings`.                                                                                                             |
-| `prefect.rename_current_flow_run_task`                                                  | `toolkit.prefect.rename_current_flow_run`, dentro de uma task da pipeline                                                                                |
-| `prefect.generate_dump_db_schedules`, `create_schedules`, `create_dump_db_schedules`    | `toolkit.prefect.schedules_yaml`, que devolve o bloco `schedules` do `prefect.yaml`.                                                                     |
+| `prefect.rename_current_flow_run_task`                                                  | `@flow(flow_run_name="{table_id}")`, do próprio Prefect.                                                                                                 |
+| `prefect.generate_dump_db_schedules`, `create_schedules`, `create_dump_db_schedules`    | O bloco `schedules:` escrito no `prefect.yaml` (Seção 8 do guia raiz).                                                                                   |
 | `prefect.delete_flow_run_batch`                                                         | Removido.                                                                                                                                                |
-| `logging.log`                                                                           | `toolkit.log.info(mensagem, campos)`.                                                                                                                    |
+| `logging.log`                                                                           | `toolkit.telemetry.logger`.                                                                                                                              |
 | `bd.get_storage_blobs`, `gcs.list_blobs_with_prefix`, `gcs.delete_blobs_list`           | `toolkit.gcs.list_keys`, `delete_keys`, `clear_prefix`                                                                                                   |
 | `gcs.get_gcs_client`, `gcs.upload_file_to_bucket`                                       | `toolkit.gcs.create_store`, `upload`                                                                                                                     |
 | `dbt.execute_dbt_task`                                                                  | `toolkit.dbt.execute_dbt`, dentro de uma task da pipeline                                                                                                |

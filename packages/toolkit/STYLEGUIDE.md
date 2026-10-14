@@ -23,7 +23,7 @@ O `toolkit` segue o [`STYLEGUIDE.md`](../../STYLEGUIDE.md) da raiz: estilo Pytho
 
 ## 1. Filosofia
 
-O `toolkit` fornece primitivos reutilizáveis. Ele não contém lógica de domínio. A tabela das três camadas está na [Seção 2 do guia raiz](../../STYLEGUIDE.md#2-arquitetura-de-código-em-três-camadas).
+O `toolkit` fornece primitivos reutilizáveis. Ele não contém lógica de domínio. A tabela das três camadas está na [Seção 2 do guia raiz](../../STYLEGUIDE.md#2-arquitetura-de-código-em-três-camadas), e os princípios gerais (ler antes de escrever, apagar antes de abstrair, causa antes de sintoma, uma fonte de verdade) estão na [Seção 1.1](../../STYLEGUIDE.md#11-princípios). As regras de commit e de documentação estão nas Seções 12.3 e 12.4 do mesmo guia.
 
 **Regra central:** regras de negócio, transformações específicas de uma secretaria e SQL de uma pipeline pertencem à pipeline. Quando uma função aqui começa a acumular `if dataset_id == "brutos_x":`, ela desceu um nível demais.
 
@@ -59,11 +59,11 @@ O pacote é plano. Cada módulo cobre um domínio e leva o nome do domínio.
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `toolkit.executor`                   | O `Executor`, que roda os templates SQL num `Engine` lendo de um `Source`. `engines/` (protocolo `Engine` e `DuckDBEngine`), `sources/` (protocolo `Source`, fontes fornecidas e `registry.py`), `render.py`, `constants.py`, `types.py`, `utils.py` e `templates/` (arquivos `.sql` em Jinja, uma pasta por backend: `duckdb/`, `postgres/`, `mysql/`, `mssql/`, `oracle/`, `bigquery/`). |
 | `toolkit.settings`                   | `Settings` (pydantic-settings) e leitura de credenciais de banco.                                                                                                                                                                                                                                                                                                                          |
-| `toolkit.log`, `toolkit.telemetry`   | Logs estruturados no logger do Prefect, e logs e métricas OpenTelemetry.                                                                                                                                                                                                                                                                                                                   |
+| `toolkit.telemetry`                  | O logger do pacote (`prefect.toolkit`) e os logs, traces e métricas OpenTelemetry                                                                                                                                                                                                                                                                                                          |
 | `toolkit.constants`, `toolkit.types` | As constantes e os aliases de tipo compartilhados. `toolkit/types.py` não importa nada do toolkit.                                                                                                                                                                                                                                                                                         |
 | `toolkit.gcs`                        | Operações no GCS com `obstore`. Único lugar que importa `obstore`.                                                                                                                                                                                                                                                                                                                         |
 | `toolkit.bigquery`                   | Cliente assíncrono do BigQuery (ADC) e tabelas externas.                                                                                                                                                                                                                                                                                                                                   |
-| `toolkit.dbt`, `toolkit.prefect`     | Execução de dbt e helpers do Prefect.                                                                                                                                                                                                                                                                                                                                                      |
+| `toolkit.dbt`                        | Execução de dbt.                                                                                                                                                                                                                                                                                                                                                                           |
 
 ### 3.2 Regras de código
 
@@ -72,6 +72,8 @@ O pacote é plano. Cada módulo cobre um domínio e leva o nome do domínio.
 - Use dataclasses para dados simples. Use modelos Pydantic só para validação em fronteiras (requisições e configurações).
 - Modele alternativas fechadas como união etiquetada e trate cada caso com `match`. Use `_` só para conjuntos abertos.
 - Fluxos de vários passos são um dataclass de contexto com um método por passo.
+- Incorpore um helper de uma linha que tem um só chamador.
+- Ponha uma função no módulo do seu domínio. Use `utils.py` só quando nenhum domínio serve.
 - Use parâmetros explícitos e funções com nome. Evite `**kwargs`, lambdas opacas, `Any` e `object`.
 - Código bloqueante roda por `asyncio.to_thread`.
 - Não dê a um módulo o nome de uma biblioteca padrão ou de terceiros, como `logging.py` ou `polars.py`.
@@ -200,12 +202,13 @@ def execute_dbt_task(request: DbtRun) -> None:
 | Lógica de negócio dentro do `@task`   | A lógica presa ao wrapper não pode ser testada sem o Prefect.     |
 | `@task` em qualquer arquivo do pacote | A pipeline decide retries e cache, então o wrapper é dela.        |
 | `if __name__ == "__main__":`          | Scripts avulsos não pertencem a uma biblioteca.                   |
-| `print()`                             | Use `toolkit.log.info`.                                           |
+| `print()`                             | Use `toolkit.telemetry.logger`.                                   |
 
 ### 8.1 Logs, traces e métricas
 
-- Todo log do pacote passa por `toolkit.log.info(mensagem, campos)`. A mensagem diz o que aconteceu, sem valores; os valores vão em `campos`, que viram `chave=valor` na mensagem e atributos do registro. Não crie logger próprio nem use `print()`.
+- Todo log do pacote passa por `toolkit.telemetry.logger`, o logger do Prefect `prefect.toolkit`, com a formatação padrão do Prefect. Escreva `logger.info("Files uploaded: prefix=%s files=%d", prefix, files)`: a mensagem é uma frase de ciclo de vida, `<Componente> <ação> <estado>: contexto`, e o nível segue o guia raiz (Seção 5.5). Não crie logger próprio nem use `print()`.
 - Uma operação do pacote (consulta, statement, upload, apagar) é um span: `with tracer.start_as_current_span(NOME, attributes=...)`, com o nome em `constants.py`. O span dá a duração, o erro e o lugar dentro do trace da run. Não crie um histograma por operação.
+- O nível do log vem só de `Settings.LOG_LEVEL`. Nenhum módulo define nível. A saída de ferramentas externas, como a do dbt e a do DuckDB, fica como vem.
 - Não há métrica de duração: o backend (SigNoz) calcula duração e taxa de erro a partir dos spans. Runs do Prefect não são instrumentadas à mão, porque o Prefect já cria um span por flow run e task run. Não decore flows nem tasks para medir duração.
 - Um instrumento de `toolkit/telemetry.py` é só para totais que um span não dá, como linhas e bytes. Use unidade e atributos de cardinalidade baixa (`template`, `prefix`). Valor de dado, id de linha e mensagem de erro não são atributos.
 - O pacote usa só a API do OpenTelemetry (`trace.get_tracer`, `metrics.get_meter`). Quem inicia o processo chama `configure_telemetry()` depois de `import prefect`. O endpoint, os cabeçalhos e o nome do serviço são as settings `OTEL_*`, lidas do singleton `settings`; a função não recebe settings como parâmetro.
@@ -218,7 +221,7 @@ Teste o comportamento do nosso código em `packages/toolkit/`, e só dele. Não 
 
 - Os testes unitários e os de integração moram na mesma árvore, `tests/`, que espelha o pacote: `toolkit/gcs.py` é testado por `tests/test_gcs.py` e `toolkit/executor/schema.py` por `tests/executor/test_schema.py`. Não há pastas `unit/` e `integration/`, nem BDD: são funções `test_*` simples.
 - Um teste que precisa de um serviço ou de rede leva a marca do serviço: `s3` (servidor S3) ou `extensions` (instala uma extensão do DuckDB). Os outros testes rodam sem rede.
-- Uma fixture usada por mais de um arquivo vai no `conftest.py`. Um módulo de teste só tem testes.
+- Uma fixture usada por mais de um arquivo vai no `conftest.py`. Um módulo de teste só tem testes. Junte arquivos de teste pequenos que cobrem um módulo.
 
 **Como se escreve**
 
@@ -235,7 +238,7 @@ Teste o comportamento do nosso código em `packages/toolkit/`, e só dele. Não 
 - Logs, spans e métricas. Confira uma vez, à mão, num script em `/tmp`, e não deixe teste no repositório.
 - O código do BigQuery (`toolkit/bigquery.py` e `BigQuerySource`): o Google testa o cliente.
 - O armazenamento de campos, os valores padrão, os atributos de classe e o "não levantou exceção".
-- Uma lista que cresce, como o registro de fontes, a não ser que ela seja fechada.
+- O conteúdo inteiro de uma lista que cresce, como o registro de fontes: confira só os itens que o teste usa.
 - O mesmo comportamento em dois níveis: ponha o teste no nível mais baixo que o prova.
 
 ## 10. Verificações automáticas
