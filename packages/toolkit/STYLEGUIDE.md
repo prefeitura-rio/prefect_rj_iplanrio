@@ -209,7 +209,6 @@ def execute_dbt_task(request: DbtRun) -> None:
 - Não há métrica de duração: o backend (SigNoz) calcula duração e taxa de erro a partir dos spans. Runs do Prefect não são instrumentadas à mão, porque o Prefect já cria um span por flow run e task run. Não decore flows nem tasks para medir duração.
 - Um instrumento de `toolkit/telemetry.py` é só para totais que um span não dá, como linhas e bytes. Use unidade e atributos de cardinalidade baixa (`template`, `prefix`). Valor de dado, id de linha e mensagem de erro não são atributos.
 - O pacote usa só a API do OpenTelemetry (`trace.get_tracer`, `metrics.get_meter`). Quem inicia o processo chama `configure_telemetry()` depois de `import prefect`. O endpoint, os cabeçalhos e o nome do serviço são as settings `OTEL_*`, lidas do singleton `settings`; a função não recebe settings como parâmetro.
-- Teste um span com `spans_named` e um contador com `metric_total`, os dois sobre os provedores em memória da sessão, com um `template` ou `prefix` único por teste. Para trocar as settings de uma função, troque o singleton no módulo com `monkeypatch.setattr`.
 
 ## 9. Testes do toolkit
 
