@@ -14,6 +14,7 @@ import polars as pl
 from duckdb import DuckDBPyConnection
 from psycopg.sql import Literal
 
+from ...functions.registry import register_functions
 from ...settings import Settings, settings
 from ...types import QueryParams, TemplateValue
 from ..constants import DEFAULT_BATCH_SIZE
@@ -97,6 +98,10 @@ class DuckDBEngine:
     """
 
     connection: DuckDBPyConnection
+
+    def __post_init__(self) -> None:
+        """Register the functions of the toolkit, so every engine has them."""
+        register_functions(self.connection)
 
     @classmethod
     @asynccontextmanager

@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 import polars as pl
 import pytest
@@ -13,6 +13,18 @@ async def duckdb_memory() -> AsyncGenerator[DuckDBEngine]:
     """Yield an in-memory DuckDB engine with no extensions and no secrets."""
     async with DuckDBEngine.connect() as engine:
         yield engine
+
+
+@pytest.fixture
+def scalar(duckdb_memory: DuckDBEngine) -> Callable[[str], Awaitable[object]]:
+    """Return a function that evaluates one SQL expression on the engine."""
+
+    async def run(expression: str) -> object:
+        """Return the value of one SQL expression."""
+        [frame] = [f async for f in duckdb_memory.query(f"SELECT {expression}")]
+        return frame.item()
+
+    return run
 
 
 class FakeEngine:

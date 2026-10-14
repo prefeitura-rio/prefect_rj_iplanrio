@@ -5,8 +5,9 @@ They name no toolkit class, so every module may import them.
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TypedDict
 
+import pyarrow as pa
 from psycopg.sql import Composable
 from pydantic import Field
 
@@ -14,6 +15,9 @@ type DatabaseValue = bool | int | float | str | datetime | None
 type QueryValue = DatabaseValue | Sequence[str]
 type QueryParams = Sequence[QueryValue]
 type NonEmptyString = Annotated[str, Field(min_length=1)]
+type TextColumn = pa.Array[pa.StringScalar]
+type ArrowColumn = pa.Array[pa.Scalar[pa.DataType]]
+type NativeResult = str | datetime
 type SourceFormat = Literal["PARQUET", "CSV"]
 type DbtCommand = Literal[
     "build", "run", "test", "source freshness", "seed", "snapshot", "deps"
@@ -34,3 +38,14 @@ class Geometry(bytes):
 
     Polars reads it as the `geoarrow.wkb` extension type, with the CRS.
     """
+
+
+class Described(TypedDict):
+    """One row of a DuckDB `DESCRIBE`: a column of a table or of a result."""
+
+    column_name: str
+    column_type: str
+    null: str | None
+    key: str | None
+    default: str | None
+    extra: str | None
