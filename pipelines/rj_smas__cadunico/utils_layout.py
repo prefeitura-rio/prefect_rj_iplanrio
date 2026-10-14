@@ -314,7 +314,7 @@ def download_files_from_storage_raw(
 
 
 def get_layout_table_from_staging(
-    project_id, dataset_id, registo_familia_table_id, layout_table_id
+    project_id, dataset_id, registo_familia_table_id, layout_table_id, staging_bucket
 ):
     query = f"""
     WITH layout_unique_columns AS (
@@ -377,7 +377,7 @@ def get_layout_table_from_staging(
     dataframe = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
 
     versions = get_existing_partitions(
-        bucket_name=project_id,
+        bucket_name=staging_bucket,
         dataset_id=dataset_id,
         table_id=registo_familia_table_id,
         prefix=f"staging/{dataset_id}/{registo_familia_table_id}",
@@ -911,7 +911,8 @@ def update_layout_from_storage_and_create_versions_dbt_models(
     registo_familia_table_id: str = "registro_familia",
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/layout",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
+    project_id: str = "rj-iplanrio",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
 ):
@@ -975,10 +976,11 @@ def update_layout_from_storage_and_create_versions_dbt_models(
 
         logger.log_progress("CARREGANDO LAYOUT CONSOLIDADO DO STAGING")
         dataframe = get_layout_table_from_staging(
-            project_id=staging_bucket,
+            project_id=project_id,
             dataset_id=dataset_id,
             layout_table_id=layout_table_id,
             registo_familia_table_id=registo_familia_table_id,
+            staging_bucket=staging_bucket,
         )
 
         logger.log_progress("CRIANDO CONTROLE DE VERSÕES CROSS-LAYOUT")
@@ -988,7 +990,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
 
         logger.log_progress("GERANDO MODELOS DBT CONSOLIDADOS")
         create_cadunico_dbt_consolidated_models(
-            project_id=staging_bucket,
+            project_id=project_id,
             dbt_repository_path=repository_path,
             dataframe=df_final,
             model_dataset_id=dataset_id,
@@ -1013,7 +1015,7 @@ def update_local_layout(
     registo_familia_table_id: str = "registro_familia",
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/layout",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
 ):

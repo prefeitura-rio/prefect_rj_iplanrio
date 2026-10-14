@@ -67,7 +67,7 @@ def update_layout_from_storage_and_create_versions_dbt_models_task(
     registo_familia_table_id: str = "registro_familia",
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/layout",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
 ):

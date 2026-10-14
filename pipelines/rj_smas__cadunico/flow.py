@@ -23,7 +23,7 @@ from pipelines.rj_smas__cadunico.tasks import (
 def rj_smas__cadunico(
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/registro_familia",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     table_id: str = "registro_familia",
     layout_table_id: str = "layout",
     dataset_id: str = "brutos_cadunico",
