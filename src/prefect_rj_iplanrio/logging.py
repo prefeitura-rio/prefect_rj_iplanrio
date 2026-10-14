@@ -1,29 +1,22 @@
 """Single entry point for logging in all pipelines.
 
-Every pipeline must obtain its logger through :func:`get_logger` rather than
-calling :func:`logging.getLogger` directly. This is the place to apply any
-workspace-wide log configuration (format, destination).
+Every pipeline obtains its logger from here, and passes ``"toolkit"``. That gives the one
+workspace logger, ``prefect.toolkit``: it has the Prefect formatting, it shows INFO, it
+reaches the Prefect UI, and with the OpenTelemetry export on it reaches the collector.
+It is the same object as ``toolkit.telemetry.logger``. A plain
+:func:`logging.getLogger` logger is outside the ``prefect`` tree, so it has none of that.
 
 Usage::
 
     from prefect_rj_iplanrio.logging import get_logger
 
-    logger = get_logger(__name__)
+    logger = get_logger("toolkit")
 
-    logger.info("Processing %d records", count)
+    logger.info("Records processed: count=%d", count)
     logger.warning("Retrying after transient error")
     logger.error("Upload failed: %s", error)
 """
 
-import logging
-from logging import Logger
+from prefect.logging import get_logger
 
-
-def get_logger(name: str) -> Logger:
-    """Return a pre-configured logger for the given module.
-
-    :param name: Module name — pass ``__name__`` from the calling module.
-    :returns: A :class:`logging.Logger` instance with workspace-wide
-        configuration applied.
-    """
-    return logging.getLogger(name)
+__all__ = ["get_logger"]
