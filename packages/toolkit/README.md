@@ -1,6 +1,6 @@
 # toolkit
 
-Biblioteca compartilhada das pipelines, com DuckDB como motor: execução de SQL tipada, extração de bancos para o GCS, tabelas externas no BigQuery e tasks do Prefect.
+Biblioteca compartilhada das pipelines, com DuckDB como motor: execução de SQL tipada, execução de SQL por templates em qualquer fonte, operações no GCS e no BigQuery, e tasks do Prefect.
 
 As regras do pacote estão em [`STYLEGUIDE.md`](STYLEGUIDE.md).
 
@@ -16,93 +16,148 @@ toolkit = { workspace = true }
 ```
 
 ```python
-from toolkit.dump import DumpRequest
-from toolkit.tasks import dump_database_task
+from pathlib import Path
 
-dump_database_task(
-    DumpRequest(
-        database_type="postgres",
-        connection={
-            "hostname": "db.internal",
-            "port": 5432,
-            "database": "app",
-            "user": "reader",
-            "password": "...",
-        },
-        query="SELECT * FROM events",
-        dataset_id="brutos_app",
-        table_id="events",
-        partition_column="created_at",
-    )
-)
+from toolkit.executor.engines.duckdb import DuckDBEngine
+from toolkit.executor.executor import Executor
+from toolkit.executor.sources.backends.postgres import PostgresSource
+from toolkit.executor.sources.protocols import DBConn
+
+source = PostgresSource(DBConn("db.internal", 5432, "app", "reader", "..."))
+
+async with DuckDBEngine.connect() as engine, source.open(engine) as client:
+    await source.setup(client)
+    executor = Executor(client, Path(__file__).parent / "queries")
+    totals = await executor.query("count_events", expect=Total)  # Dataset[Total]
 ```
 
 ## Módulos
 
-| Módulo                     | O que faz                                                                                                                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `toolkit.executor`         | `Executor`: roda templates SQL num `Engine` (`DuckDBEngine` é o fornecido) lendo de um `Source` que só descreve o sistema remoto; valida as linhas em modelos Pydantic.                   |
-| `toolkit.settings`         | `Settings` (variáveis de ambiente) e `read_database_credentials`.                                                                                                                         |
-| `toolkit.gcs`              | `create_client`, `list_keys`, `upload_file`, `delete_keys`, `clear_prefix` (aiobotocore, chaves HMAC).                                                                                    |
-| `toolkit.bigquery`         | `BigQuery`: `query`, `table_exists`, `create_dataset`, `delete_dataset`, `drop_table`, `create_external_table`.                                                                           |
-| `toolkit.executor.sources` | O protocolo `Source`, a base `DuckDBSource` (`duckdb.py`), as fontes fornecidas em `backends/` e `base.py` (`SourceBase`, que registra as subclasses) e `registry.py` (`load_sources()`). |
-| `toolkit.partitions`       | Seleções de partição e janelas de data (`plan_selections`, `chunk_windows`).                                                                                                              |
-| `toolkit.extraction`       | `COPY` para o bucket de staging, com colunas normalizadas e partições `ano/mes/data_particao`.                                                                                            |
-| `toolkit.dump`             | `DumpRequest`, `run_dump` (banco para staging e BigQuery) e `stage_scan` (qualquer `FROM` do DuckDB).                                                                                     |
-| `toolkit.dump_url`         | Baixa URL direta, Google Drive ou Google Sheets e lê o CSV.                                                                                                                               |
-| `toolkit.dump_arcgis`      | Baixa uma camada ArcGIS e reprojeta a geometria para EPSG:4326 com DuckDB `spatial`.                                                                                                      |
-| `toolkit.dbt`              | Clona o repositório de queries e executa um comando dbt.                                                                                                                                  |
-| `toolkit.tasks`            | Tasks do Prefect: `dump_database_task`, `dump_url_task`, `dump_arcgis_task`, `execute_dbt_task`, `rename_current_flow_run_task`.                                                          |
+| Módulo                             | O que faz                                                                                                                                                                                                                                      |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolkit.executor`                 | `Executor`: renderiza templates SQL e os roda num cliente (`execute` e `query`); `query` devolve um `Dataset` do Polars checado contra uma classe de schema (`dataset.py` e `schema.py`). O cliente vem do `DuckDBEngine` ou de `Source.open`. |
+| `toolkit.settings`                 | `Settings` (variáveis de ambiente) e `read_database_credentials`.                                                                                                                                                                              |
+| `toolkit.log`, `toolkit.telemetry` | `log.info(mensagem, campos)` loga no logger do Prefect com os campos na mensagem e como atributos. `configure_telemetry()` manda logs, traces e métricas a um coletor OpenTelemetry (OTLP/HTTP).                                               |
+| `toolkit.gcs`                      | `create_store` (um bucket), `list_keys`, `upload` (arquivo ou pasta) e `delete_keys` (obstore, chaves HMAC).                                                                                                                                   |
+| `toolkit.bigquery`                 | `BigQuery`: `table_exists`, `create_dataset`, `create_external_table`. Para ler dados, use o `BigQuerySource`.                                                                                                                                 |
+| `toolkit.executor.sources`         | O protocolo `Source` (`open` e `setup`), a base `DuckDBSource` (`duckdb.py`), as fontes fornecidas em `backends/` e `base.py` (`SourceBase`, que registra as subclasses) e `registry.py` (`load_sources()`).                                   |
+| `toolkit.dbt`                      | Clona o repositório de queries e executa um comando dbt.                                                                                                                                                                                       |
+| `toolkit.prefect`                  | `rename_current_flow_run` e `schedules_yaml`.                                                                                                                                                                                                  |
 
-## Limpeza
-
-O `Executor` faz toda a limpeza que é SQL no DuckDB. Uma pipeline escreve os arquivos SQL em `queries/` e passa uma lista de passos; o que o DuckDB não faz fica na task da pipeline.
+## Executor com uma fonte
 
 ```python
-from pathlib import Path
-
-from psycopg.sql import Identifier
-
-from toolkit.dump import run_dump
-from toolkit.executor.executor import Step
-
-await run_dump(
-    request,
-    steps=[Step("trim_names"), Step("drop_duplicates", {"key": Identifier("id")})],
-    templates=Path(__file__).parent / "queries",
-)
+async with source.open(engine) as client:  # carrega as extensões e entrega o cliente
+    await source.setup(client)  # segredo e ATTACH, por exemplo
+    executor = Executor(client, Path(__file__).parent / "queries")
+    totals = await executor.query("count_orders", expect=Total)  # Dataset[Total]
+    await executor.execute("refresh_view")
 ```
 
-Cada passo é um template `SELECT` que lê `{{ source }}`. Os valores são `Identifier`, `Literal`, `SQL`, números ou booleanos; um texto simples levanta `TypeError`, e um erro num passo diz o número e o template. Os passos rodam em ordem, como `TEMP VIEW`s encadeadas, e o resultado é copiado uma vez. Veja a Seção 5.4 do `STYLEGUIDE.md`.
+`Source.open(engine)` entrega o cliente que roda SQL naquele sistema e o fecha ao sair; `Source.setup(client)` prepara o cliente. O `Executor` só tem `execute` e `query`: `query` devolve um resultado tipado (veja "Resultado tipado") e `execute` só roda o statement. O cliente do Postgres, MySQL, SQL Server e BigQuery é o próprio DuckDB, e o SQL do template é DuckDB; o do Oracle é um `OracleClient` sobre `oracledb`, e o SQL do template é Oracle.
+
+## Resultado tipado
+
+```python
+class Total(TypedDict):
+    nome: str | None  # `| None` aceita nulos; sem isso, nulo é erro
+    total: int
+
+
+totals = await executor.query(
+    "count_orders", expect=Total
+)  # Dataset[Total]: tudo de uma vez
+async for batch in executor.query("orders", expect=Order, batch_size=50_000):
+    ...  # um Dataset[Order] por lote
+```
+
+O schema é uma classe com anotações (`TypedDict`, dataclass ou `NamedTuple`), sem Pydantic. `Executor.query` devolve um objeto que se pode `await` (um `Dataset` com tudo) ou percorrer com `async for` (um `Dataset` por lote). O cliente devolve quadros do Polars: o DuckDB por `.pl()` (precisa de `pyarrow`, que vem com `polars[pyarrow]`) e o Oracle por `pl.read_database`.
+
+Cada lote é checado, e um `SchemaError` lista todos os problemas, com o nome de cada coluna:
+
+- os nomes das colunas são os do schema, nem mais nem menos; a ordem final é a do schema;
+- o tipo tem de ser da mesma família da anotação: qualquer inteiro vira `Int64`, qualquer float vira `Float64`, e decimal e timestamp mantêm a própria precisão; um texto nunca é lido como número;
+- uma coluna sem `| None` não pode ter nulos;
+- uma coluna `GEOMETRY` do DuckDB (extensão `spatial`) usa a anotação `toolkit.types.Geometry`. O Polars a lê como o tipo de extensão `geoarrow.wkb` (WKB), com o CRS nos metadados do tipo, e a coluna segue assim até o fim, sem conversão;
+- uma anotação sem tipo no Polars (por exemplo `set[int]`) levanta `TypeError` antes de rodar a consulta.
+
+Regras de campo (`gt`, `Literal`, regex) não são checadas.
 
 ## Engines e fontes
 
-O `Executor` recebe um `Engine` (quem roda o SQL) e um `Source` (de onde vêm os dados).
+O `Executor` recebe um cliente, e uma fonte é o que abre esse cliente.
 
-- **Engine:** `DuckDBEngine` é o que o pacote fornece. Para usar outro, escreva uma classe com `execute(sql, params)` e `records(sql, params)` e passe uma fábrica dela em `run_dump(request, open_engine=...)`.
-- **Source:** o pacote fornece `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource` e `BigQuerySource` (os três primeiros herdam de `DuckDBSource` e só definem atributos de classe). Todas têm `from_context`, que recebe um `SourceContext` (o padrão é `cls()`; só quem precisa do contexto o sobrescreve) (dados de conexão, diretório de trabalho e tamanho de lote) e devolvem um `Source`, que só descreve o sistema remoto: o `Executor` é quem roda o SQL no engine. Para usar outra fonte, escreva uma função (ou classe) que receba um `SourceContext` e devolva algo que siga o protocolo `Source` (`name`, `window`, `extensions`, `setup`, `scan`, e `fetch` se precisar copiar os dados antes) e passe-a em `run_dump(request, make_source=...)`. As classes herdam de `SourceBase` e se registram pelo nome da classe sem `Source` (`PostgresSource` é `postgres`) com a biblioteca `autoregistry`; `load_sources()["postgres"]` acha a classe. Um backend novo é um arquivo novo em `backends/`.
+- **Engine e cliente:** `DuckDBEngine` é o engine que o pacote fornece. Um cliente é qualquer classe com `execute(sql, params)` e `query(sql, params, batch_size)`, que devolve quadros do Polars (o protocolo `Engine`).
+- **Source:** o pacote fornece `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource`, `BigQuerySource`, `GSheetsSource` e `ArcGISSource` (os três primeiros herdam de `DuckDBSource` e só definem atributos de classe). Uma fonte tem `open(engine)` e `setup(client)`; ela nunca roda uma consulta por conta própria. As classes herdam de `SourceBase` e se registram pelo nome da classe sem `Source` (`PostgresSource` é `postgres`) com a biblioteca `autoregistry`; `load_sources()["postgres"]` acha a classe. Um backend novo é um arquivo novo em `backends/`.
 
 ## Configuração
 
-A autenticação do Google é por workload identity (ADC). Não há arquivo de service account.
+A autenticação do Google é por workload identity (ADC). Não há arquivo de service account. O `ArcGISSource` só carrega a extensão `spatial`; o template lê uma camada com `FROM {{ arcgis_layer(url) }}` (macro de `duckdb/macros.sql`; `url` é a camada sem `/query`, e o segundo argumento é um `where` do ArcGIS) e a geometria mantém o CRS da camada. O `GSheetsSource` pega um token de acesso do ADC com os escopos do Sheets e o entrega à extensão `gsheets` num segredo (o token é um valor ligado, nunca vai no texto do SQL). O template lê com `FROM read_gsheet('<id ou URL>', sheet = 'Aba', range = 'A:F')` e escreve com `COPY tabela TO '<id ou URL>' (FORMAT gsheet)`. O token vale uma hora.
 
-| Variável                                            | Padrão                   | Uso                                                     |
-| --------------------------------------------------- | ------------------------ | ------------------------------------------------------- |
-| `GCS_HMAC_ACCESS_ID`                                | vazio                    | Chave HMAC do GCS (API compatível com S3).              |
-| `GCS_HMAC_SECRET`                                   | vazio                    | Segredo HMAC do GCS.                                    |
-| `GCS_ENDPOINT`                                      | `storage.googleapis.com` | Endpoint do GCS.                                        |
-| `GCS_REGION`                                        | `auto`                   | Região enviada ao cliente S3.                           |
-| `GCS_USE_SSL`                                       | `true`                   | Usa HTTPS.                                              |
-| `STAGING_BUCKET`                                    | vazio                    | Bucket de staging.                                      |
-| `BIGQUERY_PROJECT`                                  | vazio                    | Projeto das tabelas externas e da fonte `bigquery`.     |
-| `BIGQUERY_BIGLAKE_CONNECTION`                       | vazio                    | Conexão BigLake. Vazio cria uma tabela externa simples. |
-| `DUMP_CONCURRENCY`                                  | `1`                      | Seleções extraídas em paralelo.                         |
-| `DUMP_RETRY_ATTEMPTS`                               | `3`                      | Tentativas por seleção.                                 |
-| `DUMP_RETRY_DELAY_SECONDS`                          | `300`                    | Espera entre tentativas.                                |
-| `DUCKDB_MEMORY_LIMIT`                               | vazio                    | Limite de memória do DuckDB, por exemplo `4GB`.         |
-| `DUCKDB_TEMP_DIRECTORY`                             | vazio                    | Pasta onde o DuckDB grava o que não cabe na memória.    |
-| `LOG_LEVEL`                                         | `INFO`                   | Nível do log.                                           |
-| `<CAMINHO>__DB_USERNAME` e `<CAMINHO>__DB_PASSWORD` | —                        | Credenciais de banco injetadas pelo Infisical.          |
+| Variável                                            | Padrão                   | Uso                                                                   |
+| --------------------------------------------------- | ------------------------ | --------------------------------------------------------------------- |
+| `GCS_HMAC_ACCESS_ID`                                | vazio                    | Chave HMAC do GCS (API compatível com S3).                            |
+| `GCS_HMAC_SECRET`                                   | vazio                    | Segredo HMAC do GCS.                                                  |
+| `GCS_ENDPOINT`                                      | `storage.googleapis.com` | Endpoint do GCS.                                                      |
+| `GCS_REGION`                                        | `auto`                   | Região enviada ao store S3.                                           |
+| `GCS_USE_SSL`                                       | `true`                   | Usa HTTPS.                                                            |
+| `BIGQUERY_PROJECT`                                  | vazio                    | Projeto das tabelas externas e da fonte `bigquery`.                   |
+| `DUCKDB_MEMORY_LIMIT`                               | vazio                    | Limite de memória do DuckDB, por exemplo `4GB`.                       |
+| `DUCKDB_TEMP_DIRECTORY`                             | vazio                    | Pasta onde o DuckDB grava o que não cabe na memória.                  |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                       | vazio                    | Coletor OTLP/HTTP, como `http://coletor:4318`. Vazio desliga o envio. |
+| `OTEL_EXPORTER_OTLP_HEADERS`                        | vazio                    | Cabeçalhos do coletor, `chave=valor,chave2=valor2`. Segredo.          |
+| `OTEL_SERVICE_NAME`                                 | `prefect-rj-iplanrio`    | Nome do serviço nos logs, traces e métricas.                          |
+| `LOG_LEVEL`                                         | `INFO`                   | Nível do log.                                                         |
+| `<CAMINHO>__DB_USERNAME` e `<CAMINHO>__DB_PASSWORD` | —                        | Credenciais de banco injetadas pelo Infisical.                        |
+
+## Logs, traces e métricas
+
+```python
+from toolkit import log
+from toolkit.telemetry import configure_telemetry
+
+configure_telemetry()  # uma vez, depois de importar o Prefect; sem o endpoint não faz nada
+log.info("Files uploaded", {"prefix": "ds/tb", "files": 3})
+```
+
+A configuração são três settings, lidas do ambiente ou do `.env`: `OTEL_EXPORTER_OTLP_ENDPOINT` (como `http://coletor:4318`) liga o envio, `OTEL_EXPORTER_OTLP_HEADERS` (`chave=valor,chave2=valor2`, um segredo) e `OTEL_SERVICE_NAME` (padrão `prefect-rj-iplanrio`). O toolkit acrescenta `/v1/logs`, `/v1/traces` e `/v1/metrics` ao endpoint.
+
+O destino é o SigNoz, que recebe OTLP/HTTP:
+
+```bash
+# SigNoz auto-hospedado: o endpoint HTTP do coletor
+OTEL_EXPORTER_OTLP_ENDPOINT=http://signoz-otel-collector:4318
+
+# SigNoz Cloud: a região e a chave de ingestão
+OTEL_EXPORTER_OTLP_ENDPOINT=https://ingest.us.signoz.cloud:443
+OTEL_EXPORTER_OTLP_HEADERS=signoz-ingestion-key=<chave>
+```
+
+A chave de ingestão é um segredo: injete `OTEL_EXPORTER_OTLP_HEADERS` como as outras credenciais, nunca no código nem no `prefect.yaml`. O SigNoz calcula a duração e a taxa de erro de cada operação a partir dos spans, então o toolkit não envia métrica de duração.
+
+**Logs.** O logger é `prefect.toolkit`, então o log vai para a UI do Prefect e, com o endpoint, para o coletor. Todo log da árvore `prefect` (os do Prefect, os das runs e os do toolkit) segue sozinho. Um log dentro de uma run leva o `trace_id` da run, e `log.info` leva os campos como atributos. A UI do Prefect mostra só a mensagem, por isso `log.info` repete os campos nela como `chave=valor`. O nome de um campo não pode ser um atributo de `logging.LogRecord` (`name`, `args`, `msg`).
+
+**Traces.** O Prefect já cria um span para cada flow run e cada task run (`prefect.run.type`, `prefect.run.id`, tags e os tipos dos parâmetros), com status OK ou ERROR e o mesmo trace para runs aninhadas. O toolkit cria um span para cada operação, filho da run que a chamou:
+
+| Span              | Atributos                                          |
+| ----------------- | -------------------------------------------------- |
+| `toolkit.query`   | `toolkit.template`, `toolkit.rows`                 |
+| `toolkit.execute` | `toolkit.template`                                 |
+| `toolkit.upload`  | `toolkit.prefix`, `toolkit.files`, `toolkit.bytes` |
+| `toolkit.delete`  | `toolkit.objects`                                  |
+
+Um erro na operação marca o span como ERROR. Parar um resultado antes do fim não é erro: use `contextlib.aclosing`, senão o span só termina quando o gerador é coletado.
+
+**Métricas.** Só há contadores, para os totais que um span não dá:
+
+| Métrica                      | Tipo     | Atributos  |
+| ---------------------------- | -------- | ---------- |
+| `toolkit.query.rows`         | contador | `template` |
+| `toolkit.gcs.uploaded.files` | contador | `prefix`   |
+| `toolkit.gcs.uploaded.bytes` | contador | `prefix`   |
+| `toolkit.gcs.deleted.files`  | contador | —          |
+
+O `configure_telemetry()` precisa rodar depois de `import prefect`, porque o Prefect refaz a configuração de logging ao ser importado e remove handlers anteriores. Só os loggers `prefect.*` são exportados.
 
 ## Desenvolvimento
 
@@ -116,35 +171,33 @@ uv run sqlfluff lint toolkit/executor/templates
 uv run pytest
 ```
 
-Veja a Seção 10 do guia para a lista das verificações.
+Veja a Seção 10 do guia para a lista das verificações e a Seção 9 para as regras dos testes. Os testes ficam em `tests/`, com a árvore do pacote, e `pytest -m 'not s3 and not extensions'` roda os que não precisam de serviço nem de rede.
 
 ## Mapa de migração
 
 Esta versão removeu a API anterior sem alias. Use a tabela para migrar as pipelines.
 
-| Antes                                                                                   | Agora                                                                                  |
-| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `inject_bd_credentials_task`, `get_bd_credentials_from_env`, `get_credentials_from_env` | Removidos. Use ADC: `google.auth.default(scopes=...)`.                                 |
-| `get_database_username_and_password_from_secret_env`                                    | `toolkit.settings.read_database_credentials`                                           |
-| `getenv_or_action`                                                                      | `os.environ` ou `toolkit.settings.Settings`.                                           |
-| `prefect.rename_current_flow_run_task`                                                  | `toolkit.tasks.rename_current_flow_run_task`                                           |
-| `prefect.generate_dump_db_schedules`, `create_schedules`, `delete_flow_run_batch`       | Removidos. Os agendamentos ficam no `prefect.yaml`.                                    |
-| `logging.log`                                                                           | `toolkit.log.logger`, ou `get_run_logger()` dentro de uma task.                        |
-| `bd.create_table_and_upload_to_gcs_task`                                                | `toolkit.dump.stage_scan` (ou as tasks de dump).                                       |
-| `bd.get_storage_blobs`, `gcs.list_blobs_with_prefix`, `gcs.delete_blobs_list`           | `toolkit.gcs.list_keys`, `delete_keys`, `clear_prefix`                                 |
-| `gcs.get_gcs_client`, `gcs.upload_file_to_bucket`                                       | `toolkit.gcs.create_client`, `upload_file`                                             |
-| `dbt.execute_dbt_task`                                                                  | `toolkit.tasks.execute_dbt_task`                                                       |
-| `database_sql.Oracle`, `Postgres`, `MySql`, `SqlServer`                                 | `toolkit.executor.sources.registry.load_sources()[nome]`                               |
-| `pandas.*`, `io.*`, `constants.NOT_SET`                                                 | Removidos. O DuckDB faz a limpeza e a normalização; `toolkit.columns` normaliza nomes. |
-| `dump_db.tasks.*` (4 tasks)                                                             | `toolkit.tasks.dump_database_task` com um `DumpRequest`.                               |
-| `dump_url.tasks.download_url`, `dump_files`                                             | `toolkit.tasks.dump_url_task`                                                          |
-| `dump_arcgis.tasks.download_data_from_arcgis_task`                                      | `toolkit.tasks.dump_arcgis_task`                                                       |
-| Os 3 `@flow` do pacote                                                                  | Removidos. O flow fica na pipeline.                                                    |
+| Antes                                                                                   | Agora                                                                                                                                                    |
+| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `inject_bd_credentials_task`, `get_bd_credentials_from_env`, `get_credentials_from_env` | Removidos. Use ADC: `google.auth.default(scopes=...)`.                                                                                                   |
+| `get_database_username_and_password_from_secret_env`                                    | `toolkit.settings.read_database_credentials`                                                                                                             |
+| `getenv_or_action`                                                                      | `os.environ` ou `toolkit.settings.Settings`.                                                                                                             |
+| `prefect.rename_current_flow_run_task`                                                  | `toolkit.prefect.rename_current_flow_run`, dentro de uma task da pipeline                                                                                |
+| `prefect.generate_dump_db_schedules`, `create_schedules`, `create_dump_db_schedules`    | `toolkit.prefect.schedules_yaml`, que devolve o bloco `schedules` do `prefect.yaml`.                                                                     |
+| `prefect.delete_flow_run_batch`                                                         | Removido.                                                                                                                                                |
+| `logging.log`                                                                           | `toolkit.log.info(mensagem, campos)`.                                                                                                                    |
+| `bd.get_storage_blobs`, `gcs.list_blobs_with_prefix`, `gcs.delete_blobs_list`           | `toolkit.gcs.list_keys`, `delete_keys`, `clear_prefix`                                                                                                   |
+| `gcs.get_gcs_client`, `gcs.upload_file_to_bucket`                                       | `toolkit.gcs.create_store`, `upload`                                                                                                                     |
+| `dbt.execute_dbt_task`                                                                  | `toolkit.dbt.execute_dbt`, dentro de uma task da pipeline                                                                                                |
+| `database_sql.Oracle`, `Postgres`, `MySql`, `SqlServer`                                 | `toolkit.executor.sources.registry.load_sources()[nome]`                                                                                                 |
+| `pandas.*` (o resto), `io.*`, `constants.NOT_SET`                                       | Removidos até o redesenho do dump.                                                                                                                       |
+| `dump_db.tasks.*` (4 tasks)                                                             | Removidos até o redesenho do dump de bancos. Use `Executor.query` e `execute` com um `Source`.                                                           |
+| `dump_url.tasks.download_url`, `dump_files`                                             | Para uma URL, aponte o DuckDB para ela (`read_csv('https://…')`) num template. Para um Google Sheet, use o `GSheetsSource`.                              |
+| `dump_arcgis.tasks.download_data_from_arcgis_task`                                      | Use o `ArcGISSource` e a macro `arcgis_layer` num template: o DuckDB (`ST_Read`) lê a camada e pagina sozinho. A escrita no bucket depende do redesenho. |
+| Os 3 `@flow` do pacote                                                                  | Removidos. O flow fica na pipeline.                                                                                                                      |
 
 Mudanças de comportamento:
 
-- Os filtros de data usam o dialeto de cada banco e a coluna precisa ser um identificador simples.
-- As janelas `bimester`, `trimester`, `quadrimester` e `semester` não se sobrepõem mais.
-- Sem tabela no BigQuery, a execução é uma carga completa.
+- Uma fonte não monta mais consultas: o SQL é um template que o `Executor` roda no cliente da fonte, no dialeto dela. As janelas de data (`window.sql`), `Fetcher` e os passos de limpeza (`Step`, `clean`) foram removidos até o redesenho do dump.
 - `charset`, `build_json_dataframe` e `dataframe_key_column` não existem mais.
 - O SQL Server usa a extensão `mssql` do DuckDB, e não mais o `pyodbc`.

@@ -55,32 +55,27 @@ Promoção especulativa é proibida. Copie uma vez; promova no segundo uso confi
 
 O pacote é plano. Cada módulo cobre um domínio e leva o nome do domínio.
 
-| Módulo                                                    | Responsabilidade                                                                                                                                                                                                                                                                                                                                                               |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `toolkit.executor`                                        | O `Executor`, que roda os templates SQL num `Engine` lendo de um `Source`. `engines/` (protocolo `Engine` e `DuckDBEngine`), `sources/` (protocolo `Source`, fontes fornecidas e `registry.py`), `render.py`, `constants.py`, `utils.py` e `templates/` (arquivos `.sql` em Jinja, uma pasta por backend: `duckdb/`, `postgres/`, `mysql/`, `mssql/`, `oracle/`, `bigquery/`). |
-| `toolkit.settings`                                        | `Settings` (pydantic-settings) e leitura de credenciais de banco.                                                                                                                                                                                                                                                                                                              |
-| `toolkit.log`                                             | O logger do pacote.                                                                                                                                                                                                                                                                                                                                                            |
-| `toolkit.types`                                           | Aliases de tipo e protocolos compartilhados.                                                                                                                                                                                                                                                                                                                                   |
-| `toolkit.gcs`                                             | Operações no GCS com `aiobotocore`. Único lugar que importa `aiobotocore`.                                                                                                                                                                                                                                                                                                     |
-| `toolkit.bigquery`                                        | Cliente assíncrono do BigQuery (ADC) e tabelas externas.                                                                                                                                                                                                                                                                                                                       |
-| `toolkit.partitions`                                      | Seleções de partição (união etiquetada) e janelas de data.                                                                                                                                                                                                                                                                                                                     |
-| `toolkit.extraction`                                      | Montagem e execução do `COPY` para o bucket de staging.                                                                                                                                                                                                                                                                                                                        |
-| `toolkit.columns`                                         | Normalização de nomes de coluna.                                                                                                                                                                                                                                                                                                                                               |
-| `toolkit.dump`, `toolkit.dump_url`, `toolkit.dump_arcgis` | Fluxos de extração.                                                                                                                                                                                                                                                                                                                                                            |
-| `toolkit.dbt`, `toolkit.prefect`                          | Execução de dbt e helpers do Prefect.                                                                                                                                                                                                                                                                                                                                          |
-| `toolkit.tasks`                                           | Os `@task` finos que envolvem as funções acima.                                                                                                                                                                                                                                                                                                                                |
+| Módulo                               | Responsabilidade                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `toolkit.executor`                   | O `Executor`, que roda os templates SQL num `Engine` lendo de um `Source`. `engines/` (protocolo `Engine` e `DuckDBEngine`), `sources/` (protocolo `Source`, fontes fornecidas e `registry.py`), `render.py`, `constants.py`, `types.py`, `utils.py` e `templates/` (arquivos `.sql` em Jinja, uma pasta por backend: `duckdb/`, `postgres/`, `mysql/`, `mssql/`, `oracle/`, `bigquery/`). |
+| `toolkit.settings`                   | `Settings` (pydantic-settings) e leitura de credenciais de banco.                                                                                                                                                                                                                                                                                                                          |
+| `toolkit.log`, `toolkit.telemetry`   | Logs estruturados no logger do Prefect, e logs e métricas OpenTelemetry.                                                                                                                                                                                                                                                                                                                   |
+| `toolkit.constants`, `toolkit.types` | As constantes e os aliases de tipo compartilhados. `toolkit/types.py` não importa nada do toolkit.                                                                                                                                                                                                                                                                                         |
+| `toolkit.gcs`                        | Operações no GCS com `obstore`. Único lugar que importa `obstore`.                                                                                                                                                                                                                                                                                                                         |
+| `toolkit.bigquery`                   | Cliente assíncrono do BigQuery (ADC) e tabelas externas.                                                                                                                                                                                                                                                                                                                                   |
+| `toolkit.dbt`, `toolkit.prefect`     | Execução de dbt e helpers do Prefect.                                                                                                                                                                                                                                                                                                                                                      |
 
 ### 3.2 Regras de código
 
 - `__init__.py` fica sempre vazio. Importe dos submódulos.
 - Não use `_` como prefixo de nome. Uma função não recebe um parâmetro que não usa.
-- Use dataclasses para dados simples. Use modelos Pydantic só para validação em fronteiras (requisições, configurações, linhas lidas do banco).
+- Use dataclasses para dados simples. Use modelos Pydantic só para validação em fronteiras (requisições e configurações).
 - Modele alternativas fechadas como união etiquetada e trate cada caso com `match`. Use `_` só para conjuntos abertos.
-- Fluxos de vários passos são um dataclass de contexto com um método por passo, como `DumpContext`.
+- Fluxos de vários passos são um dataclass de contexto com um método por passo.
 - Use parâmetros explícitos e funções com nome. Evite `**kwargs`, lambdas opacas, `Any` e `object`.
-- Código bloqueante roda por `asyncer.asyncify`.
+- Código bloqueante roda por `asyncio.to_thread`.
 - Não dê a um módulo o nome de uma biblioteca padrão ou de terceiros, como `logging.py` ou `polars.py`.
-- Cada constante vive no módulo que a usa, exceto as de `toolkit.constants`, que são compartilhadas.
+- Constantes ficam em `constants.py` e aliases de tipo em `types.py`, nunca soltos nos módulos. Cada pacote tem os seus: `toolkit/constants.py` e `toolkit/executor/constants.py`, `toolkit/types.py`. Um módulo importa do próprio pacote e dos pacotes acima, nunca dos abaixo. `toolkit/types.py` não importa nada do toolkit; um alias que nomeia uma classe fica junto da classe, para não criar ciclo de import. Classes (modelos, dataclasses, protocolos) ficam com o comportamento delas.
 
 ## 4. API pública e contratos de import
 
@@ -90,7 +85,7 @@ O `toolkit` é usado por todas as pipelines sem versionamento semântico. Cada c
 
 ```python
 # Consumidor depende deste import exato
-from toolkit.dump import DumpRequest
+from toolkit.dbt import DbtRun
 ```
 
 ### 4.2 Regras de compatibilidade
@@ -120,120 +115,129 @@ Este é o único lugar onde `import *` é aceito. Ele é a exceção à regra da
 
 ### 5.1 Todo SQL passa pelo `Executor`
 
-- O SQL do toolkit vive em `toolkit/executor/templates/<backend>/<nome>.sql`; o da pipeline vive em `queries/*.sql` e também passa pelo `Executor` (Seção 5.4). Nunca há SQL em arquivo Python, exceto a expressão `FROM` que um adaptador `Source` devolve.
+- O SQL do toolkit vive em `toolkit/executor/templates/<pasta>/<nome>.sql`; o da pipeline vive em `queries/*.sql` e também passa pelo `Executor`. Não há SQL em arquivo Python.
 - O `Executor` renderiza o template (Jinja, `StrictUndefined`) e o executa num `Engine`. Código fora do `Executor` não abre conexão DuckDB nem escreve SQL.
 - Valores entram no template como `Identifier()` e `Literal()` de `psycopg.sql`. Nunca coloque um valor vindo de fora no texto do SQL. Valores de execução usam parâmetros (`?`).
 - Cada template começa com um cabeçalho JSON em comentário Jinja que descreve a entrada.
 - Uma conexão DuckDB atende uma consulta por vez. Abra uma conexão por tarefa concorrente.
 
 ```python
-rows = await executor.query(
-    "duckdb/describe_source", {"source": scan}, expect=ColumnInfo
-)
+orders = await executor.query("orders", {"source": scan}, expect=Order)
 ```
 
-### 5.2 Linhas viram modelos
+### 5.2 Resultados viram datasets tipados
 
-`Executor.query(..., expect=Modelo)` valida cada linha com Pydantic e levanta `ValidationError` se uma linha não couber no modelo. Use um modelo por consulta. Não leia tuplas soltas.
+`Executor.query(..., expect=Schema)` devolve um `Dataset[Schema]` do Polars (`dataset.py` guarda o resultado e `schema.py` lê a classe e checa os lotes, ambos em `toolkit/executor/`). O schema é uma classe com anotações (`TypedDict`, dataclass ou `NamedTuple`), e `X | None` marca uma coluna que aceita nulos. O resultado se pode `await` (tudo de uma vez) ou percorrer com `async for` (um `Dataset` por lote de `batch_size` linhas).
+
+- Cada lote é checado de forma vetorizada: nomes de coluna iguais aos do schema, tipo da mesma família da anotação (inteiros viram `Int64`, floats viram `Float64`, decimal e timestamp mantêm a precisão), nenhum nulo em coluna sem `| None`. Um `SchemaError` lista todos os problemas.
+- Uma coluna `GEOMETRY` do DuckDB usa a anotação `Geometry` (`toolkit.types`) e chega como vem: o tipo de extensão `geoarrow.wkb` do Polars, com o CRS nos metadados. Não converta no template só para ler o dado.
+- Um texto nunca é lido como número: quem quiser converter faz o `CAST` no template.
+- Regras de campo, como `gt` e `Literal`, não são checadas. Use um modelo Pydantic só onde essa regra importar.
+- Uma anotação sem tipo no Polars levanta `TypeError` antes de rodar a consulta. Não leia tuplas soltas.
 
 ### 5.3 DuckDB primeiro, Polars no resto
 
 | Ferramenta | Papel                                                                                           |
 | ---------- | ----------------------------------------------------------------------------------------------- |
 | DuckDB     | SQL, leitura das fontes, escrita de Parquet e CSV, `COPY` para o bucket, geometria (`spatial`). |
-| Polars     | Só o que o DuckDB não faz: a leitura de Oracle por lotes e o preparo de dados de APIs.          |
+| Polars     | Só o que o DuckDB não faz: o preparo de dados de APIs.                                          |
 
 Uma função pública recebe e devolve `Path`, `pl.DataFrame` ou `pl.LazyFrame`. Ela nunca expõe conexão ou relação do DuckDB, nem cursor de driver.
 
-### 5.4 Limpeza de dados
-
-O `Executor` faz toda a limpeza que o DuckDB faz, isto é, que é SQL. O que o DuckDB não faz (lógica em Python, chamadas de API, quadros do Polars) é trabalho da task da pipeline, que orquestra a chamada.
-
-- Um passo de limpeza é um `Step(template, values)`. O template é um `SELECT` que lê `{{ source }}`. `Executor.clean(scan, steps)` aplica os passos em ordem: cada passo vira uma `TEMP VIEW` sobre o anterior, com nome único, e o resultado é a expressão `FROM` da última. Os dados são lidos uma vez, quando o resultado é copiado.
-- Uma pipeline passa a pasta dela (`Executor(engine, templates=Path(__file__).parent / "queries")`, ou `templates=` em `run_dump` e `stage_scan`) e uma lista de `Step`. O Executor procura o template primeiro nessa pasta e depois no toolkit, então um template da pipeline pode importar os macros do toolkit (`{% from "duckdb/macros.sql" import text %}`). Não use nomes de pasta do toolkit, como `duckdb/`, na pasta da pipeline.
-- Os valores de um `Step` são `Identifier`, `Literal` ou `SQL`, números ou booleanos, nunca texto simples, que entraria cru no SQL. Um `str` levanta `TypeError` com o nome da chave quando o `Step` é criado.
-- Um erro num passo carrega uma nota com o número do passo e o nome do template (`cleaning step 2: trim_names`), sem o texto do SQL.
-- A pipeline só escreve arquivos SQL e a lista de passos. Ela não abre conexão DuckDB.
-- `DUCKDB_MEMORY_LIMIT` e `DUCKDB_TEMP_DIRECTORY` limitam a memória do DuckDB e escolhem a pasta onde ele grava os dados que não cabem. Vazios, valem os padrões do DuckDB.
-
-```python
-steps = [Step("trim_names"), Step("drop_duplicates", {"key": Identifier("id")})]
-await run_dump(request, steps=steps, templates=Path(__file__).parent / "queries")
-```
-
 ## 6. Engines e fontes
 
-O `Executor` recebe um `Engine` e um `Source` e junta os dois. A divisão é esta: o `Engine` roda SQL, o `Source` descreve um sistema remoto e nunca roda SQL, e só o `Executor` roda SQL no engine por causa de um `Source`.
+O `Executor` recebe um cliente, e uma fonte é o que abre esse cliente. A divisão é esta: o cliente roda SQL, a `Source` abre e prepara o cliente, e o `Executor` renderiza os templates e os roda no cliente. Uma `Source` nunca monta nem roda uma consulta.
 
-### 6.1 Engine
+### 6.1 Cliente e Executor
 
-- `Engine` é um protocolo com `execute(sql, params)` e `records(sql, params)`. Ele roda SQL já renderizado.
-- O `toolkit` fornece `DuckDBEngine` (`toolkit/executor/engines/duckdb.py`). Qualquer classe que siga o protocolo `Engine` (`toolkit/executor/engines/protocol.py`) também serve. Passe uma fábrica de engine (`open_engine`) para `run_dump`.
-- Uma conexão DuckDB atende uma consulta por vez. A fábrica abre um engine por tarefa concorrente.
+- O cliente segue o protocolo `Engine` (`toolkit/executor/engines/protocol.py`): `execute(sql, params)` e `query(sql, params, batch_size)`, que devolve quadros do Polars em lotes. Um resultado vazio devolve um quadro com as colunas, e um cliente que não sabe as colunas de um resultado vazio devolve um quadro sem colunas. Leia os lotes antes de rodar outro statement no mesmo cliente.
+- O `toolkit` fornece `DuckDBEngine` (`toolkit/executor/engines/duckdb.py`). Qualquer classe que siga o protocolo também serve.
+- `Executor(client, templates)` só tem `execute` e `query`. `query` devolve um `Dataset` tipado (Seção 5.2). A pasta `templates` da pipeline é procurada antes da do toolkit, então não use nomes de pasta do toolkit, como `duckdb/`, nela.
+- Uma conexão DuckDB atende uma consulta por vez. Abra uma conexão por tarefa concorrente.
 
 ### 6.2 Source
 
-- `Source` é um protocolo (`toolkit/executor/sources/protocols.py`) que descreve de onde vêm os dados: `name` e `extensions` (extensões do DuckDB a carregar), que são atributos de classe (`ClassVar`), `window(query, selection)`, `setup()` (SQL a rodar antes da leitura, como o `ATTACH`, ou `None`) e `scan(query)` (a expressão `FROM`).
-- Uma função não recebe um parâmetro que não usa. Por isso uma fonte recebe tudo de que precisa quando é criada, por um `SourceContext` (dados de conexão, diretório de trabalho e tamanho de lote): cada construtor lê só os campos que usa.
-- Uma fonte que o engine não lê direto também segue o protocolo `Fetcher` (`async fetch(query)`), que copia os dados para arquivos locais e devolve a lista deles. `Executor.prepare_source` segue sempre esta ordem: `fetch` (se houver; sem arquivos, não há o que copiar e devolve `None`), carregar `extensions`, rodar `setup` e devolver `scan`. A fonte não tem referência ao engine.
-- O `toolkit` fornece cinco fontes, uma classe por arquivo em `toolkit/executor/sources/backends/`: `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource` e `BigQuerySource`. Todas têm `from_context(context)`, que recebe o `SourceContext`. O método é opcional: `SourceBase` o define como `cls()`, para uma fonte que não precisa do contexto (como `BigQuerySource`). Uma fonte com campos obrigatórios, como a conexão, o sobrescreve. Qualquer outra função ou classe que receba um `SourceContext` e devolva um `Source` também serve: passe-a como `make_source` para `run_dump`.
-- Postgres, MySQL e SQL Server herdam de `DuckDBSource` (`toolkit/executor/sources/duckdb.py`), que tem toda a lógica: `setup` cria um `SECRET` e faz `ATTACH`, e `scan` chama a função de consulta da extensão. A subclasse só define atributos de classe, cada um anotado como `ClassVar` (`attach_type`, `query_function` e, se preciso, `extensions` e `read_only`), e não sobrescreve métodos. Se um backend precisar de outro comportamento, sobrescreva só aquele método na classe dele; não crie opções na classe base. O BigQuery declara a extensão `bigquery`, não tem `setup` e `scan` devolve `bigquery_query(projeto, sql)`, sem dados de conexão. As fontes que precisam da conexão usam `context.require_conn(nome)`.
-- Oracle não tem extensão no DuckDB. `fetch` lê por lotes com `oracledb` e Polars e escreve Parquet no diretório de trabalho, e `scan` devolve `read_parquet` sobre esses arquivos. O DuckDB faz o `COPY` para o bucket, como nas outras fontes.
-- O registro usa a biblioteca `autoregistry`. `SourceBase` (`toolkit/executor/sources/base.py`) é a base das fontes fornecidas: uma subclasse se registra pelo nome da classe sem o sufixo `Source`, em minúsculas (`PostgresSource` é `"postgres"`), e o nome da classe precisa terminar em `Source`. O atributo `name` da classe vem desse nome, então a subclasse não o declara. Uma classe intermediária, como `DuckDBSource`, usa `skip=True` e não entra no registro. `load_sources()` (`toolkit/executor/sources/registry.py`) importa todos os módulos de `backends/` e devolve o registro, usado como um dicionário: `load_sources()["postgres"]` é a classe, e a busca ignora maiúsculas. Um arquivo novo em `backends/` já basta. Dois nomes iguais levantam `KeyCollisionError`. Uma fonte fora de `backends/` é passada como `make_source` (uma classe que só segue o protocolo `Source` funciona sem registro).
-- A janela de datas é aplicada na consulta remota, no dialeto da fonte, por um template `window.sql` por fonte. O nome da coluna passa por `safe_column` (`toolkit/executor/utils.py`).
+- `Source` é um protocolo (`toolkit/executor/sources/protocols.py`) com `name` (atributo de classe), `open(engine)` e `setup(client)`.
+- `open(engine)` é um gerenciador de contexto assíncrono que entrega o cliente que roda SQL naquele sistema, e fecha o cliente ao sair. Um sistema que o DuckDB anexa (Postgres, MySQL, SQL Server, BigQuery) carrega as extensões e entrega o próprio `engine` do DuckDB. Um que o DuckDB não anexa (Oracle) ignora o `engine` e entrega um cliente próprio (`OracleClient`, sobre `oracledb`). Todo cliente segue o protocolo `Engine`.
+- `setup(client)` roda no cliente os statements que o preparam, como o `SECRET` e o `ATTACH`. Quem abre o cliente chama o `setup` em seguida. O padrão de `SourceBase` não faz nada.
+- Uma fonte recebe tudo de que precisa quando é criada. As que precisam da conexão têm `from_context(context)`, que lê o `SourceContext` (hoje só os dados de conexão) e usa `context.require_conn(nome)`. Uma fonte sem configuração, como `BigQuerySource`, é criada direto.
+- O SQL de um template segue o dialeto do cliente onde roda: DuckDB nas fontes que ele anexa, e Oracle no Oracle. O banco anexado sempre se chama `src` (`ALIAS` em `toolkit/executor/constants.py`), e o template o escreve como `FROM src.esquema.tabela`. Um `Engine` anexa uma fonte só.
+- O `toolkit` fornece sete fontes, uma classe por arquivo em `toolkit/executor/sources/backends/`: `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource`, `BigQuerySource`, `GSheetsSource` e `ArcGISSource`. O `ArcGISSource` só carrega a extensão `spatial`, e o template lê a camada com a macro `arcgis_layer`, sem código HTTP no toolkit. O `GSheetsSource` cria um segredo da extensão `gsheets` com um token de acesso do ADC, e o template chama `read_gsheet` ou `COPY ... (FORMAT gsheet)`. O `BigQuerySource(project)` anexa o projeto somente leitura, com as credenciais do ambiente (ADC), e o projeto padrão é `BIGQUERY_PROJECT`.
+- Postgres, MySQL e SQL Server herdam de `DuckDBSource` (`toolkit/executor/sources/duckdb.py`), que tem toda a lógica: `setup` cria um `SECRET` e faz `ATTACH`; a senha vai em `params` e nunca entra no texto do SQL, porque os erros do DuckDB mostram o texto. A subclasse só define atributos de classe, cada um anotado como `ClassVar` (`attach_type` e, se preciso, `extensions` e `read_only`), e não sobrescreve métodos. Se um backend precisar de outro comportamento, sobrescreva só aquele método na classe dele; não crie opções na classe base.
+- O registro usa a biblioteca `autoregistry`. `SourceBase` (`toolkit/executor/sources/base.py`) é a base das fontes fornecidas: uma subclasse se registra pelo nome da classe sem o sufixo `Source`, em minúsculas (`PostgresSource` é `"postgres"`), e o nome da classe precisa terminar em `Source`. O atributo `name` da classe vem desse nome, então a subclasse não o declara. Uma classe intermediária, como `DuckDBSource`, usa `skip=True` e não entra no registro. `load_sources()` (`toolkit/executor/sources/registry.py`) importa cada módulo de `backends/` e devolve o registro. Um backend novo é um arquivo novo em `backends/`.
 - A conexão (`DBConn`, em `protocols.py`) é um `dataclass(frozen=True)` com a senha fora do `repr`. Nunca registre senha, token, string de conexão, valores ou texto de consulta em log.
-- A construção de um `Source` não tem efeito colateral. Clientes externos são criados no primeiro uso.
+- A construção de uma `Source` não tem efeito colateral. Clientes externos são abertos no `open`.
 
 ## 7. Google Cloud
 
 - **Autenticação:** workload identity (WIF) por Application Default Credentials. Não existe arquivo de service account, variável `GOOGLE_APPLICATION_CREDENTIALS` nem credencial em imagem. Clientes Google usam `google.auth.default(scopes=...)`.
-- **GCS:** apenas por `toolkit.gcs` (`aiobotocore`, API compatível com S3, chaves HMAC lidas de `Settings`). O GCS não tem exclusão em lote do S3: apague objeto por objeto, com concorrência limitada.
+- **HTTP:** clientes HTTP usam `httpx2`, e `requests` é proibido (`TID251`). O `toolkit` só faz HTTP para renovar o token do Google (`HttpxRequest`, em `gsheets.py`): o DuckDB lê as camadas do ArcGIS e as planilhas.
+- **GCS:** apenas por `toolkit.gcs` (`obstore`, API compatível com S3, chaves HMAC lidas de `Settings`; cada função recebe o `ObjectStore` de um bucket, criado por `create_store`). O GCS não tem exclusão em lote do S3: apague objeto por objeto, com concorrência limitada.
 - **Escrita no bucket:** o DuckDB escreve com `COPY ... TO 'gs://...'`, usando o `SECRET` do tipo `gcs` criado pela conexão.
-- **BigQuery:** apenas por `toolkit.bigquery`. A tabela final é uma tabela externa sobre o prefixo de staging, criada depois que os dados existem.
+- **BigQuery:** apenas por `toolkit.bigquery`. A tabela final é uma tabela externa sobre o prefixo da tabela no bucket, criada depois que os dados existem.
 
 ## 8. Fronteira com o Prefect
 
-Cada função pura vive no módulo do seu domínio. O `@task` que a envolve vive em `toolkit/tasks.py` e é um wrapper fino.
+O toolkit expõe funções puras, sem `@task`. O `@task` que envolve uma função fica no `tasks.py` da pipeline, como wrapper fino (a pipeline decide retries, cache e nome da task).
 
 ```python
-# toolkit/dump.py
-async def run_dump(request: DumpRequest) -> None:
-    """Dump a database query to the staging bucket."""
+# toolkit/dbt.py
+def execute_dbt(request: DbtRun) -> None:
+    """Run one dbt command."""
     ...
 
 
-# toolkit/tasks.py
-@task
-async def dump_database_task(request: DumpRequest) -> None:
-    """Dump a database query to the staging bucket and publish the table."""
-    await run_dump(request)
+# pipelines/<pipeline>/tasks.py
+@task(retries=2)
+def execute_dbt_task(request: DbtRun) -> None:
+    """Run one dbt command."""
+    execute_dbt(request)
 ```
 
 | Padrão                                | Motivo                                                            |
 | ------------------------------------- | ----------------------------------------------------------------- |
 | `@flow` em qualquer arquivo do pacote | Um flow aqui tem parâmetros fixos e vira uma pipeline disfarçada. |
 | Lógica de negócio dentro do `@task`   | A lógica presa ao wrapper não pode ser testada sem o Prefect.     |
-| `@task` fora de `toolkit/tasks.py`    | Dificulta achar onde estão as tasks.                              |
+| `@task` em qualquer arquivo do pacote | A pipeline decide retries e cache, então o wrapper é dela.        |
 | `if __name__ == "__main__":`          | Scripts avulsos não pertencem a uma biblioteca.                   |
-| `print()`                             | Use `toolkit.log.logger`.                                         |
+| `print()`                             | Use `toolkit.log.info`.                                           |
+
+### 8.1 Logs, traces e métricas
+
+- Todo log do pacote passa por `toolkit.log.info(mensagem, campos)`. A mensagem diz o que aconteceu, sem valores; os valores vão em `campos`, que viram `chave=valor` na mensagem e atributos do registro. Não crie logger próprio nem use `print()`.
+- Uma operação do pacote (consulta, statement, upload, apagar) é um span: `with tracer.start_as_current_span(NOME, attributes=...)`, com o nome em `constants.py`. O span dá a duração, o erro e o lugar dentro do trace da run. Não crie um histograma por operação.
+- Não há métrica de duração: o backend (SigNoz) calcula duração e taxa de erro a partir dos spans. Runs do Prefect não são instrumentadas à mão, porque o Prefect já cria um span por flow run e task run. Não decore flows nem tasks para medir duração.
+- Um instrumento de `toolkit/telemetry.py` é só para totais que um span não dá, como linhas e bytes. Use unidade e atributos de cardinalidade baixa (`template`, `prefix`). Valor de dado, id de linha e mensagem de erro não são atributos.
+- O pacote usa só a API do OpenTelemetry (`trace.get_tracer`, `metrics.get_meter`). Quem inicia o processo chama `configure_telemetry()` depois de `import prefect`. O endpoint, os cabeçalhos e o nome do serviço são as settings `OTEL_*`, lidas do singleton `settings`; a função não recebe settings como parâmetro.
+- Teste um span com `spans_named` e um contador com `metric_total`, os dois sobre os provedores em memória da sessão, com um `template` ou `prefix` único por teste. Para trocar as settings de uma função, troque o singleton no módulo com `monkeypatch.setattr`.
 
 ## 9. Testes do toolkit
 
-A pasta `packages/toolkit/tests/` segue os níveis do `data-proxy`:
+Teste o comportamento do nosso código em `packages/toolkit/`, e só dele. Não teste o código dos outros: o DuckDB, o Polars, o Prefect, o OpenTelemetry, o `obstore`, o `psycopg`, o Jinja, o `autoregistry` e os clientes do Google já têm os seus testes. As regras gerais estão na [Seção 14 do guia raiz](../../STYLEGUIDE.md#14-testes). Regras do toolkit:
 
-| Nível      | Local                | Roda contra                                                  |
-| ---------- | -------------------- | ------------------------------------------------------------ |
-| Unitário   | `tests/unit/`        | Um processo: DuckDB em memória, arquivos temporários, fakes. |
-| Integração | `tests/integration/` | Serviços locais: servidor S3 `moto`.                         |
+**Onde ficam**
 
-As regras gerais de teste estão na [Seção 14 do guia raiz](../../STYLEGUIDE.md#14-testes). Regras só do toolkit:
+- Os testes unitários e os de integração moram na mesma árvore, `tests/`, que espelha o pacote: `toolkit/gcs.py` é testado por `tests/test_gcs.py` e `toolkit/executor/schema.py` por `tests/executor/test_schema.py`. Não há pastas `unit/` e `integration/`, nem BDD: são funções `test_*` simples.
+- Um teste que precisa de um serviço ou de rede leva a marca do serviço: `s3` (servidor S3) ou `extensions` (instala uma extensão do DuckDB). Os outros testes rodam sem rede.
+- Uma fixture usada por mais de um arquivo vai no `conftest.py`. Um módulo de teste só tem testes.
 
-- Testes unitários não abrem rede. Testes que instalam uma extensão do DuckDB levam a marca `extensions`.
-- O arquivo de teste espelha o módulo: `toolkit/partitions.py` é testado por `tests/unit/test_partitions.py`.
-- Use DuckDB em memória e `tmp_path`. Não use fake de DuckDB: ele é rápido o bastante para ser real.
-- Mocke só serviços externos (BigQuery, GCS real, bancos). Cada fake tem a forma mínima do que o código usa.
-- Use `hypothesis` para invariantes, como "as janelas cobrem o intervalo sem lacuna nem sobreposição".
-- Todo bug achado ganha um teste de regressão com o cenário no `id`.
+**Como se escreve**
+
+- Um teste é pequeno: prepara, age e confere em poucas linhas. O nome diz o comportamento (`test_a_frame_that_does_not_fit_is_rejected_naming_the_column`), não a função que roda.
+- Prefira testes por tabela, `pytest.param(..., id="cenário")`, com o `id` dizendo o cenário. Uma tabela cobre entradas diferentes de um comportamento só.
+- Use o `hypothesis` para invariantes, com a frase "para qualquer entrada, isto vale": o limite de concorrência nunca é passado, o inteiro de qualquer largura vira `Int64` sem mudar o valor, a senha nunca entra no texto do SQL. Não use `hypothesis` para um exemplo só.
+- Confira valores exatos. Não use `in` sobre texto, salvo uma regex em texto gerado que seria frágil de comparar inteiro.
+- Use DuckDB em memória e `tmp_path`. Não faça fake de DuckDB.
+- Mocke só o que é externo e não roda aqui: o cliente do Prefect, o runner do dbt, o `oracledb` (um SQLite faz o papel dele) e o token do Google. Cada fake tem a forma mínima do que o código usa.
+- Todo bug achado ganha um teste de regressão, com o cenário no `id` e a palavra "Regression" no docstring. Antes de fechar um teste, estrague o código de propósito e veja o teste falhar.
+
+**O que não se testa**
+
+- Logs, spans e métricas. Confira uma vez, à mão, num script em `/tmp`, e não deixe teste no repositório.
+- O código do BigQuery (`toolkit/bigquery.py` e `BigQuerySource`): o Google testa o cliente.
+- O armazenamento de campos, os valores padrão, os atributos de classe e o "não levantou exceção".
+- Uma lista que cresce, como o registro de fontes, a não ser que ela seja fechada.
+- O mesmo comportamento em dois níveis: ponha o teste no nível mais baixo que o prova.
 
 ## 10. Verificações automáticas
 
@@ -248,14 +252,14 @@ uv run vulture toolkit
 uv run pytest
 ```
 
-| Regra                                                                                                       | Ferramenta                             |
-| ----------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| Sem `pandas`, `geopandas`, `basedosdados`, `google.cloud.storage`, `boto3`, `psycopg2`, `pymysql`, `pyodbc` | `ruff` (`TID251`)                      |
-| `aiobotocore` só em `toolkit/gcs.py`                                                                        | `ruff` (`TID251`, exceção por arquivo) |
-| Sem `print`                                                                                                 | `ruff` (`T20`)                         |
-| Tipos completos, no modo `all`                                                                              | `basedpyright`                         |
-| Tipos completos, no preset `strict`                                                                         | `pyrefly`                              |
-| Estilo dos templates SQL                                                                                    | `sqlfluff`                             |
-| Código sem uso                                                                                              | `vulture`                              |
+| Regra                                                                                                                   | Ferramenta                             |
+| ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Sem `pandas`, `geopandas`, `requests`, `basedosdados`, `google.cloud.storage`, `boto3`, `psycopg2`, `pymysql`, `pyodbc` | `ruff` (`TID251`)                      |
+| `obstore` só em `toolkit/gcs.py`                                                                                        | `ruff` (`TID251`, exceção por arquivo) |
+| Sem `print`                                                                                                             | `ruff` (`T20`)                         |
+| Tipos completos, no modo `all`                                                                                          | `basedpyright`                         |
+| Tipos completos, no preset `strict`                                                                                     | `pyrefly`                              |
+| Estilo dos templates SQL                                                                                                | `sqlfluff`                             |
+| Código sem uso                                                                                                          | `vulture`                              |
 
 Os dois verificadores de tipos cobrem `toolkit/` e `tests/`, e valem zero erros e zero avisos. A única regra desligada para todo o pacote é `reportUnusedCallResult` do `basedpyright`: chamadas de efeito colateral (BigQuery, dbt, DuckDB) devolvem objetos que ninguém usa. Os testes desligam, por pasta, só as regras que o pytest torna ruído (parâmetros de fixture sem tipo, classes falsas pequenas); cada regra desligada tem o motivo em um comentário no `pyproject.toml`. Não há comentário de ignore no código (`# pyright: ignore`, `# pyrefly: ignore`, `# type: ignore`). Toda supressão vive no `pyproject.toml`, no escopo mais estreito possível (um arquivo ou uma pasta) e com o motivo em um comentário. Para o `basedpyright`, um arquivo é uma `executionEnvironments` com `root` no arquivo; para o `pyrefly`, um `sub-config` com `matches`. O `pyrefly` aplica só o primeiro `sub-config` que casa com o arquivo, então um arquivo listado sozinho repete as regras de `tests/**`. Só uma lacuna de tipos de uma biblioteca de terceiros justifica uma supressão. O hook de pre-commit executa `ruff-check` e `ruff-format` em todo commit que muda arquivos do `packages/toolkit/`.
