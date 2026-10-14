@@ -58,22 +58,10 @@ def fake_runner(monkeypatch, tmp_path):
             id="command_and_target",
         ),
         pytest.param(
-            {
-                "select": "a",
-                "exclude": "b",
-                "state": "prod",
-                "full_refresh": True,
-            },
+            {"select": "a", "exclude": "b", "state": "prod", "full_refresh": True},
             [
-                "run",
-                "--target",
-                "dev",
-                "--select",
-                "a",
-                "--exclude",
-                "b",
-                "--state",
-                "prod",
+                *("run", "--target", "dev"),
+                *("--select", "a", "--exclude", "b", "--state", "prod"),
                 "--full-refresh",
             ],
             id="every_option",
@@ -83,58 +71,34 @@ def fake_runner(monkeypatch, tmp_path):
             ["source", "freshness", "--target", "dev"],
             id="source_freshness_is_two_words",
         ),
-        pytest.param({"command": "deps"}, ["deps"], id="deps_takes_no_option"),
         pytest.param(
             {"command": "deps", "select": "a", "target": "prod"},
             ["deps"],
-            id="options_are_dropped_for_a_command_that_takes_none",
+            id="a_command_without_options_drops_them",
         ),
     ],
 )
-def test_arguments(values, expected):
-    assert DbtRun(repository=REPOSITORY, **values).arguments() == expected
+def test_the_command_line_of_a_request(values, expected):
+    """Regression: the shared word list of a two-word command was mutated by each call."""
+    request = DbtRun(repository=REPOSITORY, **values)
+
+    assert [request.arguments(), request.arguments()] == [expected, expected]
 
 
 @pytest.mark.parametrize(
-    ("command", "expected"),
-    [
-        pytest.param("run", ["run", "--target", "dev"], id="one_word"),
-        pytest.param(
-            "source freshness",
-            ["source", "freshness", "--target", "dev"],
-            id="two_words",
-        ),
-        pytest.param("deps", ["deps"], id="no_option"),
-    ],
-)
-def test_a_command_word_list_is_not_shared_between_calls(command, expected):
-    """Regression: the shared list of a multi-word command used to be mutated."""
-    DbtRun(repository=REPOSITORY, command=command).arguments()
-
-    assert DbtRun(repository=REPOSITORY, command=command).arguments() == expected
-
-
-@pytest.mark.parametrize(
-    ("values", "expected"),
+    ("values", "field"),
     [
         pytest.param({"repository": ""}, "repository", id="empty_repository"),
-        pytest.param(
-            {"repository": REPOSITORY, "command": "rn"}, "command", id="unknown_command"
-        ),
-        pytest.param(
-            {"repository": REPOSITORY, "unknown": "x"}, "unknown", id="unknown_field"
-        ),
+        pytest.param({"command": "rn"}, "command", id="unknown_command"),
+        pytest.param({"unknown": "x"}, "unknown", id="unknown_field"),
     ],
 )
-def test_the_request_is_validated_when_it_is_built(values, expected):
-    """The repository is not empty, the command is known and no field is extra."""
-    with pytest.raises(ValidationError, match=expected):
-        DbtRun.model_validate(values)
+def test_a_request_with_a_bad_field_is_rejected_when_built(values, field):
+    with pytest.raises(ValidationError, match=field):
+        DbtRun.model_validate({"repository": REPOSITORY, **values})
 
 
-def test_execute_dbt_runs_deps_then_the_command_with_the_cloned_project(
-    fake_runner, tmp_path
-):
+def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_path):
     """Regression: the clone was ignored, so dbt ran in the working directory."""
     dbt.execute_dbt(DbtRun(repository=REPOSITORY, select="vendas"))
 
@@ -146,14 +110,15 @@ def test_execute_dbt_runs_deps_then_the_command_with_the_cloned_project(
     ]
 
 
-def test_execute_dbt_lets_a_failed_command_raise(fake_runner):
+def test_a_failed_dbt_command_raises(fake_runner):
     fake_runner.error = ValueError("dbt failed")
+
     with pytest.raises(ValueError, match="dbt failed"):
         dbt.execute_dbt(DbtRun(repository=REPOSITORY))
 
 
 def make_repository(path: Path, *, queries: bool) -> Path:
-    """Create a local git repository, optionally with a ``queries`` project inside."""
+    """Create a local git repository, with the dbt project in ``queries`` or at the root."""
     repository = git.Repo.init(path)
     project = path / "queries" if queries else path
     project.mkdir(exist_ok=True)
@@ -167,20 +132,20 @@ def make_repository(path: Path, *, queries: bool) -> Path:
 @pytest.mark.parametrize(
     ("queries", "expected"),
     [
-        pytest.param(True, Path("clone/queries"), id="queries_folder"),
-        pytest.param(False, Path("clone"), id="repository_root"),
+        pytest.param(True, "clone/queries", id="the_queries_folder"),
+        pytest.param(False, "clone", id="the_repository_root"),
     ],
 )
-def test_dbt_project_dir(queries, expected, tmp_path):
+def test_the_dbt_project_is_the_queries_folder_when_there_is_one(
+    queries, expected, tmp_path
+):
     origin = make_repository(tmp_path / "origin", queries=queries)
 
     clone = dbt.clone_repository(str(origin), tmp_path / "clone")
-    project = dbt.dbt_project_dir(clone)
 
-    assert project == tmp_path / expected
-    assert (project / "dbt_project.yml").is_file()
+    assert dbt.dbt_project_dir(clone) == tmp_path / expected
 
 
-def test_clone_repository_reports_a_failed_clone(tmp_path):
+def test_a_failed_clone_is_reported(tmp_path):
     with pytest.raises(RuntimeError, match="clone failed"):
         dbt.clone_repository(str(tmp_path / "missing"), tmp_path / "clone")

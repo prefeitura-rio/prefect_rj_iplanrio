@@ -2,11 +2,12 @@
 
 from collections.abc import AsyncGenerator
 
+import polars as pl
 import pytest
 
+from toolkit.executor.constants import DEFAULT_BATCH_SIZE
 from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.executor.sources.protocols import DBConn, SourceContext
-from toolkit.types import DatabaseRecord, QueryParams
+from toolkit.types import QueryParams
 
 
 @pytest.fixture
@@ -16,113 +17,32 @@ async def duckdb_memory() -> AsyncGenerator[DuckDBEngine]:
         yield engine
 
 
-class FakePaginator:
-    def __init__(self, keys: list[str]) -> None:
-        self.keys = keys
-
-    async def paginate(
-        self, **_: str
-    ) -> AsyncGenerator[dict[str, list[dict[str, str]]]]:
-        prefix = _.get("Prefix", "")
-        yield {
-            "Contents": [{"Key": key} for key in self.keys if key.startswith(prefix)]
-        }
-
-
-class FakeS3:
-    """The part of the S3 client that ``toolkit.gcs`` uses."""
-
-    def __init__(self, keys: list[str]) -> None:
-        self.keys = list(keys)
-        self.deleted: list[str] = []
-
-    def get_paginator(self, _: str) -> FakePaginator:
-        return FakePaginator(self.keys)
-
-    async def delete_object(self, *, Bucket: str, Key: str) -> None:  # noqa: N803
-        self.keys.remove(Key)
-        self.deleted.append(Key)
-
-
-class FakeBigQuery:
-    """Records the calls that ``toolkit.dump`` makes."""
-
-    def __init__(self, *, exists: bool = False) -> None:
-        self.exists = exists
-        self.calls: list[tuple[str, ...]] = []
-
-    async def table_exists(self, table: str) -> bool:
-        self.calls.append(("table_exists", table))
-        return self.exists
-
-    async def drop_table(self, table: str) -> None:
-        self.calls.append(("drop_table", table))
-
-    async def create_dataset(self, dataset: str) -> None:
-        self.calls.append(("create_dataset", dataset))
-
-    async def delete_dataset(self, dataset: str) -> None:
-        self.calls.append(("delete_dataset", dataset))
-
-    async def create_external_table(
-        self,
-        table: str,
-        uri_prefix: str,
-        source_format: str,
-        *,
-        connection_id: str | None = None,
-    ) -> None:
-        self.calls.append(
-            (
-                "create_external_table",
-                table,
-                uri_prefix,
-                source_format,
-                str(connection_id),
-            )
-        )
-
-
-@pytest.fixture
-def fake_s3() -> type[FakeS3]:
-    return FakeS3
-
-
-@pytest.fixture
-def fake_bigquery() -> type[FakeBigQuery]:
-    return FakeBigQuery
-
-
 class FakeEngine:
-    """A custom engine: it only records SQL and returns canned rows."""
+    """An engine that records the SQL and returns canned rows as frames."""
 
-    def __init__(self, rows: list[DatabaseRecord] | None = None) -> None:
+    def __init__(self, rows: list[dict[str, object]] | None = None) -> None:
         self.rows = rows or []
         self.statements: list[str] = []
+        self.params: list[QueryParams | None] = []
 
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
         self.statements.append(sql)
+        self.params.append(params)
 
-    async def records(
-        self, sql: str, *, params: QueryParams | None = None
-    ) -> list[DatabaseRecord]:
+    async def query(
+        self,
+        sql: str,
+        *,
+        params: QueryParams | None = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> AsyncGenerator[pl.DataFrame]:
         self.statements.append(sql)
-        return self.rows
+        self.params.append(params)
+        frame = pl.DataFrame(self.rows)
+        for offset in range(0, max(frame.height, 1), batch_size):
+            yield frame.slice(offset, batch_size)
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def fake_engine() -> type[FakeEngine]:
     return FakeEngine
-
-
-CONN = DBConn("h", 5432, "d", "u", "p")
-
-
-@pytest.fixture
-def make_context(tmp_path):
-    """Build a source context around the test directory."""
-
-    def build(*, conn: DBConn | None = CONN, batch_size: int = 10) -> SourceContext:
-        return SourceContext(conn, tmp_path, batch_size)
-
-    return build
