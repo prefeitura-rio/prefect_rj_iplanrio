@@ -62,15 +62,21 @@ Esse modelo garante reprodutibilidade, isolamento e facilidade de evolução par
 
 ### Tarefas e fluxos compartilhados
 
-`src/prefect_rj_iplanrio/tasks.py` e `flows.py` têm o que mais de uma pipeline usa, sobre o `toolkit`. Os fluxos são assíncronos, e os parâmetros de cada ambiente (`bucket`, `project`, `biglake_connection`) vêm do `prefect.yaml`. O `DuckDB` escreve no bucket com chaves HMAC (`GCS_HMAC_ACCESS_ID` e `GCS_HMAC_SECRET`), que o pod precisa ter.
+`src/prefect_rj_iplanrio/tasks.py` e `flows.py` têm o que mais de uma pipeline usa, sobre o `toolkit`. Os fluxos são assíncronos, e os parâmetros de cada ambiente (`bucket`, `project`, `biglake_connection`) vêm do `prefect.yaml`. Os parâmetros são grupos tipados (`Database`, `Cloud`, `Table`, `Read` e `DumpOptions`, em `types.py`): o Prefect recusa uma chave que falta, um erro de digitação ou um tipo errado antes de rodar. O Prefect troca o grupo inteiro, e não só a chave, quando um `schedule` repete um parâmetro do `deployment`, então `database` e `cloud` ficam no `deployment` e `table`, `read` e `options` em cada `schedule`.
 
-| Item                                                        | O que faz                                                                                                                                                |
-| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dump_to_bucket(db_type, query, dataset_id, table_id, ...)` | O `DuckDB` copia uma consulta do banco (`postgres`, `mysql`, `mssql` ou `oracle`) para Parquet no bucket, sem trazer as linhas ao Python.                |
-| `publish_table(dataset_id, table_id, ...)`                  | Cria a tabela externa do BigQuery sobre os arquivos do bucket.                                                                                           |
-| `load_to_bigquery(data_path, dataset_id, table_id, ...)`    | Envia arquivos locais ao bucket e cria a tabela externa. Prefira Parquet: CSV só para o que a pipeline não consegue gerar em Parquet.                    |
-| `run_dbt(request)`                                          | Roda um comando `dbt` de um repositório de consultas.                                                                                                    |
-| `dump_database(...)`                                        | O fluxo que junta `dump_to_bucket` e `publish_table`, com duas tentativas em cada etapa. Os nomes das colunas viram `slugs` e `partition_by` é opcional. |
+| Item                                             | O que faz                                                                                                                                                                                                                  |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dump_db_to_gcs(database, table, read, ...)`     | Copia uma tabela ou uma consulta de `postgres`, `mysql`, `mssql` ou `oracle` para uma tabela `Delta` no bucket, uma janela por vez, sem repetir dado que não mudou.                                                        |
+| `publish_table_in_bq(table, cloud)`              | Cria a tabela do BigQuery sobre a tabela `Delta` do bucket, ou atualiza o esquema dela. Exige `biglake_connection`.                                                                                                        |
+| `dump_bq_to_gcs(table, read, ...)`               | Copia uma tabela ou consulta do BigQuery para `Parquet` no bucket, em lotes simples: o `DuckDB` lê `batch_size` linhas por vez e cada lote vira um arquivo. Não tem ledger, e um `append` repetido soma as linhas de novo. |
+| `dump_arcgis_to_gcs(table, url, ...)`            | Carrega uma camada do ArcGIS REST em uma tabela `Delta`, como uma janela só.                                                                                                                                               |
+| `dump_gsheet_to_gcs(table, spreadsheet_id, ...)` | Carrega uma planilha do Google em uma tabela `Delta`, como uma janela só.                                                                                                                                                  |
+| `upload_files_to_gcs(data_path, table, ...)`     | Carrega arquivos locais (`Parquet`, CSV como texto ou JSON) em uma tabela `Delta`, com os mesmos `options` do dump de um banco.                                                                                            |
+| `write_sheet(data_path, spreadsheet_id, ...)`    | Escreve arquivos locais em uma planilha do Google.                                                                                                                                                                         |
+| `fetch_json(url, ...)`                           | Lê o JSON de uma URL. Tenta de novo depois de timeout, erro de rede, 429 ou 5xx, e falha na hora com um 4xx.                                                                                                               |
+| `run_dbt(request)`                               | Roda um comando `dbt` de um repositório de consultas.                                                                                                                                                                      |
+| `dump_database(...)` (fluxo)                     | Junta `dump_db_to_gcs` e `publish_table_in_bq`, com duas tentativas em cada etapa. Uma tentativa nova é segura: o que já foi gravado não se repete. Uma falha avisa no Discord se houver `DISCORD_WEBHOOK_URL`.            |
+| `dbt_run(request)` (fluxo)                       | Clona o repositório, roda `dbt deps` e o comando de `request`.                                                                                                                                                             |
 
 Uma pipeline de dump só precisa de um `flow.py` de duas linhas e dos parâmetros no `prefect.yaml`:
 
@@ -85,22 +91,69 @@ deployments:
   - name: rj-secretaria--pipeline--prod
     entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
     parameters:
-      db_type: mssql
-      host: 10.0.0.1
-      port: 1433
-      database: app
-      secret_path: /db-app
-      bucket: bucket-prod
-      project: project-prod
-      biglake_connection: project-prod.us.biglake
+      database:
+        db_type: postgres
+        host: 10.0.0.1
+        port: 5432
+        database: app
+        secret_path: /db-app
+      cloud:
+        bucket: bucket-prod
+        project: project-prod
+        biglake_connection: project-prod.us.biglake
     schedules:
       - interval: 86400
         slug: orders
         parameters:
-          dataset_id: brutos_app
-          table_id: orders
-          query: SELECT id, total FROM dbo.orders
+          table: { dataset_id: brutos_app, table_id: orders }
+          read: { table: public.orders } # ou { query: "SELECT ..." }, uma janela só
+          dump_mode: append
+          options:
+            batches: { column: data_pedido, width: month, begin: "2024-01-01", lookback: 2 }
+            filters: [{ column: status, op: "!=", value: cancelado }] # linhas
+            select: [id, nome, valor, data_pedido] # colunas
+            columns: { normalize_values: true, transforms: { cpf: normalize_cpf } }
 ```
+
+**Como o dump não repete dado**
+
+1. Uma janela é uma faixa fixa de uma coluna: um `day`, `month` ou `year` de uma data, ou um número de ids (`width: 1000000`). A chave é estável, por exemplo `2024-03-01`. Sem `batches`, a fonte inteira é uma janela só.
+2. Para cada janela, o `DuckDB` lê a fonte já com a janela e os `filters` (o banco recebe o filtro, porque `read.table` é uma tabela anexada), aplica `select` e `columns`, e grava um `Parquet` local. A impressão digital desse arquivo (a contagem de linhas e duas somas do `md5` de cada linha, que não dependem da ordem) vai para o ledger da tabela `Delta`, com o nome `<hash da config>:<janela>`.
+3. Se a impressão digital é a mesma do ledger, nada é gravado, nem um `commit`. Se mudou, a janela é trocada em um `commit` atômico. Uma janela que ficou vazia na fonte perde as linhas.
+4. Uma janela que nunca foi carregada com a mesma config é sempre lida. `lookback` limita só as releituras das outras: `lookback: 2` relê as duas últimas janelas.
+5. A config é o que a pipeline lê, os `filters`, `select`, `columns` e a coluna e a largura de `batches`. Uma config nova faz o ledger tratar todas as janelas como não carregadas. O intervalo (`begin`, `end`) e `lookback` não entram, porque só escolhem quais janelas rodam.
+6. `append` nunca regrava o que não mudou. Uma mudança de colunas falha com `SchemaMismatchError`. `overwrite` regrava todas as janelas, apaga as janelas fora do intervalo e aceita um esquema novo.
+7. Depois de gravar, o fluxo escreve um `checkpoint` (o BigQuery lê o log) e os arquivos trocados ficam sete dias antes do `vacuum`.
+
+Tudo o que vai de uma fonte para o bucket e vira uma tabela BigLake usa `Delta`: `dump_db_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs` e `upload_files_to_gcs`. Do BigQuery para o bucket é um `export`, então `dump_bq_to_gcs` usa só lotes simples de `Parquet`, sem `Delta`.
+
+**O que ainda custa**
+
+- Uma janela que não mudou ainda é lida na fonte, porque a impressão digital precisa das linhas. Use `lookback` para ler só as janelas que podem mudar, e rode uma passada completa (sem `lookback`) de vez em quando para pegar mudanças nas janelas antigas.
+- Uma consulta nativa (`read.query`) roda inteira na fonte, e o DuckDB não consegue empurrar a janela para dentro dela. Por isso ela é uma janela só. O Oracle só lê por `query`, porque o DuckDB não anexa o Oracle.
+- O BigQuery lê a tabela `Delta` por uma conexão BigLake (`cloud.biglake_connection`), com os limites da Google: leitor versão 3 no máximo, sem `Storage Read API`.
+- O `deltalake` lê o ADC pelo `object_store` do Rust. Isso funciona com o servidor de metadados do GKE (workload identity), com um arquivo de service account e com credenciais de usuário. **Não funciona** com credencial `external_account` (federação). Confira a credencial do pod antes de ligar a pipeline.
+
+**Testes do dump: o que cada nível usa de verdade** (nenhum nível usa contêiner)
+
+| Nível  | Como rodar                                                                              | O que é real                                                                                                                                                                                                                              | O que é simulado                                                                                        |
+| ------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Padrão | `pytest`                                                                                | `deltalake` e `DuckDB` de verdade, em uma pasta local. Um leitor que não é o nosso (a extensão `delta` do `DuckDB`) lê a tabela depois de cada tipo de escrita, e o log é conferido contra os limites que a Google lista para o BigQuery. | O GCS é uma pasta local, o BigQuery é o leitor `DuckDB`, e o bucket das exportações é um `MemoryStore`. |
+| `gcp`  | `TOOLKIT_GCP_PROJECT=meu-projeto GOOGLE_APPLICATION_CREDENTIALS=adc.json pytest -m gcp` | GCS, BigQuery e BigLake de verdade.                                                                                                                                                                                                       | A fonte é uma pasta de arquivos `Parquet`.                                                              |
+
+O nível `gcp` precisa de `gcloud`, `bq` e do ADC com permissão para criar um bucket, uma conexão BigLake, um dataset e uma service account no projeto. Ele cria tudo com um sufixo aleatório e apaga tudo no fim, mesmo se um teste falhar. Cada teste guarda um achado dos testes reais:
+
+| Achado                                                                                                                                                                                    | Onde o teste está                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| O BigQuery lê a tabela `Delta` que o `deltalake` grava no `gs://`, com as linhas da fonte.                                                                                                | `gcp`                                                                 |
+| A mesma carga de novo não faz `commit` nem objeto novo. Uma janela trocada não duplica linha, e uma janela vazia perde as linhas.                                                         | Padrão e `gcp`                                                        |
+| Um `overwrite` com outras colunas só aparece no BigQuery depois de `publish_table_in_bq` atualizar a tabela, e um segundo `publish` atualiza em vez de falhar.                            | Padrão e `gcp`                                                        |
+| `timestamp` sem fuso é `timestamp_ntz` no `Delta` e `DATETIME` no BigQuery, com fuso é `TIMESTAMP`, e `decimal` é `NUMERIC`. O protocolo fica na versão 3 do leitor, sem `checkpoint` V2. | Padrão (o tipo do `Delta` e o protocolo) e `gcp` (o tipo do BigQuery) |
+| Quatro execuções ao mesmo tempo não perdem janela no `gs://` nativo. Pela API S3 do GCS com chaves HMAC elas perdem `commits`, por isso o `deltalake` nunca recebe `storage_options`.     | `gcp` (a corrida) e padrão (a guarda)                                 |
+| O `checkpoint` existe depois do dump, e o BigQuery continua lendo.                                                                                                                        | Padrão e `gcp`                                                        |
+| O primeiro `overwrite` apaga os arquivos `Hive` antigos, e os seguintes nunca apagam a tabela `Delta`.                                                                                    | Padrão e `gcp`                                                        |
+| Do BigQuery para o bucket sai um arquivo `Parquet` por lote.                                                                                                                              | Padrão e `gcp`                                                        |
+| Uma coluna de lote com o tipo errado falha antes de qualquer escrita. Um MySQL de verdade devolveu uma data como `VARCHAR` e o banco recusou a comparação com uma data.                   | Padrão                                                                |
 
 ### Pipelines
 

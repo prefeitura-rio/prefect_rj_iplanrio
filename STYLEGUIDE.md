@@ -484,7 +484,7 @@ Regras:
 
 ### 5.7 Parâmetros em excesso
 
-Funções em `utils.py` com mais de 5 parâmetros que formem um grupo coeso devem agrupar esses parâmetros em um `dataclass` ou `TypedDict`. A regra não se aplica a `@flow` e `@task`, cujos parâmetros precisam ser primitivos JSON-serializáveis para o Prefect.
+Funções em `utils.py` com mais de 5 parâmetros que formem um grupo coeso devem agrupar esses parâmetros em um `dataclass` ou `TypedDict`. Em `@flow` e `@task` a regra vale também, mas só com `TypedDict`, porque os parâmetros precisam ser JSON-serializáveis para o Prefect. O Prefect valida o dicionário e recusa uma chave que falta, um erro de digitação ou um tipo errado antes de rodar. Ponha cada grupo em `types.py`.
 
 Prefira `dataclass(frozen=True)` para configs imutáveis com defaults. Use `TypedDict` quando o caller precisa construir o dict diretamente e passá-lo com `**`.
 
@@ -769,7 +769,7 @@ Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arqu
 - `str.format()` colide com a sintaxe do BigQuery: `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{`.
 - SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos com centenas de linhas de SQL escapado em YAML, ilegíveis para revisão.
 
-**Exceção:** o parâmetro `query` do fluxo `dump_database` é a consulta nativa de um banco externo, escrita no dialeto dele, e vai no `prefect.yaml` da pipeline.
+**Exceção:** o parâmetro `read.query` do fluxo `dump_database` é a consulta nativa de um banco externo, escrita no dialeto dele, e vai no `prefect.yaml` da pipeline.
 
 ### 7.2 Modelos Jinja e o Executor
 
@@ -801,7 +801,7 @@ Cada variante que exija SQL diferente recebe um arquivo `.sql` próprio em `quer
 
 ### 7.3 Operações comuns já prontas
 
-O toolkit tem funções do `DuckDB` em toda conexão, sem importar nada: `normalize(coluna, separador, minúsculas)`, `clean_text(texto)`, `parse_date(texto)`, `parse_timestamp(texto)`, `ano_particao(texto)`, `mes_particao(texto)`, `data_particao(texto)`, `now_sao_paulo()` e `to_sao_paulo(instante)`. Use-as no SQL, como em `clean_text(nome)` e `normalize(nome, '_', true)`. Os modelos prontos são `csv_to_parquet` e `dump_to_bucket`. Para os nomes das colunas de uma tabela, use `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
+O toolkit tem funções do `DuckDB` em toda conexão, sem importar nada: `normalize(coluna, separador, minúsculas)`, `clean_text(texto)`, `parse_date(texto)`, `parse_timestamp(texto)`, `ano_particao(texto)`, `mes_particao(texto)`, `data_particao(texto)`, `now_sao_paulo()`, `to_sao_paulo(instante)`, `is_cpf`, `normalize_cpf`, `is_cnpj`, `normalize_cnpj` e `is_phone`. Use-as no SQL, como em `clean_text(nome)` e `normalize(nome, '_', true)`. Os modelos prontos são `extract_window`, `select_source` e `fingerprint`. No `dump_database`, `normalize_values` e `transforms` aplicam essas funções dentro do `COPY` de cada janela. Para os nomes das colunas de uma tabela, use `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
 
 ### 7.4 O que nunca fazer
 
@@ -942,10 +942,10 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 ### 11.2 API pública atual
 
-| Módulo                      | Símbolo                                                          | Propósito                                                                                    |
-| --------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `prefect_rj_iplanrio.tasks` | `load_to_bigquery`, `dump_to_bucket`, `publish_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                    |
-| `prefect_rj_iplanrio.flows` | `dump_database`                                                  | Fluxo que copia uma consulta de um banco para o bucket com o DuckDB e cria a tabela externa. |
+| Módulo                      | Símbolo                                                                                                                                                              | Propósito                                                                       |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `prefect_rj_iplanrio.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `fetch_json`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                       |
+| `prefect_rj_iplanrio.flows` | `dump_database`, `dbt_run`                                                                                                                                           | Fluxos: o dump de um banco para uma tabela `Delta` sem repetir dado, e o `dbt`. |
 
 ### 11.3 Antes de escrever um helper
 
