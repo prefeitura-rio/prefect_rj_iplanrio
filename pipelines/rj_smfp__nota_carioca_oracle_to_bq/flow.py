@@ -37,6 +37,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     take_snapshot_task,
     wait_children_task,
 )
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractOptions
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify import NotifierConfig, ParentNotifier
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify_view import ParentStage
@@ -183,7 +184,17 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     names = tuple(table_ids or DEFAULT_TABLES)
     run_id = str(flow_run.id)
     notifier = ParentNotifier.create(
-        NotifierConfig(dataset_id, run_id, run_name, names, workers, discord_notifications, project, gcs_bucket)
+        NotifierConfig(
+            dataset_id,
+            run_id,
+            run_name,
+            names,
+            workers,
+            discord_notifications,
+            project,
+            gcs_bucket,
+            environment=current_environment(),
+        )
     )
     passthrough: dict[str, object] = {
         "project": project,

@@ -1,6 +1,6 @@
 # ruff: noqa: PLR2004
 import json
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Literal
@@ -11,10 +11,11 @@ import pytest
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import flow as flow_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle import tasks as tasks_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import notify as notify_module
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils import slots, sqlldr
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.bigquery import ExportedFile
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import LoadPlan
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import DiscordStatusMessage
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import DiscordStatusMessage, Environment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord_embed import (
     COLOR_CANCELLED,
     COLOR_FAILURE,
@@ -43,9 +44,11 @@ class Discord:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict[str, object]]] = []
+        self.paths: list[str] = []
         self.transport = httpx.MockTransport(self.handle)
 
     def handle(self, request: httpx.Request) -> httpx.Response:
+        self.paths.append(request.url.path)
         self.calls.append((request.method, json.loads(request.content)))
         return httpx.Response(200, json={"id": "42"})
 
@@ -479,3 +482,107 @@ def test_synonyms_only_flow_skips_the_load_and_finishes_green(monkeypatch: pytes
         "refresh_synonyms_task",
     ]
     assert discord.embeds[-1]["color"] == COLOR_SUCCESS
+
+
+# --- environment: prod vs staging --------------------------------------------------------------------------------
+
+PROD_WEBHOOK = "https://discord.example/api/webhooks/1/prod"
+STAGING_WEBHOOK = "https://discord.example/api/webhooks/2/staging"
+
+
+def wire_discord(monkeypatch: pytest.MonkeyPatch, discord: Discord) -> None:
+    """Faz o notificador criado por ``create`` falar com o webhook falso, qualquer que seja a URL resolvida."""
+
+    class Wired(DiscordStatusMessage):
+        def __init__(self, webhook_url: str | None) -> None:
+            super().__init__(webhook_url, transport=discord.transport)
+
+    monkeypatch.setattr(notify_module, "DiscordStatusMessage", Wired)
+
+
+def created_config(environment: Environment) -> NotifierConfig:
+    return NotifierConfig(
+        "nota_carioca_staging",
+        "run-1",
+        "nota_carioca_staging",
+        ("A", "B"),
+        2,
+        False,
+        "full",
+        True,
+        heartbeat_seconds=0,
+        environment=environment,
+    )
+
+
+def test_staging_load_posts_to_the_staging_webhook_with_the_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given both webhooks configured and a staging notifier created the way the flow creates it
+    discord = Discord()
+    wire_discord(monkeypatch, discord)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", PROD_WEBHOOK)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING", STAGING_WEBHOOK)
+    notifier = LoadNotifier.create(created_config(Environment.STAGING))
+    # When the run begins and succeeds
+    with notifier.guard():
+        notifier.begin()
+    # Then every request went to the staging webhook, the embed title and the final line carry the marker
+    assert discord.paths
+    assert all(path.startswith("/api/webhooks/2/staging") for path in discord.paths)
+    assert all(str(embed["title"]).startswith("🧪 STAGING · ") for embed in discord.embeds)
+    assert discord.standalone[0].startswith("🧪 STAGING · ✅ **BigQuery → Oracle**")
+
+
+def test_prod_load_posts_to_the_prod_webhook_unmarked(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given both webhooks configured and a notifier created with the default (prod) environment
+    discord = Discord()
+    wire_discord(monkeypatch, discord)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", PROD_WEBHOOK)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING", STAGING_WEBHOOK)
+    notifier = LoadNotifier.create(created_config(Environment.PROD))
+    # When the run begins and succeeds
+    with notifier.guard():
+        notifier.begin()
+    # Then every request went to the prod webhook and nothing is marked as staging
+    assert discord.paths
+    assert all(path.startswith("/api/webhooks/1/prod") for path in discord.paths)
+    assert all(embed["title"] == "BigQuery → Oracle · nota_carioca_staging" for embed in discord.embeds)
+    assert "STAGING" not in discord.standalone[0]
+
+
+def test_staging_load_without_a_staging_webhook_stays_off_even_if_prod_has_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given only the prod webhook (the staging Secret block fails to load, as in conftest)
+    discord = Discord()
+    wire_discord(monkeypatch, discord)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", PROD_WEBHOOK)
+    # When a staging notifier is created and the run finishes
+    notifier = LoadNotifier.create(created_config(Environment.STAGING))
+    with notifier.guard():
+        notifier.begin()
+    # Then nothing reached the prod channel
+    assert discord.paths == []
+
+
+@pytest.mark.parametrize(
+    ("deployment_name", "expected"),
+    [
+        ("rj-smfp--nota-carioca-bq-to-oracle--staging", Environment.STAGING),
+        ("rj-smfp--nota-carioca-bq-to-oracle--prod", Environment.PROD),
+    ],
+)
+def test_flow_creates_its_notifier_in_the_environment_of_its_deployment(
+    monkeypatch: pytest.MonkeyPatch, deployment_name: str, expected: Environment
+) -> None:
+    # Given the Prefect runtime reporting the deployment name, and a spy on the notifier configuration
+    monkeypatch.setenv("PREFECT__RUNTIME__DEPLOYMENT__NAME", deployment_name)
+    environments: list[Environment] = []
+
+    @dataclass(frozen=True)
+    class SpiedConfig(NotifierConfig):
+        def __post_init__(self) -> None:
+            environments.append(self.environment)
+
+    monkeypatch.setattr(flow_module, "NotifierConfig", SpiedConfig)
+    # When the flow runs with fake tasks
+    run_flow_with_fakes(monkeypatch, make(None, tables=()))
+    # Then the notifier was configured with the environment derived from the deployment name
+    assert environments == [expected]

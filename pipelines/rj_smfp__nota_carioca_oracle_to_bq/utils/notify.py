@@ -19,6 +19,7 @@ from prefect.settings import PREFECT_API_URL, PREFECT_UI_URL
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import (
     DiscordStatusMessage,
+    Environment,
     Warner,
     never_raises,
     resolve_webhook,
@@ -55,6 +56,8 @@ class NotifierConfig:
     :param enabled: ``False`` (``discord_notifications=false``) desliga o Discord e a leitura dos JSONs.
     :param project: Projeto do GCS onde os filhos gravam o progresso.
     :param bucket: Bucket dos arquivos da carga.
+    :param environment: Ambiente do deployment: staging usa o webhook de staging e marca as mensagens com
+        ``🧪 STAGING · ``; o padrão é prod.
     """
 
     dataset_id: str
@@ -65,6 +68,7 @@ class NotifierConfig:
     enabled: bool
     project: str
     bucket: str
+    environment: Environment = Environment.PROD
 
 
 def is_cancellation(error: BaseException) -> bool:
@@ -100,14 +104,15 @@ class ParentNotifier:
             workers=config.workers,
             elapsed_seconds=0.0,
             updated_at=datetime.now(UTC),
+            staging=config.environment is Environment.STAGING,
         )
 
     @classmethod
     def create(cls, config: NotifierConfig) -> "ParentNotifier":
-        """Cria o notificador; webhook da variável do Infisical ou do Secret block (sem nenhum = desligado)."""
+        """Cria o notificador; webhook do ambiente (variável do Infisical ou Secret block); sem nenhum = desligado."""
         if not config.enabled:
             return cls(config, None, None)
-        message = DiscordStatusMessage(resolve_webhook())
+        message = DiscordStatusMessage(resolve_webhook(environment=config.environment))
         store = ProgressStore(config.project, config.bucket, config.run_id) if message.enabled else None
         return cls(config, message if message.enabled else None, store)
 

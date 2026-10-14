@@ -1,6 +1,8 @@
 """Constantes da carga completa da Nota Carioca."""
 
-# ``<nome do flow>/<nome do deployment>`` dos deployments de prod encadeados (conferidos na API do Prefect).
+# ``<nome do flow>/<nome do deployment>`` dos deployments de prod encadeados por padrão (conferidos na API do Prefect).
+# O deployment de staging da carga completa passa os de staging pelos parâmetros ``oracle_to_bq_deployment`` e
+# ``bq_to_oracle_deployment`` (prefect.yaml).
 ORACLE_TO_BQ_DEPLOYMENT = "rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--prod"
 BQ_TO_ORACLE_DEPLOYMENT = "rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--prod"
 

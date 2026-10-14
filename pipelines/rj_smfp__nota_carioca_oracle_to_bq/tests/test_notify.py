@@ -12,8 +12,9 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq import table_run as table_run_
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq import tasks as tasks_module
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX, PROGRESS_PREFIX
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import discord as discord_module
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import notify as notify_module
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import table_progress as progress_module
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import DiscordStatusMessage
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import DiscordStatusMessage, Environment
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord_embed import (
     COLOR_CANCELLED,
     COLOR_FAILURE,
@@ -806,8 +807,8 @@ class Stop(Exception):
     pass
 
 
-def test_parent_tells_children_whether_the_discord_is_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Given a parent run stopped at the child launch, with the Discord switched off by parameter
+def stop_parent_at_child_launch(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
+    """Troca as tasks do pai por fakes que param no lançamento dos filhos; devolve o que o pai passou a eles."""
     captured: dict[str, object] = {}
 
     def fake_launch(table_ids: list[str], snapshot: Snapshot, passthrough: dict[str, object]) -> None:
@@ -833,9 +834,115 @@ def test_parent_tells_children_whether_the_discord_is_on(monkeypatch: pytest.Mon
     }
     for name, fake in fakes.items():
         monkeypatch.setattr(flow_module, name, fake)
+    return captured
+
+
+def test_parent_tells_children_whether_the_discord_is_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given a parent run stopped at the child launch, with the Discord switched off by parameter
+    captured = stop_parent_at_child_launch(monkeypatch)
     monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", "https://discord.example/api/webhooks/1/t")
     # When the parent runs
     with pytest.raises(Stop):
         flow_module.rj_smfp__nota_carioca_oracle_to_bq.fn(table_ids=["DPS"], discord_notifications=False)
     # Then children are told not to write progress (the parent will not read it)
     assert captured["discord_notifications"] is False
+
+
+# --- environment: prod vs staging --------------------------------------------------------------------------------
+
+PROD_WEBHOOK = "https://discord.example/api/webhooks/1/prod"
+STAGING_WEBHOOK = "https://discord.example/api/webhooks/2/staging"
+STAGING_MARK = "🧪 STAGING · "
+
+
+def wire_discord(monkeypatch: pytest.MonkeyPatch, discord: Discord) -> None:
+    """Faz o notificador criado por ``create`` falar com o webhook falso, qualquer que seja a URL resolvida."""
+
+    class Wired(DiscordStatusMessage):
+        def __init__(self, webhook_url: str | None) -> None:
+            super().__init__(webhook_url, transport=discord.transport)
+
+    monkeypatch.setattr(notify_module, "DiscordStatusMessage", Wired)
+
+
+def created_config(environment: Environment) -> NotifierConfig:
+    return NotifierConfig(
+        "brutos_nota_fiscal", RUN_ID, "brutos_nota_fiscal", TABLES, 6, True, "proj", "bkt", environment=environment
+    )
+
+
+def test_staging_parent_posts_to_the_staging_webhook_with_the_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given both webhooks configured and a staging parent created the way the flow creates it
+    discord = Discord()
+    wire_discord(monkeypatch, discord)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", PROD_WEBHOOK)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING", STAGING_WEBHOOK)
+    parent = ParentNotifier.create(created_config(Environment.STAGING))
+    # When it begins and succeeds
+    parent.begin()
+    parent.succeed()
+    # Then every request went to the staging webhook, the embed title and the final line carry the marker
+    assert discord.calls
+    assert all(path.startswith("/api/webhooks/2/staging") for _, path, _ in discord.calls)
+    assert all(str(embed["title"]).startswith(STAGING_MARK) for embed in discord.embeds)
+    assert discord.standalone[0].startswith(f"{STAGING_MARK}✅ **Oracle → BigQuery**")
+
+
+def test_prod_parent_posts_to_the_prod_webhook_unmarked(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given both webhooks configured and a parent created with the default (prod) environment
+    discord = Discord()
+    wire_discord(monkeypatch, discord)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", PROD_WEBHOOK)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING", STAGING_WEBHOOK)
+    parent = ParentNotifier.create(created_config(Environment.PROD))
+    # When it begins and succeeds
+    parent.begin()
+    parent.succeed()
+    # Then every request went to the prod webhook and nothing is marked as staging
+    assert discord.calls
+    assert all(path.startswith("/api/webhooks/1/prod") for _, path, _ in discord.calls)
+    assert all(embed["title"] == "Oracle → BigQuery · brutos_nota_fiscal" for embed in discord.embeds)
+    assert "STAGING" not in discord.standalone[0]
+
+
+def test_staging_parent_without_a_staging_webhook_stays_off_even_if_prod_has_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given only the prod webhook (the staging Secret block fails to load, as in conftest)
+    discord = Discord()
+    wire_discord(monkeypatch, discord)
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL_NOTA_CARIOCA", PROD_WEBHOOK)
+    # When a staging parent is created and runs
+    parent = ParentNotifier.create(created_config(Environment.STAGING))
+    parent.begin()
+    parent.succeed()
+    # Then it is off and nothing reached the prod channel
+    assert not parent.enabled
+    assert discord.calls == []
+
+
+@pytest.mark.parametrize(
+    ("deployment_name", "expected"),
+    [
+        ("rj-smfp--nota-carioca-oracle-to-bq--staging", Environment.STAGING),
+        ("rj-smfp--nota-carioca-oracle-to-bq--prod", Environment.PROD),
+    ],
+)
+def test_parent_flow_creates_its_notifier_in_the_environment_of_its_deployment(
+    monkeypatch: pytest.MonkeyPatch, deployment_name: str, expected: Environment
+) -> None:
+    # Given a parent run stopped at the child launch, on a deployment with the given name
+    stop_parent_at_child_launch(monkeypatch)
+    monkeypatch.setenv("PREFECT__RUNTIME__DEPLOYMENT__NAME", deployment_name)
+    configs: list[NotifierConfig] = []
+
+    def record(config: NotifierConfig) -> ParentNotifier:
+        configs.append(config)
+        return ParentNotifier(config, None, None)
+
+    monkeypatch.setattr(ParentNotifier, "create", record)
+    # When the parent runs
+    with pytest.raises(Stop):
+        flow_module.rj_smfp__nota_carioca_oracle_to_bq.fn(table_ids=["DPS"])
+    # Then the notifier was configured with the environment derived from the deployment name
+    assert [config.environment for config in configs] == [expected]
