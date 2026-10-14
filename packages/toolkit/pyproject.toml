@@ -57,6 +57,7 @@ select = [
   "A",
   "B",
   "C4",
+  "D",
   "DTZ",
   "E",
   "F",
@@ -81,6 +82,9 @@ select = [
   "W",
 ]
 ignore = [
+  "D104",   # an __init__.py is always empty
+  "D203",   # blank line before the class docstring: conflicts with D211
+  "D213",   # summary on the second line: conflicts with D212
   "E501",   # line too long: handled by the formatter
   "B008",   # function call in default argument
   "RET504", # unnecessary assignment before return: aids readability
@@ -105,7 +109,17 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "toolkit/gcs.py" = ["TID251"]
-"tests/**" = ["S101", "S105", "S106", "S608", "TID251", "PLR2004"]
+"tests/**" = [
+  "D100", # a test module has no module docstring
+  "D101", # the schema classes of a test are named by the test
+  "D106", # same cause, for a nested class
+  "S101",
+  "S105",
+  "S106",
+  "S608",
+  "TID251",
+  "PLR2004",
+]
 
 [tool.basedpyright]
 typeCheckingMode = "all"
