@@ -1,39 +1,49 @@
-"""BigQuery, read through the community DuckDB ``bigquery`` extension (ADC)."""
+"""BigQuery, attached to DuckDB through the community ``bigquery`` extension (ADC)."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar, override
 
-from psycopg.sql import SQL, Composable, Literal
+from psycopg.sql import Identifier, Literal
 
-from ....partitions import Selection
 from ....settings import settings
+from ...constants import ALIAS
 from ...engines.duckdb import Extension
+from ...engines.protocol import Engine
 from ...render import render_template
-from ...utils import window_mapping
 from ..base import SourceBase
 
 
 @dataclass(frozen=True, slots=True)
 class BigQuerySource(SourceBase):
-    """Read BigQuery with workload identity. It needs no connection data."""
+    """Read BigQuery with workload identity. It needs no password.
+
+    The project is attached read-only as ``src``, so a template writes
+    ``FROM src.dataset.table`` in DuckDB SQL.
+    """
 
     extensions: ClassVar[tuple[Extension, ...]] = (
         Extension("bigquery", community=True),
     )
 
-    project: str | None = None
+    project: str = field(default_factory=lambda: settings.BIGQUERY_PROJECT)
+    """The project to attach. It defaults to the ``BIGQUERY_PROJECT`` setting."""
 
     @override
-    def window(self, query: str, selection: Selection) -> str:
-        """Return the BigQuery query restricted to the selection."""
-        return render_template("bigquery/window", window_mapping(query, selection))
+    async def setup(self, client: Engine) -> None:
+        """Attach the project.
 
-    @override
-    def setup(self) -> None:
-        """Return ``None``: ``bigquery_query`` needs no ATTACH."""
+        :raises ValueError: If there is no project.
+        """
+        if not self.project:
+            raise ValueError(
+                "BigQuerySource needs a project: pass it or set BIGQUERY_PROJECT"
+            )
 
-    @override
-    def scan(self, query: str) -> Composable:
-        """Return the ``bigquery_query`` expression for the project."""
-        project = self.project or settings.BIGQUERY_PROJECT
-        return SQL("bigquery_query({}, {})").format(Literal(project), Literal(query))
+        sql = render_template(
+            "duckdb/attach_bigquery",
+            {
+                "alias": Identifier(ALIAS),
+                "project": Literal(f"project={self.project}"),
+            },
+        )
+        await client.execute(sql)

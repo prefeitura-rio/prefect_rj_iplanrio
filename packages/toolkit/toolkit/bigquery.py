@@ -1,11 +1,11 @@
 """Async view of a synchronous BigQuery client (ADC, workload identity)."""
 
-from collections.abc import AsyncGenerator, Iterable
-from contextlib import asynccontextmanager
+from asyncio import to_thread
+from collections.abc import AsyncGenerator
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
-from typing import Literal, Self, cast
+from typing import Self
 
-from asyncer import asyncify
 from google.api_core.exceptions import NotFound
 from google.cloud.bigquery import (
     Client,
@@ -13,12 +13,9 @@ from google.cloud.bigquery import (
     HivePartitioningOptions,
     Table,
 )
-from google.cloud.bigquery.table import Row
 
-from .executor.utils import validate_rows
 from .settings import settings
-
-type SourceFormat = Literal["PARQUET", "CSV"]
+from .types import SourceFormat
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,30 +32,12 @@ class BigQuery:
         :param project: The project. Without it the ``BIGQUERY_PROJECT`` setting is
             used, and without both the client uses the ADC default project.
         """
-        client = await asyncify(Client)(
-            project=project or settings.BIGQUERY_PROJECT or None
-        )
-
-        try:
+        async with AsyncExitStack() as stack:
+            client = await to_thread(
+                Client, project=project or settings.BIGQUERY_PROJECT or None
+            )
+            stack.push_async_callback(to_thread, client.close)
             yield cls(client=client)
-        finally:
-            await asyncify(client.close)()
-
-    async def query[Expected](
-        self, sql: str, *, expect: type[Expected]
-    ) -> list[Expected]:
-        """Run a query and validate every row against the expected model.
-
-        :param sql: The BigQuery SQL.
-        :param expect: A Pydantic model, dataclass or TypedDict for one row.
-        :raises pydantic.ValidationError: If a row does not fit ``expect``.
-        """
-
-        def run() -> list[dict[str, object]]:
-            rows = cast(Iterable[Row], self.client.query(sql).result())
-            return [dict(row) for row in rows]
-
-        return validate_rows(await asyncify(run)(), expect)
 
     async def table_exists(self, table: str) -> bool:
         """Return whether ``project.dataset.table`` exists."""
@@ -70,21 +49,11 @@ class BigQuery:
                 return False
             return True
 
-        return await asyncify(run)()
+        return await to_thread(run)
 
     async def create_dataset(self, dataset: str) -> None:
         """Create a dataset when it does not exist."""
-        await asyncify(self.client.create_dataset)(dataset, exists_ok=True)
-
-    async def delete_dataset(self, dataset: str) -> None:
-        """Delete a dataset with its tables when it exists."""
-        await asyncify(self.client.delete_dataset)(
-            dataset, delete_contents=True, not_found_ok=True
-        )
-
-    async def drop_table(self, table: str) -> None:
-        """Delete a table when it exists."""
-        await asyncify(self.client.delete_table)(table, not_found_ok=True)
+        await to_thread(self.client.create_dataset, dataset, exists_ok=True)
 
     async def create_external_table(
         self,
@@ -94,10 +63,10 @@ class BigQuery:
         *,
         connection_id: str | None = None,
     ) -> None:
-        """Create or replace an external table over a staging prefix.
+        """Create or replace an external table over a bucket prefix.
 
         :param table: ``project.dataset.table``.
-        :param uri_prefix: ``gs://bucket/staging/dataset/table`` without a trailing slash.
+        :param uri_prefix: ``gs://bucket/dataset/table`` without a trailing slash.
         :param source_format: Parquet or CSV.
         :param connection_id: BigLake connection. Omit it for a plain external table.
         """
@@ -118,4 +87,4 @@ class BigQuery:
             external.external_data_configuration = config
             self.client.create_table(external)
 
-        await asyncify(run)()
+        await to_thread(run)
