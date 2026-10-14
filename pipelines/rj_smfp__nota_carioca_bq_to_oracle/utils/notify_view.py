@@ -95,6 +95,7 @@ class RunState:
     :param error: Mensagem do erro, na falha.
     :param failed_step: Passo em que a execução parou (falha ou cancelamento).
     :param step_elapsed_seconds: Há quanto tempo a etapa atual (passo e, nas tabelas, etapa da tabela) está em curso.
+    :param staging: ``True`` no deployment de staging (as mensagens levam o marcador ``🧪 STAGING · ``).
     """
 
     dataset_id: str
@@ -113,6 +114,7 @@ class RunState:
     error: str | None = None
     failed_step: Step | None = None
     step_elapsed_seconds: float = 0.0
+    staging: bool = False
 
 
 def stage_key(state: RunState) -> tuple[Step, str | None, TableStep | None]:
@@ -304,4 +306,5 @@ def build_view(state: RunState) -> RunView:
             if state.status is not RunStatus.RUNNING and state.mode == "full"
             else ()
         ),
+        staging=state.staging,
     )

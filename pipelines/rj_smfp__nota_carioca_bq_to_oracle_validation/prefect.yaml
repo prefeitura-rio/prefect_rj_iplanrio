@@ -31,6 +31,10 @@ deployments:
   - code_owner:fredzolio
   version: "{{ build-image.tag }}"
   entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle_validation/flow.py:rj_smfp__nota_carioca_bq_to_oracle_validation
+  parameters:
+    dataset_id: nota_carioca_staging
+    # Mesma codificação das colunas RAW usada pela carga de staging (hex, como em prod).
+    raw_text_encoding: hex
   work_pool:
     name: onprem-pool
     work_queue_name: default

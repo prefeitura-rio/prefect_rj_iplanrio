@@ -1,11 +1,17 @@
 """Cliente do webhook do Discord para o progresso das cargas: uma mensagem criada uma vez e editada no lugar.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de ``pipelines.*``.
+Este arquivo é idêntico nas três pipelines da Nota Carioca que notificam (oracle_to_bq, bq_to_oracle e carga_completa)
+e não importa nada de ``pipelines.*``.
 
 Regra de ouro: um problema de notificação NUNCA falha nem atrasa uma carga. Toda falha (rede, 4xx/5xx, 429, JSON) é
 registrada uma vez em log de aviso e engolida; depois de uma falha o cliente espera mais antes de tentar de novo
 (``min_interval_seconds`` dobrando a cada falha seguida, até 5 min), o que limita o tempo perdido com um Discord fora
 do ar ao timeout de uma requisição (10 s) por tentativa. A URL do webhook é um segredo e nunca vai para o log.
+
+Ambiente: o deployment cujo nome termina em ``--staging`` posta no webhook de staging (variável
+``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING`` ou Secret block ``discord-webhook-nota-carioca-staging``); qualquer outro,
+inclusive uma execução fora de deployment, no de prod. Staging NUNCA recorre ao webhook de prod: sem o seu, fica sem
+notificação.
 """
 
 import logging
@@ -13,14 +19,21 @@ import os
 import threading
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from enum import StrEnum
 from functools import wraps
+from typing import assert_never
 
 import httpx
+from prefect.runtime import deployment
 
 from iplanrio.pipelines_utils.logging import log
 
+STAGING_DEPLOYMENT_SUFFIX = "--staging"
 WEBHOOK_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
 WEBHOOK_SECRET_BLOCK = "discord-webhook-nota-carioca"
+STAGING_WEBHOOK_ENV = f"{WEBHOOK_ENV}_STAGING"
+STAGING_WEBHOOK_SECRET_BLOCK = f"{WEBHOOK_SECRET_BLOCK}-staging"
 TIMEOUT_SECONDS = 10.0
 DEFAULT_MIN_INTERVAL_SECONDS = 20.0
 MAX_BACKOFF_SECONDS = 300.0
@@ -83,13 +96,67 @@ def never_raises[**P](func: Callable[P, None]) -> Callable[P, None]:
     return wrapper
 
 
-def webhook_from_env(environ: Mapping[str, str] | None = None) -> str | None:
-    """Lê a URL do webhook de ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA``.
+class Environment(StrEnum):
+    """Ambiente do deployment em execução: escolhe o webhook e o marcador das mensagens."""
+
+    PROD = "prod"
+    STAGING = "staging"
+
+
+@dataclass(frozen=True, slots=True)
+class WebhookSource:
+    """Onde está o webhook de um ambiente: a variável de ambiente e, sem ela, o Secret block.
+
+    :param env_var: Nome da variável de ambiente.
+    :param secret_block: Nome do Secret block do Prefect.
+    """
+
+    env_var: str
+    secret_block: str
+
+
+def webhook_source(environment: Environment) -> WebhookSource:
+    """Fontes do webhook do ambiente; as de staging nunca coincidem com as de prod."""
+    match environment:
+        case Environment.PROD:
+            return WebhookSource(WEBHOOK_ENV, WEBHOOK_SECRET_BLOCK)
+        case Environment.STAGING:
+            return WebhookSource(STAGING_WEBHOOK_ENV, STAGING_WEBHOOK_SECRET_BLOCK)
+        case unreachable:
+            assert_never(unreachable)
+
+
+def environment_from_deployment(name: str | None) -> Environment:
+    """Ambiente pelo nome do deployment: terminado em ``--staging`` é staging; o resto, inclusive sem nome, é prod.
+
+    :param name: Nome do deployment (``prefect.runtime.deployment.name``); ``None`` fora de um deployment.
+    :returns: ``STAGING`` ou ``PROD``.
+    """
+    return Environment.STAGING if name and name.endswith(STAGING_DEPLOYMENT_SUFFIX) else Environment.PROD
+
+
+def current_environment() -> Environment:
+    """Ambiente do deployment deste flow run, lido de ``prefect.runtime.deployment.name``; registra uma linha de log.
+
+    Uma execução local, fora de deployment, vale prod. A leitura do nome do deployment usa a API do Prefect, da qual o
+    flow já depende ao renomear o próprio flow run.
+    """
+    name = deployment.name
+    environment = environment_from_deployment(name)
+    info(f"Ambiente das notificações do Discord: {environment} (deployment {name or 'nenhum'}).")
+    return environment
+
+
+def webhook_from_env(
+    environ: Mapping[str, str] | None = None, environment: Environment = Environment.PROD
+) -> str | None:
+    """Lê a URL do webhook da variável de ambiente do ambiente (prod: ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA``).
 
     :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
+    :param environment: Ambiente; staging lê só ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING``.
     :returns: A URL, ou ``None`` se a variável não existir ou estiver vazia.
     """
-    value = (environ if environ is not None else os.environ).get(WEBHOOK_ENV, "").strip()
+    value = (environ if environ is not None else os.environ).get(webhook_source(environment).env_var, "").strip()
     return value or None
 
 
@@ -100,28 +167,41 @@ def _load_secret_block(name: str) -> str:
     return str(Secret.load(name).get())
 
 
-def webhook_from_secret_block(load: Callable[[str], str] | None = None) -> str | None:
-    """Lê a URL do webhook do Secret block ``discord-webhook-nota-carioca`` do Prefect.
+def webhook_from_secret_block(
+    load: Callable[[str], str] | None = None, environment: Environment = Environment.PROD
+) -> str | None:
+    """Lê a URL do webhook do Secret block do ambiente (prod: ``discord-webhook-nota-carioca``) do Prefect.
 
     :param load: Leitor do bloco pelo nome; o padrão consulta a API do Prefect.
+    :param environment: Ambiente; staging lê só ``discord-webhook-nota-carioca-staging``.
     :returns: A URL, ou ``None`` se o bloco não existir, estiver vazio ou a leitura falhar.
     """
+    block = webhook_source(environment).secret_block
     try:
-        value = (load if load is not None else _load_secret_block)(WEBHOOK_SECRET_BLOCK).strip()
+        value = (load if load is not None else _load_secret_block)(block).strip()
     except Exception as error:  # bloco ausente ou API fora do ar: notificação desligada, a carga segue
-        info(f"Webhook do Discord não lido do Secret block {WEBHOOK_SECRET_BLOCK}: {type(error).__name__}")
+        info(f"Webhook do Discord não lido do Secret block {block}: {type(error).__name__}")
         return None
     return value or None
 
 
-def resolve_webhook(environ: Mapping[str, str] | None = None, load: Callable[[str], str] | None = None) -> str | None:
-    """URL do webhook: a variável ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` (Infisical) ou, sem ela, o Secret block.
+def resolve_webhook(
+    environ: Mapping[str, str] | None = None,
+    load: Callable[[str], str] | None = None,
+    environment: Environment = Environment.PROD,
+) -> str | None:
+    """URL do webhook do ambiente: a variável de ambiente (Infisical) ou, sem ela, o Secret block.
+
+    Prod: ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA`` e ``discord-webhook-nota-carioca``. Staging:
+    ``DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING`` e ``discord-webhook-nota-carioca-staging``; staging nunca recorre às de
+    prod, para o canal de prod não receber mensagem de staging.
 
     :param environ: Variáveis de ambiente; o padrão é ``os.environ``.
     :param load: Leitor do Secret block; o padrão consulta a API do Prefect.
-    :returns: A URL, ou ``None`` se nenhuma das duas fontes tiver o webhook.
+    :param environment: Ambiente do deployment.
+    :returns: A URL, ou ``None`` se nenhuma das duas fontes do ambiente tiver o webhook.
     """
-    return webhook_from_env(environ) or webhook_from_secret_block(load)
+    return webhook_from_env(environ, environment) or webhook_from_secret_block(load, environment)
 
 
 class DiscordStatusMessage:
@@ -153,7 +233,9 @@ class DiscordStatusMessage:
         self._warn = Warner()
         self._lock = threading.Lock()
         if self._url is None:
-            info(f"Notificações do Discord desligadas (parâmetro discord_notifications=false ou {WEBHOOK_ENV} vazia).")
+            info(
+                "Notificações do Discord desligadas (parâmetro discord_notifications=false ou webhook não configurado)."
+            )
 
     @property
     def enabled(self) -> bool:

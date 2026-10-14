@@ -24,9 +24,38 @@ pull:
     directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-# Só prod: a cadeia dispara os deployments de prod e opera sobre dados reais. Encadear os de staging não faz sentido:
-# eles rodam sobre datasets de teste e não formam uma carga completa de ponta a ponta. O deploy de staging do CI pula
-# esta pipeline por não haver deployment terminado em --staging.
+# Staging: encadeia os deployments de staging (datasets *_staging e Oracle de homologação) com os mesmos tempos limite
+# e a mesma pausa da prod. O Discord posta no canal de staging, com o marcador 🧪 STAGING (o ambiente vem do nome do
+# deployment, terminado em --staging).
+- name: rj-smfp--nota-carioca-carga-completa--staging
+  tags:
+  - environment:staging
+  - severity:low
+  - code_owner:fredzolio
+  version: "{{ build-image.tag }}"
+  entrypoint: pipelines/rj_smfp__nota_carioca_carga_completa/flow.py:rj_smfp__nota_carioca_carga_completa
+  # Uma carga completa por vez, como em prod.
+  concurrency_limit:
+    limit: 1
+    collision_strategy: CANCEL_NEW
+  # Sem schedule: o disparo é manual ou pelo bot do Discord.
+  parameters:
+    oracle_to_bq_deployment: rj-smfp--nota-carioca-oracle-to-bq/rj-smfp--nota-carioca-oracle-to-bq--staging
+    bq_to_oracle_deployment: rj-smfp--nota-carioca-bq-to-oracle/rj-smfp--nota-carioca-bq-to-oracle--staging
+  work_pool:
+    name: onprem-pool
+    work_queue_name: default
+    job_variables:
+      image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+      command: uv run --package rj_smfp__nota_carioca_carga_completa -- prefect flow-run execute
+      secretName: prefect-jobs-secrets-staging
+      image_pull_policy: Always
+      # O pod só espera os filhos (consulta a API do Prefect); a carga roda nos pods deles.
+      cpu_request: "100m"
+      cpu_limit: "500m"
+      memory_request: 256Mi
+      memory_limit: 512Mi
+# Prod: encadeia os deployments de prod (os padrões dos parâmetros do flow) e opera sobre dados reais.
 - name: rj-smfp--nota-carioca-carga-completa--prod
   tags:
   - environment:prod

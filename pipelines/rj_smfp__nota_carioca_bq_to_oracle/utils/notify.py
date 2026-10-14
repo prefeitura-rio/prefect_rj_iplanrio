@@ -28,6 +28,7 @@ from prefect.settings import PREFECT_API_URL, PREFECT_UI_URL
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import (
     DiscordStatusMessage,
+    Environment,
     Warner,
     never_raises,
     resolve_webhook,
@@ -66,6 +67,8 @@ class NotifierConfig:
     :param mode: ``full`` ou ``synonyms_only``.
     :param enabled: ``False`` (``discord_notifications=false``) desliga o Discord.
     :param heartbeat_seconds: Intervalo do batimento que republica a mensagem; ``0`` ou menos desliga o batimento.
+    :param environment: Ambiente do deployment: staging usa o webhook de staging e marca as mensagens com
+        ``🧪 STAGING · ``; o padrão é prod.
     """
 
     dataset_id: str
@@ -77,6 +80,7 @@ class NotifierConfig:
     mode: Literal["full", "synonyms_only"]
     enabled: bool
     heartbeat_seconds: float = DEFAULT_HEARTBEAT_SECONDS
+    environment: Environment = Environment.PROD
 
 
 def is_cancellation(error: BaseException) -> bool:
@@ -114,12 +118,13 @@ class LoadNotifier:
             sessions=config.sessions,
             elapsed_seconds=0.0,
             updated_at=datetime.now(UTC),
+            staging=config.environment is Environment.STAGING,
         )
 
     @classmethod
     def create(cls, config: NotifierConfig) -> "LoadNotifier":
-        """Cria o notificador; webhook da variável do Infisical ou do Secret block (sem nenhum = desligado)."""
-        message = DiscordStatusMessage(resolve_webhook()) if config.enabled else None
+        """Cria o notificador; webhook do ambiente (variável do Infisical ou Secret block); sem nenhum = desligado."""
+        message = DiscordStatusMessage(resolve_webhook(environment=config.environment)) if config.enabled else None
         return cls(config, message if message is not None and message.enabled else None)
 
     @property

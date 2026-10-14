@@ -1,6 +1,7 @@
 """Formatação de texto para as mensagens do Discord: barra de progresso, números, durações e hora de Brasília.
 
-Este arquivo é idêntico nas duas pipelines da Nota Carioca e não importa nada de ``pipelines.*``.
+Este arquivo é idêntico nas três pipelines da Nota Carioca que notificam (oracle_to_bq, bq_to_oracle e carga_completa)
+e não importa nada de ``pipelines.*``.
 """
 
 import math
@@ -12,6 +13,17 @@ ELLIPSIS = "…"
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 KILOBYTE = 1024
+STAGING_MARK = "🧪 STAGING · "
+
+
+def mark_staging(text: str, staging: bool) -> str:
+    """Marca o texto como vindo do ambiente de staging, para não se confundir com o de prod.
+
+    :param text: Título do embed ou linha avulsa.
+    :param staging: ``True`` no deployment de staging.
+    :returns: ``🧪 STAGING · `` seguido do texto em staging; em prod, o texto como veio.
+    """
+    return f"{STAGING_MARK}{text}" if staging else text
 
 
 def clip(text: str, limit: int) -> str:

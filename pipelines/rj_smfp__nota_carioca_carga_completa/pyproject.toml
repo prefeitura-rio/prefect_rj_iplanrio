@@ -1,7 +1,7 @@
 [project]
 name = "rj_smfp__nota_carioca_carga_completa"
 version = "1.0.0"
-description = "Chains the Nota Carioca full refresh: runs the prod Oracle to BigQuery deployment and, only if it completes, the prod BigQuery to Oracle deployment."
+description = "Chains the Nota Carioca full refresh: runs the Oracle to BigQuery deployment and, only if it completes, the BigQuery to Oracle deployment (prod by default; the staging deployment chains the staging ones)."
 dependencies = [
     "prefect_rj_iplanrio",
 ]
