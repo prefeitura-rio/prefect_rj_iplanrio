@@ -2,26 +2,15 @@
 
 import tempfile
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar
 
-import git
+from git import GitCommandError, Repo
 from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from pydantic import BaseModel, ConfigDict
 
-from .log import logger
-from .types import NonEmptyString
-
-type DbtCommand = Literal[
-    "build", "run", "test", "source freshness", "seed", "snapshot", "deps"
-]
-
-COMMAND_WORDS: dict[str, list[str]] = {"source freshness": ["source", "freshness"]}
-"""(root) The commands whose name is more than one word."""
-
-SELECTABLE: frozenset[str] = frozenset(
-    {"build", "run", "test", "source freshness", "seed", "snapshot"}
-)
-"""The commands that take a target and a selection."""
+from . import log
+from .constants import COMMAND_WORDS, SELECTABLE
+from .types import DbtCommand, NonEmptyString
 
 
 class DbtRun(BaseModel):
@@ -45,10 +34,13 @@ class DbtRun(BaseModel):
 
         :returns: The arguments, without the ``dbt`` word itself.
         """
-        arguments = list(COMMAND_WORDS.get(self.command, [self.command]))
+        arguments = list(COMMAND_WORDS.get(self.command, (self.command,)))
+
         if self.command not in SELECTABLE:
             return arguments
+
         arguments += ["--target", self.target]
+
         for option, value in (
             ("--select", self.select),
             ("--exclude", self.exclude),
@@ -56,8 +48,10 @@ class DbtRun(BaseModel):
         ):
             if value:
                 arguments += [option, value]
+
         if self.full_refresh:
             arguments.append("--full-refresh")
+
         return arguments
 
 
@@ -70,10 +64,11 @@ def clone_repository(repository: str, destination: Path) -> Path:
     :raises RuntimeError: If the clone fails.
     """
     try:
-        git.Repo.clone_from(repository, destination)
-    except git.GitCommandError as error:
+        Repo.clone_from(repository, destination)
+    except GitCommandError as error:
         raise RuntimeError("Repository clone failed") from error
-    logger.info("Repository cloned: path=%s", destination)
+
+    log.info("Repository cloned", {"path": str(destination)})
     return destination
 
 
@@ -100,10 +95,12 @@ def execute_dbt(request: DbtRun) -> None:
         project_dir = dbt_project_dir(
             clone_repository(request.repository, Path(directory) / "repository")
         )
+
         settings = PrefectDbtSettings(project_dir=project_dir)
         runner = PrefectDbtRunner(settings=settings)
         runner.invoke(["deps"])
         runner.invoke(request.arguments())
-        logger.info(
-            "dbt command finished: command=%s project=%s", request.command, project_dir
+        log.info(
+            "dbt command finished",
+            {"command": request.command, "project": str(project_dir)},
         )
