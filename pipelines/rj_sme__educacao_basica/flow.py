@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 This flow is used to dump the database to the BIGQUERY
 """
