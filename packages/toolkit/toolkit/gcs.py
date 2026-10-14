@@ -1,88 +1,139 @@
 """Google Cloud Storage operations through the S3-compatible API with HMAC keys."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Coroutine, Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
 
-from aiobotocore.session import AioSession, ClientCreatorContext, get_session
+import obstore
+from obstore.store import ObjectStore, S3Store
 
+from . import log
+from .constants import DELETE_SPAN, UPLOAD_SPAN
 from .settings import Settings, settings
-
-if TYPE_CHECKING:  # pragma: no cover
-    from types_aiobotocore_s3.client import S3Client
+from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, tracer
 
 
-def create_client(
-    config: Settings = settings, session: AioSession | None = None
-) -> "ClientCreatorContext[S3Client]":
-    """Create a typed S3 client context for GCS.
+def create_store(bucket: str, config: Settings = settings) -> S3Store:
+    """Create the S3 store of one bucket, on the endpoint and with the keys of the settings.
 
+    :param bucket: Bucket name.
     :param config: Settings with the endpoint and HMAC keys.
-    :param session: Optional aiobotocore session.
     """
-    create = cast(
-        "Callable[..., ClientCreatorContext[S3Client]]",
-        (session or get_session()).create_client,
-    )
     scheme = "https" if config.GCS_USE_SSL else "http"
-    return create(
-        "s3",
-        endpoint_url=f"{scheme}://{config.GCS_ENDPOINT}",
-        aws_access_key_id=config.GCS_HMAC_ACCESS_ID,
-        aws_secret_access_key=config.GCS_HMAC_SECRET.get_secret_value(),
-        region_name=config.GCS_REGION,
+    return S3Store(
+        bucket,
+        endpoint=f"{scheme}://{config.GCS_ENDPOINT}",
+        access_key_id=config.GCS_HMAC_ACCESS_ID,
+        secret_access_key=config.GCS_HMAC_SECRET.get_secret_value(),
+        region=config.GCS_REGION,
+        client_options={"allow_http": not config.GCS_USE_SSL},
     )
 
 
-async def list_keys(client: "S3Client", bucket: str, prefix: str) -> list[str]:
+async def list_keys(store: ObjectStore, prefix: str) -> list[str]:
     """List every object key under one prefix.
 
-    :param client: Client from :func:`create_client`.
-    :param bucket: Bucket name.
+    :param store: Store from :func:`create_store`.
     :param prefix: Key prefix.
     :returns: The keys in listing order.
     """
-    keys: list[str] = []
-    paginator = client.get_paginator("list_objects_v2")
-    async for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        keys.extend(
-            key
-            for obj in page.get("Contents", [])
-            if (key := obj.get("Key")) is not None
+    return [
+        item["path"] async for batch in obstore.list(store, prefix) for item in batch
+    ]
+
+
+def files_of(path: Path) -> dict[str, Path]:
+    """Map the relative name of each file to its path.
+
+    :param path: A file, or a directory searched recursively.
+    :raises FileNotFoundError: If ``path`` does not exist.
+    :raises ValueError: If ``path`` is a directory with no files.
+    """
+    if not path.exists():
+        raise FileNotFoundError(path)
+
+    if path.is_file():
+        return {path.name: path}
+
+    files = {
+        file.relative_to(path).as_posix(): file
+        for file in sorted(path.rglob("*"))
+        if file.is_file()
+    }
+
+    if not files:
+        raise ValueError(f"{path} has no files")
+
+    return files
+
+
+async def gather_limited(
+    calls: Iterable[Coroutine[object, object, object]], concurrency: int
+) -> None:
+    """Await the calls together, with at most ``concurrency`` running at once."""
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def run(call: Coroutine[object, object, object]) -> None:
+        async with semaphore:
+            await call
+
+    await asyncio.gather(*(run(call) for call in calls))
+
+
+async def upload(
+    store: ObjectStore, prefix: str, path: Path, *, concurrency: int = 16
+) -> list[str]:
+    """Upload a file, or every file of a directory, under one prefix.
+
+    A directory keeps its relative paths, so Hive folders such as
+    ``ano_particao=2024/`` stay in the keys. A large file goes up in parts.
+
+    :param store: Store from :func:`create_store`.
+    :param prefix: Key prefix.
+    :param path: A file, or a directory.
+    :param concurrency: Maximum number of parallel uploads.
+    :returns: The keys of the uploaded files.
+    :raises FileNotFoundError: If ``path`` does not exist.
+    :raises ValueError: If ``path`` is a directory with no files.
+    """
+    with tracer.start_as_current_span(
+        UPLOAD_SPAN, attributes={"toolkit.prefix": prefix}
+    ) as span:
+        files = files_of(path)
+        keys = {name: f"{prefix.rstrip('/')}/{name}" for name in files}
+
+        await gather_limited(
+            (
+                obstore.put_async(store, keys[name], file)
+                for name, file in files.items()
+            ),
+            concurrency,
         )
-    return keys
 
+        size = sum(file.stat().st_size for file in files.values())
+        span.set_attributes({"toolkit.files": len(files), "toolkit.bytes": size})
 
-async def upload_file(client: "S3Client", bucket: str, key: str, path: Path) -> None:
-    """Upload one local file to ``key``."""
-    await client.put_object(Bucket=bucket, Key=key, Body=path.read_bytes())
+    UPLOADED_FILES.add(len(files), {"prefix": prefix})
+    UPLOADED_BYTES.add(size, {"prefix": prefix})
+    log.info("Files uploaded", {"prefix": prefix, "files": len(files), "bytes": size})
+    return list(keys.values())
 
 
 async def delete_keys(
-    client: "S3Client", bucket: str, keys: list[str], *, concurrency: int = 16
-) -> int:
+    store: ObjectStore, keys: list[str], *, concurrency: int = 16
+) -> None:
     """Delete objects one by one, because GCS has no S3 multi-object delete.
 
-    :param client: Client from :func:`create_client`.
-    :param bucket: Bucket name.
+    :param store: Store from :func:`create_store`.
     :param keys: Keys to delete.
     :param concurrency: Maximum number of parallel deletes.
-    :returns: The number of deleted keys.
     """
-    semaphore = asyncio.Semaphore(concurrency)
+    with tracer.start_as_current_span(
+        DELETE_SPAN, attributes={"toolkit.objects": len(keys)}
+    ):
+        await gather_limited(
+            (obstore.delete_async(store, key) for key in keys), concurrency
+        )
 
-    async def delete(key: str) -> None:
-        async with semaphore:
-            await client.delete_object(Bucket=bucket, Key=key)
-
-    await asyncio.gather(*(delete(key) for key in keys))
-    return len(keys)
-
-
-async def clear_prefix(client: "S3Client", bucket: str, prefix: str) -> int:
-    """Delete every object under one prefix.
-
-    :returns: The number of deleted keys.
-    """
-    return await delete_keys(client, bucket, await list_keys(client, bucket, prefix))
+    DELETED_FILES.add(len(keys))
+    log.info("Objects deleted", {"objects": len(keys)})
