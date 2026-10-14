@@ -1,14 +1,15 @@
 {#
 {
   "kind": "macro",
-  "name": "duckdb.text",
-  "description": "Remove NUL bytes and replace line breaks with spaces in a text column.",
+  "name": "duckdb.arcgis_layer",
+  "description": "Read an ArcGIS REST layer with ST_Read. The driver pages through the layer.",
   "inputs": {
-    "column": "SQL-safe column identifier."
+    "url": "SQL literal with the layer URL, without /query.",
+    "where": "SQL literal with the ArcGIS where clause. It is URL-encoded. The default reads every feature."
   },
-  "returns": "A text expression."
+  "returns": "A table expression for FROM."
 }
 #}
-{% macro text(column) -%}
-replace(regexp_replace({{ column }}, '[\r\n]', ' ', 'g'), chr(0), '')
+{% macro arcgis_layer(url, where="'1=1'") -%}
+ST_Read('ESRIJSON:' || {{ url }} || '/query?outFields=*&f=json&where=' || url_encode({{ where }}))
 {%- endmacro %}
