@@ -51,29 +51,32 @@ O SQL é um modelo `Jinja` em `queries/count_events.sql`, que lê o banco anexad
 | `toolkit.delta`     | A tabela `Delta` de um `dump`: `fingerprint`, `known_fingerprints`, `write_window`, `sweep` e `maintain`. O `deltalake` lê o ADC pelo `object_store`: servidor de metadados do GKE, service account ou usuário, e não `external_account`.                                                                                                                                                                                                                                                                                          |
 | `toolkit.gcs`       | `create_store`, `list_keys`, `upload` e `delete_keys` (`obstore`, chaves `HMAC`).                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `toolkit.bigquery`  | `BigQuery`: `table_exists`, `create_dataset` e `sync_delta_table` (tabela `Delta` por uma conexão `BigLake`).                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `toolkit.oracle`    | `Oracle`, um `Engine`: `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `toolkit.dbt`       | Clona o repositório de consultas e executa um comando `dbt`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
-Fontes (`toolkit.executor.sources.backends`): `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource`, `BigQuerySource`, `GSheetsSource` e `ArcGISSource`. `load_sources()["postgres"]` acha a classe pelo nome.
+Fontes (`toolkit.executor.sources.backends`): `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource` (entrega o `Engine` `Oracle`; cada janela vira `Parquet` local), `BigQuerySource`, `GSheetsSource` e `ArcGISSource`. `load_sources()["postgres"]` acha a classe pelo nome.
 
 ## Configuração
 
 A autenticação do Google é por workload identity (ADC), sem arquivo de service account. As variáveis são lidas do ambiente ou do `.env`:
 
-| Variável                                            | Padrão                   | Uso                                                                     |
-| --------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------- |
-| `GCS_HMAC_ACCESS_ID`                                | vazio                    | Chave `HMAC` do `GCS` (API compatível com S3).                          |
-| `GCS_HMAC_SECRET`                                   | vazio                    | Segredo `HMAC` do `GCS`.                                                |
-| `GCS_ENDPOINT`                                      | `storage.googleapis.com` | Endpoint do `GCS`.                                                      |
-| `GCS_REGION`                                        | `auto`                   | Região enviada ao `store` S3.                                           |
-| `GCS_USE_SSL`                                       | `true`                   | Usa HTTPS.                                                              |
-| `BIGQUERY_PROJECT`                                  | vazio                    | Projeto das tabelas externas e da fonte `bigquery`.                     |
-| `DUCKDB_MEMORY_LIMIT`                               | vazio                    | Limite de memória do `DuckDB`, como `4GB`.                              |
-| `DUCKDB_TEMP_DIRECTORY`                             | vazio                    | Pasta onde o `DuckDB` grava o que não cabe na memória.                  |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`                       | vazio                    | Coletor `OTLP/HTTP`, como `http://coletor:4318`. Vazio desliga o envio. |
-| `OTEL_EXPORTER_OTLP_HEADERS`                        | vazio                    | Cabeçalhos do coletor, `chave=valor,chave2=valor2`. Segredo.            |
-| `OTEL_SERVICE_NAME`                                 | `prefect-rj-iplanrio`    | Nome do serviço nos logs, traces e métricas.                            |
-| `LOG_LEVEL`                                         | `INFO`                   | Nível do log.                                                           |
-| `<CAMINHO>__DB_USERNAME` e `<CAMINHO>__DB_PASSWORD` | —                        | Credenciais de banco injetadas pelo `Infisical`.                        |
+| Variável                                            | Padrão                   | Uso                                                                                                            |
+| --------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `GCS_HMAC_ACCESS_ID`                                | vazio                    | Chave `HMAC` do `GCS` (API compatível com S3).                                                                 |
+| `GCS_HMAC_SECRET`                                   | vazio                    | Segredo `HMAC` do `GCS`.                                                                                       |
+| `GCS_ENDPOINT`                                      | `storage.googleapis.com` | Endpoint do `GCS`.                                                                                             |
+| `GCS_REGION`                                        | `auto`                   | Região enviada ao `store` S3.                                                                                  |
+| `GCS_USE_SSL`                                       | `true`                   | Usa HTTPS.                                                                                                     |
+| `BIGQUERY_PROJECT`                                  | vazio                    | Projeto das tabelas externas e da fonte `bigquery`.                                                            |
+| `DB_QUERY_TIMEOUT_SECONDS`                          | `3600`                   | Limite de uma consulta no SQL Server (o padrão da extensão é 30 s).                                            |
+| `ORACLE_CLIENT_LIB_DIR`                             | vazio                    | Pasta do `Instant Client` do Oracle. Vazio usa o `ldconfig`, e sem o cliente o `oracledb` roda em modo `thin`. |
+| `DUCKDB_MEMORY_LIMIT`                               | vazio                    | Limite de memória do `DuckDB`, como `4GB`.                                                                     |
+| `DUCKDB_TEMP_DIRECTORY`                             | vazio                    | Pasta onde o `DuckDB` grava o que não cabe na memória.                                                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`                       | vazio                    | Coletor `OTLP/HTTP`, como `http://coletor:4318`. Vazio desliga o envio.                                        |
+| `OTEL_EXPORTER_OTLP_HEADERS`                        | vazio                    | Cabeçalhos do coletor, `chave=valor,chave2=valor2`. Segredo.                                                   |
+| `OTEL_SERVICE_NAME`                                 | `prefect-rj-iplanrio`    | Nome do serviço nos logs, traces e métricas.                                                                   |
+| `LOG_LEVEL`                                         | `INFO`                   | Nível do log.                                                                                                  |
+| `<CAMINHO>__DB_USERNAME` e `<CAMINHO>__DB_PASSWORD` | —                        | Credenciais de banco injetadas pelo `Infisical`.                                                               |
 
 ## Logs, traces e métricas
 

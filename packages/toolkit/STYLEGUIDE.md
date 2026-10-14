@@ -26,6 +26,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 | `toolkit.delta`                      | A tabela `Delta` de um `dump`: o `ledger`, a troca de uma janela e a manutenção.                                                                    |
 | `toolkit.gcs`                        | `GCS` com `obstore`. Único lugar que importa `obstore`.                                                                                             |
 | `toolkit.bigquery`                   | Cliente do BigQuery e tabelas externas.                                                                                                             |
+| `toolkit.oracle`                     | `Engine` do Oracle (`oracledb`): `connect`, `execute` e `query`.                                                                                    |
 | `toolkit.dbt`                        | Execução de `dbt`.                                                                                                                                  |
 
 - `__init__.py` fica vazio. O pacote é plano, e um módulo leva o nome do domínio, nunca o de uma biblioteca (`logging.py`, `polars.py`).
@@ -50,7 +51,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 - Todo SQL é um modelo `Jinja` (`StrictUndefined`) e roda pelo `Executor`: `toolkit/executor/templates/<pasta>/<nome>.sql` no toolkit, `queries/*.sql` em cada pipeline. Não há SQL em Python, e ninguém abre conexão `DuckDB` fora do `Executor`.
 - Valores entram como `Identifier()` e `Literal()`, e valores de execução como parâmetros (`?`). Nunca ponha um valor de fora, nem uma senha, no texto do SQL. Em SQL, carregue e apague em conjuntos.
 - Uma conexão `DuckDB` atende uma consulta por vez: abra uma por tarefa concorrente.
-- `Executor.query(..., expect=Schema)` devolve um `Dataset` tipado. O esquema é uma classe anotada, `X | None` marca nulos e `Geometry` marca geometria. Um texto nunca é lido como número: faça o `CAST` no modelo.
+- `Executor.query(..., expect=Schema)` devolve um `Dataset` tipado. O esquema é uma classe anotada, `X | None` marca nulos e `Geometry` marca geometria. Um texto nunca é lido como número: faça o `CAST` no modelo. Sem `expect`, `query` não confere nada. Quando as colunas só existem em tempo de execução, como num `dump`, `expect` aceita o mapa de colunas de uma primeira leitura (`frame_columns`), e as leituras seguintes são conferidas contra ele.
 - O `DuckDB` cuida de SQL, de leitura e escrita de Parquet e CSV, de `COPY` para o `GCS` e de geometria. O `Polars` cuida só do que o `DuckDB` não faz. Uma função pública recebe e devolve `Path`, `pl.DataFrame` ou `pl.LazyFrame`, nunca conexão, relação ou cursor.
 
 - A cópia de uma fonte para o `bucket` extrai uma janela por vez com `COPY` por `Executor.execute` (`duckdb/extract_window`) para um `Parquet` local, e o `deltalake` grava a tabela `Delta`. Tudo que vira uma tabela `BigLake` é `Delta`. Do BigQuery para o `bucket` são lotes simples do `query` da fonte (`duckdb/select_source`). CSV só entra quando não há alternativa.
@@ -66,7 +67,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 
 - O cliente roda SQL (protocolo `Engine`: `execute` e `query`). A `Source` abre e prepara o cliente (`open` e `setup`). O `Executor` renderiza os modelos e os roda. Uma `Source` nunca monta nem roda uma consulta.
 - A pasta `templates` de cada pipeline é procurada antes da do toolkit, então ela não usa nomes de pasta do toolkit, como `duckdb/`.
-- O banco anexado se chama sempre `src` (`ALIAS`), e o modelo escreve `FROM src.esquema.tabela`. Um `Engine` anexa uma fonte só. O SQL é sempre `DuckDB`. Uma consulta no dialeto de um banco vai como texto para a função da extensão dele (`postgres_query`, `mysql_query`, `mssql_scan` ou `oracle_query`), pela macro `native_query`.
+- O banco anexado se chama sempre `src` (`ALIAS`), e o modelo escreve `FROM src.esquema.tabela`. Um `Engine` anexa uma fonte só. O SQL é sempre `DuckDB`. Uma consulta no dialeto de um banco vai como texto para a função da extensão dele (`postgres_query`, `mysql_query` ou `mssql_scan`), pela macro `native_query`. O Oracle é a exceção: a fonte entrega um `Engine` próprio (`Oracle`), o `Executor` roda nele os modelos de `oracle/` (`setup` ajusta o fuso e lê o `SCN`), e a fonte grava cada janela em `Parquet` local (`Stager`) para o `DuckDB` ler.
 - Uma fonte é uma classe por arquivo em `sources/backends/`, subclasse de `SourceBase`, com o nome terminando em `Source`. O `autoregistry` a registra, e uma classe intermediária usa `skip=True`. Um sistema novo é um arquivo novo. Uma subclasse de `DuckDBSource` só define atributos `ClassVar`.
 - A conexão (`DBConn`) é uma `dataclass` congelada, com a senha fora do `repr`. Nunca registre em log senha, token, URL de conexão, valores ou texto de consulta.
 - A construção de uma `Source` não tem efeito colateral: o cliente abre no `open`.

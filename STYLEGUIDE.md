@@ -386,14 +386,17 @@ def process(
 - Sem imports com wildcard (`from x import *`).
 - Sem cabeçalho de encoding (`# -*- coding: utf-8 -*-`). UTF-8 é o padrão no Python 3, e o cabeçalho é ruído.
 - Imports explícitos apenas: liste cada nome que você usa.
+- Importe nomes, não módulos: `from asyncio import to_thread`, e não `import asyncio`. Se o nome colide com um nome local, dê um apelido (`from duckdb import connect as duckdb_connect`). As exceções são o `pytest` (`import pytest`, que o `ruff` exige pela regra `PT013`) e o módulo que um teste precisa para trocar um nome (`from toolkit import dbt`, e então `monkeypatch.setattr(dbt, ...)`).
 - Sem `# noqa` nem `# pylint: disable=...` sem o id da regra e o motivo. Corrija o problema. Se o silêncio for inevitável, escreva `# noqa: EXXX  # motivo`.
 
 ```python
 # ✅ correto
+from asyncio import to_thread
 from toolkit.dbt import DbtRun
 from toolkit.gcs import list_keys
 
 # ❌ errado
+import asyncio
 from toolkit.gcs import *
 ```
 

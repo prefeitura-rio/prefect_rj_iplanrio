@@ -76,7 +76,7 @@ Esse modelo garante reprodutibilidade, isolamento e facilidade de evolução par
 | `fetch_json(url, ...)`                           | Lê o JSON de uma URL. Tenta de novo depois de timeout, erro de rede, 429 ou 5xx, e falha na hora com um 4xx.                                                                                                               |
 | `run_dbt(request)`                               | Roda um comando `dbt` de um repositório de consultas.                                                                                                                                                                      |
 | `dump_database(...)` (fluxo)                     | Junta `dump_db_to_gcs` e `publish_table_in_bq`, com duas tentativas em cada etapa. Uma tentativa nova é segura: o que já foi gravado não se repete. Uma falha avisa no Discord se houver `DISCORD_WEBHOOK_URL`.            |
-| `dbt_run(request)` (fluxo)                       | Clona o repositório, roda `dbt deps` e o comando de `request`.                                                                                                                                                             |
+| `dbt_run(request)` (fluxo)                       | Clona o repositório, roda `dbt deps` e o comando de `request`. Um `profiles.yml` no projeto vale mais que o de `~/.dbt`.                                                                                                   |
 
 Uma pipeline de dump só precisa de um `flow.py` de duas linhas e dos parâmetros no `prefect.yaml`:
 
@@ -117,7 +117,7 @@ deployments:
 
 **Como o dump não repete dado**
 
-1. Uma janela é uma faixa fixa de uma coluna: um `day`, `month` ou `year` de uma data, ou um número de ids (`width: 1000000`). A chave é estável, por exemplo `2024-03-01`. Sem `batches`, a fonte inteira é uma janela só.
+1. Uma janela é uma faixa fixa de uma coluna: um `day`, `month` ou `year` de uma data, ou um número de ids (`width: 1000000`). A chave é estável, por exemplo `2024-03-01`. Sem `batches`, a fonte inteira é uma janela só. Com `batches`, as linhas cuja coluna é `NULL` ficam numa última janela, `null`, que toda execução relê (nenhuma faixa as contém).
 2. Para cada janela, o `DuckDB` lê a fonte já com a janela e os `filters` (o banco recebe o filtro, porque `read.table` é uma tabela anexada), aplica `select` e `columns`, e grava um `Parquet` local. A impressão digital desse arquivo (a contagem de linhas e duas somas do `md5` de cada linha, que não dependem da ordem) vai para o ledger da tabela `Delta`, com o nome `<hash da config>:<janela>`.
 3. Se a impressão digital é a mesma do ledger, nada é gravado, nem um `commit`. Se mudou, a janela é trocada em um `commit` atômico. Uma janela que ficou vazia na fonte perde as linhas.
 4. Uma janela que nunca foi carregada com a mesma config é sempre lida. `lookback` limita só as releituras das outras: `lookback: 2` relê as duas últimas janelas.
@@ -130,9 +130,20 @@ Tudo o que vai de uma fonte para o bucket e vira uma tabela BigLake usa `Delta`:
 **O que ainda custa**
 
 - Uma janela que não mudou ainda é lida na fonte, porque a impressão digital precisa das linhas. Use `lookback` para ler só as janelas que podem mudar, e rode uma passada completa (sem `lookback`) de vez em quando para pegar mudanças nas janelas antigas.
-- Uma consulta nativa (`read.query`) roda inteira na fonte, e o DuckDB não consegue empurrar a janela para dentro dela. Por isso ela é uma janela só. O Oracle só lê por `query`, porque o DuckDB não anexa o Oracle.
+- Uma consulta nativa (`read.query`) roda inteira na fonte, e o DuckDB não consegue empurrar a janela para dentro dela. Por isso ela é uma janela só. O Oracle é a exceção: ele mesmo aplica os filtros e as janelas, numa tabela ou numa consulta.
+- Uma consulta nativa roda duas vezes: uma para descrever as colunas e outra para extrair. Uma consulta lenta custa o dobro.
 - O BigQuery lê a tabela `Delta` por uma conexão BigLake (`cloud.biglake_connection`), com os limites da Google: leitor versão 3 no máximo, sem `Storage Read API`.
 - O `deltalake` lê o ADC pelo `object_store` do Rust. Isso funciona com o servidor de metadados do GKE (workload identity), com um arquivo de service account e com credenciais de usuário. **Não funciona** com credencial `external_account` (federação). Confira a credencial do pod antes de ligar a pipeline.
+
+**Tipos e dialetos** (conferidos em Postgres, MySQL, SQL Server e Oracle de verdade)
+
+- O `Delta` não guarda `TIME`, `UUID` nem `INTERVAL`: eles chegam como texto. Um inteiro sem sinal chega no inteiro com sinal maior (`UINTEGER` em `BIGINT`) e `UBIGINT` chega em `DECIMAL(20, 0)`.
+- Um `timestamp` com fuso (`timestamptz`, `datetimeoffset`) é cortado em dias de São Paulo, em qualquer máquina. Um `timestamp` sem fuso vale como vem do banco, e o `TIMESTAMP` do MySQL vem em UTC.
+- `normalize_values` limpa o texto de todo banco, inclusive o `nvarchar` do SQL Server.
+- **SQL Server:** o `DuckDB` corta toda consulta em 30 s por padrão. O toolkit troca esse limite por `DB_QUERY_TIMEOUT_SECONDS` (3600). Numa consulta nativa, uma coluna `varchar` com acento falha com `Invalid unicode`: use `CAST(coluna AS NVARCHAR(n))` ou leia pela tabela (`read.table`), que decodifica certo.
+- **Oracle:** é lido com o `oracledb` e o Instant Client (modo `thick`, que a imagem base já tem; sem ele o `oracledb` usa o modo `thin`, que não lê usuários com verifier `10G`). A pasta do Instant Client vem de `ORACLE_CLIENT_LIB_DIR` ou do `ldconfig`. Cada janela vira um `Parquet` local, com os filtros e a janela aplicados pelo Oracle por variáveis de bind: `read.table` é `DONO.TABELA` e `read.query` é uma consulta, que pode ter `;` no fim, e as duas aceitam `batches` e `filters`. Os nomes das colunas são os que o Oracle informa, em maiúsculas, como em `batches: { column: DATA_PEDIDO }`. A tabela é lida `AS OF SCN`, com o mesmo SCN em todas as janelas, e uma mudança feita durante a carga não entra. Isso pede `EXECUTE` em `SYS.DBMS_FLASHBACK` ou `SELECT` em `SYS.V_$DATABASE`, e o privilégio `FLASHBACK` na tabela de outro dono; sem eles a carga segue sem o `SCN` e avisa no log. Uma consulta não é lida `AS OF SCN`. A sessão usa o fuso de São Paulo.
+- **Tipos do Oracle:** um `NUMBER` nunca perde dígitos: até 18 dígitos sem escala é `int64`, com precisão e escala que cabem é `decimal128`, `FLOAT` é `double`, e um `NUMBER` sem precisão (ou que o `decimal128` não guarda) chega como texto exato. `DATE` e `TIMESTAMP` chegam sem fuso (`DATE` tem hora). `TIMESTAMP WITH TIME ZONE` e `WITH LOCAL TIME ZONE` chegam como o instante em UTC. `CLOB`, `NCLOB`, `NVARCHAR2` e `XMLTYPE` chegam como texto, `RAW` e `BLOB` como bytes, e `INTERVAL` e `ROWID` como texto. Um tipo sem conversão (objeto, `BFILE`, `BOOLEAN`, `JSON`) falha e diz a coluna: converta na consulta. O `Oracle` 18c (XE), 19c (19.9, `WE8MSWIN1252`) e 23 passaram nos mesmos testes.
+- **Postgres e MySQL:** o servidor parado no meio de uma leitura deixa a execução esperando para sempre. Ponha `timeout_seconds` na tarefa, no `Prefect`.
 
 **Testes do dump: o que cada nível usa de verdade** (nenhum nível usa contêiner)
 

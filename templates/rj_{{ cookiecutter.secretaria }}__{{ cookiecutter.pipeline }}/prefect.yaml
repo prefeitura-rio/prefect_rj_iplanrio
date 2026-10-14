@@ -36,7 +36,7 @@ deployments:
       db_type: postgres # postgres, mysql, mssql ou oracle
       host: host
       port: 5432
-      database: database
+      database: database # no Oracle, o service name
       secret_path: /db-secret_path
     cloud: # ambiente de destino
       bucket: bucket-staging
