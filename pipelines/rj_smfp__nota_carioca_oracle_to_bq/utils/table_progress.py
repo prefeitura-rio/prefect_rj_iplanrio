@@ -60,6 +60,9 @@ class TableProgress:
     :param error: Mensagem do erro, na etapa ``FAILED``.
     :param failed_stage: Etapa em que a tabela falhou.
     :param updated_at: Instante da gravação, ISO 8601 em UTC.
+    :param memory_bytes: Memória em uso no pod (working set do cgroup) no último tick da extração; ``None`` fora de um
+        container ou antes do primeiro tick. JSONs gravados antes deste campo existir não o têm.
+    :param memory_limit_bytes: Limite de memória do pod; ``None`` se não há limite, cgroup ou tick.
     """
 
     table: str
@@ -78,6 +81,8 @@ class TableProgress:
     error: str | None = None
     failed_stage: TableStage | None = None
     updated_at: str = ""
+    memory_bytes: int | None = None
+    memory_limit_bytes: int | None = None
 
     def to_json(self) -> str:
         """Serializa para o JSON do GCS."""
@@ -221,6 +226,8 @@ class TableReporter:
             bytes_uploaded=progress.bytes_uploaded,
             extract_seconds=progress.elapsed_seconds,
             eta_seconds=estimate_remaining_seconds(progress),
+            memory_bytes=progress.memory_bytes,
+            memory_limit_bytes=progress.memory_limit_bytes,
         )
 
     def extracted(self, result: ExtractResult) -> None:

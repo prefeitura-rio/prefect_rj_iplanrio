@@ -60,12 +60,18 @@ deployments:
     dataset_id: brutos_nota_fiscal
     # 6 processos de leitura por pod (era 2) e 6 envios simultâneos ao GCS: mais envios contornam as conexões que a
     # saída de rede prende em ~3 MB/s. Memória: 512 MiB do processo principal + 6 x 640 MiB = ~4,4 GiB, dentro do
-    # pod_memory_mb, que precisa ficar abaixo do memory_request dos job_variables menos folga (5 GiB - 256 MiB).
+    # pod_memory_mb, que precisa ficar abaixo do memory_request dos job_variables menos folga (6 GiB - 256 MiB = 5888).
     # No Oracle de prod são 3 x 6 sessões de leitura + 3 de contagem; para aliviar o banco, Custom run com workers=4.
     workers: 6
-    pod_memory_mb: 4608
+    pod_memory_mb: 5888
     upload_concurrency: 6
     max_pending_files: 6
+    # OOM de 14/10 (NOTAS_NACIONAIS, 66% em ~14 min, pod de 6 GiB): a estimativa era de ~4,4 GiB e as mesmas
+    # configurações tinham passado em 09/10 e 13/10, então o RSS dos workers cresce com o tempo. O worker é trocado a
+    # cada 25 faixas (volta a ~250 MB, conexão nova no mesmo SCN) e, com o pod em 85% do limite de memória, nenhuma
+    # faixa nova começa até o uso cair a 80%.
+    worker_max_tasks: 25
+    memory_pause_ratio: 0.85
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -78,5 +84,7 @@ deployments:
       # request já derrubou um nó. Os nós são de 8 vCPU / 15,5 GiB; a conversão para Parquet é limitada por CPU.
       cpu_request: "3"
       cpu_limit: "6"
-      memory_request: 5Gi
-      memory_limit: 6Gi
+      # O limite passa do request em 2 GiB: é a margem contra o crescimento de memória que matou o pod em 14/10, e o
+      # memory_pause_ratio é medido sobre ele (pausa a 6,8 GiB).
+      memory_request: 6Gi
+      memory_limit: 8Gi

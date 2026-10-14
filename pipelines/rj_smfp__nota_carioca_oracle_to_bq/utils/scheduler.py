@@ -1,12 +1,17 @@
-"""Agendamento da extração: leitura em processos, envio em threads e contrapressão pelo disco local."""
+"""Agendamento da extração: leitura em processos, envio em threads e contrapressão pelo disco local e pela memória."""
 
 import time
 from collections.abc import Callable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.memory_gate import GateSummary, MemoryGate
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import Progress
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.worker import ChunkJob, ChunkResult
+
+# Com o gate de memória pausado o agendador confere a memória com mais frequência do que o intervalo de progresso, para
+# retomar logo que ela baixar.
+PAUSED_POLL_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -34,11 +39,13 @@ class ChunkRun:
     :param results: Resultado de cada faixa, na ordem de ``jobs``; todos os arquivos já foram enviados e apagados.
     :param max_pending_files: Maior número de Parquet locais pendentes de envio observado.
     :param max_local_files: Maior número de faixas em leitura mais arquivos pendentes observado (teto do spool).
+    :param memory: Pausas do gate de memória e pico de memória observado.
     """
 
     results: list[ChunkResult]
     max_pending_files: int
     max_local_files: int
+    memory: GateSummary = field(default_factory=GateSummary)
 
 
 class ChunkScheduler:
@@ -50,12 +57,14 @@ class ChunkScheduler:
         upload: Callable[[ChunkJob, ChunkResult], None],
         limits: Limits,
         uploader: ThreadPoolExecutor,
+        gate: MemoryGate,
     ) -> None:
         """Guarda as dependências; ``uploader`` é o pool das threads de upload, encerrado por quem o criou."""
         self.submit = submit
         self.upload = upload
         self.limits = limits
         self.uploader = uploader
+        self.gate = gate
         self.reading: dict[Future[ChunkResult], ChunkJob] = {}
         self.uploading: dict[Future[ChunkResult], int] = {}
         self.read: dict[int, ChunkResult] = {}
@@ -68,9 +77,20 @@ class ChunkScheduler:
         """Conta os arquivos que existem ou vão existir no spool: faixas em leitura mais arquivos pendentes de envio."""
         return len(self.reading) + len(self.uploading)
 
+    def poll_seconds(self) -> float:
+        """Espera máxima por um futuro antes de reavaliar a fila: o intervalo de progresso ou, pausado, menos."""
+        interval = self.limits.progress_interval_seconds
+        return min(interval, PAUSED_POLL_SECONDS) if self.gate.paused else interval
+
     def start_ready(self, queue: list[ChunkJob]) -> None:
-        """Inicia faixas da fila enquanto couberem nos workers e no limite de arquivos pendentes."""
-        while queue and len(self.reading) < self.limits.workers and self.local_files() < self.limits.max_pending_files:
+        """Inicia faixas da fila enquanto couberem nos workers, no limite de arquivos pendentes e no gate de memória."""
+        self.gate.refresh()
+        while (
+            queue
+            and len(self.reading) < self.limits.workers
+            and self.local_files() < self.limits.max_pending_files
+            and self.gate.admit(len(self.reading))
+        ):
             job = queue.pop()
             self.reading[self.submit(job)] = job
             self.max_local = max(self.max_local, self.local_files())
@@ -121,6 +141,8 @@ class ChunkScheduler:
         :param elapsed: Segundos desde o início.
         :returns: Estado para :func:`format_progress`.
         """
+        self.gate.refresh()
+        memory = self.gate.last
         return Progress(
             chunks_read=len(self.read),
             chunks_uploaded=self.uploaded,
@@ -129,6 +151,8 @@ class ChunkScheduler:
             bytes_uploaded=self.bytes_uploaded,
             pending_files=len(self.uploading),
             elapsed_seconds=elapsed,
+            memory_bytes=memory.used_bytes if memory is not None else None,
+            memory_limit_bytes=memory.limit_bytes if memory is not None else None,
         )
 
     def abort(self) -> None:
@@ -138,25 +162,29 @@ class ChunkScheduler:
         self.uploader.shutdown(wait=True, cancel_futures=True)
 
 
-def run_chunks(
+def run_chunks(  # noqa: PLR0913
     jobs: list[ChunkJob],
     submit: Callable[[ChunkJob], Future[ChunkResult]],
     upload: Callable[[ChunkJob, ChunkResult], None],
     limits: Limits,
     report: Callable[[Progress], None],
+    *,
+    gate: MemoryGate | None = None,
 ) -> ChunkRun:
     """Lê as faixas com no máximo ``workers`` em andamento e envia cada Parquet assim que ele fica pronto.
 
     As faixas são entregues a ``submit`` sob demanda: nenhuma é iniciada se faixas em leitura mais arquivos
-    esperando envio já somarem ``max_pending_files``, o que limita o disco. Uma faixa só conta como concluída
-    depois do upload.
+    esperando envio já somarem ``max_pending_files``, o que limita o disco, nem enquanto o ``gate`` de memória estiver
+    pausado (exceto uma faixa por vez, se nenhuma estiver em leitura). Uma faixa só conta como concluída depois do
+    upload.
 
     :param jobs: Faixas a ler.
     :param submit: Inicia a leitura de uma faixa e devolve o futuro do resultado (um processo worker).
     :param upload: Envia o arquivo de um resultado e o apaga do disco; roda numa thread de upload.
     :param limits: Concorrência e limites de disco.
     :param report: Publica o progresso a cada intervalo.
-    :returns: Resultados e os picos observados.
+    :param gate: Contrapressão por memória; sem ele a memória não é lida nem limita nada.
+    :returns: Resultados, os picos observados e o resumo do gate.
     :raises Exception: A primeira falha de leitura ou de upload, depois de parar de iniciar faixas, cancelar as
         pendentes e encerrar as threads de upload.
     """
@@ -164,13 +192,13 @@ def run_chunks(
     last_report = started
     queue = list(reversed(jobs))
     with ThreadPoolExecutor(max_workers=limits.upload_concurrency, thread_name_prefix="gcs-upload") as uploader:
-        state = ChunkScheduler(submit, upload, limits, uploader)
+        state = ChunkScheduler(submit, upload, limits, uploader, gate if gate is not None else MemoryGate.off())
         try:
             while queue or state.reading or state.uploading:
                 state.start_ready(queue)
                 done, _ = wait(
                     {*state.reading, *state.uploading},
-                    timeout=limits.progress_interval_seconds,
+                    timeout=state.poll_seconds(),
                     return_when=FIRST_COMPLETED,
                 )
                 for future in done:
@@ -182,4 +210,6 @@ def run_chunks(
         except BaseException:
             state.abort()
             raise
-    return ChunkRun([state.read[job.chunk.chunk_id] for job in jobs], state.max_pending, state.max_local)
+    return ChunkRun(
+        [state.read[job.chunk.chunk_id] for job in jobs], state.max_pending, state.max_local, state.gate.summary()
+    )

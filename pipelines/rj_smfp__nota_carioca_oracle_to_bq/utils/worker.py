@@ -1,5 +1,6 @@
 """Processo worker: lê faixas de ROWID do Oracle e grava Parquet no spool local."""
 
+import atexit
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -77,12 +78,48 @@ WORKER = WorkerContext()
 def init_worker(config: OracleConfig, spool_dir: Path) -> None:
     """Abre a conexão do Oracle do processo worker e guarda o diretório do spool.
 
+    O pool reciclável (``max_tasks_per_child``) executa o ``initializer`` em cada processo novo, então toda faixa lê com
+    uma conexão aberta aqui. A conexão é fechada por :func:`close_worker` quando o processo sai, inclusive ao ser
+    reciclado.
+
     :param config: Conexão com o Oracle.
     :param spool_dir: Diretório local, criado pelo processo principal, onde os Parquet são gravados.
     """
     WORKER.config = config
     WORKER.spool_dir = spool_dir
     WORKER.connection = connect(config)
+    atexit.unregister(close_worker)
+    atexit.register(close_worker)
+
+
+def close_worker() -> None:
+    """Fecha a conexão do worker quando o processo sai, para a sessão não ficar pendurada no Oracle.
+
+    Num worker reciclado ou encerrado normalmente o processo termina pelo ``sys.exit`` do ``spawn``, que roda os
+    ``atexit``. Um processo morto à força (``SIGKILL``) não passa por aqui; o sistema operacional fecha o socket e o
+    Oracle derruba a sessão. Uma falha ao fechar vira aviso: a conexão já estaria perdida.
+    """
+    connection, WORKER.connection = WORKER.connection, None
+    if connection is None:
+        return
+    try:
+        connection.close()
+    except oracledb.Error as error:
+        logger.warning("Não foi possível fechar a conexão do worker ao sair: %s", error)
+
+
+def release_memory() -> None:
+    """Devolve ao sistema os blocos livres do pool de memória do pyarrow depois de uma faixa.
+
+    Chamada depois de ``write_chunk`` retornar, quando os lotes e tabelas Arrow da faixa já saíram de escopo (a
+    contagem de referências os liberou): o pool guarda esses blocos para reutilizar e o RSS do worker só desce se
+    ele os devolver. Mediu-se ~0,6 ms por faixa e RSS ~12 MiB menor depois de 59 faixas (282 contra ~294 MiB).
+    Não há ``gc.collect()``: o processo importa o Prefect (~170 mil objetos rastreados) e uma coleta completa levava
+    ~100 ms por faixa sem reduzir o RSS, já que os dados da faixa são liberados pela contagem de referências.
+    """
+    pool = pa.default_memory_pool()
+    if hasattr(pool, "release_unused"):
+        pool.release_unused()
 
 
 def write_chunk(connection: oracledb.Connection, spool_dir: Path, job: ChunkJob) -> ChunkResult:
@@ -120,7 +157,7 @@ def write_chunk(connection: oracledb.Connection, spool_dir: Path, job: ChunkJob)
 
 
 def process_chunk(job: ChunkJob) -> ChunkResult:
-    """Processa uma faixa no worker, reconectando se a conexão cair.
+    """Processa uma faixa no worker, reconectando se a conexão cair, e devolve ao sistema a memória do pyarrow.
 
     Só falhas de conexão são repetidas; erro do banco (ex. ``ORA-01555``,
     SCN antigo demais) propaga, pois repetir não o resolve.
@@ -136,10 +173,13 @@ def process_chunk(job: ChunkJob) -> ChunkResult:
         try:
             if WORKER.connection is None:
                 WORKER.connection = connect(WORKER.config)
-            return write_chunk(WORKER.connection, WORKER.spool_dir, job)
+            result = write_chunk(WORKER.connection, WORKER.spool_dir, job)
         except (oracledb.OperationalError, oracledb.InterfaceError):
             WORKER.connection = None
             if attempt >= MAX_CHUNK_ATTEMPTS:
                 raise
             logger.warning("Conexão perdida na faixa %d (tentativa %d); reconectando", job.chunk.chunk_id, attempt)
             attempt += 1
+        else:
+            release_memory()
+            return result
