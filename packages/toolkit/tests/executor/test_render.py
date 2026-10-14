@@ -200,7 +200,7 @@ def test_the_filters_become_a_where_clause(predicates, expected):
 
 
 def test_a_source_is_read_whole_with_a_plain_select():
-    """Select every row of the native query or of the attached table, for the batches."""
+    """Select every row of a native query or of an attached table."""
     native = render_template("duckdb/select_source", dump_values(type="bigquery"))
     attached = render_template(
         "duckdb/select_source", dump_values(table=Identifier("src", "ds", "t"))

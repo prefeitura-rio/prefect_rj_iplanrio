@@ -103,7 +103,7 @@ async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
 
 @pytest.mark.parametrize("machine", ["UTC", "Asia/Tokyo"])
 def test_regression_the_time_zone_does_not_follow_the_machine(machine):
-    """Regression: DuckDB took the zone of the machine, so a pod in UTC cut the days of a `TIMESTAMPTZ` elsewhere."""
+    """Regression: DuckDB followed the time zone of the machine."""
     code = (
         "import asyncio\n"
         "from toolkit.executor.engines.duckdb import DuckDBEngine\n"

@@ -82,8 +82,9 @@ class Executor:
     ) -> Result[Schema] | Result[dict[str, object]]:
         """Render a query and return its result, checked against `expect`.
 
-        `expect` is a schema class, or a map of the columns when they are known only at
-        run time, or nothing to check nothing. Raise `SchemaError` if a batch does not fit.
+        `expect` is a schema class, a map of the columns for a read whose columns are
+        known only at run time, or nothing to check nothing. Raise `SchemaError` if a
+        batch does not fit.
 
         ```python
         orders = await executor.query("orders", {"source": scan}, expect=Order)
@@ -93,7 +94,8 @@ class Executor:
 
         # a dump: the first read gives the columns, and the next reads must keep them
         first = await executor.query("window", values)
-        async for batch in executor.query("window", values, expect=frame_columns(first.frame)):
+        columns = frame_columns(first.frame)
+        async for batch in executor.query("window", values, expect=columns):
             ...
         ```
         """

@@ -23,7 +23,7 @@ from ..types import Geometry
 
 TEMPLATES_DIR: Final = Path(__file__).parent / "templates"
 ALIAS: Final = "src"
-"""The name under which a source database is attached. Templates write `FROM src.schema.table`."""
+"""The name of the attached source. Templates write `FROM src.schema.table`."""
 
 SECRET: Final = "src_secret"  # noqa: S105
 
@@ -47,7 +47,7 @@ SCALAR_TYPES: Final[Mapping[type, DataType | type[DataType]]] = {
     Decimal: polars_Decimal,
     Geometry: Extension(GEOMETRY_EXTENSION, Binary),
 }
-"""The Polars type of each Python type that a schema class may annotate a column with."""
+"""The Polars type of each Python type that a schema class may annotate."""
 
 DEFAULT_BATCH_SIZE: Final = 50_000
 """Rows per batch when a query does not say."""

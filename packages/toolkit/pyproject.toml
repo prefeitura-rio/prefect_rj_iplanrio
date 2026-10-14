@@ -98,6 +98,9 @@ ignore = [
   "TID252", # relative imports are the house style
 ]
 
+[tool.ruff.lint.pycodestyle]
+max-doc-length = 88 # a docstring or a comment line holds up to 88 columns, as the guide says
+
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "pandas".msg = "Use polars."
 "requests".msg = "Use httpx2."
@@ -112,6 +115,7 @@ ignore = [
 "obstore".msg = "Import obstore only in toolkit/gcs.py."
 
 [tool.ruff.lint.per-file-ignores]
+"typings/**" = ["W505"] # copies of third-party stubs, which this repo does not edit
 "toolkit/gcs.py" = ["TID251"] # the one module that imports obstore
 "tests/**" = [
   "D100",    # a test module has no module docstring

@@ -16,6 +16,11 @@ def normalize_column(name: str, separator: str = "_", lowercase: bool = True) ->
     It is a slug, with a leading `_` if the slug is empty or starts with a digit,
     because BigQuery needs a letter or an underscore first. BigQuery also rejects a
     separator other than `_`.
+
+    ```python
+    normalize_column("Código do Órgão")  # "codigo_do_orgao"
+    normalize_column("1a")  # "_1a"
+    ```
     """
     text = normalize(name, separator, lowercase)
     return f"_{text}" if not text or text[0].isdigit() else text
@@ -27,6 +32,12 @@ def column_aliases(
     """Return each column name with its normalized name, as SQL identifiers.
 
     They are the values of the `normalized_columns` macro of `duckdb/macros.sql`.
+
+    ```python
+    column_aliases(["Código", "id"])
+    # [{"source": Identifier("Código"), "target": Identifier("codigo")},
+    #  {"source": Identifier("id"), "target": Identifier("id")}]
+    ```
     """
     return [
         {
@@ -45,18 +56,13 @@ def select_columns(
     transforms: Mapping[str, str] | None = None,
     select: Sequence[str] | None = None,
 ) -> list[dict[str, Composable]]:
-    """Return the select list of a dump, as SQL fragments.
+    """Return the select list of a dump, as the values of the `select_columns` macro.
 
-    `columns` maps each column of the result to its DuckDB type. `normalize_names`
-    renames each column to a slug. `normalize_values` applies `clean_text` to the text
-    columns. `transforms` maps a column to the Arrow function that gives its value.
-    `select` keeps only those columns, in that order. A column is one that the result
-    has, by its own name. A function is one of the Arrow functions, and it reads the
-    column as text: a date or a timestamp is cast first, in the time zone of São Paulo.
-    Anything else raises a `ValueError`. A column of a type that a Delta table cannot
-    hold (`DELTA_CASTS`: a time, a UUID, an unsigned number) is cast.
-
-    They are the values of the `select_columns` macro of `duckdb/macros.sql`.
+    `columns` maps each result column to its DuckDB type, and `select` keeps some of
+    them, in order. `normalize_names` makes each name a slug, `normalize_values` cleans
+    the text, and `transforms` gives a column the value of an Arrow function, which
+    reads text (a time stamp goes through São Paulo first). A type that Delta cannot
+    hold (`DELTA_CASTS`) is cast. Raise `ValueError` for an unknown column or function.
 
     ```python
     select_columns({"Nome": "VARCHAR"}, normalize_values=True)

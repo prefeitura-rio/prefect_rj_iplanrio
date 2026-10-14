@@ -119,7 +119,7 @@ def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_p
 def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(
     fake_runner, tmp_path, has_profile
 ):
-    """Regression: dbt read `~/.dbt` only, so a `profiles.yml` in the repository was ignored."""
+    """Regression: dbt ignored the `profiles.yml` of the repository."""
     if has_profile:
         (tmp_path / "queries" / "profiles.yml").write_text("p: {}\n")
 

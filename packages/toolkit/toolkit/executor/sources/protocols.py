@@ -54,7 +54,8 @@ class Source(Protocol):
         """Open the client that runs statements in this system.
 
         Close the client on exit. A system that DuckDB attaches yields the `engine`
-        itself. One that DuckDB cannot read, such as Oracle, yields an engine of its own.
+        itself. One that DuckDB cannot read, such as Oracle, yields an engine of its
+        own.
         """
         ...
 
@@ -65,7 +66,7 @@ class Source(Protocol):
 
 @runtime_checkable
 class Stager(Protocol):
-    """A source whose client is not DuckDB: it copies the rows to local Parquet, and DuckDB reads the copy."""
+    """A source whose client is not DuckDB: it stages rows as Parquet for DuckDB."""
 
     async def stage(
         self,
@@ -74,9 +75,9 @@ class Stager(Protocol):
         rows: Rows,
         folder: Path,
     ) -> Mapping[str, TemplateValue]:
-        """Copy the rows to Parquet in `folder` with the client, and return the values that read the copy.
+        """Copy the rows to Parquet in `folder`, and return the values that read it.
 
-        The copy has the filters and the window already applied, and it keeps the schema
-        when there are no rows.
+        The copy has the filters and the window already applied, and it keeps the
+        schema when there are no rows.
         """
         ...

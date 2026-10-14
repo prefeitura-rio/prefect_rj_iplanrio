@@ -54,7 +54,7 @@ class BigQuery:
         await to_thread(self.client.create_dataset, dataset, exists_ok=True)
 
     async def sync_delta_table(self, table: str, uri: str, connection_id: str) -> None:
-        """Create an external table over a Delta table, or refresh its schema if it exists.
+        """Create an external table over a Delta table, or refresh its schema.
 
         A Delta table needs a BigLake connection. BigQuery detects the schema, so a
         refresh picks up a new column.

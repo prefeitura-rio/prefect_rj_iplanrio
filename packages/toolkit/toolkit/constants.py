@@ -47,10 +47,10 @@ DELTA_CASTS: Final[Mapping[str, LiteralString]] = {
     "UINTEGER": "BIGINT",
     "UBIGINT": "DECIMAL(20, 0)",
 }
-"""The DuckDB types that a Delta table cannot hold, and what a dump casts each one to."""
+"""The DuckDB types that Delta cannot hold, with the type a dump casts each to."""
 
 TEXT_TYPE: Final = compile_pattern(r"VARCHAR|MSSQL_N?(VAR)?CHAR\(\d+\)")
-"""The DuckDB types that hold text: `VARCHAR`, and the sized ones of the SQL Server extension."""
+"""The DuckDB text types: `VARCHAR` and the sized ones of the SQL Server extension."""
 
 TIMEZONE: Final = "America/Sao_Paulo"
 """The time zone of the functions `now_sao_paulo` and `to_sao_paulo`."""
@@ -151,21 +151,25 @@ COMMIT_ATTEMPTS: Final = 5
 """How many times a Delta write tries again after a commit conflict."""
 
 VACUUM_RETENTION_HOURS: Final = 168
-"""How long replaced Delta files stay in the bucket, for the queries that still read them."""
+"""How long replaced Delta files stay, for the queries that still read them."""
 
 FILTER_OPERATORS: Final = frozenset(
     {"=", "!=", "<", "<=", ">", ">=", "in", "not in", "is null", "is not null"}
 )
-"""The operators of a filter. Anything else raises, so an operator is never free text."""
+"""The operators of a filter. Anything else raises, so no operator is free text."""
 
 ORACLE_BATCH_ROWS: Final = 50_000
-"""The rows that one fetch from Oracle returns, so a window never sits whole in memory."""
+"""The rows of one fetch from Oracle, so a window never sits whole in memory."""
 
 ORACLE_KEEPALIVE_MINUTES: Final = 2
-"""The minutes between the probes that keep a firewall from dropping an idle connection."""
+"""The minutes between the probes that stop a firewall from dropping a connection."""
 
 ORACLE_SNAPSHOT_FALLBACK_CODES: Final = frozenset({942, 1031, 1466, 41900})
-"""The Oracle errors of a read `AS OF SCN` that has no answer: the user may not flash the table back, or its definition just changed. The read goes on without it."""
+"""The Oracle errors of a read `AS OF SCN` that has no answer.
+
+The user may not flash the table back, or its definition just changed. The read goes
+on without the number.
+"""
 
 ORACLE_EXPRESSIONS: Final = {
     "DB_TYPE_BINARY_FLOAT": ("plain", float32()),
@@ -190,4 +194,4 @@ ORACLE_EXPRESSIONS: Final = {
     "DB_TYPE_UROWID": ("rowid", arrow_string()),
     "DB_TYPE_XMLTYPE": ("xml", arrow_string()),
 }
-"""The Oracle types with a fixed form, each with its expression kind and its Arrow type. A number has its own rule."""
+"""The Oracle types of a fixed form, with their expression kind and Arrow type."""

@@ -33,5 +33,10 @@ def now_sao_paulo() -> datetime:
 
 @native([TIMESTAMP_TZ], TIMESTAMP)
 def to_sao_paulo(instant: datetime) -> datetime:
-    """Return an instant as the clock of Sao Paulo, without a time zone."""
+    """Return an instant as the clock of Sao Paulo, without a time zone.
+
+    ```sql
+    SELECT to_sao_paulo(TIMESTAMPTZ '2024-03-01 01:00:00+00')  -- 2024-02-29 22:00:00
+    ```
+    """
     return instant.astimezone(ZoneInfo(TIMEZONE)).replace(tzinfo=None)

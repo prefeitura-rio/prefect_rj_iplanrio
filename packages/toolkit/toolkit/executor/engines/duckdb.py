@@ -57,7 +57,7 @@ def quoted(value: str) -> Literal | bool:
 
 
 def setup_sql(extensions: Sequence[Extension]) -> str:
-    """Return the statements that prepare a fresh connection, with the limits of the settings."""
+    """Return the statements that prepare a fresh connection, with the settings."""
     return render_template(
         "duckdb/setup",
         {

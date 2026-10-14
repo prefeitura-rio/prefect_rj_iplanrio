@@ -1,4 +1,4 @@
-"""Oracle: an engine of its own, whose windows are copied to local Parquet for DuckDB."""
+"""Oracle: an engine of its own, with windows copied to local Parquet for DuckDB."""
 
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
@@ -59,7 +59,7 @@ class OracleSource(SourceBase):
     @override
     @asynccontextmanager
     async def open(self, engine: Engine) -> AsyncGenerator[Oracle]:
-        """Open the Oracle engine, which closes on exit. DuckDB itself reads the copies."""
+        """Open the Oracle engine, closed on exit. DuckDB itself reads the copies."""
         async with Oracle.connect(self.conn) as oracle:
             yield oracle
 
@@ -98,7 +98,7 @@ class OracleSource(SourceBase):
         rows: Rows,
         folder: Path,
     ) -> Mapping[str, TemplateValue]:
-        """Copy the rows of a table or query to Parquet, and return the values that read the copy."""
+        """Copy the rows to Parquet, and return the values that read the copy."""
         source, is_table = source_sql(values)
         target = folder / "_stage" / "oracle.parquet"
 
@@ -137,9 +137,9 @@ class OracleSource(SourceBase):
 
         Without `columns` the read returns no row, only the columns, and they are the
         result. With them every frame is checked against them, so a column that changes
-        between two windows raises `SchemaError`. A table is read as of the system change
-        number if there is one. A user who may not flash the table back gets the window
-        without it, once.
+        between two windows raises `SchemaError`. A table is read as of the system
+        change number if there is one. A user who may not flash the table back gets the
+        window without it, once.
         """
         scn = self.scn if read.is_table else None
         params = [*([scn] if scn is not None else []), *read.binds.values()]

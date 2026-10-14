@@ -1,11 +1,9 @@
-"""Async view of a synchronous Oracle connection that reads a table or query as Arrow batches.
+"""Async view of an Oracle connection that reads a table or query as Arrow batches.
 
-The types are the ones that Delta and BigQuery hold.
-
-The reader uses `oracledb` with the Oracle Instant Client (thick mode), and falls back to
-thin mode if the client libraries are missing. A number never loses digits: it is an
-integer, a `decimal128` or exact text. A type that Arrow cannot hold, such as an object
-type, raises and names the column.
+The reader uses `oracledb` with the Oracle Instant Client (thick mode), and falls back
+to thin mode if the client libraries are missing. A number never loses digits: it is
+an integer, a `decimal128` or exact text. A type that Arrow cannot hold, such as an
+object type, raises and names the column.
 """
 
 from asyncio import to_thread
@@ -59,7 +57,7 @@ DECIMAL_DIGITS = 38
 
 @dataclass(frozen=True, slots=True)
 class OracleColumn:
-    """One column of a read: its name, how a select list reads it, and its Arrow types."""
+    """One column of a read: its name, expression kind and Arrow types."""
 
     name: str
     expression: str
@@ -105,6 +103,11 @@ def plan_column(
 
     Raise `NotImplementedError` for a type with no conversion, such as an object type,
     and name the column so that the query can cast it.
+
+    ```python
+    plan_column("QUANDO", "DB_TYPE_TIMESTAMP_TZ", 0, 6)
+    # OracleColumn("QUANDO", "utc", timestamp("us"), timestamp("us", tz="UTC"))
+    ```
     """
     if type_name == "DB_TYPE_NUMBER":
         expression, arrow = number_column(precision, scale)
@@ -132,10 +135,15 @@ def init_client() -> None:
 
 
 def source_sql(values: Mapping[str, object]) -> tuple[str, bool]:
-    """Return what a read selects from, and whether it is a table.
+    r"""Return what a read selects from, and whether it is a table.
 
     A table is `OWNER.TABLE`, each part quoted as written. A query loses its trailing
     `;` and goes in parentheses, so that a window can filter it.
+
+    ```python
+    source_sql({"table": "APP.ORDERS"})  # ('"APP"."ORDERS"', True)
+    source_sql({"query": "SELECT 1 FROM dual;"})  # ("(SELECT 1 FROM dual\n)", False)
+    ```
     """
     match values.get("table"), values.get("query"):
         case str() as table, None:
@@ -152,14 +160,22 @@ def predicates(
     window: Window | None,
     known: Sequence[str],
 ) -> tuple[list[Predicate], dict[str, Bind]]:
-    """Return the filters and the window as predicates with binds, and the values of the binds.
+    """Return the filters and the window as predicates with binds, and the binds.
 
     Every column must be one of `known`, and every operator one of the list. A value is
     always a bind, never part of the SQL text. Raise `ValueError` for anything else.
+
+    ```python
+    filters = [{"column": "STATUS", "op": "!=", "value": "x"}]
+    found, binds = predicates(filters, "DIA", window, ["STATUS", "DIA"])
+    # found: "STATUS" != :p0, "DIA" >= :p1, "DIA" < :p2
+    # binds: {"p0": "x", "p1": date(2024, 3, 1), "p2": date(2024, 3, 2)}
+    ```
     """
     binds: dict[str, Bind] = {}
 
     def bind(value: Bind) -> str:
+        """Add a value to the binds and return its placeholder, such as `:p0`."""
         name = f"p{len(binds)}"
         binds[name] = value
         return f":{name}"
@@ -187,7 +203,7 @@ def window_predicates(column: str, window: Window, bind: Binder) -> list[Predica
 
 
 def filter_predicate(item: Filter, bind: Binder) -> Predicate:
-    """Return one filter as `column`, `op` and, if the operator takes one, the bind text."""
+    """Return one filter as `column`, `op` and, if any, the bind text."""
     op = item["op"]
     if op not in FILTER_OPERATORS:
         raise ValueError(f"Not a filter operator: {op!r}")
@@ -213,7 +229,7 @@ def filter_predicate(item: Filter, bind: Binder) -> Predicate:
 
 @dataclass(frozen=True, slots=True)
 class WindowRead:
-    """One read of a window: what it selects from, its filters and the values of their binds."""
+    """One read of a window: its source, filters and the values of their binds."""
 
     source: str
     is_table: bool
@@ -243,8 +259,8 @@ def target_schema(columns: Sequence[OracleColumn]) -> Schema:
 class Oracle:
     """An async view of one synchronous Oracle connection, as an `Engine`.
 
-    A query comes back in the types that Delta and BigQuery hold: the engine describes the
-    statement, and wraps it in a select list that reads each column in its form.
+    A query comes back in the types that Delta and BigQuery hold: the engine describes
+    the statement, and wraps it in a select list that reads each column in its form.
     """
 
     connection: Connection
@@ -292,6 +308,13 @@ class Oracle:
 
         The params bind by position. A query with no rows still yields one frame, with
         the columns.
+
+        ```python
+        async with Oracle.connect(conn) as oracle:
+            sql = "SELECT id FROM orders WHERE id > :1"
+            async for frame in oracle.query(sql, params=[7]):
+                ...
+        ```
         """
 
         def plan() -> list[OracleColumn]:
@@ -328,7 +351,7 @@ class Oracle:
         )
 
         def next_batch() -> Table | None:
-            """Fetch the next batch and give it the target types, or return `None` at the end."""
+            """Fetch the next batch in the target types, or return `None` at the end."""
             frame = next(batches, None)
             return None if frame is None else convert(arrow_table(frame), columns)
 

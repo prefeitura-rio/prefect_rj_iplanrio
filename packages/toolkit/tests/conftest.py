@@ -73,7 +73,7 @@ class FakeCode:
 
 
 class FakeOracle:
-    """An Oracle connection that describes columns, records what it is asked and returns canned batches."""
+    """A fake Oracle connection with canned columns and batches."""
 
     def __init__(
         self,

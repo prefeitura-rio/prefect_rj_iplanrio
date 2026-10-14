@@ -74,7 +74,7 @@ async def test_the_database_is_attached_as_src(source, read_only, fake_engine):
 async def test_regression_the_sql_server_query_timeout_follows_the_settings(
     fake_engine, monkeypatch
 ):
-    """Regression: SQL Server cut every query at 30 s, and a slow window failed with a cryptic error."""
+    """Regression: SQL Server cut every query at 30 s."""
     monkeypatch.setattr(settings, "DB_QUERY_TIMEOUT_SECONDS", 60)
     client = fake_engine()
 

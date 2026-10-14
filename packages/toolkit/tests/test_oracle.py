@@ -63,7 +63,7 @@ from toolkit.oracle import (
     ],
 )
 def test_a_number_never_loses_digits(precision, scale, expression, arrow):
-    """Read a number as an integer, a decimal or exact text, and never as a double that rounds it."""
+    """Read a number as an integer, a decimal or exact text, never a rounded double."""
     assert number_column(precision, scale) == (expression, arrow)
 
 
@@ -185,7 +185,13 @@ def test_a_read_needs_exactly_one_of_a_table_and_a_query(values):
 
 
 def rendered(found) -> list[str]:
-    """Return each predicate as the text of its clause."""
+    """Return each predicate as the text of its clause.
+
+    ```python
+    found, _ = predicates([{"column": "ID", "op": ">", "value": 1}], None, None, ["ID"])
+    rendered(found)  # ['"ID" > :p0']
+    ```
+    """
     return [
         f"{item['column'].as_string(None)} {item['op']}"
         + (f" {item['value']}" if "value" in item else "")
@@ -301,7 +307,7 @@ def test_a_batch_column_that_the_source_lacks_is_refused():
 
 
 async def select(fake_engine, **values) -> str:
-    """Render `oracle/select_window` through the executor, and return the SQL it sent."""
+    """Render `oracle/select_window` through the executor and return the SQL."""
     engine = fake_engine()
     await Executor(engine).query("oracle/select_window", values)
     return engine.statements[0]
@@ -413,7 +419,7 @@ async def test_a_query_yields_frames_in_the_types_of_delta(fake_oracle):
 
 
 async def test_a_query_is_wrapped_in_the_select_list_of_its_columns(fake_oracle):
-    """Read an instant as UTC and a bare number as exact text, in the SQL that Oracle runs."""
+    """Read an instant as UTC and a bare number as exact text in the Oracle SQL."""
     connection = fake_oracle(COLUMNS, [batch(1)])
 
     _ = [

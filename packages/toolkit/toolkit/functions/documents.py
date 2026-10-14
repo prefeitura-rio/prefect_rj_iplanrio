@@ -14,7 +14,7 @@ from .decorators import arrow
 
 
 def cpf_weights(count: int) -> Sequence[int]:
-    """Return the weights of the first `count` digits of a CPF, from `count + 1` to 2."""
+    """Return the CPF weights of the first `count` digits, `count + 1` down to 2."""
     return range(count + 1, 1, -1)
 
 

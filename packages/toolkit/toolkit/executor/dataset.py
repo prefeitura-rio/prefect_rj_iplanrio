@@ -63,7 +63,7 @@ class Result[Schema]:
             yield Dataset(self.schema, self.checked(frame))
 
     def checked(self, frame: DataFrame) -> DataFrame:
-        """Return the frame checked against the columns, or as it is when there are none."""
+        """Return the frame checked against the columns, or as it is with none."""
         return frame if self.columns is None else validate_frame(frame, self.columns)
 
     async def collect(self) -> Dataset[Schema]:

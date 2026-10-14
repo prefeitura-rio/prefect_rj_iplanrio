@@ -64,7 +64,7 @@ class ArrowFunction:
         return cast("ArrowColumn", series.to_arrow())
 
     def register(self, conn: DuckDBPyConnection) -> None:
-        """Register the function on a connection, with the NULL handling in `vectorized`.
+        """Register the function, with the NULL handling in `vectorized`.
 
         A text that the expression cannot read gives NULL, so DuckDB must not expect a
         value for every row.

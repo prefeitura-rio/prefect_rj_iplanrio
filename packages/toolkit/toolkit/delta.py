@@ -23,7 +23,12 @@ from .types import Fingerprint
 
 
 def fingerprint_of(rows: int, low: str, high: str) -> int:
-    """Turn a content summary into the 60 bit number that the ledger stores."""
+    """Turn a content summary into the 60 bit number that the ledger stores.
+
+    ```python
+    fingerprint_of(3, "1", "2")  # 810314219720917701
+    ```
+    """
     digest = md5(f"{rows}:{low}:{high}".encode(), usedforsecurity=False)
     return int(digest.hexdigest()[:15], 16)
 
@@ -101,7 +106,7 @@ def write_window(
 
 
 def sweep(uri: str, keep: Collection[str]) -> None:
-    """Delete every window that is not in `keep`. A table that does not exist is left."""
+    """Delete every window not in `keep`. A table that does not exist is left."""
     if not DeltaTable.is_deltatable(uri):
         return
 

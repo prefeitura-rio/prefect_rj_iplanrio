@@ -47,7 +47,13 @@ COLUMNS = {"Nome": "VARCHAR", "id": "INTEGER", "dia": "DATE"}
 
 
 def rendered(**options) -> list[str]:
-    """Return each column of `select_columns` as `function(source) AS target`."""
+    """Return each column of `select_columns` as `function(source) AS target`.
+
+    ```python
+    rendered(normalize_values=True)
+    # ['"clean_text"("Nome") AS "nome"', '"id" AS "id"', '"dia" AS "dia"']
+    ```
+    """
     return [
         (f"{column['function'].as_string(None)}(" if "function" in column else "")
         + column["source"].as_string(None)
@@ -142,7 +148,7 @@ def test_a_type_that_delta_lacks_gets_a_cast(kind, cast):
     ],
 )
 def test_regression_the_text_of_every_source_is_cleaned(kind, cleaned):
-    """Regression: SQL Server text came as `MSSQL_NVARCHAR(100)`, so `normalize_values` skipped it."""
+    """Regression: `normalize_values` skipped SQL Server text (`MSSQL_NVARCHAR`)."""
     [column] = select_columns({"c": kind}, normalize_values=True)
 
     assert ("function" in column) is cleaned
@@ -193,7 +199,13 @@ def text(fragment: Composable | str) -> str:
 
 
 def sql(parts: Sequence[Mapping[str, Composable | str]]) -> list[str]:
-    """Render each predicate as `column op value`."""
+    """Render each predicate as `column op value`.
+
+    ```python
+    sql(filter_predicates([{"column": "id", "op": ">=", "value": 10}], {"id"}))
+    # ['"id" >= 10']
+    ```
+    """
     return [
         " ".join(text(fragment) for fragment in predicate.values())
         for predicate in parts
@@ -240,7 +252,7 @@ def sql(parts: Sequence[Mapping[str, Composable | str]]) -> list[str]:
     ],
 )
 def test_filters_become_typed_predicates(filters, expected):
-    """Render each filter with `Identifier` and `Literal`, so no value reaches the SQL as text."""
+    """Render each filter with `Identifier` and `Literal`, so no value is SQL text."""
     assert sql(filter_predicates(filters, {"id", "Nome", "status", "dia"})) == expected
 
 
@@ -285,7 +297,7 @@ def test_filters_become_typed_predicates(filters, expected):
     ],
 )
 def test_a_filter_that_does_not_fit_is_refused(filters, message):
-    """Raise before any read, so a typo or an injection attempt never reaches the source."""
+    """Raise before any read, so a typo or an injection never reaches the source."""
     with pytest.raises(ValueError, match=message):
         filter_predicates(filters, {"id"})
 

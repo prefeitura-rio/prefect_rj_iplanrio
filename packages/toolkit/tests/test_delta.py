@@ -26,7 +26,7 @@ SCHEMA = arrow_schema(
 
 
 def window_files(directory: Path, key: str, ids: list[int]) -> Path:
-    """Write one Parquet file for a window, as the extract step does, and return its folder."""
+    """Write one Parquet file for a window, as the extract step does."""
     rows = [{"id": i, "nome": f"n{i}", "batch": key} for i in ids]
     directory.mkdir(parents=True, exist_ok=True)
     write_table(Table.from_pylist(rows, schema=SCHEMA), directory / "out.parquet")
@@ -34,7 +34,12 @@ def window_files(directory: Path, key: str, ids: list[int]) -> Path:
 
 
 def rows_of(uri: str) -> dict[str, list[int]]:
-    """Return the ids of the table, grouped by window."""
+    """Return the ids of the table, grouped by window.
+
+    ```python
+    rows_of(uri)  # {"2024-03-01": [1, 2], "2024-03-02": [3]}
+    ```
+    """
     grouped: dict[str, list[int]] = {}
     for row in DeltaTable(uri).to_pyarrow_table().to_pylist():
         grouped.setdefault(row["batch"], []).append(row["id"])
@@ -150,7 +155,7 @@ def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path):
 
 
 def test_the_fingerprint_as_a_number_is_stable():
-    """Keep the fingerprint of a known input, so a refactor cannot change every window."""
+    """Keep the fingerprint of a known input, so a refactor cannot change it."""
     assert fingerprint_of(2, "10", "20") == fingerprint_of(2, "10", "20")
     assert fingerprint_of(2, "10", "20") == 0x24133D5443DA121
     assert 0 <= fingerprint_of(0, "0", "0") < 2**63
@@ -168,7 +173,7 @@ def test_the_fingerprint_as_a_number_is_stable():
 async def test_the_fingerprint_follows_the_content_not_the_order(
     duckdb_memory, tmp_path, other, same
 ):
-    """Give one number for the same rows in any order, and another if the rows differ."""
+    """Give one number for the same rows in any order, and another for other rows."""
     executor = Executor(duckdb_memory)
     first = await fingerprint(
         executor, window_files(tmp_path / "a", "w1", [1, 2, 3, 4])
@@ -196,10 +201,10 @@ async def test_a_changed_value_changes_the_fingerprint(duckdb_memory, tmp_path):
 def test_regression_a_window_is_written_with_no_storage_options(
     uri, tmp_path, monkeypatch
 ):
-    """Regression: over the S3 API of GCS with HMAC, writers at the same time lost commits.
+    """Regression: writers over the S3 API of GCS lost commits.
 
-    `deltalake` must reach `gs://` through its own GCS client and ADC, so the write
-    passes no storage options that could switch it to another backend.
+    `deltalake` must reach `gs://` with its own GCS client and ADC, so a write passes
+    no storage options that could switch it to another backend.
     """
     seen: list[dict[str, object]] = []
 

@@ -68,10 +68,16 @@ def schema_of(schema: type) -> dict[str, Column]:
 
 
 def frame_columns(frame: DataFrame) -> dict[str, Column]:
-    """Return the columns that a frame has, each nullable, with the widest integer and float.
+    """Return the columns of a frame, all nullable, with widened integers and floats.
 
     It is the schema of a read whose columns are known only at run time. The first frame
     of a read gives it, and the next frames are checked against it.
+
+    ```python
+    frame_columns(DataFrame({"id": [1], "nome": ["a"]}))
+    # {"id": Column(dtype=Int64, nullable=True),
+    #  "nome": Column(dtype=String, nullable=True)}
+    ```
     """
     return {
         name: Column(widen(dtype), nullable=True)
@@ -133,6 +139,11 @@ def validate_frame(frame: DataFrame, columns: dict[str, Column]) -> DataFrame:
 
     Raise `SchemaError` with every problem found. A frame with no rows and no columns
     becomes an empty frame with the schema.
+
+    ```python
+    validate_frame(DataFrame({"a": ["x"]}), {"a": Column(Int64, nullable=False)})
+    # SchemaError: a: String is not Int64
+    ```
     """
     if frame.shape == (0, 0):
         return DataFrame(schema={name: c.dtype for name, c in columns.items()})

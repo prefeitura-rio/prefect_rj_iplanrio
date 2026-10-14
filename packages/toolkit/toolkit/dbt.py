@@ -87,7 +87,7 @@ def dbt_project_dir(repository_path: Path) -> Path:
 def project_profiles(project_dir: Path) -> Generator[None]:
     """Point dbt at the `profiles.yml` of the project, if it has one.
 
-    dbt looks in `~/.dbt` otherwise, and it refuses to run if that folder does not exist.
+    dbt looks in `~/.dbt` otherwise, and it refuses to run if that folder is missing.
     """
     if (project_dir / "profiles.yml").exists():
         with patch.dict(environ, {"DBT_PROFILES_DIR": str(project_dir)}):

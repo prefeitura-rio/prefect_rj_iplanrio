@@ -12,7 +12,12 @@ CNPJ_WITH_LETTERS = "12.ABC.345/01DE-35"
 
 
 def cpf_with_digits(base: list[int]) -> str:
-    """Return a CPF of 9 digits plus the check digits, by the textbook loop."""
+    """Return a CPF of 9 digits plus the check digits, by the textbook loop.
+
+    ```python
+    cpf_with_digits([5, 2, 9, 9, 8, 2, 2, 4, 7])  # "52998224725"
+    ```
+    """
     for _ in range(2):
         total = sum(d * (len(base) + 1 - i) for i, d in enumerate(base))
         base = [*base, 0 if total % 11 < 2 else 11 - total % 11]
@@ -20,7 +25,12 @@ def cpf_with_digits(base: list[int]) -> str:
 
 
 def cnpj_with_digits(base: list[int]) -> str:
-    """Return a CNPJ of 12 digits plus the check digits, by the textbook loop."""
+    """Return a CNPJ of 12 digits plus the check digits, by the textbook loop.
+
+    ```python
+    cnpj_with_digits([1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 1])  # "12345678000195"
+    ```
+    """
     for _ in range(2):
         total = sum(d * (i % 8 + 2) for i, d in enumerate(reversed(base)))
         base = [*base, 0 if total % 11 < 2 else 11 - total % 11]
@@ -72,7 +82,7 @@ async def test_is_cpf_checks_the_digits(scalar, value, expected):
     ],
 )
 async def test_is_cnpj_checks_the_characters(scalar, value, expected):
-    """Accept a CNPJ with the right check digits, with letters too, and refuse the rest."""
+    """Accept a CNPJ with letters and right check digits, and refuse the rest."""
     assert await scalar(f"is_cnpj({value})") == expected
 
 
@@ -113,7 +123,7 @@ async def test_normalize_gives_the_characters_of_a_valid_document(
     ],
 )
 async def test_is_phone_accepts_a_phone_of_brazil(scalar, value, expected):
-    """Accept an area code, then a landline or a mobile number, with the country or not."""
+    """Accept a landline or mobile number, with the country code or not."""
     assert await scalar(f"is_phone({value})") == expected
 
 

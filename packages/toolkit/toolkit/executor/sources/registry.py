@@ -11,6 +11,10 @@ def get_source(name: str) -> type[SourceBase]:
     """Return the registered source class for a name.
 
     Ignore case. Raise `KeyError` if the name is unknown.
+
+    ```python
+    get_source("Postgres")  # PostgresSource
+    ```
     """
     return load_sources()[name]
 

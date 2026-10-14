@@ -21,7 +21,13 @@ TODAY = date(2024, 3, 10)
 
 
 def keys(batches) -> list[str]:
-    """Return the keys of the windows of a configuration."""
+    """Return the keys of the windows of a configuration.
+
+    ```python
+    keys({"column": "d", "width": "day", "begin": "2024-03-01", "end": "2024-03-03"})
+    # ["2024-03-01", "2024-03-02", "2024-03-03"]
+    ```
+    """
     return [window.key for window in windows(batches, TODAY)]
 
 
@@ -183,7 +189,7 @@ def test_the_null_window_filters_the_rows_that_have_no_value():
     ],
 )
 def test_the_null_window_is_read_every_time(known, lookback, expected):
-    """Read the rows with no value on every run, because no range tells when they change."""
+    """Read the rows with no value on every run."""
     ranges = windows({"column": "id", "width": 1, "begin": 0, "end": 2}, TODAY)
     cut = [*ranges, NULL_WINDOW]
 

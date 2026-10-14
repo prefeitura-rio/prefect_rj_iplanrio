@@ -10,9 +10,9 @@ from ..constants import DEFAULT_BATCH_SIZE
 
 
 class Engine(Protocol):
-    """Runs rendered SQL.
+    """A client that runs rendered SQL.
 
-    `DuckDBEngine` is the one the toolkit provides.
+    `DuckDBEngine` and `Oracle` are the ones the toolkit provides.
     """
 
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:

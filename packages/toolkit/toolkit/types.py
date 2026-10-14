@@ -39,7 +39,7 @@ type TemplateValue = (
 
 
 class Geometry(bytes):
-    """Marks a schema field that holds a DuckDB `GEOMETRY` column.
+    """A marker for a schema field that holds a DuckDB `GEOMETRY` column.
 
     Polars reads it as the `geoarrow.wkb` extension type, with the CRS.
     """
@@ -86,7 +86,7 @@ class Fingerprint(TypedDict):
 
 
 class Filter(TypedDict):
-    """One condition on a column of the source, such as `{"column": "id", "op": ">=", "value": 10}`.
+    """One condition on a column of the source.
 
     `in` and `not in` take a list, `is null` and `is not null` take no value, and the
     other operators take one value.

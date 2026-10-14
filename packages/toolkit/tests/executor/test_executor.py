@@ -157,7 +157,7 @@ async def stand_in_for_postgres(engine: DuckDBEngine) -> None:
 async def test_a_window_is_one_local_file_with_the_schema_even_when_it_is_empty(
     tmp_path: Path, duckdb_memory
 ):
-    """Keep the schema of an empty window, so Delta can remove the rows of that window."""
+    """Keep the schema of an empty window, so Delta can remove its rows."""
     await stand_in_for_postgres(duckdb_memory)
     values = {
         "type": "postgres",
@@ -302,7 +302,7 @@ async def test_a_window_cleans_and_transforms_the_values_with_the_functions(
 async def test_normalize_columns_renames_the_columns_of_a_table(
     duckdb_memory, columns, separator, lowercase, changed, names
 ):
-    """Rename all the columns or only the given ones, with the separator and the case."""
+    """Rename all the columns or only the given ones."""
     await duckdb_memory.execute(
         'CREATE TABLE t ("Código do Órgão" INT, "Nome" INT, ok INT)'
     )

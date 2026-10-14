@@ -13,7 +13,7 @@ from .decorators import arrow
 
 @arrow(VARCHAR)
 def clean_text(column: Expr) -> Expr:
-    """Remove NUL, turn line breaks into spaces, trim, and turn `''` and `None` into NULL.
+    """Clean a text: no NUL, line breaks as spaces, trimmed, and `''` as NULL.
 
     ```sql
     SELECT clean_text(' a' || chr(10) || 'b ')  -- 'a b'
@@ -45,23 +45,43 @@ def parse_timestamp(column: Expr) -> Expr:
 
 @arrow(DATE)
 def parse_date(column: Expr) -> Expr:
-    """Return the date of `parse_timestamp`."""
+    """Return the date of `parse_timestamp`.
+
+    ```sql
+    SELECT parse_date('05/03/2024 - 10:30:00')  -- 2024-03-05
+    ```
+    """
     return parse_timestamp(column).dt.date()
 
 
 @arrow(BIGINT)
 def ano_particao(column: Expr) -> Expr:
-    """Return the year of a date text, for the folders of a partition."""
+    """Return the year of a date text, for the folders of a partition.
+
+    ```sql
+    SELECT ano_particao('05/03/2024')  -- 2024
+    ```
+    """
     return parse_timestamp(column).dt.year().cast(Int64)
 
 
 @arrow(BIGINT)
 def mes_particao(column: Expr) -> Expr:
-    """Return the month of a date text, for the folders of a partition."""
+    """Return the month of a date text, for the folders of a partition.
+
+    ```sql
+    SELECT mes_particao('05/03/2024')  -- 3
+    ```
+    """
     return parse_timestamp(column).dt.month().cast(Int64)
 
 
 @arrow(DATE, name="data_particao")
 def data_particao(column: Expr) -> Expr:
-    """Return the date of a date text, for the folders of a partition."""
+    """Return the date of a date text, for the folders of a partition.
+
+    ```sql
+    SELECT data_particao('05/03/2024')  -- 2024-03-05
+    ```
+    """
     return parse_date(column)
