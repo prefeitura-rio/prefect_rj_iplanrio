@@ -1,4 +1,4 @@
-"""Oracle: an engine of its own, with windows copied to local Parquet for DuckDB."""
+"""The Oracle source."""
 
 from collections.abc import AsyncGenerator, Mapping
 from contextlib import asynccontextmanager
@@ -30,14 +30,7 @@ from ..protocols import DBConn, SourceContext
 
 @dataclass(slots=True)
 class OracleSource(SourceBase):
-    """Oracle, read through an `Oracle` engine of its own.
-
-    DuckDB cannot read Oracle without limits, so each window is copied to a local
-    Parquet file with the client, and the filters and the window are applied by Oracle.
-    A table is read `AS OF SCN`, so every window of a dump sees the same data, if the
-    user may read the system change number and flash the table back. Otherwise the dump
-    goes on without it.
-    """
+    """A source that reads Oracle through the `Oracle` engine."""
 
     extensions: ClassVar[tuple[Extension, ...]] = ()
 
@@ -50,7 +43,7 @@ class OracleSource(SourceBase):
     @override
     @classmethod
     def from_context(cls, context: SourceContext) -> Self:
-        """Build the Oracle source from the connection data.
+        """Build the source from the connection data.
 
         Raise `ValueError` if the context has none.
         """
@@ -59,17 +52,13 @@ class OracleSource(SourceBase):
     @override
     @asynccontextmanager
     async def open(self, engine: Engine) -> AsyncGenerator[Oracle]:
-        """Open the Oracle engine, closed on exit. DuckDB itself reads the copies."""
+        """Open the `Oracle` engine."""
         async with Oracle.connect(self.conn) as oracle:
             yield oracle
 
     @override
     async def setup(self, client: Engine) -> None:
-        """Set the time zone of the session, and read the system change number.
-
-        The session is in São Paulo, so that a window over a time stamp with a time zone
-        is the same on every machine. Every window of the dump reads as of the number.
-        """
+        """Set the session time zone and read the system change number."""
         executor = Executor(client)
         await executor.execute("oracle/set_time_zone", {"zone": Literal(TIMEZONE)})
 
@@ -135,11 +124,7 @@ class OracleSource(SourceBase):
     ) -> dict[str, Column]:
         """Write a read to a Parquet file, and return its columns.
 
-        Without `columns` the read returns no row, only the columns, and they are the
-        result. With them every frame is checked against them, so a column that changes
-        between two windows raises `SchemaError`. A table is read as of the system
-        change number if there is one. A user who may not flash the table back gets the
-        window without it, once.
+        Raise `SchemaError` if a frame does not fit `columns`.
         """
         scn = self.scn if read.is_table else None
         params = [*([scn] if scn is not None else []), *read.binds.values()]
