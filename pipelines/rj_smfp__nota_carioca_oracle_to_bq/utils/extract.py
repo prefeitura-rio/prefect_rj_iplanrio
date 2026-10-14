@@ -1,10 +1,11 @@
 """Extração paralela de uma tabela do Oracle para arquivos Parquet no GCS."""
 
+import sys
 import tempfile
 import time
 from collections.abc import Callable, Mapping
 from concurrent.futures import Executor, ProcessPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from multiprocessing import get_context
 from pathlib import Path
@@ -12,11 +13,13 @@ from pathlib import Path
 from google.cloud import storage
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX, QUERIES_ANCHOR
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.cgroup_memory import read_peak_bytes, read_pod_memory
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.checksum import ColumnChecksum, merge_checksums
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.chunks import Chunk, ChunkRequest, chunk_task_name, rowid_chunks
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.columns import OracleColumn
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.gcs import blob_prefix, upload_file
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.memory import WorkerMemory, plan_worker_memory
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.memory_gate import MemoryGate
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import (
     OracleConfig,
     Snapshot,
@@ -25,6 +28,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.oracle import (
 )
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.overlap import BackgroundCount
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.progress import Progress, format_progress, format_size
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.recycling import recycling_supported
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.scheduler import ChunkRun, Limits, run_chunks
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.worker import ChunkJob, ChunkResult, init_worker, process_chunk
 from prefect_rj_iplanrio.sql import load_query
@@ -46,6 +50,12 @@ class ExtractOptions:
         bucket é irregular (alguns fluxos TCP se arrastam a ~3 MB/s), então mais fluxos em paralelo compensam os lentos.
     :param max_pending_files: Teto de Parquet no spool local: faixas em leitura mais arquivos gravados e ainda não
         enviados. Com o teto atingido nenhuma faixa nova é iniciada; limita o disco usado.
+    :param worker_max_tasks: Faixas que um processo de leitura processa antes de ser substituído por um novo (com
+        conexão nova); ``0`` ou ``None`` mantém os processos até o fim. Os workers vivem a extração inteira e o RSS de
+        cada um cresce com o tempo (fragmentação do alocador, buffers do driver); reciclá-los o devolve ao sistema. Cada
+        faixa lê ``AS OF SCN``, então a foto não depende da conexão.
+    :param memory_pause_ratio: Fração do limite de memória do pod (cgroup) a partir da qual nenhuma faixa nova é
+        iniciada até o uso cair 5 pontos percentuais abaixo; ``0`` desliga. Sem limite ou sem cgroup, não pausa.
     """
 
     workers: int = 2
@@ -56,16 +66,25 @@ class ExtractOptions:
     progress_interval_seconds: int = 30
     upload_concurrency: int = 4
     max_pending_files: int = 4
+    worker_max_tasks: int | None = 25
+    memory_pause_ratio: float = 0.85
 
     def __post_init__(self) -> None:
         """Valida os parâmetros.
 
-        :raises ValueError: Se ``upload_concurrency`` ou ``max_pending_files`` for menor que 1.
+        :raises ValueError: Se ``upload_concurrency`` ou ``max_pending_files`` for menor que 1, ``worker_max_tasks``
+            for negativo ou ``memory_pause_ratio`` sair de 0 a 1.
         """
         if self.upload_concurrency < 1:
             raise ValueError(f"upload_concurrency deve ser >= 1, recebido {self.upload_concurrency}.")
         if self.max_pending_files < 1:
             raise ValueError(f"max_pending_files deve ser >= 1, recebido {self.max_pending_files}.")
+        if self.worker_max_tasks is not None and self.worker_max_tasks < 0:
+            raise ValueError(f"worker_max_tasks deve ser >= 0 (0 desliga), recebido {self.worker_max_tasks}.")
+        if not 0 <= self.memory_pause_ratio <= 1:
+            raise ValueError(
+                f"memory_pause_ratio deve estar entre 0 e 1 (0 desliga), recebido {self.memory_pause_ratio}."
+            )
 
 
 @dataclass(frozen=True)
@@ -169,6 +188,9 @@ def build_jobs(request: ExtractRequest, chunks: list[Chunk], batch_rows: int) ->
 def open_pool(request: ExtractRequest, spool: Path, jobs: int) -> Executor:
     """Abre o pool de processos de leitura; cada worker abre a sua conexão e grava no spool.
 
+    Com ``worker_max_tasks`` o processo que atinge o teto de faixas sai (fechando a conexão) e o pool sobe outro, que
+    roda de novo o ``initializer`` e abre a sua própria conexão. O ``max_tasks_per_child`` exige o contexto ``spawn``.
+
     :param request: Tabela e parâmetros de desempenho.
     :param spool: Diretório do spool local.
     :param jobs: Faixas a ler; limita o número de processos.
@@ -179,6 +201,7 @@ def open_pool(request: ExtractRequest, spool: Path, jobs: int) -> Executor:
         mp_context=get_context("spawn"),
         initializer=init_worker,
         initargs=(request.config, spool),
+        max_tasks_per_child=request.options.worker_max_tasks or None,
     )
 
 
@@ -220,15 +243,23 @@ def run_extraction(
     :param report: Função que publica uma linha de log.
     :param on_progress: Recebe o :class:`Progress` estruturado: um retrato zerado ao começar (com o total de faixas) e
         um a cada intervalo, junto com a linha de log. Não deve levantar exceção.
-    :returns: Resultados das faixas e os picos do spool.
+    :returns: Resultados das faixas, os picos do spool e o resumo do gate de memória.
     """
     if not jobs:
         return ChunkRun([], 0, 0)
     options = request.options
+    if options.worker_max_tasks and not recycling_supported():
+        report(
+            f"{request.table}: worker_max_tasks={options.worker_max_tasks} ignorado: o Python {sys.version.split()[0]} "
+            "tem o deadlock do max_tasks_per_child (gh-115634, corrigido na 3.13.15); os workers ficam até o fim da "
+            "extração. Atualize a imagem base."
+        )
+        request = replace(request, options=replace(options, worker_max_tasks=None))
     limits = Limits(
         options.workers, options.upload_concurrency, options.max_pending_files, options.progress_interval_seconds
     )
     bucket = open_bucket(request)
+    gate = MemoryGate(options.memory_pause_ratio, read_pod_memory, lambda line: report(f"{request.table}: {line}"))
 
     def publish(progress: Progress) -> None:
         report(format_progress(request.table, progress))
@@ -248,6 +279,7 @@ def run_extraction(
                 partial(upload_and_remove, bucket),
                 limits,
                 publish,
+                gate=gate,
             )
         except BaseException:
             pool.shutdown(wait=True, cancel_futures=True)
@@ -304,6 +336,7 @@ def extract_table(
         f"{run.max_pending_files} arquivos pendentes e {run.max_local_files} no spool; contagem do Oracle levou "
         f"{counted.seconds:.0f} s, em paralelo à extração"
     )
+    report(f"{request.table}: {run.memory.describe(read_peak_bytes())}")
     return ExtractResult(
         table=request.table,
         rows=sum(result.rows for result in results),

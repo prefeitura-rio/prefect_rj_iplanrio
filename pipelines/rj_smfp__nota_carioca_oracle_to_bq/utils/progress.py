@@ -19,6 +19,8 @@ class Progress:
     :param bytes_uploaded: Bytes de Parquet já enviados ao GCS.
     :param pending_files: Parquet gravados no spool local e ainda não enviados.
     :param elapsed_seconds: Tempo desde o início da extração.
+    :param memory_bytes: Memória em uso no cgroup do pod (working set); ``None`` fora de um container.
+    :param memory_limit_bytes: Limite de memória do pod; ``None`` se não há limite ou cgroup.
     """
 
     chunks_read: int
@@ -28,6 +30,8 @@ class Progress:
     bytes_uploaded: int
     pending_files: int
     elapsed_seconds: float
+    memory_bytes: int | None = None
+    memory_limit_bytes: int | None = None
 
 
 def format_size(size: float) -> str:
@@ -72,13 +76,29 @@ def estimate_remaining_seconds(progress: Progress) -> float | None:
     return progress.elapsed_seconds / progress.chunks_uploaded * remaining
 
 
+def format_memory(progress: Progress) -> str:
+    """Formata a memória do pod, como ``memória do pod 4.1/6.0 GB (68%)``.
+
+    :param progress: Estado atual.
+    :returns: O trecho do log, ou texto vazio se a memória do pod não foi lida.
+    """
+    if progress.memory_bytes is None:
+        return ""
+    used = progress.memory_bytes / BYTES_PER_UNIT**3
+    if not progress.memory_limit_bytes:
+        return f"memória do pod {used:.1f} GB, "
+    limit = progress.memory_limit_bytes / BYTES_PER_UNIT**3
+    percent = 100 * progress.memory_bytes / progress.memory_limit_bytes
+    return f"memória do pod {used:.1f}/{limit:.1f} GB ({percent:.0f}%), "
+
+
 def format_progress(table_id: str, progress: Progress) -> str:
     """Monta a linha de progresso mostrada no log do Prefect.
 
     :param table_id: Tabela em extração.
     :param progress: Estado atual.
-    :returns: Linha com faixas lidas e enviadas, porcentagem, linhas/s, volume enviado, pendentes e ETA
-        (pelas faixas enviadas).
+    :returns: Linha com faixas lidas e enviadas, porcentagem, linhas/s, volume enviado, pendentes, memória do pod (se
+        lida) e ETA (pelas faixas enviadas).
     """
     percent = 100 * progress.chunks_uploaded / progress.chunks_total if progress.chunks_total else 100.0
     rate = progress.rows_read / progress.elapsed_seconds if progress.elapsed_seconds > 0 else 0.0
@@ -89,5 +109,5 @@ def format_progress(table_id: str, progress: Progress) -> str:
         f"enviadas {progress.chunks_uploaded}/{progress.chunks_total} faixas ({percent:.1f}%), "
         f"{progress.rows_read:,} linhas lidas, {rate:,.0f} linhas/s lidas, "
         f"{format_size(progress.bytes_uploaded)} enviados, {progress.pending_files} arquivos locais pendentes, "
-        f"decorrido {format_duration(progress.elapsed_seconds)}, faltam ~{eta}"
+        f"{format_memory(progress)}decorrido {format_duration(progress.elapsed_seconds)}, faltam ~{eta}"
     )
