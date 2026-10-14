@@ -47,3 +47,4 @@ pipelines/**/.python-version
 
 # Egg-info dirs generated inside pipeline packages
 pipelines/**/*.egg-info/
+packages/toolkit/.coverage

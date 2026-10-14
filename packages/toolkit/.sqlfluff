@@ -9,35 +9,17 @@ apply_dbt_builtins = False
 loader_search_path = toolkit/executor/templates
 
 [sqlfluff:templater:jinja:context]
-columns = [{"source":"a","alias":"b","clean":true}]
-date_column = d
-year_column = y
-month_column = m
-day_column = dd
-add_timestamp = true
-timestamp_column = ts
-path = "'gs://b/p/'"
-format = PARQUET
-partition_columns = y
-pattern = "'x_{i}'"
-source = "t"
 secret = s
 alias = a
+project = "'project=p'"
 type = postgres
 host = "'h'"
 port = 1
 database = "'d'"
 user = "'u'"
-password = "'p'"
 read_only = true
 extensions = []
 has_gcs_secret = false
-gcs_key_id = "'k'"
-gcs_secret = "'s'"
-kind = all
-column = c
-lower = "'2024-01-01'"
-upper = "'2024-02-01'"
 query = "select 1"
 dest = "'x'"
 crs = "'EPSG:4326'"
