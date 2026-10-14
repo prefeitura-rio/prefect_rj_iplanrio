@@ -47,14 +47,30 @@ class DatabaseCredentials:
     password: str = field(repr=False)
 
 
+def read_secret(secret_path: str) -> dict[str, str]:
+    """Read every variable of a secret path from the environment, by its short name.
+
+    `/api-x` reads `API_X__TOKEN` as `TOKEN`. Raise `KeyError` if there is none.
+    """
+    prefix = f"{secret_path.upper().replace('-', '_').replace('/', '')}__"
+    found = {
+        name.removeprefix(prefix): value
+        for name, value in environ.items()
+        if name.startswith(prefix)
+    }
+    if not found:
+        raise KeyError(secret_path)
+
+    return found
+
+
 def read_database_credentials(secret_path: str) -> DatabaseCredentials:
     """Read the credentials of a secret path from the environment.
 
     `/db-oracle-x` reads `DB_ORACLE_X__DB_USERNAME` and `DB_ORACLE_X__DB_PASSWORD`.
     Raise `KeyError` if one is missing.
     """
-    prefix = secret_path.upper().replace("-", "_").replace("/", "")
+    secret = read_secret(secret_path)
     return DatabaseCredentials(
-        username=environ[f"{prefix}__DB_USERNAME"],
-        password=environ[f"{prefix}__DB_PASSWORD"],
+        username=secret["DB_USERNAME"], password=secret["DB_PASSWORD"]
     )

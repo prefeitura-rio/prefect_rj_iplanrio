@@ -147,6 +147,9 @@ AREA_CODES: Final = frozenset(
 BATCH_COLUMN: Final = "batch"
 """The column that holds the key of the window, which partitions a Delta table."""
 
+EXTRACTED_AT_COLUMN: Final = "_prefect_extracted_at"
+"""The column that holds when the window of a row was written, if a dump asks for it."""
+
 COMMIT_ATTEMPTS: Final = 5
 """How many times a Delta write tries again after a commit conflict."""
 

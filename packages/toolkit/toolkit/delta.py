@@ -6,6 +6,7 @@ commit. The table lives in a bucket and is read through ADC, or on a local path.
 """
 
 from collections.abc import Collection, Sequence
+from datetime import datetime
 from hashlib import md5
 from pathlib import Path
 from time import sleep
@@ -14,9 +15,17 @@ from typing import cast
 from deltalake import CommitProperties, DeltaTable, Transaction, write_deltalake
 from deltalake.exceptions import CommitFailedError
 from psycopg.sql import Literal
+from pyarrow import RecordBatchReader, repeat, timestamp
+from pyarrow import scalar as arrow_scalar
+from pyarrow import schema as arrow_schema
 from pyarrow.dataset import dataset
 
-from .constants import BATCH_COLUMN, COMMIT_ATTEMPTS, VACUUM_RETENTION_HOURS
+from .constants import (
+    BATCH_COLUMN,
+    COMMIT_ATTEMPTS,
+    EXTRACTED_AT_COLUMN,
+    VACUUM_RETENTION_HOURS,
+)
 from .executor.executor import Executor
 from .telemetry import logger
 from .types import Fingerprint
@@ -66,6 +75,29 @@ def known_fingerprints(uri: str, ids: Sequence[str]) -> dict[str, int]:
     }
 
 
+def open_reader(directory: Path, extracted_at: datetime | None) -> RecordBatchReader:
+    """Stream the Parquet files of a folder, with `extracted_at` on each row if set."""
+    reader = dataset(directory, format="parquet").scanner().to_reader()
+    if extracted_at is None:
+        return reader
+
+    stamp = arrow_scalar(extracted_at, type=timestamp("us", "UTC"))
+    schema = arrow_schema(
+        [
+            *zip(reader.schema.names, reader.schema.types, strict=True),
+            (EXTRACTED_AT_COLUMN, stamp.type),
+        ]
+    )
+
+    return RecordBatchReader.from_batches(
+        schema,
+        (
+            batch.append_column(EXTRACTED_AT_COLUMN, repeat(stamp, batch.num_rows))
+            for batch in reader
+        ),
+    )
+
+
 def write_window(
     uri: str,
     directory: Path,
@@ -74,6 +106,8 @@ def write_window(
     number: int,
     *,
     overwrite_schema: bool = False,
+    append: bool = False,
+    extracted_at: datetime | None = None,
 ) -> None:
     """Replace the rows of one window with the Parquet files of a folder.
 
@@ -81,21 +115,32 @@ def write_window(
     folder removes the rows of the window. A commit conflict, such as two writers that
     create the table, is tried again. A schema that differs from the table raises
     `SchemaMismatchError`, unless `overwrite_schema` replaces the schema of the table.
+    With `append` the rows are added and the rows of the window stay. With
+    `extracted_at` each row gets that time in the column `_prefect_extracted_at`.
     """
     properties = CommitProperties(app_transactions=[Transaction(ledger, number)])
 
     for attempt in range(1, COMMIT_ATTEMPTS + 1):
-        reader = dataset(directory, format="parquet").scanner().to_reader()
+        reader = open_reader(directory, extracted_at)
         try:
-            write_deltalake(
-                uri,
-                reader,
-                mode="overwrite",
-                predicate=f"{BATCH_COLUMN} = '{key}'",
-                partition_by=[BATCH_COLUMN],
-                schema_mode="overwrite" if overwrite_schema else None,
-                commit_properties=properties,
-            )
+            if append:
+                write_deltalake(
+                    uri,
+                    reader,
+                    mode="append",
+                    partition_by=[BATCH_COLUMN],
+                    commit_properties=properties,
+                )
+            else:
+                write_deltalake(
+                    uri,
+                    reader,
+                    mode="overwrite",
+                    predicate=f"{BATCH_COLUMN} = '{key}'",
+                    partition_by=[BATCH_COLUMN],
+                    schema_mode="overwrite" if overwrite_schema else None,
+                    commit_properties=properties,
+                )
         except CommitFailedError:
             if attempt == COMMIT_ATTEMPTS:
                 raise
@@ -112,6 +157,11 @@ def sweep(uri: str, keep: Collection[str]) -> None:
 
     keys = ", ".join(f"'{key}'" for key in keep)
     DeltaTable(uri).delete(f"{BATCH_COLUMN} NOT IN ({keys})")
+
+
+def compact(uri: str) -> None:
+    """Merge the small files of each window into larger ones, in one commit."""
+    DeltaTable(uri).optimize.compact()
 
 
 def maintain(uri: str) -> None:

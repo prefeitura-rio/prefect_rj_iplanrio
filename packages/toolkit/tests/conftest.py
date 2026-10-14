@@ -133,3 +133,37 @@ def fake_oracle() -> Callable[
 ]:
     """Return a function that builds a fake Oracle connection."""
     return FakeOracle
+
+
+class FakeQueryJob:
+    """A BigQuery job that is done, with the count of rows that a statement changed."""
+
+    def __init__(self, rows: int | None) -> None:
+        """Keep the count."""
+        self.num_dml_affected_rows = rows
+        self.waited = False
+
+    def result(self) -> None:
+        """Record that the caller waited for the job."""
+        self.waited = True
+
+
+class FakeBigQueryClient:
+    """A BigQuery client that records the statements that it runs."""
+
+    def __init__(self, rows: int | None) -> None:
+        """Set the count that every job reports."""
+        self.rows = rows
+        self.jobs: list[tuple[str, FakeQueryJob]] = []
+
+    def query(self, sql: str) -> FakeQueryJob:
+        """Record the statement and return its job."""
+        job = FakeQueryJob(self.rows)
+        self.jobs.append((sql, job))
+        return job
+
+
+@pytest.fixture
+def fake_bigquery_client() -> Callable[[int | None], FakeBigQueryClient]:
+    """Return a function that builds a fake BigQuery client."""
+    return FakeBigQueryClient

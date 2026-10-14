@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Thread
 
@@ -10,7 +11,9 @@ from pyarrow import schema as arrow_schema
 from pyarrow import string as arrow_string
 from pyarrow.parquet import write_table
 
+from toolkit.constants import EXTRACTED_AT_COLUMN
 from toolkit.delta import (
+    compact,
     fingerprint,
     fingerprint_of,
     known_fingerprints,
@@ -219,3 +222,58 @@ def test_regression_a_window_is_written_with_no_storage_options(
 
     assert seen
     assert all("storage_options" not in call for call in seen)
+
+
+def test_append_adds_the_rows_and_keeps_the_ones_of_the_window(uri, tmp_path):
+    """Add a second capture in the same window, with no row lost."""
+    write_window(uri, window_files(tmp_path / "a", "w", [1, 2]), "w", "c:1", 1)
+    write_window(
+        uri, window_files(tmp_path / "b", "w", [3]), "w", "c:2", 2, append=True
+    )
+
+    assert rows_of(uri) == {"w": [1, 2, 3]}
+    assert known_fingerprints(uri, ["c:1", "c:2"]) == {"c:1": 1, "c:2": 2}
+
+
+def test_compact_merges_the_files_of_a_window_and_loses_no_row(uri, tmp_path):
+    """Leave one file where there were three, with the same rows."""
+    for number in range(3):
+        write_window(
+            uri,
+            window_files(tmp_path / f"w{number}", "w", [number]),
+            "w",
+            f"c:{number}",
+            number,
+            append=True,
+        )
+    assert len(DeltaTable(uri).file_uris()) == 3
+
+    compact(uri)
+
+    assert len(DeltaTable(uri).file_uris()) == 1
+    assert rows_of(uri) == {"w": [0, 1, 2]}
+
+
+def test_a_window_written_with_a_time_has_it_on_every_row(uri, tmp_path):
+    """Add `_prefect_extracted_at` as a time stamp in UTC, the same on every row."""
+    moment = datetime(2024, 3, 10, 12, 0, tzinfo=UTC)
+
+    write_window(
+        uri,
+        window_files(tmp_path / "w", "w", [1, 2]),
+        "w",
+        "c:1",
+        1,
+        extracted_at=moment,
+    )
+
+    table = DeltaTable(uri).to_pyarrow_table()
+    assert str(table.schema.field(EXTRACTED_AT_COLUMN).type) == "timestamp[us, tz=UTC]"
+    assert set(table.column(EXTRACTED_AT_COLUMN).to_pylist()) == {moment}
+
+
+def test_a_window_written_without_a_time_has_no_column(uri, tmp_path):
+    """Leave the table as the files are, unless a time is asked for."""
+    write_window(uri, window_files(tmp_path / "w", "w", [1]), "w", "c:1", 1)
+
+    assert EXTRACTED_AT_COLUMN not in DeltaTable(uri).to_pyarrow_table().column_names

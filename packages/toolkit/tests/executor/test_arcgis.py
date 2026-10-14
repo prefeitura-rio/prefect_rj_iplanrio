@@ -83,17 +83,22 @@ class Point(TypedDict):
     geom: Geometry
 
 
-async def read_layer(url: str, directory: Path, where: str = "1=1") -> list[int]:
+async def read_layer(
+    url: str, directory: Path, where: str = "1=1", srid: str | None = None
+) -> list[int]:
     """Read the ids of the layer with the macro, through the executor."""
     (directory / "points.sql").write_text(
         '{% from "duckdb/macros.sql" import arcgis_layer %}'
-        "SELECT id, name, geom FROM {{ arcgis_layer(url, where) }} ORDER BY id\n"
+        "SELECT id, name, geom FROM {{ arcgis_layer(url, where, srid | default(none)) }} ORDER BY id\n"
     )
     source = ArcGISSource()
 
     async with DuckDBEngine.connect(source.extensions) as engine:
         dataset = await Executor(engine, directory).query(
-            "points", {"url": Literal(url), "where": Literal(where)}, expect=Point
+            "points",
+            {"url": Literal(url), "where": Literal(where)}
+            | ({"srid": Literal(srid)} if srid else {}),
+            expect=Point,
         )
 
     assert dataset.frame.schema["geom"].is_extension()
@@ -118,3 +123,22 @@ async def test_the_where_clause_reaches_the_server_intact(layer, tmp_path: Path)
     await read_layer(url, tmp_path, where)
 
     assert {query["where"][0] for query in queries} == {where}
+
+
+@pytest.mark.extensions
+@pytest.mark.parametrize(
+    ("srid", "expected"),
+    [
+        pytest.param("31983", {"31983"}, id="the_system_asked"),
+        pytest.param(None, set(), id="no_system_leaves_the_parameter_out"),
+    ],
+)
+async def test_the_coordinate_system_is_asked_of_the_server(
+    layer, tmp_path: Path, srid, expected
+):
+    """Send `outSR` only when a system is set, so the server reprojects the layer."""
+    url, queries = layer
+
+    await read_layer(url, tmp_path, srid=srid)
+
+    assert {query["outSR"][0] for query in queries if "outSR" in query} == expected

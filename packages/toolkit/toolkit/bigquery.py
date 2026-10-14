@@ -53,6 +53,17 @@ class BigQuery:
         """Create a dataset when it does not exist."""
         await to_thread(self.client.create_dataset, dataset, exists_ok=True)
 
+    async def execute(self, sql: str) -> int:
+        """Run a statement and return how many rows it changed, or 0."""
+
+        def run() -> int:
+            """Run the job and wait for it."""
+            job = self.client.query(sql)
+            job.result()
+            return job.num_dml_affected_rows or 0
+
+        return await to_thread(run)
+
     async def sync_delta_table(self, table: str, uri: str, connection_id: str) -> None:
         """Create an external table over a Delta table, or refresh its schema.
 

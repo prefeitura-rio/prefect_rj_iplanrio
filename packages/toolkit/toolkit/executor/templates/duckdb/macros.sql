@@ -5,13 +5,14 @@
   "description": "Read an ArcGIS REST layer with ST_Read. The driver pages through the layer.",
   "inputs": {
     "url": "SQL literal with the layer URL, without /query.",
-    "where": "SQL literal with the ArcGIS where clause. It is URL-encoded. The default reads every feature."
+    "where": "SQL literal with the ArcGIS where clause. It is URL-encoded. The default reads every feature.",
+    "srid": "SQL literal with the EPSG code the server answers in, such as '31983', or none for the layer own system."
   },
   "returns": "A table expression for FROM."
 }
 #}
-{% macro arcgis_layer(url, where="'1=1'") -%}
-ST_Read('ESRIJSON:' || {{ url }} || '/query?outFields=*&f=json&where=' || url_encode({{ where }}))
+{% macro arcgis_layer(url, where="'1=1'", srid=none) -%}
+ST_Read('ESRIJSON:' || {{ url }} || '/query?outFields=*&f=json&where=' || url_encode({{ where }}){% if srid %} || '&outSR=' || {{ srid }}{% endif %})
 {%- endmacro %}
 
 {#
@@ -51,17 +52,18 @@ bigquery_query({{ alias }}, {{ query }})
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query, the layer URL, the spreadsheet id or the file path or glob.",
     "where": "SQL literal with the ArcGIS where clause. Only for arcgis.",
+    "srid": "SQL literal with the EPSG code of an ArcGIS answer, or none. Only for arcgis.",
     "sheet": "SQL literal with the sheet name, or none for the first sheet. Only for gsheets.",
     "table": "Identifier of a table of the attached source, such as src.public.orders, or none. It wins over the query. DuckDB pushes the filters and the columns down to the source."
   },
   "returns": "A table expression for FROM."
 }
 #}
-{% macro source_table(type, alias, secret, query, where="'1=1'", sheet=none, table=none) -%}
+{% macro source_table(type, alias, secret, query, where="'1=1'", sheet=none, table=none, srid=none) -%}
 {%- if table -%}
 {{ table }}
 {%- elif type == "arcgis" -%}
-{{ arcgis_layer(query, where) }}
+{{ arcgis_layer(query, where, srid) }}
 {%- elif type == "gsheets" -%}
 read_gsheet({{ query }}{% if sheet %}, sheet = {{ sheet }}{% endif %})
 {%- elif type == "parquet" -%}

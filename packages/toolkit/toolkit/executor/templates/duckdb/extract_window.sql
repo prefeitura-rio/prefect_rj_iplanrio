@@ -8,6 +8,7 @@
     "secret": "SQL literal with the name of the source secret.",
     "query": "SQL literal with the native query, the layer URL, the spreadsheet id or the file path or glob. Optional when there is a table.",
     "where": "SQL literal with the ArcGIS where clause. Optional, only for arcgis.",
+    "srid": "SQL literal with the EPSG code of an ArcGIS answer. Optional, only for arcgis.",
     "sheet": "SQL literal with the sheet name. Optional, only for gsheets.",
     "table": "Identifier of a table of the attached source. Optional. It wins over the query.",
     "predicates": "Filters and the window, built with filter_predicates and window_predicates.",
@@ -20,6 +21,6 @@
 {% from "duckdb/macros.sql" import select_columns, source_table, where_clause %}
 COPY (
     SELECT {{ select_columns(columns) }}
-    FROM {{ source_table(type, alias, secret, query | default(none), where | default("'1=1'"), sheet | default(none), table | default(none)) }}
+    FROM {{ source_table(type, alias, secret, query | default(none), where | default("'1=1'"), sheet | default(none), table | default(none), srid | default(none)) }}
     {{ where_clause(predicates | default([])) }}
 ) TO {{ target }} (FORMAT PARQUET)
