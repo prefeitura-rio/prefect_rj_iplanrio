@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from toolkit.pipelines_utils.prefect import create_schedules
+from toolkit.prefect import schedules_yaml
 
 schedules_parameters = [
     {
@@ -61,12 +61,12 @@ RUNS_SEPARATION_MINUTES = 10
 TIMEZONE = "America/Sao_Paulo"
 
 
-schedules_config = create_schedules(
-    schedules_parameters=schedules_parameters,
-    slug_field="table_id",
-    base_interval_seconds=BASE_INTERVAL_SECONDS,
-    base_anchor_date_str=BASE_ANCHOR_DATE,
-    runs_interval_minutes=RUNS_SEPARATION_MINUTES,
-    timezone=TIMEZONE,
+print(
+    schedules_yaml(
+        schedules_parameters,
+        interval_seconds=BASE_INTERVAL_SECONDS,
+        anchor_date=BASE_ANCHOR_DATE,
+        stagger_minutes=RUNS_SEPARATION_MINUTES,
+        timezone=TIMEZONE,
+    )
 )
-print(schedules_config)
