@@ -1,0 +1,10 @@
+[project]
+name = "rj_smfp__crf"
+version = "1.0.0"
+description = "Downloads and extracts ZIP files from a GCS bucket folder for SMFP's CRF processing pipeline."
+dependencies = [
+    "prefect_rj_iplanrio",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
