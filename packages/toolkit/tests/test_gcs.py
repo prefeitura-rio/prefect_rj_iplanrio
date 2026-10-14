@@ -20,12 +20,14 @@ TREE = {"ano=2024/mes=1/a.parquet": b"a", "ano=2024/b.parquet": b"b"}
 
 
 def write_tree(root: Path, files: dict[str, bytes]) -> None:
+    """Write the files of the tree under the root."""
     for name, content in files.items():
         (root / name).parent.mkdir(parents=True, exist_ok=True)
         (root / name).write_bytes(content)
 
 
 async def upload_list_and_delete(store: ObjectStore, root: Path) -> None:
+    """Upload a tree, list the keys and delete them, checking each step."""
     write_tree(root, TREE)
 
     uploaded = await gcs.upload(store, "ds/tb", root)
@@ -60,6 +62,7 @@ async def upload_list_and_delete(store: ObjectStore, root: Path) -> None:
 async def test_an_upload_puts_the_files_under_the_prefix(
     tmp_path, target, prefix, expected
 ):
+    """Put the files under the prefix."""
     store = MemoryStore()
     write_tree(tmp_path, TREE)
 
@@ -81,19 +84,23 @@ async def test_an_upload_puts_the_files_under_the_prefix(
 async def test_a_path_with_nothing_to_upload_is_an_error(
     tmp_path, make, error, message
 ):
+    """Reject a path with nothing to upload."""
     with pytest.raises(error, match=message):
         await gcs.upload(MemoryStore(), "p", make(tmp_path))
 
 
 async def test_upload_list_and_delete(tmp_path):
+    """Upload, list and delete on an in-memory store."""
     await upload_list_and_delete(MemoryStore(), tmp_path)
 
 
 @given(calls=st.integers(0, 30), limit=st.integers(1, 8))
 def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(calls, limit):
+    """Never run more calls at once than the limit, and finish all of them."""
     running = peak = finished = 0
 
     async def call() -> None:
+        """Count the calls that run at once."""
         nonlocal running, peak, finished
         running += 1
         peak = max(peak, running)
@@ -108,7 +115,7 @@ def test_no_more_calls_run_at_once_than_the_limit_and_all_of_them_finish(calls, 
 
 @pytest.fixture(scope="module")
 def s3_endpoint() -> Iterator[str]:
-    """An S3 server (moto) on a free port."""
+    """Serve S3 with moto on a free port, and yield its endpoint."""
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
@@ -130,6 +137,7 @@ def s3_endpoint() -> Iterator[str]:
 async def test_the_store_built_from_the_settings_works_over_the_s3_protocol(
     s3_endpoint, tmp_path
 ):
+    """Work over the S3 protocol with the store built from the settings."""
     config = Settings(
         GCS_ENDPOINT=s3_endpoint,
         GCS_USE_SSL=False,

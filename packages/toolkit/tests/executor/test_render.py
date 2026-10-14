@@ -19,10 +19,12 @@ ATTACH = {"alias": '"a"', "project": "'project=p'"}
     ],
 )
 def test_composables_become_sql_at_any_depth(value, expected):
+    """Convert composables to SQL at any depth."""
     assert to_sql(value) == expected
 
 
 def test_a_value_that_the_template_needs_is_required():
+    """Require every value that the template uses."""
     with pytest.raises(UndefinedError):
         render_template("duckdb/attach_bigquery", {})
 
@@ -37,6 +39,7 @@ def test_a_value_that_the_template_needs_is_required():
 def test_the_pipeline_templates_are_searched_before_the_toolkit_ones(
     tmp_path, pipeline_has_it, expected
 ):
+    """Search the pipeline templates before the toolkit templates."""
     if pipeline_has_it:
         (tmp_path / "duckdb").mkdir()
         (tmp_path / "duckdb" / "attach_bigquery.sql").write_text("SELECT 'pipeline'")
@@ -49,6 +52,7 @@ def test_the_pipeline_templates_are_searched_before_the_toolkit_ones(
 
 
 def test_a_pipeline_template_can_import_a_toolkit_macro(tmp_path):
+    """Let a pipeline template import a toolkit macro."""
     (tmp_path / "layer.sql").write_text(
         '{% from "duckdb/macros.sql" import arcgis_layer %}'
         "SELECT * FROM {{ arcgis_layer(url) }}"

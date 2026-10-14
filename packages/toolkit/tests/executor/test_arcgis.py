@@ -24,15 +24,15 @@ PAGE_SIZE = 2
 
 @pytest.fixture
 def layer() -> Iterator[tuple[str, list[dict[str, list[str]]]]]:
-    """Serve one ArcGIS layer of three points with a page size of two.
+    """Serve a three-point ArcGIS layer with a page size of two.
 
-    It yields the layer URL and the list that logs the query string of every
-    ``/query`` request.
+    Yield the layer URL and the query strings of each `/query` request.
     """
     queries: list[dict[str, list[str]]] = []
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
+            """Serve one page, and log each `/query` string."""
             parsed = urlparse(self.path)
             query = parse_qs(parsed.query)
             if parsed.path.endswith("/query"):
@@ -102,6 +102,7 @@ async def read_layer(url: str, directory: Path, where: str = "1=1") -> list[int]
 
 @pytest.mark.extensions
 async def test_a_layer_is_read_through_every_page(layer, tmp_path: Path):
+    """Read every page of a layer."""
     url, queries = layer
 
     assert await read_layer(url, tmp_path) == [1, 2, 3]
@@ -110,6 +111,7 @@ async def test_a_layer_is_read_through_every_page(layer, tmp_path: Path):
 
 @pytest.mark.extensions
 async def test_the_where_clause_reaches_the_server_intact(layer, tmp_path: Path):
+    """Send the where clause to the server unchanged."""
     url, queries = layer
     where = "id > 1 AND name <> 'x'"
 

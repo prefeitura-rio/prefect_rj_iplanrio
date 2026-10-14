@@ -17,6 +17,7 @@ from toolkit.executor.sources.backends.gsheets import GSheetsSource, HttpxReques
 def test_the_access_token_is_a_bound_value_that_never_reaches_the_statement_text(
     first, second, fake_engine
 ):
+    """Bind the access token, so it never reaches the statement text."""
     engines = [fake_engine(), fake_engine()]
     for engine, token in zip(engines, (first, second), strict=True):
         asyncio.run(GSheetsSource(token=lambda token=token: token).setup(engine))
@@ -27,6 +28,7 @@ def test_the_access_token_is_a_bound_value_that_never_reaches_the_statement_text
 
 @pytest.mark.extensions
 async def test_the_secret_is_valid_for_the_real_extension():
+    """Create a secret that the real extension accepts."""
     source = GSheetsSource(token=lambda: "token")
 
     async with DuckDBEngine.connect(source.extensions) as engine:
@@ -38,19 +40,22 @@ async def test_the_secret_is_valid_for_the_real_extension():
 
 @pytest.fixture
 def http_server() -> Iterator[str]:
-    """Serve ``GET`` with a body, and echo the body of a ``POST``."""
+    """Serve `GET` with a body, and echo the body of a `POST`."""
 
     class Handler(BaseHTTPRequestHandler):
         def reply(self, body: bytes) -> None:
+            """Send a 200 response with the body and the `X-Seen` header."""
             self.send_response(200)
             self.send_header("X-Seen", self.headers.get("X-Send", ""))
             self.end_headers()
             self.wfile.write(body)
 
         def do_GET(self) -> None:
+            """Reply `hello`."""
             self.reply(b"hello")
 
         def do_POST(self) -> None:
+            """Echo the body of the request."""
             self.reply(self.rfile.read(int(self.headers["Content-Length"])))
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -69,6 +74,7 @@ def http_server() -> Iterator[str]:
 def test_the_google_auth_transport_reads_the_response_of_an_httpx2_request(
     http_server, method, body, expected
 ):
+    """Read the response of an `httpx2` request through the `google-auth` transport."""
     with httpx2.Client() as client:
         response = HttpxRequest(client)(
             http_server, method, body, headers={"X-Send": "yes"}, timeout=5
@@ -79,5 +85,6 @@ def test_the_google_auth_transport_reads_the_response_of_an_httpx2_request(
 
 
 def test_a_failed_connection_is_a_transport_error():
+    """Raise a transport error if the connection fails."""
     with httpx2.Client() as client, pytest.raises(TransportError):
         HttpxRequest(client)("http://127.0.0.1:1", timeout=2)

@@ -17,6 +17,7 @@ BACKENDS = [PostgresSource, MySQLSource, MSSQLSource]
 def setup_statements(
     source_class: type[PostgresSource], conn: DBConn, fake_engine
 ) -> tuple[list[str], list[QueryParams | None]]:
+    """Run the setup of a source and return its statements."""
     client = fake_engine()
     asyncio.run(source_class.from_context(SourceContext(conn)).setup(client))
     return client.statements, client.params
@@ -32,6 +33,7 @@ def setup_statements(
 def test_the_password_is_a_bound_value_that_never_reaches_the_statement_text(
     first, second, user, fake_engine
 ):
+    """Bind the password, so it never reaches the statement text."""
     statements = [
         setup_statements(
             PostgresSource, DBConn("h", 5432, "d", user, password), fake_engine
@@ -53,6 +55,7 @@ def test_the_password_is_a_bound_value_that_never_reaches_the_statement_text(
     ],
 )
 async def test_the_database_is_attached_as_src(source, read_only, fake_engine):
+    """Attach the database as `src`."""
     client = fake_engine()
 
     await source.from_context(SourceContext(DBConn("h", 1, "d", "u", "p"))).setup(
@@ -66,5 +69,6 @@ async def test_the_database_is_attached_as_src(source, read_only, fake_engine):
 
 @pytest.mark.parametrize("source", [*BACKENDS, OracleSource])
 def test_a_source_that_needs_a_connection_names_itself_when_it_has_none(source):
+    """Name the source in the error when it has no connection."""
     with pytest.raises(ValueError, match=f"Source {source.name} needs connection data"):
         source.from_context(SourceContext(None))

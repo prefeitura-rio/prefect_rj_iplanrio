@@ -65,10 +65,12 @@ DAY = date(2024, 1, 1)
 
 
 def order(**columns: object) -> pl.DataFrame:
+    """Build a frame of one order, with extra columns."""
     return pl.DataFrame({"id": [1], "name": ["a"], "day": [DAY], **columns})
 
 
 def place(dtype: pl.DataType) -> pl.DataFrame:
+    """Build a frame of one place whose geometry has the type."""
     wkb = pl.Series("geom", [b"\x01\x01\x00\x00\x00" + bytes(16)], dtype=pl.Binary)
     return pl.DataFrame({"id": [1], "geom": wkb.cast(dtype)})
 
@@ -113,6 +115,7 @@ def place(dtype: pl.DataType) -> pl.DataFrame:
     ],
 )
 def test_schema_of_reads_the_annotations(schema, expected):
+    """Read the columns from the annotations."""
     assert schema_of(schema) == expected
 
 
@@ -125,6 +128,7 @@ def test_schema_of_reads_the_annotations(schema, expected):
     ],
 )
 def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
+    """Reject an annotation without a Polars type."""
     bad = make_dataclass("Bad", [("value", annotation)])
 
     with pytest.raises(TypeError, match=message):
@@ -197,6 +201,7 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
     ],
 )
 def test_a_frame_that_fits_is_returned_with_the_schema_types(schema, frame, expected):
+    """Return a frame that fits, with the schema types."""
     assert validate_frame(frame, schema_of(schema)).schema == expected
 
 
@@ -245,11 +250,13 @@ def test_a_frame_that_fits_is_returned_with_the_schema_types(schema, frame, expe
 def test_a_frame_that_does_not_fit_is_rejected_naming_the_column(
     schema, frame, message
 ):
+    """Reject a frame that does not fit, naming the column."""
     with pytest.raises(SchemaError, match=message):
         validate_frame(frame, schema_of(schema))
 
 
 def test_every_problem_is_reported_at_once():
+    """Report every problem at once."""
     with pytest.raises(SchemaError) as error:
         validate_frame(pl.DataFrame({"id": ["1"], "extra": [1]}), schema_of(Order))
 
@@ -276,6 +283,7 @@ class OnlyId(TypedDict):
 
 @given(st.data())
 def test_any_integer_type_widens_to_int64_and_keeps_its_values(data):
+    """Widen any integer type to `Int64` and keep the values."""
     dtype, low, high = data.draw(st.sampled_from(INTEGERS))
     values = data.draw(st.lists(st.integers(low, high), min_size=1))
 

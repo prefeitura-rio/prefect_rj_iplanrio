@@ -30,6 +30,7 @@ class Place(TypedDict):
 
 
 def write(directory: Path, name: str, sql: str) -> Path:
+    """Write a template and return its directory."""
     (directory / f"{name}.sql").write_text(sql)
     return directory
 
@@ -44,6 +45,7 @@ def write(directory: Path, name: str, sql: str) -> Path:
 async def test_a_query_is_read_whole_or_batch_by_batch(
     tmp_path: Path, duckdb_memory, batch_size, sizes
 ):
+    """Read a result whole with `await`, or batch by batch with `async for`."""
     templates = write(tmp_path, "numbers", "SELECT i AS n FROM range(10) r(i)\n")
     executor = Executor(duckdb_memory, templates)
 
@@ -63,6 +65,7 @@ async def test_a_query_is_read_whole_or_batch_by_batch(
 async def test_a_result_with_no_rows_keeps_the_declared_columns(
     tmp_path: Path, duckdb_memory
 ):
+    """Keep the declared columns in a result with no rows."""
     templates = write(tmp_path, "none", "SELECT 1::BIGINT AS a, 'x' AS b WHERE false\n")
 
     dataset = await Executor(duckdb_memory, templates).query("none", expect=Pair)
@@ -84,6 +87,8 @@ async def test_rows_that_do_not_fit_the_schema_are_rejected(
 async def test_an_unsupported_schema_fails_before_anything_runs(
     fake_engine, tmp_path: Path
 ):
+    """Fail before the query runs if the schema has no Polars type."""
+
     class Bad(TypedDict):
         value: set[int]
 
@@ -98,6 +103,7 @@ async def test_an_unsupported_schema_fails_before_anything_runs(
 async def test_execute_renders_the_values_into_the_statement(
     tmp_path: Path, duckdb_memory
 ):
+    """Render the values into the statement."""
     templates = write(tmp_path, "make", "CREATE TABLE {{ table }} AS SELECT 1 AS n\n")
 
     await Executor(duckdb_memory, templates).execute("make", {"table": Identifier("t")})
@@ -109,6 +115,7 @@ async def test_execute_renders_the_values_into_the_statement(
 async def test_a_pipeline_template_overrides_a_toolkit_one_of_the_same_name(
     fake_engine, tmp_path: Path
 ):
+    """Prefer a pipeline template to a toolkit template of the same name."""
     (tmp_path / "duckdb").mkdir()
     write(tmp_path / "duckdb", "load_extensions", "-- mine\n")
     client = fake_engine()
@@ -122,6 +129,7 @@ async def test_a_pipeline_template_overrides_a_toolkit_one_of_the_same_name(
 
 @pytest.mark.extensions
 async def test_a_duckdb_geometry_is_read_with_its_crs(tmp_path: Path):
+    """Read a DuckDB geometry with its CRS."""
     templates = write(
         tmp_path, "place", "SELECT ST_Point(1, 2)::GEOMETRY('EPSG:4326') AS geom\n"
     )

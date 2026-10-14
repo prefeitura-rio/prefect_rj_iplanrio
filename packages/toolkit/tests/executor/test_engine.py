@@ -9,6 +9,7 @@ from toolkit.settings import Settings
 
 
 async def collect(engine, sql: str, **options) -> list[pl.DataFrame]:
+    """Read every batch of a query."""
     return [frame async for frame in engine.query(sql, **options)]
 
 
@@ -41,6 +42,7 @@ async def collect(engine, sql: str, **options) -> list[pl.DataFrame]:
 async def test_a_query_yields_frames_of_the_requested_size(
     duckdb_memory, sql, batch_size, sizes, schema
 ):
+    """Yield frames of the requested size."""
     frames = await collect(duckdb_memory, sql, batch_size=batch_size)
 
     assert [frame.height for frame in frames] == sizes
@@ -48,6 +50,7 @@ async def test_a_query_yields_frames_of_the_requested_size(
 
 
 async def test_stopping_early_leaves_the_connection_usable(duckdb_memory):
+    """Keep the connection usable after a query stops early."""
     batches = duckdb_memory.query("SELECT i FROM range(100000) r(i)", batch_size=100)
     await anext(batches)
     await batches.aclose()
@@ -67,6 +70,7 @@ async def test_stopping_early_leaves_the_connection_usable(duckdb_memory):
 async def test_a_transaction_keeps_its_writes_only_on_success(
     duckdb_memory, fails, count
 ):
+    """Keep the writes of a transaction only if it succeeds."""
     await duckdb_memory.execute("CREATE TABLE t (a INTEGER)")
 
     with pytest.raises(RuntimeError) if fails else nullcontext():
@@ -87,6 +91,7 @@ async def test_a_transaction_keeps_its_writes_only_on_success(
     ],
 )
 async def test_the_gcs_secret_follows_the_hmac_keys(keys, secrets):
+    """Create the GCS secret only if the HMAC keys are set."""
     config = Settings(GCS_HMAC_ACCESS_ID=keys[0], GCS_HMAC_SECRET=SecretStr(keys[1]))
 
     async with DuckDBEngine.connect(config=config) as engine:
@@ -98,6 +103,7 @@ async def test_the_gcs_secret_follows_the_hmac_keys(keys, secrets):
 async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
     tmp_path,
 ):
+    """Take the memory limit and the temp directory from the settings."""
     config = Settings(DUCKDB_MEMORY_LIMIT="1GiB", DUCKDB_TEMP_DIRECTORY=str(tmp_path))
 
     async with DuckDBEngine.connect(config=config) as engine:

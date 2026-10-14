@@ -13,21 +13,24 @@ REPOSITORY = "https://example.invalid/queries.git"
 
 
 class FakeRunner:
-    """A ``PrefectDbtRunner`` that records the settings and the arguments."""
+    """A `PrefectDbtRunner` that records the settings and the arguments."""
 
     instances: ClassVar[list["FakeRunner"]] = []
     error: ClassVar[Exception | None] = None
 
     def __init__(self, **kwargs: object) -> None:
+        """Record the keyword arguments and register the instance."""
         self.kwargs = kwargs
         self.invoked: list[list[str]] = []
         FakeRunner.instances.append(self)
 
     @property
     def settings(self):
+        """Return the settings that the runner got."""
         return self.kwargs["settings"]
 
     def invoke(self, arguments: list[str]) -> SimpleNamespace:
+        """Record the arguments, and fail if an error is set."""
         self.invoked.append(arguments)
         if FakeRunner.error is not None:
             raise FakeRunner.error
@@ -79,7 +82,7 @@ def fake_runner(monkeypatch, tmp_path):
     ],
 )
 def test_the_command_line_of_a_request(values, expected):
-    """Regression: the shared word list of a two-word command was mutated by each call."""
+    """Regression: each call mutated the shared word list of a two-word command."""
     request = DbtRun(repository=REPOSITORY, **values)
 
     assert [request.arguments(), request.arguments()] == [expected, expected]
@@ -94,6 +97,7 @@ def test_the_command_line_of_a_request(values, expected):
     ],
 )
 def test_a_request_with_a_bad_field_is_rejected_when_built(values, field):
+    """Reject a request with a bad field when it is built."""
     with pytest.raises(ValidationError, match=field):
         DbtRun.model_validate({"repository": REPOSITORY, **values})
 
@@ -111,6 +115,7 @@ def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_p
 
 
 def test_a_failed_dbt_command_raises(fake_runner):
+    """Raise if a dbt command fails."""
     fake_runner.error = ValueError("dbt failed")
 
     with pytest.raises(ValueError, match="dbt failed"):
@@ -118,7 +123,10 @@ def test_a_failed_dbt_command_raises(fake_runner):
 
 
 def make_repository(path: Path, *, queries: bool) -> Path:
-    """Create a local git repository, with the dbt project in ``queries`` or at the root."""
+    """Create a git repository with a dbt project.
+
+    The project is in `queries` or at the root.
+    """
     repository = git.Repo.init(path)
     project = path / "queries" if queries else path
     project.mkdir(exist_ok=True)
@@ -139,6 +147,7 @@ def make_repository(path: Path, *, queries: bool) -> Path:
 def test_the_dbt_project_is_the_queries_folder_when_there_is_one(
     queries, expected, tmp_path
 ):
+    """Use the `queries` folder as the dbt project if there is one."""
     origin = make_repository(tmp_path / "origin", queries=queries)
 
     clone = dbt.clone_repository(str(origin), tmp_path / "clone")
@@ -147,5 +156,6 @@ def test_the_dbt_project_is_the_queries_folder_when_there_is_one(
 
 
 def test_a_failed_clone_is_reported(tmp_path):
+    """Report a failed clone."""
     with pytest.raises(RuntimeError, match="clone failed"):
         dbt.clone_repository(str(tmp_path / "missing"), tmp_path / "clone")
