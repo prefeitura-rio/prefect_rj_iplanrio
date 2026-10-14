@@ -31,10 +31,12 @@ Uma pipeline que baixa uma lista de itens de uma API e salva em Parquet. Os come
 # pipelines/rj_secretaria__pipeline/flow.py  — Seção 4.1
 """Flow for rj_secretaria__pipeline."""
 
-from toolkit.tasks import rename_current_flow_run_task
 from prefect import flow
 
-from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task
+from pipelines.rj_secretaria__pipeline.tasks import (
+    fetch_items_task,
+    rename_flow_run_task,
+)
 
 
 @flow(log_prints=True)
@@ -42,7 +44,7 @@ def rj_secretaria__pipeline(
     dataset_id: str = "brutos_example",
     table_id: str = "items",
 ) -> None:
-    rename_current_flow_run_task(new_name=table_id)
+    rename_flow_run_task(new_name=table_id)
     fetch_items_task(dataset_id=dataset_id, table_id=table_id)
 ```
 
@@ -51,8 +53,15 @@ def rj_secretaria__pipeline(
 """Tasks for rj_secretaria__pipeline."""
 
 from prefect import task
+from toolkit.prefect import rename_current_flow_run
 
 from pipelines.rj_secretaria__pipeline import utils
+
+
+@task
+async def rename_flow_run_task(new_name: str) -> None:
+    """Renomeia a flow run atual."""
+    await rename_current_flow_run(new_name)
 
 
 @task
@@ -65,8 +74,8 @@ def fetch_items_task(dataset_id: str, table_id: str) -> str:
 # pipelines/rj_secretaria__pipeline/utils.py  — Seções 4.3, 5.5 e 5.8
 """Funções puras da pipeline rj_secretaria__pipeline."""
 
+import httpx2
 import polars as pl
-import requests
 from prefect_rj_iplanrio.logging import get_logger
 
 logger = get_logger(__name__)
@@ -78,9 +87,9 @@ def fetch_items(dataset_id: str, table_id: str) -> str:
     :param dataset_id: Dataset de destino no BigQuery.
     :param table_id: Tabela de destino no BigQuery.
     :returns: Caminho do arquivo Parquet.
-    :raises requests.HTTPError: Se a API responder com erro.
+    :raises httpx2.HTTPStatusError: Se a API responder com erro.
     """
-    response = requests.get("https://api.example.com/items", timeout=30)
+    response = httpx2.get("https://api.example.com/items", timeout=30)
     response.raise_for_status()
     logger.info("Itens recebidos: %d", len(response.json()))
     path = f"/tmp/{dataset_id}/{table_id}.parquet"
@@ -110,7 +119,7 @@ deployments:
 name = "rj_secretaria__pipeline"
 version = "1.0.0"
 description = "Fetches the item list from the Example API and loads it into BigQuery for the secretaria's monitoring."
-dependencies = ["prefect_rj_iplanrio", "polars>=1.35.2"]
+dependencies = ["prefect_rj_iplanrio", "polars>=2.0.0"]
 
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }
@@ -223,9 +232,12 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 """Flow for rj_secretaria__pipeline."""
 
 from prefect import flow
-from toolkit.tasks import rename_current_flow_run_task
 
-from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task, upload_task
+from pipelines.rj_secretaria__pipeline.tasks import (
+    fetch_items_task,
+    rename_flow_run_task,
+    upload_task,
+)
 
 
 @flow(log_prints=True)
@@ -233,7 +245,7 @@ def rj_secretaria__pipeline(
     dataset_id: str = "brutos_example",
     table_id: str = "items",
 ) -> None:
-    rename_current_flow_run_task(new_name=table_id)
+    rename_flow_run_task(new_name=table_id)
     data_path = fetch_items_task(dataset_id=dataset_id, table_id=table_id)
     upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
 ```
@@ -266,9 +278,8 @@ def fetch_items_task(dataset_id: str, table_id: str) -> str:
 # ❌ errado — 80 linhas de lógica de API dentro de um @task
 @task
 def fetch_items_task(dataset_id: str, table_id: str) -> str:
-    session = requests.Session()
-    session.headers.update(...)
-    response = session.get(...)
+    client = httpx2.Client(headers=...)
+    response = client.get(...)
     # ... mais 70 linhas
 ```
 
@@ -282,12 +293,12 @@ def fetch_items_task(dataset_id: str, table_id: str) -> str:
 
 ```python
 # ✅ correto — sem Prefect, totalmente testável
+import httpx2
 import polars as pl
-import requests
 
 
 def fetch_items(dataset_id: str, table_id: str) -> str:
-    response = requests.get("https://api.example.com/items")
+    response = httpx2.get("https://api.example.com/items")
     response.raise_for_status()
     df = pl.DataFrame(response.json())
     path = f"/tmp/{dataset_id}/{table_id}.parquet"
@@ -385,7 +396,7 @@ def process(
 
 ```python
 # ✅ correto
-from toolkit.dump import DumpRequest
+from toolkit.dbt import DbtRun
 from toolkit.gcs import list_keys
 
 # ❌ errado
@@ -553,15 +564,16 @@ def batch_to_frame(batch: list[list], columns: list[str]) -> pl.DataFrame:
 ```python
 # ✅ correto — lazy para arquivo → arquivo, e o Executor do toolkit para SQL no DuckDB
 from pathlib import Path
+from typing import TypedDict
 
 import polars as pl
 from psycopg.sql import Literal
-from pydantic import BaseModel
+from toolkit.executor.dataset import Dataset
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.executor import Executor
 
 
-class StationTotal(BaseModel):
+class StationTotal(TypedDict):
     """Uma linha do resultado de ``totals_by_station``."""
 
     station_id: str
@@ -578,14 +590,14 @@ def normalize_parquet(source: Path, dest: Path) -> None:
     lf.rename({col: col.lower().replace(" ", "_") for col in lf.collect_schema().names()}).sink_parquet(dest)
 
 
-async def totals_by_station(source: Path) -> list[StationTotal]:
+async def totals_by_station(source: Path) -> Dataset[StationTotal]:
     """Soma os valores por estação com SQL do DuckDB.
 
     :param source: Parquet com as colunas ``station_id`` e ``mm``.
-    :returns: Uma linha por estação.
+    :returns: Um dataset do Polars com uma linha por estação.
     """
     async with DuckDBEngine.connect() as engine:
-        executor = Executor(engine, templates=Path(__file__).parent / "queries")
+        executor = Executor(engine, Path(__file__).parent / "queries")
         return await executor.query(
             "totals_by_station", {"source": Literal(str(source))}, expect=StationTotal
         )
@@ -599,6 +611,8 @@ GROUP BY station_id
 ```
 
 Uma pipeline nunca importa `duckdb`: o SQL que roda no DuckDB passa pelo `Executor` do toolkit (Seção 7.6).
+
+Para extrair de uma API, escreva a paginação e as repetições na task (`@task(retries=3, retry_delay_seconds=30)`), grave cada página em um arquivo JSON Lines e entregue os arquivos ao toolkit com `stage_scan` ou `stage_files_task`. O Prefect cuida da ordem, das repetições e do estado; o `Executor` cuida do SQL.
 
 ```python
 # ❌ errado — pandas e CSV intermediário
@@ -714,7 +728,7 @@ No Prefect 3, o grafo de execução é inferido a partir das dependências de da
 # ✅ correto — ordenação expressa por data flow
 @flow(log_prints=True)
 def rj_secretaria__pipeline(dataset_id: str, table_id: str) -> None:
-    rename_current_flow_run_task(new_name=table_id)
+    rename_flow_run_task(new_name=table_id)
     prepare_workdir_task()                                   # sequencial, sem output necessário
     last_update = get_last_update_task(dataset_id=dataset_id, table_id=table_id)
     data_path = fetch_history_task(last_update=last_update)  # dependência de dados — Prefect infere a ordem
@@ -894,7 +908,7 @@ Cada variante que exija SQL diferente recebe um arquivo `.sql` próprio em `quer
 
 ### 7.6 SQL que roda no DuckDB
 
-O SQL que roda no DuckDB vive em `queries/*.sql` como template Jinja, e o `Executor` do toolkit o renderiza e o executa: `Executor(engine, templates=Path(__file__).parent / "queries")`. Valores entram como `Identifier()` e `Literal()` de `psycopg.sql`, não por `string.Template`. Passos de limpeza ordenados são uma lista de `Step` (`Executor.clean`, ou `steps=` e `templates=` em `run_dump`). A limpeza que o DuckDB não faz é trabalho da task da pipeline. As Seções 7.2 a 7.5 valem para o SQL do BigQuery, que continua com `load_query`. Veja a Seção 5.4 do [guia do toolkit](packages/toolkit/STYLEGUIDE.md).
+O SQL que roda no DuckDB vive em `queries/*.sql` como template Jinja, e o `Executor` do toolkit o renderiza e o executa: `Executor(client, Path(__file__).parent / "queries")`. Valores entram como `Identifier()` e `Literal()` de `psycopg.sql`, não por `string.Template`. A limpeza que o DuckDB não faz é trabalho da task da pipeline. As Seções 7.2 a 7.5 valem para o SQL do BigQuery, que continua com `load_query`. Veja a Seção 5.1 do [guia do toolkit](packages/toolkit/STYLEGUIDE.md).
 
 ### 7.7 O que nunca fazer
 
@@ -1014,7 +1028,7 @@ Use limite inferior (`>=`) por padrão. Use `==` apenas com um comentário que e
 # ✅ correto
 dependencies = [
     "prefect_rj_iplanrio",
-    "polars>=1.35.2",
+    "polars>=2.0.0",
     "lxml==6.1.1", # 6.2 quebra o parser HTML de x
 ]
 
