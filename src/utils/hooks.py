@@ -2,13 +2,12 @@
 
 from typing import cast
 
-from httpx2 import AsyncClient
 from prefect import Flow, Task
 from prefect.client.schemas.objects import FlowRun, State, TaskRun
 from prefect.settings import PREFECT_UI_URL
 from toolkit.settings import settings
 
-from .utils import failure_message, is_transient
+from .utils import failure_message, is_transient, post_discord
 
 
 def retry_on_transient_error(task: Task[..., object], task_run: TaskRun, state: State[object]) -> bool:
@@ -29,5 +28,4 @@ async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: Stat
     url = f"{base}/runs/flow-run/{flow_run.id}" if base else None
     message = failure_message(flow.name, flow_run.name, state.message or "", url)
 
-    async with AsyncClient() as client:
-        await client.post(webhook, json={"content": message})
+    await post_discord(webhook, message)

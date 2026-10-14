@@ -20,7 +20,7 @@ Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a s
 
 Existem dois pontos de partida:
 
-- **Pipeline de dump (banco para BigQuery):** importe o fluxo `dump_database` de `prefect_rj_iplanrio.flows` no `flow.py` e ponha os parâmetros no `prefect.yaml` (veja o `README.md`).
+- **Pipeline de dump (banco para BigQuery):** importe o fluxo `dump_database` de `utils.flows` no `flow.py` e ponha os parâmetros no `prefect.yaml` (veja o `README.md`).
 - **Pipeline própria:** adicione `utils.py` com a lógica e, se precisar, mais tasks em `tasks.py`.
 
 ### Exemplo mínimo completo
@@ -127,7 +127,7 @@ Este exemplo não usa SQL. Se a sua pipeline executa SQL, crie `queries/` e leia
 8. [Agendamento](#8-agendamento)
 9. [Convenções do `prefect.yaml`](#9-convenções-do-prefectyaml)
 10. [`pyproject.toml`](#10-pyprojecttoml)
-11. [`src/prefect_rj_iplanrio/` — código compartilhado do workspace](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)
+11. [`src/utils/` — código compartilhado do workspace](#11-srcutils--código-compartilhado-do-workspace)
 12. [Higiene do repositório](#12-higiene-do-repositório)
 13. [Tags de pipeline](#13-tags-de-pipeline)
 14. [Testes](#14-testes)
@@ -161,10 +161,10 @@ O código neste repositório vive em um de três níveis. O nível determina ond
 | Camada                          | Local                           | Regra                                                                                                                          |
 | ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | **Compartilhado de primitivos** | `packages/toolkit/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md). |
-| **Compartilhado do repo**       | `src/prefect_rj_iplanrio/`      | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                   |
+| **Compartilhado do repo**       | `src/utils/`                    | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                   |
 | **Interno à pipeline**          | `pipelines/rj_x__y/utils.py`    | Lógica que pertence a exatamente uma pipeline.                                                                                 |
 
-**Regra de promoção:** uma função sobe de `utils.py` para `src/prefect_rj_iplanrio/` quando uma segunda pipeline precisar dela. Nunca sobe por reutilização especulativa.
+**Regra de promoção:** uma função sobe de `utils.py` para `src/utils/` quando uma segunda pipeline precisar dela. Nunca sobe por reutilização especulativa.
 
 ## 3. Contrato de arquivos da pipeline
 
@@ -927,11 +927,11 @@ dependencies = [
 dependencies = ["prefect==3.4.9"]
 ```
 
-## 11. `src/prefect_rj_iplanrio/` — código compartilhado do workspace
+## 11. `src/utils/` — código compartilhado do workspace
 
 ### 11.1 Critérios de promoção
 
-Uma função é promovida do `utils.py` de uma pipeline para `src/prefect_rj_iplanrio/` quando **ambas** as condições forem verdadeiras:
+Uma função é promovida do `utils.py` de uma pipeline para `src/utils/` quando **ambas** as condições forem verdadeiras:
 
 1. Duas ou mais pipelines precisam dela.
 2. Não contém lógica específica de nenhuma pipeline.
@@ -940,10 +940,10 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 ### 11.2 API pública atual
 
-| Módulo                      | Símbolo                                                                                                                                                              | Propósito                                                                       |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `prefect_rj_iplanrio.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `fetch_json`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                       |
-| `prefect_rj_iplanrio.flows` | `dump_database`, `dbt_run`                                                                                                                                           | Fluxos: o dump de um banco para uma tabela `Delta` sem repetir dado, e o `dbt`. |
+| Módulo        | Símbolo                                                                                                                                                                                                                                                   | Propósito                                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `utils.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `request_json`, `write_records`, `read_bq`, `run_bq_sql`, `notify_discord`, `compact_delta_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                                            |
+| `utils.flows` | `dump_database`, `dump_arcgis`, `dump_gsheet`, `load_files`, `ingest_api`, `compact_tables`, `dbt_run`                                                                                                                                                    | Fluxos: o dump de uma fonte para uma tabela `Delta` sem repetir dado, a captura de uma API, a compactação e o `dbt`. |
 
 ### 11.3 Antes de escrever um helper
 
@@ -1151,23 +1151,23 @@ Marque cada item antes de pedir revisão.
 
 ## 16. Glossário
 
-| Termo                          | Significado                                                                                                                                                                          |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| flow                           | A função `@flow` do Prefect. Define quais tasks rodam e em que ordem.                                                                                                                |
-| task                           | A função `@task` do Prefect. Tem retries e estado visíveis na UI.                                                                                                                    |
-| deployment                     | Um flow registrado no Prefect com agendamento, parâmetros e infraestrutura. Fica no `prefect.yaml` ([Seção 9](#9-convenções-do-prefectyaml)).                                        |
-| work pool                      | Onde o Prefect executa o deployment: `default-pool` (geral) ou `onprem-pool` (acesso interno por VPN).                                                                               |
-| work queue                     | Fila dentro do work pool. Neste repositório sempre `default`.                                                                                                                        |
-| `secretName`                   | Nome do Kubernetes Secret montado no container. Guarda credenciais como variáveis de ambiente.                                                                                       |
-| Infisical                      | Serviço de segredos. As credenciais chegam ao código por variáveis de ambiente injetadas em runtime.                                                                                 |
-| tag                            | Metadado `chave:valor` do deployment (`environment`, `severity`, `code_owner`) ([Seção 13](#13-tags-de-pipeline)).                                                                   |
-| imagem / `Dockerfile`          | Cada pipeline roda em uma imagem Docker construída a partir da imagem base do repositório.                                                                                           |
-| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --package <pipeline>` executa uma pipeline com as dependências dela.                                                                   |
-| staging e prod                 | Os dois ambientes. Staging não tem agendamento. Prod tem.                                                                                                                            |
-| promoção                       | Mover uma função de `utils.py` para `src/prefect_rj_iplanrio/` quando uma segunda pipeline precisa dela ([Seção 11](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)). |
-| pipeline de dump               | Pipeline que copia dados de um banco para o BigQuery. O template do repositório cria esse tipo.                                                                                      |
-| `{{ build-image.tag }}`        | Valor que o Prefect preenche no deploy com a tag da imagem construída. Vem do passo `build-image` do `prefect.yaml`.                                                                 |
-| `{{ get-commit-hash.stdout }}` | Valor que o Prefect preenche no deploy com o hash curto do commit. Vem do passo `get-commit-hash`.                                                                                   |
+| Termo                          | Significado                                                                                                                                                            |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| flow                           | A função `@flow` do Prefect. Define quais tasks rodam e em que ordem.                                                                                                  |
+| task                           | A função `@task` do Prefect. Tem retries e estado visíveis na UI.                                                                                                      |
+| deployment                     | Um flow registrado no Prefect com agendamento, parâmetros e infraestrutura. Fica no `prefect.yaml` ([Seção 9](#9-convenções-do-prefectyaml)).                          |
+| work pool                      | Onde o Prefect executa o deployment: `default-pool` (geral) ou `onprem-pool` (acesso interno por VPN).                                                                 |
+| work queue                     | Fila dentro do work pool. Neste repositório sempre `default`.                                                                                                          |
+| `secretName`                   | Nome do Kubernetes Secret montado no container. Guarda credenciais como variáveis de ambiente.                                                                         |
+| Infisical                      | Serviço de segredos. As credenciais chegam ao código por variáveis de ambiente injetadas em runtime.                                                                   |
+| tag                            | Metadado `chave:valor` do deployment (`environment`, `severity`, `code_owner`) ([Seção 13](#13-tags-de-pipeline)).                                                     |
+| imagem / `Dockerfile`          | Cada pipeline roda em uma imagem Docker construída a partir da imagem base do repositório.                                                                             |
+| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --package <pipeline>` executa uma pipeline com as dependências dela.                                                     |
+| staging e prod                 | Os dois ambientes. Staging não tem agendamento. Prod tem.                                                                                                              |
+| promoção                       | Mover uma função de `utils.py` para `src/utils/` quando uma segunda pipeline precisa dela ([Seção 11](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)). |
+| pipeline de dump               | Pipeline que copia dados de um banco para o BigQuery. O template do repositório cria esse tipo.                                                                        |
+| `{{ build-image.tag }}`        | Valor que o Prefect preenche no deploy com a tag da imagem construída. Vem do passo `build-image` do `prefect.yaml`.                                                   |
+| `{{ get-commit-hash.stdout }}` | Valor que o Prefect preenche no deploy com o hash curto do commit. Vem do passo `get-commit-hash`.                                                                     |
 
 ## Apêndice A — Por que tags em vez de parâmetros
 

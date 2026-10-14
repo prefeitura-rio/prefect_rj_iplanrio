@@ -1,22 +1,23 @@
 """The fake services that the tests use, each one with its fixture.
 
 They are the fakes of GCS, BigQuery (one that detects the schema of a Delta table and one that
-records calls), a database, Oracle and an object store. They run in the process, with no network and no
+records calls), an HTTP API, a database, Oracle and an object store. They run in the process, with no network and no
 container, and they follow what the real services did in the runs of `test_cloud.py` with
 `-m gcp`. `conftest.py` registers this module as a plugin, so a test asks for a fixture by name.
 """
 
+from collections import deque
 from collections.abc import AsyncGenerator, Callable, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from hashlib import md5
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from json import loads
+from json import dumps, loads
 from multiprocessing import get_context
 from multiprocessing.connection import Connection
 from re import findall
-from threading import Lock
+from threading import Lock, Thread
 from types import SimpleNamespace
 from typing import ClassVar, cast, override
 from urllib.parse import parse_qs, unquote, urlparse
@@ -38,7 +39,7 @@ from toolkit.executor.sources.protocols import DBConn
 from toolkit.oracle import Oracle
 from toolkit.settings import settings
 
-from prefect_rj_iplanrio import utils
+from utils import tasks, utils
 
 READABLE = {"timestampNtz", "columnMapping", "deletionVectors"}
 """The reader features that BigQuery supports, with reader version 3 as the most it reads."""
@@ -363,6 +364,10 @@ class FakeBigQuery:
         """Create a dataset when it does not exist."""
         self.datasets.add(dataset)
 
+    async def execute(self, sql: str) -> int:
+        """Refuse a statement: this fake only serves reads over Delta tables."""
+        raise NotImplementedError(sql)
+
     async def sync_delta_table(self, table: str, uri: str, connection_id: str) -> None:
         """Create the table over a Delta folder, or check it again when it exists."""
         if len(connection_id.split(".")) != 3:
@@ -411,9 +416,11 @@ class FakeDatabase:
 
 
 class FakeBigQueryCalls:
-    """A BigQuery that only records the calls that publish makes."""
+    """A BigQuery that only records the calls that a publish or a statement makes."""
 
     calls: ClassVar[list[tuple[str | None, ...]]] = []
+    changed: ClassVar[int] = 3
+    """The number of rows that every statement reports."""
 
     @classmethod
     @asynccontextmanager
@@ -431,11 +438,17 @@ class FakeBigQueryCalls:
         """Record the Delta table."""
         self.calls.append(("delta", table, uri, connection_id))
 
+    async def execute(self, sql: str) -> int:
+        """Record the statement and report `changed` rows."""
+        self.calls.append(("execute", sql))
+        return self.changed
+
 
 @pytest.fixture
 def bigquery(monkeypatch: pytest.MonkeyPatch) -> type[FakeBigQueryCalls]:
     """Replace BigQuery with the one that records the calls."""
     monkeypatch.setattr(utils, "BigQuery", FakeBigQueryCalls)
+    monkeypatch.setattr(tasks, "BigQuery", FakeBigQueryCalls)
 
     return FakeBigQueryCalls
 
@@ -474,6 +487,78 @@ def fake_bigquery() -> Iterator[type[FakeBigQuery]]:
         patch.setattr(utils, "BigQuery", FakeBigQuery)
 
         yield FakeBigQuery
+
+
+@dataclass(frozen=True)
+class SeenRequest:
+    """One request that the fake API received."""
+
+    method: str
+    path: str
+    query: dict[str, list[str]]
+    headers: dict[str, str]
+    body: bytes
+
+
+class FakeApi:
+    """An HTTP API on a free local port that answers from a queue of replies.
+
+    A reply is a status and a JSON body. With an empty queue it answers 200 with `{"ok": true}`.
+    It records every request, so a test sees what was sent.
+    """
+
+    def __init__(self) -> None:
+        """Start the server in a thread."""
+        self.replies: deque[tuple[int, object]] = deque()
+        self.requests: list[SeenRequest] = []
+        api = self
+
+        class Handler(BaseHTTPRequestHandler):
+            """Record the request and send the next reply."""
+
+            def handle_request(self) -> None:
+                """Answer any method."""
+                size = int(self.headers.get("Content-Length") or 0)
+                parsed = urlparse(self.path)
+                api.requests.append(
+                    SeenRequest(
+                        self.command,
+                        parsed.path,
+                        parse_qs(parsed.query),
+                        {name.lower(): value for name, value in self.headers.items()},
+                        self.rfile.read(size),
+                    )
+                )
+                status, body = api.replies.popleft() if api.replies else (200, {"ok": True})
+                data = dumps(body).encode()
+                self.send_response(status)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            do_GET = do_POST = do_PUT = handle_request
+
+            @override
+            def log_message(self, format: str, *args: object) -> None:
+                """Keep the test output clean."""
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        Thread(target=self.server.serve_forever, daemon=True).start()
+
+    @property
+    def url(self) -> str:
+        """Return the base URL of the server."""
+        return f"http://127.0.0.1:{self.server.server_port}"
+
+
+@pytest.fixture
+def fake_api() -> Iterator[FakeApi]:
+    """Serve a fake HTTP API, and stop it after the test."""
+    api = FakeApi()
+
+    yield api
+
+    api.server.shutdown()
 
 
 @pytest.fixture

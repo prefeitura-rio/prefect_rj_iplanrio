@@ -1,5 +1,6 @@
 """Types of the shared Prefect code, and the parameter groups of its tasks and flows."""
 
+from datetime import datetime
 from typing import Literal, NotRequired, TypedDict
 
 from toolkit.types import Batches, Filter
@@ -36,12 +37,15 @@ class Table(TypedDict):
 class ColumnOptions(TypedDict, total=False):
     """How a dump renames, cleans and transforms the columns.
 
-    Every key is optional. `normalize_columns` is `True` unless it is set.
+    Every key is optional. `normalize_columns` is `True` unless it is set. `add_timestamp`
+    adds the column `_prefect_extracted_at`: the time a window was written, so a window
+    that did not change keeps its old time.
     """
 
     normalize_columns: bool
     normalize_values: bool
     transforms: dict[str, str]
+    add_timestamp: bool
 
 
 class Read(TypedDict, total=False):
@@ -60,10 +64,13 @@ class DumpOptions(TypedDict, total=False):
     """How a dump narrows, cuts, cleans and loads the data. Every key is optional.
 
     `filters` narrow the rows and `select` the columns, both on the names of the source.
-    `batches` cut the table into windows, and `columns` normalizes the result.
+    `batches` cut the table into windows, and `columns` normalizes the result. A
+    `capture` adds the rows to the table instead of replacing a window: it is the time of
+    one run, so that a rerun of the same run adds nothing.
     """
 
     batches: Batches
+    capture: datetime
     filters: list[Filter]
     select: list[str]
     columns: ColumnOptions

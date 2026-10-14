@@ -86,7 +86,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 - Todo log passa por `toolkit.telemetry.logger` (`prefect.toolkit`), no formato `<Componente> <ação> <estado>: contexto`, com o nível do guia do repositório (Seção 5.5). O nível vem só de `Settings.LOG_LEVEL`. A saída de ferramentas externas fica como vem.
 - Uma operação (consulta, instrução, envio, exclusão) é um `span`, com o nome em `constants.py`. Não há histograma de duração, porque o `SigNoz` a deriva dos `spans`, e não se decora `flow` nem `task`.
 - Um instrumento de `telemetry.py` é só para totais que um `span` não dá (linhas, bytes), com unidade e atributos de cardinalidade baixa. Valor de dado, id de linha e mensagem de erro não são atributos.
-- O pacote usa só a API do `OpenTelemetry`. Os `flows` compartilhados de `prefect_rj_iplanrio.flows` chamam `configure_telemetry()` ao serem importados, depois de `import prefect`; um `flow` próprio faz o mesmo. Ela lê o `singleton` `settings` (`OTEL_*`) e não recebe `settings` como parâmetro.
+- O pacote usa só a API do `OpenTelemetry`. Os `flows` compartilhados de `utils.flows` chamam `configure_telemetry()` ao serem importados, depois de `import prefect`; um `flow` próprio faz o mesmo. Ela lê o `singleton` `settings` (`OTEL_*`) e não recebe `settings` como parâmetro.
 
 ## 7. Testes
 

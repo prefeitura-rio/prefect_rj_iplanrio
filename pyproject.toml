@@ -57,7 +57,7 @@ reportUnusedCallResult = false # side-effect calls (an upload, a delete) return 
 root = "tests"
 extraPaths = [
   "src",
-] # resolve `import prefect_rj_iplanrio` from the tests folder
+] # resolve `import utils` from the tests folder
 reportMissingParameterType = false # pytest fixtures and parametrized arguments arrive untyped
 reportUnknownParameterType = false # same cause as above
 reportUnknownArgumentType = false # values from untyped fixtures
@@ -69,7 +69,7 @@ reportUnknownLambdaType = false # lambdas passed to fakes
 reportAny = false # values from untyped fakes
 
 [[tool.basedpyright.executionEnvironments]]
-root = "src/prefect_rj_iplanrio/hooks.py"
+root = "src/utils/hooks.py"
 reportUnusedParameter = false # Prefect calls a retry check and a hook with a fixed signature
 
 [tool.pyrefly]
@@ -112,11 +112,11 @@ select = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/prefect_rj_iplanrio/tasks.py" = [
+"src/utils/tasks.py" = [
   "PLR0913",
 ] # a task takes flat keyword parameters, so a deployment can set each one
-"src/prefect_rj_iplanrio/flows.py" = ["PLR0913"] # same cause, for a flow
-"src/prefect_rj_iplanrio/hooks.py" = [
+"src/utils/flows.py" = ["PLR0913"] # same cause, for a flow
+"src/utils/hooks.py" = [
   "ARG001",
 ] # Prefect calls a retry check and a hook with a fixed signature, and these use some of the arguments only
 "tests/**" = [
@@ -127,6 +127,7 @@ select = [
   "ARG002",
   "ARG003",
   "N802",
+  "N815",
 ] # a fake follows the names and the signatures of the real API (`http.server`, the BigQuery client)
 "tests/conftest.py" = [
   "ARG002",

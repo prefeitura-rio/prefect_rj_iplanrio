@@ -1,5 +1,5 @@
 from collections.abc import Mapping, Sequence
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
 from json import loads
@@ -24,23 +24,29 @@ from toolkit import gcs
 from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.types import Batches, TemplateValue
 
-from prefect_rj_iplanrio import utils
-from prefect_rj_iplanrio.constants import DISCORD_LIMIT
-from prefect_rj_iplanrio.types import DumpMode, DumpOptions
-from prefect_rj_iplanrio.utils import (
+from utils import utils
+from utils.constants import DISCORD_LIMIT
+from utils.types import DumpMode, DumpOptions
+from utils.utils import (
     Destination,
+    capture_time,
     clear_legacy,
     clear_prefix,
     dump_in_batches,
     dump_to_delta,
+    epsg_code,
     failure_message,
     files_glob,
+    fill_secrets,
     is_transient,
     load_to_delta,
     publish,
+    read_frame,
     read_values,
+    records_of,
     source_values,
     without_batches,
+    write_json_lines,
 )
 
 DESTINATION = Destination("b", "ds", "tb")
@@ -319,6 +325,109 @@ async def test_regression_a_type_that_delta_lacks_arrives_as_text_or_a_wider_num
     table = DeltaTable(lake.uri).to_pyarrow_table()
     assert str(table.schema.field("valor").type) == arrow_type
     assert table.column("valor").to_pylist() == [value]
+
+
+FIRST_RUN = datetime(2024, 3, 10, 9, 0, tzinfo=UTC)
+SECOND_RUN = datetime(2024, 3, 10, 9, 5, tzinfo=UTC)
+NEXT_DAY_RUN = datetime(2024, 3, 11, 9, 0, tzinfo=UTC)
+
+
+async def test_a_capture_adds_its_rows_and_keeps_the_ones_of_the_earlier_captures(lake):
+    """Add what each run brings, so that the history of an API stays in the table."""
+    lake.put(ROWS[:2])
+    await lake.dump(capture=FIRST_RUN)
+    lake.put(ROWS[2:])
+    await lake.dump(capture=SECOND_RUN)
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
+async def test_regression_the_same_capture_again_adds_nothing_even_if_the_source_changed(lake):
+    """Regression: a retry that finds new data must not add the rows of its first try twice."""
+    await lake.dump(capture=FIRST_RUN)
+    commits = await lake.dump(capture=FIRST_RUN)
+    lake.put([*ROWS, {"id": 5, "nome": "Eli", "dia": date(2024, 3, 3), "valor": 50.0}])
+
+    assert await lake.dump(capture=FIRST_RUN) == commits
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
+async def test_regression_a_capture_from_another_folder_is_still_the_same_capture(lake, tmp_path):
+    """Regression: a rerun of a flow runs in a new temp folder, and must not add the rows twice."""
+    await lake.dump(capture=FIRST_RUN)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    write_table(Table.from_pylist(ROWS), elsewhere / "rows.parquet")
+
+    await dump_to_delta(
+        FilesSource(),
+        source_values("parquet", f"{elsewhere}/*.parquet"),
+        lake.uri,
+        "append",
+        {"capture": FIRST_RUN},
+    )
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
+async def test_a_capture_is_in_the_window_of_its_day(lake):
+    """Name the window after the day of the capture, so a day is a partition."""
+    await lake.dump(capture=FIRST_RUN)
+    await lake.dump(capture=SECOND_RUN)
+    await lake.dump(capture=NEXT_DAY_RUN)
+
+    batch = {row["batch"] for row in DeltaTable(lake.uri).to_pyarrow_table().to_pylist()}
+    assert batch == {"2024-03-10", "2024-03-11"}
+
+
+@pytest.mark.parametrize(
+    ("dump_mode", "options"),
+    [
+        pytest.param("overwrite", {}, id="overwrite"),
+        pytest.param("append", {"batches": DAYS}, id="batches"),
+    ],
+)
+async def test_a_capture_refuses_what_would_replace_the_earlier_ones(lake, dump_mode, options):
+    """Raise before any write, because a capture only adds."""
+    with pytest.raises(ValueError, match="capture"):
+        await lake.dump(dump_mode, capture=FIRST_RUN, **options)
+
+    assert not DeltaTable.is_deltatable(lake.uri)
+
+
+def stamps(lake) -> dict[int, datetime]:
+    """Return the extraction time of each id."""
+    table = DeltaTable(lake.uri).to_pyarrow_table()
+    ids, times = table.column("id").to_pylist(), table.column("_prefect_extracted_at").to_pylist()
+    return cast("dict[int, datetime]", dict(zip(ids, times, strict=True)))
+
+
+async def test_the_extraction_time_is_added_and_only_a_changed_window_gets_a_new_one(lake):
+    """Keep the time of a window that did not change, and stamp the one that was replaced."""
+    await lake.dump(batches=DAYS, columns={"add_timestamp": True})
+    first = stamps(lake)
+
+    lake.put([ROWS[0], ROWS[1], {**ROWS[2], "valor": 99.0}, ROWS[3]])
+    await lake.dump(batches=DAYS, columns={"add_timestamp": True})
+    second = stamps(lake)
+
+    assert (second[1], second[2], second[4]) == (first[1], first[2], first[4])
+    assert second[3] > first[3]
+
+
+async def test_the_extraction_time_does_not_make_a_window_look_changed(lake):
+    """Write no commit on a rerun, because the time is not part of the fingerprint."""
+    commits = await lake.dump(batches=DAYS, columns={"add_timestamp": True})
+
+    assert await lake.dump(batches=DAYS, columns={"add_timestamp": True}) == commits
+
+
+async def test_a_source_column_with_the_name_of_the_time_is_refused(lake):
+    """Raise, because the dump would write two columns with the same name."""
+    lake.put([{"id": 1, "_prefect_extracted_at": "x"}])
+
+    with pytest.raises(ValueError, match="reserved"):
+        await lake.dump(columns={"add_timestamp": True})
 
 
 async def test_normalize_values_cleans_the_text_columns(lake):
@@ -778,3 +887,103 @@ async def test_the_types_of_the_pipelines_get_the_delta_types_that_bigquery_maps
         "batch": "string",
     }
     assert_bigquery_can_read(uri)
+
+
+@pytest.mark.parametrize(
+    ("data", "key", "expected"),
+    [
+        pytest.param([{"id": 1}], None, [{"id": 1}], id="the_response_is_the_list"),
+        pytest.param({"items": [{"id": 1}]}, "items", [{"id": 1}], id="a_key"),
+        pytest.param({"data": {"items": [{"id": 1}]}}, "data.items", [{"id": 1}], id="a_dotted_key"),
+        pytest.param({"items": []}, "items", [], id="an_empty_list"),
+    ],
+)
+def test_the_records_are_the_list_at_the_key(data, key, expected):
+    """Pick the list out of the response."""
+    assert records_of(data, key) == expected
+
+
+@pytest.mark.parametrize(
+    ("data", "key"),
+    [
+        pytest.param({"items": []}, "other", id="a_missing_key"),
+        pytest.param({"items": {"id": 1}}, "items", id="an_object_instead_of_a_list"),
+        pytest.param([1, 2], None, id="a_list_of_numbers"),
+        pytest.param({"items": []}, None, id="an_object_with_no_key"),
+        pytest.param({"a": 1}, "a.b", id="a_key_below_a_number"),
+    ],
+)
+def test_a_response_with_no_list_of_objects_is_refused(data, key):
+    """Raise, so a change in the API fails the run instead of loading nothing."""
+    with pytest.raises(ValueError, match="No list of objects"):
+        records_of(data, key)
+
+
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        pytest.param({"Authorization": "Bearer {TOKEN}"}, {"Authorization": "Bearer abc"}, id="a_name_in_the_text"),
+        pytest.param({"k": "plain"}, {"k": "plain"}, id="no_name"),
+        pytest.param(None, {}, id="no_values"),
+    ],
+)
+def test_the_names_in_the_values_are_filled_from_the_secret(values, expected):
+    """Put the secret in the value, and leave a plain value alone."""
+    assert fill_secrets(values, {"TOKEN": "abc"}) == expected
+
+
+def test_a_name_that_the_secret_lacks_is_a_key_error():
+    """Raise, so a typo in a header fails before the request."""
+    with pytest.raises(KeyError):
+        fill_secrets({"k": "{OTHER}"}, {"TOKEN": "abc"})
+
+
+async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path):
+    """Write the records, and read them back with DuckDB as typed columns."""
+    folder = write_json_lines(
+        [{"id": 1, "nome": "Ana", "tags": ["a", "b"]}, {"id": 2, "nome": "Bia", "tags": []}], tmp_path
+    )
+    uri = str(tmp_path / "table")
+
+    await dump_to_delta(
+        FilesSource(),
+        source_values("json", f"{folder}/**/*.json"),
+        uri,
+        "append",
+        {"capture": datetime(2024, 3, 10, 9, tzinfo=UTC)},
+    )
+
+    table = DeltaTable(uri).to_pyarrow_table().sort_by("id").to_pylist()
+    assert [(row["id"], row["nome"], row["tags"]) for row in table] == [(1, "Ana", ["a", "b"]), (2, "Bia", [])]
+
+
+async def test_a_query_is_read_into_one_frame(lake):
+    """Return every row of the source in one Polars frame."""
+    frame = await read_frame(FilesSource(), source_values("parquet", f"{lake.source}/*.parquet"))
+
+    assert frame["id"].to_list() == [1, 2, 3, 4]
+
+
+def test_the_capture_time_is_the_scheduled_start_in_sao_paulo():
+    """Give a time with the offset of São Paulo, which is not UTC."""
+    assert capture_time().utcoffset() == timedelta(hours=-3)
+
+
+@pytest.mark.parametrize(
+    ("crs", "expected"),
+    [
+        pytest.param("EPSG:31983", "31983", id="with_the_prefix"),
+        pytest.param("epsg:3857", "3857", id="in_lower_case"),
+        pytest.param("4326", "4326", id="the_number_only"),
+    ],
+)
+def test_an_epsg_code_is_its_number(crs, expected):
+    """Give the number that ArcGIS takes as `outSR`."""
+    assert epsg_code(crs) == expected
+
+
+@pytest.mark.parametrize("crs", ["WGS84", "EPSG:", "EPSG:31983; DROP", ""])
+def test_a_text_that_is_not_an_epsg_code_is_refused(crs):
+    """Raise before the number goes into a URL."""
+    with pytest.raises(ValueError, match="EPSG"):
+        epsg_code(crs)

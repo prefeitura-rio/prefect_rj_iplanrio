@@ -17,8 +17,8 @@ from toolkit.executor.sources.backends.oracle import OracleSource
 from toolkit.executor.sources.protocols import DBConn, SourceContext
 from toolkit.types import Batches, Filter
 
-from prefect_rj_iplanrio.types import DumpOptions, Read
-from prefect_rj_iplanrio.utils import dump_to_delta, read_values
+from utils.types import DumpOptions, Read
+from utils.utils import dump_to_delta, read_values
 
 COLUMNS = [
     ("ID", "DB_TYPE_NUMBER", 10, 0),

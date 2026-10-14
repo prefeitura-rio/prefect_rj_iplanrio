@@ -32,15 +32,18 @@ from pyarrow import Table, decimal128
 from pyarrow import array as arrow_array
 from pyarrow import table as arrow_table
 from pyarrow import timestamp as arrow_timestamp
-from pydantic import SecretStr
+from pydantic import JsonValue, SecretStr
 from toolkit.constants import BATCH_COLUMN
+from toolkit.delta import compact, maintain
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
+from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.gcs import create_store, list_keys
 from toolkit.settings import settings
 from toolkit.types import Batches
 
-from prefect_rj_iplanrio.types import DumpMode, DumpOptions
-from prefect_rj_iplanrio.utils import (
+from utils.tasks import read_bq, run_bq_sql
+from utils.types import DumpMode, DumpOptions
+from utils.utils import (
     Destination,
     dump_in_batches,
     dump_to_delta,
@@ -48,6 +51,7 @@ from prefect_rj_iplanrio.utils import (
     publish,
     read_values,
     source_values,
+    write_json_lines,
 )
 
 LOCATION = "us"
@@ -312,6 +316,17 @@ async def test_a_dump_is_read_by_bigquery_with_the_rows_of_the_source(cloud, dat
     assert sorted(frame[BATCH_COLUMN].unique().to_list()) == ["2024-01-01", "2024-02-01", "2024-03-01"]
 
 
+async def test_the_extraction_time_is_a_timestamp_in_bigquery(cloud, database):
+    """Publish the column that says when each window was written, as a `TIMESTAMP`."""
+    destination = cloud.destination(name("stamped"))
+
+    await dump(database, destination, columns={"add_timestamp": True})
+    await cloud.publish(destination)
+
+    assert cloud.types(destination)["_prefect_extracted_at"] == "TIMESTAMP"
+    assert cloud.read(destination)["_prefect_extracted_at"].null_count() == 0
+
+
 async def test_the_same_dump_again_writes_no_commit_and_no_object(cloud, database):
     """Skip every window that did not change, so the bucket and the log stay as they are."""
     destination = cloud.destination(name("rerun"))
@@ -485,3 +500,47 @@ async def test_bigquery_is_copied_to_the_bucket_in_batches(real_cloud):
         body = bytes(await (await store.get_async(key)).bytes_async())
         rows += read_parquet(BytesIO(body)).height
     assert (len(keys), rows) == (3, 2500)
+
+
+async def capture(destination: Destination, folder, records: list[dict[str, JsonValue]], moment: datetime) -> None:
+    """Write the records as JSON lines, and add them to the table as the capture of a moment."""
+    (folder / "records.json").unlink(missing_ok=True)
+    write_json_lines(records, folder)
+    values = source_values("json", f"{folder}/**/*.json")
+    await dump_to_delta(FilesSource(), values, destination.uri, "append", {"capture": moment})
+
+
+async def test_captures_add_up_in_bigquery_and_compacting_keeps_every_row(cloud, tmp_path):
+    """Add what each run brings, ignore a repeated run, and still read every row after a compaction."""
+    destination = cloud.destination(name("capture"))
+    first = datetime(2024, 3, 10, 9, 0, tzinfo=UTC)
+
+    await capture(destination, tmp_path, [{"id": 1, "nome": "Ana"}], first)
+    await capture(destination, tmp_path, [{"id": 2, "nome": "Bia"}], first.replace(minute=5))
+    await capture(destination, tmp_path, [{"id": 9, "nome": "again"}], first.replace(minute=5))
+    await capture(destination, tmp_path, [{"id": 3, "nome": "Caio"}], first.replace(day=11))
+    await cloud.publish(destination)
+    assert sorted(cloud.read(destination)["id"].to_list()) == [1, 2, 3]
+
+    compact(destination.uri)
+    maintain(destination.uri)
+    await cloud.publish(destination)
+
+    assert sorted(cloud.read(destination)["id"].to_list()) == [1, 2, 3]
+    assert len(DeltaTable(destination.uri).file_uris()) == 2
+
+
+@pytest.mark.gcp
+async def test_a_statement_changes_rows_and_a_query_is_read_into_a_frame(real_cloud):
+    """Run DML in BigQuery with the count of its rows, and read the result back as a frame."""
+    schema = f"{real_cloud.project}.{real_cloud.dataset_id}"
+    real_cloud.client.query(f"CREATE SCHEMA IF NOT EXISTS `{schema}`").result()
+
+    await run_bq_sql.fn(
+        f"CREATE OR REPLACE TABLE `{schema}.t` AS SELECT x AS id FROM UNNEST([1, 2, 3]) AS x",
+        project=real_cloud.project,
+    )
+    changed = await run_bq_sql.fn(f"DELETE FROM `{schema}.t` WHERE id > 1", project=real_cloud.project)
+    frame = await read_bq.fn(f"SELECT id FROM `{schema}.t`", project=real_cloud.project)
+
+    assert (changed, frame["id"].to_list()) == (2, [1])

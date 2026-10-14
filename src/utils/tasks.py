@@ -1,14 +1,17 @@
 """Prefect tasks that more than one pipeline uses, built on the toolkit."""
 
 from asyncio import to_thread
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from httpx2 import AsyncClient
+from polars import DataFrame
 from prefect import task
 from psycopg.sql import Literal
 from pydantic import JsonValue, TypeAdapter
+from toolkit.bigquery import BigQuery
 from toolkit.dbt import DbtRun, execute_dbt
+from toolkit.delta import compact, maintain
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.executor import Executor
@@ -18,7 +21,7 @@ from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.executor.sources.backends.gsheets import GSheetsSource
 from toolkit.executor.sources.protocols import DBConn, SourceContext
 from toolkit.executor.sources.registry import get_source
-from toolkit.settings import read_database_credentials
+from toolkit.settings import read_database_credentials, settings
 
 from .constants import RETRIES, RETRY_DELAY_SECONDS
 from .hooks import retry_on_transient_error
@@ -34,16 +37,22 @@ from .types import (
 from .utils import (
     Destination,
     dump_in_batches,
+    epsg_code,
     files_glob,
     load_to_delta,
+    post_discord,
     publish,
+    read_frame,
     read_values,
     source_values,
     without_batches,
+    write_json_lines,
 )
 
+retrying = task(retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
 
-@task
+
+@retrying
 async def upload_files_to_gcs(
     data_path: Path,
     table: Table,
@@ -69,7 +78,7 @@ async def upload_files_to_gcs(
     )
 
 
-@task
+@retrying
 async def publish_table_in_bq(table: Table, cloud: Cloud) -> None:
     """Create the BigQuery table over the Delta table in the bucket, or refresh its schema.
 
@@ -83,7 +92,7 @@ async def publish_table_in_bq(table: Table, cloud: Cloud) -> None:
     )
 
 
-@task
+@retrying
 async def dump_db_to_gcs(
     database: Database,
     table: Table,
@@ -128,7 +137,7 @@ async def dump_db_to_gcs(
     )
 
 
-@task
+@retrying
 async def dump_bq_to_gcs(
     table: Table,
     read: Read,
@@ -154,32 +163,38 @@ async def dump_bq_to_gcs(
     )
 
 
-@task
+@retrying
 async def dump_arcgis_to_gcs(
     table: Table,
     url: str,
     *,
     bucket: str,
     where: str = "1=1",
+    crs: str | None = None,
     dump_mode: DumpMode = "append",
     options: DumpOptions | None = None,
 ) -> None:
     """Load an ArcGIS REST layer into a Delta table in the bucket.
 
-    `url` is the layer URL without `/query`, and `where` is the ArcGIS filter. The
-    geometry stays a geometry column. The layer is one window. `options` is as in
-    `dump_db_to_gcs`, without `batches`.
+    `url` is the layer URL without `/query`, and `where` is the ArcGIS filter. `crs`,
+    such as `EPSG:31983`, makes the server answer in that system, and without it the
+    layer keeps its own. The geometry stays a geometry column. The layer is one window.
+    `options` is as in `dump_db_to_gcs`, without `batches`.
     """
+    values = {**source_values("arcgis", url), "where": Literal(where)}
+    if crs:
+        values["srid"] = Literal(epsg_code(crs))
+
     await load_to_delta(
         ArcGISSource(),
-        {**source_values("arcgis", url), "where": Literal(where)},
+        values,
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,
         without_batches(options, "An ArcGIS layer"),
     )
 
 
-@task
+@retrying
 async def dump_gsheet_to_gcs(
     table: Table,
     spreadsheet_id: str,
@@ -237,25 +252,77 @@ async def write_sheet(
     retry_delay_seconds=RETRY_DELAY_SECONDS,
     retry_condition_fn=retry_on_transient_error,
 )
-async def fetch_json(
+async def request_json(
     url: str,
     *,
+    method: str = "GET",
     params: Mapping[str, str] | None = None,
     headers: Mapping[str, str] | None = None,
+    body: JsonValue | None = None,
     timeout: float = 60,
 ) -> JsonValue:
-    """Get a URL and return its JSON.
+    """Send a request and return its JSON.
 
-    It runs again after a timeout, a network error, a 429 or a 5xx. A 4xx fails at once.
-    The pipeline parses the JSON and writes it as files, such as with a DuckDB
-    `read_json`.
+    It runs again after a timeout, a network error, a 429 or a 5xx, so a POST must be
+    safe to send twice. A 4xx fails at once. The pipeline picks the records out of the
+    JSON, or `ingest_api` does.
     """
     async with AsyncClient(timeout=timeout) as client:
-        response = await client.get(url, params=params, headers=headers)
+        response = await client.request(method, url, params=params, headers=headers, json=body)
         response.raise_for_status()
 
     adapter: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
     return adapter.validate_python(response.json())
+
+
+@task
+async def write_records(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
+    """Write records as JSON lines in a folder, and return the folder.
+
+    The folder is ready for `upload_files_to_gcs` with `source_format="json"`.
+    """
+    return await to_thread(write_json_lines, records, folder)
+
+
+@task
+async def read_bq(query: str, *, project: str) -> DataFrame:
+    """Run a BigQuery query and return its rows as a Polars frame.
+
+    `project` is the project that runs the read. The whole result is in memory, so
+    use `dump_bq_to_gcs` for a large one.
+    """
+    return await read_frame(BigQuerySource(project), read_values("bigquery", {"query": query}, batched=False))
+
+
+@task
+async def run_bq_sql(sql: str, *, project: str) -> int:
+    """Run a BigQuery statement, such as a `MERGE`, and return how many rows it changed.
+
+    The pipeline writes the statement, so it must not hold a value from outside.
+    """
+    async with BigQuery.connect(project) as bigquery:
+        return await bigquery.execute(sql)
+
+
+@task
+async def notify_discord(message: str, *, webhook: str | None = None) -> None:
+    """Post a message to Discord, to `webhook` or to the `DISCORD_WEBHOOK_URL` setting.
+
+    Raise `ValueError` if there is no webhook.
+    """
+    url = webhook or settings.DISCORD_WEBHOOK_URL.get_secret_value()
+    if not url:
+        raise ValueError("No Discord webhook: pass it or set DISCORD_WEBHOOK_URL")
+
+    await post_discord(url, message)
+
+
+@retrying
+async def compact_delta_table(table: Table, *, bucket: str) -> None:
+    """Merge the small files of a Delta table, and remove the files that nothing reads."""
+    destination = Destination(bucket, table["dataset_id"], table["table_id"])
+    await to_thread(compact, destination.uri)
+    await to_thread(maintain, destination.uri)
 
 
 @task

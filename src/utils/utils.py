@@ -1,17 +1,24 @@
 """Helpers of the shared tasks: where a table lives, and the steps around it."""
 
 from asyncio import to_thread
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from http import HTTPStatus
+from json import dumps
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from deltalake import DeltaTable
-from httpx2 import HTTPStatusError, TransportError
+from httpx2 import AsyncClient, HTTPStatusError, TransportError
 from obstore.store import ObjectStore
+from polars import DataFrame
+from prefect.runtime import flow_run
 from psycopg.sql import Composable, Identifier, Literal
+from pydantic import JsonValue
 from toolkit.batches import (
     NULL_WINDOW,
     Rows,
@@ -24,7 +31,7 @@ from toolkit.batches import (
     windows,
 )
 from toolkit.bigquery import BigQuery
-from toolkit.constants import BATCH_COLUMN
+from toolkit.constants import BATCH_COLUMN, EXTRACTED_AT_COLUMN, TIMEZONE
 from toolkit.delta import (
     fingerprint,
     known_fingerprints,
@@ -156,12 +163,15 @@ def config_of(values: dict[str, TemplateValue], options: DumpOptions) -> str:
 
     That is what is read, and the filters, the columns and the normalization. The range
     of the windows and `lookback` are left out: they change which windows run, not what
-    a window holds.
+    a window holds. A capture leaves out what is read too, because its files are in a
+    new folder on every run.
     """
     batches = options.get("batches")
     return config_hash(
         {
-            "read": {
+            "read": None
+            if "capture" in options
+            else {
                 name: value.as_string(None) if isinstance(value, Composable) else value
                 for name, value in values.items()
             },
@@ -190,6 +200,23 @@ def check_batch_column(batches: Batches, described: Mapping[str, str]) -> None:
         raise ValueError(f"The batch column {column!r} is {kind}, and these windows need {wanted} column")
 
 
+def cut_windows(options: DumpOptions, dump_mode: DumpMode) -> list[Window]:
+    """Return the windows of a dump: the ones of `batches`, one for a `capture`, or `all`.
+
+    Raise `ValueError` for a capture with `batches` or with `overwrite`.
+    """
+    batches = options.get("batches")
+    capture = options.get("capture")
+
+    if capture and (batches or dump_mode == "overwrite"):
+        raise ValueError("A capture is added as one window: drop batches, and do not overwrite")
+    if capture:
+        return [Window(capture.date().isoformat(), 0, 0)]
+    if batches:
+        return [*windows(batches, now_sao_paulo().date()), NULL_WINDOW]
+    return [Window("all", 0, 0)]
+
+
 async def dump_to_delta(
     source: Source,
     values: dict[str, TemplateValue],
@@ -206,19 +233,25 @@ async def dump_to_delta(
     limits the re-checks of the others. `overwrite` writes every window again, then
     deletes the windows outside the config. No `batches` means one window for the whole
     source. With `batches`, the rows whose column is NULL go in a last window, `null`, that
-    every run reads.
+    every run reads. A `capture` is the exception: its rows are added to the table, in the
+    window of its day, and a capture that the ledger knows is never written again. Raise
+    `ValueError` for a capture with `batches` or with `overwrite`.
 
     `values` are those of `source_values`, plus the ones that the source type needs.
     """
     batches = options.get("batches")
     columns = options.get("columns", {})
 
+    capture = options.get("capture")
     config = config_of(values, options)
-    cut = [*windows(batches, now_sao_paulo().date()), NULL_WINDOW] if batches else [Window("all", 0, 0)]
-    ids = {window.key: ledger_id(config, window.key) for window in cut}
+    cut = cut_windows(options, dump_mode)
+    ids = {window.key: ledger_id(config, capture.isoformat() if capture else window.key) for window in cut}
     known = await to_thread(known_fingerprints, uri, list(ids.values()))
     seen = {key for key, name in ids.items() if name in known}
     todo = cut if dump_mode == "overwrite" else pending(cut, seen, (batches or {}).get("lookback"))
+    if capture:
+        todo = [window for window in cut if window.key not in seen]
+    extracted_at = datetime.now(UTC) if columns.get("add_timestamp") else None
     written = skipped = 0
 
     stager = source if isinstance(source, Stager) else None
@@ -230,8 +263,9 @@ async def dump_to_delta(
         with TemporaryDirectory() as directory:
             read = await stager.stage(client, values, Rows(empty=True), Path(directory)) if stager else values
             described = await describe_columns(executor, read)
-        if BATCH_COLUMN in described or (batches and batches["column"] not in described):
-            raise ValueError(f"The column {BATCH_COLUMN!r} is reserved, and the batch column must exist")
+        reserved = {BATCH_COLUMN, *([EXTRACTED_AT_COLUMN] if columns.get("add_timestamp") else [])}
+        if reserved & set(described) or (batches and batches["column"] not in described):
+            raise ValueError(f"The columns {sorted(reserved)} are reserved, and the batch column must exist")
         if batches:
             check_batch_column(batches, described)
 
@@ -273,6 +307,8 @@ async def dump_to_delta(
                     ids[window.key],
                     number,
                     overwrite_schema=dump_mode == "overwrite",
+                    append=capture is not None,
+                    extracted_at=extracted_at,
                 )
                 written += 1
 
@@ -376,3 +412,84 @@ async def dump_in_batches(
                 path = Path(directory) / f"part-{uuid4().hex}.parquet"
                 await to_thread(dataset.frame.write_parquet, path)
                 await upload(store, destination.prefix, path)
+
+
+async def read_frame(source: Source, values: dict[str, TemplateValue]) -> DataFrame:
+    """Read every row of a source into one frame, with the `query` of the source."""
+    async with DuckDBEngine.connect() as engine, source.open(engine) as client:
+        await source.setup(client)
+        dataset = await Executor(client).query("duckdb/select_source", values)
+
+    return dataset.frame
+
+
+def epsg_code(crs: str) -> str:
+    """Return the number of an EPSG code, such as `31983` for `EPSG:31983`.
+
+    ```python
+    epsg_code("EPSG:31983")  # "31983"
+    ```
+
+    Raise `ValueError` for anything else.
+    """
+    code = crs.upper().removeprefix("EPSG:")
+    if not code.isdigit():
+        raise ValueError(f"Not an EPSG code such as EPSG:31983: {crs!r}")
+
+    return code
+
+
+def records_of(data: JsonValue, key: str | None) -> list[dict[str, JsonValue]]:
+    """Return the records of a JSON document: the list itself, or the list at a dotted `key`.
+
+    ```python
+    records_of({"data": {"items": [{"id": 1}]}}, "data.items")  # [{"id": 1}]
+    ```
+
+    Raise `ValueError` if there is no list of objects at the key.
+    """
+    found = data
+    for name in key.split(".") if key else []:
+        found = found.get(name) if isinstance(found, dict) else None
+
+    if not isinstance(found, list) or not all(isinstance(record, dict) for record in found):
+        raise ValueError(f"No list of objects at {key or 'the top'} of the response")
+
+    return [record for record in found if isinstance(record, dict)]
+
+
+def fill_secrets(values: Mapping[str, str] | None, secret: Mapping[str, str]) -> dict[str, str]:
+    """Fill the `{NAME}` of each value with the secret of that name.
+
+    ```python
+    fill_secrets({"Authorization": "Bearer {TOKEN}"}, {"TOKEN": "abc"})
+    # {"Authorization": "Bearer abc"}
+    ```
+
+    Raise `KeyError` for a name that the secret does not have.
+    """
+    return {name: value.format_map(secret) for name, value in (values or {}).items()}
+
+
+def write_json_lines(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
+    """Write the records as a JSON lines file in a folder, and return the folder."""
+    (folder / "records.json").write_text("\n".join(dumps(record) for record in records) + "\n", encoding="utf-8")
+    return folder
+
+
+def capture_time() -> datetime:
+    """Return the scheduled start of the flow run in São Paulo.
+
+    A retry of the same flow run gives the same time, so its capture is the same.
+    """
+    return cast("datetime", flow_run.scheduled_start_time).astimezone(ZoneInfo(TIMEZONE))
+
+
+async def post_discord(webhook: str, content: str) -> None:
+    """Post a message to a Discord webhook, cut to the limit of Discord.
+
+    Raise `HTTPStatusError` if Discord refuses it.
+    """
+    async with AsyncClient() as client:
+        response = await client.post(webhook, json={"content": content[:DISCORD_LIMIT]})
+        response.raise_for_status()
