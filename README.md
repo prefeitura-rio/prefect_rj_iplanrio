@@ -60,6 +60,48 @@ Este repositório utiliza um modelo monorepo para gerenciar múltiplas pipelines
 
 Esse modelo garante reprodutibilidade, isolamento e facilidade de evolução para todas as pipelines do repositório.
 
+### Tarefas e fluxos compartilhados
+
+`src/prefect_rj_iplanrio/tasks.py` e `flows.py` têm o que mais de uma pipeline usa, sobre o `toolkit`. Os fluxos são assíncronos, e os parâmetros de cada ambiente (`bucket`, `project`, `biglake_connection`) vêm do `prefect.yaml`. O `DuckDB` escreve no bucket com chaves HMAC (`GCS_HMAC_ACCESS_ID` e `GCS_HMAC_SECRET`), que o pod precisa ter.
+
+| Item                                                        | O que faz                                                                                                                                                |
+| ----------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dump_to_bucket(db_type, query, dataset_id, table_id, ...)` | O `DuckDB` copia uma consulta do banco (`postgres`, `mysql`, `mssql` ou `oracle`) para Parquet no bucket, sem trazer as linhas ao Python.                |
+| `publish_table(dataset_id, table_id, ...)`                  | Cria a tabela externa do BigQuery sobre os arquivos do bucket.                                                                                           |
+| `load_to_bigquery(data_path, dataset_id, table_id, ...)`    | Envia arquivos locais ao bucket e cria a tabela externa. Prefira Parquet: CSV só para o que a pipeline não consegue gerar em Parquet.                    |
+| `run_dbt(request)`                                          | Roda um comando `dbt` de um repositório de consultas.                                                                                                    |
+| `dump_database(...)`                                        | O fluxo que junta `dump_to_bucket` e `publish_table`, com duas tentativas em cada etapa. Os nomes das colunas viram `slugs` e `partition_by` é opcional. |
+
+Uma pipeline de dump só precisa de um `flow.py` de duas linhas e dos parâmetros no `prefect.yaml`:
+
+```python
+from prefect_rj_iplanrio.flows import dump_database
+
+rj_secretaria__pipeline = dump_database.with_options(name="rj_secretaria__pipeline")
+```
+
+```yaml
+deployments:
+  - name: rj-secretaria--pipeline--prod
+    entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
+    parameters:
+      db_type: mssql
+      host: 10.0.0.1
+      port: 1433
+      database: app
+      secret_path: /db-app
+      bucket: bucket-prod
+      project: project-prod
+      biglake_connection: project-prod.us.biglake
+    schedules:
+      - interval: 86400
+        slug: orders
+        parameters:
+          dataset_id: brutos_app
+          table_id: orders
+          query: SELECT id, total FROM dbo.orders
+```
+
 ### Pipelines
 
 Cada pipeline possui:

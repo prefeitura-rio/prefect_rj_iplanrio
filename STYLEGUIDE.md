@@ -20,7 +20,7 @@ Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a s
 
 Existem dois pontos de partida:
 
-- **Pipeline de dump (banco para BigQuery):** use o template como ele vem. Você só edita `queries/extract_data.sql` e os parâmetros no `prefect.yaml`.
+- **Pipeline de dump (banco para BigQuery):** importe o fluxo `dump_database` de `prefect_rj_iplanrio.flows` no `flow.py` e ponha os parâmetros no `prefect.yaml` (veja o `README.md`).
 - **Pipeline própria:** adicione `utils.py` com a lógica e, se precisar, mais tasks em `tasks.py`.
 
 ### Exemplo mínimo completo
@@ -65,7 +65,7 @@ def fetch_items_task(dataset_id: str, table_id: str) -> str:
 
 import httpx2
 import polars as pl
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 logger = get_logger("toolkit")
 
@@ -332,7 +332,7 @@ API_TIMEOUT = 120.0
 
 ### 4.6 `queries/`
 
-**Contém:** um arquivo `.sql` por query lógica, nomeado descritivamente em `snake_case`. Parametrizado com placeholders `$variable` (veja a [Seção 7](#7-sql)).
+**Contém:** um arquivo `.sql` por query lógica, nomeado descritivamente em `snake_case`. Cada arquivo é um modelo Jinja que o `Executor` renderiza (veja a [Seção 7](#7-sql)).
 
 ```
 queries/
@@ -384,7 +384,7 @@ def process(
 ### 5.3 Imports
 
 - Sem imports com wildcard (`from x import *`).
-- Sem cabeçalho de encoding (`# -*- coding: utf-8 -*-`). UTF-8 é o padrão no Python 3; o cabeçalho é ruído e o hook de pre-commit o removerá.
+- Sem cabeçalho de encoding (`# -*- coding: utf-8 -*-`). UTF-8 é o padrão no Python 3, e o cabeçalho é ruído.
 - Imports explícitos apenas: liste cada nome que você usa.
 - Sem `# noqa` nem `# pylint: disable=...` sem o id da regra e o motivo. Corrija o problema. Se o silêncio for inevitável, escreva `# noqa: EXXX  # motivo`.
 
@@ -420,11 +420,11 @@ def dump(url: str) -> str:
 
 ### 5.5 Logging
 
-`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa `get_logger("toolkit")` de `prefect_rj_iplanrio.logging`, o ponto de entrada único de logging. Ele devolve o logger do workspace, `prefect.toolkit`, o mesmo de `toolkit.telemetry.logger`: tem a formatação padrão do Prefect, mostra INFO, aparece na UI do Prefect e, com a exportação do OpenTelemetry ligada, segue para o coletor. Um logger de `logging.getLogger(__name__)` fica fora da árvore `prefect`, então não tem nada disso e perde as mensagens INFO. Em uma `@task`, `get_run_logger()` do Prefect também é permitido quando a mensagem precisa aparecer na UI do Prefect.
+`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa `get_logger("toolkit")` de `prefect.logging`. Ele devolve o logger do workspace, `prefect.toolkit`, o mesmo de `toolkit.telemetry.logger`: tem a formatação padrão do Prefect, mostra INFO, aparece na UI do Prefect e, com a exportação do OpenTelemetry ligada, segue para o coletor. Um logger de `logging.getLogger(__name__)` fica fora da árvore `prefect`, então não tem nada disso e perde as mensagens INFO. Em uma `@task`, `get_run_logger()` do Prefect também é permitido quando a mensagem precisa aparecer na UI do Prefect.
 
 ```python
 # ✅ correto
-from prefect_rj_iplanrio.logging import get_logger
+from prefect.logging import get_logger
 
 logger = get_logger("toolkit")
 
@@ -458,25 +458,22 @@ Todas as funções devem ter uma docstring no formato reST. A linha de resumo us
 
 ```python
 # ✅ correto
-def load_query(caller_file: str, name: str, **params: object) -> str:
-    """Carrega e renderiza um arquivo SQL do diretório ``queries/``.
+def fetch_items(dataset_id: str, table_id: str) -> str:
+    """Baixa os itens da API e salva em Parquet.
 
-    :param caller_file: Passe ``__file__`` do módulo chamador. Usado para
-        resolver o diretório ``queries/`` relativo à pipeline.
-    :param name: Nome do arquivo SQL sem a extensão ``.sql``.
-    :param params: Variáveis substituídas no template via ``string.Template``.
-    :returns: String SQL renderizada com todos os placeholders substituídos.
-    :raises FileNotFoundError: Se ``queries/<name>.sql`` não existir.
-    :raises KeyError: Se uma variável obrigatória estiver ausente de ``params``.
+    :param dataset_id: Dataset de destino no BigQuery.
+    :param table_id: Tabela de destino no BigQuery.
+    :returns: Caminho do arquivo Parquet.
+    :raises httpx2.HTTPStatusError: Se a API responder com erro.
     """
     ...
 ```
 
 ```python
 # ❌ errado — sem docstring
-def load_query(caller_file: str, name: str, **params: object) -> str:
-    sql_file = Path(caller_file).parent / "queries" / f"{name}.sql"
-    return Template(sql_file.read_text(encoding="utf-8")).substitute(**params)
+def fetch_items(dataset_id: str, table_id: str) -> str:
+    response = httpx2.get("https://api.example.com/items", timeout=30)
+    ...
 ```
 
 Regras:
@@ -611,7 +608,7 @@ FROM read_parquet({{ source }})
 GROUP BY station_id
 ```
 
-Uma pipeline nunca importa `duckdb`: o SQL que roda no DuckDB passa pelo `Executor` do toolkit (Seção 7.6).
+Uma pipeline nunca importa `duckdb`: o SQL que roda no DuckDB passa pelo `Executor` do toolkit (Seção 7.2).
 
 Para extrair de uma API, escreva a paginação e as repetições na task (`@task(retries=3, retry_delay_seconds=30)`), grave cada página em um arquivo JSON Lines e entregue os arquivos ao toolkit com `stage_scan` ou `stage_files_task`. O Prefect cuida da ordem, das repetições e do estado; o `Executor` cuida do SQL.
 
@@ -763,155 +760,50 @@ path = download_task(url=url, wait_for=[workdir])  # apenas se download_task nã
 
 ### 7.1 A regra
 
-Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arquivos `.sql` dentro de `queries/`.
+Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arquivos `.sql` dentro de `queries/`, como modelo Jinja que o `Executor` do toolkit renderiza e executa.
 
 **Justificativa:**
 
 - SQL embutido em strings Python é invisível para linters e editores de SQL, não pode ser testado isoladamente e é mais difícil de revisar em pull requests.
 - As f-strings tornam a query dinâmica de um modo que não pode ser analisado estaticamente.
-- `str.format()` colide com a sintaxe do BigQuery: `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{`, que `str.format()` trata como placeholder.
-- SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos com centenas de linhas de SQL escapado em YAML, ilegíveis para revisão e invisíveis para qualquer linter de SQL.
+- `str.format()` colide com a sintaxe do BigQuery: `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{`.
+- SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos com centenas de linhas de SQL escapado em YAML, ilegíveis para revisão.
 
-### 7.2 Sintaxe de template
+**Exceção:** o parâmetro `query` do fluxo `dump_database` é a consulta nativa de um banco externo, escrita no dialeto dele, e vai no `prefect.yaml` da pipeline.
 
-Use `string.Template` da biblioteca padrão do Python. Os placeholders usam a sintaxe `$variable` ou `${variable}`. O caractere `$` pode ter significado próprio em alguns dialetos. Para um `$` literal em `string.Template`, use `$$` e valide o SQL renderizado.
+### 7.2 Modelos Jinja e o Executor
+
+O `Executor` renderiza o modelo com `StrictUndefined` (uma variável ausente é um erro) e o roda no cliente. Valores entram como `Identifier()` e `Literal()` de `psycopg.sql`, nunca como texto no SQL, e valores de execução como parâmetros (`?`). As regras do modelo estão na [Seção 3.1 do guia do toolkit](packages/toolkit/STYLEGUIDE.md#31-modelos).
 
 ```sql
--- queries/get_last_update.sql
-SELECT max(last_update) AS last_update
-FROM `$project.${dataset_id}_staging.$table_id`
-WHERE environment = '$environment'
-  AND last_update IS NOT NULL
-  AND last_update != 'None'
+-- queries/last_update.sql
+{#
+{
+  "kind": "template",
+  "description": "Read the last update of a table.",
+  "inputs": { "table": "Identifier of the table." }
+}
+#}
+SELECT max(last_update) AS last_update FROM {{ table }}
 ```
-
-Use `$variable` para nomes simples. Use `${variable}` quando o placeholder estiver imediatamente adjacente a outros caracteres (ex.: `${dataset_id}_staging`).
-
-### 7.3 Padrão de carregamento
-
-Importe `load_query` do pacote compartilhado do workspace. Passe `__file__` do módulo chamador para que o caminho seja resolvido relativo à pipeline, independentemente do diretório de trabalho:
 
 ```python
 # tasks.py
-from prefect_rj_iplanrio.sql import load_query
+from pathlib import Path
 
-query = load_query(
-    __file__,
-    "get_last_update",
-    project="my-project",
-    dataset_id=dataset_id,
-    table_id=table_id,
-    environment=environment,
-)
+from psycopg.sql import Identifier
+
+executor = Executor(client, Path(__file__).parent / "queries")
+result = await executor.query("last_update", {"table": Identifier("src", "t")}, expect=LastUpdate)
 ```
-
-`.substitute()` levanta `FileNotFoundError` se o arquivo `.sql` estiver ausente e `KeyError` se um `$variable` obrigatório estiver faltando — ambas são falhas explícitas que surgem imediatamente.
-
-### 7.4 Substituição de fragmentos
-
-Quando parte da estrutura SQL é computada em runtime (ex.: uma cláusula `WHERE` dinâmica ou um payload `UNNEST`), o fragmento computado ainda é substituído via `string.Template`. O arquivo `.sql` guarda o esqueleto; Python computa apenas as partes variáveis.
-
-```sql
--- queries/cluster_alerts.sql
-WITH alerts AS (
-    SELECT *
-    FROM UNNEST([$structs])
-),
-clustered AS (
-    SELECT
-        *,
-        ST_CLUSTERDBSCAN(
-            ST_GEOGPOINT(longitude, latitude),
-            $radius_meters,
-            1
-        ) OVER (PARTITION BY alert_type) AS cluster_id
-    FROM alerts
-)
-SELECT
-    alert_type,
-    cluster_id,
-    ARRAY_AGG(alert_id) AS alert_ids,
-    COUNT(*)            AS alert_count
-FROM clustered
-WHERE cluster_id IS NOT NULL
-GROUP BY alert_type, cluster_id
-```
-
-```python
-from prefect_rj_iplanrio.sql import load_query
-
-structs = ", ".join(build_struct(a) for a in alerts)
-query = load_query(__file__, "cluster_alerts", structs=structs, radius_meters=500)
-```
-
-O arquivo `.sql` permanece legível como SQL puro.
-
-### 7.5 Parâmetros `query` em deployments
-
-Flows que recebem SQL como parâmetro de deployment devem usar um parâmetro estruturado `query` com as chaves `name` e `replacements`. O `prefect.yaml` passa apenas o nome do arquivo `.sql` e os valores de substituição — nunca o conteúdo SQL.
-
-**Cadeia completa:**
-
-```yaml
-# ✅ prefect.yaml — name é o arquivo .sql em queries/; replacements são os $placeholders
-parameters:
-  query:
-    name: get_eligible_contacts
-    replacements:
-      dataset_id: brutos_example
-      environment: production
-```
-
-```sql
--- ✅ queries/get_eligible_contacts.sql
-SELECT *
-FROM `my-project.$dataset_id.contacts`
-WHERE environment = '$environment'
-```
-
-```python
-# ✅ flow.py — recebe query do Prefect e repassa para a task
-from prefect import flow
-
-from pipelines.rj_secretaria__pipeline.tasks import QueryParam, fetch_data_task
-
-
-@flow(log_prints=True)
-def rj_secretaria__pipeline(query: QueryParam) -> None:
-    fetch_data_task(query=query)
-```
-
-```python
-# ✅ tasks.py
-from typing import TypedDict
-
-import polars as pl
-from prefect import task
-from prefect_rj_iplanrio.sql import load_query
-
-
-class QueryParam(TypedDict):
-    name: str
-    replacements: dict[str, object]
-
-
-@task
-def fetch_data_task(query: QueryParam) -> pl.DataFrame:
-    sql = load_query(__file__, query["name"], **query["replacements"])
-    ...
-```
-
-**Pipelines de dump** (banco para BigQuery) seguem a mesma regra: o template usa `query: {name: extract_data, replacements: {}}` e o SQL fica em `queries/extract_data.sql`.
-
-**Contrato:** as chaves de `replacements` devem corresponder exatamente aos placeholders `$variable` no arquivo `.sql`. `load_query` usa `string.Template.substitute()`, que levanta `KeyError` se um placeholder obrigatório estiver ausente — falha explícita e imediata.
 
 Cada variante que exija SQL diferente recebe um arquivo `.sql` próprio em `queries/`. O diretório `queries/` é a única fonte de verdade do SQL da pipeline.
 
-### 7.6 SQL que roda no DuckDB
+### 7.3 Operações comuns já prontas
 
-O SQL que roda no DuckDB vive em `queries/*.sql` como template Jinja, e o `Executor` do toolkit o renderiza e o executa: `Executor(client, Path(__file__).parent / "queries")`. Valores entram como `Identifier()` e `Literal()` de `psycopg.sql`, não por `string.Template`. A limpeza que o DuckDB não faz é trabalho da task da pipeline. As Seções 7.2 a 7.5 valem para o SQL do BigQuery, que continua com `load_query`. Veja a Seção 5.1 do [guia do toolkit](packages/toolkit/STYLEGUIDE.md).
+O toolkit tem funções do `DuckDB` em toda conexão, sem importar nada: `normalize(coluna, separador, minúsculas)`, `clean_text(texto)`, `parse_date(texto)`, `parse_timestamp(texto)`, `ano_particao(texto)`, `mes_particao(texto)`, `data_particao(texto)`, `now_sao_paulo()` e `to_sao_paulo(instante)`. Use-as no SQL, como em `clean_text(nome)` e `normalize(nome, '_', true)`. Os modelos prontos são `csv_to_parquet` e `dump_to_bucket`. Para os nomes das colunas de uma tabela, use `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
 
-### 7.7 O que nunca fazer
+### 7.4 O que nunca fazer
 
 ```python
 # ❌ SQL em f-string — não testável, não pesquisável
@@ -1050,10 +942,10 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 ### 11.2 API pública atual
 
-| Módulo                        | Símbolo                                   | Propósito                                                                                             |
-| ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna o logger do workspace, `prefect.toolkit`. Passe `"toolkit"` como argumento.                   |
-| `prefect_rj_iplanrio.sql`     | `load_query(caller_file, name, **params)` | Carrega e renderiza um arquivo `.sql` do diretório `queries/` relativo ao chamador. Passe `__file__`. |
+| Módulo                      | Símbolo                                                          | Propósito                                                                                    |
+| --------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `prefect_rj_iplanrio.tasks` | `load_to_bigquery`, `dump_to_bucket`, `publish_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                    |
+| `prefect_rj_iplanrio.flows` | `dump_database`                                                  | Fluxo que copia uma consulta de um banco para o bucket com o DuckDB e cria a tabela externa. |
 
 ### 11.3 Antes de escrever um helper
 
@@ -1252,11 +1144,12 @@ Marque cada item antes de pedir revisão.
 
 ### Quem verifica cada regra
 
-| Regra                                    | Verificação hoje                                                     |
-| ---------------------------------------- | -------------------------------------------------------------------- |
-| Estrutura de arquivos, estilo, SQL, tags | Revisão do PR (ainda não há verificação automática)                  |
-| Formatação e lint (`ruff`)               | Configurado no `pyproject.toml`; o hook de pre-commit está desligado |
-| Build, deploy dos flows, análise SAST    | CI do GitHub (`.github/workflows/`)                                  |
+| Regra                                    | Verificação hoje                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------ |
+| Estrutura de arquivos, estilo, SQL, tags | Revisão do PR (ainda não há verificação automática)                |
+| Formatação e lint (`ruff`)               | Configurado no `pyproject.toml`; rode `ruff` à mão                 |
+| Tipos (`basedpyright` e `pyrefly`)       | Configurados no `pyproject.toml`, em `src/` e `tests/`; rode à mão |
+| Build, deploy dos flows, análise SAST    | CI do GitHub (`.github/workflows/`)                                |
 
 ## 16. Glossário
 

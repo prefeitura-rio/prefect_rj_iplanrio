@@ -14,15 +14,17 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 
 ## 2. Layout e código
 
-| Módulo                               | Responsabilidade                                        |
-| ------------------------------------ | ------------------------------------------------------- |
-| `toolkit.executor`                   | `Executor`, `Engine`, fontes e modelos SQL.             |
-| `toolkit.settings`                   | `Settings` e credenciais de banco.                      |
-| `toolkit.telemetry`                  | O `logger` do pacote e o `OpenTelemetry`.               |
-| `toolkit.constants`, `toolkit.types` | Constantes e apelidos de tipo compartilhados.           |
-| `toolkit.gcs`                        | `GCS` com `obstore`. Único lugar que importa `obstore`. |
-| `toolkit.bigquery`                   | Cliente do BigQuery e tabelas externas.                 |
-| `toolkit.dbt`                        | Execução de `dbt`.                                      |
+| Módulo                               | Responsabilidade                                                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolkit.executor`                   | `Executor`, `Engine`, fontes e modelos SQL.                                                                                                         |
+| `toolkit.settings`                   | `Settings` e credenciais de banco.                                                                                                                  |
+| `toolkit.functions`                  | As funções do `DuckDB`: `native.py` (uma vez por linha), `arrow.py` e `documents.py` (uma vez por lote) e `registry.py`, com o registro automático. |
+| `toolkit.utils`                      | Normalização de nomes de coluna: `normalize_column` e `column_aliases`.                                                                             |
+| `toolkit.telemetry`                  | O `logger` do pacote e o `OpenTelemetry`.                                                                                                           |
+| `toolkit.constants`, `toolkit.types` | Constantes e apelidos de tipo compartilhados.                                                                                                       |
+| `toolkit.gcs`                        | `GCS` com `obstore`. Único lugar que importa `obstore`.                                                                                             |
+| `toolkit.bigquery`                   | Cliente do BigQuery e tabelas externas.                                                                                                             |
+| `toolkit.dbt`                        | Execução de `dbt`.                                                                                                                                  |
 
 - `__init__.py` fica vazio. O pacote é plano, e um módulo leva o nome do domínio, nunca o de uma biblioteca (`logging.py`, `polars.py`).
 - Sem prefixo `_` em nomes. Uma função não recebe um parâmetro que não usa.
@@ -49,17 +51,20 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 - `Executor.query(..., expect=Schema)` devolve um `Dataset` tipado. O esquema é uma classe anotada, `X | None` marca nulos e `Geometry` marca geometria. Um texto nunca é lido como número: faça o `CAST` no modelo.
 - O `DuckDB` cuida de SQL, de leitura e escrita de Parquet e CSV, de `COPY` para o `GCS` e de geometria. O `Polars` cuida só do que o `DuckDB` não faz. Uma função pública recebe e devolve `Path`, `pl.DataFrame` ou `pl.LazyFrame`, nunca conexão, relação ou cursor.
 
+- A cópia de um banco para o `bucket` usa `COPY` por `Executor.execute` (`duckdb/dump_to_bucket`), sem trazer as linhas ao Python. CSV só entra quando não há alternativa.
+
 ### 3.1 Modelos
 
 - Todo modelo começa com um cabeçalho JSON em `{# ... #}` (`kind`, `description`, `inputs`). Toda macro tem `kind: "macro"`, `name`, `description`, `inputs` e `returns`, com uma linha em branco antes do cabeçalho, nenhuma entre ele e a macro, e uma depois.
 - Um nome por papel (`secret`, `alias`, `path`, `columns`), sem `name` solto nem abreviação (`cols`). O mapeamento do Python e o modelo usam os mesmos nomes. O Python decide identificador, literal e parâmetro, e o `Jinja` só faz laços e condicionais.
 - Cada valor de `.sqlfluff` é um exemplo válido de um modelo que existe.
+- Operação que se repete vira função do `DuckDB` ou modelo em `duckdb/`, e não código em cada pipeline. Toda função do `DuckDB` fica em `toolkit/functions/`: o código no módulo do tipo, `native.py` (o `DuckDB` a chama uma vez por linha, com `@native`), `arrow.py` ou `documents.py` (uma vez por lote, com `@arrow`). A função se registra onde é definida, com os decoradores de `decorators.py`. O `get_functions`, de `registry.py`, importa os módulos do pacote e devolve `(arrow, native)`, e o `register_functions` registra cada item com `create_function` quando o `DuckDBEngine` é criado, então toda conexão as tem: `normalize`, `clean_text`, `parse_date`, `parse_timestamp`, `ano_particao`, `mes_particao`, `data_particao`, `now_sao_paulo`, `to_sao_paulo`, `is_cpf`, `normalize_cpf`, `is_cnpj`, `normalize_cnpj` e `is_phone`. Escreva a função como uma expressão do `Polars` e a decore com `@arrow`, porque o `DuckDB` a chama uma vez por lote, e não uma vez por linha. Os modelos prontos são `csv_to_parquet`, `dump_to_bucket` e `normalized_columns`. O nome de uma coluna usa `Executor.normalize_columns(table, columns, separator, lowercase)`, porque o `DuckDB` não aceita o resultado de uma função como nome de coluna. Ela renomeia as colunas dadas, ou todas se `columns` for `None`, de uma tabela da própria conexão, nunca de uma fonte anexada. Na cópia de um banco, `column_aliases` (em `toolkit/utils.py`) monta os nomes para `normalized_columns`, porque o `COPY` lê a consulta sem criar tabela.
 
 ## 4. `Engine` e fontes
 
 - O cliente roda SQL (protocolo `Engine`: `execute` e `query`). A `Source` abre e prepara o cliente (`open` e `setup`). O `Executor` renderiza os modelos e os roda. Uma `Source` nunca monta nem roda uma consulta.
 - A pasta `templates` de cada pipeline é procurada antes da do toolkit, então ela não usa nomes de pasta do toolkit, como `duckdb/`.
-- O banco anexado se chama sempre `src` (`ALIAS`), e o modelo escreve `FROM src.esquema.tabela`. Um `Engine` anexa uma fonte só. O SQL segue o dialeto do cliente: `DuckDB`, ou Oracle no Oracle.
+- O banco anexado se chama sempre `src` (`ALIAS`), e o modelo escreve `FROM src.esquema.tabela`. Um `Engine` anexa uma fonte só. O SQL é sempre `DuckDB`. Uma consulta no dialeto de um banco vai como texto para a função da extensão dele (`postgres_query`, `mysql_query`, `mssql_scan` ou `oracle_query`), pela macro `native_query`.
 - Uma fonte é uma classe por arquivo em `sources/backends/`, subclasse de `SourceBase`, com o nome terminando em `Source`. O `autoregistry` a registra, e uma classe intermediária usa `skip=True`. Um sistema novo é um arquivo novo. Uma subclasse de `DuckDBSource` só define atributos `ClassVar`.
 - A conexão (`DBConn`) é uma `dataclass` congelada, com a senha fora do `repr`. Nunca registre em log senha, token, URL de conexão, valores ou texto de consulta.
 - A construção de uma `Source` não tem efeito colateral: o cliente abre no `open`.
@@ -112,4 +117,4 @@ uv run pytest
 | Estilo dos modelos SQL                                                                                                  | `sqlfluff`                             |
 | Código sem uso                                                                                                          | `vulture`                              |
 
-Os verificadores de tipos cobrem `toolkit/` e `tests/` com zero erros e zero avisos. Não há comentário de ignore no código (`# pyright: ignore`, `# pyrefly: ignore`, `# type: ignore`). Toda supressão vive no `pyproject.toml`, no escopo mais estreito (um arquivo ou uma pasta), com o motivo em um comentário, e só uma lacuna de tipos de terceiros a justifica. No `basedpyright` ela é uma `executionEnvironments` com `root`, e no `pyrefly` um `sub-config` com `matches` (só o primeiro que casa vale). O `pre-commit` roda `ruff-check` e `ruff-format`.
+Os verificadores de tipos cobrem `toolkit/` e `tests/` com zero erros e zero avisos. Não há comentário de ignore no código (`# pyright: ignore`, `# pyrefly: ignore`, `# type: ignore`). Toda supressão vive no `pyproject.toml`, no escopo mais estreito (um arquivo ou uma pasta), com o motivo em um comentário, e só uma lacuna de tipos de terceiros a justifica. No `basedpyright` ela é uma `executionEnvironments` com `root`, e no `pyrefly` um `sub-config` com `matches` (só o primeiro que casa vale).
