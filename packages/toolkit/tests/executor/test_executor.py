@@ -10,7 +10,7 @@ from toolkit.executor.engines.duckdb import DuckDBEngine, Extension
 from toolkit.executor.executor import Executor
 from toolkit.executor.schema import SchemaError
 from toolkit.types import Geometry
-from toolkit.utils import column_aliases
+from toolkit.utils import select_columns
 
 
 class Number(TypedDict):
@@ -144,25 +144,6 @@ async def test_a_duckdb_geometry_is_read_with_its_crs(tmp_path: Path):
     assert "EPSG" in dtype
 
 
-async def test_a_csv_becomes_parquet_with_every_column_as_text(
-    tmp_path: Path, duckdb_memory
-):
-    """Keep every column as text, and add no column from a Hive folder in the path."""
-    csv = tmp_path / "ano=2024" / "in.csv"
-    csv.parent.mkdir()
-    csv.write_text("code,amount\n007,1.50\n010,2\n")
-    parquet = tmp_path / "out.parquet"
-
-    await Executor(duckdb_memory).execute(
-        "duckdb/csv_to_parquet",
-        {"source": Literal(str(csv)), "target": Literal(str(parquet))},
-    )
-
-    frame = pl.read_parquet(parquet)
-    assert frame.schema == {"code": pl.String, "amount": pl.String}
-    assert frame.rows() == [("007", "1.50"), ("010", "2")]
-
-
 async def stand_in_for_postgres(engine: DuckDBEngine) -> None:
     """Make `postgres_query` return a small table, as a real database would."""
     await engine.execute(
@@ -173,49 +154,112 @@ async def stand_in_for_postgres(engine: DuckDBEngine) -> None:
     )
 
 
-async def dump(engine: DuckDBEngine, target: Path, **changes) -> None:
-    """Dump the stand-in to `target`, with the given changes to the values."""
+async def test_a_window_is_one_local_file_with_the_schema_even_when_it_is_empty(
+    tmp_path: Path, duckdb_memory
+):
+    """Keep the schema of an empty window, so Delta can remove the rows of that window."""
+    await stand_in_for_postgres(duckdb_memory)
     values = {
         "type": "postgres",
         "alias": Literal("src"),
         "secret": Literal("src_secret"),
-        "query": Literal("SELECT 1"),
-        "target": Literal(str(target)),
-        "columns": False,
-        "partition_by": [],
+        "table": Identifier("stub"),
+        "columns": select_columns(
+            {"id": "INTEGER", "Nome Completo": "VARCHAR", "ano": "INTEGER"},
+            normalize_names=False,
+        ),
     }
+    executor = Executor(duckdb_memory)
 
-    await Executor(engine).execute("duckdb/dump_to_bucket", values | changes)
+    for name, predicates, rows in (
+        ("some", [{"column": Identifier("id"), "op": "=", "value": Literal(1)}], 1),
+        ("none", [{"column": Identifier("id"), "op": "=", "value": Literal(99)}], 0),
+    ):
+        target = tmp_path / f"{name}.parquet"
+        await executor.execute(
+            "duckdb/extract_window",
+            {**values, "predicates": predicates, "target": Literal(str(target))},
+        )
+
+        frame = pl.read_parquet(target)
+        assert frame.height == rows
+        assert frame.columns == ["id", "Nome Completo", "ano"]
 
 
-async def test_a_dump_writes_parquet_files_with_unique_names(
-    tmp_path: Path, duckdb_memory
+@pytest.mark.parametrize(
+    ("file_type", "name", "content", "rows"),
+    [
+        pytest.param(
+            "csv",
+            "in.csv",
+            "code,amount\n007,1.50\n010,2\n",
+            [("007", "1.50"), ("010", "2")],
+            id="a_csv_keeps_every_column_as_text",
+        ),
+        pytest.param(
+            "json",
+            "in.json",
+            '[{"code": "007", "amount": 1.5}]',
+            [("007", 1.5)],
+            id="a_json_keeps_its_types",
+        ),
+    ],
+)
+async def test_a_window_reads_local_files_in_a_folder_with_a_hive_name(
+    tmp_path: Path, duckdb_memory, file_type, name, content, rows
 ):
-    """Write the rows as `part-<uuid>` files, so a second dump adds files."""
-    await stand_in_for_postgres(duckdb_memory)
+    """Read the files, and add no column from a Hive folder in their path."""
+    folder = tmp_path / "ano=2024"
+    folder.mkdir()
+    (folder / name).write_text(content)
+    target = tmp_path / "out.parquet"
 
-    await dump(duckdb_memory, tmp_path / "out")
-    await dump(duckdb_memory, tmp_path / "out")
-
-    files = sorted((tmp_path / "out").glob("part-*.parquet"))
-    assert [pl.read_parquet(file).rows() for file in files] == [[(1, "a", 2024)]] * 2
-
-
-async def test_a_dump_renames_the_columns_and_partitions_by_the_new_name(
-    tmp_path: Path, duckdb_memory
-):
-    """Rename the columns to slugs, and name the folders after a column."""
-    await stand_in_for_postgres(duckdb_memory)
-
-    await dump(
-        duckdb_memory,
-        tmp_path / "out",
-        columns=column_aliases(["id", "Nome Completo", "ano"]),
-        partition_by=[Identifier("ano")],
+    await Executor(duckdb_memory).execute(
+        "duckdb/extract_window",
+        {
+            "type": file_type,
+            "alias": Literal("src"),
+            "secret": Literal("src_secret"),
+            "query": Literal(f"{tmp_path}/**/*.{file_type}"),
+            "columns": select_columns(
+                {"code": "VARCHAR", "amount": "VARCHAR"}, normalize_names=False
+            ),
+            "target": Literal(str(target)),
+        },
     )
 
-    [file] = (tmp_path / "out").glob("ano=2024/part-*.parquet")
-    assert pl.read_parquet(file).columns == ["id", "nome_completo"]
+    frame = pl.read_parquet(target)
+    assert frame.columns == ["code", "amount"]
+    assert frame.rows() == rows
+
+
+async def test_a_window_cleans_and_transforms_the_values_with_the_functions(
+    tmp_path: Path, duckdb_memory
+):
+    """Compute the values of the columns with the functions, inside the `COPY`."""
+    await duckdb_memory.execute(
+        "CREATE TABLE stub AS SELECT 'x' || chr(10) || 'y ' AS nome, "
+        "'529.982.247-25' AS cpf, DATE '2024-03-05' AS dia"
+    )
+    target = tmp_path / "out.parquet"
+
+    await Executor(duckdb_memory).execute(
+        "duckdb/extract_window",
+        {
+            "type": "postgres",
+            "alias": Literal("src"),
+            "secret": Literal("src_secret"),
+            "table": Identifier("stub"),
+            "columns": select_columns(
+                {"nome": "VARCHAR", "cpf": "VARCHAR", "dia": "DATE"},
+                normalize_values=True,
+                transforms={"cpf": "normalize_cpf", "dia": "ano_particao"},
+            ),
+            "target": Literal(str(target)),
+        },
+    )
+
+    assert pl.read_parquet(target).rows() == [("x y", "52998224725", 2024)]
 
 
 @pytest.mark.parametrize(

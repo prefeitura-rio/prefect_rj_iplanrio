@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     }
 
     BIGQUERY_PROJECT: str = ""
+    DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")
     DUCKDB_MEMORY_LIMIT: str = ""
     DUCKDB_TEMP_DIRECTORY: str = ""
     GCS_ENDPOINT: str = "storage.googleapis.com"

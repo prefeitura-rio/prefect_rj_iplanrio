@@ -84,7 +84,7 @@ def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(columns, expecte
     """Rename each column to a slug, and quote the original name."""
     values = dump_values(columns=column_aliases(columns))
 
-    sql = render_template("duckdb/dump_to_bucket", values)
+    sql = render_template("duckdb/extract_window", values)
 
     assert f"SELECT {expected}\n" in sql
 
@@ -92,6 +92,17 @@ def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(columns, expecte
 @pytest.mark.parametrize(
     ("db_type", "expected"),
     [
+        pytest.param("bigquery", "bigquery_query('src', 'q')", id="bigquery"),
+        pytest.param(
+            "parquet", "read_parquet('q', hive_partitioning = false)", id="parquet"
+        ),
+        pytest.param(
+            "csv",
+            "read_csv('q', header = true, all_varchar = true, hive_partitioning = false)",
+            id="csv_as_text",
+        ),
+        pytest.param("json", "read_json('q', hive_partitioning = false)", id="json"),
+        pytest.param("gsheets", "read_gsheet('q')", id="a_sheet_without_a_name"),
         pytest.param("postgres", "postgres_query('src', 'q')", id="postgres"),
         pytest.param("mysql", "mysql_query('src', 'q')", id="mysql"),
         pytest.param("mssql", "mssql_scan('src', 'q')", id="mssql"),
@@ -100,20 +111,93 @@ def test_the_columns_are_renamed_to_slugs_that_bigquery_accepts(columns, expecte
 )
 def test_each_source_runs_a_native_query_through_its_own_function(db_type, expected):
     """Wrap the native query in the function of the source extension."""
-    sql = render_template("duckdb/dump_to_bucket", dump_values(type=db_type))
+    sql = render_template("duckdb/extract_window", dump_values(type=db_type))
 
     assert f"FROM {expected}\n" in sql
 
 
-def test_the_dump_partitions_by_the_given_columns_only():
-    """Add `PARTITION_BY` only for a partitioned dump."""
-    plain = render_template("duckdb/dump_to_bucket", dump_values())
-    partitioned = render_template(
-        "duckdb/dump_to_bucket", dump_values(partition_by=[Identifier("ano")])
+@pytest.mark.parametrize(
+    ("changes", "expected"),
+    [
+        pytest.param(
+            {"type": "gsheets", "sheet": Literal("Aba 1")},
+            "read_gsheet('q', sheet = 'Aba 1')",
+            id="a_named_sheet",
+        ),
+        pytest.param(
+            {"type": "arcgis", "where": Literal("ano > 2020")},
+            "url_encode('ano > 2020')",
+            id="an_arcgis_layer_with_a_where_clause",
+        ),
+        pytest.param(
+            {"type": "arcgis"},
+            "url_encode('1=1')",
+            id="an_arcgis_layer_reads_every_feature_by_default",
+        ),
+    ],
+)
+def test_the_options_of_a_source_reach_its_table_expression(changes, expected):
+    """Pass the sheet name and the ArcGIS where clause to the table expression."""
+    sql = render_template("duckdb/extract_window", dump_values(**changes))
+
+    assert expected in sql
+
+
+def test_a_sheet_is_written_from_local_files():
+    """Read the files, and copy them to the spreadsheet with the `gsheet` format."""
+    values = dump_values(type="csv", spreadsheet=Literal("id1"), sheet=Literal("Aba 1"))
+
+    sql = render_template("duckdb/write_gsheet", values)
+
+    assert "FROM read_csv('q'," in sql
+    assert "TO 'id1' (FORMAT gsheet, SHEET 'Aba 1')" in sql
+
+
+def test_an_attached_table_wins_over_the_native_query():
+    """Read `src.public.orders`, so DuckDB can push the filters down to the source."""
+    values = dump_values(table=Identifier("src", "public", "orders"))
+
+    sql = render_template("duckdb/extract_window", values)
+
+    assert 'FROM "src"."public"."orders"\n' in sql
+    assert "postgres_query" not in sql
+
+
+@pytest.mark.parametrize(
+    ("predicates", "expected"),
+    [
+        pytest.param(
+            [{"column": Identifier("id"), "op": ">=", "value": Literal(10)}],
+            'WHERE "id" >= 10',
+            id="one_filter",
+        ),
+        pytest.param(
+            [
+                {"column": Identifier("id"), "op": ">=", "value": Literal(10)},
+                {"column": Identifier("nome"), "op": "is null"},
+            ],
+            'WHERE "id" >= 10 AND "nome" is null',
+            id="filters_joined_by_and",
+        ),
+    ],
+)
+def test_the_filters_become_a_where_clause(predicates, expected):
+    """Add `WHERE` with every filter, and nothing when there are no filters."""
+    values = dump_values(predicates=predicates)
+
+    assert expected in render_template("duckdb/extract_window", values)
+    assert "WHERE" not in render_template("duckdb/extract_window", dump_values())
+
+
+def test_a_source_is_read_whole_with_a_plain_select():
+    """Select every row of the native query or of the attached table, for the batches."""
+    native = render_template("duckdb/select_source", dump_values(type="bigquery"))
+    attached = render_template(
+        "duckdb/select_source", dump_values(table=Identifier("src", "ds", "t"))
     )
 
-    assert "PARTITION_BY" not in plain
-    assert 'PARTITION_BY ("ano")' in partitioned
+    assert "SELECT * FROM bigquery_query('src', 'q')" in native
+    assert 'SELECT * FROM "src"."ds"."t"' in attached
 
 
 def dump_values(**changes):
@@ -123,8 +207,7 @@ def dump_values(**changes):
         "alias": Literal("src"),
         "secret": Literal("src_secret"),
         "query": Literal("q"),
-        "target": Literal("gs://b/p"),
-        "columns": False,
-        "partition_by": [],
+        "target": Literal("out.parquet"),
+        "columns": column_aliases(["a"]),
     }
     return values | changes

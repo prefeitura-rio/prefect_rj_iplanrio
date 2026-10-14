@@ -26,7 +26,9 @@ source = "'a.csv'"
 target = "'b.parquet'"
 query = "'select 1'"
 service = "'FREEPDB1'"
-columns = false
-partition_by = []
+columns = [{"source": "\"a\"", "target": "\"b\""}]
+predicates = [{"column": "\"a\"", "op": ">=", "value": "1"}]
 table = t
 renames = []
+spreadsheet = "'s'"
+sheet = "'Sheet1'"

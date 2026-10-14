@@ -10,12 +10,10 @@ from google.api_core.exceptions import NotFound
 from google.cloud.bigquery import (
     Client,
     ExternalConfig,
-    HivePartitioningOptions,
     Table,
 )
 
 from .settings import settings
-from .types import SourceFormat
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,34 +53,30 @@ class BigQuery:
         """Create a dataset when it does not exist."""
         await to_thread(self.client.create_dataset, dataset, exists_ok=True)
 
-    async def create_external_table(
-        self,
-        table: str,
-        uri_prefix: str,
-        source_format: SourceFormat,
-        *,
-        connection_id: str | None = None,
-    ) -> None:
-        """Create or replace an external table over a bucket prefix.
+    async def sync_delta_table(self, table: str, uri: str, connection_id: str) -> None:
+        """Create an external table over a Delta table, or refresh its schema if it exists.
 
-        Set `connection_id` to make a BigLake table.
+        A Delta table needs a BigLake connection. BigQuery detects the schema, so a
+        refresh picks up a new column.
         """
-        config = ExternalConfig(source_format)
-        config.source_uris = [f"{uri_prefix}/*"]
+        config = ExternalConfig("DELTA_LAKE")
+        config.source_uris = [uri]
         config.autodetect = True
-        hive = HivePartitioningOptions()
-        hive.mode = "AUTO"
-        hive.source_uri_prefix = f"{uri_prefix}/"
-        config.hive_partitioning = hive
-
-        if connection_id:
-            config.connection_id = connection_id
+        config.connection_id = connection_id
 
         def run() -> None:
-            """Replace the table with the external one."""
-            self.client.delete_table(table, not_found_ok=True)
-            external = Table(table)
-            external.external_data_configuration = config
-            self.client.create_table(external)
+            """Create the table, or ask BigQuery to detect the schema again."""
+            try:
+                existing = self.client.get_table(table)
+            except NotFound:
+                external = Table(table)
+                external.external_data_configuration = config
+                self.client.create_table(external)
+                return
+
+            existing.external_data_configuration = config
+            self.client.update_table(
+                existing, ["external_data_configuration"], autodetect_schema=True
+            )
 
         await to_thread(run)

@@ -48,6 +48,16 @@ async def test_parse_date_reads_the_formats_of_the_pipelines(scalar, text, expec
         ),
         pytest.param("2024-03-05 10:30", "2024-03-05 10:30:00", id="no_seconds"),
         pytest.param("202403051030", "2024-03-05 10:30:00", id="compact"),
+        pytest.param(
+            "2024-03-05 10:30:00.123456",
+            "2024-03-05 10:30:00.123456",
+            id="iso_with_microseconds",
+        ),
+        pytest.param(
+            "2024-03-05T10:30:00.5",
+            "2024-03-05 10:30:00.5",
+            id="iso_with_a_t_and_a_fraction",
+        ),
         pytest.param("lixo", None, id="garbage_is_null"),
     ],
 )
