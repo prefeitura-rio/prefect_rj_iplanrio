@@ -1,6 +1,7 @@
-"""OpenTelemetry logs, traces and metrics, sent to an OTLP collector over HTTP.
+"""The toolkit logger, and OpenTelemetry logs, traces and metrics sent to an OTLP collector.
 
-Prefect starts a span for every flow run and task run, and the toolkit starts one for
+The logger is the Prefect logger ``prefect.toolkit``, so it has the Prefect formatting and its
+logs reach the Prefect UI. Prefect starts a span for every flow run and task run, and the toolkit starts one for
 every query, statement, upload and delete. Every Prefect and toolkit log goes to the
 collector, and a log inside a run has the ``trace_id`` of the run. The backend derives
 durations and error rates from the spans. The counters below are the only metrics, for
@@ -25,9 +26,13 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.util.re import parse_env_headers
+from prefect.logging import get_logger
 
 from .constants import OTEL_HANDLER_NAME, PREFECT_LOGGER, SCOPE
 from .settings import settings
+
+logger = get_logger("toolkit")
+logger.setLevel(settings.LOG_LEVEL)
 
 tracer = trace.get_tracer(SCOPE)
 meter = metrics.get_meter(SCOPE)

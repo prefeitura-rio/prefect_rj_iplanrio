@@ -5,9 +5,8 @@ from dataclasses import dataclass
 
 import polars as pl
 
-from .. import log
 from ..constants import QUERY_SPAN, TEMPLATE_ATTRIBUTE
-from ..telemetry import QUERY_ROWS, tracer
+from ..telemetry import QUERY_ROWS, logger, tracer
 from .schema import Column, validate_frame
 
 
@@ -49,7 +48,7 @@ class Result[Schema]:
                 QUERY_ROWS.add(len(dataset), {"template": self.template})
                 yield dataset
 
-        log.info("Query finished", {"template": self.template, "rows": rows})
+        logger.info("Query finished: template=%s rows=%d", self.template, rows)
 
     async def collect(self) -> Dataset[Schema]:
         """Read every batch and join them into one dataset."""

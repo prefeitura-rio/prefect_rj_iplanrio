@@ -4,9 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from .. import log
 from ..constants import EXECUTE_SPAN, TEMPLATE_ATTRIBUTE
-from ..telemetry import tracer
+from ..telemetry import logger, tracer
 from ..types import QueryParams, TemplateValue
 from .constants import DEFAULT_BATCH_SIZE, TEMPLATES_DIR
 from .dataset import Result
@@ -50,7 +49,7 @@ class Executor:
         ):
             await self.client.execute(sql, params=params)
 
-        log.info("Statement executed", {"template": path})
+        logger.info("Statement executed: template=%s", path)
 
     def query[Schema](
         self,

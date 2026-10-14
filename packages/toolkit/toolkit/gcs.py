@@ -7,10 +7,9 @@ from pathlib import Path
 import obstore
 from obstore.store import ObjectStore, S3Store
 
-from . import log
 from .constants import DELETE_SPAN, UPLOAD_SPAN
 from .settings import Settings, settings
-from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, tracer
+from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, logger, tracer
 
 
 def create_store(bucket: str, config: Settings = settings) -> S3Store:
@@ -115,7 +114,7 @@ async def upload(
 
     UPLOADED_FILES.add(len(files), {"prefix": prefix})
     UPLOADED_BYTES.add(size, {"prefix": prefix})
-    log.info("Files uploaded", {"prefix": prefix, "files": len(files), "bytes": size})
+    logger.info("Files uploaded: prefix=%s files=%d bytes=%d", prefix, len(files), size)
     return list(keys.values())
 
 
@@ -136,4 +135,4 @@ async def delete_keys(
         )
 
     DELETED_FILES.add(len(keys))
-    log.info("Objects deleted", {"objects": len(keys)})
+    logger.info("Objects deleted: objects=%d", len(keys))

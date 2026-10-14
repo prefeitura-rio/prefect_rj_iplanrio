@@ -10,7 +10,6 @@ from pydantic import Field
 type DatabaseValue = bool | int | float | str | datetime | None
 type QueryValue = DatabaseValue | Sequence[str]
 type QueryParams = Sequence[QueryValue]
-type LogValue = str | int | float | bool
 type NonEmptyString = Annotated[str, Field(min_length=1)]
 type SourceFormat = Literal["PARQUET", "CSV"]
 type DbtCommand = Literal[

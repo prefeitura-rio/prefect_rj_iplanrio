@@ -8,8 +8,8 @@ from git import GitCommandError, Repo
 from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from pydantic import BaseModel, ConfigDict
 
-from . import log
 from .constants import COMMAND_WORDS, SELECTABLE
+from .telemetry import logger
 from .types import DbtCommand, NonEmptyString
 
 
@@ -68,7 +68,7 @@ def clone_repository(repository: str, destination: Path) -> Path:
     except GitCommandError as error:
         raise RuntimeError("Repository clone failed") from error
 
-    log.info("Repository cloned", {"path": str(destination)})
+    logger.info("Repository cloned: path=%s", destination)
     return destination
 
 
@@ -100,7 +100,6 @@ def execute_dbt(request: DbtRun) -> None:
         runner = PrefectDbtRunner(settings=settings)
         runner.invoke(["deps"])
         runner.invoke(request.arguments())
-        log.info(
-            "dbt command finished",
-            {"command": request.command, "project": str(project_dir)},
+        logger.info(
+            "dbt command finished: command=%s project=%s", request.command, project_dir
         )
