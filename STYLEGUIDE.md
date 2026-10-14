@@ -71,12 +71,9 @@ logger = get_logger("toolkit")
 
 
 def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Baixa os itens da API e salva em Parquet.
+    """Baixe os itens da API, salve em Parquet e devolva o caminho do arquivo.
 
-    :param dataset_id: Dataset de destino no BigQuery.
-    :param table_id: Tabela de destino no BigQuery.
-    :returns: Caminho do arquivo Parquet.
-    :raises httpx2.HTTPStatusError: Se a API responder com erro.
+    Levante `httpx2.HTTPStatusError` se a API responder com erro.
     """
     response = httpx2.get("https://api.example.com/items", timeout=30)
     response.raise_for_status()
@@ -457,33 +454,46 @@ Regras de conteúdo:
 
 ### 5.6 Docstrings
 
-Todas as funções devem ter uma docstring no formato reST. A linha de resumo usa modo imperativo e termina com ponto final. Como type hints já cobrem os tipos, as diretivas `:type:` e `:rtype:` são redundantes e devem ser omitidas.
+Toda função tem uma `docstring` em Markdown, sem `reST`: código com uma crase, sem `:param:`, `:returns:` nem `:type:`. Os type hints já dizem os tipos. O resumo é uma frase curta no imperativo, em uma linha, com ponto final e até 88 colunas. Escreva mais frases só se o contrato não aparecer no nome e nos tipos, após uma linha em branco. O erro que a função levanta entra na `docstring`. Uma função difícil de entender leva um exemplo em bloco `python` cercado, com o resultado num comentário `#` conferido ao rodar.
 
 ```python
-# ✅ correto
+# ✅ correto — o contrato cabe numa linha, e o erro vem depois
 def fetch_items(dataset_id: str, table_id: str) -> str:
-    """Baixa os itens da API e salva em Parquet.
+    """Baixe os itens da API, salve em Parquet e devolva o caminho do arquivo.
 
-    :param dataset_id: Dataset de destino no BigQuery.
-    :param table_id: Tabela de destino no BigQuery.
-    :returns: Caminho do arquivo Parquet.
-    :raises httpx2.HTTPStatusError: Se a API responder com erro.
+    Levante `httpx2.HTTPStatusError` se a API responder com erro.
     """
     ...
 ```
 
 ```python
-# ❌ errado — sem docstring
+# ✅ correto — uma função difícil leva um exemplo
+def normalize_column(name: str) -> str:
+    """Devolva o nome de coluna que o BigQuery aceita.
+
+    ```python
+    normalize_column("Código do Órgão")  # "codigo_do_orgao"
+    ```
+    """
+    ...
+```
+
+```python
+# ❌ errado — reST, e um resumo que repete o que os tipos dizem
 def fetch_items(dataset_id: str, table_id: str) -> str:
-    response = httpx2.get("https://api.example.com/items", timeout=30)
+    """Baixa os itens da API e salva em Parquet.
+
+    :param dataset_id: Dataset de destino no BigQuery.
+    :returns: Caminho do arquivo Parquet.
+    """
     ...
 ```
 
 Regras:
 
-- `:returns:` é omitido quando o tipo de retorno é `None`.
-- `:raises:` lista **todas** as exceções que a função pode lançar intencionalmente.
-- Uma função que só delega para outra (ex.: tasks finas) pode ter apenas a linha de resumo se não houver comportamento adicional a documentar.
+- Uma função que só delega para outra (ex.: tasks finas) pode ter apenas a linha de resumo.
+- Uma classe leva um sintagma nominal ("Uma linha do resultado de `totals_by_station`."), e uma função com `@overload` não leva `docstring`.
+- Sem o rótulo `Example:`. Um exemplo é um bloco `python` ou `sql` cercado.
 
 ### 5.7 Parâmetros em excesso
 
@@ -553,12 +563,7 @@ import polars as pl
 
 
 def batch_to_frame(batch: list[list], columns: list[str]) -> pl.DataFrame:
-    """Converte um lote de linhas em um DataFrame.
-
-    :param batch: Lista de linhas, cada uma como lista de valores.
-    :param columns: Nomes das colunas na mesma ordem dos valores.
-    :returns: DataFrame com os dados do lote.
-    """
+    """Converta um lote de linhas em um DataFrame, com os nomes das colunas dados."""
     return pl.DataFrame(dict(zip(columns, zip(*batch, strict=True), strict=True)))
 ```
 
@@ -575,28 +580,20 @@ from toolkit.executor.executor import Executor
 
 
 class StationTotal(TypedDict):
-    """Uma linha do resultado de ``totals_by_station``."""
+    """Uma linha do resultado de `totals_by_station`."""
 
     station_id: str
     mm: float
 
 
 def normalize_parquet(source: Path, dest: Path) -> None:
-    """Normaliza os nomes das colunas de um Parquet.
-
-    :param source: Parquet de entrada.
-    :param dest: Parquet de saída.
-    """
+    """Normalize os nomes das colunas de um Parquet e grave o resultado em `dest`."""
     lf = pl.scan_parquet(source)
     lf.rename({col: col.lower().replace(" ", "_") for col in lf.collect_schema().names()}).sink_parquet(dest)
 
 
 async def totals_by_station(source: Path) -> Dataset[StationTotal]:
-    """Soma os valores por estação com SQL do DuckDB.
-
-    :param source: Parquet com as colunas ``station_id`` e ``mm``.
-    :returns: Um dataset do Polars com uma linha por estação.
-    """
+    """Some os valores de um Parquet com as colunas `station_id` e `mm`, por estação."""
     async with DuckDBEngine.connect() as engine:
         executor = Executor(engine, Path(__file__).parent / "queries")
         return await executor.query(
@@ -655,11 +652,9 @@ ITEMS_SCHEMA = pl.Schema({"item_id": pl.String, "value": pl.Float64})
 
 
 def read_items(path: Path) -> pl.DataFrame:
-    """Lê os itens do Parquet e valida o schema.
+    """Leia os itens do Parquet no schema de itens.
 
-    :param path: Caminho do Parquet.
-    :returns: DataFrame com o schema de itens.
-    :raises polars.exceptions.SchemaError: Se o arquivo não respeitar o schema.
+    Levante `polars.exceptions.SchemaError` se o arquivo não respeitar o schema.
     """
     return pl.read_parquet(path, schema=ITEMS_SCHEMA)
 ```
@@ -1137,7 +1132,7 @@ Marque cada item antes de pedir revisão.
 - [ ] O `flow.py` só orquestra. A função `@flow` tem o mesmo nome do diretório ([Seção 4.1](#41-flowpy)).
 - [ ] As tasks são wrappers finos e a lógica fica em `utils.py` ([Seções 4.2 e 4.3](#42-taskspy)).
 - [ ] Não há `print()`. O logging usa `get_logger` ([Seção 5.5](#55-logging)).
-- [ ] Toda função tem type hints e docstring reST ([Seções 5.1 e 5.6](#51-type-hints)).
+- [ ] Toda função tem type hints e `docstring` em Markdown, com resumo de uma linha ([Seções 5.1 e 5.6](#51-type-hints)).
 - [ ] O código novo usa Polars e DuckDB, sem pandas ([Seção 5.8](#58-dados-tabulares)).
 - [ ] Não há SQL em Python nem em YAML. O SQL está em `queries/*.sql` ([Seção 7](#7-sql)).
 - [ ] O agendamento está só no `prefect.yaml`, em `America/Sao_Paulo`. O staging não tem `schedules` ([Seções 8 e 9](#8-agendamento)).

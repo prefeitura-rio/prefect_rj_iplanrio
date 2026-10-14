@@ -41,8 +41,8 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 
 - Escreva em inglês técnico simples (frases curtas, voz ativa) e em Markdown: código com uma crase, sem `reST` (`:param`, `:func:`, `::`).
 - Todo módulo de produção tem `docstring` de módulo. Um teste e um `__init__.py` não têm. Toda função tem `docstring` (aninhada, mágica, de teste ou de dublê). Toda classe de produção também.
-- A `docstring` é uma frase curta no imperativo, em uma linha, com ponto. Escreva mais frases só se o contrato não aparecer no nome e nos tipos, após uma linha em branco e em linhas de até 88 colunas. O erro que a função levanta entra na `docstring`.
-- Uma função difícil de entender leva um exemplo em bloco `python` cercado, com o resultado num comentário `#` conferido ao rodar. Sem o rótulo `Example:`.
+- A `docstring` é uma frase curta no imperativo, em uma linha, com ponto. Escreva mais frases só se o contrato não aparecer no nome e nos tipos, após uma linha em branco e em linhas de até 88 colunas. O erro que a função levanta entra na `docstring`. Uma classe leva um sintagma nominal, como "Uma janela de dados", e uma função com `@overload` não leva `docstring`.
+- Uma função difícil de entender leva um exemplo em bloco `python` cercado, com o resultado num comentário `#` conferido ao rodar. Sem o rótulo `Example:`. Uma função do `DuckDB` leva o exemplo em bloco `sql`. Um auxiliar de teste difícil de ler também leva exemplo.
 - Sem comentário no corpo de função e sem comentário de seção. Dê um nome à ideia.
 - O `README.md` é o dono do uso e da configuração, e este guia é o dono das regras. Aponte com um link, não copie. Uma configuração nova entra na tabela do `README.md` na mesma alteração.
 
@@ -117,6 +117,7 @@ uv run pytest
 | `obstore` só em `toolkit/gcs.py`                                                                                        | `ruff` (`TID251`, exceção por arquivo) |
 | Sem `print`                                                                                                             | `ruff` (`T20`)                         |
 | `docstring` em toda função, com resumo de uma linha no imperativo                                                       | `ruff` (`D`)                           |
+| Linha de `docstring` e de comentário com até 88 colunas                                                                 | `ruff` (`W505`)                        |
 | Tipos completos: modo `all` e nível `strict`                                                                            | `basedpyright`, `pyrefly`              |
 | Estilo dos modelos SQL                                                                                                  | `sqlfluff`                             |
 | Código sem uso                                                                                                          | `vulture`                              |
