@@ -12,7 +12,7 @@ As regras de Python, dados e testes valem também para `packages/toolkit/`. As r
 
 Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a seção com a regra completa.
 
-1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines`. O template cria o diretório com `flow.py`, `tasks.py`, `queries/`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
+1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines`. O template cria o diretório de uma pipeline de dump, com `flow.py`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. Para uma pipeline própria, troque o `flow.py` e acrescente `tasks.py`, `utils.py` e `queries/` quando precisar. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
 2. **Descreva a pipeline.** Escreva o `description` no `pyproject.toml` ([Seção 10](#10-pyprojecttoml)).
 3. **Escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho real fica em `utils.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure no [README do toolkit](packages/toolkit/README.md).
 4. **Configure o deploy.** No `prefect.yaml`, defina as tags, o agendamento da produção e o work pool ([Seções 8, 9 e 13](#8-agendamento)).
