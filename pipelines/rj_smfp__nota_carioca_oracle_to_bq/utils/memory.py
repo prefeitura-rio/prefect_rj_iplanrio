@@ -107,8 +107,11 @@ def check_pod_budget(worker_mb_by_table: Mapping[str, int], workers: int, pod_me
     """Confere que o processo principal mais os workers cabem no orçamento de memória do pod.
 
     O orçamento deve ficar abaixo do REQUEST de memória do deployment (``memory_request`` em ``job_variables``) menos
-    uma folga (256 MiB no padrão do código; o deployment de produção usa 512 MiB), não do limite do pod: acima do
-    request o scheduler superaloca o nó e ele pode ficar NotReady.
+    uma folga (256 MiB, no padrão do código e no deployment de produção: request de 6 GiB, orçamento de 5888 MiB), não
+    do limite do pod: acima do request o scheduler superaloca o nó e ele pode ficar NotReady. O limite do pod
+    (``memory_limit``) pode passar do request; essa diferença é a margem para o crescimento dos workers ao longo da
+    extração (em 14/10 o pod de 6 GiB de limite foi morto por OOM com ~4,4 GiB estimados), vigiada em tempo de
+    execução por ``memory_pause_ratio`` e ``worker_max_tasks``, e esta conferência não a conta.
 
     As tabelas são extraídas uma de cada vez, então vale a mais pesada.
 
