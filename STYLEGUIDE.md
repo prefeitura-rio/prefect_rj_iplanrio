@@ -33,18 +33,14 @@ Uma pipeline que baixa uma lista de itens de uma API e salva em Parquet. Os come
 
 from prefect import flow
 
-from pipelines.rj_secretaria__pipeline.tasks import (
-    fetch_items_task,
-    rename_flow_run_task,
-)
+from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, flow_run_name="{table_id}")
 def rj_secretaria__pipeline(
     dataset_id: str = "brutos_example",
     table_id: str = "items",
 ) -> None:
-    rename_flow_run_task(new_name=table_id)
     fetch_items_task(dataset_id=dataset_id, table_id=table_id)
 ```
 
@@ -53,15 +49,8 @@ def rj_secretaria__pipeline(
 """Tasks for rj_secretaria__pipeline."""
 
 from prefect import task
-from toolkit.prefect import rename_current_flow_run
 
 from pipelines.rj_secretaria__pipeline import utils
-
-
-@task
-async def rename_flow_run_task(new_name: str) -> None:
-    """Renomeia a flow run atual."""
-    await rename_current_flow_run(new_name)
 
 
 @task
@@ -78,7 +67,7 @@ import httpx2
 import polars as pl
 from prefect_rj_iplanrio.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 
 def fetch_items(dataset_id: str, table_id: str) -> str:
@@ -158,6 +147,16 @@ Flows orquestram. Tasks encapsulam. Utils calculam. SQL é dado.
 
 Qualquer pessoa deve conseguir abrir um diretório de pipeline e entender imediatamente sua estrutura, pois toda pipeline segue as mesmas convenções. Consistência vale mais do que otimização local.
 
+### 1.1 Princípios
+
+- Leia o código antes de escrever código.
+- Prefira apagar a criar uma abstração ou uma camada de configuração.
+- Faça mudanças pequenas e fáceis de revisar. Não misture trabalhos sem relação.
+- Corrija a causa, não o sintoma.
+- Mantenha uma única fonte de verdade para cada fato.
+- Use a ferramenta idiomática de cada ecossistema.
+- Siga um padrão que já existe antes de criar um novo.
+
 ## 2. Arquitetura de código em três camadas
 
 O código neste repositório vive em um de três níveis. O nível determina onde uma função é escrita, não sua importância.
@@ -233,19 +232,14 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 
 from prefect import flow
 
-from pipelines.rj_secretaria__pipeline.tasks import (
-    fetch_items_task,
-    rename_flow_run_task,
-    upload_task,
-)
+from pipelines.rj_secretaria__pipeline.tasks import fetch_items_task, upload_task
 
 
-@flow(log_prints=True)
+@flow(log_prints=True, flow_run_name="{table_id}")
 def rj_secretaria__pipeline(
     dataset_id: str = "brutos_example",
     table_id: str = "items",
 ) -> None:
-    rename_flow_run_task(new_name=table_id)
     data_path = fetch_items_task(dataset_id=dataset_id, table_id=table_id)
     upload_task(data_path=data_path, dataset_id=dataset_id, table_id=table_id)
 ```
@@ -426,13 +420,13 @@ def dump(url: str) -> str:
 
 ### 5.5 Logging
 
-`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa `get_logger` de `prefect_rj_iplanrio.logging`, o ponto de entrada único de logging e o lugar da configuração de logs comum a todo o workspace (formato, destino). Em uma `@task`, `get_run_logger()` do Prefect também é permitido quando a mensagem precisa aparecer na UI do Prefect.
+`print()` é **proibido** em qualquer arquivo Python do repositório. Todo logging usa `get_logger("toolkit")` de `prefect_rj_iplanrio.logging`, o ponto de entrada único de logging. Ele devolve o logger do workspace, `prefect.toolkit`, o mesmo de `toolkit.telemetry.logger`: tem a formatação padrão do Prefect, mostra INFO, aparece na UI do Prefect e, com a exportação do OpenTelemetry ligada, segue para o coletor. Um logger de `logging.getLogger(__name__)` fica fora da árvore `prefect`, então não tem nada disso e perde as mensagens INFO. Em uma `@task`, `get_run_logger()` do Prefect também é permitido quando a mensagem precisa aparecer na UI do Prefect.
 
 ```python
 # ✅ correto
 from prefect_rj_iplanrio.logging import get_logger
 
-logger = get_logger(__name__)
+logger = get_logger("toolkit")
 
 
 def fetch_items(dataset_id: str, table_id: str) -> str:
@@ -450,6 +444,13 @@ logger = logging.getLogger(__name__)
 def fetch_items(dataset_id: str, table_id: str) -> str:
     print("Buscando itens")
 ```
+
+Regras de conteúdo:
+
+- Escreva frases de ciclo de vida que uma pessoa lê: `<Componente> <ação> <estado>: <contexto>`, como `Itens buscados: dataset_id=brutos_x rows=120`.
+- Use `debug` para detalhe de sondagem, `info` para mudança normal de ciclo de vida, `warning` para nova tentativa ou trabalho opcional pulado, e `error` só antes de um erro terminal.
+- Nunca registre credenciais, tokens, strings de conexão, corpos de requisição, valores de cache, valores de SQL nem query strings.
+- Mantenha a saída de ferramentas externas (dbt, DuckDB) como ela vem. Não a interprete nem a reformate.
 
 ### 5.6 Docstrings
 
@@ -702,6 +703,7 @@ def rj_secretaria__pipeline(param: str = "default") -> None:
 - `log_prints=True` é sempre definido como proteção contra chamadas `print()` acidentais. Todo logging intencional deve usar o módulo `logging` (veja [§5.5](#55-logging)).
 - O nome da função deve corresponder **exatamente** ao nome do diretório da pipeline. É isso que o Prefect usa para identificar o flow nos deployments.
 - O tipo de retorno é quase sempre `None` — flows produzem efeitos colaterais por natureza.
+- Dê nome à run com `flow_run_name="{table_id}"` no `@flow`: o Prefect preenche o texto com os parâmetros do flow. Não renomeie a run com uma task.
 
 ### 6.2 Declaração de task
 
@@ -726,9 +728,8 @@ No Prefect 3, o grafo de execução é inferido a partir das dependências de da
 
 ```python
 # ✅ correto — ordenação expressa por data flow
-@flow(log_prints=True)
+@flow(log_prints=True, flow_run_name="{table_id}")
 def rj_secretaria__pipeline(dataset_id: str, table_id: str) -> None:
-    rename_flow_run_task(new_name=table_id)
     prepare_workdir_task()                                   # sequencial, sem output necessário
     last_update = get_last_update_task(dataset_id=dataset_id, table_id=table_id)
     data_path = fetch_history_task(last_update=last_update)  # dependência de dados — Prefect infere a ordem
@@ -1051,7 +1052,7 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 | Módulo                        | Símbolo                                   | Propósito                                                                                             |
 | ----------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna o logger do módulo, pelo ponto de entrada único de logging. Passe `__name__` como argumento.  |
+| `prefect_rj_iplanrio.logging` | `get_logger(name)`                        | Retorna o logger do workspace, `prefect.toolkit`. Passe `"toolkit"` como argumento.                   |
 | `prefect_rj_iplanrio.sql`     | `load_query(caller_file, name, **params)` | Carrega e renderiza um arquivo `.sql` do diretório `queries/` relativo ao chamador. Passe `__file__`. |
 
 ### 11.3 Antes de escrever um helper
@@ -1094,6 +1095,24 @@ Também não entram no repositório:
 - Arquivos `.py` completamente vazios.
 
 Na dúvida, pergunte: "Um novo membro do time lendo este arquivo entenderia por que ele existe e o que fazer com ele?" Se a resposta for não, apague-o.
+
+### 12.3 Commits
+
+- Use Conventional Commits: `tipo(escopo): resumo no imperativo`, em minúsculas e sem ponto final. O escopo é opcional.
+- Use os tipos `feat`, `fix`, `refactor`, `test`, `docs` e `chore` (CI, ferramentas, dependências e manutenção).
+- Faça uma mudança lógica por commit. Junte os commits de correção (squash) antes do merge.
+- Nunca faça commit nem push sem aprovação explícita. Prepare, resuma e espere.
+
+```text
+refactor(toolkit): move GCS operations to obstore
+```
+
+### 12.4 Documentação
+
+- Escreva frases curtas, na voz ativa, com uma ideia por frase.
+- Deixe cada assunto em um documento só. Aponte para o documento dono com um link, sem copiar o texto.
+- Use exemplos genéricos, a não ser que um valor real seja necessário.
+- Confira cada afirmação no código, nos templates, nos testes ou em um comando que você rodou.
 
 ## 13. Tags de pipeline
 
@@ -1192,6 +1211,12 @@ pipelines/rj_secretaria__pipeline/
 ### 14.3 Estilo
 
 Use `pytest` e `@pytest.mark.parametrize`, com `ids` que descrevem o cenário. Os testes não usam rede, credenciais nem o runtime do Prefect. Use mocks só para verificar um contrato de interface (por exemplo, que uma função recebeu a query correta), nunca para testar lógica de negócio. Para funções puras de transformação, `hypothesis` é permitido para verificar propriedades como idempotência e preservação do número de linhas.
+
+- Ponha cada teste no nível mais baixo que prova o comportamento. Não repita a mesma verificação em um nível mais alto.
+- Confira valores exatos. Não use `in` sobre texto, a não ser uma regex em texto gerado que seria frágil de comparar inteiro.
+- Use o `hypothesis` só para invariantes sobre entradas geradas.
+- Não teste o armazenamento de campos, valores padrão nem "nenhuma exceção foi levantada".
+- Junte arquivos de teste pequenos que cobrem um módulo.
 
 ```python
 import pytest
