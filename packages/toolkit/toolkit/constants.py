@@ -35,7 +35,9 @@ TIMEZONE: Final = "America/Sao_Paulo"
 
 TIMESTAMP_FORMATS: Final = (
     "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M:%S%.f",
     "%Y-%m-%dT%H:%M:%S",
+    "%Y-%m-%dT%H:%M:%S%.f",
     "%d/%m/%Y %H:%M:%S",
     "%d/%m/%Y - %H:%M:%S",
     "%Y-%m-%d %H:%M",
@@ -119,3 +121,17 @@ AREA_CODES: Final = frozenset(
     ]
 )
 """The area codes (DDD) that ANATEL assigns, which a phone must start with."""
+
+BATCH_COLUMN: Final = "batch"
+"""The column that holds the key of the window, which partitions a Delta table."""
+
+COMMIT_ATTEMPTS: Final = 5
+"""How many times a Delta write tries again after a commit conflict."""
+
+VACUUM_RETENTION_HOURS: Final = 168
+"""How long replaced Delta files stay in the bucket, for the queries that still read them."""
+
+FILTER_OPERATORS: Final = frozenset(
+    {"=", "!=", "<", "<=", ">", ">=", "in", "not in", "is null", "is not null"}
+)
+"""The operators of a filter. Anything else raises, so an operator is never free text."""

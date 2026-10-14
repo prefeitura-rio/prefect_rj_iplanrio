@@ -1,0 +1,145 @@
+"""Cut a table into windows, so a dump can load, skip and replace one window at a time."""
+
+import hashlib
+import json
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import date, timedelta
+
+from psycopg.sql import Composable, Identifier, Literal
+
+from .constants import BATCH_COLUMN
+from .types import Batches, DateWidth
+
+
+@dataclass(frozen=True, slots=True)
+class Window:
+    """One slice of the range of a column: `start <= value < stop`."""
+
+    key: str
+    start: date | int
+    stop: date | int
+
+
+def first_day(unit: DateWidth, day: date) -> date:
+    """Return the first day of the day, month or year that holds `day`."""
+    match unit:
+        case "day":
+            return day
+        case "month":
+            return day.replace(day=1)
+        case "year":
+            return day.replace(month=1, day=1)
+
+
+def next_start(unit: DateWidth, start: date) -> date:
+    """Return the first day of the window after the one that starts on `start`."""
+    match unit:
+        case "day":
+            return start + timedelta(days=1)
+        case "month":
+            return (start + timedelta(days=31)).replace(day=1)
+        case "year":
+            return date(start.year + 1, 1, 1)
+
+
+def date_windows(unit: DateWidth, begin: date, end: date) -> list[Window]:
+    """Cut `begin` to `end` into calendar days, months or years.
+
+    A month or a year starts on its first day, so its key never moves.
+    """
+    cut: list[Window] = []
+    start = first_day(unit, begin)
+
+    while start <= end:
+        stop = next_start(unit, start)
+        cut.append(Window(start.isoformat(), start, stop))
+        start = stop
+
+    return cut
+
+
+def number_windows(width: int, begin: int, end: int) -> list[Window]:
+    """Cut `begin` to `end` into runs of `width` ids."""
+    return [
+        Window(f"{start:012d}", start, start + width)
+        for start in range(begin, end + 1, width)
+    ]
+
+
+def windows(batches: Batches, today: date) -> list[Window]:
+    """Return the windows of a configuration, oldest first.
+
+    Raise `ValueError` for a width, a `begin` or an `end` that does not fit.
+
+    ```python
+    windows({"column": "d", "width": "month", "begin": "2024-01-15", "end": "2024-03-10"}, today)
+    # keys: 2024-01-01, 2024-02-01, 2024-03-01
+    ```
+    """
+    match batches["width"]:
+        case int() as width:
+            if width <= 0:
+                raise ValueError("The width must be positive")
+            match batches["begin"], batches.get("end"):
+                case int() as begin, int() as end:
+                    if begin > end:
+                        raise ValueError("The begin is after the end")
+                    return number_windows(width, begin, end)
+                case int(), None:
+                    raise ValueError("A number window needs an end")
+                case _:
+                    raise ValueError("A number width needs numbers for begin and end")
+        case ("day" | "month" | "year") as unit:
+            match batches["begin"], batches.get("end"):
+                case str() as begin, (str() | None) as end:
+                    first = date.fromisoformat(begin)
+                    last = date.fromisoformat(end) if end else today
+                    if first > last:
+                        raise ValueError("The begin is after the end")
+                    return date_windows(unit, first, last)
+                case _:
+                    raise ValueError("A date width needs dates for begin and end")
+
+
+def window_predicates(column: str, window: Window) -> list[dict[str, Composable | str]]:
+    """Return the filter `column >= start AND column < stop`, as typed values."""
+    return [
+        {"column": Identifier(column), "op": ">=", "value": Literal(window.start)},
+        {"column": Identifier(column), "op": "<", "value": Literal(window.stop)},
+    ]
+
+
+def batch_column(key: str) -> dict[str, Composable]:
+    """Return the constant column that holds the key of a window, for the select list."""
+    return {"source": Literal(key), "target": Identifier(BATCH_COLUMN)}
+
+
+def pending(
+    cut: Sequence[Window], known: Collection[str], lookback: int | None
+) -> list[Window]:
+    """Return the windows to read: the unknown ones, and the last `lookback` known ones.
+
+    `known` holds the keys that the ledger has for the current config. A window never
+    loaded is always read. `lookback=None` reads them all.
+    """
+    if lookback is None:
+        return list(cut)
+
+    recent = {window.key for window in cut[max(len(cut) - lookback, 0) :]}
+    return [window for window in cut if window.key not in known or window.key in recent]
+
+
+def config_hash(parts: Mapping[str, object]) -> str:
+    """Hash every setting that changes the bytes of a window.
+
+    The order of the keys does not matter. A new hash means a new config, so the ledger
+    treats every window as not loaded.
+    """
+    text = json.dumps(parts, sort_keys=True, default=str)
+    return hashlib.md5(text.encode(), usedforsecurity=False).hexdigest()[:8]
+
+
+def ledger_id(config: str, key: str) -> str:
+    """Name the ledger entry of one window under one config."""
+    return f"{config}:{key}"
