@@ -8,7 +8,6 @@ dependencies = [
   "idna>=3.10",
   "toolkit",
   "pandas>=2.2.3",
-  "pre-commit>=4.5.1",
   "prefect==3.4.9",
   "prefect-docker>=0.7.1",
   "unidecode>=1.3.8",
@@ -16,7 +15,11 @@ dependencies = [
 
 [tool.uv]
 link-mode = "copy"
-override-dependencies = ["grpcio==1.78.0", "grpcio-status==1.78.0", "click>=8.3.0,<9.0"]
+override-dependencies = [
+  "grpcio==1.78.0",
+  "grpcio-status==1.78.0",
+  "click>=8.3.0,<9.0",
+]
 
 [tool.uv.sources]
 toolkit = { workspace = true }
@@ -25,7 +28,54 @@ toolkit = { workspace = true }
 members = ["pipelines/*", "packages/*"]
 
 [dependency-groups]
-dev = ["prefect-docker>=0.6.5"]
+dev = [
+  "basedpyright>=1.30.0",
+  "prefect-docker>=0.6.5",
+  "pyrefly>=1.3.2",
+  "pytest>=8.0.0",
+  "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = ["--import-mode=importlib"]
+
+[tool.basedpyright]
+typeCheckingMode = "all"
+venvPath = "."
+venv = ".venv"
+include = ["src", "tests"]
+reportUnusedCallResult = false # side-effect calls (an upload, a delete) return handles that nobody needs
+
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = [
+  "src",
+] # resolve `import prefect_rj_iplanrio` from the tests folder
+reportMissingParameterType = false # pytest fixtures and parametrized arguments arrive untyped
+reportUnknownParameterType = false # same cause as above
+reportUnknownArgumentType = false # values from untyped fixtures
+reportUnknownMemberType = false # members of untyped fixtures
+reportUnknownVariableType = false # variables built from untyped fixtures
+reportUnannotatedClassAttribute = false # small fake classes
+reportUnusedParameter = false # a fake follows the signature of the real API
+reportUnknownLambdaType = false # lambdas passed to fakes
+reportAny = false # values from untyped fakes
+
+[tool.pyrefly]
+project-includes = ["src", "tests"]
+python-version = "3.13"
+python-interpreter-path = ".venv/bin/python"
+preset = "strict"
+
+# The tests keep type safety on the shared code; these rules are noise for pytest code.
+[[tool.pyrefly.sub-config]]
+matches = "tests/**"
+
+[tool.pyrefly.sub-config.errors]
+implicit-any-parameter = false  # pytest fixtures and parametrized arguments arrive untyped
+implicit-any-lambda = false  # lambdas passed to fakes
 
 [tool.ruff]
 target-version = "py313"
@@ -50,6 +100,16 @@ select = [
   "RUF",
   "W",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"src/prefect_rj_iplanrio/tasks.py" = [
+  "PLR0913",
+] # a task takes flat keyword parameters, so a deployment can set each one
+"src/prefect_rj_iplanrio/flows.py" = ["PLR0913"] # same cause, for a flow
+"tests/conftest.py" = [
+  "ARG002",
+  "ARG005",
+] # a fake follows the signature of the real API, and ignores some arguments
 
 [tool.ruff.format]
 quote-style = "double"
