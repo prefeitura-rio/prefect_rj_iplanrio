@@ -19,7 +19,6 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from functools import partial
 from secrets import token_hex
 from typing import Protocol, Unpack, cast
 
@@ -34,10 +33,9 @@ from pydantic import SecretStr
 from toolkit.constants import BATCH_COLUMN
 from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.gcs import create_store, list_keys
-from toolkit.settings import Settings, settings
+from toolkit.settings import settings
 from toolkit.types import Batches
 
-from prefect_rj_iplanrio import utils
 from prefect_rj_iplanrio.types import DumpMode, DumpOptions
 from prefect_rj_iplanrio.utils import (
     Destination,
@@ -87,7 +85,6 @@ class SimulatedCloud:
     """A fake GCS and a fake BigQuery."""
 
     gcs: FakeGcs
-    config: Settings
     bigquery: type[FakeBigQuery]
     bucket: str = "simulated-bucket"
     project: str = SIMULATED_PROJECT
@@ -113,18 +110,13 @@ class SimulatedCloud:
 
     def store(self) -> ObjectStore:
         """Return the store of the fake bucket."""
-        return create_store(self.bucket, self.config)
+        return create_store(self.bucket)
 
 
 @pytest.fixture(scope="module")
-def simulated_cloud(
-    fake_gcs: FakeGcs, fake_gcs_settings: Settings, fake_bigquery: type[FakeBigQuery]
-) -> Iterator[SimulatedCloud]:
-    """Return the simulated cloud: `obstore` and BigQuery reach the fakes, and `deltalake` through the environment."""
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(utils, "create_store", partial(create_store, config=fake_gcs_settings))
-
-        yield SimulatedCloud(fake_gcs, fake_gcs_settings, fake_bigquery)
+def simulated_cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery]) -> SimulatedCloud:
+    """Return the simulated cloud, where `deltalake`, `obstore` and BigQuery reach the fakes."""
+    return SimulatedCloud(fake_gcs, fake_bigquery)
 
 
 @dataclass(frozen=True)

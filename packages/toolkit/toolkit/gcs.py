@@ -8,20 +8,20 @@ import obstore
 from obstore.store import ObjectStore, S3Store
 
 from .constants import DELETE_SPAN, UPLOAD_SPAN
-from .settings import Settings, settings
+from .settings import settings
 from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, logger, tracer
 
 
-def create_store(bucket: str, config: Settings = settings) -> S3Store:
-    """Create the S3 store of one bucket, with the endpoint and keys of `config`."""
-    scheme = "https" if config.GCS_USE_SSL else "http"
+def create_store(bucket: str) -> S3Store:
+    """Create the S3 store of one bucket, with the endpoint and keys of the settings."""
+    scheme = "https" if settings.GCS_USE_SSL else "http"
     return S3Store(
         bucket,
-        endpoint=f"{scheme}://{config.GCS_ENDPOINT}",
-        access_key_id=config.GCS_HMAC_ACCESS_ID,
-        secret_access_key=config.GCS_HMAC_SECRET.get_secret_value(),
-        region=config.GCS_REGION,
-        client_options={"allow_http": not config.GCS_USE_SSL},
+        endpoint=f"{scheme}://{settings.GCS_ENDPOINT}",
+        access_key_id=settings.GCS_HMAC_ACCESS_ID,
+        secret_access_key=settings.GCS_HMAC_SECRET.get_secret_value(),
+        region=settings.GCS_REGION,
+        client_options={"allow_http": not settings.GCS_USE_SSL},
     )
 
 

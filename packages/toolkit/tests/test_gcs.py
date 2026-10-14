@@ -14,7 +14,7 @@ from obstore.store import MemoryStore, ObjectStore
 from pydantic import SecretStr
 
 from toolkit import gcs
-from toolkit.settings import Settings
+from toolkit.settings import settings
 
 TREE = {"ano=2024/mes=1/a.parquet": b"a", "ano=2024/b.parquet": b"b"}
 
@@ -135,16 +135,14 @@ def s3_endpoint() -> Iterator[str]:
 
 @pytest.mark.s3
 async def test_the_store_built_from_the_settings_works_over_the_s3_protocol(
-    s3_endpoint, tmp_path
+    s3_endpoint, tmp_path, monkeypatch
 ):
     """Work over the S3 protocol with the store built from the settings."""
-    config = Settings(
-        GCS_ENDPOINT=s3_endpoint,
-        GCS_USE_SSL=False,
-        GCS_HMAC_ACCESS_ID="id",
-        GCS_HMAC_SECRET=SecretStr("secret"),
-        GCS_REGION="us-east-1",
-    )
+    monkeypatch.setattr(settings, "GCS_ENDPOINT", s3_endpoint)
+    monkeypatch.setattr(settings, "GCS_USE_SSL", False)
+    monkeypatch.setattr(settings, "GCS_HMAC_ACCESS_ID", "id")
+    monkeypatch.setattr(settings, "GCS_HMAC_SECRET", SecretStr("secret"))
+    monkeypatch.setattr(settings, "GCS_REGION", "us-east-1")
     httpx2.put(f"http://{s3_endpoint}/bucket").raise_for_status()
 
-    await upload_list_and_delete(gcs.create_store("bucket", config), tmp_path)
+    await upload_list_and_delete(gcs.create_store("bucket"), tmp_path)

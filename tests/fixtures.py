@@ -28,7 +28,7 @@ from obstore.store import MemoryStore
 from pydantic import SecretStr
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.engines.protocol import Engine
-from toolkit.settings import Settings
+from toolkit.settings import settings
 
 from prefect_rj_iplanrio import utils
 
@@ -440,28 +440,21 @@ def store() -> MemoryStore:
 
 @pytest.fixture(scope="module")
 def fake_gcs() -> Iterator[FakeGcs]:
-    """Serve a fake GCS, and point `deltalake` at it with the environment of its GCS client."""
+    """Serve a fake GCS, and point `deltalake` (environment) and `obstore` (settings) at it."""
     server = FakeGcs()
 
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("GOOGLE_BASE_URL", server.url)
         patch.setenv("GOOGLE_SKIP_SIGNATURE", "true")
+        patch.setattr(settings, "GCS_ENDPOINT", server.endpoint)
+        patch.setattr(settings, "GCS_USE_SSL", False)
+        patch.setattr(settings, "GCS_HMAC_ACCESS_ID", "key")
+        patch.setattr(settings, "GCS_HMAC_SECRET", SecretStr("secret"))
 
         try:
             yield server
         finally:
             server.stop()
-
-
-@pytest.fixture(scope="module")
-def fake_gcs_settings(fake_gcs: FakeGcs) -> Settings:
-    """Return settings that make `obstore` reach the fake GCS, with keys that it ignores."""
-    return Settings(
-        GCS_ENDPOINT=fake_gcs.endpoint,
-        GCS_USE_SSL=False,
-        GCS_HMAC_ACCESS_ID="key",
-        GCS_HMAC_SECRET=SecretStr("secret"),
-    )
 
 
 @pytest.fixture(scope="module")

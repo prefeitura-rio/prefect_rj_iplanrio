@@ -1,10 +1,9 @@
 {#
 {
   "kind": "template",
-  "description": "Load DuckDB extensions and the GCS filesystem.",
+  "description": "Set the memory limit and the temp directory, and load DuckDB extensions.",
   "inputs": {
     "extensions": "Extensions to install and load, each with name and community.",
-    "has_gcs_secret": "Whether HMAC keys are configured, so httpfs is installed.",
     "memory_limit": "DuckDB memory limit literal, or false to keep the default.",
     "temp_directory": "Directory literal for spilling to disk, or false to keep the default."
   }
@@ -18,7 +17,3 @@ SET memory_limit = {{ memory_limit }};
 SET temp_directory = {{ temp_directory }};
 {% endif %}
 {% include "duckdb/load_extensions.sql" %}
-{% if has_gcs_secret %}
-INSTALL httpfs;
-LOAD httpfs;
-{% endif %}

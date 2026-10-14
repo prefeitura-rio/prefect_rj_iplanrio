@@ -75,7 +75,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 
 - Autenticação por workload identity (ADC): `google.auth.default(scopes=...)`. Sem arquivo de service account, sem `GOOGLE_APPLICATION_CREDENTIALS` e sem credencial em imagem.
 - HTTP usa `httpx2`, e `requests` é proibido.
-- O `GCS` só passa por `toolkit.gcs` (`obstore`, chaves `HMAC` de `Settings`). Ele não apaga em lote: apague objeto por objeto, com concorrência limitada. O `DuckDB` escreve no `GCS` com `COPY ... TO 'gs://...'`, menos no `dump` de um banco: ele grava `Parquet` local e o `deltalake` escreve a tabela `Delta` no `bucket`, pelo ADC.
+- O `GCS` só passa por `toolkit.gcs` (`obstore`, chaves `HMAC` de `Settings`). Ele não apaga em lote: apague objeto por objeto, com concorrência limitada. O `DuckDB` não acessa o `GCS`: no `dump` de um banco ele grava `Parquet` local e o `deltalake` escreve a tabela `Delta` no `bucket`, pelo ADC.
 - O BigQuery só passa por `toolkit.bigquery`. A tabela final é uma tabela externa sobre o prefixo, criada depois que os dados existem. Uma tabela `Delta` é uma tabela `BigLake` e exige uma conexão.
 - O `dump` de um banco não repete dado: cada janela tem uma impressão digital no `ledger` da tabela `Delta` (`toolkit.delta`), e só uma janela que mudou é trocada, em um `commit` atômico. O `md5` dá a impressão digital (`hash()` do `DuckDB` pode mudar entre versões). `deltalake` só em `toolkit/delta.py`.
 
@@ -85,7 +85,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 - Todo log passa por `toolkit.telemetry.logger` (`prefect.toolkit`), no formato `<Componente> <ação> <estado>: contexto`, com o nível do guia do repositório (Seção 5.5). O nível vem só de `Settings.LOG_LEVEL`. A saída de ferramentas externas fica como vem.
 - Uma operação (consulta, instrução, envio, exclusão) é um `span`, com o nome em `constants.py`. Não há histograma de duração, porque o `SigNoz` a deriva dos `spans`, e não se decora `flow` nem `task`.
 - Um instrumento de `telemetry.py` é só para totais que um `span` não dá (linhas, bytes), com unidade e atributos de cardinalidade baixa. Valor de dado, id de linha e mensagem de erro não são atributos.
-- O pacote usa só a API do `OpenTelemetry`. Quem inicia o processo chama `configure_telemetry()` depois de `import prefect`. Ela lê o `singleton` `settings` (`OTEL_*`) e não recebe `settings` como parâmetro.
+- O pacote usa só a API do `OpenTelemetry`. Os `flows` compartilhados de `prefect_rj_iplanrio.flows` chamam `configure_telemetry()` ao serem importados, depois de `import prefect`; um `flow` próprio faz o mesmo. Ela lê o `singleton` `settings` (`OTEL_*`) e não recebe `settings` como parâmetro.
 
 ## 7. Testes
 

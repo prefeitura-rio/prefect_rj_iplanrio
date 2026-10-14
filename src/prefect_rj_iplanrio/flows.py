@@ -2,11 +2,14 @@
 
 from prefect import flow
 from toolkit.dbt import DbtRun
+from toolkit.telemetry import configure_telemetry
 
 from .constants import RETRIES, RETRY_DELAY_SECONDS
 from .hooks import notify_failure
 from .tasks import dump_db_to_gcs, publish_table_in_bq, run_dbt
 from .types import Cloud, Database, DumpMode, DumpOptions, Read, Table
+
+configure_telemetry()
 
 
 @flow(

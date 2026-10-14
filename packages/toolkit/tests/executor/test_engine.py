@@ -2,10 +2,9 @@ from contextlib import nullcontext
 
 import polars as pl
 import pytest
-from pydantic import SecretStr
 
 from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.settings import Settings
+from toolkit.settings import settings
 
 
 async def collect(engine, sql: str, **options) -> list[pl.DataFrame]:
@@ -83,30 +82,14 @@ async def test_a_transaction_keeps_its_writes_only_on_success(
     assert frame["n"].to_list() == [count]
 
 
-@pytest.mark.parametrize(
-    ("keys", "secrets"),
-    [
-        pytest.param(("id", "top"), [("gcs",)], id="keys_create_the_gcs_secret"),
-        pytest.param(("", ""), [], id="no_keys_no_secret"),
-    ],
-)
-async def test_the_gcs_secret_follows_the_hmac_keys(keys, secrets):
-    """Create the GCS secret only if the HMAC keys are set."""
-    config = Settings(GCS_HMAC_ACCESS_ID=keys[0], GCS_HMAC_SECRET=SecretStr(keys[1]))
-
-    async with DuckDBEngine.connect(config=config) as engine:
-        [frame] = await collect(engine, "SELECT type FROM duckdb_secrets()")
-
-    assert frame.rows() == secrets
-
-
 async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
-    tmp_path,
+    tmp_path, monkeypatch
 ):
     """Take the memory limit and the temp directory from the settings."""
-    config = Settings(DUCKDB_MEMORY_LIMIT="1GiB", DUCKDB_TEMP_DIRECTORY=str(tmp_path))
+    monkeypatch.setattr(settings, "DUCKDB_MEMORY_LIMIT", "1GiB")
+    monkeypatch.setattr(settings, "DUCKDB_TEMP_DIRECTORY", str(tmp_path))
 
-    async with DuckDBEngine.connect(config=config) as engine:
+    async with DuckDBEngine.connect() as engine:
         [frame] = await collect(
             engine,
             "SELECT current_setting('memory_limit') AS m, current_setting('temp_directory') AS t",

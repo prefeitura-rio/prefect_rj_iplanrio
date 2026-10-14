@@ -15,7 +15,7 @@ from duckdb import DuckDBPyConnection
 from psycopg.sql import Literal
 
 from ...functions.registry import register_functions
-from ...settings import Settings, settings
+from ...settings import settings
 from ...types import QueryParams, TemplateValue
 from ..constants import DEFAULT_BATCH_SIZE
 from ..render import render_template
@@ -55,23 +55,16 @@ def quoted(value: str) -> Literal | bool:
     return Literal(value) if value else False
 
 
-def setup_statements(
-    extensions: Sequence[Extension], config: Settings
-) -> list[tuple[str, QueryParams | None]]:
-    """Return the statements, in order, that prepare a fresh connection."""
-    setup = render_template(
+def setup_sql(extensions: Sequence[Extension]) -> str:
+    """Return the statements that prepare a fresh connection, with the limits of the settings."""
+    return render_template(
         "duckdb/setup",
         {
             "extensions": extension_values(extensions),
-            "memory_limit": quoted(config.DUCKDB_MEMORY_LIMIT),
-            "temp_directory": quoted(config.DUCKDB_TEMP_DIRECTORY),
-            "has_gcs_secret": bool(config.GCS_HMAC_ACCESS_ID),
+            "memory_limit": quoted(settings.DUCKDB_MEMORY_LIMIT),
+            "temp_directory": quoted(settings.DUCKDB_TEMP_DIRECTORY),
         },
     )
-
-    secret = render_template("duckdb/create_gcs_secret", {})
-    keys = [config.GCS_HMAC_ACCESS_ID, config.GCS_HMAC_SECRET.get_secret_value()]
-    return [(setup, None), *([(secret, keys)] if config.GCS_HMAC_ACCESS_ID else [])]
 
 
 def open_batches(
@@ -106,18 +99,15 @@ class DuckDBEngine:
     @classmethod
     @asynccontextmanager
     async def connect(
-        cls,
-        extensions: Sequence[Extension] = (),
-        config: Settings = settings,
+        cls, extensions: Sequence[Extension] = ()
     ) -> AsyncGenerator[Self]:
-        """Open an in-memory connection with extensions and the GCS secret loaded."""
+        """Open an in-memory connection with the extensions loaded."""
         async with AsyncExitStack() as stack:
             connection = await to_thread(duckdb.connect)
             stack.push_async_callback(to_thread, connection.close)
             engine = cls(connection)
 
-            for sql, params in setup_statements(extensions, config):
-                await engine.execute(sql, params=params)
+            await engine.execute(setup_sql(extensions))
 
             yield engine
 
