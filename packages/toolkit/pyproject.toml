@@ -18,13 +18,14 @@ dependencies = [
   "opentelemetry-exporter-otlp-proto-http>=1.45.1",
   "opentelemetry-instrumentation-logging>=0.66b1",
   "opentelemetry-sdk>=1.45.1",
-  "oracledb>=2.0.0",
   "polars[pyarrow]>=2.0.0",
   "prefect==3.4.9",
   "prefect-dbt==0.7.5",
   "psycopg[binary]>=3.3.4",
+  "pyarrow>=20.0.0",
   "pydantic>=2.13.4",
   "pydantic-settings>=2.14.2",
+  "python-slugify>=8.0.4",
 ]
 
 [dependency-groups]
@@ -33,6 +34,7 @@ dev = [
   "basedpyright>=1.30.0",
   "hypothesis>=6.165.10",
   "moto[server]>=5.1.0",
+  "pyarrow-stubs>=20.0.0.20260819",
   "pyrefly>=1.3.2",
   "pytest>=8.0.0",
   "pytest-asyncio>=0.24.0",
@@ -136,6 +138,10 @@ root = "toolkit/dbt.py"
 reportMissingTypeStubs = false  # prefect_dbt ships no stubs
 
 [[tool.basedpyright.executionEnvironments]]
+root = "toolkit/functions/registry.py"
+reportUnknownMemberType = false  # the stubs of duckdb type create_function with a pyarrow Array that has no type argument
+
+[[tool.basedpyright.executionEnvironments]]
 root = "toolkit/executor/sources/backends/gsheets.py"
 reportUnknownVariableType = false  # google-auth types its credentials loosely
 reportUnknownMemberType = false  # same cause
@@ -182,12 +188,6 @@ preset = "strict"
 # No inline ignore comments: every suppression lives here, with its reason.
 # A file takes the first sub-config that matches it, so a file listed on its own
 # repeats the test rules it would get from "tests/**".
-[[tool.pyrefly.sub-config]]
-matches = "toolkit/executor/sources/backends/oracle.py"
-
-[tool.pyrefly.sub-config.errors]
-no-matching-overload = false  # polars takes any DB-API connection at runtime
-
 [[tool.pyrefly.sub-config]]
 matches = "toolkit/executor/sources/registry.py"
 

@@ -1,134 +1,56 @@
-"""Oracle: DuckDB has no Oracle extension, so the source opens an `oracledb` client."""
+"""Oracle, read through the community DuckDB `oracle_scanner` extension."""
 
-from asyncio import to_thread
-from collections.abc import AsyncGenerator, Callable, Iterator
-from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass, field
-from typing import Protocol, Self, cast, override
+from dataclasses import dataclass
+from typing import ClassVar, Self, override
 
-import oracledb
-import polars as pl
+from psycopg.sql import Identifier, Literal
 
-from ....types import QueryParams, QueryValue
-from ...constants import DEFAULT_BATCH_SIZE
+from ....types import TemplateValue
+from ...constants import SECRET
+from ...engines.duckdb import Extension
 from ...engines.protocol import Engine
+from ...render import render_template
 from ..base import SourceBase
 from ..protocols import DBConn, SourceContext
 
 
-def connect_oracle(connection: DBConn) -> oracledb.Connection:
-    """Open an `oracledb` thin-mode connection."""
-    return oracledb.connect(
-        user=connection.user,
-        password=connection.password,
-        dsn=f"{connection.hostname}:{connection.port}/{connection.database}",
-    )
-
-
-class Cursor(Protocol):
-    """The part of a DB-API cursor that the client uses.
-
-    `oracledb` types it loosely.
-    """
-
-    def execute(self, sql: str, params: list[QueryValue]) -> object:
-        """Run one statement."""
-
-    def close(self) -> None:
-        """Close the cursor."""
-
-
-def run_statement(
-    connection: oracledb.Connection, sql: str, params: QueryParams | None
-) -> None:
-    """Run one statement on `connection` and commit."""
-    cursor = cast("Cursor", cast("object", connection.cursor()))
-    try:
-        cursor.execute(sql, list(params or []))
-        connection.commit()
-    finally:
-        cursor.close()
-
-
-def open_batches(
-    connection: oracledb.Connection,
-    sql: str,
-    params: QueryParams | None,
-    batch_size: int,
-) -> Iterator[pl.DataFrame]:
-    """Run `sql` and return a lazy stream of Polars batches."""
-    options = {"parameters": list(params)} if params else None
-    return iter(
-        pl.read_database(
-            sql,
-            connection,
-            iter_batches=True,
-            batch_size=batch_size,
-            execute_options=options,
-        )
-    )
-
-
-def next_batch(batches: Iterator[pl.DataFrame]) -> pl.DataFrame | None:
-    """Return the next batch, or `None` when the stream is done."""
-    return next(batches, None)
-
-
-@dataclass(frozen=True, slots=True)
-class OracleClient:
-    """Run Oracle SQL on an `oracledb` connection.
-
-    It follows the `Engine` protocol. A column keeps the name that Oracle returns, upper
-    case if unquoted. Its Polars type comes from the first batch.
-    """
-
-    connection: oracledb.Connection
-
-    async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
-        """Run one statement and commit."""
-        await to_thread(run_statement, self.connection, sql, params)
-
-    async def query(
-        self,
-        sql: str,
-        *,
-        params: QueryParams | None = None,
-        batch_size: int = DEFAULT_BATCH_SIZE,
-    ) -> AsyncGenerator[pl.DataFrame]:
-        """Run one query and yield Polars frames of up to `batch_size` rows."""
-        batches = await to_thread(
-            open_batches, self.connection, sql, params, batch_size
-        )
-        first = await to_thread(next_batch, batches)
-        yield pl.DataFrame() if first is None else first
-
-        while (batch := await to_thread(next_batch, batches)) is not None:
-            yield batch
-
-
 @dataclass(frozen=True, slots=True)
 class OracleSource(SourceBase):
-    """Read Oracle with `oracledb` in thin mode."""
+    """Oracle, read through the community DuckDB `oracle_scanner` extension.
+
+    The extension needs no Oracle client. A template reads with `oracle_query`.
+    """
+
+    extensions: ClassVar[tuple[Extension, ...]] = (
+        Extension("oracle_scanner", community=True),
+    )
 
     conn: DBConn
-    connect: Callable[[DBConn], oracledb.Connection] = field(default=connect_oracle)
 
+    @override
     @classmethod
     def from_context(cls, context: SourceContext) -> Self:
         """Build the Oracle source from the connection data.
 
         Raise `ValueError` if the context has none.
         """
-        return cls(context.require_conn("oracle"))
+        return cls(context.require_conn(cls.name))
 
     @override
-    @asynccontextmanager
-    async def open(self, engine: Engine) -> AsyncGenerator[Engine]:
-        """Connect to Oracle and yield an `OracleClient`.
+    async def setup(self, client: Engine) -> None:
+        """Create the secret that `oracle_query` reads.
 
-        The DuckDB `engine` is not used.
+        The password is a bound value. `database` is the Oracle service name.
         """
-        async with AsyncExitStack() as stack:
-            connection = await to_thread(self.connect, self.conn)
-            stack.push_async_callback(to_thread, connection.close)
-            yield OracleClient(connection)
+        connection = self.conn
+        values: dict[str, TemplateValue] = {
+            "secret": Identifier(SECRET),
+            "host": Literal(connection.hostname),
+            "port": Literal(connection.port),
+            "service": Literal(connection.database),
+            "user": Literal(connection.user),
+        }
+        await client.execute(
+            render_template("duckdb/create_oracle_secret", values),
+            params=[connection.password],
+        )

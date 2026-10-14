@@ -27,6 +27,7 @@ class DuckDBSource(SourceBase, skip=True):
 
     conn: DBConn
 
+    @override
     @classmethod
     def from_context(cls, context: SourceContext) -> Self:
         """Build the source from the connection data of the context.

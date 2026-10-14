@@ -1,12 +1,15 @@
 """Render SQL templates and run them on a client."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from psycopg.sql import Identifier
+
 from ..constants import EXECUTE_SPAN, TEMPLATE_ATTRIBUTE
 from ..telemetry import logger, tracer
-from ..types import QueryParams, TemplateValue
+from ..types import Described, QueryParams, TemplateValue
+from ..utils import column_aliases, normalize_column
 from .constants import DEFAULT_BATCH_SIZE, TEMPLATES_DIR
 from .dataset import Result
 from .engines.protocol import Engine
@@ -69,3 +72,39 @@ class Executor:
         sql = render_template(path, mapping or {}, roots=self.roots)
         frames = self.client.query(sql, params=params, batch_size=batch_size)
         return Result(expect, columns, path, frames)
+
+    async def normalize_columns(
+        self,
+        table: str,
+        columns: Sequence[str] | None = None,
+        separator: str = "_",
+        lowercase: bool = True,
+    ) -> dict[str, str]:
+        """Rename the columns of a table of the connection, and return what changed.
+
+        `columns` names the columns to rename, and `None` renames all of them. The table
+        is one of the connection itself, never of an attached source.
+
+        ```python
+        await executor.normalize_columns("t", None, "_", True)
+        # {"Código do Órgão": "codigo_do_orgao"}
+        ```
+        """
+        identifier = Identifier(table)
+        if columns is None:
+            described = await self.query(
+                "duckdb/describe_table", {"table": identifier}, expect=Described
+            )
+            columns = described.frame["column_name"].to_list()
+
+        changed = {
+            name: new
+            for name in columns
+            if (new := normalize_column(name, separator, lowercase)) != name
+        }
+        if changed:
+            renames = column_aliases(list(changed), separator, lowercase)
+            await self.execute(
+                "duckdb/rename_columns", {"table": identifier, "renames": renames}
+            )
+        return changed

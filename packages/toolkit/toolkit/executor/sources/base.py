@@ -3,12 +3,13 @@
 from abc import ABC
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import ClassVar
+from typing import ClassVar, Self
 
 from autoregistry import Registry
 
 from ..engines.duckdb import Extension, load_extensions
 from ..engines.protocol import Engine
+from .protocols import SourceContext
 
 
 class SourceBase(Registry, ABC, suffix="Source"):
@@ -25,6 +26,14 @@ class SourceBase(Registry, ABC, suffix="Source"):
         """Register the subclass under its class name without the `Source` suffix."""
         super().__init_subclass__(**kwargs)
         cls.name = cls.__registry__.name
+
+    @classmethod
+    def from_context(cls, context: SourceContext) -> Self:
+        """Build a source that needs no connection data.
+
+        A source with connection data overrides it.
+        """
+        return cls()
 
     @asynccontextmanager
     async def open(self, engine: Engine) -> AsyncGenerator[Engine]:

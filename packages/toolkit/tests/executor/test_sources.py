@@ -4,6 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.backends.mssql import MSSQLSource
 from toolkit.executor.sources.backends.mysql import MySQLSource
 from toolkit.executor.sources.backends.oracle import OracleSource
@@ -15,7 +16,7 @@ BACKENDS = [PostgresSource, MySQLSource, MSSQLSource]
 
 
 def setup_statements(
-    source_class: type[PostgresSource], conn: DBConn, fake_engine
+    source_class: type[PostgresSource] | type[OracleSource], conn: DBConn, fake_engine
 ) -> tuple[list[str], list[QueryParams | None]]:
     """Run the setup of a source and return its statements."""
     client = fake_engine()
@@ -23,6 +24,7 @@ def setup_statements(
     return client.statements, client.params
 
 
+@pytest.mark.parametrize("source", [*BACKENDS, OracleSource])
 @given(
     first=st.text(min_size=1),
     second=st.text(min_size=1),
@@ -31,19 +33,17 @@ def setup_statements(
     ),  # a NUL byte cannot be quoted
 )
 def test_the_password_is_a_bound_value_that_never_reaches_the_statement_text(
-    first, second, user, fake_engine
+    source, first, second, user, fake_engine
 ):
     """Bind the password, so it never reaches the statement text."""
     statements = [
-        setup_statements(
-            PostgresSource, DBConn("h", 5432, "d", user, password), fake_engine
-        )
+        setup_statements(source, DBConn("h", 5432, "d", user, password), fake_engine)
         for password in (first, second)
     ]
 
     assert statements[0][0] == statements[1][0]
-    assert statements[0][1] == [[first], None]
-    assert statements[1][1] == [[second], None]
+    assert statements[0][1][0] == [first]
+    assert statements[1][1][0] == [second]
 
 
 @pytest.mark.parametrize(
@@ -72,3 +72,8 @@ def test_a_source_that_needs_a_connection_names_itself_when_it_has_none(source):
     """Name the source in the error when it has no connection."""
     with pytest.raises(ValueError, match=f"Source {source.name} needs connection data"):
         source.from_context(SourceContext(None))
+
+
+def test_a_source_without_connection_data_is_built_from_any_context():
+    """Build `BigQuerySource` from a context that has no connection."""
+    assert BigQuerySource.from_context(SourceContext(None)) == BigQuerySource()
