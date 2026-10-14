@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass, field
 from typing import ClassVar, Literal
 
-from pydantic import Field, SecretStr
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,20 +16,18 @@ class Settings(BaseSettings):
         "env_file": ".env",
     }
 
-    BIGQUERY_BIGLAKE_CONNECTION: str = ""
     BIGQUERY_PROJECT: str = ""
     DUCKDB_MEMORY_LIMIT: str = ""
     DUCKDB_TEMP_DIRECTORY: str = ""
-    DUMP_CONCURRENCY: int = Field(default=1, gt=0)
-    DUMP_RETRY_ATTEMPTS: int = Field(default=3, gt=0)
-    DUMP_RETRY_DELAY_SECONDS: float = Field(default=300.0, ge=0)
     GCS_ENDPOINT: str = "storage.googleapis.com"
     GCS_HMAC_ACCESS_ID: str = ""
     GCS_HMAC_SECRET: SecretStr = SecretStr("")
     GCS_REGION: str = "auto"
     GCS_USE_SSL: bool = True
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_HEADERS: SecretStr = SecretStr("")
+    OTEL_SERVICE_NAME: str = "prefect-rj-iplanrio"
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
-    STAGING_BUCKET: str = ""
 
 
 settings = Settings()

@@ -1,27 +1,22 @@
-"""Shared type aliases and protocols used across the toolkit."""
+"""Type aliases and marker types shared by the toolkit. They name no toolkit class, so every module may import them."""
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from psycopg.sql import Composable
 from pydantic import Field
 
 type DatabaseValue = bool | int | float | str | datetime | None
-type DatabaseRow = tuple[object, ...]
-type DatabaseRecord = dict[str, object]
 type QueryValue = DatabaseValue | Sequence[str]
 type QueryParams = Sequence[QueryValue]
+type LogValue = str | int | float | bool
 type NonEmptyString = Annotated[str, Field(min_length=1)]
-type StepValue = (
-    Composable
-    | bool
-    | int
-    | list[StepValue]
-    | tuple[StepValue, ...]
-    | Mapping[str, StepValue]
-)
-"""A value of a cleaning step: never plain text, which would enter the SQL raw."""
+type SourceFormat = Literal["PARQUET", "CSV"]
+type DbtCommand = Literal[
+    "build", "run", "test", "source freshness", "seed", "snapshot", "deps"
+]
+
 type TemplateValue = (
     str
     | bool
@@ -30,3 +25,11 @@ type TemplateValue = (
     | Sequence[TemplateValue]
     | Mapping[str, TemplateValue]
 )
+
+
+class Geometry(bytes):
+    """Marks a schema field that holds a DuckDB ``GEOMETRY`` column.
+
+    DuckDB sends it as WKB, and Polars reads it as the ``geoarrow.wkb`` extension type,
+    which keeps the CRS.
+    """
