@@ -20,7 +20,7 @@ from .constants import TEMPLATES_DIR
 
 @lru_cache
 def jinja_environment(roots: tuple[Path, ...]) -> Environment:
-    """Return one strict Jinja environment for SQL template directories.
+    """Return a strict Jinja environment over the template directories.
 
     The first directory that has a template wins.
     """
@@ -33,7 +33,13 @@ def jinja_environment(roots: tuple[Path, ...]) -> Environment:
 
 
 def to_sql(value: TemplateValue) -> TemplateValue:
-    """Convert composables, including those nested in lists and mappings, to SQL."""
+    """Convert composables, also inside lists and mappings, to SQL text.
+
+    ```python
+    to_sql({"table": Identifier("s", "t"), "ids": [Literal(1)]})
+    # {"table": '"s"."t"', "ids": ["1"]}
+    ```
+    """
     match value:
         case Composable():
             return value.as_string(None)
@@ -51,16 +57,10 @@ def render_template(
     *,
     roots: tuple[Path, ...] = (TEMPLATES_DIR,),
 ) -> LiteralString:
-    """Render one strict Jinja SQL template with composable values converted to SQL.
+    """Render one strict Jinja SQL template and return the SQL.
 
-    :param path: Template path without ``.sql``, such as ``duckdb/write_all``.
-    :param mapping: Values for the template. Build them with ``Identifier``
-        and ``Literal``.
-    :param roots: Template directories, searched in order. The toolkit directory
-        is the default.
-    :returns: The final SQL.
-    :raises jinja2.UndefinedError: If the template uses a missing variable.
-    :raises jinja2.TemplateNotFound: If no directory has the template.
+    `path` has no `.sql`, such as `duckdb/attach`. Raise `UndefinedError` for a missing
+    variable.
     """
     rendered = {key: to_sql(value) for key, value in mapping.items()}
     template = jinja_environment(roots).get_template(f"{path}.sql").render(rendered)

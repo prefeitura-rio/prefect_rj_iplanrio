@@ -29,8 +29,7 @@ class BigQuery:
     async def connect(cls, project: str | None = None) -> AsyncGenerator[Self]:
         """Build a client for one project and close it off the event loop.
 
-        :param project: The project. Without it the ``BIGQUERY_PROJECT`` setting is
-            used, and without both the client uses the ADC default project.
+        The project is the argument, then `BIGQUERY_PROJECT`, then the ADC project.
         """
         async with AsyncExitStack() as stack:
             client = await to_thread(
@@ -40,9 +39,10 @@ class BigQuery:
             yield cls(client=client)
 
     async def table_exists(self, table: str) -> bool:
-        """Return whether ``project.dataset.table`` exists."""
+        """Return whether `project.dataset.table` exists."""
 
         def run() -> bool:
+            """Return whether the client finds the table."""
             try:
                 self.client.get_table(table)
             except NotFound:
@@ -65,10 +65,7 @@ class BigQuery:
     ) -> None:
         """Create or replace an external table over a bucket prefix.
 
-        :param table: ``project.dataset.table``.
-        :param uri_prefix: ``gs://bucket/dataset/table`` without a trailing slash.
-        :param source_format: Parquet or CSV.
-        :param connection_id: BigLake connection. Omit it for a plain external table.
+        Set `connection_id` to make a BigLake table.
         """
         config = ExternalConfig(source_format)
         config.source_uris = [f"{uri_prefix}/*"]
@@ -82,6 +79,7 @@ class BigQuery:
             config.connection_id = connection_id
 
         def run() -> None:
+            """Replace the table with the external one."""
             self.client.delete_table(table, not_found_ok=True)
             external = Table(table)
             external.external_data_configuration = config

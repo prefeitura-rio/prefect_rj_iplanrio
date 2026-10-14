@@ -1,11 +1,13 @@
-"""Schema classes and the check of a Polars frame against one.
+"""Schema classes, and the check of a Polars frame against one.
 
-A schema class is a ``TypedDict``, a dataclass, a ``NamedTuple`` or any class with
-annotated fields. Each field is a column, and ``X | None`` lets it hold nulls::
+A schema class is a `TypedDict`, a dataclass, a `NamedTuple` or any class with annotated
+fields. `X | None` lets a column hold nulls.
 
-    class Order(TypedDict):
-        id: int
-        note: str | None
+```python
+class Order(TypedDict):
+    id: int
+    note: str | None
+```
 """
 
 from dataclasses import dataclass
@@ -33,7 +35,17 @@ class Column:
 def schema_of(schema: type) -> dict[str, Column]:
     """Return the expected columns of a schema class, in declaration order.
 
-    :raises TypeError: If an annotation has no Polars type. The message names the field.
+    Raise `TypeError` if an annotation has no Polars type.
+
+    ```python
+    class Order(TypedDict):
+        id: int
+        note: str | None
+
+    schema_of(Order)
+    # {"id": Column(dtype=Int64, nullable=False),
+    #  "note": Column(dtype=String, nullable=True)}
+    ```
     """
     hints = cast("dict[str, object]", get_type_hints(schema))
     return {
@@ -53,7 +65,13 @@ def column_of(name: str, annotation: object) -> Column:
 
 
 def split_nullable(annotation: object) -> tuple[object, bool]:
-    """Return the annotation without ``| None``, and whether it had ``| None``."""
+    """Return the annotation without `| None`, and whether it had `| None`.
+
+    ```python
+    split_nullable(str | None)  # (str, True)
+    split_nullable(int)  # (int, False)
+    ```
+    """
     if get_origin(annotation) is not UnionType:
         return annotation, False
 
@@ -67,7 +85,7 @@ def split_nullable(annotation: object) -> tuple[object, bool]:
 
 
 def dtype_of(annotation: object) -> pl.DataType | type[pl.DataType]:
-    """Return the Polars type of an annotation without ``| None``."""
+    """Return the Polars type of an annotation without `| None`."""
     if get_origin(annotation) is list:
         (item,) = cast("tuple[object]", get_args(annotation))
         return pl.List(dtype_of(item))
@@ -87,12 +105,10 @@ def dtype_of(annotation: object) -> pl.DataType | type[pl.DataType]:
 
 
 def validate_frame(frame: pl.DataFrame, columns: dict[str, Column]) -> pl.DataFrame:
-    """Check a frame against the columns and return it with the schema's order.
+    """Check a frame against the columns and return it in schema order.
 
-    A frame with no rows and no columns is an empty result from a client that cannot
-    tell the columns of an empty result: it becomes an empty frame with the schema.
-
-    :raises SchemaError: With every problem found, naming each column.
+    Raise `SchemaError` with every problem found. A frame with no rows and no columns
+    becomes an empty frame with the schema.
     """
     if frame.shape == (0, 0):
         return pl.DataFrame(schema={name: c.dtype for name, c in columns.items()})
@@ -130,7 +146,7 @@ def name_problems(frame: pl.DataFrame, columns: dict[str, Column]) -> list[str]:
 def fit(series: pl.Series, column: Column) -> pl.Series:
     """Return the series with the type that the column expects.
 
-    :raises SchemaError: If the type, the nulls or a value do not fit.
+    Raise `SchemaError` if the type, the nulls or a value do not fit.
     """
     if series.dtype == pl.Null:
         series = series.cast(column.dtype)
@@ -154,10 +170,15 @@ def fit(series: pl.Series, column: Column) -> pl.Series:
 
 
 def widen(dtype: pl.DataType) -> pl.DataType:
-    """Return the type with every integer as ``Int64`` and every float as ``Float64``.
+    """Return the type with integers as `Int64` and floats as `Float64`.
 
-    This holds inside lists and structs too. A decimal or a timestamp keeps its own
-    precision, and a string is never read as a number.
+    This holds inside lists and structs.
+
+    ```python
+    widen(pl.Int8)  # Int64
+    widen(pl.List(pl.Float32))  # List(Float64)
+    widen(pl.Decimal(10, 2))  # Decimal(10, 2)
+    ```
     """
     if dtype.is_integer():
         return pl.Int64()
@@ -180,10 +201,10 @@ def widen(dtype: pl.DataType) -> pl.DataType:
 
 
 def same_type(actual: pl.DataType, expected: pl.DataType | type[pl.DataType]) -> bool:
-    """Return whether two types are equal. Extension types compare by name only.
+    """Return whether two types are equal.
 
-    An extension type carries its metadata, such as the CRS of a geometry, and that
-    does not make it another type.
+    Extension types compare by name only. Their metadata, such as a geometry CRS, does
+    not make them another type.
     """
     match actual, expected:
         case pl.Extension(), pl.Extension():

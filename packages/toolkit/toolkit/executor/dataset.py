@@ -12,20 +12,21 @@ from .schema import Column, validate_frame
 
 @dataclass(frozen=True, slots=True)
 class Dataset[Schema]:
-    """A Polars frame that fits a schema class. The type parameter is that class."""
+    """A Polars frame that fits a schema class, the type parameter."""
 
     schema: type[Schema]
     frame: pl.DataFrame
 
     def __len__(self) -> int:
+        """Return the number of rows."""
         return self.frame.height
 
 
 @dataclass(frozen=True, slots=True)
 class Result[Schema]:
-    """The result of a query: ``await`` it for one dataset, or iterate it in batches.
+    """The result of a query, read once.
 
-    Each batch is checked against the schema when it arrives. A result is read once.
+    `await` it for one dataset, or iterate it for one dataset per batch.
     """
 
     schema: type[Schema]
@@ -61,4 +62,5 @@ class Result[Schema]:
         return Dataset(self.schema, frame)
 
     def __await__(self) -> Generator[object, None, Dataset[Schema]]:
+        """Return the awaitable that collects every batch."""
         return self.collect().__await__()

@@ -9,7 +9,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Settings for the toolkit. Google APIs use ADC (workload identity)."""
+    """Settings of the toolkit.
+
+    Google APIs use ADC (workload identity).
+    """
 
     model_config: ClassVar[SettingsConfigDict] = {
         "extra": "ignore",
@@ -42,11 +45,10 @@ class DatabaseCredentials:
 
 
 def read_database_credentials(secret_path: str) -> DatabaseCredentials:
-    """Read ``<PATH>__DB_USERNAME`` and ``<PATH>__DB_PASSWORD`` from the environment.
+    """Read the credentials of a secret path from the environment.
 
-    :param secret_path: Secret path such as ``/db-oracle-x``.
-    :returns: The credentials.
-    :raises KeyError: If a variable is missing.
+    `/db-oracle-x` reads `DB_ORACLE_X__DB_USERNAME` and `DB_ORACLE_X__DB_PASSWORD`.
+    Raise `KeyError` if one is missing.
     """
     prefix = secret_path.upper().replace("-", "_").replace("/", "")
     return DatabaseCredentials(

@@ -27,12 +27,16 @@ class DbtRun(BaseModel):
     full_refresh: bool = False
 
     def arguments(self) -> list[str]:
-        """Return the dbt CLI arguments, in the order dbt expects.
+        """Return the dbt CLI arguments in the order dbt expects.
 
-        The target and the selection are dropped for a command that takes none,
-        such as ``deps``.
+        A command that takes no target or selection, such as `deps`, gets none.
 
-        :returns: The arguments, without the ``dbt`` word itself.
+        ```python
+        DbtRun(repository="r", select="tag:daily").arguments()
+        # ["run", "--target", "dev", "--select", "tag:daily"]
+        DbtRun(repository="r", command="deps").arguments()
+        # ["deps"]
+        ```
         """
         arguments = list(COMMAND_WORDS.get(self.command, (self.command,)))
 
@@ -56,12 +60,9 @@ class DbtRun(BaseModel):
 
 
 def clone_repository(repository: str, destination: Path) -> Path:
-    """Clone the repository into ``destination`` and return the cloned path.
+    """Clone the repository into `destination` and return its path.
 
-    :param repository: URL of the repository.
-    :param destination: Directory to clone into. It must not exist yet.
-    :returns: The path of the clone.
-    :raises RuntimeError: If the clone fails.
+    The destination must not exist. Raise `RuntimeError` if the clone fails.
     """
     try:
         Repo.clone_from(repository, destination)
@@ -73,23 +74,16 @@ def clone_repository(repository: str, destination: Path) -> Path:
 
 
 def dbt_project_dir(repository_path: Path) -> Path:
-    """Return the dbt project inside a cloned repository.
-
-    :param repository_path: Path of the clone.
-    :returns: The ``queries`` folder when it exists, otherwise ``repository_path``.
-    """
+    """Return the `queries` folder of a clone if it exists, else the clone path."""
     queries_path = repository_path / "queries"
     return queries_path if queries_path.is_dir() else repository_path
 
 
 def execute_dbt(request: DbtRun) -> None:
-    """Clone the repository, install dependencies and run one dbt command.
+    """Clone the repository and run one dbt command in it.
 
-    The clone lives in a temporary directory for the length of the call.
-
-    :param request: The repository and the dbt command.
-    :raises RuntimeError: If the clone fails.
-    :raises ValueError: If a dbt command fails.
+    The clone is temporary, and dbt runs `deps` before the command. Raise `RuntimeError`
+    if the clone fails, and `ValueError` if dbt fails.
     """
     with tempfile.TemporaryDirectory(prefix="dbt_repository_") as directory:
         project_dir = dbt_project_dir(

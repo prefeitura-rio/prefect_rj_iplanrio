@@ -16,10 +16,9 @@ from .protocols import DBConn, SourceContext
 
 @dataclass(frozen=True, slots=True)
 class DuckDBSource(SourceBase, skip=True):
-    """Base class of the databases that DuckDB attaches with an extension.
+    """Base of the databases that DuckDB attaches with an extension.
 
-    A backend subclasses it and only sets the class attributes: ``attach_type``, and
-    optionally ``extensions`` and ``read_only``. The behaviour lives here.
+    A backend only sets `attach_type` and, if needed, `extensions` and `read_only`.
     """
 
     attach_type: ClassVar[str]
@@ -32,15 +31,15 @@ class DuckDBSource(SourceBase, skip=True):
     def from_context(cls, context: SourceContext) -> Self:
         """Build the source from the connection data of the context.
 
-        :raises ValueError: If the context has no connection data.
+        Raise `ValueError` if it has none.
         """
         return cls(context.require_conn(cls.name))
 
     @override
     async def setup(self, client: Engine) -> None:
-        """Create the secret and attach the database as ``src``.
+        """Create the secret and attach the database as `src`.
 
-        The password is a bound value, so it never enters the statement text.
+        The password is a bound value.
         """
         connection = self.conn
         values: dict[str, TemplateValue] = {

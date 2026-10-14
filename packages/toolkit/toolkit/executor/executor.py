@@ -16,15 +16,9 @@ from .schema import schema_of
 
 @dataclass(frozen=True, slots=True)
 class Executor:
-    """Runs the statements of a template on a client.
+    """Run the statements of a template on a client.
 
-    The client is whatever runs SQL: the DuckDB engine, or the client that
-    ``Source.open`` yields for a source.
-
-    :param client: Runs the SQL.
-    :param templates: A directory with the pipeline templates. It is searched
-        before the toolkit templates, so avoid the toolkit folder names such as
-        ``duckdb/``.
+    The `templates` directory of the pipeline is searched before the toolkit templates.
     """
 
     client: Engine
@@ -60,15 +54,16 @@ class Executor:
         expect: type[Schema],
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> Result[Schema]:
-        """Render a query and return its result, checked against the schema class.
+        """Render a query and return its result, checked against `expect`.
 
-        ``await`` the result for one ``Dataset``, or iterate it to get one ``Dataset``
-        per batch of up to ``batch_size`` rows.
+        Raise `SchemaError` if a batch does not fit.
 
-        :param expect: The schema class: a ``TypedDict``, a dataclass or any class with
-            annotated fields. See :func:`toolkit.executor.schema.schema_of`.
-        :raises TypeError: If an annotation of ``expect`` has no Polars type.
-        :raises toolkit.executor.schema.SchemaError: When a batch does not fit the schema.
+        ```python
+        orders = await executor.query("orders", {"source": scan}, expect=Order)
+
+        async for batch in executor.query("orders", expect=Order, batch_size=10_000):
+            ...
+        ```
         """
         columns = schema_of(expect)
         sql = render_template(path, mapping or {}, roots=self.roots)

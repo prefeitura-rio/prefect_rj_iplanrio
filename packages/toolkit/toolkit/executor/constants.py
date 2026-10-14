@@ -12,7 +12,7 @@ from ..types import Geometry
 
 TEMPLATES_DIR: Final = Path(__file__).parent / "templates"
 ALIAS: Final = "src"
-"""The name under which a source database is attached. Templates write ``FROM src.schema.table``."""
+"""The name under which a source database is attached. Templates write `FROM src.schema.table`."""
 
 SECRET: Final = "src_secret"  # noqa: S105
 
@@ -20,10 +20,10 @@ SHEETS_SCOPES: Final = (
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 )
-"""The OAuth scopes the ``gsheets`` extension needs to read and write sheets."""
+"""The OAuth scopes the `gsheets` extension needs to read and write sheets."""
 
 GEOMETRY_EXTENSION: Final = "geoarrow.wkb"
-"""The Arrow extension type that DuckDB uses for ``GEOMETRY``."""
+"""The Arrow extension type that DuckDB uses for `GEOMETRY`."""
 
 SCALAR_TYPES: Final[Mapping[type, pl.DataType | type[pl.DataType]]] = {
     int: pl.Int64,

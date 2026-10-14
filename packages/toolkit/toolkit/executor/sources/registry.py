@@ -1,4 +1,4 @@
-"""Find the provided sources: every class of ``backends/`` registers itself."""
+"""Find the provided sources: every class of `backends/` registers itself."""
 
 import importlib
 import pkgutil
@@ -8,17 +8,21 @@ from .base import SourceBase
 
 
 def get_source(name: str) -> type[SourceBase]:
-    """Return the registered source class for a name. The lookup ignores case.
+    """Return the registered source class for a name.
 
-    :raises KeyError: If the name is unknown.
+    Ignore case. Raise `KeyError` if the name is unknown.
     """
     return load_sources()[name]
 
 
 def load_sources() -> type[SourceBase]:
-    """Import every module of ``backends/`` and return the registry.
+    """Import every module of `backends/` and return the registry.
 
-    Use it like a dict: ``load_sources()["postgres"]`` is the source class.
+    It works like a dict.
+
+    ```python
+    load_sources()["postgres"]  # PostgresSource
+    ```
     """
     for module in pkgutil.iter_modules(backends.__path__):
         importlib.import_module(f"{backends.__name__}.{module.name}")

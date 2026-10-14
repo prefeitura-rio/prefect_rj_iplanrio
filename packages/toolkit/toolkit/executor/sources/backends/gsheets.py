@@ -1,4 +1,4 @@
-"""Google Sheets, read and written through the community DuckDB ``gsheets`` extension."""
+"""Google Sheets, read and written through the community DuckDB `gsheets` extension."""
 
 from asyncio import to_thread
 from collections.abc import Callable, Mapping
@@ -20,7 +20,7 @@ from ..base import SourceBase
 
 @dataclass(frozen=True, slots=True)
 class HttpResponse:
-    """The response that ``google-auth`` reads."""
+    """The response that `google-auth` reads."""
 
     status: int
     headers: Mapping[str, str]
@@ -29,7 +29,7 @@ class HttpResponse:
 
 @dataclass(frozen=True, slots=True)
 class HttpxRequest(Request):
-    """The HTTP transport of ``google-auth``, on an ``httpx2`` client."""
+    """The HTTP transport of `google-auth`, on an `httpx2` client."""
 
     client: httpx2.Client
 
@@ -45,7 +45,7 @@ class HttpxRequest(Request):
     ) -> HttpResponse:
         """Make one request.
 
-        :raises google.auth.exceptions.TransportError: If the request fails.
+        Raise `TransportError` if it fails.
         """
         try:
             response = self.client.request(
@@ -70,11 +70,10 @@ def sheets_token() -> str:
 
 @dataclass(frozen=True, slots=True)
 class GSheetsSource(SourceBase):
-    """Read and write Google Sheets with workload identity. It needs no password.
+    """Read and write Google Sheets with workload identity.
 
-    A template calls the extension itself: ``FROM read_gsheet('<id or URL>')`` reads a
-    sheet, and ``COPY t TO '<id or URL>' (FORMAT gsheet)`` writes one. The access token
-    lives one hour, so a longer run needs a new source.
+    A template calls `read_gsheet` or `COPY ... (FORMAT gsheet)`. The access token lives
+    one hour.
     """
 
     extensions: ClassVar[tuple[Extension, ...]] = (
@@ -86,7 +85,7 @@ class GSheetsSource(SourceBase):
 
     @override
     async def setup(self, client: Engine) -> None:
-        """Create the secret that holds the access token. The token is a bound value."""
+        """Create the secret with the access token as a bound value."""
         sql = render_template(
             "duckdb/create_gsheets_secret", {"secret": Identifier(SECRET)}
         )

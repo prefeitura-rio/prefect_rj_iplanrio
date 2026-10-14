@@ -20,15 +20,17 @@ class DBConn:
 
 @dataclass(frozen=True, slots=True)
 class SourceContext:
-    """Everything a source may need when it is built. Each source reads what it uses."""
+    """Everything a source may need when it is built.
+
+    Each source reads what it uses.
+    """
 
     conn: DBConn | None
 
     def require_conn(self, name: str) -> DBConn:
-        """Return the connection data.
+        """Return the connection data of the context.
 
-        :param name: The source name, for the error message.
-        :raises ValueError: If the context has no connection data.
+        Raise `ValueError`, naming `name`, if it has none.
         """
         if self.conn is None:
             raise ValueError(f"Source {name} needs connection data")
@@ -36,24 +38,22 @@ class SourceContext:
 
 
 class Source(Protocol):
-    """A system the statements run in. It provides the client; the ``Executor`` runs SQL.
+    """A system the statements run in.
 
-    The toolkit provides postgres, mysql, mssql, bigquery and oracle. Any class that
-    follows this protocol also works.
+    It provides the client that the `Executor` runs SQL on.
     """
 
     name: ClassVar[str]
     """The source name."""
 
     def open(self, engine: Engine) -> AbstractAsyncContextManager[Engine]:
-        """Open the client that runs statements in this system, and close it on exit.
+        """Open the client that runs statements in this system.
 
-        A system that DuckDB attaches yields the ``engine`` itself, after loading its
-        extensions. A system that DuckDB cannot attach, such as Oracle, ignores the
-        ``engine`` and yields a client of its own. The client follows ``Engine``.
+        Close the client on exit. A system that DuckDB attaches yields the `engine`
+        itself. Oracle, which DuckDB cannot attach, yields a client of its own.
         """
         ...
 
     async def setup(self, client: Engine) -> None:
-        """Run the statements that prepare the client, such as the secret and the ATTACH."""
+        """Run the statements that prepare the client, such as `ATTACH`."""
         ...

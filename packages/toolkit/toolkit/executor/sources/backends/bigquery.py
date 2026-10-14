@@ -1,4 +1,4 @@
-"""BigQuery, attached to DuckDB through the community ``bigquery`` extension (ADC)."""
+"""BigQuery, attached to DuckDB through the community `bigquery` extension (ADC)."""
 
 from dataclasses import dataclass, field
 from typing import ClassVar, override
@@ -15,10 +15,9 @@ from ..base import SourceBase
 
 @dataclass(frozen=True, slots=True)
 class BigQuerySource(SourceBase):
-    """Read BigQuery with workload identity. It needs no password.
+    """Read BigQuery with workload identity and no password.
 
-    The project is attached read-only as ``src``, so a template writes
-    ``FROM src.dataset.table`` in DuckDB SQL.
+    The project is attached read-only as `src`.
     """
 
     extensions: ClassVar[tuple[Extension, ...]] = (
@@ -26,13 +25,13 @@ class BigQuerySource(SourceBase):
     )
 
     project: str = field(default_factory=lambda: settings.BIGQUERY_PROJECT)
-    """The project to attach. It defaults to the ``BIGQUERY_PROJECT`` setting."""
+    """The project to attach. It defaults to the `BIGQUERY_PROJECT` setting."""
 
     @override
     async def setup(self, client: Engine) -> None:
         """Attach the project.
 
-        :raises ValueError: If there is no project.
+        Raise `ValueError` if there is no project.
         """
         if not self.project:
             raise ValueError(

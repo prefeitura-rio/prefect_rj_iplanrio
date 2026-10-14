@@ -1,7 +1,6 @@
-"""The DuckDB engine: an async view of a synchronous DuckDB connection.
+"""The DuckDB engine: an async view of a DuckDB connection.
 
-A DuckDB connection serves one query at a time, so concurrent calls on one
-instance serialize. Open one instance per concurrent task to run in parallel.
+A connection serves one query at a time.
 """
 
 from asyncio import to_thread
@@ -41,8 +40,7 @@ def extension_values(extensions: Sequence[Extension]) -> list[TemplateValue]:
 async def load_extensions(engine: Engine, extensions: Sequence[Extension]) -> None:
     """Install and load DuckDB extensions through an engine.
 
-    :param engine: An engine that runs DuckDB SQL.
-    :param extensions: The extensions to load. Nothing runs when it is empty.
+    Nothing runs if `extensions` is empty.
     """
     if extensions:
         sql = render_template(
@@ -52,7 +50,7 @@ async def load_extensions(engine: Engine, extensions: Sequence[Extension]) -> No
 
 
 def quoted(value: str) -> Literal | bool:
-    """Return ``value`` as an SQL literal, or ``False`` when it is empty."""
+    """Return `value` as an SQL literal, or `False` when it is empty."""
     return Literal(value) if value else False
 
 
@@ -81,13 +79,13 @@ def open_batches(
     params: QueryParams | None,
     batch_size: int,
 ) -> tuple[pl.Schema, Iterator[pl.DataFrame]]:
-    """Run ``sql`` and return its columns and a lazy stream of Polars batches."""
+    """Run `sql` and return its columns and a lazy stream of Polars batches."""
     lazy = connection.execute(sql, params).pl(lazy=True)
     return lazy.collect_schema(), lazy.collect_batches(chunk_size=batch_size)
 
 
 def next_batch(batches: Iterator[pl.DataFrame]) -> pl.DataFrame | None:
-    """Return the next batch, or ``None`` when the stream is done."""
+    """Return the next batch, or `None` when the stream is done."""
     return next(batches, None)
 
 
@@ -95,7 +93,7 @@ def next_batch(batches: Iterator[pl.DataFrame]) -> pl.DataFrame | None:
 class DuckDBEngine:
     """An async view of one synchronous DuckDB connection.
 
-    Every blocking call runs in a worker thread through ``asyncio.to_thread``.
+    Blocking calls run in a worker thread.
     """
 
     connection: DuckDBPyConnection
@@ -129,7 +127,7 @@ class DuckDBEngine:
         params: QueryParams | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> AsyncGenerator[pl.DataFrame]:
-        """Run one query and yield the result as Polars frames of up to ``batch_size`` rows."""
+        """Run one query and yield Polars frames of up to `batch_size` rows."""
         schema, batches = await to_thread(
             open_batches, self.connection, sql, params, batch_size
         )

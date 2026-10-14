@@ -3,7 +3,6 @@
 from collections.abc import Mapping
 from typing import Final
 
-# Telemetry
 PREFECT_LOGGER: Final = "prefect"
 """The logger whose tree carries every Prefect log and every toolkit log."""
 
@@ -21,7 +20,6 @@ DELETE_SPAN: Final = "toolkit.delete"
 TEMPLATE_ATTRIBUTE: Final = "toolkit.template"
 """The span attribute with the template that ran."""
 
-# dbt
 COMMAND_WORDS: Final[Mapping[str, tuple[str, ...]]] = {
     "source freshness": ("source", "freshness")
 }

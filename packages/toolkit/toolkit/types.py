@@ -1,4 +1,7 @@
-"""Type aliases and marker types shared by the toolkit. They name no toolkit class, so every module may import them."""
+"""Type aliases and marker types shared by the toolkit.
+
+They name no toolkit class, so every module may import them.
+"""
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -27,8 +30,7 @@ type TemplateValue = (
 
 
 class Geometry(bytes):
-    """Marks a schema field that holds a DuckDB ``GEOMETRY`` column.
+    """Marks a schema field that holds a DuckDB `GEOMETRY` column.
 
-    DuckDB sends it as WKB, and Polars reads it as the ``geoarrow.wkb`` extension type,
-    which keeps the CRS.
+    Polars reads it as the `geoarrow.wkb` extension type, with the CRS.
     """

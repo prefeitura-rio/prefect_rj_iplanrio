@@ -1,14 +1,8 @@
-"""The toolkit logger, and OpenTelemetry logs, traces and metrics sent to an OTLP collector.
+"""The toolkit logger, and OpenTelemetry logs, traces and metrics.
 
-The logger is the Prefect logger ``prefect.toolkit``, so it has the Prefect formatting and its
-logs reach the Prefect UI. Prefect starts a span for every flow run and task run, and the toolkit starts one for
-every query, statement, upload and delete. Every Prefect and toolkit log goes to the
-collector, and a log inside a run has the ``trace_id`` of the run. The backend derives
-durations and error rates from the spans. The counters below are the only metrics, for
-the totals that a span cannot give.
-
-Call :func:`configure_telemetry` once when the process starts. The endpoint, the headers
-and the service name are settings, so they also come from a ``.env`` file.
+Prefect starts a span for each flow run and task run. The toolkit starts one for each
+query, statement, upload and delete. Counters cover only the totals that a span cannot
+give.
 """
 
 import logging
@@ -52,12 +46,10 @@ DELETED_FILES = meter.create_counter(
 
 
 def configure_telemetry() -> None:
-    """Send logs, traces and metrics to ``OTEL_EXPORTER_OTLP_ENDPOINT``.
+    """Send logs, traces and metrics to `OTEL_EXPORTER_OTLP_ENDPOINT`.
 
-    It does nothing without the endpoint, and nothing when it ran before. Call it after
-    ``import prefect``, because Prefect rebuilds its logging when it is imported.
-
-    The endpoint, the headers and the service name are the ``OTEL_*`` settings.
+    It does nothing without the endpoint, or if it already ran. Call it after `import
+    prefect`, which rebuilds the logging.
     """
     endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
     prefect_logger = logging.getLogger(PREFECT_LOGGER)

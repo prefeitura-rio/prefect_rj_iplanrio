@@ -10,7 +10,10 @@ from ..constants import DEFAULT_BATCH_SIZE
 
 
 class Engine(Protocol):
-    """Runs rendered SQL. ``DuckDBEngine`` is the one the toolkit provides."""
+    """Runs rendered SQL.
+
+    `DuckDBEngine` is the one the toolkit provides.
+    """
 
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
         """Run one statement."""
@@ -23,10 +26,10 @@ class Engine(Protocol):
         params: QueryParams | None = None,
         batch_size: int = DEFAULT_BATCH_SIZE,
     ) -> AsyncIterator[pl.DataFrame]:
-        """Run one query and yield the result as Polars frames of up to ``batch_size`` rows.
+        """Run one query and yield Polars frames of up to `batch_size` rows.
 
-        A result with no rows still yields one frame, so the columns are known. A
-        client that cannot tell the columns of an empty result yields a frame with
-        no columns. Read the batches before running another statement on the client.
+        A result with no rows still yields one frame. The frame has no columns if the
+        client cannot tell them. Read the batches before the next statement runs on the
+        client.
         """
         ...

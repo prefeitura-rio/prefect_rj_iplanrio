@@ -13,11 +13,7 @@ from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, logger, tr
 
 
 def create_store(bucket: str, config: Settings = settings) -> S3Store:
-    """Create the S3 store of one bucket, on the endpoint and with the keys of the settings.
-
-    :param bucket: Bucket name.
-    :param config: Settings with the endpoint and HMAC keys.
-    """
+    """Create the S3 store of one bucket, with the endpoint and keys of `config`."""
     scheme = "https" if config.GCS_USE_SSL else "http"
     return S3Store(
         bucket,
@@ -30,12 +26,7 @@ def create_store(bucket: str, config: Settings = settings) -> S3Store:
 
 
 async def list_keys(store: ObjectStore, prefix: str) -> list[str]:
-    """List every object key under one prefix.
-
-    :param store: Store from :func:`create_store`.
-    :param prefix: Key prefix.
-    :returns: The keys in listing order.
-    """
+    """List every object key under one prefix, in listing order."""
     return [
         item["path"] async for batch in obstore.list(store, prefix) for item in batch
     ]
@@ -44,9 +35,15 @@ async def list_keys(store: ObjectStore, prefix: str) -> list[str]:
 def files_of(path: Path) -> dict[str, Path]:
     """Map the relative name of each file to its path.
 
-    :param path: A file, or a directory searched recursively.
-    :raises FileNotFoundError: If ``path`` does not exist.
-    :raises ValueError: If ``path`` is a directory with no files.
+    Raise `FileNotFoundError` if `path` does not exist. Raise `ValueError` for a
+    directory with no files.
+
+    ```python
+    files_of(Path("out"))
+    # {"ano=2024/a.parquet": Path("out/ano=2024/a.parquet")}
+    files_of(Path("out/a.csv"))
+    # {"a.csv": Path("out/a.csv")}
+    ```
     """
     if not path.exists():
         raise FileNotFoundError(path)
@@ -69,10 +66,11 @@ def files_of(path: Path) -> dict[str, Path]:
 async def gather_limited(
     calls: Iterable[Coroutine[object, object, object]], concurrency: int
 ) -> None:
-    """Await the calls together, with at most ``concurrency`` running at once."""
+    """Await the calls together, with at most `concurrency` running at once."""
     semaphore = asyncio.Semaphore(concurrency)
 
     async def run(call: Coroutine[object, object, object]) -> None:
+        """Await one call while it holds a slot."""
         async with semaphore:
             await call
 
@@ -82,18 +80,14 @@ async def gather_limited(
 async def upload(
     store: ObjectStore, prefix: str, path: Path, *, concurrency: int = 16
 ) -> list[str]:
-    """Upload a file, or every file of a directory, under one prefix.
+    """Upload a file, or a directory, under one prefix and return the keys.
 
-    A directory keeps its relative paths, so Hive folders such as
-    ``ano_particao=2024/`` stay in the keys. A large file goes up in parts.
+    A directory keeps its relative paths.
 
-    :param store: Store from :func:`create_store`.
-    :param prefix: Key prefix.
-    :param path: A file, or a directory.
-    :param concurrency: Maximum number of parallel uploads.
-    :returns: The keys of the uploaded files.
-    :raises FileNotFoundError: If ``path`` does not exist.
-    :raises ValueError: If ``path`` is a directory with no files.
+    ```python
+    await upload(store, "ds/tb", Path("out"))
+    # ["ds/tb/ano_particao=2024/a.parquet"]
+    ```
     """
     with tracer.start_as_current_span(
         UPLOAD_SPAN, attributes={"toolkit.prefix": prefix}
@@ -121,12 +115,7 @@ async def upload(
 async def delete_keys(
     store: ObjectStore, keys: list[str], *, concurrency: int = 16
 ) -> None:
-    """Delete objects one by one, because GCS has no S3 multi-object delete.
-
-    :param store: Store from :func:`create_store`.
-    :param keys: Keys to delete.
-    :param concurrency: Maximum number of parallel deletes.
-    """
+    """Delete objects one by one, because GCS has no S3 multi-object delete."""
     with tracer.start_as_current_span(
         DELETE_SPAN, attributes={"toolkit.objects": len(keys)}
     ):
