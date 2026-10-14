@@ -4,20 +4,21 @@ A DuckDB connection serves one query at a time, so concurrent calls on one
 instance serialize. Open one instance per concurrent task to run in parallel.
 """
 
-from collections.abc import AsyncGenerator, Sequence
-from contextlib import asynccontextmanager
+from asyncio import to_thread
+from collections.abc import AsyncGenerator, Iterator, Sequence
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from typing import Self
 
 import duckdb
-from asyncer import asyncify
+import polars as pl
 from duckdb import DuckDBPyConnection
 from psycopg.sql import Literal
 
 from ...settings import Settings, settings
-from ...types import DatabaseRecord, DatabaseRow, QueryParams, TemplateValue
+from ...types import QueryParams, TemplateValue
+from ..constants import DEFAULT_BATCH_SIZE
 from ..render import render_template
-from ..utils import rows_to_records
 from .protocol import Engine
 
 
@@ -50,9 +51,52 @@ async def load_extensions(engine: Engine, extensions: Sequence[Extension]) -> No
         await engine.execute(sql)
 
 
+def quoted(value: str) -> Literal | bool:
+    """Return ``value`` as an SQL literal, or ``False`` when it is empty."""
+    return Literal(value) if value else False
+
+
+def setup_statements(
+    extensions: Sequence[Extension], config: Settings
+) -> list[tuple[str, QueryParams | None]]:
+    """Return the statements, in order, that prepare a fresh connection."""
+    setup = render_template(
+        "duckdb/setup",
+        {
+            "extensions": extension_values(extensions),
+            "memory_limit": quoted(config.DUCKDB_MEMORY_LIMIT),
+            "temp_directory": quoted(config.DUCKDB_TEMP_DIRECTORY),
+            "has_gcs_secret": bool(config.GCS_HMAC_ACCESS_ID),
+        },
+    )
+
+    secret = render_template("duckdb/create_gcs_secret", {})
+    keys = [config.GCS_HMAC_ACCESS_ID, config.GCS_HMAC_SECRET.get_secret_value()]
+    return [(setup, None), *([(secret, keys)] if config.GCS_HMAC_ACCESS_ID else [])]
+
+
+def open_batches(
+    connection: DuckDBPyConnection,
+    sql: str,
+    params: QueryParams | None,
+    batch_size: int,
+) -> tuple[pl.Schema, Iterator[pl.DataFrame]]:
+    """Run ``sql`` and return its columns and a lazy stream of Polars batches."""
+    lazy = connection.execute(sql, params).pl(lazy=True)
+    return lazy.collect_schema(), lazy.collect_batches(chunk_size=batch_size)
+
+
+def next_batch(batches: Iterator[pl.DataFrame]) -> pl.DataFrame | None:
+    """Return the next batch, or ``None`` when the stream is done."""
+    return next(batches, None)
+
+
 @dataclass(frozen=True, slots=True)
 class DuckDBEngine:
-    """An async view of one synchronous DuckDB connection."""
+    """An async view of one synchronous DuckDB connection.
+
+    Every blocking call runs in a worker thread through ``asyncio.to_thread``.
+    """
 
     connection: DuckDBPyConnection
 
@@ -64,61 +108,38 @@ class DuckDBEngine:
         config: Settings = settings,
     ) -> AsyncGenerator[Self]:
         """Open an in-memory connection with extensions and the GCS secret loaded."""
-        connection = await asyncify(duckdb.connect)()
-        setup = render_template(
-            "duckdb/setup",
-            {
-                "extensions": extension_values(extensions),
-                "memory_limit": Literal(config.DUCKDB_MEMORY_LIMIT)
-                if config.DUCKDB_MEMORY_LIMIT
-                else False,
-                "temp_directory": Literal(config.DUCKDB_TEMP_DIRECTORY)
-                if config.DUCKDB_TEMP_DIRECTORY
-                else False,
-                "has_gcs_secret": bool(config.GCS_HMAC_ACCESS_ID),
-                "gcs_key_id": Literal(config.GCS_HMAC_ACCESS_ID),
-                "gcs_secret": Literal(config.GCS_HMAC_SECRET.get_secret_value()),
-            },
-        )
+        async with AsyncExitStack() as stack:
+            connection = await to_thread(duckdb.connect)
+            stack.push_async_callback(to_thread, connection.close)
+            engine = cls(connection)
 
-        def bootstrap() -> None:
-            connection.execute(setup)
+            for sql, params in setup_statements(extensions, config):
+                await engine.execute(sql, params=params)
 
-        try:
-            await asyncify(bootstrap)()
-            yield cls(connection=connection)
-        finally:
-            await asyncify(connection.close)()
+            yield engine
 
     async def execute(self, sql: str, *, params: QueryParams | None = None) -> None:
         """Run one statement."""
-
-        def run() -> None:
-            self.connection.execute(sql, params)
-
-        await asyncify(run)()
+        await to_thread(self.connection.execute, sql, params)
 
     async def query(
-        self, sql: str, *, params: QueryParams | None = None
-    ) -> list[DatabaseRow]:
-        """Run one query and return every row as a tuple."""
+        self,
+        sql: str,
+        *,
+        params: QueryParams | None = None,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> AsyncGenerator[pl.DataFrame]:
+        """Run one query and yield the result as Polars frames of up to ``batch_size`` rows."""
+        schema, batches = await to_thread(
+            open_batches, self.connection, sql, params, batch_size
+        )
 
-        def run() -> list[DatabaseRow]:
-            return self.connection.execute(sql, params).fetchall()
+        first = await to_thread(next_batch, batches)
 
-        return await asyncify(run)()
+        yield pl.DataFrame(schema=schema) if first is None else first
 
-    async def records(
-        self, sql: str, *, params: QueryParams | None = None
-    ) -> list[DatabaseRecord]:
-        """Run one query and return every row as a dict keyed by column name."""
-
-        def run() -> list[DatabaseRecord]:
-            cursor = self.connection.execute(sql, params)
-            names = [column[0] for column in cursor.description]
-            return rows_to_records(names, cursor.fetchall())
-
-        return await asyncify(run)()
+        while (batch := await to_thread(next_batch, batches)) is not None:
+            yield batch
 
     @asynccontextmanager
     async def transaction(self) -> AsyncGenerator[None]:
@@ -129,4 +150,5 @@ class DuckDBEngine:
         except Exception:
             await self.execute("ROLLBACK")
             raise
-        await self.execute("COMMIT")
+        else:
+            await self.execute("COMMIT")

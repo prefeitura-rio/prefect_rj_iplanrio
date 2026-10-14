@@ -1,12 +1,10 @@
 {#
 {
   "kind": "template",
-  "description": "Load DuckDB extensions and create the GCS access secret.",
+  "description": "Load DuckDB extensions and the GCS filesystem.",
   "inputs": {
     "extensions": "Extensions to install and load, each with name and community.",
-    "has_gcs_secret": "Whether HMAC keys are configured.",
-    "gcs_key_id": "GCS HMAC access id literal.",
-    "gcs_secret": "GCS HMAC secret literal.",
+    "has_gcs_secret": "Whether HMAC keys are configured, so httpfs is installed.",
     "memory_limit": "DuckDB memory limit literal, or false to keep the default.",
     "temp_directory": "Directory literal for spilling to disk, or false to keep the default."
   }
@@ -23,9 +21,4 @@ SET temp_directory = {{ temp_directory }};
 {% if has_gcs_secret %}
 INSTALL httpfs;
 LOAD httpfs;
-CREATE SECRET (
-    TYPE gcs,
-    KEY_ID {{ gcs_key_id }},
-    SECRET {{ gcs_secret }}
-);
 {% endif %}

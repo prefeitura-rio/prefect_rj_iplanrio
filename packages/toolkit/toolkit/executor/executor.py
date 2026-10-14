@@ -1,72 +1,34 @@
-"""Render SQL templates and run them on an engine, for one source."""
+"""Render SQL templates and run them on a client."""
 
-from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from uuid import uuid4
 
-from psycopg.sql import Composable, Identifier
-
-from ..log import logger
-from ..types import QueryParams, StepValue, TemplateValue
-from .constants import TEMPLATES_DIR
-from .engines.duckdb import load_extensions
+from .. import log
+from ..constants import EXECUTE_SPAN, TEMPLATE_ATTRIBUTE
+from ..telemetry import tracer
+from ..types import QueryParams, TemplateValue
+from .constants import DEFAULT_BATCH_SIZE, TEMPLATES_DIR
+from .dataset import Result
 from .engines.protocol import Engine
 from .render import render_template
-from .sources.protocols import Source, as_fetcher
-from .utils import validate_rows
-
-
-def reject_text(key: str, value: StepValue | str) -> None:
-    """Raise if a value is, or holds, a plain string.
-
-    :raises TypeError: Naming the key.
-    """
-    match value:
-        case str():
-            message = f"Step value {key!r} must not be a plain string"
-            raise TypeError(f"{message}: use Identifier, Literal or SQL")
-        case Mapping():
-            for item in value.values():
-                reject_text(key, item)
-        case list() | tuple():
-            for item in value:
-                reject_text(key, item)
-        case _:
-            pass
-
-
-@dataclass(frozen=True, slots=True)
-class Step:
-    """One cleaning step: a SELECT template that reads ``{{ source }}``.
-
-    ``values`` are ``Identifier``, ``Literal`` or ``SQL`` values, numbers or
-    booleans, never plain text, which would enter the SQL as raw text.
-
-    :raises TypeError: If a value is a plain string.
-    """
-
-    template: str
-    values: Mapping[str, StepValue] = field(default_factory=dict[str, StepValue])
-
-    def __post_init__(self) -> None:
-        for key, value in self.values.items():
-            reject_text(key, value)
+from .schema import schema_of
 
 
 @dataclass(frozen=True, slots=True)
 class Executor:
-    """Runs the statements of a template on an engine, reading from a source.
+    """Runs the statements of a template on a client.
 
-    :param engine: Runs the SQL.
-    :param source: Where the data comes from. Optional.
+    The client is whatever runs SQL: the DuckDB engine, or the client that
+    ``Source.open`` yields for a source.
+
+    :param client: Runs the SQL.
     :param templates: A directory with the pipeline templates. It is searched
         before the toolkit templates, so avoid the toolkit folder names such as
         ``duckdb/``.
     """
 
-    engine: Engine
-    source: Source | None = None
+    client: Engine
     templates: Path | None = None
 
     @property
@@ -83,73 +45,33 @@ class Executor:
     ) -> None:
         """Render and execute one SQL statement."""
         sql = render_template(path, mapping or {}, roots=self.roots)
-        await self.engine.execute(sql, params=params)
+        with tracer.start_as_current_span(
+            EXECUTE_SPAN, attributes={TEMPLATE_ATTRIBUTE: path}
+        ):
+            await self.client.execute(sql, params=params)
 
-    async def query[Expected](
+        log.info("Statement executed", {"template": path})
+
+    def query[Schema](
         self,
         path: str,
         mapping: Mapping[str, TemplateValue] | None = None,
         *,
         params: QueryParams | None = None,
-        expect: type[Expected],
-    ) -> list[Expected]:
-        """Render, run, and validate one SQL query against the expected model.
+        expect: type[Schema],
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> Result[Schema]:
+        """Render a query and return its result, checked against the schema class.
 
-        :raises pydantic.ValidationError: If a row does not fit ``expect``.
+        ``await`` the result for one ``Dataset``, or iterate it to get one ``Dataset``
+        per batch of up to ``batch_size`` rows.
+
+        :param expect: The schema class: a ``TypedDict``, a dataclass or any class with
+            annotated fields. See :func:`toolkit.executor.schema.schema_of`.
+        :raises TypeError: If an annotation of ``expect`` has no Polars type.
+        :raises toolkit.executor.schema.SchemaError: When a batch does not fit the schema.
         """
+        columns = schema_of(expect)
         sql = render_template(path, mapping or {}, roots=self.roots)
-        rows = await self.engine.records(sql, params=params)
-        return validate_rows(rows, expect)
-
-    async def prepare_source(self, remote_query: str) -> Composable | None:
-        """Make the source readable by the engine and return the ``FROM`` expression.
-
-        The steps run in this order: ``fetch`` (only for a source that has it),
-        load the extensions, run ``setup``, then ``scan``.
-
-        :param remote_query: The query, already restricted by ``source.window``.
-        :returns: The expression, or ``None`` when there is nothing to copy.
-        :raises ValueError: If the executor has no source.
-        """
-        source = self.source
-        if source is None:
-            raise ValueError("The executor has no source")
-        fetcher = as_fetcher(source)
-        if fetcher is not None and not await fetcher.fetch(remote_query):
-            return None
-        await load_extensions(self.engine, source.extensions)
-        if (setup := source.setup()) is not None:
-            await self.engine.execute(setup)
-        return source.scan(remote_query)
-
-    async def clean(self, scan: Composable, steps: Sequence[Step]) -> Composable:
-        """Apply cleaning steps in order and return the ``FROM`` expression of the result.
-
-        Each step becomes a temporary view over the previous one, so the data is
-        read once, when the result is copied.
-
-        :param scan: ``FROM`` expression of the data to clean.
-        :param steps: The steps, in order. Each template is a SELECT that reads
-            ``{{ source }}``.
-        :returns: ``scan`` when there are no steps, or the last view.
-        :raises jinja2.UndefinedError: If a step template uses a missing variable.
-            Any error of a step carries a note with the step number and template.
-        """
-        token = uuid4().hex
-        for index, step in enumerate(steps):
-            view = Identifier(f"clean_{token}_{index}")
-            try:
-                select = render_template(
-                    step.template, {**step.values, "source": scan}, roots=self.roots
-                )
-                await self.execute(
-                    "duckdb/create_view", {"view": view, "select": select}
-                )
-            except Exception as error:
-                error.add_note(f"cleaning step {index + 1}: {step.template}")
-                raise
-            logger.info(
-                "Cleaning step applied: step=%d template=%s", index + 1, step.template
-            )
-            scan = view
-        return scan
+        frames = self.client.query(sql, params=params, batch_size=batch_size)
+        return Result(expect, columns, path, frames)
