@@ -1,15 +1,42 @@
+import io
+import json
+import re
+from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
+from typing import Unpack, cast
 
+import duckdb
+import httpx2
 import polars as pl
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
+from deltalake import DeltaTable
+from deltalake.exceptions import SchemaMismatchError
+from psycopg.sql import Composable
 from toolkit import gcs
+from toolkit.executor.sources.backends.files import FilesSource
+from toolkit.types import Batches, TemplateValue
 
+from prefect_rj_iplanrio import utils
+from prefect_rj_iplanrio.constants import DISCORD_LIMIT
+from prefect_rj_iplanrio.types import DumpMode, DumpOptions
 from prefect_rj_iplanrio.utils import (
     Destination,
+    clear_legacy,
     clear_prefix,
-    csv_to_parquet,
+    dump_in_batches,
+    dump_to_delta,
+    failure_message,
+    files_glob,
+    is_transient,
+    load_to_delta,
     publish,
-    retries_for,
+    read_values,
+    source_values,
+    without_batches,
 )
 
 DESTINATION = Destination("b", "ds", "tb")
@@ -39,44 +66,626 @@ async def test_regression_clearing_a_table_leaves_a_similar_name_alone(store):
 
 
 @pytest.mark.parametrize(
-    ("dump_mode", "exists", "created"),
+    ("is_folder", "file_format", "expected"),
     [
-        pytest.param("overwrite", True, True, id="overwrite_replaces_a_table_that_exists"),
-        pytest.param("append", True, False, id="append_keeps_a_table_that_exists"),
-        pytest.param("append", False, True, id="append_creates_a_missing_table"),
+        pytest.param(False, "csv", "{root}/in.csv", id="a_file_is_read_as_it_is"),
+        pytest.param(True, "json", "{root}/**/*.json", id="a_folder_is_read_by_glob"),
     ],
 )
-async def test_the_external_table_is_created_as_the_mode_asks(bigquery, dump_mode, exists, created):
-    """Create the dataset, and the table only if the mode asks for it."""
-    bigquery.exists = exists
+def test_the_path_of_the_files_to_read_is_a_file_or_a_glob(tmp_path: Path, is_folder, file_format, expected):
+    """Read one file as it is, and every file of one format in a folder."""
+    path = tmp_path if is_folder else tmp_path / "in.csv"
 
-    await publish(DESTINATION, "p", dump_mode, "c")
-
-    table = ("table", "p.ds_staging.tb", "gs://b/staging/ds/tb", "PARQUET", "c")
-    assert bigquery.calls[:2] == [("connect", "p"), ("dataset", "p.ds_staging")]
-    assert (table in bigquery.calls) is created
+    assert files_glob(path, file_format) == expected.format(root=tmp_path)
 
 
-async def test_a_csv_folder_becomes_text_parquet_with_the_same_folders(tmp_path: Path):
-    """Convert each CSV to Parquet with text columns, and keep the Hive folders."""
-    source = tmp_path / "in" / "ano=2024"
-    source.mkdir(parents=True)
-    (source / "a.csv").write_text("code\n007\n")
-
-    await csv_to_parquet(tmp_path / "in", tmp_path / "out")
-
-    [file] = (tmp_path / "out").rglob("*.parquet")
-    assert file.relative_to(tmp_path / "out").as_posix() == "ano=2024/a.parquet"
-    assert pl.read_parquet(file).rows() == [("007",)]
+def status_error(status: int) -> httpx2.HTTPStatusError:
+    """Return the error that `raise_for_status` gives for a status code."""
+    request = httpx2.Request("GET", "https://x")
+    response = httpx2.Response(status, request=request)
+    return httpx2.HTTPStatusError("failed", request=request, response=response)
 
 
 @pytest.mark.parametrize(
-    ("dump_mode", "retries"),
+    ("error", "expected"),
     [
-        pytest.param("overwrite", 2, id="overwrite_runs_again"),
-        pytest.param("append", 0, id="append_never_runs_again"),
+        pytest.param(status_error(500), True, id="a_server_error"),
+        pytest.param(status_error(503), True, id="a_service_that_is_down"),
+        pytest.param(status_error(429), True, id="too_many_requests"),
+        pytest.param(status_error(404), False, id="a_missing_page_stays_missing"),
+        pytest.param(status_error(401), False, id="a_wrong_token_stays_wrong"),
+        pytest.param(httpx2.ConnectTimeout("slow"), True, id="a_timeout"),
+        pytest.param(httpx2.ConnectError("down"), True, id="a_network_error"),
+        pytest.param(ValueError("bug"), False, id="a_bug_is_not_a_transient_error"),
+        pytest.param(None, False, id="no_error"),
     ],
 )
-def test_regression_only_overwrite_runs_a_failed_copy_again(dump_mode, retries):
-    """Regression: a second copy on top of a partial first one repeated the rows."""
-    assert retries_for(dump_mode) == retries
+def test_only_a_transient_error_is_sent_again(error, expected):
+    """Send a request again after a timeout, a network error, a 429 or a 5xx."""
+    assert is_transient(error) is expected
+
+
+@pytest.mark.parametrize(
+    ("url", "tail"),
+    [
+        pytest.param("https://p/runs/1", "\nhttps://p/runs/1", id="with_a_link"),
+        pytest.param(None, "boom", id="without_a_link"),
+    ],
+)
+def test_the_failure_message_names_the_flow_the_run_and_the_reason(url, tail):
+    """Name the flow and the run, give the reason, and add the link if there is one."""
+    message = failure_message("dump", "orders", "boom", url)
+
+    assert message.startswith(":red_circle: **dump** `orders` failed: boom")
+    assert message.endswith(tail)
+
+
+def test_regression_a_long_reason_never_goes_over_the_limit_of_discord():
+    """Regression: Discord refuses a message of more than 2000 characters."""
+    message = failure_message("f", "r", "x" * 5000, "https://p")
+
+    assert len(message) == DISCORD_LIMIT
+
+
+ROWS = [
+    {"id": 1, "nome": " Ana ", "dia": date(2024, 3, 1), "valor": 10.0},
+    {"id": 2, "nome": "Bia", "dia": date(2024, 3, 1), "valor": 20.0},
+    {"id": 3, "nome": "Caio", "dia": date(2024, 3, 2), "valor": 30.0},
+    {"id": 4, "nome": "Dani", "dia": date(2024, 3, 3), "valor": 40.0},
+]
+DAYS: Batches = {"column": "dia", "width": "day", "begin": "2024-03-01", "end": "2024-03-03"}
+
+
+class Lake:
+    """A folder that stands in for the source, and a local Delta table for the bucket."""
+
+    def __init__(self, root: Path) -> None:
+        """Keep the paths of the source files and of the table."""
+        self.source = root / "source"
+        self.source.mkdir()
+        self.uri = str(root / "table")
+
+    def put(self, rows: Sequence[Mapping[str, object]]) -> None:
+        """Replace the rows of the source."""
+        pq.write_table(pa.Table.from_pylist(rows), self.source / "rows.parquet")
+
+    async def dump(self, dump_mode: DumpMode = "append", **options: Unpack[DumpOptions]) -> int:
+        """Dump the source and return how many commits the table has."""
+        values = source_values("parquet", f"{self.source}/*.parquet")
+        await dump_to_delta(FilesSource(), values, self.uri, dump_mode, options)
+        return DeltaTable(self.uri).version() + 1
+
+    def writes(self) -> int:
+        """Return how many commits wrote data."""
+        return sum(1 for entry in DeltaTable(self.uri).history() if entry.get("operation") == "WRITE")
+
+    def rows(self) -> list[tuple[object, ...]]:
+        """Return the rows of the table, sorted by id, without the window column."""
+        table = DeltaTable(self.uri).to_pyarrow_table().drop(["batch"])
+        return sorted((tuple(row.values()) for row in table.to_pylist()), key=lambda r: r[0])
+
+
+@pytest.fixture
+def lake(tmp_path: Path) -> Lake:
+    """Return a lake with the four sample rows in the source."""
+    lake = Lake(tmp_path)
+    lake.put(ROWS)
+    return lake
+
+
+async def test_the_first_dump_loads_every_window(lake):
+    """Write each day as its own window, and normalize the names of the columns."""
+    commits = await lake.dump(batches=DAYS)
+
+    assert commits == 3
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+    assert sorted(cast("list[str]", DeltaTable(lake.uri).to_pyarrow_table().column("batch").to_pylist())) == [
+        "2024-03-01",
+        "2024-03-01",
+        "2024-03-02",
+        "2024-03-03",
+    ]
+
+
+async def test_the_same_data_is_never_written_again(lake):
+    """Skip every window whose fingerprint is in the ledger, so the table gets no commit."""
+    first = await lake.dump(batches=DAYS)
+
+    second = await lake.dump(batches=DAYS)
+
+    assert second == first
+
+
+async def test_a_changed_window_is_replaced_and_the_others_are_left(lake):
+    """Commit once for the one day that changed, and keep the other days as they are."""
+    first = await lake.dump(batches=DAYS)
+    lake.put([*ROWS[:2], {**ROWS[2], "valor": 99.0}, ROWS[3]])
+
+    second = await lake.dump(batches=DAYS)
+
+    assert second == first + 1
+    assert next(row for row in lake.rows() if row[0] == 3)[3] == 99.0
+    assert len(lake.rows()) == 4
+
+
+async def test_a_window_that_became_empty_loses_its_rows(lake):
+    """Expire the rows of a day that has none in the source now."""
+    await lake.dump(batches=DAYS)
+    lake.put(ROWS[:3])
+
+    await lake.dump(batches=DAYS)
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3]
+
+
+async def test_filters_and_select_narrow_the_rows_and_the_columns(lake):
+    """Keep the rows that pass the filters, and only the columns that were asked for."""
+    await lake.dump(
+        batches=DAYS,
+        filters=[{"column": "valor", "op": ">", "value": 15}],
+        select=["id", "dia"],
+    )
+
+    table = DeltaTable(lake.uri).to_pyarrow_table()
+    assert table.column_names == ["id", "dia", "batch"]
+    assert sorted(cast("list[int]", table.column("id").to_pylist())) == [2, 3, 4]
+
+
+async def test_normalize_values_cleans_the_text_columns(lake):
+    """Trim the text inside the dump."""
+    await lake.dump(batches=DAYS, columns={"normalize_values": True})
+
+    assert next(row[1] for row in lake.rows()) == "Ana"
+
+
+async def test_a_new_config_loads_every_window_again(lake):
+    """Treat the windows as not loaded when what is written changes."""
+    first = await lake.dump(batches=DAYS)
+
+    second = await lake.dump(batches=DAYS, columns={"normalize_values": True})
+
+    assert second == first + 3
+
+
+async def test_append_refuses_a_change_of_columns_and_overwrite_applies_it(lake):
+    """Keep one schema in append, and replace it when the dump is rebuilt in overwrite."""
+    await lake.dump(batches=DAYS)
+
+    with pytest.raises(SchemaMismatchError):
+        await lake.dump(batches=DAYS, select=["id", "dia"])
+
+    await lake.dump("overwrite", batches=DAYS, select=["id", "dia"])
+
+    table = DeltaTable(lake.uri).to_pyarrow_table()
+    assert table.column_names == ["id", "dia", "batch"]
+    assert table.num_rows == len(ROWS)
+
+
+async def test_overwrite_writes_every_window_again_and_sweeps_the_old_ones(lake):
+    """Rewrite the same data in overwrite mode, and delete the windows outside the range."""
+    await lake.dump(batches=DAYS)
+    before = lake.writes()
+
+    await lake.dump("overwrite", batches={**DAYS, "begin": "2024-03-02"})
+
+    assert lake.writes() == before + 2
+    assert [row[0] for row in lake.rows()] == [3, 4]
+
+
+async def test_overwrite_ignores_lookback_and_rebuilds_every_window(lake):
+    """Rewrite all the windows in overwrite mode, even when lookback names only the last one."""
+    await lake.dump(batches=DAYS)
+    before = lake.writes()
+
+    await lake.dump("overwrite", batches={**DAYS, "lookback": 1})
+
+    assert lake.writes() == before + 3
+
+
+async def test_an_earlier_window_never_loaded_is_loaded_even_with_lookback(lake):
+    """Let lookback limit the re-checks only, and not the first load of an older window."""
+    await lake.dump(batches={**DAYS, "begin": "2024-03-02"})
+
+    await lake.dump(batches={**DAYS, "lookback": 1})
+
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
+async def test_a_new_filter_reaches_the_windows_that_lookback_does_not_recheck(lake):
+    """Treat every window as not loaded after a new filter, so no old window keeps its rows."""
+    await lake.dump(batches=DAYS)
+
+    await lake.dump(batches={**DAYS, "lookback": 1}, filters=[{"column": "valor", "op": ">", "value": 15}])
+
+    assert [row[0] for row in lake.rows()] == [2, 3, 4]
+
+
+async def test_a_dump_that_writes_leaves_a_checkpoint_for_bigquery(lake):
+    """Write a checkpoint after the windows, so a query does not replay a long log."""
+    await lake.dump(batches=DAYS)
+
+    log = Path(lake.uri, "_delta_log")
+    assert any("checkpoint" in entry.name for entry in log.iterdir())
+
+
+async def test_lookback_skips_the_windows_that_it_does_not_recheck(lake):
+    """Do not read an old window again, but always load a window that is new."""
+    await lake.dump(batches=DAYS)
+    lake.put([{**ROWS[0], "valor": 11.0}, *ROWS[1:], {**ROWS[3], "id": 5, "dia": date(2024, 3, 4)}])
+    wider = {**DAYS, "end": "2024-03-04", "lookback": 1}
+
+    await lake.dump(batches=wider)
+
+    by_id = {row[0]: row for row in lake.rows()}
+    assert by_id[1][3] == 10.0
+    assert 5 in by_id
+
+
+async def test_without_batches_the_whole_source_is_one_window(lake):
+    """Replace the whole table when the data changes, and skip it when it does not."""
+    first = await lake.dump()
+    assert await lake.dump() == first
+
+    lake.put(ROWS[:2])
+    await lake.dump()
+
+    assert [row[0] for row in lake.rows()] == [1, 2]
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        pytest.param({"batches": {**DAYS, "column": "nada"}}, "must exist", id="a_batch_column_that_is_missing"),
+        pytest.param(
+            {"filters": [{"column": "nada", "op": "=", "value": 1}]},
+            "Unknown columns",
+            id="a_filter_on_a_missing_column",
+        ),
+        pytest.param({"select": ["nada"]}, "Unknown columns", id="a_missing_column_to_select"),
+    ],
+)
+async def test_an_option_that_does_not_fit_fails_before_any_write(lake, options, message):
+    """Raise before the table is touched."""
+    with pytest.raises(ValueError, match=message):
+        await lake.dump(**options)
+
+    assert not DeltaTable.is_deltatable(lake.uri)
+
+
+async def test_a_delta_table_is_synced_over_its_prefix_with_the_connection(bigquery):
+    """Create the dataset, and point the BigLake table at the Delta folder."""
+    await publish(DESTINATION, "p", "p.us.conn")
+
+    assert bigquery.calls == [
+        ("connect", "p"),
+        ("dataset", "p.ds_staging"),
+        ("delta", "p.ds_staging.tb", "gs://b/staging/ds/tb", "p.us.conn"),
+    ]
+
+
+@pytest.mark.usefixtures("bigquery")
+async def test_a_delta_table_without_a_connection_is_refused():
+    """Raise, because BigQuery reads a Delta table only through a BigLake connection."""
+    with pytest.raises(ValueError, match="BigLake connection"):
+        await publish(DESTINATION, "p", None)
+
+
+def composed(value: TemplateValue) -> str:
+    """Return a template value that is an SQL fragment, as text."""
+    match value:
+        case Composable():
+            return value.as_string(None)
+        case _:
+            raise AssertionError(value)
+
+
+@pytest.mark.parametrize(
+    ("db_type", "read", "batched", "expected"),
+    [
+        pytest.param("postgres", {"table": "public.orders"}, True, 'FROM "src"."public"."orders"', id="a_table"),
+        pytest.param("mysql", {"table": "app.orders"}, False, '"src"."app"."orders"', id="a_table_of_mysql"),
+        pytest.param("postgres", {"query": "SELECT 1"}, False, "'SELECT 1'", id="a_native_query"),
+    ],
+)
+def test_a_table_is_attached_and_a_query_is_a_literal(db_type, read, batched, expected):
+    """Give an identifier for a table, and a literal for a native query."""
+    values = read_values(db_type, read, batched)
+
+    key = "table" if "table" in read else "query"
+    assert expected.split("FROM ")[-1] == composed(values[key])
+
+
+@pytest.mark.parametrize(
+    ("db_type", "read", "batched", "message"),
+    [
+        pytest.param("postgres", {}, False, "exactly one", id="neither"),
+        pytest.param("postgres", {"table": "a.b", "query": "SELECT 1"}, False, "exactly one", id="both"),
+        pytest.param("oracle", {"table": "app.orders"}, False, "Oracle", id="a_table_on_oracle"),
+        pytest.param("postgres", {"query": "SELECT 1"}, True, "one window", id="windows_over_a_query"),
+    ],
+)
+def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message):
+    """Raise before any connection, so a typo never reaches the database."""
+    with pytest.raises(ValueError, match=message):
+        read_values(db_type, read, batched)
+
+
+async def stored_rows(store, prefix: str) -> list[int]:
+    """Return the ids of every Parquet object under a prefix."""
+    ids: list[int] = []
+    for key in await gcs.list_keys(store, prefix):
+        data = bytes(await (await store.get_async(key)).bytes_async())
+        ids += pl.read_parquet(io.BytesIO(data))["id"].to_list()
+    return sorted(ids)
+
+
+@pytest.fixture
+def batches_in_a_bucket(store, lake, monkeypatch):
+    """Return a function that copies the lake in batches to an in-memory bucket."""
+    monkeypatch.setattr(utils, "create_store", lambda *_: store)
+    values = source_values("parquet", f"{lake.source}/*.parquet")
+
+    async def run(dump_mode: DumpMode, batch_size: int) -> None:
+        """Copy the four sample rows."""
+        await dump_in_batches(FilesSource(), values, DESTINATION, dump_mode, batch_size)
+
+    return run
+
+
+async def test_a_source_is_copied_in_batches_of_the_given_size(store, batches_in_a_bucket):
+    """Write one Parquet object for each batch of rows, and lose no row."""
+    await batches_in_a_bucket("append", 3)
+
+    keys = await gcs.list_keys(store, DESTINATION.prefix)
+    assert len(keys) == 2
+    assert await stored_rows(store, DESTINATION.prefix) == [1, 2, 3, 4]
+
+
+async def test_append_keeps_the_old_objects_and_overwrite_deletes_them(store, batches_in_a_bucket):
+    """Add objects in append mode, and start from an empty prefix in overwrite mode."""
+    await put(store, f"{DESTINATION.prefix}/old.parquet")
+
+    await batches_in_a_bucket("append", 10)
+    assert f"{DESTINATION.prefix}/old.parquet" in await gcs.list_keys(store, DESTINATION.prefix)
+
+    await batches_in_a_bucket("overwrite", 10)
+    keys = await gcs.list_keys(store, DESTINATION.prefix)
+    assert f"{DESTINATION.prefix}/old.parquet" not in keys
+    assert len(keys) == 1
+
+
+@pytest.mark.parametrize(
+    ("options", "fails"),
+    [
+        pytest.param(None, False, id="no_options"),
+        pytest.param({"select": ["a"]}, False, id="options_without_batches"),
+        pytest.param({"batches": DAYS}, True, id="batches_over_a_source_read_whole"),
+    ],
+)
+def test_a_source_read_whole_is_never_cut_into_windows(options, fails):
+    """Refuse windows over a source that DuckDB cannot filter, so it is not read many times."""
+    if fails:
+        with pytest.raises(ValueError, match="one window"):
+            without_batches(options, "A layer")
+    else:
+        assert without_batches(options, "A layer") == (options or {})
+
+
+@pytest.mark.parametrize(
+    ("dump_mode", "is_delta", "cleared"),
+    [
+        pytest.param("overwrite", False, True, id="overwrite_clears_the_files_of_an_older_layout"),
+        pytest.param("overwrite", True, False, id="overwrite_never_deletes_a_delta_table"),
+        pytest.param("append", False, False, id="append_never_deletes_anything"),
+    ],
+)
+async def test_the_files_of_an_older_layout_go_before_an_overwrite_builds_a_delta_table(
+    store, monkeypatch, dump_mode, is_delta, cleared
+):
+    """Delete the old Hive files only when an overwrite meets no Delta table."""
+    monkeypatch.setattr(utils, "create_store", lambda *_: store)
+    monkeypatch.setattr(DeltaTable, "is_deltatable", staticmethod(lambda *_: is_delta))
+    key = f"{DESTINATION.prefix}/old.parquet"
+    await put(store, key)
+
+    await clear_legacy(DESTINATION, dump_mode)
+
+    assert (key not in await gcs.list_keys(store, DESTINATION.prefix)) is cleared
+
+
+async def test_a_delta_load_clears_the_older_layout_before_it_writes(monkeypatch):
+    """Clear first, then dump, so the new table never sits beside old Hive files."""
+    order: list[str] = []
+
+    async def fake_clear(*args: object) -> None:
+        """Record the clear, with its dump mode."""
+        order.append(f"clear:{args[1]}")
+
+    async def fake_dump(*args: object) -> None:
+        """Record the dump, with its URI."""
+        order.append(f"dump:{args[2]}")
+
+    monkeypatch.setattr(utils, "clear_legacy", fake_clear)
+    monkeypatch.setattr(utils, "dump_to_delta", fake_dump)
+
+    await load_to_delta(FilesSource(), {}, DESTINATION, "overwrite", None)
+
+    assert order == ["clear:overwrite", "dump:gs://b/staging/ds/tb"]
+
+
+async def test_a_number_width_cuts_an_integer_column_into_runs_of_ids(lake):
+    """Window by runs of ids, and keep every row."""
+    commits = await lake.dump(batches={"column": "id", "width": 2, "begin": 1, "end": 4})
+
+    assert commits == 2
+    assert [row[0] for row in lake.rows()] == [1, 2, 3, 4]
+
+
+def naive(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> datetime:
+    """Return a timestamp without a time zone, as a database column holds it."""
+    return datetime(year, month, day, hour, minute, tzinfo=UTC).replace(tzinfo=None)
+
+
+async def test_a_date_width_also_cuts_a_timestamp_column(lake):
+    """Window by day over a timestamp, and keep the rows of a day whatever the time."""
+    lake.put(
+        [
+            {"id": 1, "dia": naive(2024, 3, 1, 9), "nome": "a", "valor": 1.0},
+            {"id": 2, "dia": naive(2024, 3, 1, 23, 59), "nome": "b", "valor": 2.0},
+            {"id": 3, "dia": naive(2024, 3, 2, 0, 1), "nome": "c", "valor": 3.0},
+        ]
+    )
+
+    commits = await lake.dump(batches=DAYS)
+
+    assert commits == 3
+    assert [row[0] for row in lake.rows()] == [1, 2, 3]
+
+
+@pytest.mark.parametrize(
+    ("batches", "message"),
+    [
+        pytest.param(
+            {"column": "nome", "width": "day", "begin": "2024-03-01"},
+            "a date or a timestamp",
+            id="a_date_width_on_text",
+        ),
+        pytest.param(
+            {"column": "valor", "width": "day", "begin": "2024-03-01"},
+            "a date or a timestamp",
+            id="a_date_width_on_a_float",
+        ),
+        pytest.param({"column": "dia", "width": 10, "begin": 0, "end": 5}, "an integer", id="a_number_width_on_a_date"),
+        pytest.param({"column": "nome", "width": 10, "begin": 0, "end": 5}, "an integer", id="a_number_width_on_text"),
+    ],
+)
+async def test_the_batch_column_must_have_the_type_that_the_windows_need(lake, batches, message):
+    """Refuse a column of another type before any write, as a database would fail on the compare."""
+    with pytest.raises(ValueError, match=message):
+        await lake.dump(batches=batches)
+
+    assert not DeltaTable.is_deltatable(lake.uri)
+
+
+READABLE = {"timestampNtz", "columnMapping", "deletionVectors"}
+"""The reader features that BigQuery supports, with reader version 3 as the most it reads."""
+IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def delta_log(uri: str) -> tuple[dict[str, object], dict[str, str]]:
+    """Return the last protocol and the schema, name to type, that the log of a table records."""
+    protocol: dict[str, object] = {}
+    schema: dict[str, str] = {}
+    for entry in sorted(Path(uri, "_delta_log").glob("*.json")):
+        for line in entry.read_text().splitlines():
+            action = json.loads(line)
+            if "protocol" in action:
+                protocol = action["protocol"]
+            if "metaData" in action:
+                fields = json.loads(action["metaData"]["schemaString"])["fields"]
+                schema = {field["name"]: field["type"] for field in fields}
+    return protocol, schema
+
+
+def assert_bigquery_can_read(uri: str) -> None:
+    """Check the limits that Google lists for a Delta table of BigLake, on the log itself."""
+    protocol, schema = delta_log(uri)
+    features = set(cast("list[str]", protocol.get("readerFeatures", [])))
+
+    assert cast("int", protocol["minReaderVersion"]) <= 3
+    assert features <= READABLE
+    assert not Path(uri, "_delta_log", "_sidecars").exists()
+    assert all(IDENTIFIER.fullmatch(name) for name in schema)
+
+
+@pytest.fixture(scope="module")
+def delta_reader() -> duckdb.DuckDBPyConnection:
+    """Return a DuckDB connection with the delta extension, an independent reader of the log."""
+    connection = duckdb.connect()
+    try:
+        connection.execute("INSTALL delta")
+        connection.execute("LOAD delta")
+    except duckdb.Error:
+        pytest.skip("The DuckDB delta extension is not available")
+    return connection
+
+
+async def after_first_load(lake: Lake) -> None:
+    """Load the three days."""
+    await lake.dump(batches=DAYS)
+
+
+async def after_a_replaced_window(lake: Lake) -> None:
+    """Change one row, so one day is replaced."""
+    await lake.dump(batches=DAYS)
+    lake.put([*ROWS[:2], {**ROWS[2], "valor": 99.0}, ROWS[3]])
+    await lake.dump(batches=DAYS)
+
+
+async def after_an_empty_window(lake: Lake) -> None:
+    """Delete a whole day, so its rows are removed."""
+    await lake.dump(batches=DAYS)
+    lake.put(ROWS[:3])
+    await lake.dump(batches=DAYS)
+
+
+async def after_an_overwrite_with_other_columns(lake: Lake) -> None:
+    """Rebuild with fewer columns, which replaces the schema."""
+    await lake.dump(batches=DAYS)
+    await lake.dump("overwrite", batches=DAYS, select=["id", "dia"])
+
+
+@pytest.mark.extensions
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        pytest.param(after_first_load, id="after_the_first_load"),
+        pytest.param(after_a_replaced_window, id="after_a_replaced_window"),
+        pytest.param(after_an_empty_window, id="after_an_empty_window"),
+        pytest.param(after_an_overwrite_with_other_columns, id="after_an_overwrite_with_other_columns"),
+    ],
+)
+async def test_a_reader_that_is_not_ours_sees_what_we_wrote_and_the_log_fits_bigquery(lake, delta_reader, scenario):
+    """Read the table with DuckDB after each kind of write, as BigQuery reads the log, and check its limits."""
+    await scenario(lake)
+
+    names = [field.name for field in DeltaTable(lake.uri).schema().fields if field.name != "batch"]
+    columns = ", ".join(names)
+    read = delta_reader.execute(f"SELECT {columns} FROM delta_scan('{lake.uri}') ORDER BY 1").fetchall()
+    ours = DeltaTable(lake.uri).to_pyarrow_table().select(names).sort_by("id").to_pylist()
+    assert [tuple(row.values()) for row in ours] == read
+    assert_bigquery_can_read(lake.uri)
+
+
+async def test_the_types_of_the_pipelines_get_the_delta_types_that_bigquery_maps(tmp_path):
+    """Pin the Delta type of each column, which BigQuery reads as INTEGER, NUMERIC, DATETIME and so on."""
+    instant = datetime(2024, 3, 1, 10, tzinfo=UTC)
+    frame = pa.table(
+        {
+            "id": [1],
+            "texto": ["a"],
+            "numero": [1.5],
+            "decimal": pa.array([Decimal("1.25")], pa.decimal128(10, 2)),
+            "flag": [True],
+            "dia": pa.array([date(2024, 3, 1)]),
+            "instante": pa.array([instant.replace(tzinfo=None)], pa.timestamp("us")),
+            "instante_utc": pa.array([instant], pa.timestamp("us", "UTC")),
+        }
+    )
+    pq.write_table(frame, tmp_path / "types.parquet")
+    uri = str(tmp_path / "table")
+
+    await dump_to_delta(FilesSource(), source_values("parquet", str(tmp_path / "types.parquet")), uri, "append", {})
+
+    assert delta_log(uri)[1] == {
+        "id": "long",
+        "texto": "string",
+        "numero": "double",
+        "decimal": "decimal(10,2)",
+        "flag": "boolean",
+        "dia": "date",
+        "instante": "timestamp_ntz",
+        "instante_utc": "timestamp",
+        "batch": "string",
+    }
+    assert_bigquery_can_read(uri)

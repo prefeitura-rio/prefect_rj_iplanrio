@@ -39,7 +39,12 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = ["--import-mode=importlib"]
+addopts = ["--import-mode=importlib", "-m", "not gcp"]
+pythonpath = ["tests"]
+markers = [
+  "gcp: real GCS and BigQuery checks, run with -m gcp and TOOLKIT_GCP_PROJECT",
+  "extensions: needs a DuckDB extension that is downloaded the first time",
+]
 
 [tool.basedpyright]
 typeCheckingMode = "all"
@@ -63,10 +68,15 @@ reportUnusedParameter = false # a fake follows the signature of the real API
 reportUnknownLambdaType = false # lambdas passed to fakes
 reportAny = false # values from untyped fakes
 
+[[tool.basedpyright.executionEnvironments]]
+root = "src/prefect_rj_iplanrio/hooks.py"
+reportUnusedParameter = false # Prefect calls a retry check and a hook with a fixed signature
+
 [tool.pyrefly]
 project-includes = ["src", "tests"]
 python-version = "3.13"
 python-interpreter-path = ".venv/bin/python"
+search-path = ["tests"]
 preset = "strict"
 
 # The tests keep type safety on the shared code; these rules are noise for pytest code.
@@ -106,6 +116,18 @@ select = [
   "PLR0913",
 ] # a task takes flat keyword parameters, so a deployment can set each one
 "src/prefect_rj_iplanrio/flows.py" = ["PLR0913"] # same cause, for a flow
+"src/prefect_rj_iplanrio/hooks.py" = [
+  "ARG001",
+] # Prefect calls a retry check and a hook with a fixed signature, and these use some of the arguments only
+"tests/**" = [
+  "PLR2004",
+] # the expected numbers and values of an assertion are the point of a test
+"tests/fixtures.py" = [
+  "A002",
+  "ARG002",
+  "ARG003",
+  "N802",
+] # a fake follows the names and the signatures of the real API (`http.server`, the BigQuery client)
 "tests/conftest.py" = [
   "ARG002",
   "ARG005",
