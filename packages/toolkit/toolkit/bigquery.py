@@ -13,7 +13,21 @@ from google.cloud.bigquery import (
     Table,
 )
 
+from .constants import GCS_SCHEME, GS_SCHEME
 from .settings import settings
+
+
+def build_source_uri(uri: str) -> str:
+    """Return the `gs://` URI that BigQuery reads, for a `gcs://` URI.
+
+    ```python
+    build_source_uri("gcs://bucket/staging/ds/table")  # "gs://bucket/staging/ds/table"
+    build_source_uri("gs://bucket/staging/ds/table")  # "gs://bucket/staging/ds/table"
+    ```
+    """
+    if uri.startswith(GCS_SCHEME):
+        return GS_SCHEME + uri.removeprefix(GCS_SCHEME)
+    return uri
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,7 +85,7 @@ class BigQuery:
         refresh picks up a new column.
         """
         config = ExternalConfig("DELTA_LAKE")
-        config.source_uris = [uri]
+        config.source_uris = [build_source_uri(uri)]
         config.autodetect = True
         config.connection_id = connection_id
 

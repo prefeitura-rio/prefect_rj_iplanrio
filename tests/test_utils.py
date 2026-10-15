@@ -61,7 +61,7 @@ async def put(store, *keys: str) -> None:
 def test_a_destination_names_the_files_and_the_external_table():
     """Name the folder, the URI, the dataset and the table of one BigQuery table."""
     assert DESTINATION.prefix == "staging/ds/tb"
-    assert DESTINATION.uri == "gs://b/staging/ds/tb"
+    assert DESTINATION.uri == "gcs://b/staging/ds/tb"
     assert DESTINATION.dataset("p") == "p.ds_staging"
     assert DESTINATION.table("p") == "p.ds_staging.tb"
 
@@ -558,7 +558,7 @@ async def test_a_delta_table_is_synced_over_its_prefix_with_the_connection(bigqu
     assert bigquery.calls == [
         ("connect", "p"),
         ("dataset", "p.ds_staging"),
-        ("delta", "p.ds_staging.tb", "gs://b/staging/ds/tb", "p.us.conn"),
+        ("delta", "p.ds_staging.tb", "gcs://b/staging/ds/tb", "p.us.conn"),
     ]
 
 
@@ -708,7 +708,7 @@ async def test_a_delta_load_clears_the_older_layout_before_it_writes(monkeypatch
 
     await load_to_delta(FilesSource(), {}, DESTINATION, "overwrite", None)
 
-    assert order == ["clear:overwrite", "dump:gs://b/staging/ds/tb"]
+    assert order == ["clear:overwrite", "dump:gcs://b/staging/ds/tb"]
 
 
 async def test_a_number_width_cuts_an_integer_column_into_runs_of_ids(lake):

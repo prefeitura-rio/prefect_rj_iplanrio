@@ -68,8 +68,12 @@ class Destination:
 
     @property
     def uri(self) -> str:
-        """Return the `gs://` URI of the table files."""
-        return f"gs://{self.bucket}/{self.prefix}"
+        """Return the `gcs://` URI of the table files.
+
+        `deltalake` reads `gcs://` with OpenDAL, which accepts a WIF ADC (`external_account`),
+        and `gs://` with `object_store`, which does not. `BigQuery` turns it into `gs://`.
+        """
+        return f"gcs://{self.bucket}/{self.prefix}"
 
     def dataset(self, project: str) -> str:
         """Return the BigQuery dataset of the external table."""

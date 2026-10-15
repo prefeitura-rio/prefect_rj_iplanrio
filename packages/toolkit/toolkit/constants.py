@@ -19,6 +19,9 @@ OTEL_HANDLER_NAME: Final = "toolkit-otel"
 SCOPE: Final = "toolkit"
 """The name of the tracer and of the meter of the toolkit."""
 
+GCS_SCHEME: Final = "gcs://"
+GS_SCHEME: Final = "gs://"
+
 QUERY_SPAN: Final = "toolkit.query"
 EXECUTE_SPAN: Final = "toolkit.execute"
 UPLOAD_SPAN: Final = "toolkit.upload"

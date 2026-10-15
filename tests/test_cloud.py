@@ -5,6 +5,7 @@ rules that the real services showed, and a database in memory. Nothing here need
 """
 
 from asyncio import gather
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -74,10 +75,21 @@ class SimulatedCloud:
         return create_store(self.bucket)
 
 
+def read_gs_uri(destination: Destination) -> str:
+    """Return the `gs://` URI, which `object_store` reads from the fake bucket."""
+    return f"gs://{destination.bucket}/{destination.prefix}"
+
+
 @pytest.fixture(scope="module")
-def cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery]) -> SimulatedCloud:
-    """Return the simulated cloud, where `deltalake`, `obstore` and BigQuery reach the fakes."""
-    return SimulatedCloud(fake_gcs, fake_bigquery)
+def cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery]) -> Iterator[SimulatedCloud]:
+    """Return the simulated cloud, where `deltalake`, `obstore` and BigQuery reach the fakes.
+
+    `Destination.uri` is `gcs://` (OpenDAL), which has no setting for a fake endpoint, so it
+    reads `gs://` here.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(Destination, "uri", property(read_gs_uri))
+        yield SimulatedCloud(fake_gcs, fake_bigquery)
 
 
 def sample(rows: list[dict[str, object]]) -> Table:
