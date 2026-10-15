@@ -1099,7 +1099,7 @@ Quem revisa o PR deve recusar um deployment sem tags.
 
 ### 14.1 O que testar
 
-Lógica com ramificações ou parsing em `helpers.py` **deve** ter teste. Tasks finas e flows não precisam de teste: não têm lógica própria (Seções 4.1 e 4.2).
+Lógica com ramificações ou parsing em `helpers.py` **deve** ter teste. Tasks finas não precisam de teste, porque não têm lógica própria (Seção 4.1). **Flows nunca têm teste**: um flow só liga componentes, e confiamos nos testes de cada componente (Seção 4.2). Não escreva teste que roda um flow.
 
 ### 14.2 Estrutura
 

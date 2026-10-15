@@ -202,7 +202,9 @@ Tudo que vai de uma fonte para o bucket usa uma tabela `Delta`, que o BigQuery l
 
 - Uma janela que não mudou ainda é lida na fonte, porque a impressão digital precisa das linhas. Use `lookback` e faça uma carga completa às vezes.
 - Uma consulta nativa (`read.query`) é uma janela só e roda duas vezes: uma para descrever as colunas e outra para ler. O Oracle é a exceção: ele aplica filtros e janelas, em tabela ou consulta.
-- O `deltalake` lê o ADC do Google. Funciona com o servidor de metadados do GKE, com `service account` e com credencial de usuário. **Não funciona** com credencial `external_account` (federação). Confira a credencial do pod antes de ligar uma pipeline.
+- O `deltalake` lê a tabela pelo esquema `gcs://` (OpenDAL), que é o de `Destination.uri`. Esse esquema lê todo tipo de ADC: servidor de metadados do GKE, `service account`, credencial de usuário e `external_account` (federação). O esquema `gs://` não lê o `external_account`.
+- O `BigQuery` só aceita `gs://`, então o `toolkit` converte o `gcs://` na hora de criar a tabela externa (`build_source_uri`).
+- Para conferir a credencial de um pod, rode nele `python -c "from deltalake import DeltaTable; print(DeltaTable.is_deltatable('gcs://<bucket>/staging/x'))"`. O resultado `False` sem erro quer dizer que a autenticação funciona.
 - A planilha precisa estar compartilhada com a `service account`. O `DuckDB` lê todo número da planilha como `DOUBLE`.
 - Os tipos que o `Delta` não guarda e as regras de cada banco estão no [README do toolkit](packages/toolkit/README.md#bancos-tipos-e-limites).
 
@@ -219,10 +221,17 @@ O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência e os 
 ## Testes
 
 ```sh
-pytest   # sem rede nem contêiner
+pytest              # sem rede nem contêiner
+pytest -n 4         # em quatro processos, como o `test:root`
 ```
 
 Os testes não usam a nuvem de verdade. O GCS é um servidor falso com a API XML, o BigQuery lê a tabela `Delta` com as regras que o serviço real mostrou, e o banco é um `DuckDB` em memória. O `deltalake`, o `DuckDB` e o `Polars` são os de verdade. Por isso um teste não pega uma mudança do serviço real: confira com uma execução em um ambiente de staging.
+
+O `pytest-xdist` roda os testes da raiz em quatro processos, e cada processo sobe o próprio servidor GCS falso (as portas são livres, então não há conflito). Com mais de quatro o ganho some, porque cada processo importa o código de novo. Os testes do `toolkit` rodam em um processo só: o ganho lá é de 2 s.
+
+O servidor GCS falso não tem como receber o `gcs://` (o OpenDAL não aceita um endereço falso). Por isso a fixture `cloud` de `tests/test_cloud.py` faz `Destination.uri` devolver `gs://` nos testes. O `gcs://` em si só é conferido pelo teste de `Destination.uri` e pelo de `build_source_uri`.
+
+Flows não têm teste, nem os de `src/utils/flows.py`: um flow só liga componentes, e confiamos nos testes de cada componente (`utils.py` e o `toolkit`).
 
 ## Pipelines
 
