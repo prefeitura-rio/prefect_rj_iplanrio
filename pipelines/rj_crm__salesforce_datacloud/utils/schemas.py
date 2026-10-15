@@ -435,6 +435,15 @@ SCHEMAS: dict[str, list[bigquery.SchemaField]] = {
     "sfmc_whatsapp_send_event_staging": _base_fields(list(_SFMC_WHATSAPP_SEND_EVENT_FIELDS)),
 }
 
+# _first_loaded_at — 1ª vez que o registro chegou (só tabela final). O
+# _loaded_at é sobrescrito a cada MERGE (a janela de 1h recaptura o mesmo id
+# ~4x, e o passe diário de novo), então não serve pra medir atraso de chegada.
+# Preenchido só no INSERT do MERGE (sql/bigquery/merge_staging.sql), nunca no
+# UPDATE. Linhas de antes de 2026-10-15 ficam NULL — sem como recuperar.
+for _nome, _campos in SCHEMAS.items():
+    if not _nome.endswith("_staging"):
+        _campos.append(bigquery.SchemaField("_first_loaded_at", _TIMESTAMP))
+
 # Tabelas com particionamento + clustering
 PARTITIONED_TABLES: dict[str, list[str]] = {
     "ai_agent_session": ["id"],
