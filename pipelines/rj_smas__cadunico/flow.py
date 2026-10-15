@@ -67,6 +67,7 @@ def rj_smas__cadunico(
             dataset_id=dataset_id,
             table_id=table_id,
             max_concurrent=max_concurrent,
+            staging_bucket=staging_bucket,
             wait_for=[need_to_ingest],
         )
     injected_files = False

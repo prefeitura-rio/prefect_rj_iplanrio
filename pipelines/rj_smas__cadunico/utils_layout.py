@@ -12,7 +12,7 @@ import basedosdados as bd
 import numpy as np
 import pandas as pd
 import ruamel.yaml as ryaml
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+from pipelines.rj_smas__cadunico.utils_dump import create_table_and_upload_with_bucket
 from iplanrio.pipelines_utils.gcs import (
     list_blobs_with_prefix,
 )
@@ -878,7 +878,7 @@ def create_cadunico_dbt_consolidated_models(
 
 
 def create_layout_column_cross_version_control_bq_table(
-    dataframe, dataset_id, table_id
+    dataframe, dataset_id, table_id, staging_bucket=None
 ):
     new_dataframe = parse_columns_version_control(dataframe=dataframe)
 
@@ -892,11 +892,12 @@ def create_layout_column_cross_version_control_bq_table(
         savepath=str(output_path),
     )
     table_id = table_id + "_columns_version_control"
-    create_table_and_upload_to_gcs(
+    create_table_and_upload_with_bucket(
         data_path=output_path,
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode="overwrite",
+        bucket_name=staging_bucket,
         biglake_table=True,
         only_staging_dataset=True,
     )
@@ -953,11 +954,12 @@ def update_layout_from_storage_and_create_versions_dbt_models(
             raw_filespaths_to_ingest=raw_filespaths_to_ingest,
         )
         log(f"CRIANDO TABELA DE LAYOUT: {raw_bucket}.{dataset_id}.{layout_table_id}")
-        output_path_result = create_table_and_upload_to_gcs(
+        output_path_result = create_table_and_upload_with_bucket(
             data_path=str(output_path),
             dump_mode="append",
             dataset_id=dataset_id,
             table_id=layout_table_id,
+            bucket_name=staging_bucket,
             only_staging_dataset=True,
         )
         output_path = str(output_path_result)
@@ -985,7 +987,10 @@ def update_layout_from_storage_and_create_versions_dbt_models(
 
         logger.log_progress("CRIANDO CONTROLE DE VERSÕES CROSS-LAYOUT")
         df_final = create_layout_column_cross_version_control_bq_table(
-            dataframe=dataframe, dataset_id=dataset_id, table_id=layout_table_id
+            dataframe=dataframe,
+            dataset_id=dataset_id,
+            table_id=layout_table_id,
+            staging_bucket=staging_bucket,
         )
 
         logger.log_progress("GERANDO MODELOS DBT CONSOLIDADOS")

@@ -44,6 +44,7 @@ def ingest_files_task(
     dataset_id: str,
     table_id: str,
     max_concurrent: int = 3,
+    staging_bucket: str | None = None,
 ) -> None:
     return ingest_files(
         files_to_ingest=files_to_ingest,
@@ -51,6 +52,7 @@ def ingest_files_task(
         dataset_id=dataset_id,
         table_id=table_id,
         max_concurrent=max_concurrent,
+        staging_bucket=staging_bucket,
     )
 
 
