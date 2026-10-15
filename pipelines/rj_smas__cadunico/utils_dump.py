@@ -78,6 +78,9 @@ def create_table_if_not_exists(
         bucket_name (str | None): Explicit GCS staging bucket.
     """
 
+    if not isinstance(bucket_name, str) or not bucket_name.strip():
+        raise ValueError("bucket_name deve ser informado explicitamente")
+
     tb = bd.Table(dataset_id=dataset_id, table_id=table_id, bucket_name=bucket_name)
     st = bd.Storage(dataset_id=dataset_id, table_id=table_id, bucket_name=bucket_name)
 
@@ -137,6 +140,9 @@ def create_table_and_upload_to_gcs_with_bucket(
     the upload uses bd.Storage.upload instead of bd.Table.append (append drops
     bucket_name internally).
     """
+    if not isinstance(bucket_name, str) or not bucket_name.strip():
+        raise ValueError("bucket_name deve ser informado explicitamente")
+
     bd_version = bd.__version__
     log(f"USING BASEDOSDADOS {bd_version}")
     tb = bd.Table(dataset_id=dataset_id, table_id=table_id, bucket_name=bucket_name)
