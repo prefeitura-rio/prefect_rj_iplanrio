@@ -27,7 +27,7 @@ pull:
   parameters:
 {%- if cookiecutter.tipo == "dump_database" %}
     database:
-      type: postgres # postgres, mysql, mssql ou oracle
+      type: postgres
       host: host
       port: 5432
       database: database
@@ -72,7 +72,6 @@ deployments:
       command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
-  # O Prefect troca o grupo inteiro (table, read, options), não só uma chave.
   schedules:
   - cron: "0 1 * * *"
     timezone: America/Sao_Paulo
@@ -84,17 +83,17 @@ deployments:
 {%- if cookiecutter.tipo == "dump_database" %}
       dump_mode: append
       read:
-        table: public.table_name # ou query: "SELECT ..." (uma janela só)
+        table: public.table_name
       options:
         batches:
           column: created_at
-          width: month # day, month, year ou um número de ids
+          width: month
           begin: "2024-01-01"
-          lookback: 2 # relê só as duas últimas janelas
+          lookback: 2
 {%- elif cookiecutter.tipo == "ingest_api" %}
-      dump_mode: append # overwrite troca a tabela
+      dump_mode: append
       url: https://api.example.gov.br/items
-      records_key: data.items # caminho até a lista de registros
+      records_key: data.items
 {%- elif cookiecutter.tipo == "dump_arcgis" %}
       dump_mode: overwrite
       url: https://services.arcgis.com/example/FeatureServer/0

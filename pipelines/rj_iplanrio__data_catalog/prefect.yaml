@@ -36,6 +36,6 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     schedules:
-      - interval: 43200 # executa a cada 12h
+      - interval: 43200
         anchor_date: "2022-01-01T01:00:00"
         timezone: America/Sao_Paulo

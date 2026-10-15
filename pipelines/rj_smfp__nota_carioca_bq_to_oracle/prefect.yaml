@@ -31,7 +31,6 @@ deployments:
   - code_owner:fredzolio
   version: "{{ build-image.tag }}"
   entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle/flow.py:rj_smfp__nota_carioca_bq_to_oracle
-  # Duas cargas simultâneas escreveriam na mesma tabela inativa (A/B); a segunda espera a primeira.
   concurrency_limit:
     limit: 1
     collision_strategy: ENQUEUE
@@ -50,22 +49,16 @@ deployments:
   - code_owner:fredzolio
   version: "{{ get-commit-hash.stdout }}"
   entrypoint: pipelines/rj_smfp__nota_carioca_bq_to_oracle/flow.py:rj_smfp__nota_carioca_bq_to_oracle
-  # Duas cargas simultâneas escreveriam na mesma tabela inativa (A/B); a segunda espera a primeira.
   concurrency_limit:
     limit: 1
     collision_strategy: ENQUEUE
   parameters:
     dataset_id: nota_carioca
-    # dbt antes da carga (falha do dbt falha a carga); para carregar sem dbt, Custom run com run_dbt=false.
     run_dbt: true
-    # Tabelas levadas ao Oracle, cada uma espelhando a original de mesmo nome em DFEN. Lista explícita: uma tabela
-    # nova no dataset só entra no Oracle depois de conferida contra a original.
     table_ids:
     - MVT_NOTAS_NACIONAIS_EXIGIVEIS
     - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
     - MVT_NOTAS_NACIONAIS_DETALHES
-    # dbt só dos models dessas tabelas (e dos testes deles). Precisa da lista completa: a pipeline não mescla com
-    # os padrões.
     dbt_parameters:
       command: build
       select: >-
@@ -79,8 +72,6 @@ deployments:
       gcs_buckets:
         prod: rj-iplanrio_dbt
         dev: rj-iplanrio-dev_dbt
-    # 4 sessões do SQL*Loader (era 2). Cada uma usa ~1,3 core e ~20 MB por coluna de texto (o campo é declarado como
-    # CHAR(4000)): ~0,5 GB na MVT_NOTAS_NACIONAIS_DETALHES. Índices e estatísticas com grau 8 (era 4) no Oracle.
     sqlldr_sessions: 4
     index_parallel_degree: 8
   work_pool:
@@ -91,7 +82,6 @@ deployments:
       command: uv run --package rj_smfp__nota_carioca_bq_to_oracle -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
-      # Reserva o que as 4 sessões usam (~2 GB do SQL*Loader + ~0,5 GB do processo e dos downloads do GCS).
       cpu_request: "4"
       cpu_limit: "6"
       memory_request: 4Gi
@@ -99,6 +89,5 @@ deployments:
   schedules:
   - cron: "0 9,18 * * *"
     timezone: America/Sao_Paulo
-    # Desativada em prod pela UI; mantida desativada para o deploy não religar a agenda sem decisão explícita.
     active: false
     slug: nota-carioca-bq-to-oracle-9h-18h

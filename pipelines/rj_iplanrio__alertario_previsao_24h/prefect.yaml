@@ -28,7 +28,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
     parameters:
-      send_discord_alerts: true  # Desativa envio de alertas ao Discord para teste
+      send_discord_alerts: true
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -42,7 +42,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__alertario_previsao_24h/flow.py:rj_iplanrio__alertario_previsao_24h
     parameters:
-      send_discord_alerts: true  # Ativa envio de alertas ao Discord
+      send_discord_alerts: true
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -53,5 +53,5 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-      - cron: "*/30 * * * *"  # Executa a cada 30 minutos
+      - cron: "*/30 * * * *"
         timezone: America/Sao_Paulo

@@ -1,0 +1,106 @@
+name: Deploy
+on:
+  push:
+    branches:
+      - master
+      - staging/*
+    paths:
+      - pipelines/**
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy to
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+      pipeline:
+        description: Deploy only this pipeline
+        required: false
+        type: string
+      all:
+        description: Deploy every pipeline
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      pipeline:
+        required: false
+        type: string
+        default: ""
+      all:
+        required: false
+        type: boolean
+        default: false
+concurrency:
+  group: deploy-${{ inputs.environment || (github.ref == 'refs/heads/master' && 'prod' || 'staging') }}-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+  pull-requests: read
+env:
+  ENVIRONMENT: ${{ inputs.environment || (github.ref == 'refs/heads/master' && 'prod' || 'staging') }}
+  PREFECT_API_URL: https://prefect.squirrel-regulus.ts.net/api
+jobs:
+  plan:
+    name: Choose the pipelines
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: devenv --profile deploy shell -- bash -e {0}
+    outputs:
+      deploy: ${{ steps.plan.outputs.deploy }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-devenv
+      - id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PIPELINE: ${{ inputs.pipeline }}
+          ALL: ${{ inputs.all }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          BRANCH: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          args=(--environment "$ENVIRONMENT" --before "$BEFORE" --after "$AFTER")
+          [ -n "$PIPELINE" ] && args+=(--pipeline "$PIPELINE")
+          [ "$ALL" = true ] && args+=(--all)
+          [ "$EVENT" = push ] && [ "$ENVIRONMENT" = staging ] && args+=(--open-pr-from "$BRANCH")
+          nu scripts/deploy.nu plan "${args[@]}"
+  deploy:
+    name: Deploy ${{ matrix.pipeline }}
+    needs: plan
+    if: needs.plan.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: devenv --profile deploy shell -- bash -e {0}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:prefect-cicd
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GH_TOKEN }}
+      - uses: ./.github/actions/setup-devenv
+      - run: nu scripts/deploy.nu run "${{ matrix.pipeline }}" --environment "$ENVIRONMENT"

@@ -24,7 +24,6 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  # Deploy APENAS em staging (nao ha necessidade de prod para testes)
   - name: rj-iplanrio--cor-alerts-test-writer--staging
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__cor_alerts_test_writer/flow.py:rj_iplanrio__cor_alerts_test_writer
@@ -41,4 +40,3 @@ deployments:
         command: uv run --package rj_iplanrio__cor_alerts_test_writer -- prefect flow-run execute
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-    # SEM SCHEDULE - executa sob demanda via UI ou CLI

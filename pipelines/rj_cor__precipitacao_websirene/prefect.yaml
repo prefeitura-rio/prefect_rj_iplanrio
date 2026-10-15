@@ -35,24 +35,3 @@ deployments:
         command: uv run --package rj_cor__precipitacao_websirene -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-
-  # - name: rj-cor--precipitacao-websirene--prod
-  #   version: "{{ get-commit-hash.stdout }}"
-  #   entrypoint: pipelines/rj_cor__precipitacao_websirene/flow.py:rj_cor__precipitacao_websirene
-  #   work_pool:
-  #     name: onprem-pool
-  #     work_queue_name: default
-  #     job_variables:
-  #       image: "{{ build-image.image_name }}:{{ build-image.tag }}"
-  #       command: uv run --package rj_cor__precipitacao_websirene -- prefect flow-run execute
-  #       secretName: prefect-jobs-secrets
-  #       image_pull_policy: Always
-  #   schedules:
-  #     - interval: 900
-  #       anchor_date: "2021-01-01T00:03:00"
-  #       timezone: America/Sao_Paulo
-  #       slug: precipitacao-websirene-15min
-  #       parameters:
-  #         dataset_id: clima_pluviometro
-  #         table_id: taxa_precipitacao_websirene
-  #         dump_mode: append

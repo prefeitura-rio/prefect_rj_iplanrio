@@ -31,8 +31,6 @@ deployments:
       - code_owner:miloskimatheus
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_rmi__run_dbt/flow.py:rj_rmi__run_dbt
-    # dbt debug contra prod, que não escreve nada. O target e o secret são os
-    # de prod porque a service account do RMI não tem papel no rj-rmi-dev.
     parameters:
       command: "debug"
       target: "prod"
@@ -51,13 +49,10 @@ deployments:
       - code_owner:miloskimatheus
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_rmi__run_dbt/flow.py:rj_rmi__run_dbt
-    # Valem para o schedule e para o Quick run, que refaz a passada do dia.
     parameters:
       command: "build"
       select: "tag:daily"
       target: "prod"
-    # Uma execução manual durante a agendada espera a vez em vez de escrever
-    # nos mesmos modelos.
     concurrency_limit:
       limit: 1
       collision_strategy: ENQUEUE
@@ -70,8 +65,6 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     schedules:
-      # Depois da passada diária do rj-crm-registry (07:15, termina por volta
-      # de 07:30), da qual o RMI lê tabelas.
       - cron: "0 8 * * *"
         timezone: America/Sao_Paulo
         slug: dbt_daily_build

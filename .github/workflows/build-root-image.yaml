@@ -1,0 +1,44 @@
+name: Build and push root image
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - Dockerfile
+  workflow_dispatch:
+    inputs:
+      pipeline:
+        description: "Deploy specific pipeline (leave empty to rebuild all)"
+        required: false
+        type: string
+
+jobs:
+  build-and-push-root-image:
+    name: Build and push root image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and push root image
+        uses: ./.github/actions/build-and-push-root-image
+        with:
+          repository: ${{ github.repository }}
+          github_token: ${{ secrets.GH_TOKEN }}
+
+  deploy:
+    name: Deploy every pipeline to ${{ matrix.environment }}
+    needs: build-and-push-root-image
+    strategy:
+      fail-fast: false
+      matrix:
+        environment:
+          - staging
+          - prod
+    uses: ./.github/workflows/deploy.yaml
+    with:
+      environment: ${{ matrix.environment }}
+      pipeline: ${{ github.event.inputs.pipeline || '' }}
+      all: ${{ github.event.inputs.pipeline == '' }}
+    secrets: inherit

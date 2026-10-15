@@ -41,7 +41,6 @@ deployments:
       filter_duplicated_phones: false
       filter_duplicated_cpfs: true
     schedules:
-      # Disparo infrequência escolar (SME)
       - cron: "0 15 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -59,7 +58,6 @@ deployments:
           filter_failed_phones: true
           query_file: queries/sme_infrequencia_escolar.sql
 
-      # Disparo emergencial (ex: ventos fortes)
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -78,7 +76,6 @@ deployments:
           batch_size: 10000
           batch_sleep_minutes: 5
 
-      # Cadunico com cadastro desatualizado
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -96,7 +93,6 @@ deployments:
           batch_size: 10000
           batch_sleep_minutes: 5
 
-      # Multas de transito (SMTR)
       - cron: "0 11 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
@@ -113,7 +109,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/smtr_multa_pf.sql
 
-      # Ciclo de vida da pesquisa 1746 (unificado)
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -135,7 +130,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/cvl_pesquisa_1746.sql
 
-      # Divida ativa cobrança
       - cron: "30 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -161,7 +155,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/pgm_divida_ativa_cobranca.sql
 
-      # Divida ativa lembrete
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -182,7 +175,6 @@ deployments:
           filter_duplicated_cpfs: false
           query_file: queries/pgm_divida_ativa_lembrete.sql
 
-      # Divida ativa agradecimento
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -204,7 +196,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/pgm_divida_ativa_agradecimento.sql
 
-      # Puérpera confirma agendamento
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -231,7 +222,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerpera_confirma_agendamento.sql
 
-      # Puérpera D0 - Explicação pesquisa
       - cron: "0 14 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -258,7 +248,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_d0_explica_pesquisa.sql
 
-      # Puérpera D1/D3/D5/D10/D13/D16/D19 - Pesquisa 1
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -269,9 +258,6 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            # 588 = antiga Pesquisa 1 (D1/3/5/10), 562 = antiga Pesquisa 3 (D13/16/19), unificadas aqui.
             id_hsm_legado_placeholder: "588, 562"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
@@ -299,7 +285,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # Puérpera D7/D22 - Pesquisa 4
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -321,7 +306,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-          de_columns: ["nome", "numero_dias", "maternidade"] # única pesquisa cuja hsm usa a variável numero_dias
+          de_columns: ["nome", "numero_dias", "maternidade"]
           max_dispatch_retries: 0
           whitelist_percentage: 0
           whitelist_environment: production
@@ -332,7 +317,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # Puérpera D25/D28/D34 - Pesquisa 5
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -343,7 +327,6 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # 564 = antiga Pesquisa 5 (D25/28), 566 = antiga Pesquisa 6 (D34), unificadas aqui.
             id_hsm_legado_placeholder: "564, 566"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
@@ -367,7 +350,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # Puérpera D40 - Pesquisa 7
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -398,7 +380,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # Confirmação de agendamento do CadÚnico
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -417,7 +398,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/cadunico_confirma_agendamento.sql
 
-      # Confirmação evento Cartao PIC
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -439,7 +419,6 @@ deployments:
           filter_failed_phones: false
           query_file: queries/smas_cartaopic_evento.sql
 
-      # Lembrete evento Cartao PIC
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -478,7 +457,6 @@ deployments:
       filter_duplicated_cpfs: true
 
     schedules:
-      # Multa SMTR PF
       - cron: "0 11 * * 1-5"
         timezone: America/Sao_Paulo
         active: false
@@ -494,9 +472,6 @@ deployments:
           table_id: disparos_efetuados
           filter_duplicated_cpfs: true
           query_file: queries/smtr_multa_pf.sql
-  # Daily schedule para flow cvl-pesquisa1746 (unifica com solução + sem resolução num único
-  # CSV/Data Extension; STATUS_DEMANDA distingue as duas linhas e a Journey no Salesforce
-  # decide qual HSM enviar por linha)
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -518,7 +493,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/cvl_pesquisa_1746.sql
 
-      # PGM Dívida Ativa
       - cron: "30 9 * * 1-5"
         timezone: America/Sao_Paulo
         active: true
@@ -544,7 +518,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/pgm_divida_ativa_cobranca.sql
 
-      # PGM Dívida Ativa - Lembrete
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -565,7 +538,6 @@ deployments:
           filter_duplicated_cpfs: false
           query_file: queries/pgm_divida_ativa_lembrete.sql
 
-      # PGM Dívida Ativa - Confirmação de pagamento
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -587,7 +559,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/pgm_divida_ativa_agradecimento.sql
 
-      # SMS Puérpera - Confirmação de agendamento
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -614,7 +585,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerpera_confirma_agendamento.sql
 
-      # SMS Puérpera - D0
       - cron: "0 14 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -641,7 +611,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_d0_explica_pesquisa.sql
 
-      # SMS Puérpera - D1, D3, D5, D10, D13, D16, D19 - Pesquisa 1
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -652,9 +621,6 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo4v3
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # IDs numéricos legados da Wetalkie (pré-migração pra status_disparo), usados
-            # como fallback de "já disparado" enquanto a status_disparo não tem histórico completo.
-            # 588 = antiga Pesquisa 1 (D1/3/5/10), 562 = antiga Pesquisa 3 (D13/16/19), unificadas aqui.
             id_hsm_legado_placeholder: "588, 562"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 1"
@@ -682,7 +648,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # SMS Puérpera - D7, D22 - Pesquisa 4
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -704,7 +669,7 @@ deployments:
           dataset_id: brutos_salesforce
           campaign_name: smspuerperadisparo6
           data_extension_filename: whatsapp_sms_puerperas_pesquisa4
-          de_columns: ["nome", "numero_dias", "maternidade"] # única pesquisa cuja hsm usa a variável numero_dias
+          de_columns: ["nome", "numero_dias", "maternidade"]
           max_dispatch_retries: 0
           whitelist_percentage: 0
           whitelist_environment: production
@@ -715,7 +680,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # SMS Puérpera - D25, D28, D34 - Pesquisa 5
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -726,7 +690,6 @@ deployments:
           query_replacements:
             nome_hsm_placeholder: smspuerperasdisparo12
             nome_hsm_anterior_placeholder: smspuerperasdisparo25
-            # 564 = antiga Pesquisa 5 (D25/28), 566 = antiga Pesquisa 6 (D34), unificadas aqui.
             id_hsm_legado_placeholder: "564, 566"
             id_hsm_anterior_legado_placeholder: 610
             pesquisa_id: "Pesquisa 5"
@@ -750,7 +713,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # SMS Puérpera - D40 - Pesquisa 7
       - cron: "0 10 * * *"
         timezone: America/Sao_Paulo
         active: true
@@ -781,7 +743,6 @@ deployments:
           whitelist_replace_contacts: true
           query_file: queries/sms_puerperas_pesquisa_template.sql
 
-      # Confirmação de agendamento do CadÚnico
       - cron: "0 13 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -800,7 +761,6 @@ deployments:
           filter_duplicated_cpfs: true
           query_file: queries/cadunico_confirma_agendamento.sql          
 
-      # SMAS - Carta PIC - Evento
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
         active: false
@@ -820,7 +780,6 @@ deployments:
           filter_failed_phones: false
           query_file: queries/smas_cartaopic_evento.sql
 
-      # SMAS - Carta PIC - Lembrete
       - cron: "0 12 * * *"
         timezone: America/Sao_Paulo
         active: false

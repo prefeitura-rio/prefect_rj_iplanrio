@@ -15,9 +15,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# direnv
-.direnv/
-
 # Sphinx documentation
 docs/_build/
 
@@ -50,3 +47,7 @@ pipelines/**/.python-version
 # Egg-info dirs generated inside pipeline packages
 pipelines/**/*.egg-info/
 packages/toolkit/.coverage
+
+# devenv
+.devenv/
+devenv.local.nix

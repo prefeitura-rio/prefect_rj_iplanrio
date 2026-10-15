@@ -24,7 +24,6 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 
 deployments:
-  # Nominatim-only strategy (fast, basic accuracy)
   - name: rj-crm--geolocalizacao-residencia--nominatim--staging
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
@@ -79,12 +78,11 @@ deployments:
       return_original_cols: true
       infisical_secret_path: "/geocoding"
     schedules:
-      - interval: 180  # 3 minutes (from updated schedule)
+      - interval: 180
         anchor_date: "2021-01-01T00:06:00"
         timezone: America/Sao_Paulo
         slug: geocoding_every_3min
 
-  # Fallback strategy (slower, higher accuracy)
   - name: rj-crm--geolocalizacao-residencia--fallback--staging
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
@@ -139,12 +137,11 @@ deployments:
       return_original_cols: true
       infisical_secret_path: "/geocoding"
     schedules:
-      - interval: 3600  # 1 hour for fallback strategy (more expensive)
+      - interval: 3600
         anchor_date: "2021-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: fallback_geocoding_hourly
 
-  # Geoapify batch strategy (medium speed, good accuracy)
   - name: rj-crm--geolocalizacao-residencia--geoapify--staging
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__geolocalizacao_residencia/flow.py:rj_crm__geolocalizacao_residencia
@@ -199,7 +196,7 @@ deployments:
       return_original_cols: true
       infisical_secret_path: "/geocoding"
     schedules:
-      - interval: 1800  # 30 minutes for batch strategy (balanced frequency)
+      - interval: 1800
         anchor_date: "2021-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: batch_geocoding_30min

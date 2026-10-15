@@ -49,56 +49,43 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-    # ========================================
-    # Tabelas com schedule SEMANAL (every_week)
-    # ========================================
 
-    # Cities - Dump mensal da collection cities
-    - interval: 604800  # 7 dias em segundos
+    - interval: 604800
       anchor_date: "2024-09-01T07:00:00"
       timezone: America/Sao_Paulo
       slug: cities-weekly
       parameters:
         table_id: cities
 
-    # Drivers - Dump mensal da collection drivers
-    - interval: 604800  # 7 dias em segundos
+    - interval: 604800
       anchor_date: "2024-09-01T07:05:00"
       timezone: America/Sao_Paulo
       slug: drivers-weekly
       parameters:
         table_id: drivers
 
-    # Discounts - Dump mensal da collection discounts
-    - interval: 604800  # 7 dias em segundos
+    - interval: 604800
       anchor_date: "2024-09-01T07:10:00"
       timezone: America/Sao_Paulo
       slug: discounts-weekly
       parameters:
         table_id: discounts
 
-    # Payment Methods - Dump mensal da collection paymentmethods
-    - interval: 604800  # 7 dias em segundos
+    - interval: 604800
       anchor_date: "2024-09-01T07:15:00"
       timezone: America/Sao_Paulo
       slug: paymentmethods-weekly
       parameters:
         table_id: paymentmethods
 
-    # Users - Dump semanal da collection users
-    - interval: 604800  # 7 dias em segundos
+    - interval: 604800
       anchor_date: "2024-09-02T07:20:00"
       timezone: America/Sao_Paulo
       slug: users-weekly
       parameters:
         table_id: users
 
-    # ========================================
-    # Tabelas com schedule DIÁRIO (every_day)
-    # ========================================
-
-    # Races - Dump incremental diário da collection races
-    - interval: 86400  # 1 dia em segundos
+    - interval: 86400
       anchor_date: "2025-04-28T07:25:00"
       timezone: America/Sao_Paulo
       slug: races-daily
@@ -107,8 +94,7 @@ deployments:
         dump_mode: append
         frequency: D
 
-    # Passengers - Dump incremental diário da collection passengers
-    - interval: 86400  # 1 dia em segundos
+    - interval: 86400
       anchor_date: "2025-04-28T07:30:00"
       timezone: America/Sao_Paulo
       slug: passengers-daily
@@ -117,8 +103,7 @@ deployments:
         dump_mode: append
         frequency: D
 
-    # Ranking Races - Dump mensal da collection rankingraces
-    - interval: 86400  # Executa a cada 24 horas (1 dia)
+    - interval: 86400
       anchor_date: "2024-09-01T07:40:00"
       timezone: America/Sao_Paulo
       slug: rankingraces-daily
@@ -127,8 +112,7 @@ deployments:
         dump_mode: append
         frequency: D
 
-    # Metrics Driver Unoccupieds - Dump mensal da collection metricsdriverunoccupieds
-    - interval: 86400  # Executa a cada 24 horas (1 dia)
+    - interval: 86400
       anchor_date: "2024-09-01T07:45:00"
       timezone: America/Sao_Paulo
       slug: metricsdriverunoccupieds-daily

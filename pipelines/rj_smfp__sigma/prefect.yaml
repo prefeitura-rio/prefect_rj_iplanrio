@@ -48,7 +48,6 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
 
-
     schedules:
       - interval: 86400
         anchor_date: '2026-06-08T20:00:00'
@@ -317,5 +316,3 @@ deployments:
               TEL_ALTERNATIVO1, TEL_ALTERNATIVO2, CD_ORGAO_DESIGNACAO, DS_ORGAO_DESIGNACAO, CD_PERFIL, DS_PERFIL, PRIVILEGIO_ALMOXARIFADO, HORA_ACESSO_INI,
               MINUTO_ACESSO_INI, HORA_ACESSO_FIM, MINUTO_ACESSO_FIM, DT_INCLUSAO, ST_STATUS, ST_SITUACAO, CD_TERMINAL, DT_ULTIMA_SESSAO, HORA_ULTIMA_SESSAO
             FROM SIGMA.VW_USUARIO_SISTEMA
-
-

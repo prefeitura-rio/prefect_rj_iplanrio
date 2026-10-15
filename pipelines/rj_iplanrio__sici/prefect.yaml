@@ -49,9 +49,8 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-      # Schedule diário para dump de órgãos do SICI
-      - interval: 86400  # Executa a cada 24 horas (1 dia)
-        anchor_date: "2024-07-17T18:00:00" # UTC: 18:00hrs / BRT: 15:00hrs
+      - interval: 86400
+        anchor_date: "2024-07-17T18:00:00"
         timezone: America/Sao_Paulo
         slug: sici-orgaos-daily
         parameters:

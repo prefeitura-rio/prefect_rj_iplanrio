@@ -49,8 +49,8 @@ deployments:
         image_pull_policy: Always
 
     schedules:
-      - interval: 86400 # Executa a cada 24 horas (diariamente)
-        anchor_date: "2026-03-01T03:00:00" # Data de início do schedule em UTC
+      - interval: 86400
+        anchor_date: "2026-03-01T03:00:00"
         timezone: America/Sao_Paulo
         slug: rj-setur-turismo-fluxo-visitantes-daily
         parameters:

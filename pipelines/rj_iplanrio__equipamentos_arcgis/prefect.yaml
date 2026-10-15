@@ -80,4 +80,3 @@ deployments:
           crs: EPSG:31983
           dataset_id: brutos_equipamentos
           table_id: culturais_datario
-
