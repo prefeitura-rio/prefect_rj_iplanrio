@@ -404,6 +404,8 @@ Não use `_` como prefixo para indicar nomes internos/privados. Use fronteiras d
 
 Use `UPPER_SNAKE_CASE` apenas para constantes no nível do módulo. Dentro de funções, use `snake_case`.
 
+Nomeie uma função com um verbo no imperativo e o objeto: `read_secret`, `build_column`, `extract_records`. Não use o molde `algo_of` (`config_of`, `records_of`): ele diz o que a função devolve, e não o que ela faz. Uma função que responde sim ou não começa com `is_` ou `has_`. Um script `Nushell` segue a mesma regra, com hífen (`find-deployments`).
+
 ```python
 # ✅ correto — constante real no nível do módulo
 DEFAULT_TMP_PATH = "/tmp/dump"
@@ -836,10 +838,10 @@ Agendamentos vivem exclusivamente no `prefect.yaml` sob a chave `schedules:` do 
 deployments:
   - name: rj-secretaria--pipeline--prod
     schedules:
-      - cron: "0 6 * * 1-5" # dias úteis às 06:00
+      - cron: "0 6 * * 1-5"
         timezone: America/Sao_Paulo
         slug: weekday-morning-run
-      - interval: 3600 # a cada hora
+      - interval: 3600
         anchor_date: "2024-01-01T00:00:00"
         timezone: America/Sao_Paulo
         slug: hourly-run
@@ -891,6 +893,10 @@ secretName: prefect-jobs-secrets # prod
 
 Staging não tem a chave `schedules:`. Prod tem agendamentos. Staging usa `secretName: prefect-jobs-secrets-staging`. Prod usa `secretName: prefect-jobs-secrets`.
 
+### 9.4 Sem comentários
+
+O `prefect.yaml` não tem comentários. O script de deploy (`scripts/deploy.nu`) lê o arquivo com o `Nushell`, e o leitor de YAML dele falha com comentários em alguns lugares. Escreva a explicação no `README.md` ou na `description` da pipeline. A task `lint:prefect` falha se um `prefect.yaml` tem uma linha de comentário ou se o `Nushell` não consegue lê-lo.
+
 ## 10. `pyproject.toml`
 
 ### 10.1 `description`
@@ -914,18 +920,23 @@ Sempre `1.0.0`. O versionamento é tratado no nível do workspace via git tags e
 
 ### 10.3 Dependências
 
-Use limite inferior (`>=`) por padrão. Use `==` apenas com um comentário que explique o motivo (incompatibilidade conhecida, correção de segurança). O `uv.lock` garante a reprodutibilidade. A pipeline declara apenas os pacotes que importa e não repete pacotes que `prefect_rj_iplanrio` já fornece. Não adicione `pandas` (Seção 5.8).
+A pipeline lista só os pacotes que ela importa, pelo nome, sem versão. A versão de cada pacote compartilhado fica em um lugar só: `constraint-dependencies` no `pyproject.toml` da raiz. O `uv.lock` garante a reprodutibilidade. A pipeline não repete pacotes que `prefect_rj_iplanrio` já fornece, como `prefect` e `prefect-docker`. Não adicione `pandas` (Seção 5.8).
+
+- Para subir a versão de um pacote compartilhado, mude uma linha no `pyproject.toml` da raiz.
+- Um pacote que só uma pipeline usa pode levar a versão na própria pipeline. Use `==` só com um comentário que explique o motivo.
+- Um pacote que vem de um repositório git (`prefeitura-rio`) tem o endereço e o `rev` em `[tool.uv.sources]` da raiz, e a pipeline só escreve o nome.
+- A task `lint:deps` falha se uma pipeline escreve versão ou endereço de um pacote que a raiz já define.
 
 ```toml
-# ✅ correto
+# ✅ correto — pacote compartilhado só pelo nome, pacote só desta pipeline com versão
 dependencies = [
     "prefect_rj_iplanrio",
-    "polars>=2.0.0",
+    "pendulum",
     "lxml==6.1.1", # 6.2 quebra o parser HTML de x
 ]
 
-# ❌ errado — pin exato sem motivo de pacote que o workspace já fornece
-dependencies = ["prefect==3.4.9"]
+# ❌ errado — versão de um pacote compartilhado, e pacote que o workspace já fornece
+dependencies = ["pendulum==3.0.0", "prefect==3.8.8"]
 ```
 
 ## 11. `src/utils/` — código compartilhado do workspace
@@ -1140,19 +1151,22 @@ Marque cada item antes de pedir revisão.
 - [ ] Toda função tem type hints e `docstring` em Markdown, com resumo de uma linha ([Seções 5.1 e 5.6](#51-type-hints)).
 - [ ] O código novo usa Polars e DuckDB, sem pandas ([Seção 5.8](#58-dados-tabulares)).
 - [ ] Não há SQL em Python nem em YAML. O SQL está em `queries/*.sql` ([Seção 7](#7-sql)).
+- [ ] O `prefect.yaml` não tem comentários ([Seção 9.4](#94-sem-comentários)).
 - [ ] O agendamento está só no `prefect.yaml`, em `America/Sao_Paulo`. O staging não tem `schedules` ([Seções 8 e 9](#8-agendamento)).
 - [ ] Cada deployment tem as tags `environment`, `severity` e `code_owner` ([Seção 13](#13-tags-de-pipeline)).
-- [ ] O `pyproject.toml` tem `version = "1.0.0"`, um `description` real e dependências com `>=` ([Seção 10](#10-pyprojecttoml)).
+- [ ] O `pyproject.toml` tem `version = "1.0.0"`, um `description` real e dependências pelo nome, sem versão dos pacotes compartilhados ([Seção 10](#10-pyprojecttoml)).
 - [ ] Existe teste para a lógica com ramificações ou parsing de `helpers.py` ([Seção 14](#14-testes)).
 
 ### Quem verifica cada regra
 
-| Regra                                    | Verificação hoje                                                   |
-| ---------------------------------------- | ------------------------------------------------------------------ |
-| Estrutura de arquivos, estilo, SQL, tags | Revisão do PR (ainda não há verificação automática)                |
-| Formatação e lint (`ruff`)               | Configurado no `pyproject.toml`; rode `ruff` à mão                 |
-| Tipos (`basedpyright` e `pyrefly`)       | Configurados no `pyproject.toml`, em `src/` e `tests/`; rode à mão |
-| Build, deploy dos flows, análise SAST    | CI do GitHub (`.github/workflows/`)                                |
+Rode as verificações com `devenv --profile checks tasks run lint:all test:all`. O CI (`ci.yaml`) roda o mesmo comando em todo `pull request`.
+
+| Regra                                                                                                                                    | Verificação                                         |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Estrutura de arquivos, estilo, SQL, tags                                                                                                 | Revisão do PR (ainda não há verificação automática) |
+| Formatação, lint e tipos (`ruff`, `basedpyright`, `pyrefly`), SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
+| Testes unitários                                                                                                                         | `test:all`                                          |
+| Build, deploy dos flows, análise SAST                                                                                                    | CI do GitHub (`.github/workflows/`)                 |
 
 ## 16. Glossário
 

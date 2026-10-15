@@ -27,6 +27,7 @@ rj_sec__pipeline/
 
 - O repositório é um [`workspace` do `uv`](https://docs.astral.sh/uv/concepts/projects/workspaces/). Cada pasta de `pipelines/` e de `packages/` é um membro dele.
 - Toda pipeline depende de `prefect_rj_iplanrio` (`{ workspace = true }`) e recebe as dependências base: `toolkit`, `prefect` e outras.
+- As versões dos pacotes compartilhados (`pendulum`, `pandas`, `dbt-bigquery` e outros) ficam em `constraint-dependencies`, no `pyproject.toml` da raiz. A pipeline lista só o nome do pacote. Para subir uma versão, mude essa linha.
 - O `toolkit` tem o código de uso comum. Veja o [README do toolkit](packages/toolkit/README.md).
 - `src/utils/` tem os flows e as tasks prontos. A pipeline os importa do módulo `utils`:
 
@@ -205,14 +206,23 @@ Tudo que vai de uma fonte para o bucket usa uma tabela `Delta`, que o BigQuery l
 - A planilha precisa estar compartilhada com a `service account`. O `DuckDB` lê todo número da planilha como `DOUBLE`.
 - Os tipos que o `Delta` não guarda e as regras de cada banco estão no [README do toolkit](packages/toolkit/README.md#bancos-tipos-e-limites).
 
+## Desenvolvimento
+
+O ambiente usa [`devenv`](https://devenv.sh) (Python 3.14, `uv`, `nushell`, `duckdb` e `gcloud`). Para entrar nele, rode `devenv shell`.
+
+```sh
+devenv --profile checks tasks run lint:all test:all   # o mesmo que o CI roda
+```
+
+O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência e os workflows. O `test:all` roda os testes da raiz e do toolkit. O `devenv` roda em paralelo o que não depende um do outro e pula o que não mudou desde a última execução. As tasks chamam os scripts `Nushell` de `scripts/`.
+
 ## Testes
 
 ```sh
-pytest                      # sem rede: GCS e BigQuery são simulados
-TOOLKIT_GCP_PROJECT=meu-projeto GOOGLE_APPLICATION_CREDENTIALS=adc.json pytest -m gcp
+pytest   # sem rede nem contêiner
 ```
 
-O nível `gcp` usa GCS, BigQuery e `BigLake` de verdade. Ele precisa de `gcloud`, `bq` e de um ADC com permissão para criar um bucket, uma conexão `BigLake`, um dataset e uma `service account`. Ele cria tudo com um sufixo aleatório e apaga tudo no fim.
+Os testes não usam a nuvem de verdade. O GCS é um servidor falso com a API XML, o BigQuery lê a tabela `Delta` com as regras que o serviço real mostrou, e o banco é um `DuckDB` em memória. O `deltalake`, o `DuckDB` e o `Polars` são os de verdade. Por isso um teste não pega uma mudança do serviço real: confira com uma execução em um ambiente de staging.
 
 ## Pipelines
 
@@ -228,10 +238,28 @@ O nível `gcp` usa GCS, BigQuery e `BigLake` de verdade. Ele precisa de `gcloud`
 
 ## CI/CD
 
-O `GitHub Actions` cuida do ciclo das pipelines:
+O `GitHub Actions` roda as tasks do `devenv` e os scripts `Nushell` de `scripts/`. Assim o que roda no CI roda igual na sua máquina.
 
-- **Deploy dos flows** (`.github/workflows/deploy-prefect-flows-prod.yaml` e `deploy-prefect-flows-staging.yaml`): rodam `.github/scripts/deploy_prefect_flows.py`, que registra todo `pipelines/*/prefect.yaml`. A produção roda a cada `push` na `master` e o `staging` a cada `push` em `staging/*`, quando algo em `pipelines/**` muda. Se um `deploy` falha, o `workflow` para.
-- **Imagem base** (`.github/workflows/build-and-push-root-dockerfile.yaml`): a cada mudança no `Dockerfile` da raiz, na `master`, publica `ghcr.io/<repositório>:latest`.
+| Workflow                | Quando roda                                                                                  | O que faz                                                                                                                                   |
+| ----------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yaml`               | `pull request` e `push` na `master`                                                          | `devenv --profile checks tasks run lint:all test:all`. O `devenv` já roda as tasks independentes em paralelo.                               |
+| `deploy.yaml`           | `push` na `master` (prod) ou em `staging/*` (staging), quando `pipelines/**` muda; ou manual | Escolhe as pipelines com `scripts/deploy.nu plan` e registra cada uma no `Prefect` com `scripts/deploy.nu run`, quatro por vez.             |
+| `build-root-image.yaml` | Mudança no `Dockerfile` da raiz, na `master`; ou manual                                      | Publica `ghcr.io/<repositório>:latest` e chama `deploy.yaml` para todas as pipelines, em staging e em prod (os dois ambientes em paralelo). |
+| `sast.yml`              | `pull request` e `push` na `master`                                                          | Análise de segurança.                                                                                                                       |
+
+Como o `deploy.yaml` funciona:
+
+- **`plan`:** a lista é a das pipelines com arquivo mudado entre o commit anterior ao `push` e o atual, e que têm um `deployment` do ambiente (`rj-...--prod` ou `rj-...--staging`). Em staging, só segue se a branch tem um `pull request` aberto para a `master`.
+- **`deploy`:** um job por pipeline, cada um no próprio runner, com quatro em paralelo. Uma falha não cancela as outras. O script tenta de novo (duas vezes) só quando o erro é de rede.
+- **Manual:** informe o ambiente e, se quiser, uma `pipeline` ou `all`.
+- **Só `pipelines/**` dispara o deploy.** Cada imagem tem `src/` e `packages/` dentro. Para publicar uma mudança nelas, rode o `deploy.yaml` à mão com `all`.
+
+Para testar o plano na sua máquina:
+
+```sh
+devenv --profile deploy shell -- nu scripts/deploy.nu plan --environment prod --all
+devenv --profile deploy shell -- nu scripts/deploy.nu run rj_smdue__dump_db_sislic --environment prod --dry-run
+```
 
 ## Problemas comuns
 
@@ -239,6 +267,6 @@ O `GitHub Actions` cuida do ciclo das pipelines:
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `uv sync --package` falha com "package not found"          | O `pyproject.toml` da pipeline não declara `prefect_rj_iplanrio`. Ponha-o em `dependencies` e `prefect_rj_iplanrio = { workspace = true }` em `[tool.uv.sources]`. |
 | `No module named 'utils.flows'`                            | Um `utils.py` ou uma pasta `utils/` da pipeline esconde o módulo compartilhado. Renomeie o código local (por exemplo, `helpers.py`).                               |
-| O build do Docker falha com `cx-oracle` ou `pkg_resources` | O `cx-oracle` não funciona no Python 3.13. O `pyproject.toml` da raiz já usa `oracledb`. Rode `uv lock`.                                                           |
+| O build do Docker falha com `cx-oracle` ou `pkg_resources` | O `cx-oracle` não funciona no Python 3.14. O `pyproject.toml` da raiz já usa `oracledb`. Rode `uv lock`.                                                           |
 | O `container` não acha `utils` ou `toolkit`                | O `Dockerfile` não copia `src/` e `packages/`. Copie as duas pastas, como no modelo.                                                                               |
 | O `uv.lock` está desatualizado ao criar uma pipeline       | Rode `uv lock` na raiz do repositório.                                                                                                                             |

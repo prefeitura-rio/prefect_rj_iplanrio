@@ -45,7 +45,7 @@ O SQL é um modelo `Jinja` em `queries/count_events.sql`, que lê o banco anexad
 | `toolkit.executor`  | `Executor`, `Engine`, as fontes e os modelos SQL. `query` devolve um `Dataset` tipado.                                                                  |
 | `toolkit.functions` | As funções do `DuckDB`, que toda conexão tem. Veja a lista abaixo.                                                                                      |
 | `toolkit.batches`   | As janelas de um `dump` e o `hash` da configuração.                                                                                                     |
-| `toolkit.delta`     | A tabela `Delta` de um `dump`: `write_window` (troca uma janela, soma linhas com `append` ou grava a hora com `extracted_at`), `compact` e `maintain`. |
+| `toolkit.delta`     | A tabela `Delta` de um `dump`: `write_window` (troca uma janela, soma linhas com `append` ou grava a hora com `extracted_at`), `compact` e `maintain`.  |
 | `toolkit.gcs`       | `create_store`, `list_keys`, `upload` e `delete_keys`, com `obstore` e chaves `HMAC`.                                                                   |
 | `toolkit.bigquery`  | `BigQuery`: `table_exists`, `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake). |
 | `toolkit.oracle`    | `Oracle`, um `Engine` com `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                 |
@@ -145,7 +145,13 @@ A chave de ingestão é um segredo: injete `OTEL_EXPORTER_OTLP_HEADERS` como as 
 
 ## Desenvolvimento
 
-No diretório `packages/toolkit/` (use `UV_PROJECT_ENVIRONMENT=<repo>/.venv` se o seu `shell` definir outro ambiente):
+Na raiz do repositório, o `devenv` roda as verificações (veja o [README da raiz](../../README.md#desenvolvimento)):
+
+```sh
+devenv --profile checks tasks run lint:all test:all
+```
+
+Ou, no diretório `packages/toolkit/`, uma ferramenta de cada vez:
 
 ```sh
 uv run ruff check . && uv run ruff format --check .
