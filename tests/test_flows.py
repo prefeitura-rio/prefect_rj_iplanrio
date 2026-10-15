@@ -21,7 +21,7 @@ from utils.flows import (
 )
 from utils.types import Cloud, Database, Table
 
-CLOUD: Cloud = {"bucket": "simulated-bucket", "project": "p", "biglake_connection": "p.us.connection"}
+CLOUD: Cloud = {"bucket": "simulated-bucket", "project": "p", "connection": "p.us.connection"}
 FIRST_RUN = datetime(2024, 3, 10, 9, 0, tzinfo=UTC)
 SECOND_RUN = datetime(2024, 3, 10, 9, 5, tzinfo=UTC)
 
@@ -150,7 +150,7 @@ async def test_files_that_a_flow_made_are_loaded_and_published(cloud, tmp_path):
     assert read(cloud, "files") == [7, 8]
 
 
-DATABASE: Database = {"db_type": "postgres", "host": "h", "port": 5432, "database": "d", "secret_path": "/db-x"}
+DATABASE: Database = {"type": "postgres", "host": "h", "port": 5432, "database": "d", "secret_path": "/db-x"}
 
 
 @pytest.fixture

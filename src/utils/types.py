@@ -12,7 +12,7 @@ type FileFormat = Literal["parquet", "csv", "json"]
 class Database(TypedDict):
     """The database to read, with the secret that holds its user and password."""
 
-    db_type: str
+    type: str
     host: str
     port: int
     database: str
@@ -24,7 +24,7 @@ class Cloud(TypedDict):
 
     bucket: str
     project: str
-    biglake_connection: NotRequired[str | None]
+    connection: NotRequired[str | None]
 
 
 class Table(TypedDict):

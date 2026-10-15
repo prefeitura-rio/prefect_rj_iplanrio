@@ -88,19 +88,19 @@ async def clear_prefix(store: ObjectStore, destination: Destination) -> None:
 async def publish(
     destination: Destination,
     project: str,
-    biglake_connection: str | None,
+    connection: str | None,
 ) -> None:
     """Create the BigQuery table over the Delta table of the bucket, or refresh its schema.
 
-    A Delta table is a BigLake table, so it needs `biglake_connection`. Raise
+    A Delta table is a BigLake table, so it needs `connection`. Raise
     `ValueError` without it.
     """
-    if not biglake_connection:
+    if not connection:
         raise ValueError("A Delta table needs a BigLake connection")
 
     async with BigQuery.connect(project) as bigquery:
         await bigquery.create_dataset(destination.dataset(project))
-        await bigquery.sync_delta_table(destination.table(project), destination.uri, biglake_connection)
+        await bigquery.sync_delta_table(destination.table(project), destination.uri, connection)
 
 
 def source_values(source_type: str, query: str) -> dict[str, TemplateValue]:

@@ -82,13 +82,13 @@ async def upload_files_to_gcs(
 async def publish_table_in_bq(table: Table, cloud: Cloud) -> None:
     """Create the BigQuery table over the Delta table in the bucket, or refresh its schema.
 
-    BigQuery reads a Delta table through a BigLake connection, so `biglake_connection`
+    BigQuery reads a Delta table through a BigLake connection, so `connection`
     in `cloud` is required.
     """
     await publish(
         Destination(cloud["bucket"], table["dataset_id"], table["table_id"]),
         cloud["project"],
-        cloud.get("biglake_connection"),
+        cloud.get("connection"),
     )
 
 
@@ -129,8 +129,8 @@ async def dump_db_to_gcs(
         credentials.password,
     )
     await load_to_delta(
-        get_source(database["db_type"]).from_context(SourceContext(conn)),
-        read_values(database["db_type"], read, "batches" in chosen),
+        get_source(database["type"]).from_context(SourceContext(conn)),
+        read_values(database["type"], read, "batches" in chosen),
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,
         chosen,
