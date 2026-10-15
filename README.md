@@ -1,95 +1,89 @@
-# Pipelines - Prefect
+# Pipelines - `Prefect`
 
-Este repositório contém pipelines desenvolvidas com Prefect para automação de fluxos de dados da Prefeitura do Rio de Janeiro.
+Este repositório tem as pipelines `Prefect` da Prefeitura do Rio de Janeiro. Para contribuir, leia o [guia de contribuição](https://iplan-rio.mintlify.app/data-lake/prefect/construindo-uma-pipeline) e o [guia de estilo](STYLEGUIDE.md).
 
-## Contribuindo com o projeto
-
-Se você deseja contribuir com o projeto, acesse nossa [guia de contribuição](https://iplan-rio.mintlify.app/data-lake/prefect/construindo-uma-pipeline).
-
-## Estrutura do projeto
-
-### Raiz do repositório
+## Estrutura
 
 ```
-pipelines/
-├── rj_sec__pipeline1/
-├── rj_sec__pipeline2/
-└── ...
-src/
-└── utils/
-    └── __init__.py
-packages/
-└── toolkit/
-    └── toolkit/
-Dockerfile
-pyproject.toml
-uv.lock
+pipelines/          uma pasta por pipeline: rj_<secretaria>__<pipeline>/
+src/utils/          flows e tasks prontos, usados por várias pipelines
+packages/toolkit/   biblioteca com o código de uso comum (DuckDB, GCS, BigQuery, dbt)
+templates/          modelo para criar uma pipeline nova
+Dockerfile          imagem base de todas as pipelines
+pyproject.toml      dependências do repositório
 ```
 
-### Pipeline
+Cada pipeline tem estes arquivos:
 
 ```
-rj_sec__pipeline
-├── Dockerfile
-├── flow.py
-├── prefect.yaml
-├── pyproject.toml
-└── ...
+rj_sec__pipeline/
+├── flow.py          o flow
+├── prefect.yaml     o deployment: parâmetros, agenda e infraestrutura
+├── pyproject.toml   as dependências da pipeline
+└── Dockerfile       a imagem da pipeline
 ```
 
-## Como usar este repositório
+## Como funciona
 
-Este repositório utiliza um modelo monorepo para gerenciar múltiplas pipelines Prefect de forma centralizada e padronizada:
+- O repositório é um [`workspace` do `uv`](https://docs.astral.sh/uv/concepts/projects/workspaces/). Cada pasta de `pipelines/` e de `packages/` é um membro dele.
+- Toda pipeline depende de `prefect_rj_iplanrio` (`{ workspace = true }`) e recebe as dependências base: `toolkit`, `prefect` e outras.
+- O `toolkit` tem o código de uso comum. Veja o [README do toolkit](packages/toolkit/README.md).
+- `src/utils/` tem os flows e as tasks prontos. A pipeline os importa do módulo `utils`:
 
-- **Dockerfile base**: o arquivo `Dockerfile` na raiz define a imagem base utilizada por todas as pipelines. Ele inclui as dependências essenciais para execução dos fluxos, como Python, Prefect, drivers de banco de dados e ferramentas auxiliares. Cada pipeline pode customizar sua própria imagem a partir desse Dockerfile base, garantindo consistência e facilidade de manutenção.
+  ```python
+  from utils.flows import dump_database
+  ```
 
-- **`pyproject.toml` centralizado com uv workspaces**: o `pyproject.toml` na raiz do projeto gerencia as dependências Python de todas as pipelines utilizando [uv workspaces](https://docs.astral.sh/uv/concepts/projects/workspaces/).
-  - Cada subdiretório em `pipelines/` representa um módulo Python independente, mas todos são importados automaticamente como membros do workspace.
-  - As pipelines declaram `prefect_rj_iplanrio` como dependência com `{ workspace = true }`, herdando automaticamente as dependências base (`toolkit`, `prefect`, `pandas`, etc.).
-  - Novas pipelines adicionadas à pasta `pipelines/` são automaticamente reconhecidas e integradas ao workspace, sem necessidade de configuração manual adicional.
+- **Não crie `utils.py` nem `utils/` em uma pipeline.** O `Prefect` procura imports primeiro na pasta do `flow.py`, então um arquivo com esse nome esconde o módulo `utils`. Use `helpers.py` para o código só da pipeline.
 
-- **Pacote `toolkit`**: o diretório `packages/toolkit/` é um membro do workspace com os primitivos compartilhados (execução de SQL no DuckDB, staging no GCS, tabelas externas no BigQuery, extração de bancos). As regras estão em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md).
+## Criar uma pipeline
 
-- **Código compartilhado**: o diretório `src/utils/` contém código Python compartilhado entre as pipelines.
-  - Funções utilitárias, classes base, helpers e lógica comum podem ser adicionados neste pacote.
-  - Todas as pipelines que dependem de `prefect_rj_iplanrio` (o nome do pacote do workspace) podem importar este código pelo módulo `utils`:
-    ```python
-    from utils.flows import dump_database
-    ```
-  - Um `utils.py` ou uma pasta `utils/` ao lado do `flow.py` de uma pipeline esconde o módulo compartilhado, porque o Python acha o da pasta do `flow.py` primeiro. Dê outro nome ao módulo local, como `helpers.py`.
-  - Isso evita duplicação de código e facilita a manutenção de funcionalidades reutilizáveis.
+Instale o `uv` e rode:
 
-Esse modelo garante reprodutibilidade, isolamento e facilidade de evolução para todas as pipelines do repositório.
+```sh
+uvx cookiecutter templates --output-dir=pipelines
+```
 
-### Tarefas e fluxos compartilhados
+O `cookiecutter` pergunta a `secretaria`, o nome da `pipeline`, o `tipo`, a `severidade` e o `code_owner`. O `tipo` escolhe o flow pronto:
 
-`src/utils/tasks.py` e `flows.py` têm o que mais de uma pipeline usa, sobre o `toolkit`. Os fluxos são assíncronos, e os parâmetros de cada ambiente (`bucket`, `project`, `biglake_connection`) vêm do `prefect.yaml`. Os parâmetros são grupos tipados (`Database`, `Cloud`, `Table`, `Read` e `DumpOptions`, em `types.py`): o Prefect recusa uma chave que falta, um erro de digitação ou um tipo errado antes de rodar. O Prefect troca o grupo inteiro, e não só a chave, quando um `schedule` repete um parâmetro do `deployment`, então `database` e `cloud` ficam no `deployment` e `table`, `read` e `options` em cada `schedule`.
+| `tipo`          | O que faz                                                              |
+| --------------- | ---------------------------------------------------------------------- |
+| `dump_database` | Copia uma tabela ou consulta de Postgres, MySQL, SQL Server ou Oracle. |
+| `ingest_api`    | Faz uma requisição a uma API e soma os registros à tabela.             |
+| `dump_arcgis`   | Copia uma camada do `ArcGIS`.                                          |
+| `dump_gsheet`   | Copia uma planilha do Google.                                          |
 
-| Item                                             | O que faz                                                                                                                                                                                                                                                              |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dump_db_to_gcs(database, table, read, ...)`     | Copia uma tabela ou uma consulta de `postgres`, `mysql`, `mssql` ou `oracle` para uma tabela `Delta` no bucket, uma janela por vez, sem repetir dado que não mudou.                                                                                                    |
-| `publish_table_in_bq(table, cloud)`              | Cria a tabela do BigQuery sobre a tabela `Delta` do bucket, ou atualiza o esquema dela. Exige `biglake_connection`.                                                                                                                                                    |
-| `dump_bq_to_gcs(table, read, ...)`               | Copia uma tabela ou consulta do BigQuery para `Parquet` no bucket, em lotes simples: o `DuckDB` lê `batch_size` linhas por vez e cada lote vira um arquivo. Não tem ledger, e um `append` repetido soma as linhas de novo.                                             |
-| `dump_arcgis_to_gcs(table, url, ...)`            | Carrega uma camada do ArcGIS REST em uma tabela `Delta`, como uma janela só. Com `crs`, como `EPSG:31983`, o servidor responde nesse sistema de coordenadas.                                                                                                           |
-| `dump_gsheet_to_gcs(table, spreadsheet_id, ...)` | Carrega uma planilha do Google em uma tabela `Delta`, como uma janela só.                                                                                                                                                                                              |
-| `upload_files_to_gcs(data_path, table, ...)`     | Carrega arquivos locais (`Parquet`, CSV como texto ou JSON) em uma tabela `Delta`, com os mesmos `options` do dump de um banco.                                                                                                                                        |
-| `write_sheet(data_path, spreadsheet_id, ...)`    | Escreve arquivos locais em uma planilha do Google.                                                                                                                                                                                                                     |
-| `request_json(url, ...)`                         | Envia uma requisição (`GET` por padrão) e devolve o JSON. Tenta de novo depois de timeout, erro de rede, 429 ou 5xx, e falha na hora com um 4xx. Um `POST` precisa aceitar repetição.                                                                                  |
-| `write_records(records, folder)`                 | Grava uma lista de objetos como linhas JSON em uma pasta, pronta para `upload_files_to_gcs` com `source_format="json"`.                                                                                                                                                |
-| `read_bq(query, project=...)`                    | Roda uma consulta do BigQuery e devolve as linhas em um `DataFrame` do `Polars`, todas na memória.                                                                                                                                                                     |
-| `run_bq_sql(sql, project=...)`                   | Roda uma instrução do BigQuery, como um `MERGE`, e devolve quantas linhas ela mudou. Quem escreve a instrução é a pipeline, então ela não pode receber valor externo.                                                                                                  |
-| `notify_discord(message, webhook=None)`          | Posta uma mensagem no Discord, no `webhook` ou em `DISCORD_WEBHOOK_URL`. Falha se não houver `webhook` ou se o Discord recusar.                                                                                                                                        |
-| `compact_delta_table(table, bucket=...)`         | Junta os arquivos pequenos de uma tabela `Delta`, depois do `append` de várias execuções, e apaga os que nenhuma versão lê.                                                                                                                                            |
-| `run_dbt(request)`                               | Roda um comando `dbt` de um repositório de consultas.                                                                                                                                                                                                                  |
-| `dump_database(...)` (fluxo)                     | Junta `dump_db_to_gcs` e `publish_table_in_bq`, com duas tentativas em cada etapa. Uma tentativa nova é segura: o que já foi gravado não se repete. Com `dbt`, roda um comando `dbt` depois da publicação. Uma falha avisa no Discord se houver `DISCORD_WEBHOOK_URL`. |
-| `dbt_run(request)` (fluxo)                       | Clona o repositório, roda `dbt deps` e o comando de `request`. Um `profiles.yml` no projeto vale mais que o de `~/.dbt`.                                                                                                                                               |
-| `dump_arcgis(...)` (fluxo)                       | `dump_arcgis_to_gcs` e `publish_table_in_bq`.                                                                                                                                                                                                                          |
-| `dump_gsheet(...)` (fluxo)                       | `dump_gsheet_to_gcs` e `publish_table_in_bq`.                                                                                                                                                                                                                          |
-| `load_files(...)` (fluxo)                        | `upload_files_to_gcs` e `publish_table_in_bq`, para um fluxo que já fez os arquivos.                                                                                                                                                                                   |
-| `ingest_api(...)` (fluxo)                        | Manda uma requisição a uma API e carrega os registros em uma tabela do BigQuery. Veja abaixo.                                                                                                                                                                          |
-| `compact_tables(cloud, tables)` (fluxo)          | Roda `compact_delta_table` em cada tabela, para as pipelines que fazem `append` a cada poucos minutos.                                                                                                                                                                 |
+O modelo cria `flow.py` (duas linhas), `prefect.yaml` (`staging` e produção, com um `schedule` de exemplo), `pyproject.toml` e `Dockerfile`. Troque os valores de exemplo e pronto.
 
-Uma pipeline de dump só precisa de um `flow.py` de duas linhas e dos parâmetros no `prefect.yaml`:
+Se nenhum `tipo` serve, escreva um `flow.py` que chama as [tasks prontas](#tasks-prontas).
+
+## Flows prontos
+
+Os flows ficam em `src/utils/flows.py`. Todos gravam em uma tabela do BigQuery e avisam no Discord quando falham (se existir `DISCORD_WEBHOOK_URL`).
+
+| Flow             | O que faz                                                                                 |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| `dump_database`  | Copia um banco para o BigQuery sem repetir dado. Com `dbt`, roda um comando `dbt` no fim. |
+| `ingest_api`     | Faz uma requisição a uma API e carrega os registros.                                      |
+| `dump_arcgis`    | Copia uma camada do `ArcGIS`. `crs` (como `EPSG:31983`) escolhe o sistema de coordenadas. |
+| `dump_gsheet`    | Copia uma planilha. A primeira linha é o cabeçalho.                                       |
+| `load_files`     | Carrega arquivos locais (`Parquet`, CSV ou JSON). Use em um flow que criou os arquivos.   |
+| `compact_tables` | Junta os arquivos pequenos de tabelas que recebem dados a cada poucos minutos.            |
+| `dbt_run`        | Clona o repositório de consultas e roda um comando `dbt`.                                 |
+
+Os parâmetros são grupos com tipo (`src/utils/types.py`). O `Prefect` recusa uma chave que falta ou um tipo errado antes de rodar.
+
+| Grupo      | O que tem                                                                          | Onde fica no `prefect.yaml` |
+| ---------- | ---------------------------------------------------------------------------------- | --------------------------- |
+| `database` | `type`, `host`, `port`, `database` e `secret_path` (o segredo com usuário e senha) | `deployment`                |
+| `cloud`    | `bucket`, `project` e `connection` (a conexão `BigLake`)                           | `deployment`                |
+| `table`    | `dataset_id` e `table_id`, a tabela no BigQuery                                    | `schedule`                  |
+| `read`     | `table` (`esquema.tabela`) ou `query` (no dialeto do banco)                        | `schedule`                  |
+| `options`  | `batches`, `filters`, `select` e `columns`                                         | `schedule`                  |
+
+Cada `schedule` repete o grupo inteiro. O `Prefect` troca o grupo todo, e não só uma chave.
+
+### Exemplo: banco para o BigQuery
 
 ```python
 from utils.flows import dump_database
@@ -103,7 +97,7 @@ deployments:
     entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
     parameters:
       database:
-        db_type: postgres
+        type: postgres # postgres, mysql, mssql ou oracle
         host: 10.0.0.1
         port: 5432
         database: app
@@ -111,245 +105,140 @@ deployments:
       cloud:
         bucket: bucket-prod
         project: project-prod
-        biglake_connection: project-prod.us.biglake
+        connection: project-prod.us.biglake
     schedules:
-      - interval: 86400
+      - cron: "0 1 * * *"
+        timezone: America/Sao_Paulo
         slug: orders
         parameters:
-          table: { dataset_id: brutos_app, table_id: orders }
-          read: { table: public.orders } # ou { query: "SELECT ..." }, uma janela só
-          dump_mode: append
+          table:
+            dataset_id: brutos_app
+            table_id: orders
+          read:
+            table: public.orders # ou query: "SELECT ...", uma janela só
+          dump_mode: append # ou overwrite
           options:
-            batches: { column: data_pedido, width: month, begin: "2024-01-01", lookback: 2 }
-            filters: [{ column: status, op: "!=", value: cancelado }] # linhas
-            select: [id, nome, valor, data_pedido] # colunas
-            columns: { normalize_values: true, transforms: { cpf: normalize_cpf }, add_timestamp: true }
+            batches:
+              column: data_pedido
+              width: month
+              begin: "2024-01-01"
+              lookback: 2
+            filters: # só estas linhas
+              - column: status
+                op: "!="
+                value: cancelado
+            select: # só estas colunas
+              - id
+              - nome
+              - valor
+              - data_pedido
+            columns:
+              normalize_values: true # limpa o texto
+              add_timestamp: true # grava a hora da carga
 ```
 
-**Pipeline de API**
+### Exemplo: API para o BigQuery
 
-`ingest_api` manda uma requisição, tira a lista de registros da resposta (`records_key`, um caminho com pontos como `data.items`, ou vazio quando a resposta já é a lista) e carrega os registros. `{NOME}` em `params` e em `headers` vem do segredo de `secret_path` (a variável `API_X__NOME` do caminho `/api-x`), então o token nunca fica no `prefect.yaml`. Uma resposta sem registro não carrega nada.
+O `ingest_api` faz a requisição e tira a lista de registros da resposta. `records_key` é o caminho até a lista, como `data.items`. Deixe vazio se a resposta já é a lista.
 
-```python
-from utils.flows import ingest_api
-
-rj_secretaria__api = ingest_api.with_options(name="rj_secretaria__api")
-```
+`{NOME}` em `headers` e `params` vem do segredo de `secret_path`. O caminho `/api-x` lê a variável `API_X__NOME`. Assim o token nunca fica no `prefect.yaml`.
 
 ```yaml
-parameters:
-  cloud: { bucket: bucket-prod, project: project-prod, biglake_connection: project-prod.us.biglake }
 schedules:
-  - interval: 900
+  - cron: "*/15 * * * *"
+    timezone: America/Sao_Paulo
     slug: leituras
     parameters:
-      table: { dataset_id: brutos_api, table_id: leituras }
+      table:
+        dataset_id: brutos_api
+        table_id: leituras
       url: https://api.exemplo.gov.br/leituras
       secret_path: /api-exemplo
-      headers: { Authorization: "Bearer {TOKEN}" }
+      headers:
+        Authorization: "Bearer {TOKEN}"
       records_key: data.items
 ```
 
-- Em `append` (o padrão), cada execução soma os registros dela à tabela, em uma janela do dia (`capture`). Uma tentativa nova da mesma execução não soma de novo, mesmo que a API devolva outros dados, porque o `ledger` guarda a hora agendada da execução. Uma execução nova, mesmo manual, é outra captura.
-- Em `overwrite`, os registros trocam a tabela. Serve a uma API que devolve uma lista, e não um fluxo de leituras.
-- O fluxo manda uma requisição. Uma API paginada precisa de uma pipeline que manda cada página com `request_json` e carrega todas com `load_files`.
-- Uma captura nunca troca uma janela, então os arquivos pequenos se acumulam. Agende `compact_tables` (por exemplo, à noite) para as tabelas que recebem uma captura a cada poucos minutos.
+- Em `append` (o padrão), cada execução soma os registros dela à tabela. Se a mesma execução roda de novo, ela não soma de novo, mesmo que a API devolva outros dados. Uma execução nova, mesmo manual, soma de novo.
+- Em `overwrite`, os registros trocam a tabela.
+- O flow faz uma requisição só. Para uma API com páginas, escreva um flow que pede cada página com `request_json` e carrega tudo com `load_files`.
+- Cada execução cria arquivos pequenos. Agende `compact_tables` (por exemplo, à noite) para as tabelas que recebem dados a cada poucos minutos.
 
-**Como o dump não repete dado**
+## Tasks prontas
 
-1. Uma janela é uma faixa fixa de uma coluna: um `day`, `month` ou `year` de uma data, ou um número de ids (`width: 1000000`). A chave é estável, por exemplo `2024-03-01`. Sem `batches`, a fonte inteira é uma janela só. Com `batches`, as linhas cuja coluna é `NULL` ficam numa última janela, `null`, que toda execução relê (nenhuma faixa as contém).
-2. Para cada janela, o `DuckDB` lê a fonte já com a janela e os `filters` (o banco recebe o filtro, porque `read.table` é uma tabela anexada), aplica `select` e `columns`, e grava um `Parquet` local. A impressão digital desse arquivo (a contagem de linhas e duas somas do `md5` de cada linha, que não dependem da ordem) vai para o ledger da tabela `Delta`, com o nome `<hash da config>:<janela>`.
-3. Se a impressão digital é a mesma do ledger, nada é gravado, nem um `commit`. Se mudou, a janela é trocada em um `commit` atômico. Uma janela que ficou vazia na fonte perde as linhas.
-4. Uma janela que nunca foi carregada com a mesma config é sempre lida. `lookback` limita só as releituras das outras: `lookback: 2` relê as duas últimas janelas.
-5. A config é o que a pipeline lê, os `filters`, `select`, `columns` e a coluna e a largura de `batches`. Uma config nova faz o ledger tratar todas as janelas como não carregadas. O intervalo (`begin`, `end`) e `lookback` não entram, porque só escolhem quais janelas rodam.
-6. `append` nunca regrava o que não mudou. Uma mudança de colunas falha com `SchemaMismatchError`. `overwrite` regrava todas as janelas, apaga as janelas fora do intervalo e aceita um esquema novo.
-7. Com `add_timestamp`, cada linha ganha a coluna `_prefect_extracted_at`, a hora em que a janela foi gravada (`TIMESTAMP` em UTC). A hora não entra na impressão digital, então uma janela que não mudou não é gravada de novo e guarda a hora antiga. Uma coluna da fonte com esse nome é recusada.
-8. Depois de gravar, o fluxo escreve um `checkpoint` (o BigQuery lê o log) e os arquivos trocados ficam sete dias antes do `vacuum`.
+As tasks ficam em `src/utils/tasks.py`. Use-as para montar um flow próprio.
 
-Tudo o que vai de uma fonte para o bucket e vira uma tabela BigLake usa `Delta`: `dump_db_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs` e `upload_files_to_gcs`. Do BigQuery para o bucket é um `export`, então `dump_bq_to_gcs` usa só lotes simples de `Parquet`, sem `Delta`.
+| Task                                        | O que faz                                                                                                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `dump_db_to_gcs(database, table, read)`     | Copia uma tabela ou consulta de um banco para uma tabela `Delta` no bucket.                                        |
+| `dump_arcgis_to_gcs(table, url)`            | Copia uma camada do `ArcGIS` para o bucket.                                                                        |
+| `dump_gsheet_to_gcs(table, spreadsheet_id)` | Copia uma planilha para o bucket.                                                                                  |
+| `upload_files_to_gcs(data_path, table)`     | Carrega arquivos locais para o bucket.                                                                             |
+| `publish_table_in_bq(table, cloud)`         | Cria a tabela do BigQuery sobre a tabela do bucket, ou atualiza as colunas dela. Rode depois das tasks acima.      |
+| `dump_bq_to_gcs(table, read, project=...)`  | Copia uma tabela ou consulta do BigQuery para `Parquet` no bucket, em lotes. Um `append` repetido soma de novo.    |
+| `request_json(url)`                         | Faz uma requisição (`GET` por padrão) e devolve o JSON. Tenta de novo depois de timeout, erro de rede, 429 ou 5xx. |
+| `write_records(records, folder)`            | Grava uma lista de objetos como linhas JSON, pronta para `upload_files_to_gcs`.                                    |
+| `read_bq(query, project=...)`               | Roda uma consulta do BigQuery e devolve um `DataFrame` do `Polars`, todo na memória.                               |
+| `run_bq_sql(sql, project=...)`              | Roda uma instrução do BigQuery, como um `MERGE`, e devolve quantas linhas ela mudou. Escreva o SQL na pipeline.    |
+| `write_sheet(data_path, spreadsheet_id)`    | Escreve arquivos locais em uma planilha.                                                                           |
+| `notify_discord(message)`                   | Posta uma mensagem no Discord.                                                                                     |
+| `compact_delta_table(table, bucket=...)`    | Junta os arquivos pequenos de uma tabela `Delta`.                                                                  |
+| `run_dbt(request)`                          | Roda um comando `dbt`.                                                                                             |
 
-**O que ainda custa**
+## Como o dump não repete dado
 
-- Uma janela que não mudou ainda é lida na fonte, porque a impressão digital precisa das linhas. Use `lookback` para ler só as janelas que podem mudar, e rode uma passada completa (sem `lookback`) de vez em quando para pegar mudanças nas janelas antigas.
-- Uma consulta nativa (`read.query`) roda inteira na fonte, e o DuckDB não consegue empurrar a janela para dentro dela. Por isso ela é uma janela só. O Oracle é a exceção: ele mesmo aplica os filtros e as janelas, numa tabela ou numa consulta.
-- Uma consulta nativa roda duas vezes: uma para descrever as colunas e outra para extrair. Uma consulta lenta custa o dobro.
-- O BigQuery lê a tabela `Delta` por uma conexão BigLake (`cloud.biglake_connection`), com os limites da Google: leitor versão 3 no máximo, sem `Storage Read API`.
-- O `deltalake` lê o ADC pelo `object_store` do Rust. Isso funciona com o servidor de metadados do GKE (workload identity), com um arquivo de service account e com credenciais de usuário. **Não funciona** com credencial `external_account` (federação). Confira a credencial do pod antes de ligar a pipeline.
+Tudo que vai de uma fonte para o bucket usa uma tabela `Delta`, que o BigQuery lê por uma conexão `BigLake`.
 
-**Tipos e dialetos** (conferidos em Postgres, MySQL, SQL Server e Oracle de verdade)
+1. Uma **janela** é uma faixa fixa de uma coluna: um dia, mês ou ano de uma data, ou uma faixa de ids. Sem `batches`, a fonte inteira é uma janela. Com `batches`, as linhas com a coluna nula ficam na janela `null`, que toda execução lê de novo.
+2. Para cada janela, o `DuckDB` lê a fonte com os `filters`, aplica `select` e `columns` e grava um `Parquet` local. Uma **impressão digital** do arquivo (a contagem de linhas e duas somas de `md5`) fica no registro da tabela `Delta`.
+3. Se a impressão digital é igual à do registro, nada é gravado. Se mudou, a janela é trocada em um só `commit`. Uma janela que ficou vazia na fonte perde as linhas.
+4. Uma janela nova sempre é lida. `lookback: 2` lê de novo só as duas últimas janelas já carregadas.
+5. Se `filters`, `select`, `columns` ou `batches` mudam, todas as janelas são carregadas de novo. O intervalo (`begin` e `end`) e o `lookback` não contam.
+6. `append` falha com `SchemaMismatchError` se as colunas mudarem. `overwrite` grava todas as janelas, apaga as que saíram do intervalo e aceita colunas novas.
+7. Com `add_timestamp`, cada linha ganha a coluna `_prefect_extracted_at`: a hora em que a janela foi gravada (`TIMESTAMP` em UTC). Uma janela que não mudou guarda a hora antiga.
 
-- O `Delta` não guarda `TIME`, `UUID` nem `INTERVAL`: eles chegam como texto. Um inteiro sem sinal chega no inteiro com sinal maior (`UINTEGER` em `BIGINT`) e `UBIGINT` chega em `DECIMAL(20, 0)`.
-- Um `timestamp` com fuso (`timestamptz`, `datetimeoffset`) é cortado em dias de São Paulo, em qualquer máquina. Um `timestamp` sem fuso vale como vem do banco, e o `TIMESTAMP` do MySQL vem em UTC.
-- `normalize_values` limpa o texto de todo banco, inclusive o `nvarchar` do SQL Server.
-- **SQL Server:** o `DuckDB` corta toda consulta em 30 s por padrão. O toolkit troca esse limite por `DB_QUERY_TIMEOUT_SECONDS` (3600). Numa consulta nativa, uma coluna `varchar` com acento falha com `Invalid unicode`: use `CAST(coluna AS NVARCHAR(n))` ou leia pela tabela (`read.table`), que decodifica certo.
-- **Oracle:** é lido com o `oracledb` e o Instant Client (modo `thick`, que a imagem base já tem; sem ele o `oracledb` usa o modo `thin`, que não lê usuários com verifier `10G`). A pasta do Instant Client vem de `ORACLE_CLIENT_LIB_DIR` ou do `ldconfig`. Cada janela vira um `Parquet` local, com os filtros e a janela aplicados pelo Oracle por variáveis de bind: `read.table` é `DONO.TABELA` e `read.query` é uma consulta, que pode ter `;` no fim, e as duas aceitam `batches` e `filters`. Os nomes das colunas são os que o Oracle informa, em maiúsculas, como em `batches: { column: DATA_PEDIDO }`. A tabela é lida `AS OF SCN`, com o mesmo SCN em todas as janelas, e uma mudança feita durante a carga não entra. Isso pede `EXECUTE` em `SYS.DBMS_FLASHBACK` ou `SELECT` em `SYS.V_$DATABASE`, e o privilégio `FLASHBACK` na tabela de outro dono; sem eles a carga segue sem o `SCN` e avisa no log. Uma consulta não é lida `AS OF SCN`. A sessão usa o fuso de São Paulo.
-- **Tipos do Oracle:** um `NUMBER` nunca perde dígitos: até 18 dígitos sem escala é `int64`, com precisão e escala que cabem é `decimal128`, `FLOAT` é `double`, e um `NUMBER` sem precisão (ou que o `decimal128` não guarda) chega como texto exato. `DATE` e `TIMESTAMP` chegam sem fuso (`DATE` tem hora). `TIMESTAMP WITH TIME ZONE` e `WITH LOCAL TIME ZONE` chegam como o instante em UTC. `CLOB`, `NCLOB`, `NVARCHAR2` e `XMLTYPE` chegam como texto, `RAW` e `BLOB` como bytes, e `INTERVAL` e `ROWID` como texto. Um tipo sem conversão (objeto, `BFILE`, `BOOLEAN`, `JSON`) falha e diz a coluna: converta na consulta. O `Oracle` 18c (XE), 19c (19.9, `WE8MSWIN1252`) e 23 passaram nos mesmos testes.
-- **Postgres e MySQL:** o servidor parado no meio de uma leitura deixa a execução esperando para sempre. Ponha `timeout_seconds` na tarefa, no `Prefect`.
+## Limites e cuidados
 
-**Testes do dump: o que cada nível usa de verdade** (nenhum nível usa contêiner)
+- Uma janela que não mudou ainda é lida na fonte, porque a impressão digital precisa das linhas. Use `lookback` e faça uma carga completa às vezes.
+- Uma consulta nativa (`read.query`) é uma janela só e roda duas vezes: uma para descrever as colunas e outra para ler. O Oracle é a exceção: ele aplica filtros e janelas, em tabela ou consulta.
+- O `deltalake` lê o ADC do Google. Funciona com o servidor de metadados do GKE, com `service account` e com credencial de usuário. **Não funciona** com credencial `external_account` (federação). Confira a credencial do pod antes de ligar uma pipeline.
+- A planilha precisa estar compartilhada com a `service account`. O `DuckDB` lê todo número da planilha como `DOUBLE`.
+- Os tipos que o `Delta` não guarda e as regras de cada banco estão no [README do toolkit](packages/toolkit/README.md#bancos-tipos-e-limites).
 
-| Nível  | Como rodar                                                                              | O que é real                                                                                                                                                                                                                              | O que é simulado                                                                                        |
-| ------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Padrão | `pytest`                                                                                | `deltalake` e `DuckDB` de verdade, em uma pasta local. Um leitor que não é o nosso (a extensão `delta` do `DuckDB`) lê a tabela depois de cada tipo de escrita, e o log é conferido contra os limites que a Google lista para o BigQuery. | O GCS é uma pasta local, o BigQuery é o leitor `DuckDB`, e o bucket das exportações é um `MemoryStore`. |
-| `gcp`  | `TOOLKIT_GCP_PROJECT=meu-projeto GOOGLE_APPLICATION_CREDENTIALS=adc.json pytest -m gcp` | GCS, BigQuery e BigLake de verdade.                                                                                                                                                                                                       | A fonte é uma pasta de arquivos `Parquet`.                                                              |
-
-O nível `gcp` precisa de `gcloud`, `bq` e do ADC com permissão para criar um bucket, uma conexão BigLake, um dataset e uma service account no projeto. Ele cria tudo com um sufixo aleatório e apaga tudo no fim, mesmo se um teste falhar. Cada teste guarda um achado dos testes reais:
-
-| Achado                                                                                                                                                                                    | Onde o teste está                                                     |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| O BigQuery lê a tabela `Delta` que o `deltalake` grava no `gs://`, com as linhas da fonte.                                                                                                | `gcp`                                                                 |
-| A mesma carga de novo não faz `commit` nem objeto novo. Uma janela trocada não duplica linha, e uma janela vazia perde as linhas.                                                         | Padrão e `gcp`                                                        |
-| Um `overwrite` com outras colunas só aparece no BigQuery depois de `publish_table_in_bq` atualizar a tabela, e um segundo `publish` atualiza em vez de falhar.                            | Padrão e `gcp`                                                        |
-| `timestamp` sem fuso é `timestamp_ntz` no `Delta` e `DATETIME` no BigQuery, com fuso é `TIMESTAMP`, e `decimal` é `NUMERIC`. O protocolo fica na versão 3 do leitor, sem `checkpoint` V2. | Padrão (o tipo do `Delta` e o protocolo) e `gcp` (o tipo do BigQuery) |
-| Quatro execuções ao mesmo tempo não perdem janela no `gs://` nativo. Pela API S3 do GCS com chaves HMAC elas perdem `commits`, por isso o `deltalake` nunca recebe `storage_options`.     | `gcp` (a corrida) e padrão (a guarda)                                 |
-| O `checkpoint` existe depois do dump, e o BigQuery continua lendo.                                                                                                                        | Padrão e `gcp`                                                        |
-| O primeiro `overwrite` apaga os arquivos `Hive` antigos, e os seguintes nunca apagam a tabela `Delta`.                                                                                    | Padrão e `gcp`                                                        |
-| Do BigQuery para o bucket sai um arquivo `Parquet` por lote.                                                                                                                              | Padrão e `gcp`                                                        |
-| Uma coluna de lote com o tipo errado falha antes de qualquer escrita. Um MySQL de verdade devolveu uma data como `VARCHAR` e o banco recusou a comparação com uma data.                   | Padrão                                                                |
-
-### Pipelines
-
-Cada pipeline possui:
-
-- `Dockerfile`: imagem customizada para execução no Prefect
-- `flow.py`: definição dos fluxos Prefect
-- `prefect.yaml`: configuração do deployment Prefect
-- `pyproject.toml`: dependências específicas da pipeline
-
-Alterações específicas de cada pipeline devem ser adicionadas no `Dockerfile` de cada pipeline, assim como dependências específicas devem ser adicionadas no `pyproject.toml` de cada pipeline.
-
-O arquivo `prefect.yaml` é responsável por definir as configurações de deployment do flow Prefect. Esse arquivo especifica variáveis de ambiente, parâmetros, agendamento, infraestrutura de execução e outras opções necessárias para o correto funcionamento do fluxo. O arquivo também é utilizado nos workflows de CI/CD para registrar e disponibilizar os flows.
-
-Consulte a [documentação oficial do Prefect](https://docs.prefect.io/v3/how-to-guides/deployments/prefect-yaml) para detalhes sobre todas as opções disponíveis.
-
-#### Configuração de secrets
-
-O parâmetro `secretName` nas `job_variables` do `prefect.yaml` especifica qual Kubernetes Secret deve ser montado no container durante a execução do job. Esse secret contém variáveis de ambiente necessárias para o funcionamento da pipeline, como credenciais de banco de dados, tokens de API e outras informações sensíveis.
-
-**Valores padrão utilizados:**
-
-- **`prefect-jobs-secrets`**: para deployments de produção
-- **`prefect-jobs-secrets-staging`**: para deployments de staging
-
-Exemplo de configuração no `prefect.yaml`:
-
-```yaml
-deployments:
-  - name: rj-secretaria--pipeline--prod
-    work_pool:
-      job_variables:
-        secretName: prefect-jobs-secrets
-  - name: rj-secretaria--pipeline--staging
-    work_pool:
-      job_variables:
-        secretName: prefect-jobs-secrets-staging
-```
-
-### Convenções de nomenclatura
-
-- Os diretórios de pipelines seguem o padrão: `rj_<secretaria>__<pipeline>`, utilizando apenas letras minúsculas, números e underscores.
-- Os arquivos principais de cada pipeline (`Dockerfile`, `flow.py`, `prefect.yaml`, `pyproject.toml`) devem estar diretamente dentro do diretório da pipeline.
-- Os nomes de deployments Prefect seguem o padrão `rj-<secretaria>--<pipeline>--<ambiente>`, por exemplo: `rj-segovi--dump-db-1746--staging`.
-- Use sempre nomes descritivos e padronizados para facilitar a identificação e automação dos fluxos.
-
-### Templates
-
-Este repositório utiliza [`cookiecutter`](https://cookiecutter.readthedocs.io/) para facilitar a criação de novas pipelines de forma padronizada. Os templates disponíveis em `templates/` permitem gerar rapidamente a estrutura de diretórios e arquivos necessários para uma nova pipeline Prefect, incluindo `Dockerfile`, `flow.py`, `prefect.yaml` e `pyproject.toml`.
-
-Para criar uma nova pipeline, instale `uv` e rode:
+## Testes
 
 ```sh
-uvx cookiecutter templates --output-dir=pipelines
+pytest                      # sem rede: GCS e BigQuery são simulados
+TOOLKIT_GCP_PROJECT=meu-projeto GOOGLE_APPLICATION_CREDENTIALS=adc.json pytest -m gcp
 ```
 
-O template cria uma pipeline de dump, pronta para trocar os valores de exemplo: `flow.py` (duas linhas, com o fluxo `dump_database`), `prefect.yaml` (staging e produção, com um `schedule` `overwrite` e um incremental), `pyproject.toml` e `Dockerfile`. Veja o [Início rápido](STYLEGUIDE.md#início-rápido) do guia de estilo.
+O nível `gcp` usa GCS, BigQuery e `BigLake` de verdade. Ele precisa de `gcloud`, `bq` e de um ADC com permissão para criar um bucket, uma conexão `BigLake`, um dataset e uma `service account`. Ele cria tudo com um sufixo aleatório e apaga tudo no fim.
 
-Você será solicitado a informar valores como `secretaria` e `pipeline`, que serão utilizados para preencher os nomes dos diretórios, arquivos e variáveis nos templates. O template gerado já segue o padrão de nomenclatura definido anteriormente.
+## Pipelines
 
-### Work pools
-
-Este repositório utiliza dois work pools principais para execução dos deployments Prefect:
-
-- **default-pool**: destinado à execução geral de pipelines, incluindo fluxos que não possuem requisitos especiais de rede ou infraestrutura. É o pool padrão para a maioria dos deployments.
-- **onprem-pool**: utilizado para pipelines que acessam bancos de dados ou sistemas internos da IplanRio, especialmente aqueles que exigem conexão via VPN. Esse pool garante que os jobs sejam executados em ambientes com acesso seguro e autorizado aos recursos internos.
-
-Ao configurar um deployment no arquivo `prefect.yaml`, selecione o pool apropriado conforme a necessidade de acesso aos dados ou sistemas.
+- O `prefect.yaml` define o `deployment`: parâmetros, agenda, infraestrutura e `secretName`. O CI usa esse arquivo para registrar os flows. Veja a [documentação do `Prefect`](https://docs.prefect.io/v3/how-to-guides/deployments/prefect-yaml).
+- O código e as dependências só da pipeline ficam no `Dockerfile` e no `pyproject.toml` dela.
+- `secretName` é o `Secret` do Kubernetes que o job monta. Use `prefect-jobs-secrets` em produção e `prefect-jobs-secrets-staging` em `staging`.
+- Os nomes usam só letras minúsculas, números e `_`:
+  - pasta: `rj_<secretaria>__<pipeline>`
+  - `deployment`: `rj-<secretaria>--<pipeline>--<ambiente>`, como `rj-segovi--dump-db-1746--staging`
+- Work pools:
+  - `default-pool`: trabalho geral.
+  - `onprem-pool`: bancos e sistemas internos da `IplanRio`, que exigem VPN.
 
 ## CI/CD
 
-O repositório utiliza GitHub Actions para automatizar todo o ciclo de vida das pipelines, incluindo build, deploy e publicação de imagens Docker:
+O `GitHub Actions` cuida do ciclo das pipelines:
 
-- **Deploy automático dos flows**: os workflows `.github/workflows/deploy-prefect-flows-prod.yaml` e `.github/workflows/deploy-prefect-flows-staging.yaml` realizam o deploy automático dos flows Prefect para os ambientes de produção e staging, respectivamente.
-  - O workflow de produção é acionado a cada push na branch `master` ou manualmente, sempre que houver alterações em arquivos dentro de `pipelines/**`.
-  - O workflow de staging é acionado a cada push em branches `staging/*` ou manualmente, também monitorando alterações em `pipelines/**`.
-  - Ambos executam:
-    - Checkout do código-fonte
-    - Login no GitHub Container Registry (`ghcr.io`)
-    - Instalação das dependências Python com `uv`
-    - Execução do script `.github/scripts/deploy_prefect_flows.py`, que faz o deploy automático de todos os flows definidos em `pipelines/*/prefect.yaml`
-    - Caso algum deploy falhe, o workflow é interrompido e o erro é registrado nos logs
+- **Deploy dos flows** (`.github/workflows/deploy-prefect-flows-prod.yaml` e `deploy-prefect-flows-staging.yaml`): rodam `.github/scripts/deploy_prefect_flows.py`, que registra todo `pipelines/*/prefect.yaml`. A produção roda a cada `push` na `master` e o `staging` a cada `push` em `staging/*`, quando algo em `pipelines/**` muda. Se um `deploy` falha, o `workflow` para.
+- **Imagem base** (`.github/workflows/build-and-push-root-dockerfile.yaml`): a cada mudança no `Dockerfile` da raiz, na `master`, publica `ghcr.io/<repositório>:latest`.
 
-- **Build e publicação da imagem base**: o workflow `.github/workflows/build-and-push-root-dockerfile.yaml` é acionado em alterações no `Dockerfile` da raiz a cada push na branch `master`, além de poder ser executado manualmente. Ele realiza:
-  - Build da imagem Docker definida no `Dockerfile` do repositório
-  - Publicação da imagem no GitHub Container Registry (`ghcr.io/${{ github.repository }}:latest`)
+## Problemas comuns
 
-## Troubleshooting
-
-### Erro: `uv sync --package` falha com "package not found"
-
-**Causa**: O `pyproject.toml` da pipeline não declara `prefect_rj_iplanrio` como dependência com `workspace = true`.
-
-**Solução**: Adicione ao `pyproject.toml` da pipeline:
-
-```toml
-dependencies = [
-    "prefect_rj_iplanrio",
-    # ... outras dependências
-]
-
-[tool.uv.sources]
-prefect_rj_iplanrio = { workspace = true }
-```
-
-### Erro: Docker build falha com "cx-oracle" ou "pkg_resources"
-
-**Causa**: O pacote `cx-oracle` não é compatível com Python 3.13+.
-
-**Solução**: O `pyproject.toml` raiz já contém um override para usar `oracledb` no lugar de `cx-oracle`. Certifique-se de que o `uv.lock` está atualizado:
-
-```sh
-uv lock
-```
-
-### Erro: Dependências base não instaladas no container
-
-**Causa**: O Dockerfile não está copiando os diretórios `src/` e `packages/`.
-
-**Solução**: Verifique se o Dockerfile da pipeline contém:
-
-```dockerfile
-COPY ./pyproject.toml ./uv.lock /opt/prefect/prefect_rj_iplanrio/
-COPY ./src ./src/
-COPY ./packages ./packages/
-COPY ./pipelines/<nome-da-pipeline> ./pipelines/<nome-da-pipeline>/
-RUN uv sync --package <nome-da-pipeline>
-```
-
-### Erro: Lockfile desatualizado após adicionar nova pipeline
-
-**Causa**: O `uv.lock` precisa ser regenerado quando novas pipelines são adicionadas ao workspace.
-
-**Solução**: Execute na raiz do repositório:
-
-```sh
-uv lock
-```
-
-### Erro: Import de código compartilhado não funciona
-
-**Causa**: O pacote `prefect_rj_iplanrio` não está sendo instalado corretamente.
-
-**Solução**: Verifique se:
-1. O diretório `src/utils/` existe e contém `__init__.py`
-2. A pipeline declara `prefect_rj_iplanrio` como dependência com `workspace = true`
-3. O Dockerfile copia os diretórios `src/` e `packages/`
+| Erro                                                       | Causa e solução                                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `uv sync --package` falha com "package not found"          | O `pyproject.toml` da pipeline não declara `prefect_rj_iplanrio`. Ponha-o em `dependencies` e `prefect_rj_iplanrio = { workspace = true }` em `[tool.uv.sources]`. |
+| `No module named 'utils.flows'`                            | Um `utils.py` ou uma pasta `utils/` da pipeline esconde o módulo compartilhado. Renomeie o código local (por exemplo, `helpers.py`).                               |
+| O build do Docker falha com `cx-oracle` ou `pkg_resources` | O `cx-oracle` não funciona no Python 3.13. O `pyproject.toml` da raiz já usa `oracledb`. Rode `uv lock`.                                                           |
+| O `container` não acha `utils` ou `toolkit`                | O `Dockerfile` não copia `src/` e `packages/`. Copie as duas pastas, como no modelo.                                                                               |
+| O `uv.lock` está desatualizado ao criar uma pipeline       | Rode `uv lock` na raiz do repositório.                                                                                                                             |

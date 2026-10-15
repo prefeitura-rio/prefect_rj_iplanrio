@@ -12,16 +12,16 @@ As regras de Python, dados e testes valem também para `packages/toolkit/`. As r
 
 Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a seção com a regra completa.
 
-1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines`. O template cria o diretório de uma pipeline de dump, com `flow.py`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. Para uma pipeline própria, troque o `flow.py` e acrescente `tasks.py`, `utils.py` e `queries/` quando precisar. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
-2. **Descreva a pipeline.** Escreva o `description` no `pyproject.toml` ([Seção 10](#10-pyprojecttoml)).
-3. **Escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho real fica em `utils.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure no [README do toolkit](packages/toolkit/README.md).
-4. **Configure o deploy.** No `prefect.yaml`, defina as tags, o agendamento da produção e o work pool ([Seções 8, 9 e 13](#8-agendamento)).
-5. **Teste e abra o PR.** Escreva testes para a lógica de `utils.py` ([Seção 14](#14-testes)) e passe pelo [checklist](#15-checklist-antes-do-pull-request).
+1. **Crie a pipeline com o template.** Rode `uvx cookiecutter templates --output-dir=pipelines` e escolha o `tipo`: `dump_database`, `ingest_api`, `dump_arcgis` ou `dump_gsheet`. O template cria `flow.py`, `prefect.yaml`, `pyproject.toml` e `Dockerfile`. O nome segue o padrão `rj_<secretaria>__<pipeline>` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
+2. **Troque os valores de exemplo.** Os parâmetros ficam no `prefect.yaml`, e uma pipeline desses tipos não precisa de mais código. Escreva o `description` no `pyproject.toml` ([Seção 10](#10-pyprojecttoml)).
+3. **Para uma pipeline própria, escreva o código nos arquivos certos.** O flow só orquestra, a task é um wrapper fino e o trabalho fica em `helpers.py` ([Seção 4](#4-responsabilidades-dos-módulos)). O SQL fica em `queries/*.sql` ([Seção 7](#7-sql)). Antes de escrever um helper, procure em `src/utils/` e no [README do toolkit](packages/toolkit/README.md).
+4. **Configure o deploy.** No `prefect.yaml`, defina as tags, a agenda da produção e o work pool ([Seções 8, 9 e 13](#8-agendamento)).
+5. **Teste e abra o PR.** Escreva testes para a lógica de `helpers.py` ([Seção 14](#14-testes)) e passe pelo [checklist](#15-checklist-antes-do-pull-request).
 
 Existem dois pontos de partida:
 
-- **Pipeline de dump (banco para BigQuery):** importe o fluxo `dump_database` de `utils.flows` no `flow.py` e ponha os parâmetros no `prefect.yaml` (veja o `README.md`).
-- **Pipeline própria:** adicione `utils.py` com a lógica e, se precisar, mais tasks em `tasks.py`.
+- **Pipeline de um tipo pronto:** o `flow.py` importa o fluxo de `utils.flows` e o `prefect.yaml` tem os parâmetros (veja o [README](README.md#fluxos-prontos)).
+- **Pipeline própria:** o `flow.py` chama as tarefas de `utils.tasks` ou as suas, em `tasks.py`, com a lógica em `helpers.py`.
 
 ### Exemplo mínimo completo
 
@@ -50,17 +50,17 @@ def rj_secretaria__pipeline(
 
 from prefect import task
 
-from pipelines.rj_secretaria__pipeline import utils
+from pipelines.rj_secretaria__pipeline import helpers
 
 
 @task
 def fetch_items_task(dataset_id: str, table_id: str) -> str:
     """Baixa os itens e retorna o caminho do Parquet."""
-    return utils.fetch_items(dataset_id=dataset_id, table_id=table_id)
+    return helpers.fetch_items(dataset_id=dataset_id, table_id=table_id)
 ```
 
 ```python
-# pipelines/rj_secretaria__pipeline/utils.py  — Seções 4.3, 5.5 e 5.8
+# pipelines/rj_secretaria__pipeline/helpers.py  — Seções 4.3, 5.5 e 5.8
 """Funções puras da pipeline rj_secretaria__pipeline."""
 
 import httpx2
@@ -162,9 +162,9 @@ O código neste repositório vive em um de três níveis. O nível determina ond
 | ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | **Compartilhado de primitivos** | `packages/toolkit/` (workspace) | Primitivos reutilizáveis sem lógica de pipeline. Regras em [`packages/toolkit/STYLEGUIDE.md`](packages/toolkit/STYLEGUIDE.md). |
 | **Compartilhado do repo**       | `src/utils/`                    | Utilitários usados por **2 ou mais pipelines** neste repo sem lógica específica de pipeline.                                   |
-| **Interno à pipeline**          | `pipelines/rj_x__y/utils.py`    | Lógica que pertence a exatamente uma pipeline.                                                                                 |
+| **Interno à pipeline**          | `pipelines/rj_x__y/helpers.py`  | Lógica que pertence a exatamente uma pipeline.                                                                                 |
 
-**Regra de promoção:** uma função sobe de `utils.py` para `src/utils/` quando uma segunda pipeline precisar dela. Nunca sobe por reutilização especulativa.
+**Regra de promoção:** uma função sobe de `helpers.py` para `src/utils/` quando uma segunda pipeline precisar dela. Nunca sobe por reutilização especulativa.
 
 ## 3. Contrato de arquivos da pipeline
 
@@ -186,34 +186,35 @@ Adicione apenas quando a necessidade existir concretamente:
 
 ```
 ├── tasks.py         ← quando o flow chama funções decoradas com @task
-├── utils.py         ← quando as tasks delegam para helpers puros reutilizáveis
-├── utils/           ← quando os helpers abrangem múltiplos domínios distintos
-│   ├── api.py       ← nomeado pelo domínio, não pelo papel (nunca utils/tasks.py)
+├── helpers.py       ← quando as tasks delegam para helpers puros reutilizáveis
+├── helpers/         ← quando os helpers abrangem múltiplos domínios distintos
+│   ├── api.py       ← nomeado pelo domínio, não pelo papel (nunca helpers/tasks.py)
 │   └── schemas.py
 ├── constants.py     ← quando constantes são compartilhadas entre 2+ módulos
 ├── queries/         ← quando a pipeline executa SQL
 │   ├── fetch_data.sql
 │   └── get_last_update.sql
-└── tests/           ← quando utils.py tem lógica com ramificações ou parsing (Seção 14)
-    └── test_utils.py
+└── tests/           ← quando helpers.py tem lógica com ramificações ou parsing (Seção 14)
+    └── test_helpers.py
 ```
 
 ### 3.3 Proibidos nos diretórios de pipeline
 
 O seguinte nunca deve ser commitado em um diretório de pipeline:
 
-| Arquivo / padrão                                                       | Motivo                                                                                               |
-| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `__init__.py`                                                          | Pacotes membros do workspace não precisam dele; sua presença causa confusão nos imports.             |
-| `env.py`                                                               | Variáveis de ambiente são injetadas em runtime via Infisical ou o ambiente do container.             |
-| `schedules.py`                                                         | Agendamentos vivem no `prefect.yaml`. Geradores Python de schedules são uma indireção desnecessária. |
-| `build_prefect_yaml.py`                                                | Scripts avulsos ficam desatualizados e induzem ao erro.                                              |
-| `scheduler*.yaml` (avulsos)                                            | Uma segunda fonte de verdade de agendamentos que diverge do `prefect.yaml`.                          |
-| `test_*.py` na raiz da pipeline                                        | Scripts de teste ad-hoc não são reproduzíveis. Testes ficam em `tests/` e rodam com `pytest`.        |
-| `FIX_SUMMARY.md`, `MIGRATION_NOTES.md`, `MIGRACAO_*.md`                | Artefatos de sessões de LLM. Delete antes de commitar.                                               |
-| `.python-version`                                                      | A versão do Python é fixada na raiz do workspace no `pyproject.toml`.                                |
-| `.DS_Store`                                                            | Metadados do macOS. Coberto pelo `.gitignore` — se aparecer, o gitignore falhou.                     |
-| Arquivos de dados avulsos (`.json`, `.xml`, `.sql` fora de `queries/`) | Fixtures pertencem a `tests/fixtures/`; scripts DDL pertencem a um repositório de migrations.        |
+| Arquivo / padrão                                                       | Motivo                                                                                                                                                      |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `__init__.py`                                                          | Pacotes membros do workspace não precisam dele; sua presença causa confusão nos imports.                                                                    |
+| `utils.py` e `utils/`                                                  | O Prefect põe a pasta do `flow.py` na frente no caminho de imports, então eles escondem o módulo compartilhado `src/utils/`. Use `helpers.py` e `helpers/`. |
+| `env.py`                                                               | Variáveis de ambiente são injetadas em runtime via Infisical ou o ambiente do container.                                                                    |
+| `schedules.py`                                                         | Agendamentos vivem no `prefect.yaml`. Geradores Python de schedules são uma indireção desnecessária.                                                        |
+| `build_prefect_yaml.py`                                                | Scripts avulsos ficam desatualizados e induzem ao erro.                                                                                                     |
+| `scheduler*.yaml` (avulsos)                                            | Uma segunda fonte de verdade de agendamentos que diverge do `prefect.yaml`.                                                                                 |
+| `test_*.py` na raiz da pipeline                                        | Scripts de teste ad-hoc não são reproduzíveis. Testes ficam em `tests/` e rodam com `pytest`.                                                               |
+| `FIX_SUMMARY.md`, `MIGRATION_NOTES.md`, `MIGRACAO_*.md`                | Artefatos de sessões de LLM. Delete antes de commitar.                                                                                                      |
+| `.python-version`                                                      | A versão do Python é fixada na raiz do workspace no `pyproject.toml`.                                                                                       |
+| `.DS_Store`                                                            | Metadados do macOS. Coberto pelo `.gitignore` — se aparecer, o gitignore falhou.                                                                            |
+| Arquivos de dados avulsos (`.json`, `.xml`, `.sql` fora de `queries/`) | Fixtures pertencem a `tests/fixtures/`; scripts DDL pertencem a um repositório de migrations.                                                               |
 
 ## 4. Responsabilidades dos módulos
 
@@ -250,19 +251,19 @@ def rj_secretaria__pipeline(
 
 ### 4.2 `tasks.py`
 
-**Contém:** exclusivamente funções decoradas com `@task`. Cada task é um wrapper fino que chama uma função de `utils.py` ou da biblioteca `toolkit`.
+**Contém:** exclusivamente funções decoradas com `@task`. Cada task é um wrapper fino que chama uma função de `helpers.py` ou da biblioteca `toolkit`.
 
 **Papel:** fronteira entre o engine de orquestração do Prefect e o Python puro. Tasks dão visibilidade ao Prefect — retries, rastreamento de estado, limites de concorrência — sem acoplar essa maquinaria à lógica em si.
 
 ```python
-# ✅ correto — task delega para utils, permanece fina
+# ✅ correto — task delega para helpers, permanece fina
 from prefect import task
-from pipelines.rj_secretaria__pipeline import utils
+from pipelines.rj_secretaria__pipeline import helpers
 
 
 @task
 def fetch_items_task(dataset_id: str, table_id: str) -> str:
-    return utils.fetch_items(dataset_id=dataset_id, table_id=table_id)
+    return helpers.fetch_items(dataset_id=dataset_id, table_id=table_id)
 ```
 
 ```python
@@ -274,9 +275,9 @@ def fetch_items_task(dataset_id: str, table_id: str) -> str:
     # ... mais 70 linhas
 ```
 
-**Nunca contém:** `@flow`, lógica de negócio com mais de ~20 linhas, `import`s sem relação com o Prefect ou com a chamada a `utils`.
+**Nunca contém:** `@flow`, lógica de negócio com mais de ~20 linhas, `import`s sem relação com o Prefect ou com a chamada a `helpers`.
 
-### 4.3 `utils.py`
+### 4.3 `helpers.py`
 
 **Contém:** funções Python sem dependência do Prefect que realizam o trabalho real — chamadas de API, transformação de dados, I/O de arquivos e construção de queries.
 
@@ -299,18 +300,18 @@ def fetch_items(dataset_id: str, table_id: str) -> str:
 
 **Nunca contém:** `from prefect import ...`, `@task`, `@flow`, efeitos colaterais no momento do import do módulo.
 
-### 4.4 `utils/<domain>.py`
+### 4.4 `helpers/<domain>.py`
 
-Use um subdiretório `utils/` quando os helpers se dividem naturalmente em múltiplos domínios distintos e um único `utils.py` ficaria extenso demais. Nomeie cada módulo pelo domínio, não pelo papel.
+Use um subdiretório `helpers/` quando os helpers se dividem naturalmente em múltiplos domínios distintos e um único `helpers.py` ficaria extenso demais. Nomeie cada módulo pelo domínio, não pelo papel.
 
 ```
-utils/
+helpers/
 ├── api.py       ← helpers de client HTTP
 ├── schemas.py   ← modelos Pydantic / dataclasses
 └── bq.py        ← helpers específicos do BigQuery
 ```
 
-**`utils/tasks.py` é proibido.** Tasks são primitivos do Prefect, não utilitários. Se você se encontrar criando `utils/tasks.py`, está misturando duas responsabilidades. Coloque as tasks em `tasks.py` e a lógica no `utils/<domain>.py` adequado.
+**`helpers/tasks.py` é proibido.** Tasks são primitivos do Prefect, não utilitários. Se você se encontrar criando `helpers/tasks.py`, está misturando duas responsabilidades. Coloque as tasks em `tasks.py` e a lógica no `helpers/<domain>.py` adequado.
 
 ### 4.5 `constants.py`
 
@@ -466,7 +467,7 @@ def fetch_items(dataset_id: str, table_id: str) -> str:
     ...
 ```
 
-```python
+````python
 # ✅ correto — uma função difícil leva um exemplo
 def normalize_column(name: str) -> str:
     """Devolva o nome de coluna que o BigQuery aceita.
@@ -476,7 +477,7 @@ def normalize_column(name: str) -> str:
     ```
     """
     ...
-```
+````
 
 ```python
 # ❌ errado — reST, e um resumo que repete o que os tipos dizem
@@ -497,7 +498,7 @@ Regras:
 
 ### 5.7 Parâmetros em excesso
 
-Funções em `utils.py` com mais de 5 parâmetros que formem um grupo coeso devem agrupar esses parâmetros em um `dataclass` ou `TypedDict`. Em `@flow` e `@task` a regra vale também, mas só com `TypedDict`, porque os parâmetros precisam ser JSON-serializáveis para o Prefect. O Prefect valida o dicionário e recusa uma chave que falta, um erro de digitação ou um tipo errado antes de rodar. Ponha cada grupo em `types.py`.
+Funções em `helpers.py` com mais de 5 parâmetros que formem um grupo coeso devem agrupar esses parâmetros em um `dataclass` ou `TypedDict`. Em `@flow` e `@task` a regra vale também, mas só com `TypedDict`, porque os parâmetros precisam ser JSON-serializáveis para o Prefect. O Prefect valida o dicionário e recusa uma chave que falta, um erro de digitação ou um tipo errado antes de rodar. Ponha cada grupo em `types.py`.
 
 Prefira `dataclass(frozen=True)` para configs imutáveis com defaults. Use `TypedDict` quando o caller precisa construir o dict diretamente e passá-lo com `**`.
 
@@ -610,7 +611,7 @@ GROUP BY station_id
 
 Uma pipeline nunca importa `duckdb`: o SQL que roda no DuckDB passa pelo `Executor` do toolkit (Seção 7.2).
 
-Para extrair de uma API, escreva a paginação e as repetições na task (`@task(retries=3, retry_delay_seconds=30)`), grave cada página em um arquivo JSON Lines e entregue os arquivos ao toolkit com `stage_scan` ou `stage_files_task`. O Prefect cuida da ordem, das repetições e do estado; o `Executor` cuida do SQL.
+Para extrair de uma API, use o fluxo `ingest_api` ou, se a API tem páginas, escreva um fluxo próprio: peça cada página com `request_json`, grave os registros com `write_records` e carregue tudo com `upload_files_to_gcs` e `publish_table_in_bq`. O Prefect cuida da ordem, das repetições e do estado, e o `Executor` cuida do SQL.
 
 ```python
 # ❌ errado — pandas e CSV intermediário
@@ -681,7 +682,7 @@ class UploadConfig(BaseModel):
 
 Não faça isto:
 
-- I/O dentro de um validador (consulta ao BigQuery, leitura do GCS, chamada de API). O validador verifica estrutura e formato. O I/O fica na função que usa o dado.
+- I/O em um validador (consulta ao BigQuery, leitura do GCS, chamada de API). O validador verifica estrutura e formato. O I/O fica na função que usa o dado.
 - `assert` fora de testes para validar dado.
 - Revalidar um dado que já passou pela borda.
 
@@ -708,7 +709,7 @@ from prefect import task
 
 @task
 def fetch_data_task(url: str, timeout: int = 30) -> pl.DataFrame:
-    return utils.fetch_data(url=url, timeout=timeout)
+    return helpers.fetch_data(url=url, timeout=timeout)
 ```
 
 - Tasks ficam apenas em `tasks.py`.
@@ -751,7 +752,7 @@ path = download_task(url=url, wait_for=[workdir])  # apenas se download_task nã
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `@task` dentro de `flow.py`               | Mistura orquestração e definição de task em um único arquivo; torna as tasks invisíveis para consumidores de `tasks.py`.                            |
 | `@flow` dentro de `tasks.py`              | Viola a responsabilidade única; subflows pertencem a arquivos `flow.py` separados, se necessário.                                                   |
-| `utils/tasks.py`                          | Tasks não são utilitários. O nome é uma contradição e engana os leitores sobre onde encontrar as definições de task.                                |
+| `helpers/tasks.py`                        | Tasks não são utilitários. O nome é uma contradição e engana os leitores sobre onde encontrar as definições de task.                                |
 | `if __name__ == "__main__":` em `flow.py` | Flows são executados via deployments do Prefect ou `prefect flow run`, não como scripts. Esse padrão incentiva contornar o mecanismo de deployment. |
 
 ## 7. SQL
@@ -931,7 +932,7 @@ dependencies = ["prefect==3.4.9"]
 
 ### 11.1 Critérios de promoção
 
-Uma função é promovida do `utils.py` de uma pipeline para `src/utils/` quando **ambas** as condições forem verdadeiras:
+Uma função é promovida do `helpers.py` de uma pipeline para `src/utils/` quando **ambas** as condições forem verdadeiras:
 
 1. Duas ou mais pipelines precisam dela.
 2. Não contém lógica específica de nenhuma pipeline.
@@ -945,9 +946,13 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 | `utils.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `request_json`, `write_records`, `read_bq`, `run_bq_sql`, `notify_discord`, `compact_delta_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                                            |
 | `utils.flows` | `dump_database`, `dump_arcgis`, `dump_gsheet`, `load_files`, `ingest_api`, `compact_tables`, `dbt_run`                                                                                                                                                    | Fluxos: o dump de uma fonte para uma tabela `Delta` sem repetir dado, a captura de uma API, a compactação e o `dbt`. |
 
-### 11.3 Antes de escrever um helper
+### 11.3 O nome `utils`
 
-Procure primeiro no [README do toolkit](packages/toolkit/README.md).
+O módulo compartilhado se chama `utils`, então a pipeline não pode ter `utils.py` nem `utils/` ao lado do `flow.py`. O código local se chama `helpers.py` (Seção 4.3).
+
+### 11.4 Antes de escrever um helper
+
+Procure primeiro nesta seção e no [README do toolkit](packages/toolkit/README.md).
 
 ## 12. Higiene do repositório
 
@@ -1001,7 +1006,7 @@ refactor(toolkit): move GCS operations to obstore
 
 - Escreva frases curtas, na voz ativa, com uma ideia por frase.
 - Deixe cada assunto em um documento só. Aponte para o documento dono com um link, sem copiar o texto.
-- Use exemplos genéricos, a não ser que um valor real seja necessário.
+- Use exemplos genéricos, exceto se um valor real for necessário.
 - Confira cada afirmação no código, nos templates, nos testes ou em um comando que você rodou.
 
 ## 13. Tags de pipeline
@@ -1083,17 +1088,17 @@ Quem revisa o PR deve recusar um deployment sem tags.
 
 ### 14.1 O que testar
 
-Lógica com ramificações ou parsing em `utils.py` **deve** ter teste. Tasks finas e flows não precisam de teste: não têm lógica própria (Seções 4.1 e 4.2).
+Lógica com ramificações ou parsing em `helpers.py` **deve** ter teste. Tasks finas e flows não precisam de teste: não têm lógica própria (Seções 4.1 e 4.2).
 
 ### 14.2 Estrutura
 
-`tests/` fica dentro do diretório da pipeline e espelha os módulos: `utils.py` é testado por `tests/test_utils.py`. Fixtures ficam em `tests/fixtures/`. `pytest` é dependência de desenvolvimento da pipeline.
+`tests/` fica dentro do diretório da pipeline e espelha os módulos: `helpers.py` é testado por `tests/test_helpers.py`. Fixtures ficam em `tests/fixtures/`. `pytest` é dependência de desenvolvimento da pipeline.
 
 ```
 pipelines/rj_secretaria__pipeline/
-├── utils.py
+├── helpers.py
 └── tests/
-    ├── test_utils.py
+    ├── test_helpers.py
     └── fixtures/
         └── response.json
 ```
@@ -1111,7 +1116,7 @@ Use `pytest` e `@pytest.mark.parametrize`, com `ids` que descrevem o cenário. O
 ```python
 import pytest
 
-from pipelines.rj_secretaria__pipeline.utils import parse_value
+from pipelines.rj_secretaria__pipeline.helpers import parse_value
 
 
 @pytest.mark.parametrize(
@@ -1130,7 +1135,7 @@ Marque cada item antes de pedir revisão.
 - [ ] O diretório se chama `rj_<secretaria>__<pipeline>` e tem `flow.py`, `pyproject.toml` e `Dockerfile` ([Seção 3](#3-contrato-de-arquivos-da-pipeline)).
 - [ ] Não há `__init__.py`, `env.py`, `schedules.py`, `.python-version` nem arquivos avulsos ([Seção 3.3](#33-proibidos-nos-diretórios-de-pipeline)).
 - [ ] O `flow.py` só orquestra. A função `@flow` tem o mesmo nome do diretório ([Seção 4.1](#41-flowpy)).
-- [ ] As tasks são wrappers finos e a lógica fica em `utils.py` ([Seções 4.2 e 4.3](#42-taskspy)).
+- [ ] As tasks são wrappers finos e a lógica fica em `helpers.py` ([Seções 4.2 e 4.3](#42-taskspy)).
 - [ ] Não há `print()`. O logging usa `get_logger` ([Seção 5.5](#55-logging)).
 - [ ] Toda função tem type hints e `docstring` em Markdown, com resumo de uma linha ([Seções 5.1 e 5.6](#51-type-hints)).
 - [ ] O código novo usa Polars e DuckDB, sem pandas ([Seção 5.8](#58-dados-tabulares)).
@@ -1138,7 +1143,7 @@ Marque cada item antes de pedir revisão.
 - [ ] O agendamento está só no `prefect.yaml`, em `America/Sao_Paulo`. O staging não tem `schedules` ([Seções 8 e 9](#8-agendamento)).
 - [ ] Cada deployment tem as tags `environment`, `severity` e `code_owner` ([Seção 13](#13-tags-de-pipeline)).
 - [ ] O `pyproject.toml` tem `version = "1.0.0"`, um `description` real e dependências com `>=` ([Seção 10](#10-pyprojecttoml)).
-- [ ] Existe teste para a lógica com ramificações ou parsing de `utils.py` ([Seção 14](#14-testes)).
+- [ ] Existe teste para a lógica com ramificações ou parsing de `helpers.py` ([Seção 14](#14-testes)).
 
 ### Quem verifica cada regra
 
@@ -1151,23 +1156,23 @@ Marque cada item antes de pedir revisão.
 
 ## 16. Glossário
 
-| Termo                          | Significado                                                                                                                                                            |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| flow                           | A função `@flow` do Prefect. Define quais tasks rodam e em que ordem.                                                                                                  |
-| task                           | A função `@task` do Prefect. Tem retries e estado visíveis na UI.                                                                                                      |
-| deployment                     | Um flow registrado no Prefect com agendamento, parâmetros e infraestrutura. Fica no `prefect.yaml` ([Seção 9](#9-convenções-do-prefectyaml)).                          |
-| work pool                      | Onde o Prefect executa o deployment: `default-pool` (geral) ou `onprem-pool` (acesso interno por VPN).                                                                 |
-| work queue                     | Fila dentro do work pool. Neste repositório sempre `default`.                                                                                                          |
-| `secretName`                   | Nome do Kubernetes Secret montado no container. Guarda credenciais como variáveis de ambiente.                                                                         |
-| Infisical                      | Serviço de segredos. As credenciais chegam ao código por variáveis de ambiente injetadas em runtime.                                                                   |
-| tag                            | Metadado `chave:valor` do deployment (`environment`, `severity`, `code_owner`) ([Seção 13](#13-tags-de-pipeline)).                                                     |
-| imagem / `Dockerfile`          | Cada pipeline roda em uma imagem Docker construída a partir da imagem base do repositório.                                                                             |
-| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --package <pipeline>` executa uma pipeline com as dependências dela.                                                     |
-| staging e prod                 | Os dois ambientes. Staging não tem agendamento. Prod tem.                                                                                                              |
-| promoção                       | Mover uma função de `utils.py` para `src/utils/` quando uma segunda pipeline precisa dela ([Seção 11](#11-srcprefect_rj_iplanrio--código-compartilhado-do-workspace)). |
-| pipeline de dump               | Pipeline que copia dados de um banco para o BigQuery. O template do repositório cria esse tipo.                                                                        |
-| `{{ build-image.tag }}`        | Valor que o Prefect preenche no deploy com a tag da imagem construída. Vem do passo `build-image` do `prefect.yaml`.                                                   |
-| `{{ get-commit-hash.stdout }}` | Valor que o Prefect preenche no deploy com o hash curto do commit. Vem do passo `get-commit-hash`.                                                                     |
+| Termo                          | Significado                                                                                                                                                |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| flow                           | A função `@flow` do Prefect. Define quais tasks rodam e em que ordem.                                                                                      |
+| task                           | A função `@task` do Prefect. Tem retries e estado visíveis na UI.                                                                                          |
+| deployment                     | Um flow registrado no Prefect com agendamento, parâmetros e infraestrutura. Fica no `prefect.yaml` ([Seção 9](#9-convenções-do-prefectyaml)).              |
+| work pool                      | Onde o Prefect executa o deployment: `default-pool` (geral) ou `onprem-pool` (acesso interno por VPN).                                                     |
+| work queue                     | Fila dentro do work pool. Neste repositório sempre `default`.                                                                                              |
+| `secretName`                   | Nome do Kubernetes Secret montado no container. Guarda credenciais como variáveis de ambiente.                                                             |
+| Infisical                      | Serviço de segredos. As credenciais chegam ao código por variáveis de ambiente injetadas em runtime.                                                       |
+| tag                            | Metadado `chave:valor` do deployment (`environment`, `severity`, `code_owner`) ([Seção 13](#13-tags-de-pipeline)).                                         |
+| imagem / `Dockerfile`          | Cada pipeline roda em uma imagem Docker construída a partir da imagem base do repositório.                                                                 |
+| workspace e `--package`        | O repositório é um workspace do `uv`. `uv run --package <pipeline>` executa uma pipeline com as dependências dela.                                         |
+| staging e prod                 | Os dois ambientes. Staging não tem agendamento. Prod tem.                                                                                                  |
+| promoção                       | Mover uma função de `helpers.py` para `src/utils/` quando uma segunda pipeline precisa dela ([Seção 11](#11-srcutils--código-compartilhado-do-workspace)). |
+| pipeline de dump               | Pipeline que copia dados de um banco para o BigQuery. O template do repositório cria esse tipo.                                                            |
+| `{{ build-image.tag }}`        | Valor que o Prefect preenche no deploy com a tag da imagem construída. Vem do passo `build-image` do `prefect.yaml`.                                       |
+| `{{ get-commit-hash.stdout }}` | Valor que o Prefect preenche no deploy com o hash curto do commit. Vem do passo `get-commit-hash`.                                                         |
 
 ## Apêndice A — Por que tags em vez de parâmetros
 

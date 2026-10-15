@@ -23,6 +23,22 @@ pull:
 - prefect.deployments.steps.set_working_directory:
     directory: /opt/prefect/prefect_rj_iplanrio
 
+{%- macro environment(env) %}
+  parameters:
+{%- if cookiecutter.tipo == "dump_database" %}
+    database:
+      type: postgres # postgres, mysql, mssql ou oracle
+      host: host
+      port: 5432
+      database: database
+      secret_path: /db-secret_path
+{%- endif %}
+    cloud:
+      bucket: bucket-{{ env }}
+      project: project-{{ env }}
+      connection: project-{{ env }}.us.biglake
+{%- endmacro %}
+
 deployments:
 - name: rj-{{ cookiecutter.secretaria | lower }}--{{ cookiecutter.pipeline }}--staging
   tags:
@@ -31,17 +47,7 @@ deployments:
   - code_owner:{{ cookiecutter.code_owner | lower }}
   version: "{% raw %}{{ build-image.tag }}{% endraw %}"
   entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
-  parameters:
-    database: # banco de origem e o segredo com usuario e senha
-      db_type: postgres # postgres, mysql, mssql ou oracle
-      host: host
-      port: 5432
-      database: database # no Oracle, o service name
-      secret_path: /db-secret_path
-    cloud: # ambiente de destino
-      bucket: bucket-staging
-      project: project-staging
-      biglake_connection: project-staging.us.biglake # conexao BigLake que le a tabela Delta
+{{- environment("staging") }}
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -57,17 +63,7 @@ deployments:
   - code_owner:{{ cookiecutter.code_owner | lower }}
   version: "{% raw %}{{ get-commit-hash.stdout }}{% endraw %}"
   entrypoint: pipelines/rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}/flow.py:rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}
-  parameters:
-    database:
-      db_type: postgres
-      host: host
-      port: 5432
-      database: database
-      secret_path: /db-secret_path
-    cloud:
-      bucket: bucket-prod
-      project: project-prod
-      biglake_connection: project-prod.us.biglake
+{{- environment("prod") }}
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -76,39 +72,34 @@ deployments:
       command: uv run --package rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }} -- prefect flow-run execute
       secretName: prefect-jobs-secrets
       image_pull_policy: Always
-
-  # Cada schedule repete os grupos table, read e options inteiros: o Prefect troca o grupo, nao a chave.
+  # O Prefect troca o grupo inteiro (table, read, options), não só uma chave.
   schedules:
-  # Exemplo de schedule overwrite: le a tabela inteira e regrava tudo
-  - interval: 86400 # executa a cada 24h
-    anchor_date: "2022-01-01T01:00:00" # Data de inicio do schedule em UTC
+  - cron: "0 1 * * *"
     timezone: America/Sao_Paulo
-    slug: full # slug do schedule
+    slug: daily
     parameters:
-      dump_mode: overwrite
-      table: # tabela no BigQuery
-        dataset_id: dataset_id
-        table_id: table_id
-      read:
-        table: public.table_name # tabela anexada: o filtro e a janela vao para o banco
-        # query: "SELECT ..." # ou uma consulta nativa, no dialeto do banco (uma janela so)
-  # Exemplo de schedule incremental: so grava a janela que mudou
-  - interval: 86400
-    anchor_date: "2022-01-01T02:32:00"
-    timezone: America/Sao_Paulo
-    slug: incremental
-    parameters:
-      dump_mode: append
       table:
         dataset_id: dataset_id
         table_id: table_id
+{%- if cookiecutter.tipo == "dump_database" %}
+      dump_mode: append
       read:
-        table: public.table_name
+        table: public.table_name # ou query: "SELECT ..." (uma janela só)
       options:
-        batches: # janelas de uma coluna de data ou de id
+        batches:
           column: created_at
-          width: month # day, month, year ou um numero de ids
+          width: month # day, month, year ou um número de ids
           begin: "2024-01-01"
-          lookback: 2 # relê so as duas ultimas janelas
-        # filters: [{column: status, op: "!=", value: cancelado}] # so as linhas que passam
-        # select: [id, created_at] # so estas colunas, na ordem; sem a chave grava todas
+          lookback: 2 # relê só as duas últimas janelas
+{%- elif cookiecutter.tipo == "ingest_api" %}
+      dump_mode: append # overwrite troca a tabela
+      url: https://api.example.gov.br/items
+      records_key: data.items # caminho até a lista de registros
+{%- elif cookiecutter.tipo == "dump_arcgis" %}
+      dump_mode: overwrite
+      url: https://services.arcgis.com/example/FeatureServer/0
+      crs: EPSG:31983
+{%- else %}
+      dump_mode: overwrite
+      spreadsheet_id: spreadsheet_id
+{%- endif %}

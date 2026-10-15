@@ -8,7 +8,7 @@ Regras só do pacote `toolkit`. Ele segue o [guia do repositório](../../STYLEGU
 
 ## 1. Escopo
 
-O `toolkit` tem primitivos reutilizáveis e nenhuma lógica de domínio. Regras de negócio, consultas, constantes de `dataset` ou `table_id`, `@flow` e `@task` ficam em cada pipeline.
+O `toolkit` tem primitivos reutilizáveis e nenhuma lógica de domínio. Regras de negócio, consultas, constantes de `dataset` ou `table_id`, `@flow` e `@task` ficam em cada pipeline ou em `src/utils/`.
 
 Promova uma função para cá só no segundo uso confirmado, e só se ela for genérica, estável e sem lógica de pipeline. Promoção especulativa é proibida.
 
@@ -17,15 +17,15 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 | Módulo                               | Responsabilidade                                                                                                                                    |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `toolkit.executor`                   | `Executor`, `Engine`, fontes e modelos SQL.                                                                                                         |
-| `toolkit.settings`                   | `Settings` e credenciais de banco.                                                                                                                  |
+| `toolkit.settings`                   | `Settings`, `read_secret` e credenciais de banco.                                                                                                   |
 | `toolkit.functions`                  | As funções do `DuckDB`: `native.py` (uma vez por linha), `arrow.py` e `documents.py` (uma vez por lote) e `registry.py`, com o registro automático. |
 | `toolkit.utils`                      | As colunas e os filtros de um `dump`: `normalize_column`, `column_aliases`, `select_columns` e `filter_predicates`.                                 |
 | `toolkit.telemetry`                  | O `logger` do pacote e o `OpenTelemetry`.                                                                                                           |
 | `toolkit.constants`, `toolkit.types` | Constantes e apelidos de tipo compartilhados.                                                                                                       |
 | `toolkit.batches`                    | As janelas de um `dump` e o `hash` da `config`. Funções puras.                                                                                      |
-| `toolkit.delta`                      | A tabela `Delta` de um `dump`: o `ledger`, a troca de uma janela e a manutenção.                                                                    |
+| `toolkit.delta`                      | A tabela `Delta` de um `dump`: o `ledger`, a troca de uma janela, a soma de linhas, a compactação e a manutenção.                                   |
 | `toolkit.gcs`                        | `GCS` com `obstore`. Único lugar que importa `obstore`.                                                                                             |
-| `toolkit.bigquery`                   | Cliente do BigQuery e tabelas externas.                                                                                                             |
+| `toolkit.bigquery`                   | Cliente do BigQuery: instruções e tabelas externas.                                                                                                 |
 | `toolkit.oracle`                     | `Engine` do Oracle (`oracledb`): `connect`, `execute` e `query`.                                                                                    |
 | `toolkit.dbt`                        | Execução de `dbt`.                                                                                                                                  |
 
@@ -61,7 +61,12 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 - Todo modelo começa com um cabeçalho JSON em `{# ... #}` (`kind`, `description`, `inputs`). Toda macro tem `kind: "macro"`, `name`, `description`, `inputs` e `returns`, com uma linha em branco antes do cabeçalho, nenhuma entre ele e a macro, e uma depois.
 - Um nome por papel (`secret`, `alias`, `path`, `columns`), sem `name` solto nem abreviação (`cols`). O mapeamento do Python e o modelo usam os mesmos nomes. O Python decide identificador, literal e parâmetro, e o `Jinja` só faz laços e condicionais.
 - Cada valor de `.sqlfluff` é um exemplo válido de um modelo que existe.
-- Operação que se repete vira função do `DuckDB` ou modelo em `duckdb/`, e não código em cada pipeline. Toda função do `DuckDB` fica em `toolkit/functions/`: o código no módulo do tipo, `native.py` (o `DuckDB` a chama uma vez por linha, com `@native`), `arrow.py` ou `documents.py` (uma vez por lote, com `@arrow`). A função se registra onde é definida, com os decoradores de `decorators.py`. O `get_functions`, de `registry.py`, importa os módulos do pacote e devolve `(arrow, native)`, e o `register_functions` registra cada item com `create_function` quando o `DuckDBEngine` é criado, então toda conexão as tem: `normalize`, `clean_text`, `parse_date`, `parse_timestamp`, `ano_particao`, `mes_particao`, `data_particao`, `now_sao_paulo`, `to_sao_paulo`, `is_cpf`, `normalize_cpf`, `is_cnpj`, `normalize_cnpj` e `is_phone`. Escreva a função como uma expressão do `Polars` e a decore com `@arrow`, porque o `DuckDB` a chama uma vez por lote, e não uma vez por linha. Os modelos prontos são `extract_window`, `select_source`, `fingerprint` e `select_columns`. O nome de uma coluna usa `Executor.normalize_columns(table, columns, separator, lowercase)`, porque o `DuckDB` não aceita o resultado de uma função como nome de coluna. Ela renomeia as colunas dadas, ou todas se `columns` for `None`, de uma tabela da própria conexão, nunca de uma fonte anexada. Na cópia de um banco, `select_columns` (em `toolkit/utils.py`) monta a lista de colunas para a macro `select_columns`: `select`, nomes, `clean_text` e funções por coluna. Só entram funções `Arrow`, e elas leem texto, então `select_columns` converte datas e `timestamps` antes.
+- Uma operação que se repete vira função do `DuckDB` ou modelo em `duckdb/`, e não código em cada pipeline.
+- Toda função do `DuckDB` fica em `toolkit/functions/`, no módulo do tipo: `native.py` (o `DuckDB` a chama uma vez por linha, com `@native`), `arrow.py` ou `documents.py` (uma vez por lote, com `@arrow`). Escreva a função como uma expressão do `Polars`.
+- A função se registra onde é definida, com os decoradores de `decorators.py`. O `register_functions` a registra quando o `DuckDBEngine` é criado, então toda conexão a tem. A lista está no [README](README.md#módulos).
+- Os modelos prontos são `extract_window`, `select_source`, `fingerprint` e `select_columns`.
+- O nome de uma coluna usa `Executor.normalize_columns(table, columns, separator, lowercase)`, porque o `DuckDB` não aceita o resultado de uma função como nome de coluna. Ela renomeia as colunas dadas (ou todas, se `columns` for `None`) de uma tabela da própria conexão, nunca de uma fonte anexada.
+- Na cópia de um banco, `select_columns` (em `toolkit/utils.py`) monta a lista de colunas da macro `select_columns`: `select`, nomes, `clean_text` e funções por coluna. Só entram funções `Arrow`, que leem texto, então `select_columns` converte datas e `timestamps` antes.
 
 ## 4. `Engine` e fontes
 
@@ -82,7 +87,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 
 ## 6. `Prefect`, logs e telemetria
 
-- O toolkit tem funções puras: sem `@flow`, `@task`, `if __name__ == "__main__":` nem `print()`. O `@task` é uma função fina no `tasks.py` de cada pipeline, que decide `retries` e cache.
+- O toolkit tem funções puras: sem `@flow`, `@task`, `if __name__ == "__main__":` nem `print()`. O `@task` é uma função fina, no `tasks.py` da pipeline ou em `src/utils/tasks.py`, que decide `retries` e cache.
 - Todo log passa por `toolkit.telemetry.logger` (`prefect.toolkit`), no formato `<Componente> <ação> <estado>: contexto`, com o nível do guia do repositório (Seção 5.5). O nível vem só de `Settings.LOG_LEVEL`. A saída de ferramentas externas fica como vem.
 - Uma operação (consulta, instrução, envio, exclusão) é um `span`, com o nome em `constants.py`. Não há histograma de duração, porque o `SigNoz` a deriva dos `spans`, e não se decora `flow` nem `task`.
 - Um instrumento de `telemetry.py` é só para totais que um `span` não dá (linhas, bytes), com unidade e atributos de cardinalidade baixa. Valor de dado, id de linha e mensagem de erro não são atributos.
