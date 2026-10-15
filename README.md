@@ -240,19 +240,24 @@ Os testes não usam a nuvem de verdade. O GCS é um servidor falso com a API XML
 
 O `GitHub Actions` roda as tasks do `devenv` e os scripts `Nushell` de `scripts/`. Assim o que roda no CI roda igual na sua máquina.
 
-| Workflow                | Quando roda                                                                                  | O que faz                                                                                                                                   |
-| ----------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yaml`               | `pull request` e `push` na `master`                                                          | `devenv --profile checks tasks run lint:all test:all`. O `devenv` já roda as tasks independentes em paralelo.                               |
-| `deploy.yaml`           | `push` na `master` (prod) ou em `staging/*` (staging), quando `pipelines/**` muda; ou manual | Escolhe as pipelines com `scripts/deploy.nu plan` e registra cada uma no `Prefect` com `scripts/deploy.nu run`, quatro por vez.             |
-| `build-root-image.yaml` | Mudança no `Dockerfile` da raiz, na `master`; ou manual                                      | Publica `ghcr.io/<repositório>:latest` e chama `deploy.yaml` para todas as pipelines, em staging e em prod (os dois ambientes em paralelo). |
-| `sast.yml`              | `pull request` e `push` na `master`                                                          | Análise de segurança.                                                                                                                       |
+| Workflow                | Quando roda                                                                                                                                          | O que faz                                                                                                                                                                                    |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yaml`               | `pull request` e `push` na `master`                                                                                                                  | `devenv --profile checks tasks run lint:all test:all`. O `devenv` já roda as tasks independentes em paralelo.                                                                                |
+| `deploy.yaml`           | `push` na `master` (prod) ou em `staging/*` (staging), quando `pipelines/**`, `src/**`, `packages/**`, `pyproject.toml` ou `uv.lock` muda; ou manual | Escolhe as pipelines com `scripts/deploy.nu plan` e registra cada uma no `Prefect` com `scripts/deploy.nu run`, quatro por vez.                                                              |
+| `build-root-image.yaml` | Mudança no `Dockerfile` ou no `openssl.cnf` da raiz, na `master`; ou manual                                                                          | Publica `ghcr.io/<repositório>:latest` e chama `deploy.yaml` para todas as pipelines, em staging e em prod (os dois ambientes em paralelo). Os dois ambientes não esperam um `pull request`. |
+| `sast.yaml`             | `pull request` e `push` na `master`                                                                                                                  | Análise de segurança.                                                                                                                                                                        |
 
 Como o `deploy.yaml` funciona:
 
-- **`plan`:** a lista é a das pipelines com arquivo mudado entre o commit anterior ao `push` e o atual, e que têm um `deployment` do ambiente (`rj-...--prod` ou `rj-...--staging`). Em staging, só segue se a branch tem um `pull request` aberto para a `master`.
+- **`plan`:** escolhe as pipelines que têm um `deployment` do ambiente, isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML.
+  - Se mudou um arquivo de `pipelines/<nome>/`, só essa pipeline entra.
+  - Se mudou `src/`, `packages/`, `pyproject.toml` ou `uv.lock`, todas as pipelines entram, porque cada imagem tem esse código dentro. Arquivos `.md` não contam.
+  - Em `staging/*`, só segue se a branch tem um `pull request` aberto para a `master`.
+  - Na `master`, se o mesmo `push` muda o `Dockerfile` ou o `openssl.cnf`, o `plan` não faz nada. O `build-root-image.yaml` publica a imagem nova e depois faz o deploy de todas as pipelines.
 - **`deploy`:** um job por pipeline, cada um no próprio runner, com quatro em paralelo. Uma falha não cancela as outras. O script tenta de novo (duas vezes) só quando o erro é de rede.
 - **Manual:** informe o ambiente e, se quiser, uma `pipeline` ou `all`.
-- **Só `pipelines/**` dispara o deploy.** Cada imagem tem `src/` e `packages/` dentro. Para publicar uma mudança nelas, rode o `deploy.yaml` à mão com `all`.
+- **Permissões e tokens:** cada workflow começa com `permissions: {}` e cada job pede só o que usa. O login no `ghcr.io` usa o `GITHUB_TOKEN`.
+- **Versões das actions:** todas ficam fixas por `hash` de commit, e o `Renovate` (`renovate.json`) atualiza.
 
 Para testar o plano na sua máquina:
 

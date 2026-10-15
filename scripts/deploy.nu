@@ -3,6 +3,8 @@ use std/log
 
 const RETRYABLE_ERRORS = [timeout connection network 'read timed out']
 const ZERO_SHA = '0000000000000000000000000000000000000000'
+const SHARED_PATHS = [src packages pyproject.toml uv.lock]
+const ROOT_IMAGE_FILES = [Dockerfile openssl.cnf]
 
 # Write one output for the next job of the workflow, or print it when run by hand.
 def write-output [name: string, value: string]: nothing -> nothing {
@@ -35,14 +37,18 @@ def find-deployments [pipeline: string, environment: string]: nothing -> list<st
     | where ($it | str ends-with $'--($environment)')
 }
 
-# Return the pipelines whose files changed between two commits. Without a `before` commit, use the parent of `after`.
-def changed-pipelines [before: oneof<string, nothing>, after: string]: nothing -> list<string> {
+# List the files that changed between two commits, except Markdown files. Without a `before` commit, use the parent of `after`.
+def list-changed-files [before: oneof<string, nothing>, after: string]: nothing -> list<string> {
     let base = if ($before == null) or ($before == '') or ($before == $ZERO_SHA) { $'($after)^' } else { $before }
 
-    git diff --name-only $base $after -- pipelines
-    | lines
+    git diff --name-only $base $after | lines | where not ($it | str ends-with '.md')
+}
+
+# List the pipelines that own the files of the input.
+def list-pipelines []: list<string> -> list<string> {
+    where ($it | str starts-with 'pipelines/')
     | each { path split | get --optional 1 }
-    | where $it != null
+    | compact
     | uniq
 }
 
@@ -60,6 +66,15 @@ def has-open-pr [branch: string]: nothing -> bool {
     ($pulls | length) > 0
 }
 
+# Write a plan that deploys nothing, and say why.
+def skip-deploy [reason: string]: nothing -> nothing {
+    log warning $'Nothing is deployed: ($reason)'
+    write-output deploy 'false'
+    write-output matrix ({
+        pipeline: []
+    } | to json --raw)
+}
+
 # Choose the pipelines to deploy and write the matrix of the deploy job.
 def 'main plan' [
     --environment: string # `staging` or `prod`
@@ -68,22 +83,29 @@ def 'main plan' [
     --before: string # the commit before the push
     --after: string = HEAD # the commit of the push
     --open-pr-from: string # deploy only if this branch has an open pull request into master
+    --defer-to-image-build # deploy nothing if the push also changes the root image, because its build deploys every pipeline
 ]: nothing -> nothing {
     if ($open_pr_from != null) and not (has-open-pr $open_pr_from) {
-        log warning $'No open pull request from ($open_pr_from) into master, so nothing is deployed'
-        write-output deploy 'false'
-        write-output matrix ({
-            pipeline: []
-        } | to json --raw)
+        skip-deploy $'no open pull request from ($open_pr_from) into master'
         return
     }
 
+    let changed = if ($pipeline == null) and (not $all) { list-changed-files $before $after } else { [] }
+
+    if $defer_to_image_build and ($changed | any {|file| $file in $ROOT_IMAGE_FILES }) {
+        skip-deploy 'the push changes the root image, and its build deploys every pipeline'
+        return
+    }
+
+    let every_pipeline = glob pipelines/*/prefect.yaml | each { path dirname | path basename }
+    let shared_changed = $changed | any {|file| $SHARED_PATHS | any {|path| ($file == $path) or ($file | str starts-with $'($path)/') } }
+
     let candidates = if $pipeline != null {
         [$pipeline]
-    } else if $all {
-        glob pipelines/*/prefect.yaml | each { path dirname | path basename }
+    } else if $all or $shared_changed {
+        $every_pipeline
     } else {
-        changed-pipelines $before $after
+        $changed | list-pipelines
     }
 
     let chosen = $candidates | where (find-deployments $it $environment | is-not-empty) | sort

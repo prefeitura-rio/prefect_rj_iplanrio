@@ -6,6 +6,10 @@ on:
       - staging/*
     paths:
       - pipelines/**
+      - src/**
+      - packages/**
+      - pyproject.toml
+      - uv.lock
   workflow_dispatch:
     inputs:
       environment:
@@ -40,9 +44,7 @@ on:
 concurrency:
   group: deploy-${{ inputs.environment || (github.ref == 'refs/heads/master' && 'prod' || 'staging') }}-${{ github.ref }}
   cancel-in-progress: false
-permissions:
-  contents: read
-  pull-requests: read
+permissions: {}
 env:
   ENVIRONMENT: ${{ inputs.environment || (github.ref == 'refs/heads/master' && 'prod' || 'staging') }}
   PREFECT_API_URL: https://prefect.squirrel-regulus.ts.net/api
@@ -51,6 +53,9 @@ jobs:
     name: Choose the pipelines
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
     defaults:
       run:
         shell: devenv --profile deploy shell -- bash -e {0}
@@ -58,11 +63,14 @@ jobs:
       deploy: ${{ steps.plan.outputs.deploy }}
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-      - uses: ./.github/actions/setup-devenv
-      - id: plan
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+      - name: Choose the pipelines
+        id: plan
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PIPELINE: ${{ inputs.pipeline }}
@@ -75,7 +83,8 @@ jobs:
           args=(--environment "$ENVIRONMENT" --before "$BEFORE" --after "$AFTER")
           [ -n "$PIPELINE" ] && args+=(--pipeline "$PIPELINE")
           [ "$ALL" = true ] && args+=(--all)
-          [ "$EVENT" = push ] && [ "$ENVIRONMENT" = staging ] && args+=(--open-pr-from "$BRANCH")
+          [ "$EVENT" = push ] && [[ "$BRANCH" == staging/* ]] && args+=(--open-pr-from "$BRANCH")
+          [ "$EVENT" = push ] && [ "$BRANCH" = master ] && args+=(--defer-to-image-build)
           nu scripts/deploy.nu plan "${args[@]}"
   deploy:
     name: Deploy ${{ matrix.pipeline }}
@@ -83,6 +92,9 @@ jobs:
     if: needs.plan.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       max-parallel: 4
@@ -91,16 +103,21 @@ jobs:
       run:
         shell: devenv --profile deploy shell -- bash -e {0}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@d1b6cd204f8dceda5b3eaad7f1f767be390056cd # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:prefect-cicd
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+      - name: Log in to the GitHub container registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GH_TOKEN }}
-      - uses: ./.github/actions/setup-devenv
-      - run: nu scripts/deploy.nu run "${{ matrix.pipeline }}" --environment "$ENVIRONMENT"
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up devenv
+        uses: ./.github/actions/setup-devenv
+      - name: Deploy the pipeline
+        run: nu scripts/deploy.nu run "${{ matrix.pipeline }}" --environment "$ENVIRONMENT"

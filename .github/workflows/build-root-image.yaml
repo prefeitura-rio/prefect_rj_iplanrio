@@ -1,35 +1,52 @@
-name: Build and push root image
-
+name: Build root image
 on:
   push:
     branches:
       - master
     paths:
       - Dockerfile
+      - openssl.cnf
   workflow_dispatch:
     inputs:
       pipeline:
-        description: "Deploy specific pipeline (leave empty to rebuild all)"
+        description: Deploy only this pipeline (leave empty to deploy every pipeline)
         required: false
         type: string
-
+concurrency:
+  group: build-root-image-${{ github.ref }}
+  cancel-in-progress: false
+permissions: {}
 jobs:
-  build-and-push-root-image:
-    name: Build and push root image
+  build:
+    name: Build and push the root image
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Build and push root image
-        uses: ./.github/actions/build-and-push-root-image
+      - name: Check out the repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Log in to the GitHub container registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
-          repository: ${{ github.repository }}
-          github_token: ${{ secrets.GH_TOKEN }}
-
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest
   deploy:
-    name: Deploy every pipeline to ${{ matrix.environment }}
-    needs: build-and-push-root-image
+    name: Deploy to ${{ matrix.environment }}
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: read
     strategy:
       fail-fast: false
       matrix:
@@ -39,6 +56,6 @@ jobs:
     uses: ./.github/workflows/deploy.yaml
     with:
       environment: ${{ matrix.environment }}
-      pipeline: ${{ github.event.inputs.pipeline || '' }}
-      all: ${{ github.event.inputs.pipeline == '' }}
+      pipeline: ${{ inputs.pipeline || '' }}
+      all: ${{ inputs.pipeline == '' }}
     secrets: inherit

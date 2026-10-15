@@ -1,30 +1,28 @@
 name: SAST
-
 on:
   push:
     branches: [master]
   pull_request:
     branches: [master]
-  workflow_dispatch: {}
-
+  workflow_dispatch:
 concurrency:
-  group: sast-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: sast-${{ github.ref }}
   cancel-in-progress: true
-
 permissions: {}
-
 jobs:
   sast:
+    name: Static analysis
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
-      - name: Checkout
+      - name: Check out the repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
-      - name: Run SAST (local action)
-        uses: prefeitura-rio/actions/sast@master
+      - name: Run the SAST scan
+        uses: prefeitura-rio/actions/sast@39454781d7508aa89278145b7b5affc37f63e0b7 # master
         with:
           sonar_url: ${{ vars.SONARQUBE_URL }}
           sonar_token: ${{ secrets.SONARQUBE_TOKEN }}
