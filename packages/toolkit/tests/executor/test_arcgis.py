@@ -14,6 +14,8 @@ from toolkit.executor.executor import Executor
 from toolkit.executor.sources.backends.arcgis import ArcGISSource
 from toolkit.types import Geometry
 
+POLL_SECONDS = 0.01
+
 FEATURES = [
     {"attributes": {"id": 1, "name": "a"}, "geometry": {"x": 1.0, "y": 2.0}},
     {"attributes": {"id": 2, "name": "b"}, "geometry": {"x": 3.0, "y": 4.0}},
@@ -69,7 +71,7 @@ def layer() -> Iterator[tuple[str, list[dict[str, list[str]]]]]:
             self.wfile.write(payload)
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    Thread(target=server.serve_forever, daemon=True).start()
+    Thread(target=server.serve_forever, args=(POLL_SECONDS,), daemon=True).start()
     url = (
         f"http://127.0.0.1:{server.server_port}/arcgis/rest/services/s/FeatureServer/0"
     )

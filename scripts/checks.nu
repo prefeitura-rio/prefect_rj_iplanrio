@@ -80,9 +80,9 @@ def 'main lint prefect' []: nothing -> nothing {
     }
 }
 
-# Run the unit tests of the root project. They need no network.
+# Run the unit tests of the root project on four workers. They need no network.
 def 'main test root' []: nothing -> nothing {
-    in-project . pytest -q
+    in-project . pytest -q -n 4 --dist worksteal
 }
 
 # Run the unit tests of the toolkit. They need no network.

@@ -12,6 +12,8 @@ from hypothesis import strategies as st
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.sources.backends.gsheets import GSheetsSource, HttpxRequest
 
+POLL_SECONDS = 0.01
+
 
 @given(first=st.text(min_size=1), second=st.text(min_size=1))
 def test_the_access_token_is_a_bound_value_that_never_reaches_the_statement_text(
@@ -59,7 +61,7 @@ def http_server() -> Iterator[str]:
             self.reply(self.rfile.read(int(self.headers["Content-Length"])))
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    Thread(target=server.serve_forever, daemon=True).start()
+    Thread(target=server.serve_forever, args=(POLL_SECONDS,), daemon=True).start()
     yield f"http://127.0.0.1:{server.server_port}"
     server.shutdown()
 
