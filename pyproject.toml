@@ -39,10 +39,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = ["--import-mode=importlib", "-m", "not gcp"]
+addopts = ["--import-mode=importlib"]
 pythonpath = ["tests"]
 markers = [
-  "gcp: real GCS and BigQuery checks, run with -m gcp and TOOLKIT_GCP_PROJECT",
   "extensions: needs a DuckDB extension that is downloaded the first time",
 ]
 

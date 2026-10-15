@@ -44,7 +44,7 @@ class Column:
     nullable: bool
 
 
-def schema_of(schema: type) -> dict[str, Column]:
+def build_columns(schema: type) -> dict[str, Column]:
     """Return the expected columns of a schema class, in declaration order.
 
     Raise `TypeError` if an annotation has no Polars type.
@@ -54,14 +54,14 @@ def schema_of(schema: type) -> dict[str, Column]:
         id: int
         note: str | None
 
-    schema_of(Order)
+    build_columns(Order)
     # {"id": Column(dtype=Int64, nullable=False),
     #  "note": Column(dtype=String, nullable=True)}
     ```
     """
     hints = cast("dict[str, object]", get_type_hints(schema))
     return {
-        name: column_of(name, annotation)
+        name: build_column(name, annotation)
         for name, annotation in hints.items()
         if get_origin(annotation) is not ClassVar
     }
@@ -85,11 +85,11 @@ def frame_columns(frame: DataFrame) -> dict[str, Column]:
     }
 
 
-def column_of(name: str, annotation: object) -> Column:
+def build_column(name: str, annotation: object) -> Column:
     """Return the column that one annotated field describes."""
     try:
         annotation, nullable = split_nullable(annotation)
-        return Column(dtype_of(annotation), nullable)
+        return Column(resolve_dtype(annotation), nullable)
     except TypeError as error:
         raise TypeError(f"{name}: {error}") from error
 
@@ -114,11 +114,11 @@ def split_nullable(annotation: object) -> tuple[object, bool]:
     return others[0], True
 
 
-def dtype_of(annotation: object) -> DataType | type[DataType]:
+def resolve_dtype(annotation: object) -> DataType | type[DataType]:
     """Return the Polars type of an annotation without `| None`."""
     if get_origin(annotation) is list:
         (item,) = cast("tuple[object]", get_args(annotation))
-        return List(dtype_of(item))
+        return List(resolve_dtype(item))
 
     if get_origin(annotation) is Literal:
         return String
@@ -128,7 +128,7 @@ def dtype_of(annotation: object) -> DataType | type[DataType]:
             return SCALAR_TYPES[annotation]
 
         if get_type_hints(annotation):
-            fields = schema_of(annotation)
+            fields = build_columns(annotation)
             return Struct({name: column.dtype for name, column in fields.items()})
 
     raise TypeError(f"unsupported annotation: {annotation!r}")

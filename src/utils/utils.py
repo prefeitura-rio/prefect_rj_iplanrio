@@ -158,7 +158,7 @@ def failure_message(flow_name: str, run_name: str, reason: str, url: str | None)
     return f":red_circle: **{flow_name}** `{run_name}` failed: {reason}{link}"[:DISCORD_LIMIT]
 
 
-def config_of(values: dict[str, TemplateValue], options: DumpOptions) -> str:
+def hash_config(values: dict[str, TemplateValue], options: DumpOptions) -> str:
     """Hash everything that changes the bytes of a window.
 
     That is what is read, and the filters, the columns and the normalization. The range
@@ -243,7 +243,7 @@ async def dump_to_delta(
     columns = options.get("columns", {})
 
     capture = options.get("capture")
-    config = config_of(values, options)
+    config = hash_config(values, options)
     cut = cut_windows(options, dump_mode)
     ids = {window.key: ledger_id(config, capture.isoformat() if capture else window.key) for window in cut}
     known = await to_thread(known_fingerprints, uri, list(ids.values()))
@@ -439,11 +439,11 @@ def epsg_code(crs: str) -> str:
     return code
 
 
-def records_of(data: JsonValue, key: str | None) -> list[dict[str, JsonValue]]:
+def extract_records(data: JsonValue, key: str | None) -> list[dict[str, JsonValue]]:
     """Return the records of a JSON document: the list itself, or the list at a dotted `key`.
 
     ```python
-    records_of({"data": {"items": [{"id": 1}]}}, "data.items")  # [{"id": 1}]
+    extract_records({"data": {"items": [{"id": 1}]}}, "data.items")  # [{"id": 1}]
     ```
 
     Raise `ValueError` if there is no list of objects at the key.

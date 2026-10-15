@@ -34,7 +34,7 @@ from polars import (
 from polars import Decimal as polars_Decimal
 
 from toolkit.executor.constants import GEOMETRY_EXTENSION
-from toolkit.executor.schema import Column, SchemaError, schema_of, validate_frame
+from toolkit.executor.schema import Column, SchemaError, build_columns, validate_frame
 from toolkit.types import Geometry
 
 
@@ -139,7 +139,7 @@ def place(dtype: DataType) -> DataFrame:
 )
 def test_schema_of_reads_the_annotations(schema, expected):
     """Read the columns from the annotations."""
-    assert schema_of(schema) == expected
+    assert build_columns(schema) == expected
 
 
 @pytest.mark.parametrize(
@@ -155,7 +155,7 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
     bad = make_dataclass("Bad", [("value", annotation)])
 
     with pytest.raises(TypeError, match=message):
-        schema_of(bad)
+        build_columns(bad)
 
 
 @pytest.mark.parametrize(
@@ -225,7 +225,7 @@ def test_an_annotation_without_a_polars_type_is_rejected(annotation, message):
 )
 def test_a_frame_that_fits_is_returned_with_the_schema_types(schema, frame, expected):
     """Return a frame that fits, with the schema types."""
-    assert validate_frame(frame, schema_of(schema)).schema == expected
+    assert validate_frame(frame, build_columns(schema)).schema == expected
 
 
 @pytest.mark.parametrize(
@@ -275,13 +275,13 @@ def test_a_frame_that_does_not_fit_is_rejected_naming_the_column(
 ):
     """Reject a frame that does not fit, naming the column."""
     with pytest.raises(SchemaError, match=message):
-        validate_frame(frame, schema_of(schema))
+        validate_frame(frame, build_columns(schema))
 
 
 def test_every_problem_is_reported_at_once():
     """Report every problem at once."""
     with pytest.raises(SchemaError) as error:
-        validate_frame(DataFrame({"id": ["1"], "extra": [1]}), schema_of(Order))
+        validate_frame(DataFrame({"id": ["1"], "extra": [1]}), build_columns(Order))
 
     assert str(error.value).split("; ")[:2] == [
         "missing columns: name, day",
@@ -311,7 +311,7 @@ def test_any_integer_type_widens_to_int64_and_keeps_its_values(data):
     values = data.draw(st.lists(st.integers(low, high), min_size=1))
 
     result = validate_frame(
-        DataFrame({"id": Series(values, dtype=dtype)}), schema_of(OnlyId)
+        DataFrame({"id": Series(values, dtype=dtype)}), build_columns(OnlyId)
     )
 
     assert result.schema == Schema({"id": Int64})

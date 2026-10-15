@@ -51,7 +51,7 @@ def run_at(monkeypatch: pytest.MonkeyPatch) -> Callable[[datetime], None]:
     return set_time
 
 
-def table_of(name: str) -> Table:
+def build_table(name: str) -> Table:
     """Return the table of a test, in a dataset of its own."""
     return {"dataset_id": "api", "table_id": name}
 
@@ -64,7 +64,7 @@ def read(cloud: type[FakeBigQuery], name: str) -> list[int]:
 
 async def test_each_run_of_an_api_adds_its_records_and_a_rerun_of_the_same_run_adds_nothing(cloud, fake_api, run_at):
     """Keep the history of the API, and make a retry of a run harmless."""
-    table = table_of("history")
+    table = build_table("history")
     url = f"{fake_api.url}/list"
 
     run_at(FIRST_RUN)
@@ -86,7 +86,7 @@ async def test_a_response_with_no_record_loads_nothing(cloud, fake_api, run_at):
     run_at(FIRST_RUN)
     fake_api.replies.append((200, []))
 
-    await ingest_api(cloud=CLOUD, table=table_of("empty"), url=f"{fake_api.url}/list")
+    await ingest_api(cloud=CLOUD, table=build_table("empty"), url=f"{fake_api.url}/list")
 
     assert "p.api_staging.empty" not in cloud.tables
 
@@ -100,7 +100,7 @@ async def test_the_names_in_the_headers_and_the_params_come_from_the_secret(fake
 
     await ingest_api(
         cloud=CLOUD,
-        table=table_of("secret"),
+        table=build_table("secret"),
         url=f"{fake_api.url}/list",
         secret_path="/api-x",
         headers={"Authorization": "Bearer {TOKEN}"},
@@ -113,7 +113,7 @@ async def test_the_names_in_the_headers_and_the_params_come_from_the_secret(fake
 
 async def test_overwrite_replaces_the_table_with_the_records_of_the_run(cloud, fake_api, run_at):
     """Keep only the last response, for an API that serves a list and not a stream."""
-    table = table_of("snapshot")
+    table = build_table("snapshot")
     run_at(FIRST_RUN)
     fake_api.replies.append((200, [{"id": 1}, {"id": 2}]))
     await ingest_api(cloud=CLOUD, table=table, url=f"{fake_api.url}/list", dump_mode="overwrite")
@@ -127,7 +127,7 @@ async def test_overwrite_replaces_the_table_with_the_records_of_the_run(cloud, f
 
 async def test_compacting_merges_the_files_of_the_runs_and_loses_no_row(cloud, fake_api, run_at):
     """Leave one file for the day, and BigQuery still reads every record."""
-    table = table_of("busy")
+    table = build_table("busy")
     for minute in range(3):
         run_at(datetime(2024, 3, 10, 9, minute, tzinfo=UTC))
         fake_api.replies.append((200, [{"id": minute}]))
@@ -145,7 +145,7 @@ async def test_files_that_a_flow_made_are_loaded_and_published(cloud, tmp_path):
     """Load the Parquet files of a folder, and create the BigQuery table over them."""
     write_table(ArrowTable.from_pylist([{"id": 7}, {"id": 8}]), tmp_path / "rows.parquet")
 
-    await load_files(cloud=CLOUD, table=table_of("files"), data_path=tmp_path)
+    await load_files(cloud=CLOUD, table=build_table("files"), data_path=tmp_path)
 
     assert read(cloud, "files") == [7, 8]
 
@@ -190,14 +190,14 @@ def steps(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, Mapping[str, objec
 )
 async def test_a_database_dump_runs_dbt_only_after_the_publish(steps, dbt, expected):
     """Run the dump, publish the table, and then the dbt command if there is one."""
-    await dump_database(database=DATABASE, cloud=CLOUD, table=table_of("t"), read={"table": "public.t"}, dbt=dbt)
+    await dump_database(database=DATABASE, cloud=CLOUD, table=build_table("t"), read={"table": "public.t"}, dbt=dbt)
 
     assert [name for name, _ in steps] == expected
 
 
 async def test_an_arcgis_layer_is_dumped_with_its_filter_and_system_then_published(steps):
     """Pass the layer, the filter and the bucket to the dump, and publish."""
-    await dump_arcgis(cloud=CLOUD, table=table_of("t"), url="https://x/layer", where="id > 1", crs="EPSG:3857")
+    await dump_arcgis(cloud=CLOUD, table=build_table("t"), url="https://x/layer", where="id > 1", crs="EPSG:3857")
 
     [(dump, arguments), (publish, _)] = steps
     assert (dump, arguments["where"], arguments["crs"], arguments["bucket"], publish) == (
@@ -211,7 +211,7 @@ async def test_an_arcgis_layer_is_dumped_with_its_filter_and_system_then_publish
 
 async def test_a_sheet_is_dumped_by_name_then_published(steps):
     """Pass the sheet name to the dump, and publish."""
-    await dump_gsheet(cloud=CLOUD, table=table_of("t"), spreadsheet_id="abc", sheet="Dados")
+    await dump_gsheet(cloud=CLOUD, table=build_table("t"), spreadsheet_id="abc", sheet="Dados")
 
     [(dump, arguments), (publish, _)] = steps
     assert (dump, arguments["sheet"], arguments["bucket"], publish) == (

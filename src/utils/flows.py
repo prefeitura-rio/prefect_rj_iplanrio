@@ -23,7 +23,7 @@ from .tasks import (
     write_records,
 )
 from .types import Cloud, Database, DumpMode, DumpOptions, FileFormat, Read, Table
-from .utils import capture_time, fill_secrets, records_of
+from .utils import capture_time, extract_records, fill_secrets
 
 configure_telemetry()
 
@@ -165,7 +165,7 @@ async def ingest_api(
         headers=fill_secrets(headers, secret),
         body=body,
     )
-    records = records_of(data, records_key)
+    records = extract_records(data, records_key)
 
     if not records:
         print(f"No record in the response of {url}")

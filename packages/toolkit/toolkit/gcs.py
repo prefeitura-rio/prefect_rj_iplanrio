@@ -33,16 +33,16 @@ async def list_keys(store: ObjectStore, prefix: str) -> list[str]:
     ]
 
 
-def files_of(path: Path) -> dict[str, Path]:
+def list_files(path: Path) -> dict[str, Path]:
     """Map the relative name of each file to its path.
 
     Raise `FileNotFoundError` if `path` does not exist. Raise `ValueError` for a
     directory with no files.
 
     ```python
-    files_of(Path("out"))
+    list_files(Path("out"))
     # {"ano=2024/a.parquet": Path("out/ano=2024/a.parquet")}
-    files_of(Path("out/a.csv"))
+    list_files(Path("out/a.csv"))
     # {"a.csv": Path("out/a.csv")}
     ```
     """
@@ -93,7 +93,7 @@ async def upload(
     with tracer.start_as_current_span(
         UPLOAD_SPAN, attributes={"toolkit.prefix": prefix}
     ) as span:
-        files = files_of(path)
+        files = list_files(path)
         keys = {name: f"{prefix.rstrip('/')}/{name}" for name in files}
 
         await gather_limited(

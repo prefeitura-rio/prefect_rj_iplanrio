@@ -35,6 +35,7 @@ from utils.utils import (
     dump_in_batches,
     dump_to_delta,
     epsg_code,
+    extract_records,
     failure_message,
     files_glob,
     fill_secrets,
@@ -43,7 +44,6 @@ from utils.utils import (
     publish,
     read_frame,
     read_values,
-    records_of,
     source_values,
     without_batches,
     write_json_lines,
@@ -900,7 +900,7 @@ async def test_the_types_of_the_pipelines_get_the_delta_types_that_bigquery_maps
 )
 def test_the_records_are_the_list_at_the_key(data, key, expected):
     """Pick the list out of the response."""
-    assert records_of(data, key) == expected
+    assert extract_records(data, key) == expected
 
 
 @pytest.mark.parametrize(
@@ -916,7 +916,7 @@ def test_the_records_are_the_list_at_the_key(data, key, expected):
 def test_a_response_with_no_list_of_objects_is_refused(data, key):
     """Raise, so a change in the API fails the run instead of loading nothing."""
     with pytest.raises(ValueError, match="No list of objects"):
-        records_of(data, key)
+        extract_records(data, key)
 
 
 @pytest.mark.parametrize(

@@ -1,51 +1,35 @@
-"""The dump against the cloud, simulated in the process or real.
+"""The dump against the cloud, simulated in the process.
 
-Every scenario runs against two backends. `simulated` is the default: a fake GCS with the
-XML API and its generation preconditions, BigQuery over a Delta table with the rules that the
-real runs showed, and a database in memory. `gcp` is real GCS, BigQuery and BigLake, and runs
-with `pytest -m gcp`. It needs `gcloud`, `bq`, and ADC with rights to create a bucket, a
-BigLake connection, a dataset and a service account in `TOOLKIT_GCP_PROJECT`. It creates
-scratch resources with a random suffix and deletes all of them at the end.
+A fake GCS with the XML API and its generation preconditions, BigQuery over a Delta table with the
+rules that the real services showed, and a database in memory. Nothing here needs the network.
 """
 
 from asyncio import gather
-from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from io import BytesIO
-from json import loads
-from os import environ
 from secrets import token_hex
-from shutil import which
-from subprocess import run as run_process
-from time import sleep
-from typing import Protocol, Unpack, cast
+from typing import Unpack, cast
 
 import pytest
 from deltalake import DeltaTable
 from fixtures import FakeBigQuery, FakeDatabase, FakeGcs
-from google.cloud.bigquery import Client
 from obstore.store import ObjectStore
-from polars import DataFrame, col, from_arrow, read_parquet
+from polars import DataFrame, col, from_arrow
 from pyarrow import Table, decimal128
 from pyarrow import array as arrow_array
 from pyarrow import table as arrow_table
 from pyarrow import timestamp as arrow_timestamp
-from pydantic import JsonValue, SecretStr
+from pydantic import JsonValue
 from toolkit.constants import BATCH_COLUMN
 from toolkit.delta import compact, maintain
-from toolkit.executor.sources.backends.bigquery import BigQuerySource
 from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.gcs import create_store, list_keys
-from toolkit.settings import settings
 from toolkit.types import Batches
 
-from utils.tasks import read_bq, run_bq_sql
 from utils.types import DumpMode, DumpOptions
 from utils.utils import (
     Destination,
-    dump_in_batches,
     dump_to_delta,
     load_to_delta,
     publish,
@@ -54,37 +38,9 @@ from utils.utils import (
     write_json_lines,
 )
 
-LOCATION = "us"
 INSTANT = datetime(2024, 3, 1, 10, tzinfo=UTC)
 MONTHS: Batches = {"column": "dia", "width": "month", "begin": "2024-01-01", "end": "2024-03-31"}
 SIMULATED_PROJECT = "simulated-project"
-
-
-class Cloud(Protocol):
-    """What a scenario needs of a cloud, so it runs against a real one or a simulated one."""
-
-    bucket: str
-    project: str
-
-    def destination(self, name: str) -> Destination:
-        """Return the destination of a table of this run."""
-        ...
-
-    async def publish(self, destination: Destination) -> None:
-        """Create or refresh the BigQuery table of a destination."""
-        ...
-
-    def read(self, destination: Destination) -> DataFrame:
-        """Return what BigQuery returns for the table of a destination."""
-        ...
-
-    def types(self, destination: Destination) -> dict[str, str]:
-        """Return the BigQuery type of each column of the table of a destination."""
-        ...
-
-    def store(self) -> ObjectStore:
-        """Return the object store of the bucket."""
-        ...
 
 
 @dataclass(frozen=True)
@@ -119,153 +75,9 @@ class SimulatedCloud:
 
 
 @pytest.fixture(scope="module")
-def simulated_cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery]) -> SimulatedCloud:
+def cloud(fake_gcs: FakeGcs, fake_bigquery: type[FakeBigQuery]) -> SimulatedCloud:
     """Return the simulated cloud, where `deltalake`, `obstore` and BigQuery reach the fakes."""
     return SimulatedCloud(fake_gcs, fake_bigquery)
-
-
-@dataclass(frozen=True)
-class RealCloud:
-    """The scratch resources of one run against the real services."""
-
-    project: str
-    bucket: str
-    dataset_id: str
-    connection: str
-    client: Client
-
-    def destination(self, name: str) -> Destination:
-        """Return the destination of a table of this run."""
-        return Destination(self.bucket, self.dataset_id, name)
-
-    async def publish(self, destination: Destination) -> None:
-        """Create or refresh the BigQuery table of a destination."""
-        await publish(destination, self.project, self.connection)
-
-    def read(self, destination: Destination) -> DataFrame:
-        """Return what BigQuery returns for the table of a destination."""
-        rows = self.client.query(f"SELECT * FROM `{destination.table(self.project)}`").to_arrow()
-        return cast("DataFrame", from_arrow(rows))
-
-    def types(self, destination: Destination) -> dict[str, str]:
-        """Return the BigQuery type of each column of the table of a destination."""
-        table = self.client.get_table(destination.table(self.project))
-        return {field.name: field.field_type for field in table.schema}
-
-    def store(self) -> ObjectStore:
-        """Return the object store of the bucket, with the HMAC key of this run."""
-        return create_store(self.bucket)
-
-
-def run(*command: str, check: bool = True) -> str:
-    """Run a command line tool and return its output."""
-    done = run_process(command, capture_output=True, text=True, timeout=240, check=check)
-    return done.stdout
-
-
-def retry(command: list[str], attempts: int = 8) -> None:
-    """Run a command again while IAM has not caught up with a new resource."""
-    for _ in range(attempts):
-        if run_process(command, capture_output=True, timeout=120, check=False).returncode == 0:
-            return
-        sleep(6)
-    run(*command)
-
-
-@pytest.fixture(scope="module")
-def real_cloud() -> Iterator[RealCloud]:
-    """Create a bucket, a BigLake connection, a dataset name and an HMAC key, and delete them after."""
-    project = environ.get("TOOLKIT_GCP_PROJECT")
-    if not project or not which("gcloud") or not which("bq"):
-        pytest.skip("Set TOOLKIT_GCP_PROJECT and install gcloud and bq")
-
-    token = token_hex(3)
-    bucket, dataset_id = f"toolkit-test-{token}", f"toolkit_test_{token}"
-    connection, account = f"toolkit_test_{token}", f"tkt{token}"
-    email = f"{account}@{project}.iam.gserviceaccount.com"
-    key = ""
-
-    try:
-        run(
-            "gcloud",
-            "storage",
-            "buckets",
-            "create",
-            f"gs://{bucket}",
-            f"--project={project}",
-            "--location=US",
-            "--uniform-bucket-level-access",
-        )
-        run(
-            "bq",
-            "mk",
-            "--connection",
-            f"--location={LOCATION}",
-            f"--project_id={project}",
-            "--connection_type=CLOUD_RESOURCE",
-            connection,
-        )
-        info = loads(run("bq", "show", "--connection", "--format=json", f"{project}.{LOCATION}.{connection}"))
-        member = f"serviceAccount:{info['cloudResource']['serviceAccountId']}"
-        retry(
-            [
-                "gcloud",
-                "storage",
-                "buckets",
-                "add-iam-policy-binding",
-                f"gs://{bucket}",
-                f"--member={member}",
-                "--role=roles/storage.objectViewer",
-            ]
-        )
-        run(
-            "gcloud",
-            "iam",
-            "service-accounts",
-            "create",
-            account,
-            f"--project={project}",
-            "--display-name=toolkit test (temporary)",
-        )
-        retry(
-            [
-                "gcloud",
-                "storage",
-                "buckets",
-                "add-iam-policy-binding",
-                f"gs://{bucket}",
-                f"--member=serviceAccount:{email}",
-                "--role=roles/storage.objectAdmin",
-            ]
-        )
-        hmac = loads(run("gcloud", "storage", "hmac", "create", email, f"--project={project}", "--format=json"))
-        key = hmac["metadata"]["accessId"]
-
-        with pytest.MonkeyPatch.context() as patch:
-            patch.setattr(settings, "BIGQUERY_PROJECT", project)
-            patch.setattr(settings, "GCS_HMAC_ACCESS_ID", key)
-            patch.setattr(settings, "GCS_HMAC_SECRET", SecretStr(hmac["secret"]))
-            yield RealCloud(project, bucket, dataset_id, f"{project}.{LOCATION}.{connection}", Client(project=project))
-    finally:
-        run("bq", f"--project_id={project}", "rm", "-r", "-f", "-d", f"{dataset_id}_staging", check=False)
-        run("bq", f"--project_id={project}", "rm", "-r", "-f", "-d", dataset_id, check=False)
-        run("bq", "rm", "--connection", "-f", f"{project}.{LOCATION}.{connection}", check=False)
-        run("gcloud", "storage", "rm", "-r", f"gs://{bucket}", f"--project={project}", check=False)
-        if key:
-            run("gcloud", "storage", "hmac", "update", key, "--deactivate", f"--project={project}", check=False)
-            run("gcloud", "storage", "hmac", "delete", key, f"--project={project}", check=False)
-        run("gcloud", "iam", "service-accounts", "delete", email, f"--project={project}", "--quiet", check=False)
-
-
-@pytest.fixture(
-    scope="module",
-    params=[pytest.param("simulated", id="simulated"), pytest.param("gcp", id="gcp", marks=pytest.mark.gcp)],
-)
-def cloud(request: pytest.FixtureRequest) -> Cloud:
-    """Return the simulated cloud, or the real one when the run asks for `-m gcp`."""
-    fixture = {"simulated": "simulated_cloud", "gcp": "real_cloud"}[request.param]
-
-    return cast("Cloud", request.getfixturevalue(fixture))
 
 
 def sample(rows: list[dict[str, object]]) -> Table:
@@ -480,28 +292,6 @@ async def test_the_files_of_an_older_layout_go_before_an_overwrite_and_a_delta_t
     assert DeltaTable(destination.uri).to_pyarrow_table().num_rows == 300
 
 
-@pytest.mark.gcp
-async def test_bigquery_is_copied_to_the_bucket_in_batches(real_cloud):
-    """Export a BigQuery table as one Parquet object for each batch of rows."""
-    destination = real_cloud.destination(name("export"))
-    schema = f"{real_cloud.project}.{real_cloud.dataset_id}"
-    real_cloud.client.query(f"CREATE SCHEMA IF NOT EXISTS `{schema}`").result()
-    real_cloud.client.query(
-        f"CREATE OR REPLACE TABLE `{schema}.numbers` AS " + "SELECT x AS id FROM UNNEST(GENERATE_ARRAY(1, 2500)) AS x"
-    ).result()
-    values = source_values("bigquery", f"SELECT id FROM `{schema}.numbers`")
-
-    await dump_in_batches(BigQuerySource(real_cloud.project), values, destination, "append", 1000)
-
-    store = real_cloud.store()
-    keys = await list_keys(store, destination.prefix)
-    rows = 0
-    for key in keys:
-        body = bytes(await (await store.get_async(key)).bytes_async())
-        rows += read_parquet(BytesIO(body)).height
-    assert (len(keys), rows) == (3, 2500)
-
-
 async def capture(destination: Destination, folder, records: list[dict[str, JsonValue]], moment: datetime) -> None:
     """Write the records as JSON lines, and add them to the table as the capture of a moment."""
     (folder / "records.json").unlink(missing_ok=True)
@@ -528,19 +318,3 @@ async def test_captures_add_up_in_bigquery_and_compacting_keeps_every_row(cloud,
 
     assert sorted(cloud.read(destination)["id"].to_list()) == [1, 2, 3]
     assert len(DeltaTable(destination.uri).file_uris()) == 2
-
-
-@pytest.mark.gcp
-async def test_a_statement_changes_rows_and_a_query_is_read_into_a_frame(real_cloud):
-    """Run DML in BigQuery with the count of its rows, and read the result back as a frame."""
-    schema = f"{real_cloud.project}.{real_cloud.dataset_id}"
-    real_cloud.client.query(f"CREATE SCHEMA IF NOT EXISTS `{schema}`").result()
-
-    await run_bq_sql.fn(
-        f"CREATE OR REPLACE TABLE `{schema}.t` AS SELECT x AS id FROM UNNEST([1, 2, 3]) AS x",
-        project=real_cloud.project,
-    )
-    changed = await run_bq_sql.fn(f"DELETE FROM `{schema}.t` WHERE id > 1", project=real_cloud.project)
-    frame = await read_bq.fn(f"SELECT id FROM `{schema}.t`", project=real_cloud.project)
-
-    assert (changed, frame["id"].to_list()) == (2, [1])

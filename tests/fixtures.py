@@ -1,9 +1,9 @@
 """The fake services that the tests use, each one with its fixture.
 
 They are the fakes of GCS, BigQuery (one that detects the schema of a Delta table and one that
-records calls), an HTTP API, a database, Oracle and an object store. They run in the process, with no network and no
-container, and they follow what the real services did in the runs of `test_cloud.py` with
-`-m gcp`. `conftest.py` registers this module as a plugin, so a test asks for a fixture by name.
+records calls), an HTTP API, a database, Oracle and an object store. They run in the process, with
+no network and no container. `conftest.py` registers this module as a plugin, so a test asks for a
+fixture by name.
 """
 
 from collections import deque

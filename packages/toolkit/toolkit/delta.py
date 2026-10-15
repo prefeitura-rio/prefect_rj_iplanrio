@@ -31,11 +31,11 @@ from .telemetry import logger
 from .types import Fingerprint
 
 
-def fingerprint_of(rows: int, low: str, high: str) -> int:
+def hash_summary(rows: int, low: str, high: str) -> int:
     """Turn a content summary into the 60 bit number that the ledger stores.
 
     ```python
-    fingerprint_of(3, "1", "2")  # 810314219720917701
+    hash_summary(3, "1", "2")  # 810314219720917701
     ```
     """
     digest = md5(f"{rows}:{low}:{high}".encode(), usedforsecurity=False)
@@ -54,7 +54,7 @@ async def fingerprint(executor: Executor, directory: Path) -> int:
         expect=Fingerprint,
     )
     row = data.frame.row(0, named=True)
-    return fingerprint_of(
+    return hash_summary(
         cast("int", row["n"]), cast("str", row["low"]), cast("str", row["high"])
     )
 

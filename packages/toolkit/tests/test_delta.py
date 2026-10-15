@@ -15,7 +15,7 @@ from toolkit.constants import EXTRACTED_AT_COLUMN
 from toolkit.delta import (
     compact,
     fingerprint,
-    fingerprint_of,
+    hash_summary,
     known_fingerprints,
     maintain,
     sweep,
@@ -36,11 +36,11 @@ def window_files(directory: Path, key: str, ids: list[int]) -> Path:
     return directory
 
 
-def rows_of(uri: str) -> dict[str, list[int]]:
+def read_rows(uri: str) -> dict[str, list[int]]:
     """Return the ids of the table, grouped by window.
 
     ```python
-    rows_of(uri)  # {"2024-03-01": [1, 2], "2024-03-02": [3]}
+    read_rows(uri)  # {"2024-03-01": [1, 2], "2024-03-02": [3]}
     ```
     """
     grouped: dict[str, list[int]] = {}
@@ -59,7 +59,7 @@ def test_the_first_window_creates_the_table_and_the_ledger(uri, tmp_path):
     """Create the table on the first write, and record the fingerprint of the window."""
     write_window(uri, window_files(tmp_path / "w1", "w1", [1, 2]), "w1", "cfg:w1", 11)
 
-    assert rows_of(uri) == {"w1": [1, 2]}
+    assert read_rows(uri) == {"w1": [1, 2]}
     assert known_fingerprints(uri, ["cfg:w1", "cfg:w2"]) == {"cfg:w1": 11}
 
 
@@ -75,7 +75,7 @@ def test_a_window_replaces_only_its_own_rows(uri, tmp_path):
 
     write_window(uri, window_files(tmp_path / "c", "w1", [1, 2, 9]), "w1", "c:w1", 3)
 
-    assert rows_of(uri) == {"w1": [1, 2, 9], "w2": [3]}
+    assert read_rows(uri) == {"w1": [1, 2, 9], "w2": [3]}
     assert known_fingerprints(uri, ["c:w1", "c:w2"]) == {"c:w1": 3, "c:w2": 2}
 
 
@@ -86,7 +86,7 @@ def test_a_window_with_no_rows_removes_its_old_rows(uri, tmp_path):
 
     write_window(uri, window_files(tmp_path / "c", "w1", []), "w1", "c:w1", 0)
 
-    assert rows_of(uri) == {"w2": [3]}
+    assert read_rows(uri) == {"w2": [3]}
 
 
 def test_a_window_with_other_columns_is_refused_unless_the_schema_is_overwritten(
@@ -114,7 +114,7 @@ def test_sweep_removes_the_windows_that_the_config_no_longer_has(uri, tmp_path):
 
     sweep(uri, ["w2", "w3"])
 
-    assert rows_of(uri) == {"w2": [2], "w3": [3]}
+    assert read_rows(uri) == {"w2": [2], "w3": [3]}
 
 
 def test_sweep_on_a_missing_table_does_nothing(uri):
@@ -144,7 +144,7 @@ def test_regression_windows_written_at_the_same_time_all_land(uri, tmp_path):
         thread.join()
 
     assert errors == []
-    assert sorted(rows_of(uri)) == [f"w{i}" for i in range(8)]
+    assert sorted(read_rows(uri)) == [f"w{i}" for i in range(8)]
 
 
 def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path):
@@ -159,9 +159,9 @@ def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path):
 
 def test_the_fingerprint_as_a_number_is_stable():
     """Keep the fingerprint of a known input, so a refactor cannot change it."""
-    assert fingerprint_of(2, "10", "20") == fingerprint_of(2, "10", "20")
-    assert fingerprint_of(2, "10", "20") == 0x24133D5443DA121
-    assert 0 <= fingerprint_of(0, "0", "0") < 2**63
+    assert hash_summary(2, "10", "20") == hash_summary(2, "10", "20")
+    assert hash_summary(2, "10", "20") == 0x24133D5443DA121
+    assert 0 <= hash_summary(0, "0", "0") < 2**63
 
 
 @pytest.mark.parametrize(
@@ -231,7 +231,7 @@ def test_append_adds_the_rows_and_keeps_the_ones_of_the_window(uri, tmp_path):
         uri, window_files(tmp_path / "b", "w", [3]), "w", "c:2", 2, append=True
     )
 
-    assert rows_of(uri) == {"w": [1, 2, 3]}
+    assert read_rows(uri) == {"w": [1, 2, 3]}
     assert known_fingerprints(uri, ["c:1", "c:2"]) == {"c:1": 1, "c:2": 2}
 
 
@@ -251,7 +251,7 @@ def test_compact_merges_the_files_of_a_window_and_loses_no_row(uri, tmp_path):
     compact(uri)
 
     assert len(DeltaTable(uri).file_uris()) == 1
-    assert rows_of(uri) == {"w": [0, 1, 2]}
+    assert read_rows(uri) == {"w": [0, 1, 2]}
 
 
 def test_a_window_written_with_a_time_has_it_on_every_row(uri, tmp_path):

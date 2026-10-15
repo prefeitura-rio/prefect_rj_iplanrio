@@ -15,7 +15,7 @@ from .constants import DEFAULT_BATCH_SIZE, TEMPLATES_DIR
 from .dataset import Result
 from .engines.protocol import Engine
 from .render import render_template
-from .schema import Column, schema_of
+from .schema import Column, build_columns
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +107,7 @@ class Executor:
             case Mapping():
                 return Result(dict, dict(expect), path, frames)
             case _:
-                return Result(expect, schema_of(expect), path, frames)
+                return Result(expect, build_columns(expect), path, frames)
 
     async def normalize_columns(
         self,
