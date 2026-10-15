@@ -32,6 +32,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
     wait_inmemory_task,
 )
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.dbt import resolve_dbt_parameters, should_run_dbt
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.notify import LoadNotifier, NotifierConfig
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.stages import Step, TableStep
 
@@ -71,6 +72,7 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
             run_dbt=dbt_enabled,
             mode=mode,
             enabled=discord_notifications,
+            environment=current_environment(),
         )
     )
     with notifier.guard():

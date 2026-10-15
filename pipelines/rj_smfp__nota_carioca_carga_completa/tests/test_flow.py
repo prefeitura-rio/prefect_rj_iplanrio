@@ -9,6 +9,7 @@ from pipelines.rj_smfp__nota_carioca_carga_completa import tasks as tasks_module
 from pipelines.rj_smfp__nota_carioca_carga_completa.constants import BQ_TO_ORACLE_DEPLOYMENT, ORACLE_TO_BQ_DEPLOYMENT
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils import runs
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.chain import ChainStoppedError, ChildRun
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.discord import Environment
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -86,3 +87,31 @@ def test_flow_refuses_to_start_when_a_target_deployment_has_an_active_run(fake_p
     with pytest.raises(ChainStoppedError, match=r"não iniciada.*manual-run \(Running\)"):
         flow_module.rj_smfp__nota_carioca_carga_completa(discord_notifications=False)
     assert fake_prefect.launched == []
+
+
+@pytest.mark.usefixtures("fake_prefect")
+@pytest.mark.parametrize(
+    ("deployment_name", "expected"),
+    [
+        ("rj-smfp--nota-carioca-carga-completa--staging", Environment.STAGING),
+        ("rj-smfp--nota-carioca-carga-completa--prod", Environment.PROD),
+    ],
+)
+def test_flow_notifies_in_the_environment_of_its_deployment(
+    monkeypatch: pytest.MonkeyPatch, deployment_name: str, expected: Environment
+) -> None:
+    # Given: o runtime do Prefect informa o nome do deployment deste run
+    monkeypatch.setenv("PREFECT__RUNTIME__DEPLOYMENT__NAME", deployment_name)
+    created: list[tuple[bool, Environment]] = []
+
+    def make_notifier(enabled: bool, environment: Environment) -> object:
+        created.append((enabled, environment))
+        return lambda _text: None
+
+    monkeypatch.setattr(flow_module, "make_notifier", make_notifier)
+
+    # When: o flow roda
+    flow_module.rj_smfp__nota_carioca_carga_completa()
+
+    # Then: o notificador nasce com o ambiente derivado do nome do deployment
+    assert created == [(True, expected)]

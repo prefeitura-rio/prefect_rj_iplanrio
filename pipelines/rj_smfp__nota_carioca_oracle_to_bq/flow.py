@@ -9,6 +9,10 @@ Os padrões de memória (``workers=2``, ``worker_memory_mb=640``, ``pod_memory_m
 ``pod_memory_mb`` é o orçamento do pod, que deve ficar abaixo do ``memory_request`` do deployment (``job_variables``)
 menos uma folga, e o deployment passa os dois juntos. Passar do request deixa o scheduler superalocar o nó, que ficou
 NotReady.
+Contra o crescimento de memória ao longo da extração, os processos de leitura são reciclados a cada
+``worker_max_tasks`` faixas e, perto do limite do pod (``memory_pause_ratio`` do limite de memória do cgroup), nenhuma
+faixa nova começa até a memória baixar. O limite do pod (``memory_limit``) pode passar do request para absorver o
+crescimento; o orçamento de ``pod_memory_mb`` continua medido contra o request.
 A publicação é tudo ou nada: todas as tabelas são conferidas antes do primeiro copy e, se um copy falhar, as já
 publicadas voltam ao estado anterior por time travel.
 """
@@ -33,6 +37,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     take_snapshot_task,
     wait_children_task,
 )
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractOptions
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify import NotifierConfig, ParentNotifier
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify_view import ParentStage
@@ -145,6 +150,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     progress_interval_seconds: int = 30,
     upload_concurrency: int = 4,
     max_pending_files: int = 4,
+    worker_max_tasks: int | None = 25,
+    memory_pause_ratio: float = 0.85,
     parallel_tables: bool = True,
     discord_notifications: bool = True,
     table_id: str | None = None,
@@ -165,6 +172,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         progress_interval_seconds=progress_interval_seconds,
         upload_concurrency=upload_concurrency,
         max_pending_files=max_pending_files,
+        worker_max_tasks=worker_max_tasks,
+        memory_pause_ratio=memory_pause_ratio,
     )
     if child is not None:
         ctx = TableRunContext(
@@ -175,7 +184,17 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     names = tuple(table_ids or DEFAULT_TABLES)
     run_id = str(flow_run.id)
     notifier = ParentNotifier.create(
-        NotifierConfig(dataset_id, run_id, run_name, names, workers, discord_notifications, project, gcs_bucket)
+        NotifierConfig(
+            dataset_id,
+            run_id,
+            run_name,
+            names,
+            workers,
+            discord_notifications,
+            project,
+            gcs_bucket,
+            environment=current_environment(),
+        )
     )
     passthrough: dict[str, object] = {
         "project": project,
@@ -191,6 +210,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
         "progress_interval_seconds": progress_interval_seconds,
         "upload_concurrency": upload_concurrency,
         "max_pending_files": max_pending_files,
+        "worker_max_tasks": worker_max_tasks,
+        "memory_pause_ratio": memory_pause_ratio,
         # Os filhos só gravam o JSON de progresso no GCS se o pai for usá-lo; eles nunca postam no Discord.
         "discord_notifications": notifier.enabled,
     }

@@ -10,6 +10,9 @@ import pytest
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import discord as discord_module
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import (
     DiscordStatusMessage,
+    Environment,
+    current_environment,
+    environment_from_deployment,
     never_raises,
     resolve_webhook,
     webhook_from_env,
@@ -432,7 +435,11 @@ def test_never_raises_swallows_and_warns(warnings: list[str]) -> None:
 
 
 def equal_line() -> ValidationLine:
-    sides = (CountSide("Oracle (SCN)", 193_000_000), CountSide("arquivos", 193_000_000), CountSide("BigQuery", 193_000_000))
+    sides = (
+        CountSide("Oracle (SCN)", 193_000_000),
+        CountSide("arquivos", 193_000_000),
+        CountSide("BigQuery", 193_000_000),
+    )
     return ValidationLine("DPS", sides, "Σ VALOR_SERVICO, NUMERO_DPS iguais")
 
 
@@ -535,3 +542,133 @@ def test_unreadable_or_empty_secret_block_disables_notifications() -> None:
     assert webhook_from_secret_block(missing) is None
     assert webhook_from_secret_block(lambda _name: "   ") is None
     assert resolve_webhook({}, missing) is None
+
+
+# --- environment: prod vs staging ---------------------------------------------------------------------------------
+
+PROD_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
+STAGING_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING"
+PROD_BLOCK = "discord-webhook-nota-carioca"
+STAGING_BLOCK = "discord-webhook-nota-carioca-staging"
+PROD_URL = "https://discord.example/api/webhooks/1/prod-token"
+STAGING_URL = "https://discord.example/api/webhooks/2/staging-token"
+
+
+@pytest.mark.parametrize(
+    ("deployment_name", "expected"),
+    [
+        ("rj-smfp--nota-carioca-oracle-to-bq--staging", Environment.STAGING),
+        ("rj-smfp--nota-carioca-oracle-to-bq--prod", Environment.PROD),
+        ("rj-smfp--nota-carioca-oracle-to-bq--staging-copy", Environment.PROD),
+        ("", Environment.PROD),
+        (None, Environment.PROD),
+    ],
+)
+def test_environment_is_staging_only_when_the_deployment_name_ends_with_staging(
+    deployment_name: str | None, expected: Environment
+) -> None:
+    # Given a deployment name (or none, as in a local run)
+    # When the environment is derived from it
+    # Then only a name ending in --staging is staging; everything else, including no deployment, is prod
+    assert environment_from_deployment(deployment_name) is expected
+
+
+@pytest.mark.usefixtures("warnings")
+@pytest.mark.parametrize(
+    ("runtime_name", "expected"),
+    [("rj-smfp--nota-carioca-bq-to-oracle--staging", Environment.STAGING), (None, Environment.PROD)],
+)
+def test_current_environment_reads_the_prefect_runtime_deployment_name(
+    monkeypatch: pytest.MonkeyPatch, runtime_name: str | None, expected: Environment
+) -> None:
+    # Given the Prefect runtime reporting a deployment name, or no deployment at all
+    if runtime_name is not None:
+        monkeypatch.setenv("PREFECT__RUNTIME__DEPLOYMENT__NAME", runtime_name)
+    # When the current environment is read, Then it follows the name reported by the runtime
+    assert current_environment() is expected
+
+
+def test_staging_reads_only_its_own_variable_and_block() -> None:
+    # Given both variables set and a loader that serves every block
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        return STAGING_URL
+
+    environ = {PROD_ENV: PROD_URL, STAGING_ENV: f" {STAGING_URL} "}
+    # When staging resolves its webhook, Then its variable wins over the block, which is not read
+    assert resolve_webhook(environ, load, Environment.STAGING) == STAGING_URL
+    assert webhook_from_env(environ, Environment.STAGING) == STAGING_URL
+    assert loaded == []
+    # And without the variable, the staging block is the source
+    assert resolve_webhook({PROD_ENV: PROD_URL}, load, Environment.STAGING) == STAGING_URL
+    assert loaded == [STAGING_BLOCK]
+
+
+def test_staging_never_falls_back_to_the_prod_webhook() -> None:
+    # Given prod fully configured (variable and block) and staging's block missing
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        if name == PROD_BLOCK:
+            return PROD_URL
+        raise ValueError(f"block {name} not found")
+
+    # When staging resolves its webhook
+    webhook = resolve_webhook({PROD_ENV: PROD_URL}, load, Environment.STAGING)
+    # Then there is none (notifications off) and the prod block was never even read
+    assert webhook is None
+    assert loaded == [STAGING_BLOCK]
+    assert webhook_from_secret_block(load, Environment.STAGING) is None
+
+
+def test_empty_staging_variable_and_block_disable_staging_notifications() -> None:
+    # Given blank staging sources next to a configured prod variable
+    # Then staging resolves nothing instead of using prod's
+    assert resolve_webhook({PROD_ENV: PROD_URL, STAGING_ENV: "  "}, lambda _name: "  ", Environment.STAGING) is None
+
+
+def test_prod_ignores_the_staging_variable_and_block() -> None:
+    # Given the staging variable set and a loader that tells the blocks apart
+    loaded: list[str] = []
+
+    def load(name: str) -> str:
+        loaded.append(name)
+        return PROD_URL if name == PROD_BLOCK else STAGING_URL
+
+    # When prod resolves its webhook, with the environment spelled out or by default
+    # Then it uses prod's block only, exactly as before staging existed
+    assert resolve_webhook({STAGING_ENV: STAGING_URL}, load, Environment.PROD) == PROD_URL
+    assert resolve_webhook({STAGING_ENV: STAGING_URL}, load) == PROD_URL
+    assert resolve_webhook({STAGING_ENV: STAGING_URL, PROD_ENV: PROD_URL}, load) == PROD_URL
+    assert loaded == [PROD_BLOCK, PROD_BLOCK]
+
+
+def test_staging_marks_the_embed_title_and_changes_nothing_else() -> None:
+    # Given the same running view in prod and in staging
+    prod = embed_of(build_payload(view()))
+    staging = embed_of(build_payload(view(staging=True)))
+    # Then only the title differs, with the marker in front
+    assert prod["title"] == "Oracle → BigQuery · brutos_nota_fiscal"
+    assert staging["title"] == "🧪 STAGING · Oracle → BigQuery · brutos_nota_fiscal"
+    assert {k: v for k, v in staging.items() if k != "title"} == {k: v for k, v in prod.items() if k != "title"}
+
+
+@pytest.mark.parametrize(
+    ("status", "extra"),
+    [
+        (RunStatus.SUCCESS, {}),
+        (RunStatus.FAILED, {"failed_stage": "Extração", "error": "boom"}),
+        (RunStatus.CANCELLED, {"failed_stage": "Carga"}),
+    ],
+)
+def test_staging_prefixes_every_final_announcement_line(status: RunStatus, extra: dict[str, object]) -> None:
+    # Given a finished run in each final state, in prod and in staging
+    prod = build_announcement(view(status, **extra))
+    staging = build_announcement(view(status, staging=True, **extra))
+    # Then the staging line is the prod line behind the marker, and mentions stay disabled
+    assert "STAGING" not in str(prod["content"])
+    assert staging["content"] == f"🧪 STAGING · {prod['content']}"
+    assert staging["allowed_mentions"] == {"parse": []}

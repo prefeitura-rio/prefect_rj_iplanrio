@@ -35,6 +35,35 @@ deployments:
   concurrency_limit:
     limit: 1
     collision_strategy: ENQUEUE
+  # Staging se comporta como prod: mesmos parâmetros e recursos do deployment de prod, só mudam o dataset de origem
+  # (nota_carioca_staging), os models do dbt e o Oracle, que vem do secret de staging (homologação). Sem schedule.
+  parameters:
+    dataset_id: nota_carioca_staging
+    # dbt antes da carga, pelo mesmo deployment de dbt de prod (target prod): os models de staging gravam em
+    # nota_carioca_staging pela própria configuração de schema deles.
+    run_dbt: true
+    table_ids:
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS
+    - MVT_NOTAS_NACIONAIS_EXIGIVEIS_DETALHES
+    - MVT_NOTAS_NACIONAIS_DETALHES
+    # Precisa da lista completa: a pipeline não mescla com os padrões. Só muda o select (models de staging).
+    dbt_parameters:
+      command: build
+      select: >-
+        mart_nota_carioca_staging__notas_nacionais_exigiveis
+        mart_nota_carioca_staging__notas_nacionais_exigiveis_detalhes
+        mart_nota_carioca_staging__notas_nacionais_detalhes
+      send_discord_report: false
+      github_repo: https://github.com/prefeitura-rio/queries-rj-iplanrio.git
+      bigquery_project: rj-iplanrio
+      target: prod
+      gcs_buckets:
+        prod: rj-iplanrio_dbt
+        dev: rj-iplanrio-dev_dbt
+    sqlldr_sessions: 4
+    index_parallel_degree: 8
+    # Mesma codificação das colunas PESSOA_* de prod (hex): precisa casar com o model de staging.
+    raw_text_encoding: hex
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -43,6 +72,10 @@ deployments:
       command: uv run --package rj_smfp__nota_carioca_bq_to_oracle -- prefect flow-run execute
       secretName: prefect-jobs-secrets-staging
       image_pull_policy: Always
+      cpu_request: "4"
+      cpu_limit: "6"
+      memory_request: 4Gi
+      memory_limit: 6Gi
 - name: rj-smfp--nota-carioca-bq-to-oracle--prod
   tags:
   - environment:prod
