@@ -15,7 +15,7 @@ import pandas as pd
 from defusedxml import ElementTree as ET
 from google.cloud import storage
 from google.oauth2 import service_account
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 logger = get_logger(__name__)
 

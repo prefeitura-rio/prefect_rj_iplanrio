@@ -22,7 +22,7 @@ from googleapiclient.discovery import Resource, build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseUpload
 from iplanrio.pipelines_utils.env import get_bd_credentials_from_env
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 logger = get_logger(__name__)
 

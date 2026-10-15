@@ -7,8 +7,11 @@ from iplanrio.pipelines_templates.dump_db.tasks import (
     parse_comma_separated_string_to_list_task,
 )
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
+from iplanrio.pipelines_utils.logging import get_logger
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
+
+logger = get_logger(__name__)
 
 
 @flow(log_prints=True)
@@ -38,6 +41,7 @@ def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
     only_staging_dataset: bool = False,
     add_timestamp_column: bool = True,
 ) -> None:
+    logger.info("Iniciando dump de %s.%s (modo=%s)", dataset_id, table_id, dump_mode)
     rename_current_flow_run_task(new_name=table_id)
     inject_bd_credentials_task(environment="prod")
     secrets = get_database_username_and_password_from_secret_task(infisical_secret_path=infisical_secret_path)
@@ -78,3 +82,5 @@ def rj_{{ cookiecutter.secretaria }}__{{ cookiecutter.pipeline }}(
         only_staging_dataset=only_staging_dataset,
         add_timestamp_column=add_timestamp_column,
     )
+
+    logger.info("Dump de %s.%s finalizado", dataset_id, table_id)

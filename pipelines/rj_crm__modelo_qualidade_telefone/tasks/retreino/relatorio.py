@@ -16,7 +16,7 @@ matplotlib.use("Agg")  # sem display — só gera a imagem em memória
 import matplotlib.pyplot as plt
 import shap
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 from pipelines.rj_crm__modelo_qualidade_telefone.constants import FEATURES
 from pipelines.rj_crm__modelo_qualidade_telefone.tasks.cobertura import calcula_cobertura

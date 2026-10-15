@@ -24,7 +24,7 @@ import numpy as np
 import optuna
 import pandas as pd
 from prefect import task
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import f1_score, fbeta_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score, train_test_split

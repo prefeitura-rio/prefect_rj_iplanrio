@@ -13,7 +13,7 @@ função entrega o nível.
 import logging
 from logging import Logger
 
-from prefect_rj_iplanrio.logging import get_logger
+from iplanrio.pipelines_utils.logging import get_logger
 
 NIVEL = logging.INFO
 
