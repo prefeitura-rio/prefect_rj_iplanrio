@@ -1,0 +1,12 @@
+[project]
+name = "rj_ssm__isp"
+version = "1.0.0"
+description = "Fetches criminal occurrence records from ISP-GEO (Instituto de Segurança Pública do RJ) and loads them into BigQuery."
+dependencies = [
+    "prefect_rj_iplanrio",
+    "requests>=2.32.0",
+    "aiohttp>=3.9.0",
+]
+
+[tool.uv.sources]
+prefect_rj_iplanrio = { workspace = true }
