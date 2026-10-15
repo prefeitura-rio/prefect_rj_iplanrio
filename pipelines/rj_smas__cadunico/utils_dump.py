@@ -119,7 +119,7 @@ def create_table_if_not_exists(
     return table_exists
 
 
-def create_table_and_upload_with_bucket(
+def create_table_and_upload_to_gcs_with_bucket(
     data_path: str | Path,
     dataset_id: str,
     table_id: str,
@@ -297,7 +297,7 @@ def append_data_to_storage(
         biglake_table (bool): Whether to create a BigLake table.
         bucket_name (str | None): Explicit GCS staging bucket.
     """
-    create_table_and_upload_with_bucket(
+    create_table_and_upload_to_gcs_with_bucket(
         data_path=data_path,
         dataset_id=dataset_id,
         table_id=table_id,
