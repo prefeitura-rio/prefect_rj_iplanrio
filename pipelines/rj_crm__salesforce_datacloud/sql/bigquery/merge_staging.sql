@@ -6,6 +6,8 @@
 -- um MERGE bem-sucedido, a duplicata ficava lá e travava todo tick seguinte
 -- (telemetry_trace_span parado de 2026-09-09 a 2026-09-29, 368k linhas
 -- acumuladas na staging).
+-- _first_loaded_at não existe na staging (só na final): entra no INSERT com o
+-- _loaded_at da carga e nunca é tocado no UPDATE — fica a 1ª chegada.
 -- Placeholders preenchidos em tasks/bigquery.py:merge_staging_to_target.
 MERGE `{target}` AS t
 USING (
@@ -22,5 +24,5 @@ ON t.{primary_key} = s.{primary_key}
 WHEN MATCHED THEN
     UPDATE SET {set_clause}
 WHEN NOT MATCHED THEN
-    INSERT ({insert_cols})
-    VALUES ({insert_vals})
+    INSERT ({insert_cols}, _first_loaded_at)
+    VALUES ({insert_vals}, s._loaded_at)
