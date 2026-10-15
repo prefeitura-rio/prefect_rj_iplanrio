@@ -5,7 +5,7 @@ LABEL org.opencontainers.image.source=https://github.com/prefeitura-rio/prefect_
 RUN wget -O /tmp/instantclient.zip "https://download.oracle.com/otn_software/linux/instantclient/2118000/instantclient-basic-linux.x64-21.18.0.0.0dbru.zip" \
     && unzip /tmp/instantclient.zip -d /tmp \
     && rm /tmp/instantclient.zip
-FROM python:3.13-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 COPY --from=get-instant-client-step /tmp/instantclient_21_18 /opt/oracle/instantclient
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/

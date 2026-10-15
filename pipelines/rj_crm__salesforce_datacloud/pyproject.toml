@@ -4,11 +4,9 @@ version = "0.2.0"
 description = "Pipeline Salesforce Data Cloud (Agentforce, Messaging, eventos WhatsApp) → BigQuery via CRM REST e Data Cloud Query API"
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-cloud-bigquery>=3.11.0",
-    "prefect==3.4.9",
-    "prefect-docker>=0.6.5",
-    "requests>=2.31.0",
-    "pandas>=2.0.0",
+    "google-cloud-bigquery",
+    "requests",
+    "pandas",
     "pyyaml>=6.0",
 ]
 

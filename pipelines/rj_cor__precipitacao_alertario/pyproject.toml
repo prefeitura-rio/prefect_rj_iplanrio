@@ -4,8 +4,8 @@ version = "0.1.0"
 description = "Pipeline para coleta de dados de precipitação e meteorologia do AlertaRio - COR"
 dependencies = [
     "prefect_rj_iplanrio",
-    "pendulum>=3.0.0",
-    "beautifulsoup4>=4.12.0",
+    "pendulum",
+    "beautifulsoup4",
     "bs4==0.0.2",
     "lxml==6.1.1"
 ]

@@ -6,8 +6,8 @@ dependencies = [
     "prefect_rj_iplanrio",
     "pymongo>=4.0.0",
     "pymongoarrow>=1.0.0",
-    "pyarrow>=10.0.0",
-    "pytz>=2023.3",
+    "pyarrow",
+    "pytz",
 ]
 
 [tool.uv.sources]

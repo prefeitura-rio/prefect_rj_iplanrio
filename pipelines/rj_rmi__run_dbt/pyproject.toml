@@ -7,9 +7,9 @@ description = """\
     CRM: a passada diária (tag:daily) e comandos avulsos pela UI do Prefect."""
 dependencies = [
     "prefect_rj_iplanrio",
-    "dbt-bigquery==1.11.1",
-    "gitpython>=3.1.44",
-    "prefect-dbt>=0.7.5",
+    "dbt-bigquery",
+    "gitpython",
+    "prefect-dbt",
 ]
 
 [tool.uv.sources]

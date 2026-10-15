@@ -16,7 +16,7 @@ REPOSITORY = "https://example.invalid/queries.git"
 class FakeRunner:
     """A `PrefectDbtRunner` that records the settings and the arguments."""
 
-    instances: ClassVar[list["FakeRunner"]] = []
+    instances: ClassVar[list[FakeRunner]] = []
     error: ClassVar[Exception | None] = None
 
     def __init__(self, **kwargs: object) -> None:

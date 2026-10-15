@@ -95,11 +95,11 @@ class FakeOracle:
         self.requested: list[Schema] = []
         self.closed = False
 
-    def cursor(self) -> "FakeOracle":
+    def cursor(self) -> FakeOracle:
         """Return itself as the cursor."""
         return self
 
-    def __enter__(self) -> "FakeOracle":
+    def __enter__(self) -> FakeOracle:
         """Enter the cursor."""
         return self
 

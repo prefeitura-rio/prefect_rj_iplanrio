@@ -4,9 +4,9 @@ version = "1.0.0"
 description = "Copies Nota Carioca tables from BigQuery to the on-prem Oracle database through GCS and SQL*Loader direct path, replacing slow row-by-row inserts."
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-cloud-bigquery>=3.41.0",
-    "google-cloud-storage>=2.10.0",
-    "oracledb>=4.0.1",
+    "google-cloud-bigquery",
+    "google-cloud-storage",
+    "oracledb",
 ]
 
 [tool.uv.sources]
