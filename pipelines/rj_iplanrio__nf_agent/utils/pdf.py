@@ -14,11 +14,11 @@ class PdfPages:
     pages: int
 
 
-def split_pdf_pages(pdf_bytes: bytes) -> list[str]:
-    """Divide um PDF em PDFs de uma página, codificados em base64.
+def split_pdf_page_bytes(pdf_bytes: bytes) -> list[bytes]:
+    """Divide um PDF em PDFs de uma página.
 
     :param pdf_bytes: Conteúdo do PDF.
-    :returns: Uma string base64 por página, na ordem original.
+    :returns: Os bytes de cada página, na ordem original.
     :raises ValueError: Se o PDF não puder ser lido ou não tiver páginas.
     """
     try:
@@ -33,7 +33,7 @@ def split_pdf_pages(pdf_bytes: bytes) -> list[str]:
             single = fitz.open()
             try:
                 single.insert_pdf(source, from_page=index, to_page=index)
-                pages.append(base64.b64encode(single.tobytes()).decode("ascii"))
+                pages.append(single.tobytes())
             except RuntimeError as exc:
                 raise ValueError(f"PDF ilegível na página {index + 1}: {exc}") from exc
             finally:
@@ -41,3 +41,13 @@ def split_pdf_pages(pdf_bytes: bytes) -> list[str]:
         return pages
     finally:
         source.close()
+
+
+def split_pdf_pages(pdf_bytes: bytes) -> list[str]:
+    """Divide um PDF em PDFs de uma página, codificados em base64.
+
+    :param pdf_bytes: Conteúdo do PDF.
+    :returns: Uma string base64 por página, na ordem original.
+    :raises ValueError: Se o PDF não puder ser lido ou não tiver páginas.
+    """
+    return [base64.b64encode(page).decode("ascii") for page in split_pdf_page_bytes(pdf_bytes)]

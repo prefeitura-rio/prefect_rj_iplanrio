@@ -1,5 +1,6 @@
 """Tests for planning and submitting classification sessions."""
 
+import json
 from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
@@ -53,6 +54,7 @@ def env(pdf_bytes):
     client = MagicMock()
     # Só entrega o próximo batch falso; não inspeciona os argumentos.
     client.submit_jsonl.side_effect = lambda data, name: next(batches)  # noqa: ARG005
+    client.page_uri.side_effect = lambda name, number: f"gs://pages/{name}/{number:04d}.pdf"
     with (
         patch.object(submit, "load_prompts", return_value=PROMPTS),
         patch.object(submit, "list_pdfs") as list_pdfs,
@@ -60,6 +62,7 @@ def env(pdf_bytes):
         patch.object(submit, "find_done_pdfs", return_value=set()) as done,
         patch.object(submit, "in_flight_pdf_names", return_value=set()) as in_flight,
         patch.object(submit, "append_event") as append_event,
+        patch.object(submit, "active_sessions", return_value=[]) as active,
     ):
         yield {
             "client": client,
@@ -68,6 +71,7 @@ def env(pdf_bytes):
             "in_flight": in_flight,
             "submit_jsonl": client.submit_jsonl,
             "append_event": append_event,
+            "active": active,
         }
 
 
@@ -127,7 +131,7 @@ def test_unreadable_pdf_is_skipped(env):
     env["list_pdfs"].return_value = refs("a1", "b1")
     with (
         patch.object(submit, "download_bytes", side_effect=[b"lixo", b"%PDF"]),
-        patch.object(submit, "split_pdf_pages", side_effect=[ValueError("PDF ilegível"), ["QUJD"]]),
+        patch.object(submit, "split_pdf_page_bytes", side_effect=[ValueError("PDF ilegível"), [b"%PDF"]]),
     ):
         summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.skipped == ["a1"]
@@ -146,3 +150,75 @@ def test_download_failure_on_one_pdf_does_not_abort_the_rest(env, pdf_bytes):
         summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.skipped == ["b1"]
     assert summary.pdf_count == 2  # noqa: PLR2004 -- a1 e c1 têm 1 página cada, per a convenção de nomes do fixture
+
+
+def test_lines_reference_pages_by_uri_and_pages_are_uploaded(env):
+    env["list_pdfs"].return_value = refs("a2")
+    submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    data = env["submit_jsonl"].call_args.args[0]
+    rows = [json.loads(line) for line in data.splitlines()]
+    assert [row["custom_id"] for row in rows] == ["a2:1", "a2:2"]
+    uris = [row["request"]["contents"][0]["parts"][1]["fileData"]["fileUri"] for row in rows]
+    assert uris == ["gs://pages/a2/0001.pdf", "gs://pages/a2/0002.pdf"]
+    env["client"].upload_pages.assert_called_once()
+    name, pages = env["client"].upload_pages.call_args.args
+    assert (name, len(pages)) == ("a2", 2)
+
+
+def test_failed_upload_skips_only_that_pdf(env):
+    env["list_pdfs"].return_value = refs("a1", "b1")
+    env["client"].upload_pages.side_effect = [OSError("sem rede"), None]
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    assert summary.skipped == ["a1"]
+    assert summary.pdf_count == 1
+
+
+def test_stops_at_the_active_session_ceiling_and_leaves_the_rest_pending(env, monkeypatch):
+    env["list_pdfs"].return_value = refs("a1", "b1", "c1", "d1")
+    monkeypatch.setattr(constants, "BATCH_MAX_REQUESTS", 1)  # uma página por sessão
+    settings = replace(SETTINGS, max_active_sessions=3)
+    env["active"].return_value = [object()]  # já há 1 ativa: sobram 2 vagas
+    summary = submit.submit_pending(env["client"], settings, submit.SubmitRequest("gs://in"))
+    assert len(summary.session_ids) == 2  # noqa: PLR2004 -- 3 de teto menos 1 ativa
+    assert summary.pdf_count == 2  # noqa: PLR2004
+    assert summary.remaining == 2  # noqa: PLR2004
+
+
+def test_submits_nothing_when_the_ceiling_is_already_reached(env):
+    env["list_pdfs"].return_value = refs("a1", "b1")
+    env["active"].return_value = [object()] * SETTINGS.max_active_sessions
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    assert (summary.session_ids, summary.remaining) == ([], 2)
+    env["submit_jsonl"].assert_not_called()
+    env["client"].upload_pages.assert_not_called()
+
+
+def test_request_cap_closes_the_session_before_the_byte_cap(env, monkeypatch):
+    env["list_pdfs"].return_value = refs("a2", "b2", "c2")
+    monkeypatch.setattr(constants, "BATCH_MAX_REQUESTS", 4)
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    assert len(summary.session_ids) == 2  # noqa: PLR2004 -- 4 páginas na primeira, 2 na segunda
+    assert [call.args[0].count(b"\n") for call in env["submit_jsonl"].call_args_list] == [4, 2]
+
+
+def test_pdf_with_more_pages_than_the_request_cap_is_skipped(env, monkeypatch):
+    env["list_pdfs"].return_value = refs("a3", "b1")
+    monkeypatch.setattr(constants, "BATCH_MAX_REQUESTS", 2)
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    assert summary.skipped == ["a3"]
+    assert summary.pdf_count == 1
+
+
+def test_session_id_is_deterministic_for_the_same_run_and_pdfs():
+    pdfs = [submit.PdfPages("a", 2), submit.PdfPages("b", 1)]
+    assert submit.session_id_for("run-1", pdfs) == submit.session_id_for("run-1", pdfs)
+    assert submit.session_id_for("run-1", pdfs) != submit.session_id_for("run-2", pdfs)
+    assert submit.session_id_for("run-1", pdfs) != submit.session_id_for("run-1", pdfs[:1])
+
+
+def test_retried_submission_with_the_same_run_id_reuses_the_session_id(env):
+    env["list_pdfs"].return_value = refs("a1")
+    request = submit.SubmitRequest("gs://in", run_id="task-run-1")
+    first = submit.submit_pending(env["client"], SETTINGS, request)
+    second = submit.submit_pending(env["client"], SETTINGS, request)
+    assert first.session_ids == second.session_ids

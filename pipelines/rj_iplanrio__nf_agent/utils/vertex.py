@@ -7,9 +7,11 @@ no bucket de transporte; o Vertex lê e escreve nele pelo agente de serviço do 
 
 import base64
 import binascii
+import hashlib
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -29,6 +31,7 @@ CREDENTIALS_ENV = "RJ_NF_AGENT_VERTEX_CREDENTIALS"
 PROJECT_ENV = "VERTEX_PROJECT"
 SCOPES = ("https://www.googleapis.com/auth/cloud-platform",)
 STORAGE_PREFIX = "vertex-batch-io"
+PAGE_UPLOAD_WORKERS = 16
 SPEND_CAP_MARKER = "spend cap"
 FORBIDDEN = 403
 NOT_FOUND = 404
@@ -154,6 +157,38 @@ class VertexBatchClient:
         self.genai = genai_client
         self.storage = storage_client
         self.bucket = bucket
+
+    def page_uri(self, pdf_name: str, page_number: int) -> str:
+        """URI estável da página de um PDF no bucket (função do nome, sem E/S).
+
+        O nome do PDF vira um hash para a URI não depender de espaços ou acentos.
+
+        :param pdf_name: Nome do PDF sem extensão.
+        :param page_number: Página, a partir de 1.
+        :returns: ``gs://<bucket>/vertex-batch-io/pages/<hash>/<página>.pdf``.
+        """
+        digest = hashlib.sha256(pdf_name.encode("utf-8")).hexdigest()[:20]
+        return f"gs://{self.bucket}/{STORAGE_PREFIX}/pages/{digest}/{page_number:04d}.pdf"
+
+    def upload_pages(self, pdf_name: str, pages: Sequence[bytes]) -> list[str]:
+        """Grava cada página de um PDF como objeto no bucket, em paralelo.
+
+        Regravar a mesma página é seguro: o caminho depende só do nome do PDF.
+
+        :param pdf_name: Nome do PDF sem extensão.
+        :param pages: Bytes de cada página, na ordem original.
+        :returns: A URI de cada página, na mesma ordem.
+        """
+        uris = [self.page_uri(pdf_name, number) for number in range(1, len(pages) + 1)]
+
+        def upload(item: tuple[str, bytes]) -> None:
+            uri, data = item
+            bucket, path = parse_gcs_uri(uri)
+            self.storage.bucket(bucket).blob(path).upload_from_string(data, content_type="application/pdf")
+
+        with ThreadPoolExecutor(max_workers=PAGE_UPLOAD_WORKERS) as pool:
+            list(pool.map(upload, zip(uris, pages, strict=True)))
+        return uris
 
     def find_job(self, display_name: str) -> str | None:
         """Procura um job pelo nome de exibição.

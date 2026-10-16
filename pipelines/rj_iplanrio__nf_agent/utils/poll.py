@@ -1,15 +1,21 @@
 """Acompanhamento das sessões ativas: só consulta o Vertex e avança o que terminou.
 
 Nunca lista nem baixa PDFs: a extração é montada a partir do output da
-classificação, que ecoa o ``request`` com a página em base64.
+classificação, que ecoa o ``request`` com a página (URI do GCS ou base64).
+
+Páginas que falham num lote são reenviadas uma vez, só elas (fases ``*_retry``). O resultado
+da sessão junta os sucessos do lote original com o resultado das novas tentativas.
 """
 
 import traceback
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
+from enum import StrEnum
+from typing import TypeVar
 
+from .. import constants
 from .categories import NF_CATEGORIES
-from .llm_requests import encode_custom_id, jsonl_line, page_b64_from_vertex_row
+from .llm_requests import encode_custom_id, jsonl_line, page_part_from_vertex_row, retry_line
 from .observability import get_logger
 from .output import RunMetadata, build_extracao_pagina_rows, build_versao_pipeline, utc_now_naive
 from .pdf import PdfPages
@@ -17,6 +23,7 @@ from .prompts import extraction_prompt_with_hint, load_prompts
 from .responses import (
     ClassificationResult,
     ExtractionResult,
+    ModelOutput,
     output_from_vertex_row,
     parse_classification,
     parse_extraction,
@@ -26,7 +33,9 @@ from .settings import Settings
 from .storage import write_ndjson
 from .tracking import (
     PHASE_CLASSIFICATION,
+    PHASE_CLASSIFICATION_RETRY,
     PHASE_EXTRACTION,
+    PHASE_EXTRACTION_RETRY,
     STATE_DONE,
     STATE_FAILED,
     STATE_SUBMITTED,
@@ -34,12 +43,25 @@ from .tracking import (
     SessionContext,
     active_sessions,
     append_event,
+    session_batches,
     session_start,
 )
 from .versioning import compute_processing_version
 from .vertex import BatchState, BatchStatus, VertexBatchClient
 
 logger = get_logger(__name__)
+
+RETRY_PHASES = frozenset({PHASE_CLASSIFICATION_RETRY, PHASE_EXTRACTION_RETRY})
+CLASSIFICATION_PHASES = frozenset({PHASE_CLASSIFICATION, PHASE_CLASSIFICATION_RETRY})
+ResultT = TypeVar("ResultT", ClassificationResult, ExtractionResult)
+
+
+class Outcome(StrEnum):
+    """O que aconteceu com uma sessão neste acompanhamento."""
+
+    ADVANCED = "advanced"
+    FINISHED = "finished"
+    FAILED = "failed"
 
 
 @dataclass
@@ -109,19 +131,104 @@ def finish_session(
     logger.info("Sessão %s concluída: %d linhas em %s", start.session_id, len(rows), uri)
 
 
-def advance_classification(client: VertexBatchClient, settings: Settings, event: JobEvent, batch: BatchStatus) -> bool:
-    """Trata uma classificação concluída: submete a extração ou finaliza se não houver NF.
+def iter_merged_rows(
+    client: VertexBatchClient,
+    original: BatchStatus,
+    retry: BatchStatus | None,
+    parse: Callable[[ModelOutput], ResultT],
+) -> Iterator[tuple[dict, ResultT]]:
+    """Lê a saída do lote original trocando as páginas que falharam pelo resultado da nova tentativa.
 
-    A saída é lida em fluxo: guarda só a classificação de cada página e as linhas de extração
-    das páginas fiscais, nunca o output inteiro com as páginas em base64.
+    :param client: Cliente do Vertex.
+    :param original: Lote original, concluído.
+    :param retry: Lote da nova tentativa, se houve; só vale se tiver concluído.
+    :param parse: Interpretação da resposta (classificação ou extração).
+    :returns: ``(linha, resultado)`` de cada página, na ordem do lote original.
+    """
+    retried: dict[str, dict] = {}
+    if retry is not None and retry.state is BatchState.SUCCEEDED:
+        retried = {row["custom_id"]: row for row in client.iter_output(retry.output_dir)}
+    for row in client.iter_output(original.output_dir):
+        final = row
+        item = parse(output_from_vertex_row(final))
+        if item.error is not None and row["custom_id"] in retried:
+            final = retried[row["custom_id"]]
+            item = parse(output_from_vertex_row(final))
+        yield final, item
+
+
+def too_many_errors(errors: int, total: int) -> bool:
+    """Diz se as páginas com erro passam do limite aceitável de uma sessão.
+
+    :param errors: Páginas que continuam com erro depois da nova tentativa.
+    :param total: Páginas da fase.
+    :returns: ``True`` se a fração passar de ``MAX_ERROR_RATIO``.
+    """
+    return total > 0 and errors / total > constants.MAX_ERROR_RATIO
+
+
+def fail_session(settings: Settings, event: JobEvent, message: str) -> Outcome:
+    """Marca a sessão como falha, sem gravar resultados; os PDFs voltam a ficar pendentes.
+
+    :param settings: Configuração de runtime.
+    :param event: Evento mais recente da sessão.
+    :param message: Motivo.
+    :returns: :attr:`Outcome.FAILED`.
+    """
+    append_event(
+        settings.nf_batch_jobs_table,
+        JobEvent(event.session_id, event.phase, event.batch_id, STATE_FAILED, error=message),
+    )
+    logger.warning("Sessão %s falhou: %s", event.session_id, message)
+    return Outcome.FAILED
+
+
+def submit_retry(
+    client: VertexBatchClient, settings: Settings, event: JobEvent, phase: str, failed_rows: Sequence[dict]
+) -> Outcome:
+    """Reenvia só as páginas que falharam, num novo lote da mesma sessão.
 
     :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
     :param event: Evento mais recente da sessão.
-    :param batch: Batch de classificação concluído.
-    :returns: ``True`` se a extração foi submetida; ``False`` se a sessão foi finalizada.
+    :param phase: Fase da nova tentativa (``classification_retry`` ou ``extraction_retry``).
+    :param failed_rows: Linhas da saída que falharam, com o ``request`` ecoado.
+    :returns: :attr:`Outcome.ADVANCED`.
+    """
+    lines = [retry_line(row) for row in failed_rows]
+    submitted = client.submit_jsonl(b"".join(lines), f"nf-{phase.replace('_', '-')}-{event.session_id}")
+    append_event(
+        settings.nf_batch_jobs_table,
+        JobEvent(
+            session_id=event.session_id,
+            phase=phase,
+            batch_id=submitted.batch_id,
+            state=STATE_SUBMITTED,
+            input_file_id=submitted.input_file_id,
+            row_count=len(lines),
+        ),
+    )
+    logger.info("Sessão %s: %d páginas com erro reenviadas (%s)", event.session_id, len(lines), phase)
+    return Outcome.ADVANCED
+
+
+def advance_classification(
+    client: VertexBatchClient, settings: Settings, event: JobEvent, batch: BatchStatus
+) -> Outcome:
+    """Trata uma classificação concluída: reenvia o que falhou, submete a extração ou finaliza.
+
+    A saída é lida em fluxo: guarda só a classificação de cada página, as linhas de extração das
+    páginas fiscais e as linhas que falharam, nunca o output inteiro.
+
+    :param client: Cliente do Vertex.
+    :param settings: Configuração de runtime.
+    :param event: Evento mais recente da sessão (classificação ou sua nova tentativa).
+    :param batch: Batch concluído desse evento.
+    :returns: O desfecho da sessão neste acompanhamento.
     """
     start = session_start(settings.nf_batch_jobs_table, event.session_id)
+    is_retry = event.phase == PHASE_CLASSIFICATION_RETRY
+    original, retry = (client.retrieve(start.batch_id), batch) if is_retry else (batch, None)
     context = start.context
     prompts = load_prompts(
         context.classification_prompt_version if context else None,
@@ -129,16 +236,32 @@ def advance_classification(client: VertexBatchClient, settings: Settings, event:
     )
     classifications: list[ClassificationResult] = []
     lines: list[bytes] = []
-    for row in client.iter_output(batch.output_dir):
-        item = parse_classification(output_from_vertex_row(row))
+    failed_rows: list[dict] = []
+    for row, item in iter_merged_rows(client, original, retry, parse_classification):
         classifications.append(item)
-        if item.category in NF_CATEGORIES:
+        if item.error is not None:
+            failed_rows.append(row)
+        elif item.category in NF_CATEGORIES:
             custom_id = encode_custom_id(item.page.pdf_name, item.page.page_number)
             prompt = extraction_prompt_with_hint(prompts.extraction_text, item.category)
-            lines.append(jsonl_line(custom_id, prompt, page_b64_from_vertex_row(row)))
+            lines.append(jsonl_line(custom_id, prompt, page_part_from_vertex_row(row)))
+    logger.info(
+        "Sessão %s: classificação com %d páginas, %d com erro (job: %s ok, %s falhas)",
+        event.session_id,
+        len(classifications),
+        len(failed_rows),
+        batch.successful,
+        batch.failed,
+    )
+    if failed_rows and not is_retry:
+        return submit_retry(client, settings, event, PHASE_CLASSIFICATION_RETRY, failed_rows)
+    if too_many_errors(len(failed_rows), len(classifications)):
+        return fail_session(
+            settings, event, f"{len(failed_rows)} de {len(classifications)} páginas falharam na classificação."
+        )
     if not lines:
         finish_session(settings, start, classifications, [])
-        return False
+        return Outcome.FINISHED
 
     submitted = client.submit_jsonl(b"".join(lines), f"nf-extraction-{event.session_id}")
     append_event(
@@ -153,27 +276,55 @@ def advance_classification(client: VertexBatchClient, settings: Settings, event:
         ),
     )
     logger.info("Sessão %s: extração submetida para %d páginas", event.session_id, len(lines))
-    return True
+    return Outcome.ADVANCED
 
 
-def finish_extraction(client: VertexBatchClient, settings: Settings, event: JobEvent, batch: BatchStatus) -> None:
-    """Trata uma extração concluída lendo as duas saídas direto do Vertex.
+def finish_extraction(client: VertexBatchClient, settings: Settings, event: JobEvent, batch: BatchStatus) -> Outcome:
+    """Trata uma extração concluída: reenvia o que falhou ou grava o resultado da sessão.
 
     :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
-    :param event: Evento mais recente da sessão.
-    :param batch: Batch de extração concluído.
+    :param event: Evento mais recente da sessão (extração ou sua nova tentativa).
+    :param batch: Batch concluído desse evento.
+    :returns: O desfecho da sessão neste acompanhamento.
     :raises RuntimeError: Se o evento inicial não tiver o ID do batch de classificação.
     """
     start = session_start(settings.nf_batch_jobs_table, event.session_id)
     if not start.batch_id:
         raise RuntimeError(f"Sessão {event.session_id} sem ID do batch de classificação.")
-    classification_batch = client.retrieve(start.batch_id)
+    batches = session_batches(settings.nf_batch_jobs_table, event.session_id)
+    classification_retry = batches.get(PHASE_CLASSIFICATION_RETRY)
     classifications = [
-        parse_classification(output_from_vertex_row(row)) for row in client.iter_output(classification_batch.output_dir)
+        item
+        for _, item in iter_merged_rows(
+            client,
+            client.retrieve(start.batch_id),
+            client.retrieve(classification_retry) if classification_retry else None,
+            parse_classification,
+        )
     ]
-    extractions = [parse_extraction(output_from_vertex_row(row)) for row in client.iter_output(batch.output_dir)]
+    is_retry = event.phase == PHASE_EXTRACTION_RETRY
+    original, retry = (client.retrieve(batches[PHASE_EXTRACTION]), batch) if is_retry else (batch, None)
+    extractions: list[ExtractionResult] = []
+    failed_rows: list[dict] = []
+    for row, item in iter_merged_rows(client, original, retry, parse_extraction):
+        extractions.append(item)
+        if item.error is not None:
+            failed_rows.append(row)
+    logger.info(
+        "Sessão %s: extração com %d páginas, %d com erro (job: %s ok, %s falhas)",
+        event.session_id,
+        len(extractions),
+        len(failed_rows),
+        batch.successful,
+        batch.failed,
+    )
+    if failed_rows and not is_retry:
+        return submit_retry(client, settings, event, PHASE_EXTRACTION_RETRY, failed_rows)
+    if too_many_errors(len(failed_rows), len(extractions)):
+        return fail_session(settings, event, f"{len(failed_rows)} de {len(extractions)} páginas falharam na extração.")
     finish_session(settings, start, classifications, extractions)
+    return Outcome.FINISHED
 
 
 def fail_if_status_unreachable(session_count: int, status_errors: Sequence[str]) -> None:
@@ -226,7 +377,7 @@ def poll_sessions(client: VertexBatchClient, settings: Settings) -> PollSummary:
             summary.waiting.append(event.session_id)
             continue
 
-        if batch.state is BatchState.FAILED:
+        if batch.state is BatchState.FAILED and event.phase not in RETRY_PHASES:
             try:
                 append_event(
                     settings.nf_batch_jobs_table,
@@ -248,14 +399,13 @@ def poll_sessions(client: VertexBatchClient, settings: Settings) -> PollSummary:
             continue
 
         try:
-            if not batch.output_dir:
+            if batch.state is BatchState.SUCCEEDED and not batch.output_dir:
                 raise RuntimeError(f"Batch {event.batch_id} concluído sem pasta de saída.")
-            if event.phase == PHASE_CLASSIFICATION:
-                advanced = advance_classification(client, settings, event, batch)
-                (summary.advanced if advanced else summary.finished).append(event.session_id)
-            else:
-                finish_extraction(client, settings, event, batch)
-                summary.finished.append(event.session_id)
+            handler = advance_classification if event.phase in CLASSIFICATION_PHASES else finish_extraction
+            outcome = handler(client, settings, event, batch)
+            {Outcome.ADVANCED: summary.advanced, Outcome.FINISHED: summary.finished, Outcome.FAILED: summary.failed}[
+                outcome
+            ].append(event.session_id)
         except Exception as exc:
             errors.append(f"sessão {event.session_id} ({event.phase}): {exc}\n{traceback.format_exc()}")
 

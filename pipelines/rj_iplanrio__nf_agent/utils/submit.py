@@ -9,14 +9,22 @@ from dataclasses import dataclass, field
 
 from .. import constants
 from .categories import PAGE_CATEGORIES
-from .llm_requests import encode_custom_id, jsonl_line
+from .llm_requests import encode_custom_id, file_part, jsonl_line
 from .observability import get_logger
-from .pdf import PdfPages, split_pdf_pages
+from .pdf import PdfPages, split_pdf_page_bytes
 from .pending import find_done_pdfs
 from .prompts import PromptSet, extraction_prompt_with_hint, load_prompts
 from .settings import Settings
-from .storage import download_bytes, list_pdfs
-from .tracking import PHASE_CLASSIFICATION, STATE_SUBMITTED, JobEvent, SessionContext, append_event, in_flight_pdf_names
+from .storage import PdfRef, download_bytes, list_pdfs
+from .tracking import (
+    PHASE_CLASSIFICATION,
+    STATE_SUBMITTED,
+    JobEvent,
+    SessionContext,
+    active_sessions,
+    append_event,
+    in_flight_pdf_names,
+)
 from .versioning import compute_processing_version
 from .vertex import VertexBatchClient
 
@@ -76,6 +84,17 @@ class SubmitSummary:
     pdf_count: int
     page_count: int
     skipped: list[str]
+    remaining: int = 0
+
+
+@dataclass(frozen=True)
+class PreparedPdf:
+    """Um PDF dividido em páginas, com as linhas de classificação já montadas."""
+
+    ref: PdfRef
+    pages: list[bytes]
+    lines: list[bytes]
+    cost: int
 
 
 @dataclass
@@ -85,6 +104,52 @@ class SessionDraft:
     lines: list[bytes] = field(default_factory=list)
     pdfs: list[PdfPages] = field(default_factory=list)
     budget_used: int = 0
+
+    def is_full_with(self, prepared: PreparedPdf) -> bool:
+        """Diz se acrescentar o PDF passaria dos limites de bytes ou de linhas da sessão.
+
+        :param prepared: PDF candidato.
+        :returns: ``True`` se a sessão precisa ser fechada antes de recebê-lo.
+        """
+        return (
+            self.budget_used + prepared.cost > constants.BATCH_MAX_BYTES
+            or len(self.lines) + len(prepared.lines) > constants.BATCH_MAX_REQUESTS
+        )
+
+    def add(self, prepared: PreparedPdf) -> None:
+        """Acrescenta um PDF à sessão.
+
+        :param prepared: PDF a acrescentar.
+        """
+        self.lines.extend(prepared.lines)
+        self.pdfs.append(PdfPages(prepared.ref.name, len(prepared.pages)))
+        self.budget_used += prepared.cost
+
+
+def prepare_pdf(client: VertexBatchClient, ref: PdfRef, prompt: str, overhead: int) -> PreparedPdf | None:
+    """Baixa um PDF, divide em páginas e monta as linhas de classificação (ainda sem gravar nada).
+
+    :param client: Cliente do Vertex (só para calcular a URI de cada página).
+    :param ref: PDF de origem.
+    :param prompt: Texto do prompt de classificação.
+    :param overhead: Bytes extras por linha que a extração pode ter a mais (ver
+        :func:`extraction_overhead_per_row`).
+    :returns: PDF preparado, ou ``None`` se não puder ser lido ou não couber numa sessão.
+    """
+    try:
+        pages = split_pdf_page_bytes(download_bytes(ref.uri))
+    except Exception as exc:  # um PDF ruim (baixar ou ler) nunca pode derrubar o lote inteiro
+        logger.warning("PDF %s ignorado: falha ao baixar/ler: %s", ref.name, exc)
+        return None
+    lines = [
+        jsonl_line(encode_custom_id(ref.name, number), prompt, file_part(client.page_uri(ref.name, number)))
+        for number in range(1, len(pages) + 1)
+    ]
+    cost = sum(len(line) for line in lines) + overhead * len(lines)
+    if cost > constants.BATCH_MAX_BYTES or len(lines) > constants.BATCH_MAX_REQUESTS:
+        logger.warning("PDF %s ignorado: %d páginas (%d bytes) não cabem numa sessão", ref.name, len(lines), cost)
+        return None
+    return PreparedPdf(ref, pages, lines, cost)
 
 
 def extraction_overhead_per_row(prompts: PromptSet) -> int:
@@ -145,13 +210,42 @@ def submit_session(
     return session_id
 
 
+def find_pending(settings: Settings, input_uri: str, version: str) -> list[PdfRef]:
+    """Lista os PDFs da origem que ainda precisam ser processados.
+
+    Pendente = não processado na mesma ``versao_processamento`` e fora de sessões ativas.
+
+    :param settings: Configuração de runtime.
+    :param input_uri: Pasta de origem.
+    :param version: ``versao_processamento`` da submissão.
+    :returns: PDFs pendentes, ordenados por nome.
+    """
+    refs = list_pdfs(input_uri)
+    done = find_done_pdfs(settings.extracao_pagina_table, [ref.name for ref in refs], version)
+    in_flight = in_flight_pdf_names(settings.nf_batch_jobs_table)
+    pending = [ref for ref in refs if ref.name not in done and ref.name not in in_flight]
+    logger.info(
+        "Origem %s: %d PDFs, %d já processados na versão %s, %d em voo, %d pendentes",
+        input_uri,
+        len(refs),
+        len(done),
+        version,
+        len(in_flight & {ref.name for ref in refs}),
+        len(pending),
+    )
+    return pending
+
+
 def submit_pending(client: VertexBatchClient, settings: Settings, request: SubmitRequest) -> SubmitSummary:
     """Submete todos os PDFs pendentes da origem, em quantas sessões forem necessárias.
 
     Pendente = não processado na mesma ``versao_processamento`` e fora de sessões ativas.
-    Cada sessão é fechada quando a próxima linha passaria de ``BATCH_MAX_BYTES``. Um
-    PDF que falhe ao baixar ou ler é pulado (fica em ``skipped``) e não interrompe
-    os demais — com centenas de PDFs, uma falha pontual de rede é esperada.
+    As páginas de cada PDF vão para o bucket como objetos e o JSONL as referencia por URI.
+    Cada sessão é fechada ao atingir ``BATCH_MAX_REQUESTS`` linhas ou ``BATCH_MAX_BYTES``, e a
+    submissão para quando as sessões ativas chegam a ``max_active_sessions``: o que sobrar
+    fica pendente para a próxima rodada (``remaining``). Um PDF que falhe ao baixar, ler ou
+    gravar é pulado (fica em ``skipped``) e não interrompe os demais — com centenas de PDFs,
+    uma falha pontual de rede é esperada.
 
     :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
@@ -166,20 +260,7 @@ def submit_pending(client: VertexBatchClient, settings: Settings, request: Submi
 
     prompts = load_prompts()
     version = compute_processing_version(prompts, request.processing_version)
-    refs = list_pdfs(request.input_uri)
-    done = find_done_pdfs(settings.extracao_pagina_table, [ref.name for ref in refs], version)
-    in_flight = in_flight_pdf_names(settings.nf_batch_jobs_table)
-    pending = [ref for ref in refs if ref.name not in done and ref.name not in in_flight]
-    logger.info(
-        "Origem %s: %d PDFs, %d já processados na versão %s, %d em voo, %d pendentes",
-        request.input_uri,
-        len(refs),
-        len(done),
-        version,
-        len(in_flight & {ref.name for ref in refs}),
-        len(pending),
-    )
-
+    pending = find_pending(settings, request.input_uri, version)
     run_id = request.run_id or str(uuid.uuid4())
     base_context = SessionContext(
         run_id=run_id,
@@ -189,6 +270,15 @@ def submit_pending(client: VertexBatchClient, settings: Settings, request: Submi
         extraction_prompt_version=prompts.extraction_version,
         pdfs=(),
     )
+    slots = settings.max_active_sessions - len(active_sessions(settings.nf_batch_jobs_table))
+    if slots <= 0:
+        logger.warning(
+            "Já há %d sessões ativas (teto %d); nada submetido.",
+            settings.max_active_sessions - slots,
+            settings.max_active_sessions,
+        )
+        return SubmitSummary(run_id, version, [], 0, 0, [], remaining=len(pending))
+
     overhead = extraction_overhead_per_row(prompts)
     draft = SessionDraft()
     session_ids: list[str] = []
@@ -197,33 +287,34 @@ def submit_pending(client: VertexBatchClient, settings: Settings, request: Submi
     page_count = 0
 
     for ref in pending:
-        try:
-            pages = split_pdf_pages(download_bytes(ref.uri))
-            lines = [
-                jsonl_line(encode_custom_id(ref.name, number), prompts.classification_text, page)
-                for number, page in enumerate(pages, start=1)
-            ]
-        except Exception as exc:  # um PDF ruim (baixar ou ler) nunca pode derrubar o lote inteiro
-            logger.warning("PDF %s ignorado: falha ao baixar/ler: %s", ref.name, exc)
-            skipped.append(ref.name)
-            continue
-        if request.max_pages is not None and page_count + len(pages) > request.max_pages:
+        if slots <= 0:
             break
-        cost = sum(len(line) for line in lines) + overhead * len(lines)
-        if cost > constants.BATCH_MAX_BYTES:
-            logger.warning("PDF %s ignorado: %d bytes não cabem num lote", ref.name, cost)
+        prepared = prepare_pdf(client, ref, prompts.classification_text, overhead)
+        if prepared is None:
             skipped.append(ref.name)
             continue
-        if draft.lines and draft.budget_used + cost > constants.BATCH_MAX_BYTES:
+        if request.max_pages is not None and page_count + len(prepared.pages) > request.max_pages:
+            break
+        if draft.lines and draft.is_full_with(prepared):
             session_ids.append(submit_session(client, settings, draft, base_context))
             draft = SessionDraft()
-        draft.lines.extend(lines)
-        draft.pdfs.append(PdfPages(ref.name, len(pages)))
-        draft.budget_used += cost
+            slots -= 1
+            if slots <= 0:
+                break
+        try:
+            client.upload_pages(ref.name, prepared.pages)
+        except Exception as exc:
+            logger.warning("PDF %s ignorado: falha ao gravar as páginas: %s", ref.name, exc)
+            skipped.append(ref.name)
+            continue
+        draft.add(prepared)
         pdf_count += 1
-        page_count += len(pages)
+        page_count += len(prepared.pages)
 
     if draft.lines:
         session_ids.append(submit_session(client, settings, draft, base_context))
 
-    return SubmitSummary(run_id, version, session_ids, pdf_count, page_count, skipped)
+    remaining = len(pending) - pdf_count - len(skipped)
+    if remaining > 0:
+        logger.info("Ficaram %d PDFs para a próxima rodada (limite de sessões ativas ou de páginas).", remaining)
+    return SubmitSummary(run_id, version, session_ids, pdf_count, page_count, skipped, remaining)

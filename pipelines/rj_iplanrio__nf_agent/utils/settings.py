@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import constants
+
 CREDENTIALS_ENV = "RJ_NF_AGENT_CREDENTIALS"
 CREDENTIALS_PATH = Path("/tmp/rj_nf_agent_credentials.json")
 
@@ -12,6 +14,7 @@ CREDENTIALS_PATH = Path("/tmp/rj_nf_agent_credentials.json")
 # uma origem explícita (ver utils/submit.py::resolve_origem) — por isso fica
 # fora de REQUIRED_ENV.
 PDFS_BASE_PATH_ENV = "PDFS_BASE_PATH"
+MAX_ACTIVE_SESSIONS_ENV = "MAX_ACTIVE_SESSIONS"
 
 # Bucket de entrada e saída dos batches. BIFROST_GCS_BUCKET é o nome antigo da mesma variável.
 BATCH_BUCKET_ENVS = ("VERTEX_BATCH_BUCKET", "BIFROST_GCS_BUCKET")
@@ -34,6 +37,7 @@ class Settings:
     extracao_pagina_table: str
     nf_batch_jobs_table: str
     pdfs_base_path: str | None = None
+    max_active_sessions: int = constants.DEFAULT_MAX_ACTIVE_SESSIONS
 
 
 def load_settings() -> Settings:
@@ -52,6 +56,7 @@ def load_settings() -> Settings:
         batch_bucket=batch_bucket,
         **{field: os.environ[env] for field, env in REQUIRED_ENV.items()},
         pdfs_base_path=os.environ.get(PDFS_BASE_PATH_ENV),
+        max_active_sessions=int(os.environ.get(MAX_ACTIVE_SESSIONS_ENV) or constants.DEFAULT_MAX_ACTIVE_SESSIONS),
     )
 
 

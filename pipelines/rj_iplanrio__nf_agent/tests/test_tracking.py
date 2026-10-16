@@ -1,6 +1,7 @@
 """Tests for the nf_batch_jobs event log."""
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -59,3 +60,22 @@ def test_session_start_parses_context_and_requires_a_row():
 def test_in_flight_pdf_names():
     with patch.object(tracking, "run_query", return_value=[{"nome_arquivo": "a"}, {"nome_arquivo": "b"}]):
         assert tracking.in_flight_pdf_names("p.d.t") == {"a", "b"}
+
+
+def test_session_batches_maps_each_phase_to_its_latest_batch():
+    rows = [
+        {"phase": "classification", "bifrost_batch_id": "c1"},
+        {"phase": "classification_retry", "bifrost_batch_id": "c2"},
+        {"phase": "extraction", "bifrost_batch_id": "e1"},
+    ]
+    with patch.object(tracking, "run_query", return_value=rows) as query:
+        batches = tracking.session_batches("p.d.t", "s1")
+    assert batches == {"classification": "c1", "classification_retry": "c2", "extraction": "e1"}
+    assert query.call_args.args[1] == "session_batches"
+    assert query.call_args.args[3][0].value == "s1"
+
+
+def test_session_batches_query_exists_and_keeps_one_row_per_phase():
+    sql = (Path(tracking.__file__).parent / "queries" / "session_batches.sql").read_text()
+    assert "PARTITION BY phase" in sql
+    assert "bifrost_batch_id IS NOT NULL" in sql

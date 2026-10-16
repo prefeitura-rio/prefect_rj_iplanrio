@@ -5,6 +5,7 @@ import os
 
 import pytest
 
+from pipelines.rj_iplanrio__nf_agent import constants
 from pipelines.rj_iplanrio__nf_agent.utils import settings
 
 ENV = {
@@ -78,3 +79,12 @@ def test_inject_gcp_credentials_rejects_invalid_base64(monkeypatch):
     monkeypatch.setenv("RJ_NF_AGENT_CREDENTIALS", "não é base64!")
     with pytest.raises(ValueError, match="RJ_NF_AGENT_CREDENTIALS"):
         settings.inject_gcp_credentials()
+
+
+def test_max_active_sessions_defaults_and_can_be_overridden(monkeypatch):
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("MAX_ACTIVE_SESSIONS", raising=False)
+    assert settings.load_settings().max_active_sessions == constants.DEFAULT_MAX_ACTIVE_SESSIONS
+    monkeypatch.setenv("MAX_ACTIVE_SESSIONS", "7")
+    assert settings.load_settings().max_active_sessions == 7  # noqa: PLR2004 -- valor definido no próprio teste

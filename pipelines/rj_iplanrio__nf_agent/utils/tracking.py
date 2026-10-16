@@ -1,6 +1,7 @@
 """Log de eventos das sessões de batch (tabela ``nf_batch_jobs``, só append).
 
-Uma sessão é um lote de classificação seguido de, no máximo, um lote de extração.
+Uma sessão é um lote de classificação seguido de, no máximo, um lote de extração. Cada lote
+pode ter uma nova tentativa só para as páginas que falharam (fases ``*_retry``).
 O estado atual é o evento mais recente da sessão. O evento de submissão da
 classificação carrega em ``contexto`` (JSON) tudo que o acompanhamento precisa.
 """
@@ -17,6 +18,8 @@ from .pdf import PdfPages
 
 PHASE_CLASSIFICATION = "classification"
 PHASE_EXTRACTION = "extraction"
+PHASE_CLASSIFICATION_RETRY = "classification_retry"
+PHASE_EXTRACTION_RETRY = "extraction_retry"
 STATE_SUBMITTED = "submitted"
 STATE_DONE = "done"
 STATE_FAILED = "failed"
@@ -131,6 +134,18 @@ def session_start(table: str, session_id: str) -> JobEvent:
     if not rows:
         raise RuntimeError(f"Sessão {session_id} sem evento de classificação em {table}.")
     return event_from_row(rows[0])
+
+
+def session_batches(table: str, session_id: str) -> dict[str, str]:
+    """Busca o batch mais recente de cada fase de uma sessão.
+
+    :param table: Tabela ``nf_batch_jobs``.
+    :param session_id: Sessão.
+    :returns: ``{fase: id do batch}``; fases sem batch (como o evento final) ficam de fora.
+    """
+    params = [bigquery.ScalarQueryParameter("session_id", "STRING", session_id)]
+    rows = run_query(__file__, "session_batches", table, params)
+    return {row["phase"]: row["bifrost_batch_id"] for row in rows}
 
 
 def in_flight_pdf_names(table: str) -> set[str]:
