@@ -68,15 +68,17 @@ def submit_task(
 
 
 @task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=RETRY_DELAYS, retry_condition_fn=retry_unless_fatal)
-def poll_task() -> PollSummary:
+def poll_task(max_sessoes: int | None = None) -> PollSummary:
     """Avança as sessões ativas que terminaram.
+
+    ``max_sessoes`` limita quantas sessões são acompanhadas nesta passada.
 
     As tentativas automáticas em caso de falha transitória (Vertex/GCS) são
     seguras pelo mesmo motivo de ``submit_task``: cada tentativa reconsulta
     ``active_sessions`` do zero, sem depender de estado da tentativa anterior.
     """
     settings = load_settings()
-    return poll_sessions(build_client(settings.batch_bucket), settings)
+    return poll_sessions(build_client(settings.batch_bucket), settings, max_sessoes)
 
 
 @task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=RETRY_DELAYS)

@@ -56,3 +56,13 @@ def test_submit_action_still_activates_the_schedule_when_the_submission_fails():
     ):
         run_flow(acao="submeter")
     activate.assert_called_once()
+
+
+def test_max_sessoes_is_forwarded_to_the_poll():
+    with (
+        patch.object(flow_mod, "inject_credentials_task"),
+        patch.object(flow_mod, "poll_task") as poll_task,
+        patch.object(flow_mod, "pause_schedule_if_idle_task"),
+    ):
+        run_flow(max_sessoes=3)
+    assert poll_task.call_args.kwargs["max_sessoes"] == 3  # noqa: PLR2004 -- valor definido no próprio teste

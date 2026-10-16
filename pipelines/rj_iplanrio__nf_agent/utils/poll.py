@@ -345,7 +345,7 @@ def fail_if_status_unreachable(session_count: int, status_errors: Sequence[str])
         )
 
 
-def poll_sessions(client: VertexBatchClient, settings: Settings) -> PollSummary:
+def poll_sessions(client: VertexBatchClient, settings: Settings, max_sessions: int | None = None) -> PollSummary:
     """Consulta cada sessão ativa uma vez e avança as que terminaram.
 
     Erros de consulta de status são tratados como transitórios, a menos que atinjam
@@ -357,6 +357,8 @@ def poll_sessions(client: VertexBatchClient, settings: Settings) -> PollSummary:
 
     :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
+    :param max_sessions: Se informado, acompanha só essas primeiras sessões ativas (para liberar
+        um backlog aos poucos e limitar quantos jobs novos uma passada cria).
     :returns: Sessões por desfecho.
     :raises RuntimeError: Se o status de nenhuma sessão ativa puder ser consultado, ou
         se alguma sessão concluída não puder ser avançada.
@@ -365,6 +367,8 @@ def poll_sessions(client: VertexBatchClient, settings: Settings) -> PollSummary:
     errors: list[str] = []
     status_errors: list[str] = []
     sessions = active_sessions(settings.nf_batch_jobs_table)
+    if max_sessions is not None:
+        sessions = sessions[:max_sessions]
     for event in sessions:
         if not event.batch_id:
             errors.append(f"sessão {event.session_id} ({event.phase}): evento ativo sem batch_id")

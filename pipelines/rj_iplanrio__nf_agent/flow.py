@@ -20,18 +20,21 @@ from .tasks import (
 
 
 @flow(log_prints=True)
-def rj_iplanrio__nf_agent(
+def rj_iplanrio__nf_agent(  # noqa: PLR0913 -- parâmetros do deployment do Prefect, sempre passados por nome
+    *,
     acao: Literal["submeter", "acompanhar"] = "acompanhar",
     origem: str | None = None,
     mes_envio: str | None = None,
     max_paginas: int | None = None,
     versao_processamento: str | None = None,
+    max_sessoes: int | None = None,
 ) -> None:
     """Roteia ``acao``: submete PDFs pendentes ou avança as sessões em andamento.
 
     Depois de submeter, o agendamento é reativado em ``finally`` — mesmo se a submissão
     falhar no meio, as sessões já criadas precisam de acompanhamento. Depois de acompanhar,
-    o agendamento é pausado se não sobrou sessão ativa.
+    o agendamento é pausado se não sobrou sessão ativa. ``max_sessoes`` limita quantas sessões
+    uma passada de ``acompanhar`` avança.
     """
     credentials = inject_credentials_task()
     if acao == "submeter":
@@ -46,5 +49,5 @@ def rj_iplanrio__nf_agent(
         finally:
             activate_schedule_task()
     else:
-        poll_task(wait_for=[credentials])
+        poll_task(max_sessoes=max_sessoes, wait_for=[credentials])
         pause_schedule_if_idle_task()

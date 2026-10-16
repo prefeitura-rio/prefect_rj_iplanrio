@@ -322,3 +322,11 @@ def test_extraction_retry_results_are_merged_into_the_session_output(io):
     assert all(row["pipeline_erro"] in (None, "") for row in rows)
     assert io.appended[-1].state == STATE_DONE
     io.submit_jsonl.assert_not_called()
+
+
+def test_max_sessions_limits_how_many_active_sessions_are_followed(io):
+    io.active.return_value = [START, JobEvent("s2", PHASE_CLASSIFICATION, "b2", STATE_SUBMITTED)]
+    io.retrieve.return_value = batch("in_progress")
+    summary = poll.poll_sessions(io.client, SETTINGS, max_sessions=1)
+    assert summary.waiting == ["s1"]
+    assert io.retrieve.call_count == 1
