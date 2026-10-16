@@ -4,8 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from pipelines.rj_iplanrio__nf_agent import tasks
+from pipelines.rj_iplanrio__nf_agent.utils.vertex import FatalBatchError, SpendCapReachedError
 
 SETTINGS = SimpleNamespace(nf_batch_jobs_table="p.d.t")
+SETTINGS_STUB = SimpleNamespace(nf_batch_jobs_table="p.d.t", batch_bucket="batch-bkt")
 
 
 def test_submit_task_retries_on_transient_failure():
@@ -158,3 +160,30 @@ def test_pause_schedule_noop_outside_a_deployment():
     ):
         tasks.pause_schedule_if_idle_task.fn()
     get_client.assert_not_called()
+
+
+def test_retry_condition_stops_on_fatal_errors_and_retries_the_rest():
+    def failed(exc):
+        return SimpleNamespace(result=lambda raise_on_failure=False: exc)  # noqa: ARG005
+
+    assert tasks.retry_unless_fatal(None, None, failed(SpendCapReachedError("cap"))) is False
+    assert tasks.retry_unless_fatal(None, None, failed(FatalBatchError("x"))) is False
+    assert tasks.retry_unless_fatal(None, None, failed(RuntimeError("503"))) is True
+
+
+def test_submit_and_poll_do_not_retry_fatal_errors():
+    assert tasks.submit_task.retry_condition_fn is tasks.retry_unless_fatal
+    assert tasks.poll_task.retry_condition_fn is tasks.retry_unless_fatal
+
+
+def test_submit_task_passes_the_task_run_id_so_retries_rebuild_the_same_sessions():
+    with (
+        patch.object(tasks, "load_settings", return_value=SETTINGS_STUB),
+        patch.object(tasks, "resolve_origem", return_value="gs://in"),
+        patch.object(tasks, "build_client") as build_client,
+        patch.object(tasks, "submit_pending") as submit_pending,
+        patch.object(tasks.task_run, "id", "run-abc"),
+    ):
+        tasks.submit_task.fn(origem=None, mes_envio=None, max_paginas=None, versao_processamento=None)
+    build_client.assert_called_once_with("batch-bkt")
+    assert submit_pending.call_args.args[2].run_id == "run-abc"

@@ -8,10 +8,6 @@ import traceback
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from openai import OpenAI
-from openai.types import Batch
-
-from .bifrost import read_batch_output, retrieve_batch, submit_jsonl
 from .categories import NF_CATEGORIES
 from .llm_requests import encode_custom_id, jsonl_line, page_b64_from_vertex_row
 from .observability import get_logger
@@ -41,12 +37,9 @@ from .tracking import (
     session_start,
 )
 from .versioning import compute_processing_version
+from .vertex import BatchState, BatchStatus, VertexBatchClient
 
 logger = get_logger(__name__)
-
-IN_PROGRESS_STATES = frozenset({"validating", "in_progress", "finalizing", "cancelling"})
-FAILURE_STATES = frozenset({"failed", "expired", "canceled", "cancelled"})
-SUCCESS_STATE = "completed"
 
 
 @dataclass
@@ -116,37 +109,38 @@ def finish_session(
     logger.info("Sessão %s concluída: %d linhas em %s", start.session_id, len(rows), uri)
 
 
-def advance_classification(client: OpenAI, settings: Settings, event: JobEvent, batch: Batch) -> bool:
+def advance_classification(client: VertexBatchClient, settings: Settings, event: JobEvent, batch: BatchStatus) -> bool:
     """Trata uma classificação concluída: submete a extração ou finaliza se não houver NF.
 
-    :param client: Cliente do Bifrost.
+    A saída é lida em fluxo: guarda só a classificação de cada página e as linhas de extração
+    das páginas fiscais, nunca o output inteiro com as páginas em base64.
+
+    :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
     :param event: Evento mais recente da sessão.
     :param batch: Batch de classificação concluído.
     :returns: ``True`` se a extração foi submetida; ``False`` se a sessão foi finalizada.
     """
-    raw_rows = read_batch_output(batch.output_file_id)
-    classifications = [parse_classification(output_from_vertex_row(row)) for row in raw_rows]
     start = session_start(settings.nf_batch_jobs_table, event.session_id)
-    nf_pages = [item for item in classifications if item.category in NF_CATEGORIES]
-    if not nf_pages:
-        finish_session(settings, start, classifications, [])
-        return False
-
     context = start.context
     prompts = load_prompts(
         context.classification_prompt_version if context else None,
         context.extraction_prompt_version if context else None,
     )
-    page_by_id = {row["custom_id"]: page_b64_from_vertex_row(row) for row in raw_rows}
-    lines = []
-    for item in nf_pages:
-        custom_id = encode_custom_id(item.page.pdf_name, item.page.page_number)
-        prompt = extraction_prompt_with_hint(prompts.extraction_text, item.category)
-        lines.append(jsonl_line(custom_id, prompt, page_by_id[custom_id]))
-    submitted = submit_jsonl(
-        client, b"".join(lines), f"nf-extraction-{event.session_id}.jsonl", settings.bifrost_bucket
-    )
+    classifications: list[ClassificationResult] = []
+    lines: list[bytes] = []
+    for row in client.iter_output(batch.output_dir):
+        item = parse_classification(output_from_vertex_row(row))
+        classifications.append(item)
+        if item.category in NF_CATEGORIES:
+            custom_id = encode_custom_id(item.page.pdf_name, item.page.page_number)
+            prompt = extraction_prompt_with_hint(prompts.extraction_text, item.category)
+            lines.append(jsonl_line(custom_id, prompt, page_b64_from_vertex_row(row)))
+    if not lines:
+        finish_session(settings, start, classifications, [])
+        return False
+
+    submitted = client.submit_jsonl(b"".join(lines), f"nf-extraction-{event.session_id}")
     append_event(
         settings.nf_batch_jobs_table,
         JobEvent(
@@ -162,10 +156,10 @@ def advance_classification(client: OpenAI, settings: Settings, event: JobEvent, 
     return True
 
 
-def finish_extraction(client: OpenAI, settings: Settings, event: JobEvent, batch: Batch) -> None:
+def finish_extraction(client: VertexBatchClient, settings: Settings, event: JobEvent, batch: BatchStatus) -> None:
     """Trata uma extração concluída lendo as duas saídas direto do Vertex.
 
-    :param client: Cliente do Bifrost.
+    :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
     :param event: Evento mais recente da sessão.
     :param batch: Batch de extração concluído.
@@ -174,12 +168,11 @@ def finish_extraction(client: OpenAI, settings: Settings, event: JobEvent, batch
     start = session_start(settings.nf_batch_jobs_table, event.session_id)
     if not start.batch_id:
         raise RuntimeError(f"Sessão {event.session_id} sem ID do batch de classificação.")
-    classification_batch = retrieve_batch(client, start.batch_id)
+    classification_batch = client.retrieve(start.batch_id)
     classifications = [
-        parse_classification(output_from_vertex_row(row))
-        for row in read_batch_output(classification_batch.output_file_id)
+        parse_classification(output_from_vertex_row(row)) for row in client.iter_output(classification_batch.output_dir)
     ]
-    extractions = [parse_extraction(output_from_vertex_row(row)) for row in read_batch_output(batch.output_file_id)]
+    extractions = [parse_extraction(output_from_vertex_row(row)) for row in client.iter_output(batch.output_dir)]
     finish_session(settings, start, classifications, extractions)
 
 
@@ -187,7 +180,7 @@ def fail_if_status_unreachable(session_count: int, status_errors: Sequence[str])
     """Falha o run se o status de nenhuma sessão ativa pôde ser consultado.
 
     Quando todas as consultas falham, o problema não é de uma sessão (chave inativa,
-    spend cap, Bifrost fora do ar). Levantar aqui faz a causa aparecer no estado do run
+    spend cap, permissão negada, Vertex fora do ar). Levantar aqui faz a causa aparecer no estado do run
     no Prefect, em vez de ficar só em avisos de log.
 
     :param session_count: Sessões ativas consultadas.
@@ -197,21 +190,21 @@ def fail_if_status_unreachable(session_count: int, status_errors: Sequence[str])
     if session_count and len(status_errors) == session_count:
         raise RuntimeError(
             f"Não foi possível consultar o status de nenhuma das {session_count} sessões ativas "
-            f"(chave inativa, spend cap ou Bifrost fora do ar?). Primeira falha: {status_errors[0][:500]}"
+            f"(spend cap, permissão negada ou Vertex fora do ar?). Primeira falha: {status_errors[0][:500]}"
         )
 
 
-def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
+def poll_sessions(client: VertexBatchClient, settings: Settings) -> PollSummary:
     """Consulta cada sessão ativa uma vez e avança as que terminaram.
 
     Erros de consulta de status são tratados como transitórios, a menos que atinjam
     todas as sessões ativas: aí o problema não é de uma sessão (chave inativa, spend
-    cap, Bifrost fora do ar) e o run falha com a primeira mensagem, para aparecer no
+    cap, permissão negada, Vertex fora do ar) e o run falha com a primeira mensagem, para aparecer no
     estado do run no Prefect. Erros ao avançar uma sessão concluída são acumulados e
     levantados juntos no fim, depois de todas as sessões serem tentadas; a sessão
     continua ativa para o próximo run.
 
-    :param client: Cliente do Bifrost.
+    :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
     :returns: Sessões por desfecho.
     :raises RuntimeError: Se o status de nenhuma sessão ativa puder ser consultado, ou
@@ -226,14 +219,14 @@ def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
             errors.append(f"sessão {event.session_id} ({event.phase}): evento ativo sem batch_id")
             continue
         try:
-            batch = retrieve_batch(client, event.batch_id)
+            batch = client.retrieve(event.batch_id)
         except Exception as exc:
             logger.warning("Sessão %s: falha ao consultar status: %s", event.session_id, exc)
             status_errors.append(f"sessão {event.session_id} ({event.phase}): {exc}")
             summary.waiting.append(event.session_id)
             continue
 
-        if batch.status in FAILURE_STATES:
+        if batch.state is BatchState.FAILED:
             try:
                 append_event(
                     settings.nf_batch_jobs_table,
@@ -242,7 +235,7 @@ def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
                         event.phase,
                         event.batch_id,
                         STATE_FAILED,
-                        error=str(getattr(batch, "errors", None) or batch.status),
+                        error=batch.error or "Job do Vertex terminou sem sucesso.",
                     ),
                 )
             except Exception as exc:
@@ -250,15 +243,13 @@ def poll_sessions(client: OpenAI, settings: Settings) -> PollSummary:
                 continue
             summary.failed.append(event.session_id)
             continue
-        if batch.status != SUCCESS_STATE:
-            if batch.status not in IN_PROGRESS_STATES:
-                logger.warning("Sessão %s: status desconhecido %r, aguardando", event.session_id, batch.status)
+        if batch.state is BatchState.IN_PROGRESS:
             summary.waiting.append(event.session_id)
             continue
 
         try:
-            if not batch.output_file_id:
-                raise RuntimeError(f"Batch {event.batch_id} concluído sem output_file_id.")
+            if not batch.output_dir:
+                raise RuntimeError(f"Batch {event.batch_id} concluído sem pasta de saída.")
             if event.phase == PHASE_CLASSIFICATION:
                 advanced = advance_classification(client, settings, event, batch)
                 (summary.advanced if advanced else summary.finished).append(event.session_id)

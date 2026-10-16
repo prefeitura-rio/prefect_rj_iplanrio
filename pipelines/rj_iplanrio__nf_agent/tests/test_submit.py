@@ -7,13 +7,13 @@ import pytest
 
 from pipelines.rj_iplanrio__nf_agent import constants
 from pipelines.rj_iplanrio__nf_agent.utils import submit
-from pipelines.rj_iplanrio__nf_agent.utils.bifrost import SubmittedBatch
 from pipelines.rj_iplanrio__nf_agent.utils.prompts import PromptSet
 from pipelines.rj_iplanrio__nf_agent.utils.settings import Settings
 from pipelines.rj_iplanrio__nf_agent.utils.storage import PdfRef
 from pipelines.rj_iplanrio__nf_agent.utils.tracking import PHASE_CLASSIFICATION, STATE_SUBMITTED
+from pipelines.rj_iplanrio__nf_agent.utils.vertex import SubmittedBatch
 
-SETTINGS = Settings("bifrost-bkt", "out-bkt", "out/path", "p.d.extracao_pagina", "p.d.nf_batch_jobs")
+SETTINGS = Settings("batch-bkt", "out-bkt", "out/path", "p.d.extracao_pagina", "p.d.nf_batch_jobs")
 PROMPTS = PromptSet("v1", "classifica", "v1", "extrai {classification_hint}")
 
 
@@ -50,21 +50,23 @@ def test_resolve_origem_without_origem_or_base_path_raises():
 def env(pdf_bytes):
     """Patches every I/O boundary; each PDF has as many pages as its name's digit."""
     batches = iter(SubmittedBatch(f"batch-{i}", f"file-{i}") for i in range(100))
+    client = MagicMock()
+    # Só entrega o próximo batch falso; não inspeciona os argumentos.
+    client.submit_jsonl.side_effect = lambda data, name: next(batches)  # noqa: ARG005
     with (
         patch.object(submit, "load_prompts", return_value=PROMPTS),
         patch.object(submit, "list_pdfs") as list_pdfs,
         patch.object(submit, "download_bytes", side_effect=lambda uri: pdf_bytes(int(uri[-1]))),
         patch.object(submit, "find_done_pdfs", return_value=set()) as done,
         patch.object(submit, "in_flight_pdf_names", return_value=set()) as in_flight,
-        # Any args accepted: this stub only hands out the next fake batch, it never inspects the call.
-        patch.object(submit, "submit_jsonl", side_effect=lambda *a, **k: next(batches)) as submit_jsonl,  # noqa: ARG005
         patch.object(submit, "append_event") as append_event,
     ):
         yield {
+            "client": client,
             "list_pdfs": list_pdfs,
             "done": done,
             "in_flight": in_flight,
-            "submit_jsonl": submit_jsonl,
+            "submit_jsonl": client.submit_jsonl,
             "append_event": append_event,
         }
 
@@ -78,7 +80,7 @@ def test_skips_done_and_in_flight_and_records_context(env):
     env["list_pdfs"].return_value = refs("a2", "b1", "c3")
     env["done"].return_value = {"b1"}
     env["in_flight"].return_value = {"c3"}
-    summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.pdf_count == 1
     assert summary.page_count == 2  # noqa: PLR2004 -- "a2" has 2 pages per the env fixture's naming convention
     assert len(summary.session_ids) == 1
@@ -95,28 +97,28 @@ def test_skips_done_and_in_flight_and_records_context(env):
 def test_pdf_larger_than_a_batch_is_skipped(env, monkeypatch):
     env["list_pdfs"].return_value = refs("a1", "b1", "c1")
     monkeypatch.setattr(constants, "BATCH_MAX_BYTES", 1)
-    summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.session_ids == []
     assert summary.skipped == ["a1", "b1", "c1"]
 
 
 def test_groups_pdfs_until_the_budget_fills(env, monkeypatch):
     env["list_pdfs"].return_value = refs("a1", "b1", "c1")
-    submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
-    line_bytes = len(env["submit_jsonl"].call_args.args[1]) // 3  # three identical one-page PDFs
+    submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    line_bytes = len(env["submit_jsonl"].call_args.args[0]) // 3  # three identical one-page PDFs
     cost_per_pdf = line_bytes + submit.extraction_overhead_per_row(PROMPTS)
     env["submit_jsonl"].reset_mock()
     monkeypatch.setattr(constants, "BATCH_MAX_BYTES", 2 * cost_per_pdf)
-    summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert len(summary.session_ids) == 2  # noqa: PLR2004 -- budget fits 2 of the 3 PDFs per session
-    assert [call.args[1].count(b"\n") for call in env["submit_jsonl"].call_args_list] == [2, 1]
-    sizes = [len(call.args[1]) for call in env["submit_jsonl"].call_args_list]
+    assert [call.args[0].count(b"\n") for call in env["submit_jsonl"].call_args_list] == [2, 1]
+    sizes = [len(call.args[0]) for call in env["submit_jsonl"].call_args_list]
     assert all(size <= constants.BATCH_MAX_BYTES for size in sizes)
 
 
 def test_max_pages_stops_before_exceeding(env):
     env["list_pdfs"].return_value = refs("a2", "b2", "c1")
-    summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in", max_pages=3))
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in", max_pages=3))
     assert summary.page_count == 2  # noqa: PLR2004 -- "a2" has 2 pages per the env fixture's naming convention
     assert summary.pdf_count == 1
 
@@ -127,7 +129,7 @@ def test_unreadable_pdf_is_skipped(env):
         patch.object(submit, "download_bytes", side_effect=[b"lixo", b"%PDF"]),
         patch.object(submit, "split_pdf_pages", side_effect=[ValueError("PDF ilegível"), ["QUJD"]]),
     ):
-        summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
+        summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.skipped == ["a1"]
     assert summary.pdf_count == 1
 
@@ -141,6 +143,6 @@ def test_download_failure_on_one_pdf_does_not_abort_the_rest(env, pdf_bytes):
         return pdf_bytes(int(uri[-1]))
 
     with patch.object(submit, "download_bytes", side_effect=flaky_download):
-        summary = submit.submit_pending(MagicMock(), SETTINGS, submit.SubmitRequest("gs://in"))
+        summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.skipped == ["b1"]
     assert summary.pdf_count == 2  # noqa: PLR2004 -- a1 e c1 têm 1 página cada, per a convenção de nomes do fixture

@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pipelines.rj_iplanrio__nf_agent.utils import poll
-from pipelines.rj_iplanrio__nf_agent.utils.bifrost import SubmittedBatch
 from pipelines.rj_iplanrio__nf_agent.utils.pdf import PdfPages
 from pipelines.rj_iplanrio__nf_agent.utils.prompts import PromptSet
 from pipelines.rj_iplanrio__nf_agent.utils.settings import Settings
@@ -20,37 +19,45 @@ from pipelines.rj_iplanrio__nf_agent.utils.tracking import (
     JobEvent,
     SessionContext,
 )
+from pipelines.rj_iplanrio__nf_agent.utils.vertex import BatchState, BatchStatus, SubmittedBatch
 
-SETTINGS = Settings("bifrost-bkt", "out-bkt", "out/path", "p.d.extracao_pagina", "p.d.nf_batch_jobs")
+SETTINGS = Settings("batch-bkt", "out-bkt", "out/path", "p.d.extracao_pagina", "p.d.nf_batch_jobs")
 PROMPTS = PromptSet("v8", "classifica", "v9", "extrai {classification_hint}")
 CONTEXT = SessionContext("run-1", "gs://in", "auto-abc", "v8", "v9", (PdfPages("doc", 2),))
 START = JobEvent("s1", PHASE_CLASSIFICATION, "cls-batch", STATE_SUBMITTED, context=CONTEXT)
 
 
-def batch(status: str, output: str | None = "gs://bkt/out/x") -> SimpleNamespace:
-    return SimpleNamespace(status=status, output_file_id=output, errors=None)
+STATES = {
+    "completed": BatchState.SUCCEEDED,
+    "in_progress": BatchState.IN_PROGRESS,
+    "expired": BatchState.FAILED,
+}
+
+
+def batch(status: str, output: str | None = "gs://bkt/out/x") -> BatchStatus:
+    return BatchStatus(STATES[status], output_dir=output)
 
 
 @pytest.fixture
 def io(vertex_row):
     appended: list[JobEvent] = []
+    client = MagicMock()
+    client.submit_jsonl.return_value = SubmittedBatch("ext-batch", "ext-file")
     with (
         patch.object(poll, "active_sessions") as active,
-        patch.object(poll, "retrieve_batch") as retrieve,
-        patch.object(poll, "read_batch_output") as read,
         patch.object(poll, "session_start", return_value=START),
         patch.object(poll, "load_prompts", return_value=PROMPTS) as load_prompts,
-        patch.object(poll, "submit_jsonl", return_value=SubmittedBatch("ext-batch", "ext-file")) as submit_jsonl,
         # Mirrors append_event's signature exactly since it's used as its side_effect.
         patch.object(poll, "append_event", side_effect=lambda table, event: appended.append(event)),  # noqa: ARG005
         patch.object(poll, "write_ndjson", return_value="gs://out-bkt/x.ndjson") as write,
     ):
         yield SimpleNamespace(
+            client=client,
             active=active,
-            retrieve=retrieve,
-            read=read,
+            retrieve=client.retrieve,
+            read=client.iter_output,
             load_prompts=load_prompts,
-            submit_jsonl=submit_jsonl,
+            submit_jsonl=client.submit_jsonl,
             write=write,
             appended=appended,
             row=vertex_row,
@@ -60,7 +67,7 @@ def io(vertex_row):
 def test_waits_on_in_progress_and_tolerates_status_errors(io):
     io.active.return_value = [START, JobEvent("s2", PHASE_CLASSIFICATION, "b2", STATE_SUBMITTED)]
     io.retrieve.side_effect = [batch("in_progress"), RuntimeError("conexão")]
-    summary = poll.poll_sessions(MagicMock(), SETTINGS)
+    summary = poll.poll_sessions(io.client, SETTINGS)
     assert summary.waiting == ["s1", "s2"]
     assert io.appended == []
 
@@ -68,7 +75,7 @@ def test_waits_on_in_progress_and_tolerates_status_errors(io):
 def test_failed_batch_marks_session_failed(io):
     io.active.return_value = [START]
     io.retrieve.return_value = batch("expired")
-    summary = poll.poll_sessions(MagicMock(), SETTINGS)
+    summary = poll.poll_sessions(io.client, SETTINGS)
     assert summary.failed == ["s1"]
     assert io.appended[0].state == STATE_FAILED
 
@@ -81,8 +88,8 @@ def test_failed_write_error_is_aggregated_without_blocking_other_sessions(io):
         patch.object(poll, "append_event", side_effect=RuntimeError("bq indisponível")),
         pytest.raises(RuntimeError, match=r"(?s)s1.*bq indisponível"),
     ):
-        poll.poll_sessions(MagicMock(), SETTINGS)
-    assert [call.args[1] for call in io.retrieve.call_args_list] == ["cls-batch", "b2"]
+        poll.poll_sessions(io.client, SETTINGS)
+    assert [call.args[0] for call in io.retrieve.call_args_list] == ["cls-batch", "b2"]
 
 
 def test_classification_done_submits_extraction_from_echoed_pages(io):
@@ -92,10 +99,10 @@ def test_classification_done_submits_extraction_from_echoed_pages(io):
         io.row("doc:1", '{"categoria": "Nenhuma das Opções"}', page_b64="UDE="),
         io.row("doc:2", '{"categoria": "NFS-e"}', page_b64="UDI="),
     ]
-    summary = poll.poll_sessions(MagicMock(), SETTINGS)
+    summary = poll.poll_sessions(io.client, SETTINGS)
     assert summary.advanced == ["s1"]
     io.load_prompts.assert_called_once_with("v8", "v9")
-    data = io.submit_jsonl.call_args.args[1]
+    data = io.submit_jsonl.call_args.args[0]
     lines = [json.loads(line) for line in data.splitlines()]
     assert [line["custom_id"] for line in lines] == ["doc:2"]
     parts = lines[0]["request"]["contents"][0]["parts"]
@@ -117,7 +124,7 @@ def test_classification_without_nf_finishes_directly(io):
         io.row("doc:1", '{"categoria": "Nenhuma das Opções"}'),
         io.row("doc:2", '{"categoria": "Nenhuma das Opções"}'),
     ]
-    summary = poll.poll_sessions(MagicMock(), SETTINGS)
+    summary = poll.poll_sessions(io.client, SETTINGS)
     assert summary.finished == ["s1"]
     io.submit_jsonl.assert_not_called()
     rows = io.write.call_args.args[2]
@@ -128,8 +135,7 @@ def test_classification_without_nf_finishes_directly(io):
 
 def test_extraction_done_reads_classification_output_from_vertex(io):
     io.active.return_value = [JobEvent("s1", PHASE_EXTRACTION, "ext-batch", STATE_SUBMITTED)]
-    # Mirrors retrieve_batch's signature exactly since it's used as its side_effect.
-    io.retrieve.side_effect = lambda client, batch_id: {  # noqa: ARG005
+    io.retrieve.side_effect = lambda batch_id: {
         "ext-batch": batch("completed", "gs://bkt/out/ext"),
         "cls-batch": batch("completed", "gs://bkt/out/cls"),
     }[batch_id]
@@ -140,7 +146,7 @@ def test_extraction_done_reads_classification_output_from_vertex(io):
         ],
         "gs://bkt/out/ext": [io.row("doc:2", '{"notas_fiscais": [{"numero_nf": "77"}]}')],
     }[uri]
-    summary = poll.poll_sessions(MagicMock(), SETTINGS)
+    summary = poll.poll_sessions(io.client, SETTINGS)
     assert summary.finished == ["s1"]
     rows = io.write.call_args.args[2]
     assert rows[1]["numero_documento"] == "77"
@@ -152,8 +158,8 @@ def test_advance_errors_are_aggregated_after_all_sessions(io):
     other = JobEvent("s2", PHASE_CLASSIFICATION, "b2", STATE_SUBMITTED)
     io.active.return_value = [START, other]
     io.retrieve.return_value = batch("completed", None)
-    with pytest.raises(RuntimeError, match=r"(?s)s1.*output_file_id.*s2"):
-        poll.poll_sessions(MagicMock(), SETTINGS)
+    with pytest.raises(RuntimeError, match=r"(?s)s1.*pasta de saída.*s2"):
+        poll.poll_sessions(io.client, SETTINGS)
 
 
 def test_legacy_session_without_context(io):
@@ -165,7 +171,7 @@ def test_legacy_session_without_context(io):
         io.row("doc:3", '{"categoria": "Nenhuma das Opções"}'),
     ]
     with patch.object(poll, "session_start", return_value=legacy_start):
-        summary = poll.poll_sessions(MagicMock(), SETTINGS)
+        summary = poll.poll_sessions(io.client, SETTINGS)
     assert summary.finished == ["s1"]
     io.load_prompts.assert_called_with(None, None)
     rows = io.write.call_args.args[2]
@@ -177,7 +183,7 @@ def test_status_errors_on_every_active_session_fail_the_run_with_the_first_messa
     io.active.return_value = [START, JobEvent("s2", PHASE_CLASSIFICATION, "b2", STATE_SUBMITTED)]
     io.retrieve.side_effect = RuntimeError("403 virtualkey is inactive")
     with pytest.raises(RuntimeError, match=r"(?s)nenhuma das 2 sessões.*s1.*virtualkey is inactive"):
-        poll.poll_sessions(MagicMock(), SETTINGS)
+        poll.poll_sessions(io.client, SETTINGS)
     assert io.appended == []
 
 
@@ -185,11 +191,11 @@ def test_status_error_on_the_only_active_session_fails_the_run(io):
     io.active.return_value = [START]
     io.retrieve.side_effect = RuntimeError("conexão")
     with pytest.raises(RuntimeError, match="nenhuma das 1 sessões"):
-        poll.poll_sessions(MagicMock(), SETTINGS)
+        poll.poll_sessions(io.client, SETTINGS)
 
 
 def test_no_active_sessions_is_not_a_status_failure(io):
     io.active.return_value = []
-    summary = poll.poll_sessions(MagicMock(), SETTINGS)
+    summary = poll.poll_sessions(io.client, SETTINGS)
     assert summary.waiting == []
     io.retrieve.assert_not_called()

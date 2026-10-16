@@ -1,4 +1,4 @@
-"""Classifica páginas de PDFs e extrai dados de notas fiscais em batch via Bifrost, para a CGM.
+"""Classifica páginas de PDFs e extrai dados de notas fiscais em batch via Vertex AI, para a CGM.
 
 ``acao="submeter"`` (manual): submete todos os PDFs pendentes de ``origem`` — ou,
 se ``origem`` não for informada, da base padrão (``GCS_BUCKET``/``PDFS_BASE_PATH``

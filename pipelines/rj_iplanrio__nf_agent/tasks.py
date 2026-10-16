@@ -3,16 +3,34 @@
 from prefect import task
 from prefect.cache_policies import NO_CACHE
 from prefect.client.orchestration import get_client
-from prefect.runtime import deployment
+from prefect.client.schemas.objects import State, TaskRun
+from prefect.runtime import deployment, task_run
+from prefect.tasks import Task
 
-from .utils.bifrost import build_client
 from .utils.observability import get_logger
 from .utils.poll import PollSummary, poll_sessions
 from .utils.settings import inject_gcp_credentials, load_settings
 from .utils.submit import SubmitRequest, SubmitSummary, resolve_origem, submit_pending
 from .utils.tracking import active_sessions
+from .utils.vertex import FatalBatchError, build_client
 
 logger = get_logger(__name__)
+
+RETRY_DELAYS = [30, 60, 120]
+
+
+def retry_unless_fatal(task: Task, task_run_: TaskRun, state: State) -> bool:  # noqa: ARG001 -- assinatura fixa do Prefect
+    """Decide se o Prefect deve repetir uma task que falhou.
+
+    Cota de gasto e permissão negada não se resolvem repetindo; repetir só adia a mensagem
+    e, na submissão, pode criar jobs a mais.
+
+    :param task: Task que falhou (não usada).
+    :param task_run_: Execução que falhou (não usada).
+    :param state: Estado de falha da task.
+    :returns: ``False`` se o erro for fatal; ``True`` nos demais casos.
+    """
+    return not isinstance(state.result(raise_on_failure=False), FatalBatchError)
 
 
 @task
@@ -21,7 +39,7 @@ def inject_credentials_task() -> None:
     inject_gcp_credentials()
 
 
-@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=[30, 60, 120])
+@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=RETRY_DELAYS, retry_condition_fn=retry_unless_fatal)
 def submit_task(
     origem: str | None, mes_envio: str | None, max_paginas: int | None, versao_processamento: str | None
 ) -> SubmitSummary:
@@ -29,33 +47,39 @@ def submit_task(
 
     Reativar o agendamento e disparar o acompanhamento é feito à parte, por
     ``activate_schedule_task``, que o flow chama mesmo se esta task falhar.
-    Uma falha transitória do Bifrost (ex.: ``no healthy
-    upstream``) no meio da submissão de centenas de PDFs derrubava a task
-    inteira sem deixar rastro em ``nf_batch_jobs`` — as sessões já criadas
-    até ali ficavam registradas, mas o resto nunca era submetido. As
-    tentativas automáticas reexecutam a task inteira, o que é seguro: cada
-    tentativa recalcula os pendentes do zero e ``in_flight_pdf_names``
-    exclui corretamente o que já foi submetido nas tentativas anteriores.
+    Uma falha transitória no meio da submissão de centenas de PDFs derrubava a task
+    inteira sem deixar rastro em ``nf_batch_jobs`` — as sessões já criadas até ali
+    ficavam registradas, mas o resto nunca era submetido. As tentativas automáticas
+    reexecutam a task inteira, o que é seguro: cada tentativa recalcula os pendentes do
+    zero, ``in_flight_pdf_names`` exclui o que já foi submetido, e o ID de cada sessão
+    é derivado do ID da execução (que se mantém entre tentativas), então um job criado
+    sem o evento gravado é reaproveitado, não duplicado. Spend cap e permissão negada
+    não são repetidos.
     """
     settings = load_settings()
     resolved_origem = resolve_origem(origem, mes_envio, settings)
-    request = SubmitRequest(input_uri=resolved_origem, max_pages=max_paginas, processing_version=versao_processamento)
-    return submit_pending(build_client(), settings, request)
+    request = SubmitRequest(
+        input_uri=resolved_origem,
+        max_pages=max_paginas,
+        processing_version=versao_processamento,
+        run_id=task_run.id,
+    )
+    return submit_pending(build_client(settings.batch_bucket), settings, request)
 
 
-@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=[30, 60, 120])
+@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=RETRY_DELAYS, retry_condition_fn=retry_unless_fatal)
 def poll_task() -> PollSummary:
     """Avança as sessões ativas que terminaram.
 
-    As tentativas automáticas em caso de falha transitória (Bifrost/GCS) são
+    As tentativas automáticas em caso de falha transitória (Vertex/GCS) são
     seguras pelo mesmo motivo de ``submit_task``: cada tentativa reconsulta
     ``active_sessions`` do zero, sem depender de estado da tentativa anterior.
     """
     settings = load_settings()
-    return poll_sessions(build_client(), settings)
+    return poll_sessions(build_client(settings.batch_bucket), settings)
 
 
-@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=[30, 60, 120])
+@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=RETRY_DELAYS)
 def activate_schedule_task() -> None:
     """Reativa o agendamento e dispara um acompanhamento se houver sessão ativa.
 
@@ -78,7 +102,7 @@ def activate_schedule_task() -> None:
         client.create_flow_run_from_deployment(deployment.id, parameters={"acao": "acompanhar"})
 
 
-@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=[30, 60, 120])
+@task(cache_policy=NO_CACHE, retries=3, retry_delay_seconds=RETRY_DELAYS)
 def pause_schedule_if_idle_task() -> None:
     """Pausa o agendamento do próprio deployment se não sobrar sessão ativa.
 

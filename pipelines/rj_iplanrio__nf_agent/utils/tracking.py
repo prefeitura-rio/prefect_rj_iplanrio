@@ -76,7 +76,7 @@ def event_from_row(row: Row) -> JobEvent:
     return JobEvent(
         session_id=row["session_id"],
         phase=row["phase"],
-        batch_id=row["bifrost_batch_id"],
+        batch_id=row["bifrost_batch_id"],  # nome histórico da coluna: guarda o ID do job (novo ou do gateway antigo)
         state=row["state"],
         input_file_id=row.get("input_file_id"),
         row_count=row.get("row_count"),

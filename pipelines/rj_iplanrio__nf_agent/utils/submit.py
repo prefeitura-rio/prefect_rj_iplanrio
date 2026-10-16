@@ -4,12 +4,10 @@ import dataclasses
 import json
 import re
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from openai import OpenAI
-
 from .. import constants
-from .bifrost import submit_jsonl
 from .categories import PAGE_CATEGORIES
 from .llm_requests import encode_custom_id, jsonl_line
 from .observability import get_logger
@@ -20,6 +18,7 @@ from .settings import Settings
 from .storage import download_bytes, list_pdfs
 from .tracking import PHASE_CLASSIFICATION, STATE_SUBMITTED, JobEvent, SessionContext, append_event, in_flight_pdf_names
 from .versioning import compute_processing_version
+from .vertex import VertexBatchClient
 
 logger = get_logger(__name__)
 
@@ -31,6 +30,7 @@ class SubmitRequest:
     input_uri: str | None
     max_pages: int | None = None
     processing_version: str | None = None
+    run_id: str | None = None
 
 
 # Igual ao nome das subpastas já existentes no bucket (``mes_envio=2021-11-01``):
@@ -102,19 +102,33 @@ def extraction_overhead_per_row(prompts: PromptSet) -> int:
     return max(0, len(extraction.encode("utf-8")) - len(classification.encode("utf-8")))
 
 
-def submit_session(client: OpenAI, settings: Settings, draft: SessionDraft, base_context: SessionContext) -> str:
+def session_id_for(run_id: str, pdfs: Sequence[PdfPages]) -> str:
+    """Deriva o ID da sessão do run e dos PDFs, para que repetir a submissão o reproduza.
+
+    Se um job foi criado mas o evento não chegou a ser gravado, a nova tentativa monta a
+    mesma sessão, chega ao mesmo ID e reaproveita o job em vez de criar (e pagar) outro.
+
+    :param run_id: ID do run de submissão (estável entre as tentativas da task).
+    :param pdfs: PDFs da sessão, na ordem em que entram.
+    :returns: UUID determinístico.
+    """
+    key = "|".join([run_id, *(f"{pdf.name}:{pdf.pages}" for pdf in pdfs)])
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, key))
+
+
+def submit_session(
+    client: VertexBatchClient, settings: Settings, draft: SessionDraft, base_context: SessionContext
+) -> str:
     """Cria o batch de classificação de uma sessão e grava o evento com o contexto.
 
-    :param client: Cliente do Bifrost.
+    :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
     :param draft: Linhas e PDFs da sessão.
     :param base_context: Contexto comum à submissão (sem a lista de PDFs).
     :returns: ID da sessão criada.
     """
-    session_id = str(uuid.uuid4())
-    submitted = submit_jsonl(
-        client, b"".join(draft.lines), f"nf-classification-{session_id}.jsonl", settings.bifrost_bucket
-    )
+    session_id = session_id_for(base_context.run_id, draft.pdfs)
+    submitted = client.submit_jsonl(b"".join(draft.lines), f"nf-classification-{session_id}")
     append_event(
         settings.nf_batch_jobs_table,
         JobEvent(
@@ -131,7 +145,7 @@ def submit_session(client: OpenAI, settings: Settings, draft: SessionDraft, base
     return session_id
 
 
-def submit_pending(client: OpenAI, settings: Settings, request: SubmitRequest) -> SubmitSummary:
+def submit_pending(client: VertexBatchClient, settings: Settings, request: SubmitRequest) -> SubmitSummary:
     """Submete todos os PDFs pendentes da origem, em quantas sessões forem necessárias.
 
     Pendente = não processado na mesma ``versao_processamento`` e fora de sessões ativas.
@@ -139,9 +153,9 @@ def submit_pending(client: OpenAI, settings: Settings, request: SubmitRequest) -
     PDF que falhe ao baixar ou ler é pulado (fica em ``skipped``) e não interrompe
     os demais — com centenas de PDFs, uma falha pontual de rede é esperada.
 
-    :param client: Cliente do Bifrost.
+    :param client: Cliente do Vertex.
     :param settings: Configuração de runtime.
-    :param request: Origem, limite de páginas e versão.
+    :param request: Origem, limite de páginas, versão e ID do run.
     :returns: Resumo da submissão.
     :raises ValueError: Se a origem não for informada ou ``max_pages`` não for positivo.
     """
@@ -166,7 +180,7 @@ def submit_pending(client: OpenAI, settings: Settings, request: SubmitRequest) -
         len(pending),
     )
 
-    run_id = str(uuid.uuid4())
+    run_id = request.run_id or str(uuid.uuid4())
     base_context = SessionContext(
         run_id=run_id,
         input_uri=request.input_uri,

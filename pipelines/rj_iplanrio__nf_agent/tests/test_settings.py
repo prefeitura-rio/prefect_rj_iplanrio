@@ -8,7 +8,7 @@ import pytest
 from pipelines.rj_iplanrio__nf_agent.utils import settings
 
 ENV = {
-    "BIFROST_GCS_BUCKET": "bifrost-bucket",
+    "VERTEX_BATCH_BUCKET": "batch-bucket",
     "GCS_BUCKET": "out-bucket",
     "GCS_OUTPUT_BASE_PATH": "staging/extracao_pagina",
     "BQ_EXTRACAO_PAGINA_TABLE": "p.d.extracao_pagina",
@@ -20,10 +20,25 @@ def test_load_settings_reads_env(monkeypatch):
     for key, value in ENV.items():
         monkeypatch.setenv(key, value)
     loaded = settings.load_settings()
-    assert loaded.bifrost_bucket == "bifrost-bucket"
+    assert loaded.batch_bucket == "batch-bucket"
     assert loaded.gcs_bucket == "out-bucket"
     assert loaded.nf_batch_jobs_table == "p.d.nf_batch_jobs"
     assert loaded.pdfs_base_path is None
+
+
+def test_load_settings_accepts_the_old_bifrost_bucket_variable(monkeypatch):
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv("VERTEX_BATCH_BUCKET")
+    monkeypatch.setenv("BIFROST_GCS_BUCKET", "old-bucket")
+    assert settings.load_settings().batch_bucket == "old-bucket"
+
+
+def test_load_settings_prefers_the_new_bucket_variable(monkeypatch):
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv("BIFROST_GCS_BUCKET", "old-bucket")
+    assert settings.load_settings().batch_bucket == "batch-bucket"
 
 
 def test_load_settings_reads_optional_pdfs_base_path(monkeypatch):
@@ -34,9 +49,11 @@ def test_load_settings_reads_optional_pdfs_base_path(monkeypatch):
 
 
 def test_load_settings_lists_every_missing_var(monkeypatch):
-    for key in ENV:
+    for key in (*ENV, "BIFROST_GCS_BUCKET"):
         monkeypatch.delenv(key, raising=False)
-    with pytest.raises(RuntimeError, match=r"BIFROST_GCS_BUCKET.*NF_BATCH_JOBS_TABLE"):
+    with pytest.raises(
+        RuntimeError, match=r"BQ_EXTRACAO_PAGINA_TABLE.*NF_BATCH_JOBS_TABLE.*VERTEX_BATCH_BUCKET ou BIFROST_GCS_BUCKET"
+    ):
         settings.load_settings()
 
 
