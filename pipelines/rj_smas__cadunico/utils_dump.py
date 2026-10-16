@@ -21,13 +21,14 @@ from pipelines.rj_smas__cadunico.utils_logging import (
     log_partition_comparison,
     log_ingestion_summary,
 )
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+from iplanrio.pipelines_utils.bd import _delete_prod_dataset
 from iplanrio.pipelines_utils.gcs import get_gcs_client
 from iplanrio.pipelines_utils.logging import log
 from iplanrio.pipelines_utils.gcs import (
     list_blobs_with_prefix,
     parse_blobs_to_partition_list,
 )
+from iplanrio.pipelines_utils.pandas import dump_header_to_file
 
 
 def parse_partition_from_filename(blob_name: str) -> str:
@@ -64,6 +65,7 @@ def create_table_if_not_exists(
     dataset_id: str,
     table_id: str,
     biglake_table: bool = True,
+    bucket_name: str | None = None,
 ) -> bool:
     """
     Create table using BD+ .
@@ -73,10 +75,14 @@ def create_table_if_not_exists(
         dataset_id (str): The dataset ID.
         table_id (str): The table ID.
         biglake_table (bool): Whether to create a BigLake table.
+        bucket_name (str | None): Explicit GCS staging bucket.
     """
 
-    tb = bd.Table(dataset_id=dataset_id, table_id=table_id)
-    st = bd.Storage(dataset_id=dataset_id, table_id=table_id)
+    if not isinstance(bucket_name, str) or not bucket_name.strip():
+        raise ValueError("bucket_name deve ser informado explicitamente")
+
+    tb = bd.Table(dataset_id=dataset_id, table_id=table_id, bucket_name=bucket_name)
+    st = bd.Storage(dataset_id=dataset_id, table_id=table_id, bucket_name=bucket_name)
 
     table_exists = tb.table_exists(mode="staging")
 
@@ -116,12 +122,175 @@ def create_table_if_not_exists(
     return table_exists
 
 
+def create_table_and_upload_to_gcs_with_bucket(
+    data_path: str | Path,
+    dataset_id: str,
+    table_id: str,
+    dump_mode: str,
+    bucket_name: str,
+    biglake_table: bool = True,
+    source_format: str = "csv",
+    only_staging_dataset: bool = False,
+) -> str | Path:
+    """
+    Create table using BD+ and upload to GCS in an explicit bucket.
+
+    Twin of iplanrio.pipelines_utils.bd.create_table_and_upload_to_gcs with two
+    deltas: bucket_name is passed to the bd.Table/bd.Storage constructors, and
+    the upload uses bd.Storage.upload instead of bd.Table.append (append drops
+    bucket_name internally).
+    """
+    if not isinstance(bucket_name, str) or not bucket_name.strip():
+        raise ValueError("bucket_name deve ser informado explicitamente")
+
+    bd_version = bd.__version__
+    log(f"USING BASEDOSDADOS {bd_version}")
+    tb = bd.Table(dataset_id=dataset_id, table_id=table_id, bucket_name=bucket_name)
+    log(f"Dataset:{dataset_id} Table:{table_id} ")
+    table_staging = f"{tb.table_full_name['staging']}"
+    log(f"table_staging: {table_staging}")
+
+    st = bd.Storage(dataset_id=dataset_id, table_id=table_id, bucket_name=bucket_name)
+    storage_path = f"{st.bucket_name}.staging.{dataset_id}.{table_id}"
+    log(f"storage_path: {storage_path}")
+    storage_path_link = (
+        f"https://console.cloud.google.com/storage/browser/{st.bucket_name}"
+        f"/staging/{dataset_id}/{table_id}"
+    )
+    log(f"storage_path_link: {storage_path_link}")
+
+    # prod datasets is public if the project is datario. staging are private im both projects
+    dataset_is_public = tb.client["bigquery_prod"].project == "datario"
+    log(f"dataset_is_public: {dataset_is_public}")
+
+    #####################################
+    #
+    # MANAGEMENT OF TABLE CREATION
+    #
+    #####################################
+    log("STARTING TABLE CREATION MANAGEMENT")
+    if dump_mode == "append":
+        if tb.table_exists(mode="staging"):
+            log(
+                f"MODE APPEND: Table ALREADY EXISTS:"
+                f"\n{table_staging}"
+                f"\n{storage_path_link}"
+            )
+        else:
+            # the header is needed to create a table when doesn't exist
+            log("MODE APPEND: Table DOESN'T EXISTS\nStart to CREATE HEADER file")
+            header_path = dump_header_to_file(
+                data_path=data_path, data_type=source_format
+            )
+            log("MODE APPEND: Created HEADER file:\n" f"{header_path}")
+
+            tb.create(
+                path=header_path,
+                if_storage_data_exists="replace",
+                if_table_exists="replace",
+                biglake_table=biglake_table,
+                dataset_is_public=dataset_is_public,
+                source_format=source_format,
+                set_biglake_connection_permissions=False,
+            )
+
+            log(
+                "MODE APPEND: Sucessfully CREATED A NEW TABLE:\n"
+                f"{table_staging}\n"
+                f"{storage_path_link}"
+            )
+
+            st.delete_table(
+                mode="staging", bucket_name=st.bucket_name, not_found_ok=True
+            )
+            log(
+                "MODE APPEND: Sucessfully REMOVED HEADER DATA from Storage:\n"
+                f"{storage_path}\n"
+                f"{storage_path_link}"
+            )
+    elif dump_mode == "overwrite":
+        if tb.table_exists(mode="staging"):
+            log(
+                "MODE OVERWRITE: Table ALREADY EXISTS, DELETING OLD DATA!\n"
+                f"{storage_path}\n"
+                f"{storage_path_link}"
+            )
+            st.delete_table(
+                mode="staging", bucket_name=st.bucket_name, not_found_ok=True
+            )
+            log(
+                "MODE OVERWRITE: Sucessfully DELETED OLD DATA from Storage:\n"
+                f"{storage_path}\n"
+                f"{storage_path_link}"
+            )
+            tb.delete(mode="staging")
+            log(
+                "MODE OVERWRITE: Sucessfully DELETED TABLE:\n"
+                f"{table_staging}\n"
+            )
+
+        # the header is needed to create a table when doesn't exist
+        # in overwrite mode the header is always created
+        log("MODE OVERWRITE: Table DOESN'T EXISTS\nStart to CREATE HEADER file")
+        header_path = dump_header_to_file(data_path=data_path, data_type=source_format)
+        log("MODE OVERWRITE: Created HEADER file:\n" f"{header_path}")
+
+        tb.create(
+            path=header_path,
+            if_storage_data_exists="replace",
+            if_table_exists="replace",
+            biglake_table=biglake_table,
+            dataset_is_public=dataset_is_public,
+            source_format=source_format,
+            set_biglake_connection_permissions=False,
+        )
+
+        log(
+            "MODE OVERWRITE: Sucessfully CREATED TABLE\n"
+            f"{table_staging}\n"
+            f"{storage_path_link}"
+        )
+
+        st.delete_table(mode="staging", bucket_name=st.bucket_name, not_found_ok=True)
+        log(
+            f"MODE OVERWRITE: Sucessfully REMOVED HEADER DATA from Storage\n:"
+            f"{storage_path}\n"
+            f"{storage_path_link}"
+        )
+
+    if only_staging_dataset:
+        _delete_prod_dataset(
+            only_staging_dataset=only_staging_dataset, dataset_id=dataset_id
+        )
+    #####################################
+    #
+    # Uploads a bunch of files using BD+
+    #
+    #####################################
+
+    log("STARTING UPLOAD TO GCS")
+    if tb.table_exists(mode="staging"):
+        # the name of the files need to be the same or the data doesn't get overwritten
+        st.upload(path=data_path, mode="staging", partitions=None, if_exists="replace")
+
+        log(
+            f"STEP UPLOAD: Successfully uploaded {data_path} to Storage:\n"
+            f"{storage_path}\n"
+            f"{storage_path_link}"
+        )
+    else:
+        log("STEP UPLOAD: Table does not exist in STAGING, need to create first")
+
+    return data_path
+
+
 def append_data_to_storage(
     data_path: str | Path,
     dataset_id: str,
     table_id: str,
     dump_mode: str,
     biglake_table: bool = True,
+    bucket_name: str | None = None,
 ) -> str:
     """
     Upload to GCS.
@@ -132,19 +301,27 @@ def append_data_to_storage(
         table_id (str): The table ID.
         dump_mode (str): The dump mode.
         biglake_table (bool): Whether to create a BigLake table.
+        bucket_name (str | None): Explicit GCS staging bucket.
     """
-    create_table_and_upload_to_gcs(
+    create_table_and_upload_to_gcs_with_bucket(
         data_path=data_path,
         dataset_id=dataset_id,
         table_id=table_id,
         dump_mode=dump_mode,
+        bucket_name=bucket_name,
         biglake_table=biglake_table,
     )
 
     return dataset_id
 
 
-def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id: str) -> None:
+def ingest_file_sync(
+    blob_name: str,
+    bucket_name: str,
+    dataset_id: str,
+    table_id: str,
+    staging_bucket: str | None = None,
+) -> None:
     """
     Processa um arquivo ZIP: baixa, extrai, divide em chunks, converte para CSV e faz upload.
 
@@ -153,6 +330,7 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
         bucket_name (str): Nome do bucket GCS.
         dataset_id (str): ID do dataset de destino.
         table_id (str): ID da tabela de destino.
+        staging_bucket (str | None): Bucket GCS de staging para escrita.
     """
     # Inicializar logger estruturado para este arquivo
     partition = parse_partition_from_filename(blob_name)
@@ -277,7 +455,9 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
 
         # ETAPA 7: Criação de tabela
         file_logger.start_step("Criação de tabela se necessário", 7, 8)
-        create_table_if_not_exists(dataset_id=dataset_id, table_id=table_id)
+        create_table_if_not_exists(
+            dataset_id=dataset_id, table_id=table_id, bucket_name=staging_bucket
+        )
         file_logger.complete_step(True)
 
         # ETAPA 8: Upload para BigQuery/GCS
@@ -287,6 +467,7 @@ def ingest_file_sync(blob_name: str, bucket_name: str, dataset_id: str, table_id
             dataset_id=dataset_id,
             table_id=table_id,
             dump_mode="append",
+            bucket_name=staging_bucket,
         )
         file_logger.complete_step(True)
 
@@ -407,6 +588,7 @@ def ingest_files(
     dataset_id: str,
     table_id: str,
     max_concurrent: int = 3,
+    staging_bucket: str | None = None,
 ) -> None:
     """
     Processa múltiplos arquivos ZIP de forma assíncrona com controle de concorrência.
@@ -417,6 +599,7 @@ def ingest_files(
         dataset_id (str): ID do dataset de destino.
         table_id (str): ID da tabela de destino.
         max_concurrent (int): Número máximo de downloads/processamentos simultâneos.
+        staging_bucket (str | None): Bucket GCS de staging para escrita.
     """
     if not files_to_ingest:
         log("❌ Nenhum arquivo para ingerir", level="info")
@@ -445,6 +628,7 @@ def ingest_files(
                         bucket_name,
                         dataset_id,
                         table_id,
+                        staging_bucket,
                     )
                 except Exception as e:
                     success = False
