@@ -31,6 +31,7 @@ SCOPES = ("https://www.googleapis.com/auth/cloud-platform",)
 STORAGE_PREFIX = "vertex-batch-io"
 SPEND_CAP_MARKER = "spend cap"
 FORBIDDEN = 403
+NOT_FOUND = 404
 
 
 class BatchState(StrEnum):
@@ -211,6 +212,8 @@ class VertexBatchClient:
         try:
             job = self.genai.batches.get(name=resource_name(batch_id))
         except genai_errors.APIError as exc:
+            if exc.code == NOT_FOUND:
+                return BatchStatus(BatchState.FAILED, error="Job não encontrado no Vertex (expirado ou removido).")
             raise_for_fatal(exc)
             raise
         raw_state = job.state.name if job.state else "JOB_STATE_UNSPECIFIED"
@@ -222,6 +225,18 @@ class VertexBatchClient:
             failed=stats.failed_count if stats else None,
             error=job.error.message if job.error and job.error.message else None,
         )
+
+    def cancel(self, batch_id: str) -> None:
+        """Cancela um job que ainda não terminou.
+
+        :param batch_id: ID guardado no evento (formato novo ou o antigo do gateway).
+        :raises FatalBatchError: Se a permissão impedir o cancelamento.
+        """
+        try:
+            self.genai.batches.cancel(name=resource_name(batch_id))
+        except genai_errors.APIError as exc:
+            raise_for_fatal(exc)
+            raise
 
     def iter_output(self, output_dir: str | None) -> Iterator[dict]:
         """Lê as linhas de resultado de um batch concluído, uma a uma.

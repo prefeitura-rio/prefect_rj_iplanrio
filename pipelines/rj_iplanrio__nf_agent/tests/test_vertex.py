@@ -190,6 +190,28 @@ def test_retrieve_turns_inactive_or_denied_access_into_a_fatal_error():
         client.retrieve(JOB_NAME)
 
 
+def test_retrieve_treats_a_missing_job_as_failed_so_the_session_can_be_closed():
+    client = make_client()
+    client.genai.batches.get.side_effect = api_error(404, "job not found")
+    status = client.retrieve(JOB_NAME)
+    assert status.state is vertex.BatchState.FAILED
+    assert "não encontrado" in status.error
+
+
+def test_cancel_uses_the_resource_name_even_for_the_old_gateway_id():
+    client = make_client()
+    old = base64.urlsafe_b64encode(JOB_NAME.encode()).decode().rstrip("=")
+    client.cancel(old)
+    client.genai.batches.cancel.assert_called_once_with(name=JOB_NAME)
+
+
+def test_cancel_turns_denied_access_into_a_fatal_error():
+    client = make_client()
+    client.genai.batches.cancel.side_effect = api_error(403, "caller does not have permission")
+    with pytest.raises(vertex.FatalBatchError):
+        client.cancel(JOB_NAME)
+
+
 # ---------- saída
 
 
