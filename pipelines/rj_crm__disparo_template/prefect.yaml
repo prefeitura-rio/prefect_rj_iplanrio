@@ -136,7 +136,7 @@ deployments:
           query_file: queries/cvl_pesquisa_1746.sql
 
       # Divida ativa cobrança
-      - cron: "30 13 * * *"
+      - cron: "00 13 * * *"
         timezone: America/Sao_Paulo
         active: false
         slug: daily-pgm-divida-ativa-prod
@@ -496,7 +496,7 @@ deployments:
   # decide qual HSM enviar por linha)
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-cvl-pesquisa1746-unificado
         flow_run_name: cvl-pesquisa1746
         parameters:
