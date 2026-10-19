@@ -24,7 +24,7 @@ def test_load_settings_reads_env(monkeypatch):
     assert loaded.batch_bucket == "batch-bucket"
     assert loaded.gcs_bucket == "out-bucket"
     assert loaded.nf_batch_jobs_table == "p.d.nf_batch_jobs"
-    assert loaded.pdfs_base_path is None
+    assert loaded.pdfs_view_table == constants.PDFS_VIEW_TABLE
 
 
 def test_load_settings_accepts_the_old_bifrost_bucket_variable(monkeypatch):
@@ -42,11 +42,11 @@ def test_load_settings_prefers_the_new_bucket_variable(monkeypatch):
     assert settings.load_settings().batch_bucket == "batch-bucket"
 
 
-def test_load_settings_reads_optional_pdfs_base_path(monkeypatch):
+def test_load_settings_reads_optional_pdfs_view_table(monkeypatch):
     for key, value in ENV.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.setenv("PDFS_BASE_PATH", "staging/pdfs")
-    assert settings.load_settings().pdfs_base_path == "staging/pdfs"
+    monkeypatch.setenv("PDFS_VIEW_TABLE", "p.d.minha_view")
+    assert settings.load_settings().pdfs_view_table == "p.d.minha_view"
 
 
 def test_load_settings_lists_every_missing_var(monkeypatch):

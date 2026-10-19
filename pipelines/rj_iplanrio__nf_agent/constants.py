@@ -1,5 +1,9 @@
 """Constantes do modelo e do Vertex AI compartilhadas entre os módulos da pipeline."""
 
+# View com um registro por arquivo baixado: nome, último mês de envio e URI do PDF (esteja onde estiver no bucket).
+PDFS_VIEW_TABLE = "rj-agent-cgm-triagem-nf.brutos_osinfo_mongo.vw_files_pdfs_download"
+VIEW_ORIGIN_PREFIX = "view://"
+
 # Os batches anteriores rodaram em ``global``; o SDK mapeia o nome para publishers/google/models/<nome>.
 VERTEX_LOCATION = "global"
 MODEL_NAME = "gemini-3.1-flash-lite"

@@ -1,8 +1,8 @@
 """Classifica páginas de PDFs e extrai dados de notas fiscais em batch via Vertex AI, para a CGM.
 
-``acao="submeter"`` (manual): submete todos os PDFs pendentes de ``origem`` — ou,
-se ``origem`` não for informada, da base padrão (``GCS_BUCKET``/``PDFS_BASE_PATH``
-do Infisical), opcionalmente restrita a ``mes_envio=<data>/`` via ``mes_envio``.
+``acao="submeter"`` (manual): submete os PDFs pendentes. Sem ``origem``, lê da view de download
+os PDFs baixados do mês ``mes_envio`` (onde quer que estejam no bucket); com ``origem``, lista
+essa pasta ``gs://``.
 ``acao="acompanhar"`` (padrão, agendado em prod): avança as sessões em andamento.
 """
 

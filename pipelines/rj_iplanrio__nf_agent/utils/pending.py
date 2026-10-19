@@ -5,8 +5,24 @@ from collections.abc import Sequence
 from google.cloud import bigquery
 
 from .bq import run_query
+from .storage import PdfRef
 
 CHUNK_SIZE = 10_000
+
+
+def list_downloaded_pdfs(view_table: str, mes_envio: str) -> list[PdfRef]:
+    """Lista os PDFs já baixados de um mês de envio, onde quer que estejam no bucket.
+
+    A view traz um registro por arquivo, com o último mês em que ele foi enviado e a URI da
+    cópia preferida (a da pasta ``mes_envio=``, se houver, ou a mais recente).
+
+    :param view_table: View de PDFs baixados, totalmente qualificada.
+    :param mes_envio: Mês de envio, ``YYYY-MM-DD``.
+    :returns: PDFs ordenados por nome.
+    """
+    params = [bigquery.ScalarQueryParameter("mes_envio", "DATE", mes_envio)]
+    rows = run_query(__file__, "downloaded_pdfs", view_table, params)
+    return [PdfRef(name=row["name"], uri=row["uri"]) for row in rows]
 
 
 def find_done_pdfs(extracao_pagina_table: str, names: Sequence[str], processing_version: str) -> set[str]:

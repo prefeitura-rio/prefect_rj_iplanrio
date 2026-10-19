@@ -22,28 +22,25 @@ def refs(*names: str) -> list[PdfRef]:
     return [PdfRef(name, f"gs://in/{name}") for name in names]
 
 
+VIEW = "p.d.vw_files_pdfs_download"
+
+
 def test_resolve_origem_explicit_wins_over_mes_envio():
     assert submit.resolve_origem("gs://custom/path", "2021-11-01", SETTINGS) == "gs://custom/path"
 
 
-def test_resolve_origem_defaults_to_base_path_env():
-    with_base = replace(SETTINGS, pdfs_base_path="staging/pdfs")
-    assert submit.resolve_origem(None, None, with_base) == "gs://out-bkt/staging/pdfs"
-
-
-def test_resolve_origem_appends_mes_envio_subfolder():
-    with_base = replace(SETTINGS, pdfs_base_path="staging/pdfs")
-    assert submit.resolve_origem(None, "2021-11-01", with_base) == "gs://out-bkt/staging/pdfs/mes_envio=2021-11-01"
+def test_resolve_origem_reads_the_month_from_the_download_view():
+    with_view = replace(SETTINGS, pdfs_view_table=VIEW)
+    assert submit.resolve_origem(None, "2021-11-01", with_view) == f"view://{VIEW}?mes_envio=2021-11-01"
 
 
 def test_resolve_origem_rejects_bad_mes_envio_format():
-    with_base = replace(SETTINGS, pdfs_base_path="staging/pdfs")
     with pytest.raises(ValueError, match="mes_envio"):
-        submit.resolve_origem(None, "01-11-2021", with_base)
+        submit.resolve_origem(None, "01-11-2021", SETTINGS)
 
 
-def test_resolve_origem_without_origem_or_base_path_raises():
-    with pytest.raises(ValueError, match="PDFS_BASE_PATH"):
+def test_resolve_origem_without_origem_or_month_raises():
+    with pytest.raises(ValueError, match="mes_envio"):
         submit.resolve_origem(None, None, SETTINGS)
 
 
@@ -58,6 +55,7 @@ def env(pdf_bytes):
     with (
         patch.object(submit, "load_prompts", return_value=PROMPTS),
         patch.object(submit, "list_pdfs") as list_pdfs,
+        patch.object(submit, "list_downloaded_pdfs") as list_downloaded,
         patch.object(submit, "download_bytes", side_effect=lambda uri: pdf_bytes(int(uri[-1]))),
         patch.object(submit, "find_done_pdfs", return_value=set()) as done,
         patch.object(submit, "in_flight_pdf_names", return_value=set()) as in_flight,
@@ -67,6 +65,7 @@ def env(pdf_bytes):
         yield {
             "client": client,
             "list_pdfs": list_pdfs,
+            "list_downloaded": list_downloaded,
             "done": done,
             "in_flight": in_flight,
             "submit_jsonl": client.submit_jsonl,
@@ -222,3 +221,30 @@ def test_retried_submission_with_the_same_run_id_reuses_the_session_id(env):
     first = submit.submit_pending(env["client"], SETTINGS, request)
     second = submit.submit_pending(env["client"], SETTINGS, request)
     assert first.session_ids == second.session_ids
+
+
+def test_view_origin_reads_downloaded_pdfs_wherever_they_are_and_not_the_folder(env):
+    env["list_downloaded"].return_value = [
+        PdfRef("a1", "gs://in/raiz/a1"),
+        PdfRef("b1", "gs://in/mes_envio=2022-04-01/b1"),
+    ]
+    origin = f"view://{SETTINGS.pdfs_view_table}?mes_envio=2022-04-01"
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest(origin))
+    env["list_downloaded"].assert_called_once_with(SETTINGS.pdfs_view_table, "2022-04-01")
+    env["list_pdfs"].assert_not_called()
+    assert summary.pdf_count == 2  # noqa: PLR2004 -- a1 e b1 têm 1 página cada
+
+
+def test_explicit_gs_origin_still_lists_the_folder(env):
+    env["list_pdfs"].return_value = refs("a1")
+    submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    env["list_pdfs"].assert_called_once_with("gs://in")
+    env["list_downloaded"].assert_not_called()
+
+
+def test_pdf_with_a_name_too_long_for_custom_id_is_skipped_without_aborting(env):
+    long_name = "x" * 100
+    env["list_pdfs"].return_value = [PdfRef(long_name, f"gs://in/{long_name}1"), PdfRef("b1", "gs://in/b1")]
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    assert summary.skipped == [long_name]
+    assert summary.pdf_count == 1

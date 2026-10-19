@@ -12,7 +12,7 @@ from .categories import PAGE_CATEGORIES
 from .llm_requests import encode_custom_id, file_part, jsonl_line
 from .observability import get_logger
 from .pdf import PdfPages, split_pdf_page_bytes
-from .pending import find_done_pdfs
+from .pending import find_done_pdfs, list_downloaded_pdfs
 from .prompts import PromptSet, extraction_prompt_with_hint, load_prompts
 from .settings import Settings
 from .storage import PdfRef, download_bytes, list_pdfs
@@ -47,31 +47,26 @@ MES_ENVIO_PATTERN = re.compile(r"\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])")
 
 
 def resolve_origem(origem: str | None, mes_envio: str | None, settings: Settings) -> str:
-    """Resolve a origem da submissão, com ``mes_envio`` opcional sobre a base padrão.
+    """Resolve de onde vêm os PDFs da submissão.
 
-    Se ``origem`` for informada, é usada como está e ``mes_envio`` é ignorado.
-    Caso contrário, monta ``gs://{GCS_BUCKET}/{PDFS_BASE_PATH}`` a partir do
-    ambiente e, se ``mes_envio`` for informado, restringe para a subpasta
-    ``mes_envio=<data>/`` dentro dela.
+    Com ``origem`` explícita (``gs://...``), lista essa pasta do GCS. Sem ela, lê os PDFs
+    baixados do mês ``mes_envio`` na view de download, onde quer que estejam no bucket:
+    devolve ``view://<view>?mes_envio=<data>``.
 
     :param origem: URI completa (``gs://...``) informada explicitamente, ou ``None``.
-    :param mes_envio: Data ``YYYY-MM-DD`` selecionando a subpasta ``mes_envio=<data>``
-        da base padrão, ou ``None`` para a base inteira.
-    :param settings: Configuração de runtime (``gcs_bucket``/``pdfs_base_path``).
-    :returns: Origem final para :func:`storage.list_pdfs`.
-    :raises ValueError: Se nem ``origem`` nem ``PDFS_BASE_PATH`` estiverem
-        disponíveis, ou se ``mes_envio`` não estiver no formato ``YYYY-MM-DD``.
+    :param mes_envio: Data ``YYYY-MM-DD`` do mês de envio na view; ignorada se houver ``origem``.
+    :param settings: Configuração de runtime (``pdfs_view_table``).
+    :returns: Origem final, para :func:`find_pending`.
+    :raises ValueError: Se não houver ``origem`` nem ``mes_envio``, ou se ``mes_envio`` não
+        estiver no formato ``YYYY-MM-DD``.
     """
     if origem:
         return origem
-    if not settings.pdfs_base_path:
-        raise ValueError("Informe 'origem' ou configure PDFS_BASE_PATH para usar a base padrão.")
-    base = f"gs://{settings.gcs_bucket}/{settings.pdfs_base_path}"
     if mes_envio is None:
-        return base
+        raise ValueError("Informe 'mes_envio' (lê os PDFs baixados da view) ou 'origem' (uma pasta gs://).")
     if not MES_ENVIO_PATTERN.fullmatch(mes_envio):
         raise ValueError(f"mes_envio inválido: {mes_envio!r}. Use o formato YYYY-MM-DD.")
-    return f"{base}/mes_envio={mes_envio}"
+    return f"{constants.VIEW_ORIGIN_PREFIX}{settings.pdfs_view_table}?mes_envio={mes_envio}"
 
 
 @dataclass(frozen=True)
@@ -141,10 +136,14 @@ def prepare_pdf(client: VertexBatchClient, ref: PdfRef, prompt: str, overhead: i
     except Exception as exc:  # um PDF ruim (baixar ou ler) nunca pode derrubar o lote inteiro
         logger.warning("PDF %s ignorado: falha ao baixar/ler: %s", ref.name, exc)
         return None
-    lines = [
-        jsonl_line(encode_custom_id(ref.name, number), prompt, file_part(client.page_uri(ref.name, number)))
-        for number in range(1, len(pages) + 1)
-    ]
+    try:
+        lines = [
+            jsonl_line(encode_custom_id(ref.name, number), prompt, file_part(client.page_uri(ref.name, number)))
+            for number in range(1, len(pages) + 1)
+        ]
+    except ValueError as exc:  # nome longo demais para o custom_id: pula só este PDF
+        logger.warning("PDF %s ignorado: %s", ref.name, exc)
+        return None
     cost = sum(len(line) for line in lines) + overhead * len(lines)
     if cost > constants.BATCH_MAX_BYTES or len(lines) > constants.BATCH_MAX_REQUESTS:
         logger.warning("PDF %s ignorado: %d páginas (%d bytes) não cabem numa sessão", ref.name, len(lines), cost)
@@ -216,11 +215,14 @@ def find_pending(settings: Settings, input_uri: str, version: str) -> list[PdfRe
     Pendente = não processado na mesma ``versao_processamento`` e fora de sessões ativas.
 
     :param settings: Configuração de runtime.
-    :param input_uri: Pasta de origem.
+    :param input_uri: Origem: pasta ``gs://`` ou ``view://<view>?mes_envio=<data>``.
     :param version: ``versao_processamento`` da submissão.
     :returns: PDFs pendentes, ordenados por nome.
     """
-    refs = list_pdfs(input_uri)
+    if input_uri.startswith(constants.VIEW_ORIGIN_PREFIX):
+        refs = list_downloaded_pdfs(settings.pdfs_view_table, input_uri.rsplit("mes_envio=", 1)[1])
+    else:
+        refs = list_pdfs(input_uri)
     done = find_done_pdfs(settings.extracao_pagina_table, [ref.name for ref in refs], version)
     in_flight = in_flight_pdf_names(settings.nf_batch_jobs_table)
     pending = [ref for ref in refs if ref.name not in done and ref.name not in in_flight]

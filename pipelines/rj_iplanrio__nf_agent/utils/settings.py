@@ -10,10 +10,8 @@ from .. import constants
 CREDENTIALS_ENV = "RJ_NF_AGENT_CREDENTIALS"
 CREDENTIALS_PATH = Path("/tmp/rj_nf_agent_credentials.json")
 
-# PDFS_BASE_PATH é opcional: só é necessário quando a submissão não recebe
-# uma origem explícita (ver utils/submit.py::resolve_origem) — por isso fica
-# fora de REQUIRED_ENV.
-PDFS_BASE_PATH_ENV = "PDFS_BASE_PATH"
+# Opcional: view de PDFs baixados de onde a submissão lê os pendentes (padrão: constants.PDFS_VIEW_TABLE).
+PDFS_VIEW_TABLE_ENV = "PDFS_VIEW_TABLE"
 MAX_ACTIVE_SESSIONS_ENV = "MAX_ACTIVE_SESSIONS"
 
 # Bucket de entrada e saída dos batches. BIFROST_GCS_BUCKET é o nome antigo da mesma variável.
@@ -36,7 +34,7 @@ class Settings:
     output_base_path: str
     extracao_pagina_table: str
     nf_batch_jobs_table: str
-    pdfs_base_path: str | None = None
+    pdfs_view_table: str = constants.PDFS_VIEW_TABLE
     max_active_sessions: int = constants.DEFAULT_MAX_ACTIVE_SESSIONS
 
 
@@ -55,7 +53,7 @@ def load_settings() -> Settings:
     return Settings(
         batch_bucket=batch_bucket,
         **{field: os.environ[env] for field, env in REQUIRED_ENV.items()},
-        pdfs_base_path=os.environ.get(PDFS_BASE_PATH_ENV),
+        pdfs_view_table=os.environ.get(PDFS_VIEW_TABLE_ENV) or constants.PDFS_VIEW_TABLE,
         max_active_sessions=int(os.environ.get(MAX_ACTIVE_SESSIONS_ENV) or constants.DEFAULT_MAX_ACTIVE_SESSIONS),
     )
 
