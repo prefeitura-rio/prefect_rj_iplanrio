@@ -99,7 +99,7 @@ def test_metric_specs_only_loaded_columns_and_convert_text_dates():
         ("valor", "maximo_num"),
     ]
     assert specs[1].bigquery_expression == (
-        "FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MIN(SAFE_CAST(REPLACE(SUBSTR(`data_competencia_municipio`, 1, 19), "
+        "FORMAT_DATETIME('%E4Y-%m-%d %H:%M:%S', MIN(SAFE_CAST(REPLACE(SUBSTR(`data_competencia_municipio`, 1, 19), "
         "'T', ' ') AS DATETIME)))"
     )
     assert specs[1].oracle_expression == "TO_CHAR(MIN(\"DATA_COMPETENCIA_MUNICIPIO\"), 'YYYY-MM-DD HH24:MI:SS')"

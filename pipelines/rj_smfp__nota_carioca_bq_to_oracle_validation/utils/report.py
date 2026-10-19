@@ -85,13 +85,13 @@ def metric_specs(
                 MetricSpec(
                     field["name"],
                     "minimo",
-                    f"FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MIN({bq_date}))",
+                    f"FORMAT_DATETIME('%E4Y-%m-%d %H:%M:%S', MIN({bq_date}))",
                     f"TO_CHAR(MIN({ora}), 'YYYY-MM-DD HH24:MI:SS')",
                 ),
                 MetricSpec(
                     field["name"],
                     "maximo",
-                    f"FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MAX({bq_date}))",
+                    f"FORMAT_DATETIME('%E4Y-%m-%d %H:%M:%S', MAX({bq_date}))",
                     f"TO_CHAR(MAX({ora}), 'YYYY-MM-DD HH24:MI:SS')",
                 ),
             ]
@@ -120,7 +120,7 @@ def metric_specs(
                 ),
             ]
         elif field["type"] == "TIMESTAMP":
-            bq_format = "FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%E6S', {}({}), 'UTC')"
+            bq_format = "FORMAT_TIMESTAMP('%E4Y-%m-%d %H:%M:%E6S', {}({}), 'UTC')"
             ora_format = "TO_CHAR({}({}) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6')"
             specs += [
                 MetricSpec(field["name"], "nao_nulos", f"COUNT({bq})", f"COUNT({ora})"),
