@@ -138,7 +138,7 @@ deployments:
       # Divida ativa cobrança
       - cron: "00 13 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-pgm-divida-ativa-prod
         flow_run_name: pgm-divida-ativa
         parameters:
@@ -496,7 +496,7 @@ deployments:
   # decide qual HSM enviar por linha)
       - cron: "0 11 * * *"
         timezone: America/Sao_Paulo
-        active: true
+        active: false
         slug: daily-cvl-pesquisa1746-unificado
         flow_run_name: cvl-pesquisa1746
         parameters:
