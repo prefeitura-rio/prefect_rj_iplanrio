@@ -3,8 +3,12 @@
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from functools import lru_cache
 
 from google.cloud import storage
+from requests.adapters import HTTPAdapter
+
+POOL_SIZE = 128
 
 
 @dataclass(frozen=True)
@@ -13,6 +17,20 @@ class PdfRef:
 
     name: str
     uri: str
+
+
+@lru_cache(maxsize=1)
+def get_storage_client() -> storage.Client:
+    """Cliente único do GCS para o processo (cada ``storage.Client()`` novo refaz a autenticação).
+
+    O pool de conexões é ampliado porque a submissão baixa e grava páginas em várias threads.
+
+    :returns: Cliente compartilhado.
+    """
+    client = storage.Client()
+    adapter = HTTPAdapter(pool_connections=POOL_SIZE, pool_maxsize=POOL_SIZE)
+    client._http.mount("https://", adapter)
+    return client
 
 
 def parse_gcs_uri(uri: str) -> tuple[str, str]:
@@ -39,7 +57,7 @@ def list_pdfs(prefix_uri: str) -> list[PdfRef]:
     bucket, path = parse_gcs_uri(prefix_uri)
     prefix = f"{path.rstrip('/')}/" if path else ""
     refs = []
-    for blob in storage.Client().list_blobs(bucket, prefix=prefix, delimiter="/"):
+    for blob in get_storage_client().list_blobs(bucket, prefix=prefix, delimiter="/"):
         if blob.name.endswith("/"):
             continue
         filename = blob.name[len(prefix) :]
@@ -55,7 +73,7 @@ def download_bytes(uri: str) -> bytes:
     :returns: Conteúdo do objeto.
     """
     bucket, path = parse_gcs_uri(uri)
-    return storage.Client().bucket(bucket).blob(path).download_as_bytes()
+    return get_storage_client().bucket(bucket).blob(path).download_as_bytes()
 
 
 def download_text(uri: str) -> str:
@@ -79,7 +97,7 @@ def write_ndjson(bucket: str, base_path: str, rows: list[dict], filename_stem: s
     """
     path = f"{base_path.rstrip('/')}/data_geracao={generated_at:%Y-%m-%d}/{filename_stem}.ndjson"
     content = "\n".join(json.dumps(row, ensure_ascii=False, default=str) for row in rows)
-    storage.Client().bucket(bucket).blob(path).upload_from_string(
+    get_storage_client().bucket(bucket).blob(path).upload_from_string(
         content.encode("utf-8"), content_type="application/x-ndjson"
     )
     return f"gs://{bucket}/{path}"

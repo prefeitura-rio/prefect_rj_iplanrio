@@ -23,6 +23,7 @@ def test_list_pdfs_lists_direct_children_only():
         SimpleNamespace(name="base/mes=1/b_doc"),
         SimpleNamespace(name="base/mes=1/a_doc.pdf"),
     ]
+    storage.get_storage_client.cache_clear()
     with patch.object(storage.storage, "Client", return_value=client):
         refs = storage.list_pdfs("gs://bkt/base/mes=1")
     client.list_blobs.assert_called_once_with("bkt", prefix="base/mes=1/", delimiter="/")
@@ -36,6 +37,7 @@ def test_write_ndjson_uses_partition_and_stem():
     blob = MagicMock()
     client = MagicMock()
     client.bucket.return_value.blob.return_value = blob
+    storage.get_storage_client.cache_clear()
     with patch.object(storage.storage, "Client", return_value=client):
         uri = storage.write_ndjson(
             "out",
@@ -47,3 +49,16 @@ def test_write_ndjson_uses_partition_and_stem():
     assert uri == "gs://out/staging/extracao_pagina/data_geracao=2026-09-24/extracao_pagina_s1.ndjson"
     payload = blob.upload_from_string.call_args.args[0].decode("utf-8")
     assert payload == '{"a": 1}\n{"b": "ç"}'
+
+
+def test_storage_client_is_created_once_and_has_a_large_connection_pool():
+    storage.get_storage_client.cache_clear()
+    client = MagicMock()
+    with patch.object(storage.storage, "Client", return_value=client) as make:
+        first = storage.get_storage_client()
+        second = storage.get_storage_client()
+    assert first is second
+    make.assert_called_once_with()
+    adapter = client._http.mount.call_args.args[1]
+    assert adapter._pool_maxsize == storage.POOL_SIZE
+    storage.get_storage_client.cache_clear()

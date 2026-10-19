@@ -4,7 +4,8 @@ import dataclasses
 import json
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 from .. import constants
@@ -29,6 +30,9 @@ from .versioning import compute_processing_version
 from .vertex import VertexBatchClient
 
 logger = get_logger(__name__)
+
+PREPARE_WORKERS = 12
+PREPARE_CHUNK = 48
 
 
 @dataclass(frozen=True)
@@ -209,6 +213,49 @@ def submit_session(
     return session_id
 
 
+def prepare_and_upload(client: VertexBatchClient, ref: PdfRef, prompt: str, overhead: int) -> PreparedPdf | None:
+    """Prepara um PDF e grava as páginas no bucket; devolve ``None`` se ele precisar ser pulado.
+
+    :param client: Cliente do Vertex.
+    :param ref: PDF de origem.
+    :param prompt: Texto do prompt de classificação.
+    :param overhead: Ver :func:`prepare_pdf`.
+    :returns: PDF pronto e já gravado, ou ``None``.
+    """
+    prepared = prepare_pdf(client, ref, prompt, overhead)
+    if prepared is None:
+        return None
+    try:
+        client.upload_pages(ref.name, prepared.pages)
+    except Exception as exc:
+        logger.warning("PDF %s ignorado: falha ao gravar as páginas: %s", ref.name, exc)
+        return None
+    return prepared
+
+
+def iter_prepared(
+    client: VertexBatchClient, pending: Sequence[PdfRef], prompt: str, overhead: int
+) -> Iterator[tuple[PdfRef, PreparedPdf | None]]:
+    """Prepara os PDFs em paralelo, devolvendo-os na ordem original.
+
+    Trabalha em blocos para limitar a memória e poder parar cedo (teto de sessões, limite de páginas).
+    Uma página gravada de um PDF que acabe não entrando na sessão é inofensiva: o caminho depende só
+    do nome do PDF, e a próxima rodada a regrava.
+
+    :param client: Cliente do Vertex.
+    :param pending: PDFs a preparar.
+    :param prompt: Texto do prompt de classificação.
+    :param overhead: Ver :func:`prepare_pdf`.
+    :returns: Pares ``(PDF, preparado ou None)``.
+    """
+    with ThreadPoolExecutor(max_workers=PREPARE_WORKERS) as pool:
+        for start in range(0, len(pending), PREPARE_CHUNK):
+            chunk = pending[start : start + PREPARE_CHUNK]
+            yield from zip(
+                chunk, pool.map(lambda ref: prepare_and_upload(client, ref, prompt, overhead), chunk), strict=True
+            )
+
+
 def find_pending(settings: Settings, input_uri: str, version: str) -> list[PdfRef]:
     """Lista os PDFs da origem que ainda precisam ser processados.
 
@@ -288,10 +335,9 @@ def submit_pending(client: VertexBatchClient, settings: Settings, request: Submi
     pdf_count = 0
     page_count = 0
 
-    for ref in pending:
+    for ref, prepared in iter_prepared(client, pending, prompts.classification_text, overhead):
         if slots <= 0:
             break
-        prepared = prepare_pdf(client, ref, prompts.classification_text, overhead)
         if prepared is None:
             skipped.append(ref.name)
             continue
@@ -303,12 +349,6 @@ def submit_pending(client: VertexBatchClient, settings: Settings, request: Submi
             slots -= 1
             if slots <= 0:
                 break
-        try:
-            client.upload_pages(ref.name, prepared.pages)
-        except Exception as exc:
-            logger.warning("PDF %s ignorado: falha ao gravar as páginas: %s", ref.name, exc)
-            skipped.append(ref.name)
-            continue
         draft.add(prepared)
         pdf_count += 1
         page_count += len(prepared.pages)

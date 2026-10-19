@@ -248,3 +248,23 @@ def test_pdf_with_a_name_too_long_for_custom_id_is_skipped_without_aborting(env)
     summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
     assert summary.skipped == [long_name]
     assert summary.pdf_count == 1
+
+
+def test_pdfs_are_prepared_in_parallel_but_stay_in_order(env):
+    names = [f"p{n:02d}" for n in range(1, 8)]
+    env["list_pdfs"].return_value = refs(*[f"{name[0]}{name[-1]}" for name in names])
+    summary = submit.submit_pending(env["client"], SETTINGS, submit.SubmitRequest("gs://in"))
+    pdfs = env["append_event"].call_args.args[1].context.pdfs
+    assert [pdf.name for pdf in pdfs] == sorted(pdf.name for pdf in pdfs)
+    assert summary.pdf_count == len(names)
+
+
+def test_chunked_preparation_stops_early_when_the_ceiling_is_reached(env, monkeypatch):
+    monkeypatch.setattr(submit, "PREPARE_CHUNK", 2)
+    monkeypatch.setattr(constants, "BATCH_MAX_REQUESTS", 1)
+    env["list_pdfs"].return_value = refs("a1", "b1", "c1", "d1", "e1", "f1")
+    settings = replace(SETTINGS, max_active_sessions=2)
+    summary = submit.submit_pending(env["client"], settings, submit.SubmitRequest("gs://in"))
+    assert len(summary.session_ids) == 2  # noqa: PLR2004 -- teto de 2 sessões
+    assert summary.remaining == 4  # noqa: PLR2004 -- sobraram 4 dos 6 PDFs
+    assert env["client"].upload_pages.call_count <= 4  # noqa: PLR2004 -- só os blocos já preparados foram gravados

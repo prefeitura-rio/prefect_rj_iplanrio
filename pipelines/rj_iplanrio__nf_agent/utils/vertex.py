@@ -20,10 +20,11 @@ from google.cloud import storage
 from google.genai import errors as genai_errors
 from google.genai import types
 from google.oauth2 import service_account
+from requests.adapters import HTTPAdapter
 
 from .. import constants
 from .observability import get_logger
-from .storage import parse_gcs_uri
+from .storage import POOL_SIZE, parse_gcs_uri
 
 logger = get_logger(__name__)
 
@@ -31,7 +32,7 @@ CREDENTIALS_ENV = "RJ_NF_AGENT_VERTEX_CREDENTIALS"
 PROJECT_ENV = "VERTEX_PROJECT"
 SCOPES = ("https://www.googleapis.com/auth/cloud-platform",)
 STORAGE_PREFIX = "vertex-batch-io"
-PAGE_UPLOAD_WORKERS = 16
+PAGE_UPLOAD_WORKERS = 8
 SPEND_CAP_MARKER = "spend cap"
 FORBIDDEN = 403
 NOT_FOUND = 404
@@ -304,6 +305,18 @@ class VertexBatchClient:
                         yield json.loads(line)
 
 
+def make_storage_client(project: str, credentials: service_account.Credentials) -> storage.Client:
+    """Cria o cliente do GCS da conta do Vertex, com pool de conexões para uploads em paralelo.
+
+    :param project: Projeto dos jobs.
+    :param credentials: Credenciais da conta de serviço.
+    :returns: Cliente do GCS.
+    """
+    client = storage.Client(project=project, credentials=credentials)
+    client._http.mount("https://", HTTPAdapter(pool_connections=POOL_SIZE, pool_maxsize=POOL_SIZE))
+    return client
+
+
 def build_client(bucket: str) -> VertexBatchClient:
     """Cria o cliente autenticado com a conta de serviço do Vertex.
 
@@ -313,6 +326,6 @@ def build_client(bucket: str) -> VertexBatchClient:
     credentials, project = load_credentials()
     return VertexBatchClient(
         genai.Client(vertexai=True, project=project, location=constants.VERTEX_LOCATION, credentials=credentials),
-        storage.Client(project=project, credentials=credentials),
+        make_storage_client(project, credentials),
         bucket,
     )
