@@ -1,7 +1,13 @@
+from dataclasses import replace
 from decimal import Decimal
 
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.columns import OracleColumn
-from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import IndexDefinition, Partitioning, TablePartition
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
+    IndexDefinition,
+    PartitionStorage,
+    Partitioning,
+    TablePartition,
+)
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle_validation.utils.report import (
     compare_columns,
     compare_grants,
@@ -93,7 +99,7 @@ def test_metric_specs_only_loaded_columns_and_convert_text_dates():
         ("valor", "maximo_num"),
     ]
     assert specs[1].bigquery_expression == (
-        "FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MIN(SAFE_CAST(REPLACE(SUBSTR(`data_competencia_municipio`, 1, 19), "
+        "FORMAT_DATETIME('%E4Y-%m-%d %H:%M:%S', MIN(SAFE_CAST(REPLACE(SUBSTR(`data_competencia_municipio`, 1, 19), "
         "'T', ' ') AS DATETIME)))"
     )
     assert specs[1].oracle_expression == "TO_CHAR(MIN(\"DATA_COMPETENCIA_MUNICIPIO\"), 'YYYY-MM-DD HH24:MI:SS')"
@@ -172,6 +178,19 @@ def test_compare_partitions_flags_unpartitioned_missing_and_extra_partitions():
     assert rows[2][3] == "(ausente)"
     assert rows[3][:3] == ["+", "P_X", "(ausente)"]
     assert compare_partitions(None, None) == [["-", "(particionamento)", "sem partição", "sem partição", "OK"]]
+
+
+def test_compare_partitions_checks_only_the_storage_the_original_declares():
+    immediate = PartitionStorage(True, 8388608, 1048576, 1, 2147483645)
+    deferred = PartitionStorage(False)
+    first, second = MONTHLY.partitions
+    expected = replace(MONTHLY, partitions=(replace(first, storage=immediate), replace(second, storage=deferred)))
+    loaded = replace(MONTHLY, partitions=(replace(first, storage=deferred), replace(second, storage=immediate)))
+    rows = compare_partitions(expected, loaded)
+    assert [row[-1] for row in rows] == ["OK", "DIVERGE", "OK"]
+    assert rows[1][2].endswith(f"· {immediate.clause}")
+    assert rows[1][3].endswith("· SEGMENT CREATION DEFERRED")
+    assert "·" not in rows[2][2]
 
 
 def index(name, degree="1", status="N/A", columns=("A", "B")):
