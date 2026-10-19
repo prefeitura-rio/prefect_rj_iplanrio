@@ -73,10 +73,20 @@ def _filter_output_value_text_action_step_only(df: pd.DataFrame) -> pd.DataFrame
 
 
 def _parse_dates(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
-    """Converte colunas de data/datetime para datetime com timezone UTC."""
+    """Converte colunas de data/datetime para datetime com timezone UTC.
+
+    format="ISO8601" é obrigatório: sem ele o pandas (>= 2) infere o formato
+    pelo PRIMEIRO valor da coluna e aplica a todas as linhas. O Data Cloud
+    omite a fração quando o evento cai no segundo exato
+    ("2026-10-19T12:08:04+00:00" vs "...:06.966+00:00"), então num lote cujo
+    1º valor tinha fração os valores sem fração viravam NaT (e vice-versa) —
+    o errors="coerce" escondia. Visto em 2026-10-19: 507 event_date_time
+    nulos em messaging_events_whatsapp, ~0,03–0,1% em todas as tabelas do
+    Data Cloud.
+    """
     for col in columns:
         if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True)
+            df[col] = pd.to_datetime(df[col], errors="coerce", utc=True, format="ISO8601")
     return df
 
 

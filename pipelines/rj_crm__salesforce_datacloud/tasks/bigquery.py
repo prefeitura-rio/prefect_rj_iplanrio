@@ -50,8 +50,9 @@ def _full_table_id(project_id: str, dataset_id: str, table_id: str) -> str:
 @task(log_prints=True)
 def ensure_bq_tables(project_id: str, dataset_id: str) -> None:
     """
-    Cria todas as tabelas da pipeline no BigQuery se ainda não existirem.
-    Idempotente — seguro rodar a cada execução.
+    Cria todas as tabelas da pipeline no BigQuery se ainda não existirem e
+    adiciona colunas novas de SCHEMAS nas que já existem. Idempotente — seguro
+    rodar a cada execução.
 
     Args:
         project_id : ID do projeto GCP.
@@ -71,7 +72,17 @@ def ensure_bq_tables(project_id: str, dataset_id: str) -> None:
             )
             table.clustering_fields = PARTITIONED_TABLES[table_id]
 
-        client.create_table(table, exists_ok=True)
+        existente = client.create_table(table, exists_ok=True)
+
+        # create_table não mexe no schema de tabela que já existe — coluna
+        # nova em SCHEMAS (ex.: _first_loaded_at, 2026-10-15) entra aqui,
+        # sempre NULLABLE no fim (único ALTER que o BQ aceita sem recriar).
+        nomes = {f.name for f in existente.schema}
+        novas = [f for f in schema if f.name not in nomes]
+        if novas:
+            existente.schema = list(existente.schema) + novas
+            client.update_table(existente, ["schema"])
+            print(f"[BQ] {table_id}: colunas adicionadas {[f.name for f in novas]}")
 
 
 @task(

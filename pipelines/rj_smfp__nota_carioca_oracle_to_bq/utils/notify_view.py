@@ -102,6 +102,7 @@ class ParentState:
     :param snapshot_taken_at: Horário da foto.
     :param error: Mensagem do erro, na falha.
     :param failed_stage: Etapa do pai em que a falha ocorreu.
+    :param staging: ``True`` no deployment de staging (as mensagens levam o marcador ``🧪 STAGING · ``).
     """
 
     dataset_id: str
@@ -118,6 +119,7 @@ class ParentState:
     snapshot_taken_at: datetime | None = None
     error: str | None = None
     failed_stage: ParentStage | None = None
+    staging: bool = False
 
 
 def _table_stage(progress: TableProgress | None) -> TableStage:
@@ -319,4 +321,5 @@ def build_view(state: ParentState) -> RunView:
             if state.status is not RunStatus.RUNNING
             else ()
         ),
+        staging=state.staging,
     )

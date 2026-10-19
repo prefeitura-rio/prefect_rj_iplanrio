@@ -1,8 +1,10 @@
 """Flow for rj_smfp__nota_carioca_carga_completa.
 
-Encadeia os dois deployments de prod da Nota Carioca: dispara Oracle → BigQuery e, só se terminar em ``Completed``,
-espera ``pause_seconds`` e dispara BigQuery → Oracle. Cada filho usa os parâmetros padrão do próprio deployment (o mesmo
-que um disparo rápido) e é ligado a este run como subflow. O pod só espera: a carga roda nos pods dos filhos.
+Encadeia dois deployments da Nota Carioca: dispara Oracle → BigQuery e, só se terminar em ``Completed``, espera
+``pause_seconds`` e dispara BigQuery → Oracle. Os padrões dos parâmetros são os deployments de prod; o deployment de
+staging passa os de staging. Cada filho usa os parâmetros padrão do próprio deployment (o mesmo que um disparo rápido) e
+é ligado a este run como subflow. O pod só espera: a carga roda nos pods dos filhos.
+O ambiente (prod ou staging) vem do nome deste deployment e só escolhe o webhook e o marcador das mensagens do Discord.
 Se qualquer parte não concluir, o orquestrador falha e o segundo deployment não é disparado; um filho que ainda corria
 quando o tempo limite acabou NÃO é cancelado.
 """
@@ -29,6 +31,7 @@ from pipelines.rj_smfp__nota_carioca_carga_completa.utils.chain import (
     build_run_tags,
     run_chain,
 )
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.notify import make_notifier
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.runs import run_link
 
@@ -53,7 +56,7 @@ def rj_smfp__nota_carioca_carga_completa(  # noqa: PLR0913, PLR0917
         run=run_deployment_task,
         ensure_idle=ensure_idle_task,
         pause=pause_task,
-        notify=make_notifier(discord_notifications),
+        notify=make_notifier(discord_notifications, current_environment()),
         log=log,
         link=run_link,
         clock=time.monotonic,

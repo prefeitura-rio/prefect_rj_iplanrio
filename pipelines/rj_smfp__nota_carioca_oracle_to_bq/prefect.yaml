@@ -36,6 +36,17 @@ deployments:
   concurrency_limit:
     limit: 4
     collision_strategy: ENQUEUE
+  # Staging se comporta como prod: mesmos parâmetros e recursos do deployment de prod, só muda o dataset de destino
+  # (brutos_nota_fiscal_staging) e o Oracle, que vem do secret de staging (homologação, bem menor que o de prod: estes
+  # recursos são folgados ali, mas mantê-los iguais exercita o mesmo caminho de código e de memória).
+  parameters:
+    dataset_id: brutos_nota_fiscal_staging
+    workers: 6
+    pod_memory_mb: 5888
+    upload_concurrency: 6
+    max_pending_files: 6
+    worker_max_tasks: 25
+    memory_pause_ratio: 0.85
   work_pool:
     name: onprem-pool
     work_queue_name: default
@@ -44,6 +55,10 @@ deployments:
       command: uv run --package rj_smfp__nota_carioca_oracle_to_bq -- prefect flow-run execute
       secretName: prefect-jobs-secrets-staging
       image_pull_policy: Always
+      cpu_request: "3"
+      cpu_limit: "6"
+      memory_request: 6Gi
+      memory_limit: 8Gi
 - name: rj-smfp--nota-carioca-oracle-to-bq--prod
   tags:
   - environment:prod

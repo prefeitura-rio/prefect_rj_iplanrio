@@ -113,7 +113,7 @@ def formatar_debitos_msg(debitos: Any) -> Optional[str]:
     return "\n".join(linhas)
 
 
-def consultar_debitos(cpf: str, api_url: str, timeout: int = 15, max_retries: int = 3) -> Optional[Dict[str, Any]]:
+def consultar_debitos(cpf: str, api_url: str, timeout: int = 30, max_retries: int = 3) -> Optional[Dict[str, Any]]:
     """
     Consulta débitos de um CPF/CNPJ na API consulta_debitos, com retentativas
     em caso de erro de rede/timeout/5xx.

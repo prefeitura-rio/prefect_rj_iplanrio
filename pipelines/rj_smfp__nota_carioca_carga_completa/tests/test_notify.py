@@ -4,9 +4,13 @@ import json
 import httpx
 import pytest
 
+from pipelines.rj_smfp__nota_carioca_carga_completa.utils.discord import Environment
 from pipelines.rj_smfp__nota_carioca_carga_completa.utils.notify import make_notifier
 
 URL = "https://discord.example/api/webhooks/1/secret-token"
+STAGING_URL = "https://discord.example/api/webhooks/2/staging-token"
+PROD_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA"
+STAGING_ENV = "DISCORD_WEBHOOK_URL_NOTA_CARIOCA_STAGING"
 
 
 def recording_transport(requests: list[httpx.Request], status_code: int = 200) -> httpx.MockTransport:
@@ -104,3 +108,76 @@ def test_notifier_swallows_failure_to_read_the_webhook() -> None:
     notify = make_notifier(True, resolve=resolve)
 
     notify("linha")
+
+
+def test_staging_notifier_prefixes_every_line_with_the_staging_marker() -> None:
+    # Given: notificador de staging com o webhook de staging
+    requests: list[httpx.Request] = []
+    notify = make_notifier(
+        True, Environment.STAGING, resolve=lambda: STAGING_URL, transport=recording_transport(requests)
+    )
+
+    # When: posta duas linhas
+    notify("🔗 Carga completa iniciada")
+    notify("⛔ Carga completa interrompida")
+
+    # Then: cada linha leva o marcador na frente, sem permitir menções
+    bodies = [json.loads(request.content) for request in requests]
+    assert [body["content"] for body in bodies] == [
+        "🧪 STAGING · 🔗 Carga completa iniciada",
+        "🧪 STAGING · ⛔ Carga completa interrompida",
+    ]
+    assert all(body["allowed_mentions"] == {"parse": []} for body in bodies)
+
+
+def test_staging_marker_counts_towards_the_discord_limit() -> None:
+    requests: list[httpx.Request] = []
+    notify = make_notifier(
+        True, Environment.STAGING, resolve=lambda: STAGING_URL, transport=recording_transport(requests)
+    )
+
+    notify("x" * 5000)
+
+    content = json.loads(requests[0].content)["content"]
+    assert len(content) == 2000
+    assert content.startswith("🧪 STAGING · ")
+
+
+def test_prod_notifier_posts_lines_unmarked() -> None:
+    # Given: o ambiente dito prod explicitamente
+    requests: list[httpx.Request] = []
+    notify = make_notifier(True, Environment.PROD, resolve=lambda: URL, transport=recording_transport(requests))
+
+    # When / Then: a linha sai exatamente como veio
+    notify("✅ Carga completa concluída em 3h 40min")
+    assert json.loads(requests[0].content)["content"] == "✅ Carga completa concluída em 3h 40min"
+
+
+def test_staging_notifier_reads_the_staging_webhook_and_never_the_prod_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Given: os dois webhooks configurados
+    monkeypatch.setenv(PROD_ENV, URL)
+    monkeypatch.setenv(STAGING_ENV, STAGING_URL)
+    staging_requests: list[httpx.Request] = []
+    prod_requests: list[httpx.Request] = []
+
+    # When: cada ambiente posta uma linha com o leitor padrão do webhook
+    make_notifier(True, Environment.STAGING, transport=recording_transport(staging_requests))("linha")
+    make_notifier(True, transport=recording_transport(prod_requests))("linha")
+
+    # Then: staging vai para o webhook de staging e o padrão (prod) para o de prod
+    assert [str(request.url).split("?")[0] for request in staging_requests] == [STAGING_URL]
+    assert [str(request.url).split("?")[0] for request in prod_requests] == [URL]
+
+
+def test_staging_notifier_stays_silent_without_a_staging_webhook_even_if_prod_has_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: só o webhook de prod existe (o Secret block de staging falha, como no conftest)
+    monkeypatch.setenv(PROD_ENV, URL)
+    requests: list[httpx.Request] = []
+
+    # When: staging tenta postar
+    make_notifier(True, Environment.STAGING, transport=recording_transport(requests))("linha")
+
+    # Then: nada vai ao canal de prod
+    assert requests == []
