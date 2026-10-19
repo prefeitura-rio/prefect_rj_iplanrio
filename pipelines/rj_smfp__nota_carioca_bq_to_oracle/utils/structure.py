@@ -13,6 +13,8 @@ FUNCTION_BASED_INDEX_TYPE = "FUNCTION-BASED NORMAL"
 QUOTED_IDENTIFIER_PATTERN = re.compile(r'"([^"]+)"')
 STRING_LITERAL_PATTERN = re.compile(r"'(?:[^']|'')*'")
 USABLE_INDEX_STATUSES = ("VALID", "N/A")
+# MAXEXTENTS UNLIMITED, como o dicionário o devolve.
+UNLIMITED_EXTENTS = 2147483645
 # Valores de all_tables e all_part_tables aceitos no INMEMORY; o texto entra no DDL como está.
 INMEMORY_PRIORITIES = ("NONE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
 INMEMORY_COMPRESSIONS = (
@@ -32,6 +34,50 @@ LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTR
 
 
 @dataclass(frozen=True)
+class PartitionStorage:
+    """Criação do segmento e ``STORAGE`` de uma partição, como em ``all_tab_partitions``.
+
+    Os parâmetros ficam ``None`` quando a partição não os declara: partição com segmento adiado e sem ``STORAGE``.
+
+    :param segment_created: ``True`` se o segmento existe (``SEGMENT CREATION IMMEDIATE`` ou partição com dados).
+    :param initial: ``INITIAL``, em bytes.
+    :param next: ``NEXT``, em bytes.
+    :param min_extents: ``MINEXTENTS``.
+    :param max_extents: ``MAXEXTENTS`` (``2147483645`` é ``UNLIMITED``).
+    :param pct_increase: ``PCTINCREASE``.
+    """
+
+    segment_created: bool
+    initial: int | None = None
+    next: int | None = None
+    min_extents: int | None = None
+    max_extents: int | None = None
+    pct_increase: int | None = None
+
+    @property
+    def parameters(self) -> tuple[int | None, ...]:
+        """``INITIAL``, ``NEXT``, ``MINEXTENTS``, ``MAXEXTENTS`` e ``PCTINCREASE``, nessa ordem."""
+        return (self.initial, self.next, self.min_extents, self.max_extents, self.pct_increase)
+
+    @property
+    def declared(self) -> bool:
+        """``True`` se a partição declara algum parâmetro de ``STORAGE``."""
+        return any(value is not None for value in self.parameters)
+
+    @property
+    def clause(self) -> str:
+        """``SEGMENT CREATION`` e ``STORAGE`` da partição no ``CREATE TABLE``."""
+        text = f"SEGMENT CREATION {'IMMEDIATE' if self.segment_created else 'DEFERRED'}"
+        names = ("INITIAL", "NEXT", "MINEXTENTS", "MAXEXTENTS", "PCTINCREASE")
+        options = [
+            f"{name} {'UNLIMITED' if name == 'MAXEXTENTS' and value == UNLIMITED_EXTENTS else value}"
+            for name, value in zip(names, self.parameters, strict=True)
+            if value is not None
+        ]
+        return f"{text} STORAGE ({' '.join(options)})" if options else text
+
+
+@dataclass(frozen=True)
 class TablePartition:
     """Partição declarada na tabela, como em ``all_tab_partitions``.
 
@@ -39,11 +85,13 @@ class TablePartition:
     :param high_value: Limite da partição, no texto do dicionário
         (por exemplo ``TO_DATE(' 2026-01-01 00:00:00', ...)``).
     :param tablespace: Tablespace da partição.
+    :param storage: Criação do segmento e ``STORAGE`` da partição, ou ``None`` se não forem lidos.
     """
 
     name: str
     high_value: str
     tablespace: str | None
+    storage: PartitionStorage | None = None
 
     @property
     def description(self) -> str:
@@ -167,7 +215,8 @@ def partitioning_from_dictionary(
         ``subpartitioning_type`` e ``interval``).
     :param key_columns: Colunas de ``all_part_key_columns``, na ordem.
     :param partition_rows: Linhas de ``all_tab_partitions`` (``partition_name``,
-        ``high_value``, ``tablespace_name`` e ``interval``), na ordem.
+        ``high_value``, ``tablespace_name``, ``interval`` e, se lidos, ``segment_created`` e os parâmetros de
+        ``STORAGE``), na ordem.
     :returns: Particionamento, sem as partições criadas pelo ``INTERVAL``.
     """
     interval = str(table_row["interval"]).strip() if table_row["interval"] else None
@@ -176,6 +225,7 @@ def partitioning_from_dictionary(
             name=str(row["partition_name"]),
             high_value=str(row["high_value"]).strip(),
             tablespace=None if row["tablespace_name"] is None else str(row["tablespace_name"]),
+            storage=partition_storage_from_dictionary(row),
         )
         for row in partition_rows
         if row["interval"] != "YES"
@@ -185,6 +235,30 @@ def partitioning_from_dictionary(
     if subpartitioning not in (None, "NONE"):
         kind = f"{kind}-{subpartitioning}"
     return Partitioning(kind=kind, key_columns=tuple(key_columns), interval=interval, partitions=partitions)
+
+
+def partition_storage_from_dictionary(row: dict[str, object]) -> PartitionStorage | None:
+    """Lê a criação do segmento e o ``STORAGE`` de uma linha de ``all_tab_partitions``.
+
+    :param row: Linha com ``segment_created``, ``initial_extent``, ``next_extent``, ``min_extent``,
+        ``max_extent`` e ``pct_increase``.
+    :returns: Segmento e ``STORAGE`` da partição, ou ``None`` se a linha não trouxer ``segment_created``.
+    """
+    if row.get("segment_created") is None:
+        return None
+
+    def number(key: str) -> int | None:
+        value = row.get(key)
+        return None if value is None else int(str(value))
+
+    return PartitionStorage(
+        segment_created=row["segment_created"] == "YES",
+        initial=number("initial_extent"),
+        next=number("next_extent"),
+        min_extents=number("min_extent"),
+        max_extents=number("max_extent"),
+        pct_increase=number("pct_increase"),
+    )
 
 
 def inmemory_option(row: dict[str, object], key: str, allowed: tuple[str, ...]) -> str | None:
@@ -376,6 +450,7 @@ def partitioning_clause(partitioning: Partitioning) -> str:
     bound = "VALUES LESS THAN" if partitioning.kind == "RANGE" else "VALUES"
     partitions = ",\n".join(
         f"  PARTITION {quote(partition.name)} {bound} ({partition.high_value})"
+        + (f" {partition.storage.clause}" if partition.storage else "")
         + (f" TABLESPACE {quote(partition.tablespace)}" if partition.tablespace else "")
         for partition in partitioning.partitions
     )
@@ -444,7 +519,32 @@ def layout_differences(existing: TableLayout, expected: TableLayout) -> list[str
     wanted_partitions = {partition.description for partition in wanted.partitions}
     differences += [f"partição a mais: {text}" for text in sorted(found_partitions - wanted_partitions)]
     differences += [f"partição ausente: {text}" for text in sorted(wanted_partitions - found_partitions)]
+    found_storage = {partition.name: partition.storage for partition in found.partitions}
+    for partition in wanted.partitions:
+        storage = found_storage.get(partition.name)
+        if partition.name in found_storage and not storage_matches(storage, partition.storage):
+            differences.append(
+                f"storage da partição {partition.name}: {storage.clause if storage else '(não lido)'} → "
+                f"{partition.storage.clause if partition.storage else '(não lido)'}"
+            )
     return differences
+
+
+def storage_matches(existing: PartitionStorage | None, expected: PartitionStorage | None) -> bool:
+    """Diz se a partição existente tem o segmento e o ``STORAGE`` que a original declara.
+
+    Só conta o que a original declara: numa partição original adiada e sem ``STORAGE``, o segmento da existente
+    depende só de ela ter dados, e isso não é diferença.
+
+    :param existing: Segmento e ``STORAGE`` da partição existente.
+    :param expected: Segmento e ``STORAGE`` da partição original.
+    :returns: ``True`` se a existente atende à original.
+    """
+    if expected is None or not expected.declared:
+        return True
+    if existing is None or existing.parameters != expected.parameters:
+        return False
+    return existing.segment_created or not expected.segment_created
 
 
 def describe_partitioning(partitioning: Partitioning | None) -> str:
