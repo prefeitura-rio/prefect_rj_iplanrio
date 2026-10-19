@@ -40,6 +40,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.slots import (
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     IndexDefinition,
     IndexExpression,
+    PartitionStorage,
     Partitioning,
     TableLayout,
     TablePartition,
@@ -485,6 +486,93 @@ def test_partitioning_from_dictionary_keeps_only_declared_partitions():
         {"partitioning_type": "RANGE", "subpartitioning_type": "HASH", "interval": None}, ["D"], []
     )
     assert composite.kind == "RANGE-HASH"
+
+
+IMMEDIATE_8M = PartitionStorage(True, 8388608, 1048576, 1, 2147483645)
+DEFERRED_EMPTY = PartitionStorage(False)
+
+
+def storage_row(name, high_value, segment_created, extents=(None, None, None, None)):
+    initial, next_extent, min_extent, max_extent = extents
+    return {
+        "partition_name": name,
+        "high_value": high_value,
+        "tablespace_name": "DFEN_BIG_DATA",
+        "interval": "NO",
+        "segment_created": segment_created,
+        "initial_extent": initial,
+        "next_extent": next_extent,
+        "min_extent": min_extent,
+        "max_extent": max_extent,
+        "pct_increase": None,
+    }
+
+
+def test_partitioning_from_dictionary_reads_segment_creation_and_storage():
+    partitioning = partitioning_from_dictionary(
+        {"partitioning_type": "RANGE", "subpartitioning_type": "NONE", "interval": None},
+        ["DATA_COMPETENCIA_MUNICIPIO"],
+        [
+            storage_row("P_INITIAL", JAN, "YES", (8388608, 1048576, 1, 2147483645)),
+            storage_row("P_202601", FEB, "NO"),
+        ],
+    )
+    assert [partition.storage for partition in partitioning.partitions] == [IMMEDIATE_8M, DEFERRED_EMPTY]
+
+
+def test_partition_storage_clause_replicates_the_original_ddl():
+    assert IMMEDIATE_8M.clause == (
+        "SEGMENT CREATION IMMEDIATE STORAGE (INITIAL 8388608 NEXT 1048576 MINEXTENTS 1 MAXEXTENTS UNLIMITED)"
+    )
+    assert DEFERRED_EMPTY.clause == "SEGMENT CREATION DEFERRED"
+    assert PartitionStorage(False, 65536, None, 1, 100, 0).clause == (
+        "SEGMENT CREATION DEFERRED STORAGE (INITIAL 65536 MINEXTENTS 1 MAXEXTENTS 100 PCTINCREASE 0)"
+    )
+
+
+def test_storage_clause_puts_partition_storage_before_tablespace():
+    partitioning = Partitioning(
+        "RANGE",
+        ("D",),
+        None,
+        (
+            TablePartition("P_INITIAL", JAN, "DFEN_BIG_DATA", IMMEDIATE_8M),
+            TablePartition("P_202601", FEB, "DFEN_BIG_DATA", DEFERRED_EMPTY),
+        ),
+    )
+    assert storage_clause(TableLayout("DFEN_BIG_DATA", partitioning)).splitlines()[3:5] == [
+        f'  PARTITION "P_INITIAL" VALUES LESS THAN ({JAN}) {IMMEDIATE_8M.clause} TABLESPACE "DFEN_BIG_DATA",',
+        f'  PARTITION "P_202601" VALUES LESS THAN ({FEB}) SEGMENT CREATION DEFERRED TABLESPACE "DFEN_BIG_DATA"',
+    ]
+
+
+def with_storage(*storages):
+    partitions = tuple(
+        replace(partition, storage=storage)
+        for partition, storage in zip(RANGE_BY_MONTH.partitions, storages, strict=True)
+    )
+    return TableLayout("DFEN_BIG_DATA", replace(RANGE_BY_MONTH, partitions=partitions))
+
+
+def test_layout_differences_detect_partition_without_the_declared_storage():
+    expected = with_storage(IMMEDIATE_8M, IMMEDIATE_8M)
+    assert layout_differences(with_storage(IMMEDIATE_8M, IMMEDIATE_8M), expected) == []
+    assert layout_differences(with_storage(IMMEDIATE_8M, DEFERRED_EMPTY), expected) == [
+        f"storage da partição P_202601: SEGMENT CREATION DEFERRED → {IMMEDIATE_8M.clause}"
+    ]
+    smaller = PartitionStorage(True, 65536, 1048576, 1, 2147483645)
+    assert len(layout_differences(with_storage(smaller, IMMEDIATE_8M), expected)) == 1
+    unread = layout_differences(TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH), expected)
+    assert len(unread) == len(expected.partitioning.partitions)
+
+
+def test_layout_differences_ignore_segments_that_depend_only_on_data():
+    expected = with_storage(DEFERRED_EMPTY, PartitionStorage(False, 8388608, 1048576, 1, 2147483645))
+    loaded = with_storage(IMMEDIATE_8M, IMMEDIATE_8M)
+    assert layout_differences(loaded, expected) == []
+    deferred = with_storage(DEFERRED_EMPTY, DEFERRED_EMPTY)
+    assert layout_differences(deferred, deferred) == []
+    assert layout_differences(loaded, TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH)) == []
 
 
 def test_index_from_dictionary_ignores_degree_and_status_in_comparison():
