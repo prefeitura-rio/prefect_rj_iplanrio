@@ -31,7 +31,6 @@ pull:
       host: host
       port: 5432
       database: database
-      secret_path: /db-secret_path
 {%- endif %}
     cloud:
       bucket: bucket-{{ env }}

@@ -7,7 +7,6 @@ from tempfile import TemporaryDirectory
 from prefect import flow
 from pydantic import JsonValue
 from toolkit.dbt import DbtRun
-from toolkit.settings import read_secret
 from toolkit.telemetry import configure_telemetry, logger
 
 from .hooks import notify_failure
@@ -23,7 +22,7 @@ from .tasks import (
     write_records,
 )
 from .types import Cloud, Database, DumpMode, DumpOptions, FileFormat, Read, Table
-from .utils import capture_time, extract_records, fill_secrets
+from .utils import capture_time, extract_records
 
 configure_telemetry()
 
@@ -143,7 +142,6 @@ async def ingest_api(
     params: Mapping[str, str] | None = None,
     headers: Mapping[str, str] | None = None,
     body: JsonValue | None = None,
-    secret_path: str | None = None,
     records_key: str | None = None,
     dump_mode: DumpMode = "append",
     options: DumpOptions | None = None,
@@ -151,20 +149,12 @@ async def ingest_api(
     """Send one request to an API and load its records to a BigQuery table.
 
     `records_key` is the dotted path to the list of records, or empty when the response
-    is the list. `{NAME}` in `params` and `headers` is filled from `secret_path`, so a
-    token never sits in the `prefect.yaml`. In `append` each run adds its records, and a
-    retry of the same run adds nothing. In `overwrite` the records replace the table. A
-    response with no record loads nothing. It sends one request: a paged API needs a
-    pipeline that sends each page with `request_json` and loads them with `load_files`.
+    is the list. In `append` each run adds its records, and a retry of the same run adds
+    nothing. In `overwrite` the records replace the table. A response with no record
+    loads nothing. It sends one request: a paged API needs a pipeline that sends each
+    page with `request_json` and loads them with `load_files`.
     """
-    secret = read_secret(secret_path) if secret_path else {}
-    data = await request_json(
-        url,
-        method=method,
-        params=fill_secrets(params, secret),
-        headers=fill_secrets(headers, secret),
-        body=body,
-    )
+    data = await request_json(url, method=method, params=params, headers=headers, body=body)
     records = extract_records(data, records_key)
 
     if not records:

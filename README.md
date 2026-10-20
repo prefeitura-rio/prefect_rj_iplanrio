@@ -76,7 +76,7 @@ Os parâmetros são grupos com tipo (`src/utils/types.py`). O `Prefect` recusa u
 
 | Grupo      | O que tem                                                                                                                                                 | Onde fica no `prefect.yaml` |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| `database` | `type`, `host`, `port`, `database`, `secret_path` (o segredo com usuário e senha) e `options` (opcional, da fonte)                                        | `deployment`                |
+| `database` | `type`, `host`, `port`, `database` e `options` (opcional, da fonte). O usuário e a senha vêm de `DB_USERNAME` e `DB_PASSWORD`                             | `deployment`                |
 | `cloud`    | `bucket`, `project` e `connection` (a conexão `BigLake`)                                                                                                  | `deployment`                |
 | `table`    | `dataset_id` e `table_id`, a tabela no BigQuery                                                                                                           | `schedule`                  |
 | `read`     | `table` (`esquema.tabela`) ou `query` (no dialeto do banco). No CouchDB, `table` é a base, `query` um seletor Mango e `since` uma sequência de `_changes` | `schedule`                  |
@@ -102,7 +102,6 @@ deployments:
         host: 10.0.0.1
         port: 5432
         database: app
-        secret_path: /db-app
       cloud:
         bucket: bucket-prod
         project: project-prod
@@ -142,8 +141,6 @@ deployments:
 
 O `ingest_api` faz a requisição e tira a lista de registros da resposta. `records_key` é o caminho até a lista, como `data.items`. Deixe vazio se a resposta já é a lista.
 
-`{NOME}` em `headers` e `params` vem do segredo de `secret_path`. O caminho `/api-x` lê a variável `API_X__NOME`. Assim o token nunca fica no `prefect.yaml`.
-
 ```yaml
 schedules:
   - cron: "*/15 * * * *"
@@ -154,9 +151,8 @@ schedules:
         dataset_id: brutos_api
         table_id: leituras
       url: https://api.exemplo.gov.br/leituras
-      secret_path: /api-exemplo
       headers:
-        Authorization: "Bearer {TOKEN}"
+        Accept: application/json
       records_key: data.items
 ```
 

@@ -404,7 +404,7 @@ Não use `_` como prefixo para indicar nomes internos/privados. Use fronteiras d
 
 Use `UPPER_SNAKE_CASE` apenas para constantes no nível do módulo. Dentro de funções, use `snake_case`.
 
-Nomeie uma função com um verbo no imperativo e o objeto: `read_secret`, `build_column`, `extract_records`. Não use o molde `algo_of` (`config_of`, `records_of`): ele diz o que a função devolve, e não o que ela faz. Uma função que responde sim ou não começa com `is_` ou `has_`. Um script `Nushell` segue a mesma regra, com hífen (`find-deployments`).
+Nomeie uma função com um verbo no imperativo e o objeto: `read_bq`, `build_column`, `extract_records`. Não use o molde `algo_of` (`config_of`, `records_of`): ele diz o que a função devolve, e não o que ela faz. Uma função que responde sim ou não começa com `is_` ou `has_`. Um script `Nushell` segue a mesma regra, com hífen (`find-deployments`).
 
 ```python
 # ✅ correto — constante real no nível do módulo

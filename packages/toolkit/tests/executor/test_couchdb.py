@@ -24,7 +24,6 @@ from toolkit.executor.sources.backends.couchdb import (
 )
 from toolkit.executor.sources.models import CouchDBItem
 from toolkit.executor.sources.protocols import DBConn, SourceContext
-from toolkit.settings import settings
 
 USER = "user"
 PASSWORD = "segredo"
@@ -398,10 +397,10 @@ async def test_a_path_prefix_reaches_every_endpoint(proxied_couchdb, tmp_path):
 
 def test_the_registry_path_takes_its_options_from_the_settings(monkeypatch):
     """Build the options of a source from the settings, so no code has to pass them."""
-    monkeypatch.setattr(settings, "COUCHDB_PAGE_SIZE", 5)
-    monkeypatch.setattr(settings, "COUCHDB_VERIFY_TLS", False)
-    monkeypatch.setattr(settings, "COUCHDB_SECURE", False)
-    monkeypatch.setattr(settings, "COUCHDB_PATH_PREFIX", "/couchdb")
+    monkeypatch.setenv("COUCHDB_PAGE_SIZE", "5")
+    monkeypatch.setenv("COUCHDB_VERIFY_TLS", "false")
+    monkeypatch.setenv("COUCHDB_SECURE", "false")
+    monkeypatch.setenv("COUCHDB_PATH_PREFIX", "/couchdb")
     conn = DBConn("db.example", 6984, "people", USER, PASSWORD)
 
     source = CouchDBSource.from_context(SourceContext(conn))

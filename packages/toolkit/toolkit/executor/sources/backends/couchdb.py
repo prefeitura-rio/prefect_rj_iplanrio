@@ -16,7 +16,7 @@ from pyarrow.parquet import ParquetWriter
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
 from ....batches import NULL_WINDOW, Rows, Window
-from ....settings import settings
+from ....settings import CouchDBSettings
 from ....types import TemplateValue
 from ...constants import (
     ALIAS,
@@ -133,11 +133,19 @@ class CouchDBSource(SourceBase):
 
     conn: DBConn
     shape: Shape = Shape(schema([("id", string()), ("doc", json_())]), document_row)
-    page_size: int = field(default_factory=lambda: settings.COUCHDB_PAGE_SIZE)
-    verify_tls: bool = field(default_factory=lambda: settings.COUCHDB_VERIFY_TLS)
-    secure: bool | None = field(default_factory=lambda: settings.COUCHDB_SECURE)
-    path_prefix: str = field(default_factory=lambda: settings.COUCHDB_PATH_PREFIX)
-    timeout: int = field(default_factory=lambda: settings.COUCHDB_TIMEOUT_SECONDS)
+    page_size: int = field(default_factory=lambda: CouchDBSettings().COUCHDB_PAGE_SIZE)
+    verify_tls: bool = field(
+        default_factory=lambda: CouchDBSettings().COUCHDB_VERIFY_TLS
+    )
+    secure: bool | None = field(
+        default_factory=lambda: CouchDBSettings().COUCHDB_SECURE
+    )
+    path_prefix: str = field(
+        default_factory=lambda: CouchDBSettings().COUCHDB_PATH_PREFIX
+    )
+    timeout: int = field(
+        default_factory=lambda: CouchDBSettings().COUCHDB_TIMEOUT_SECONDS
+    )
     key_width: int | None = None
     width: int | None = field(default=None, init=False, repr=False)
 

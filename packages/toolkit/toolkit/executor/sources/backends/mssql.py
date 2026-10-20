@@ -5,7 +5,7 @@ from typing import ClassVar, override
 
 from psycopg.sql import Literal
 
-from ....settings import settings
+from ....settings import MSSQLSettings
 from ...engines.duckdb import Extension
 from ...engines.protocol import Engine
 from ...render import render_template
@@ -31,6 +31,6 @@ class MSSQLSource(DuckDBSource):
         await client.execute(
             render_template(
                 "duckdb/set_mssql_timeout",
-                {"seconds": Literal(settings.DB_QUERY_TIMEOUT_SECONDS)},
+                {"seconds": Literal(MSSQLSettings().DB_QUERY_TIMEOUT_SECONDS)},
             )
         )

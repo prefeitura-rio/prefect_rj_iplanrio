@@ -6,7 +6,6 @@ import pytest
 from polars import DataFrame, Int64, Schema, String
 
 from toolkit.executor.engines.duckdb import DuckDBEngine
-from toolkit.settings import settings
 
 
 async def collect(engine, sql: str, **options) -> list[DataFrame]:
@@ -65,8 +64,8 @@ async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
     tmp_path, monkeypatch
 ):
     """Take the memory limit and the temp directory from the settings."""
-    monkeypatch.setattr(settings, "DUCKDB_MEMORY_LIMIT", "1GiB")
-    monkeypatch.setattr(settings, "DUCKDB_TEMP_DIRECTORY", str(tmp_path))
+    monkeypatch.setenv("DUCKDB_MEMORY_LIMIT", "1GiB")
+    monkeypatch.setenv("DUCKDB_TEMP_DIRECTORY", str(tmp_path))
 
     async with DuckDBEngine.connect() as engine:
         [frame] = await collect(

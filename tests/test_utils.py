@@ -38,7 +38,6 @@ from utils.utils import (
     extract_records,
     failure_message,
     files_glob,
-    fill_secrets,
     is_transient,
     load_to_delta,
     publish,
@@ -917,25 +916,6 @@ def test_a_response_with_no_list_of_objects_is_refused(data, key):
     """Raise, so a change in the API fails the run instead of loading nothing."""
     with pytest.raises(ValueError, match="No list of objects"):
         extract_records(data, key)
-
-
-@pytest.mark.parametrize(
-    ("values", "expected"),
-    [
-        pytest.param({"Authorization": "Bearer {TOKEN}"}, {"Authorization": "Bearer abc"}, id="a_name_in_the_text"),
-        pytest.param({"k": "plain"}, {"k": "plain"}, id="no_name"),
-        pytest.param(None, {}, id="no_values"),
-    ],
-)
-def test_the_names_in_the_values_are_filled_from_the_secret(values, expected):
-    """Put the secret in the value, and leave a plain value alone."""
-    assert fill_secrets(values, {"TOKEN": "abc"}) == expected
-
-
-def test_a_name_that_the_secret_lacks_is_a_key_error():
-    """Raise, so a typo in a header fails before the request."""
-    with pytest.raises(KeyError):
-        fill_secrets({"k": "{OTHER}"}, {"TOKEN": "abc"})
 
 
 async def test_json_lines_load_as_rows_and_nested_values_stay_nested(tmp_path):

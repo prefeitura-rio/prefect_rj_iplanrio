@@ -9,13 +9,15 @@ from obstore import list as list_objects
 from obstore.store import ObjectStore, S3Store
 
 from .constants import DELETE_SPAN, UPLOAD_SPAN
-from .settings import settings
+from .settings import GcsSettings
 from .telemetry import DELETED_FILES, UPLOADED_BYTES, UPLOADED_FILES, logger, tracer
 
 
 def create_store(bucket: str) -> S3Store:
     """Create the S3 store of one bucket, with the endpoint and keys of the settings."""
+    settings = GcsSettings()
     scheme = "https" if settings.GCS_USE_SSL else "http"
+
     return S3Store(
         bucket,
         endpoint=f"{scheme}://{settings.GCS_ENDPOINT}",

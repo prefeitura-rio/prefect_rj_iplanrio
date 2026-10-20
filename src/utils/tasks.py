@@ -21,7 +21,7 @@ from toolkit.executor.sources.backends.files import FilesSource
 from toolkit.executor.sources.backends.gsheets import GSheetsSource
 from toolkit.executor.sources.protocols import DBConn, SourceContext
 from toolkit.executor.sources.registry import get_source
-from toolkit.settings import read_database_credentials, settings
+from toolkit.settings import DatabaseSettings, DiscordSettings
 
 from .constants import RETRIES, RETRY_DELAY_SECONDS
 from .hooks import retry_on_transient_error
@@ -107,8 +107,8 @@ async def dump_db_to_gcs(
     DuckDB reads the source one window at a time, applies the filters, the columns and
     the normalization, and writes Parquet to a temp folder. A window whose content did
     not change is never written again, and a changed one is replaced in one commit.
-    `secret_path` of `database` names the secret with the user and the password, such as
-    `/db-oracle-x`. `read` is a `table` (`schema.name`) or a native `query`. `options`:
+    The user and the password come from `DB_USERNAME` and `DB_PASSWORD`. `read` is a
+    `table` (`schema.name`) or a native `query`. `options`:
 
     - `batches` cuts the table into windows over a column: `width` is `day`, `month`
       or `year`, or a number of ids. `lookback` re-checks only the last windows.
@@ -120,13 +120,13 @@ async def dump_db_to_gcs(
     deletes the windows outside the range. Run `publish_table_in_bq` after it.
     """
     chosen = options or {}
-    credentials = read_database_credentials(database["secret_path"])
+    credentials = DatabaseSettings()
     conn = DBConn(
         database["host"],
         database["port"],
         database["database"],
-        credentials.username,
-        credentials.password,
+        credentials.DB_USERNAME,
+        credentials.DB_PASSWORD.get_secret_value(),
     )
     await load_to_delta(
         get_source(database["type"]).from_context(SourceContext(conn, database.get("options", {}))),
@@ -310,7 +310,7 @@ async def notify_discord(message: str, *, webhook: str | None = None) -> None:
 
     Raise `ValueError` if there is no webhook.
     """
-    url = webhook or settings.DISCORD_WEBHOOK_URL.get_secret_value()
+    url = webhook or DiscordSettings().DISCORD_WEBHOOK_URL.get_secret_value()
     if not url:
         raise ValueError("No Discord webhook: pass it or set DISCORD_WEBHOOK_URL")
 

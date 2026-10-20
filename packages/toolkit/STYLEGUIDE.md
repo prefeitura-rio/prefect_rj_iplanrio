@@ -17,7 +17,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 | Módulo                               | Responsabilidade                                                                                                                                    |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `toolkit.executor`                   | `Executor`, `Engine`, fontes e modelos SQL.                                                                                                         |
-| `toolkit.settings`                   | `Settings`, `read_secret` e credenciais de banco.                                                                                                   |
+| `toolkit.settings`                   | `ToolkitSettings` (a base) e um grupo por parte, como `GcsSettings`.                                                                                |
 | `toolkit.functions`                  | As funções do `DuckDB`: `native.py` (uma vez por linha), `arrow.py` e `documents.py` (uma vez por lote) e `registry.py`, com o registro automático. |
 | `toolkit.utils`                      | As colunas e os filtros de um `dump`: `normalize_column`, `column_aliases`, `select_columns` e `filter_predicates`.                                 |
 | `toolkit.telemetry`                  | O `logger` do pacote e o `OpenTelemetry`.                                                                                                           |
@@ -34,6 +34,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 - Use `dataclass` para dados e `Pydantic` só em fronteiras. Alternativas fechadas são uniões etiquetadas tratadas com `match`. Um fluxo de vários passos é uma `dataclass` de contexto com um método por passo.
 - Incorpore uma função auxiliar de uma linha que tem um só chamador. Ponha a função no módulo do domínio, e use `utils.py` só quando nenhum serve.
 - Parâmetros explícitos e funções com nome. Evite `**kwargs`, lambdas opacas, `Any` e `object`. Código bloqueante roda por `asyncio.to_thread`.
+- Cada parte tem a sua classe de configuração, que estende `ToolkitSettings`. A parte cria o grupo quando precisa dele, como `GcsSettings()`, nunca no `import`. A base só tem o que todas as partes usam: `LOG_LEVEL` e `OTEL_*`. Uma variável nova vai no grupo da parte que a usa.
 - Constantes ficam em `constants.py` e apelidos de tipo em `types.py`, um de cada por pacote. Um módulo importa do próprio pacote e dos acima, nunca dos abaixo. `toolkit/types.py` não importa nada do toolkit. Classes ficam com o comportamento delas.
 - Cada caminho de importação é um contrato, sem versionamento. Renomear, mover ou mudar o retorno de um símbolo público quebra os consumidores: atualize todos no mesmo PR, sem reexportação. Adicionar função, ou parâmetro com default, é seguro.
 
@@ -92,7 +93,7 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 - Todo log passa por `toolkit.telemetry.logger` (`prefect.toolkit`), no formato `<Componente> <ação> <estado>: contexto`, com o nível do guia do repositório (Seção 5.5). O nível vem só de `Settings.LOG_LEVEL`. A saída de ferramentas externas fica como vem.
 - Uma operação (consulta, instrução, envio, exclusão) é um `span`, com o nome em `constants.py`. Não há histograma de duração, porque o `SigNoz` a deriva dos `spans`, e não se decora `flow` nem `task`.
 - Um instrumento de `telemetry.py` é só para totais que um `span` não dá (linhas, bytes), com unidade e atributos de cardinalidade baixa. Valor de dado, id de linha e mensagem de erro não são atributos.
-- O pacote usa só a API do `OpenTelemetry`. Os `flows` compartilhados de `utils.flows` chamam `configure_telemetry()` ao serem importados, depois de `import prefect`; um `flow` próprio faz o mesmo. Ela lê o `singleton` `settings` (`OTEL_*`) e não recebe `settings` como parâmetro.
+- O pacote usa só a API do `OpenTelemetry`. Os `flows` compartilhados de `utils.flows` chamam `configure_telemetry()` ao serem importados, depois de `import prefect`; um `flow` próprio faz o mesmo. Ela cria `ToolkitSettings` (`OTEL_*`) e não recebe as configurações como parâmetro.
 
 ## 7. Testes
 

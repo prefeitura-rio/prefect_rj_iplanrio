@@ -5,7 +5,7 @@ from typing import cast
 from prefect import Flow, Task
 from prefect.client.schemas.objects import FlowRun, State, TaskRun
 from prefect.settings import PREFECT_UI_URL
-from toolkit.settings import settings
+from toolkit.settings import DiscordSettings
 
 from .utils import failure_message, is_transient, post_discord
 
@@ -20,7 +20,7 @@ async def notify_failure(flow: Flow[..., object], flow_run: FlowRun, state: Stat
 
     Set it with `on_failure=[notify_failure]` on a flow.
     """
-    webhook = settings.DISCORD_WEBHOOK_URL.get_secret_value()
+    webhook = DiscordSettings().DISCORD_WEBHOOK_URL.get_secret_value()
     if not webhook:
         return
 

@@ -3,8 +3,6 @@ from json import loads
 import pytest
 from httpx2 import HTTPStatusError
 from psycopg.sql import Literal
-from pydantic import SecretStr
-from toolkit.settings import settings
 
 from utils import tasks
 from utils.constants import DISCORD_LIMIT
@@ -60,7 +58,7 @@ async def test_a_message_goes_to_the_webhook_as_the_content(fake_api):
 
 async def test_a_message_uses_the_webhook_of_the_settings_when_none_is_given(fake_api, monkeypatch):
     """Fall back to `DISCORD_WEBHOOK_URL`."""
-    monkeypatch.setattr(settings, "DISCORD_WEBHOOK_URL", SecretStr(f"{fake_api.url}/set"))
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", f"{fake_api.url}/set")
 
     await notify_discord.fn("hello")
 
@@ -69,7 +67,7 @@ async def test_a_message_uses_the_webhook_of_the_settings_when_none_is_given(fak
 
 async def test_a_message_with_no_webhook_is_refused(monkeypatch):
     """Raise, so a missing setting fails the run instead of dropping the message."""
-    monkeypatch.setattr(settings, "DISCORD_WEBHOOK_URL", SecretStr(""))
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "")
 
     with pytest.raises(ValueError, match="webhook"):
         await notify_discord.fn("hello")

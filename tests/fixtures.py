@@ -29,12 +29,11 @@ from pyarrow import Schema, Table
 from pyarrow import array as arrow_array
 from pyarrow import int64 as arrow_int64
 from pyarrow import table as arrow_table
-from pydantic import JsonValue, SecretStr
+from pydantic import JsonValue
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.engines.protocol import Engine
 from toolkit.executor.sources.protocols import DBConn
 from toolkit.oracle import Oracle
-from toolkit.settings import settings
 
 from utils import tasks, utils
 
@@ -237,10 +236,10 @@ def fake_gcs() -> Iterator[FakeGcs]:
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("GOOGLE_BASE_URL", server.url)
         patch.setenv("GOOGLE_SKIP_SIGNATURE", "true")
-        patch.setattr(settings, "GCS_ENDPOINT", server.endpoint)
-        patch.setattr(settings, "GCS_USE_SSL", False)
-        patch.setattr(settings, "GCS_HMAC_ACCESS_ID", "key")
-        patch.setattr(settings, "GCS_HMAC_SECRET", SecretStr("secret"))
+        patch.setenv("GCS_ENDPOINT", server.endpoint)
+        patch.setenv("GCS_USE_SSL", "false")
+        patch.setenv("GCS_HMAC_ACCESS_ID", "key")
+        patch.setenv("GCS_HMAC_SECRET", "secret")
 
         try:
             yield server

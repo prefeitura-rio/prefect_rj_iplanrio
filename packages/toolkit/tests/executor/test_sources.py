@@ -13,7 +13,6 @@ from toolkit.executor.sources.backends.mysql import MySQLSource
 from toolkit.executor.sources.backends.oracle import OracleSource
 from toolkit.executor.sources.backends.postgres import PostgresSource
 from toolkit.executor.sources.protocols import DBConn, SourceContext
-from toolkit.settings import settings
 from toolkit.types import QueryParams
 
 BACKENDS = [PostgresSource, MySQLSource, MSSQLSource]
@@ -75,7 +74,7 @@ async def test_regression_the_sql_server_query_timeout_follows_the_settings(
     fake_engine, monkeypatch
 ):
     """Regression: SQL Server cut every query at 30 s."""
-    monkeypatch.setattr(settings, "DB_QUERY_TIMEOUT_SECONDS", 60)
+    monkeypatch.setenv("DB_QUERY_TIMEOUT_SECONDS", "60")
     client = fake_engine()
 
     await MSSQLSource.from_context(SourceContext(DBConn("h", 1, "d", "u", "p"))).setup(

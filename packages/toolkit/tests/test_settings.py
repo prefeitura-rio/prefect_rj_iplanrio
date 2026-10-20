@@ -1,39 +1,65 @@
 import pytest
+from pydantic import ValidationError
 
-from toolkit.settings import read_database_credentials, read_secret
-
-
-def test_a_secret_is_every_variable_of_its_path_by_the_short_name(monkeypatch):
-    """Read the variables of `/api-x`, and no variable of another path."""
-    monkeypatch.setenv("API_X__TOKEN", "t")
-    monkeypatch.setenv("API_X__USER", "u")
-    monkeypatch.setenv("API_XY__TOKEN", "other")
-
-    assert read_secret("/api-x") == {"TOKEN": "t", "USER": "u"}
+from toolkit.settings import (
+    CouchDBSettings,
+    DatabaseSettings,
+    GcsSettings,
+    ToolkitSettings,
+)
 
 
-def test_a_secret_with_no_variable_is_a_key_error(monkeypatch):
-    """Raise, so a typo in the path fails at once and not at the first request."""
-    monkeypatch.delenv("API_Z__TOKEN", raising=False)
+def test_a_bad_value_of_one_group_does_not_break_another(monkeypatch):
+    """Read the CouchDB settings although a GCS variable is wrong."""
+    monkeypatch.setenv("GCS_USE_SSL", "maybe")
 
-    with pytest.raises(KeyError):
-        read_secret("/api-z")
+    assert CouchDBSettings().COUCHDB_PAGE_SIZE == 10_000
 
-
-def test_the_credentials_of_a_database_are_its_user_and_its_password(monkeypatch):
-    """Read `DB_USERNAME` and `DB_PASSWORD` of the path."""
-    monkeypatch.setenv("DB_ORACLE_X__DB_USERNAME", "u")
-    monkeypatch.setenv("DB_ORACLE_X__DB_PASSWORD", "p")
-
-    credentials = read_database_credentials("/db-oracle-x")
-
-    assert (credentials.username, credentials.password) == ("u", "p")
+    with pytest.raises(ValidationError, match="GCS_USE_SSL"):
+        GcsSettings()
 
 
-def test_a_secret_without_the_password_is_a_key_error(monkeypatch):
-    """Raise `KeyError` when only the user is set."""
-    monkeypatch.setenv("DB_ONLY_USER__DB_USERNAME", "u")
-    monkeypatch.delenv("DB_ONLY_USER__DB_PASSWORD", raising=False)
+def test_every_group_shares_the_log_level_and_the_telemetry(monkeypatch):
+    """Give the log level and the telemetry to every group from the base."""
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("OTEL_SERVICE_NAME", "toolkit-test")
 
-    with pytest.raises(KeyError):
-        read_database_credentials("/db-only-user")
+    groups = [kind() for kind in (ToolkitSettings, GcsSettings, CouchDBSettings)]
+
+    assert [(group.LOG_LEVEL, group.OTEL_SERVICE_NAME) for group in groups] == [
+        ("DEBUG", "toolkit-test")
+    ] * 3
+
+
+@pytest.mark.parametrize("kind", [ToolkitSettings, GcsSettings, CouchDBSettings])
+def test_a_bad_shared_value_breaks_every_group(monkeypatch, kind):
+    """Raise in every group for a wrong log level, because all of them share it."""
+    monkeypatch.setenv("LOG_LEVEL", "trace")
+
+    with pytest.raises(ValidationError, match="LOG_LEVEL"):
+        kind()
+
+
+def test_the_database_settings_hold_the_user_and_the_password(monkeypatch):
+    """Read the login of the database, and keep the password out of the repr."""
+    monkeypatch.setenv("DB_USERNAME", "reader")
+    monkeypatch.setenv("DB_PASSWORD", "segredo")
+
+    settings = DatabaseSettings()
+
+    assert (settings.DB_USERNAME, settings.DB_PASSWORD.get_secret_value()) == (
+        "reader",
+        "segredo",
+    )
+    assert "segredo" not in repr(settings)
+
+
+@pytest.mark.parametrize("missing", ["DB_USERNAME", "DB_PASSWORD"])
+def test_a_database_login_that_lacks_a_variable_names_it(monkeypatch, missing):
+    """Raise for a missing user or password, and name the variable that is missing."""
+    monkeypatch.setenv("DB_USERNAME", "reader")
+    monkeypatch.setenv("DB_PASSWORD", "segredo")
+    monkeypatch.delenv(missing)
+
+    with pytest.raises(ValidationError, match=missing):
+        DatabaseSettings()

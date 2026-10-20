@@ -10,7 +10,6 @@ from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.sources.backends.couchdb import CouchDBSource, change_item
 from toolkit.executor.sources.models import CouchDBAllDocs, CouchDBChanges
 from toolkit.executor.sources.protocols import DBConn
-from toolkit.settings import DatabaseCredentials
 from toolkit.types import Batches
 
 from utils import tasks
@@ -188,20 +187,14 @@ async def test_the_options_of_the_database_choose_the_bcadastro_shape(monkeypatc
         """Keep what the dump would read and where it would write."""
         seen.update(source=source, values=values, mode=dump_mode, options=options, destination=destination)
 
-    def credentials(path):
-        """Keep the secret that was asked for, and give a user and a password."""
-        seen["secret_path"] = path
-
-        return DatabaseCredentials("user", "password")
-
     monkeypatch.setattr(tasks, "load_to_delta", load)
-    monkeypatch.setattr(tasks, "read_database_credentials", credentials)
+    monkeypatch.setenv("DB_USERNAME", "user")
+    monkeypatch.setenv("DB_PASSWORD", "password")
     database: Database = {
         "type": "couchdb",
         "host": "10.2.231.241",
         "port": 6984,
         "database": "unused",
-        "secret_path": "/db-bcadastro",
         "options": {"shape": "utils.couchdb:BCADASTRO", "key_width": 3},
     }
 
@@ -211,4 +204,5 @@ async def test_the_options_of_the_database_choose_the_bcadastro_shape(monkeypatc
 
     source = seen["source"]
     assert (source.shape, source.key_width, source.conn.hostname) == (BCADASTRO, 3, "10.2.231.241")
-    assert (seen["secret_path"], seen["values"]) == ("/db-bcadastro", {"type": "couchdb", "table": "chcpf_bcadastros"})
+    assert (source.conn.user, source.conn.password) == ("user", "password")
+    assert seen["values"] == {"type": "couchdb", "table": "chcpf_bcadastros"}

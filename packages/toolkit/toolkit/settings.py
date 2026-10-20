@@ -1,81 +1,86 @@
 """Application settings loaded from environment variables."""
 
-from dataclasses import dataclass, field
-from os import environ
 from typing import ClassVar, Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
-    """Settings of the toolkit.
+class ToolkitSettings(BaseSettings):
+    """The settings that every part of the toolkit shares: the log level and telemetry.
 
-    Google APIs use ADC (workload identity).
+    A group of settings extends it with the variables of one part. A part builds its
+    group when it needs it, such as `GcsSettings()`, so a wrong value of another group
+    never stops it. Google APIs use ADC (workload identity).
     """
 
-    model_config: ClassVar[SettingsConfigDict] = {
-        "extra": "ignore",
-        "env_file": ".env",
-    }
+    model_config: ClassVar[SettingsConfigDict] = {"extra": "ignore"}
+
+    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
+    OTEL_EXPORTER_OTLP_HEADERS: SecretStr = SecretStr("")
+    OTEL_SERVICE_NAME: str = "prefect-rj-iplanrio"
+
+
+class BigQuerySettings(ToolkitSettings):
+    """The settings of BigQuery."""
 
     BIGQUERY_PROJECT: str = ""
+
+
+class CouchDBSettings(ToolkitSettings):
+    """The settings of the CouchDB source."""
+
     COUCHDB_PAGE_SIZE: int = 10_000
     COUCHDB_PATH_PREFIX: str = ""
     COUCHDB_SECURE: bool | None = None
     COUCHDB_TIMEOUT_SECONDS: int = 300
     COUCHDB_VERIFY_TLS: bool = True
-    DB_QUERY_TIMEOUT_SECONDS: int = 3600
+
+
+class DatabaseSettings(ToolkitSettings):
+    """The login of the database that a deployment reads.
+
+    Both variables are required: an empty or missing one is a `ValidationError` that
+    names it.
+    """
+
+    DB_USERNAME: str = Field(default="", min_length=1, validate_default=True)
+    DB_PASSWORD: SecretStr = Field(
+        default=SecretStr(""), min_length=1, validate_default=True
+    )
+
+
+class DiscordSettings(ToolkitSettings):
+    """The settings of the Discord notices."""
+
     DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")
+
+
+class DuckDBSettings(ToolkitSettings):
+    """The settings of the DuckDB engine."""
+
     DUCKDB_MEMORY_LIMIT: str = ""
     DUCKDB_TEMP_DIRECTORY: str = ""
+
+
+class GcsSettings(ToolkitSettings):
+    """The settings of Google Cloud Storage."""
+
     GCS_ENDPOINT: str = "storage.googleapis.com"
     GCS_HMAC_ACCESS_ID: str = ""
     GCS_HMAC_SECRET: SecretStr = SecretStr("")
     GCS_REGION: str = "auto"
     GCS_USE_SSL: bool = True
-    OTEL_EXPORTER_OTLP_ENDPOINT: str = ""
-    OTEL_EXPORTER_OTLP_HEADERS: SecretStr = SecretStr("")
-    OTEL_SERVICE_NAME: str = "prefect-rj-iplanrio"
+
+
+class MSSQLSettings(ToolkitSettings):
+    """The settings of the SQL Server source."""
+
+    DB_QUERY_TIMEOUT_SECONDS: int = 3600
+
+
+class OracleSettings(ToolkitSettings):
+    """The settings of the Oracle client."""
+
     ORACLE_CLIENT_LIB_DIR: str = ""
-    LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
-
-
-settings = Settings()
-
-
-@dataclass(frozen=True, slots=True)
-class DatabaseCredentials:
-    """User and password read from a secret path injected as environment variables."""
-
-    username: str
-    password: str = field(repr=False)
-
-
-def read_secret(secret_path: str) -> dict[str, str]:
-    """Read every variable of a secret path from the environment, by its short name.
-
-    `/api-x` reads `API_X__TOKEN` as `TOKEN`. Raise `KeyError` if there is none.
-    """
-    prefix = f"{secret_path.upper().replace('-', '_').replace('/', '')}__"
-    found = {
-        name.removeprefix(prefix): value
-        for name, value in environ.items()
-        if name.startswith(prefix)
-    }
-    if not found:
-        raise KeyError(secret_path)
-
-    return found
-
-
-def read_database_credentials(secret_path: str) -> DatabaseCredentials:
-    """Read the credentials of a secret path from the environment.
-
-    `/db-oracle-x` reads `DB_ORACLE_X__DB_USERNAME` and `DB_ORACLE_X__DB_PASSWORD`.
-    Raise `KeyError` if one is missing.
-    """
-    secret = read_secret(secret_path)
-    return DatabaseCredentials(
-        username=secret["DB_USERNAME"], password=secret["DB_PASSWORD"]
-    )

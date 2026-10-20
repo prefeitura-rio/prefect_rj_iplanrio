@@ -14,7 +14,7 @@ from google.cloud.bigquery import (
 )
 
 from .constants import GCS_SCHEME, GS_SCHEME
-from .settings import settings
+from .settings import BigQuerySettings
 
 
 def build_source_uri(uri: str) -> str:
@@ -45,7 +45,8 @@ class BigQuery:
         """
         async with AsyncExitStack() as stack:
             client = await to_thread(
-                Client, project=project or settings.BIGQUERY_PROJECT or None
+                Client,
+                project=project or BigQuerySettings().BIGQUERY_PROJECT or None,
             )
             stack.push_async_callback(to_thread, client.close)
             yield cls(client=client)

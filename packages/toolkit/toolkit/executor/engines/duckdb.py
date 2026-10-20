@@ -16,7 +16,7 @@ from psycopg.sql import Literal
 
 from ...constants import TIMEZONE
 from ...functions.registry import register_functions
-from ...settings import settings
+from ...settings import DuckDBSettings
 from ...types import QueryParams, TemplateValue
 from ..constants import DEFAULT_BATCH_SIZE
 from ..render import render_template
@@ -58,6 +58,8 @@ def quoted(value: str) -> Literal | bool:
 
 def setup_sql(extensions: Sequence[Extension]) -> str:
     """Return the statements that prepare a fresh connection, with the settings."""
+    settings = DuckDBSettings()
+
     return render_template(
         "duckdb/setup",
         {

@@ -489,19 +489,6 @@ def extract_records(data: JsonValue, key: str | None) -> list[dict[str, JsonValu
     return [record for record in found if isinstance(record, dict)]
 
 
-def fill_secrets(values: Mapping[str, str] | None, secret: Mapping[str, str]) -> dict[str, str]:
-    """Fill the `{NAME}` of each value with the secret of that name.
-
-    ```python
-    fill_secrets({"Authorization": "Bearer {TOKEN}"}, {"TOKEN": "abc"})
-    # {"Authorization": "Bearer abc"}
-    ```
-
-    Raise `KeyError` for a name that the secret does not have.
-    """
-    return {name: value.format_map(secret) for name, value in (values or {}).items()}
-
-
 def write_json_lines(records: Sequence[Mapping[str, JsonValue]], folder: Path) -> Path:
     """Write the records as a JSON lines file in a folder, and return the folder."""
     (folder / "records.json").write_text("\n".join(dumps(record) for record in records) + "\n", encoding="utf-8")

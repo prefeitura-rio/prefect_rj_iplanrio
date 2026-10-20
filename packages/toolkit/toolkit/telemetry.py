@@ -23,10 +23,10 @@ from opentelemetry.util.re import parse_env_headers
 from prefect.logging import get_logger
 
 from .constants import OTEL_HANDLER_NAME, PREFECT_LOGGER, SCOPE
-from .settings import settings
+from .settings import ToolkitSettings
 
 logger = get_logger("toolkit")
-logger.setLevel(settings.LOG_LEVEL)
+logger.setLevel(ToolkitSettings().LOG_LEVEL)
 
 tracer = trace.get_tracer(SCOPE)
 meter = metrics.get_meter(SCOPE)
@@ -51,6 +51,7 @@ def configure_telemetry() -> None:
     It does nothing without the endpoint, or if it already ran. Call it after `import
     prefect`, which rebuilds the logging.
     """
+    settings = ToolkitSettings()
     endpoint = settings.OTEL_EXPORTER_OTLP_ENDPOINT.rstrip("/")
     prefect_logger = getLogger(PREFECT_LOGGER)
 

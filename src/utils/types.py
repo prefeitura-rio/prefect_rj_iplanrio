@@ -12,7 +12,7 @@ type FileFormat = Literal["parquet", "csv", "json"]
 
 
 class Database(TypedDict):
-    """The database to read, with the secret that holds its user and password.
+    """The database to read. Its user and password come from `DatabaseSettings`.
 
     `options` are for the source of the type, such as the shape of a CouchDB read.
     """
@@ -21,7 +21,6 @@ class Database(TypedDict):
     host: str
     port: int
     database: str
-    secret_path: str
     options: NotRequired[Mapping[str, JsonValue]]
 
 

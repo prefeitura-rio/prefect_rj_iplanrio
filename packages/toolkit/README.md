@@ -50,7 +50,7 @@ O SQL é um modelo `Jinja` em `queries/count_events.sql`, que lê o banco anexad
 | `toolkit.bigquery`  | `BigQuery`: `table_exists`, `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake). |
 | `toolkit.oracle`    | `Oracle`, um `Engine` com `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                 |
 | `toolkit.dbt`       | Clona o repositório de consultas e roda um comando `dbt`.                                                                                               |
-| `toolkit.settings`  | `Settings` (variáveis de ambiente), `read_secret` (as variáveis de um caminho de segredo) e `read_database_credentials`.                                |
+| `toolkit.settings`  | `ToolkitSettings` (o log e a telemetria) e um grupo por parte, como `GcsSettings`. Cada parte cria o seu grupo quando precisa dele.                     |
 | `toolkit.utils`     | As colunas e os filtros de um `dump`: `normalize_column`, `column_aliases`, `select_columns` e `filter_predicates`.                                     |
 | `toolkit.telemetry` | O `logger` do pacote e `configure_telemetry()`.                                                                                                         |
 
@@ -103,30 +103,30 @@ Conferido em Postgres, MySQL, SQL Server e Oracle de verdade.
 
 ## Configuração
 
-A autenticação do Google é por workload identity (ADC), sem arquivo de service account. As variáveis são lidas do ambiente ou do `.env`:
+A autenticação do Google é por workload identity (ADC), sem arquivo de service account. As variáveis são lidas do ambiente. `LOG_LEVEL` e `OTEL_*` valem para todas as partes, e cada parte lê as do seu grupo só quando roda:
 
-| Variável                                            | Padrão                   | Uso                                                                                                            |
-| --------------------------------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `GCS_HMAC_ACCESS_ID`                                | vazio                    | Chave `HMAC` do `GCS` (API compatível com S3).                                                                 |
-| `GCS_HMAC_SECRET`                                   | vazio                    | Segredo `HMAC` do `GCS`.                                                                                       |
-| `GCS_ENDPOINT`                                      | `storage.googleapis.com` | Endpoint do `GCS`.                                                                                             |
-| `GCS_REGION`                                        | `auto`                   | Região enviada ao `store` S3.                                                                                  |
-| `GCS_USE_SSL`                                       | `true`                   | Usa HTTPS.                                                                                                     |
-| `BIGQUERY_PROJECT`                                  | vazio                    | Projeto das tabelas externas e da fonte `bigquery`.                                                            |
-| `COUCHDB_PAGE_SIZE`                                 | `10000`                  | Documentos por página de uma leitura do CouchDB.                                                               |
-| `COUCHDB_PATH_PREFIX`                               | vazio                    | Prefixo do caminho de um CouchDB atrás de um proxy, como `/couchdb`.                                           |
-| `COUCHDB_SECURE`                                    | vazio                    | `true` usa HTTPS e `false` usa HTTP. Vazio usa HTTP só na porta 5984.                                          |
-| `COUCHDB_TIMEOUT_SECONDS`                           | `300`                    | Segundos que uma página de uma leitura do CouchDB pode levar.                                                  |
-| `COUCHDB_VERIFY_TLS`                                | `true`                   | Verifica o certificado do CouchDB. `false` aceita um certificado que não casa com o endereço.                  |
-| `DB_QUERY_TIMEOUT_SECONDS`                          | `3600`                   | Limite de uma consulta no SQL Server (o padrão da extensão é 30 s).                                            |
-| `ORACLE_CLIENT_LIB_DIR`                             | vazio                    | Pasta do `Instant Client` do Oracle. Vazio usa o `ldconfig`, e sem o cliente o `oracledb` roda em modo `thin`. |
-| `DUCKDB_MEMORY_LIMIT`                               | vazio                    | Limite de memória do `DuckDB`, como `4GB`.                                                                     |
-| `DUCKDB_TEMP_DIRECTORY`                             | vazio                    | Pasta onde o `DuckDB` grava o que não cabe na memória.                                                         |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`                       | vazio                    | Coletor `OTLP/HTTP`, como `http://coletor:4318`. Vazio desliga o envio.                                        |
-| `OTEL_EXPORTER_OTLP_HEADERS`                        | vazio                    | Cabeçalhos do coletor, `chave=valor,chave2=valor2`. Segredo.                                                   |
-| `OTEL_SERVICE_NAME`                                 | `prefect-rj-iplanrio`    | Nome do serviço nos logs, traces e métricas.                                                                   |
-| `LOG_LEVEL`                                         | `INFO`                   | Nível do log.                                                                                                  |
-| `<CAMINHO>__DB_USERNAME` e `<CAMINHO>__DB_PASSWORD` | —                        | Credenciais de banco injetadas pelo `Infisical`.                                                               |
+| Variável                      | Padrão                   | Uso                                                                                                            |
+| ----------------------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `GCS_HMAC_ACCESS_ID`          | vazio                    | Chave `HMAC` do `GCS` (API compatível com S3).                                                                 |
+| `GCS_HMAC_SECRET`             | vazio                    | Segredo `HMAC` do `GCS`.                                                                                       |
+| `GCS_ENDPOINT`                | `storage.googleapis.com` | Endpoint do `GCS`.                                                                                             |
+| `GCS_REGION`                  | `auto`                   | Região enviada ao `store` S3.                                                                                  |
+| `GCS_USE_SSL`                 | `true`                   | Usa HTTPS.                                                                                                     |
+| `BIGQUERY_PROJECT`            | vazio                    | Projeto das tabelas externas e da fonte `bigquery`.                                                            |
+| `COUCHDB_PAGE_SIZE`           | `10000`                  | Documentos por página de uma leitura do CouchDB.                                                               |
+| `COUCHDB_PATH_PREFIX`         | vazio                    | Prefixo do caminho de um CouchDB atrás de um proxy, como `/couchdb`.                                           |
+| `COUCHDB_SECURE`              | vazio                    | `true` usa HTTPS e `false` usa HTTP. Vazio usa HTTP só na porta 5984.                                          |
+| `COUCHDB_TIMEOUT_SECONDS`     | `300`                    | Segundos que uma página de uma leitura do CouchDB pode levar.                                                  |
+| `COUCHDB_VERIFY_TLS`          | `true`                   | Verifica o certificado do CouchDB. `false` aceita um certificado que não casa com o endereço.                  |
+| `DB_QUERY_TIMEOUT_SECONDS`    | `3600`                   | Limite de uma consulta no SQL Server (o padrão da extensão é 30 s).                                            |
+| `ORACLE_CLIENT_LIB_DIR`       | vazio                    | Pasta do `Instant Client` do Oracle. Vazio usa o `ldconfig`, e sem o cliente o `oracledb` roda em modo `thin`. |
+| `DUCKDB_MEMORY_LIMIT`         | vazio                    | Limite de memória do `DuckDB`, como `4GB`.                                                                     |
+| `DUCKDB_TEMP_DIRECTORY`       | vazio                    | Pasta onde o `DuckDB` grava o que não cabe na memória.                                                         |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | vazio                    | Coletor `OTLP/HTTP`, como `http://coletor:4318`. Vazio desliga o envio.                                        |
+| `OTEL_EXPORTER_OTLP_HEADERS`  | vazio                    | Cabeçalhos do coletor, `chave=valor,chave2=valor2`. Segredo.                                                   |
+| `OTEL_SERVICE_NAME`           | `prefect-rj-iplanrio`    | Nome do serviço nos logs, traces e métricas.                                                                   |
+| `LOG_LEVEL`                   | `INFO`                   | Nível do log.                                                                                                  |
+| `DB_USERNAME` e `DB_PASSWORD` | obrigatórias             | Usuário e senha do banco que o deployment lê. Vazio ou ausente é um erro.                                      |
 
 ## Logs, traces e métricas
 

@@ -37,7 +37,7 @@ from .constants import (
 from .executor.constants import DEFAULT_BATCH_SIZE
 from .executor.render import render_template
 from .executor.sources.protocols import DBConn
-from .settings import settings
+from .settings import OracleSettings
 from .telemetry import logger
 from .types import ArrowColumn, Filter, QueryParams, Scalar
 
@@ -126,7 +126,7 @@ def plan_column(
 def init_client() -> None:
     """Load the Oracle Instant Client once, or stay in thin mode if it is not there."""
     try:
-        init_oracle_client(lib_dir=settings.ORACLE_CLIENT_LIB_DIR or None)
+        init_oracle_client(lib_dir=OracleSettings().ORACLE_CLIENT_LIB_DIR or None)
     except DatabaseError as error:
         logger.warning(
             "Oracle Instant Client not loaded, so oracledb runs in thin mode: %s",

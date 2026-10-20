@@ -5,7 +5,7 @@ from typing import ClassVar, override
 
 from psycopg.sql import Identifier, Literal
 
-from ....settings import settings
+from ....settings import BigQuerySettings
 from ...constants import ALIAS
 from ...engines.duckdb import Extension
 from ...engines.protocol import Engine
@@ -24,7 +24,7 @@ class BigQuerySource(SourceBase):
         Extension("bigquery", community=True),
     )
 
-    project: str = field(default_factory=lambda: settings.BIGQUERY_PROJECT)
+    project: str = field(default_factory=lambda: BigQuerySettings().BIGQUERY_PROJECT)
 
     @override
     async def setup(self, client: Engine) -> None:
