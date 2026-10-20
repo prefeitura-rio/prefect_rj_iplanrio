@@ -486,6 +486,7 @@ def test_parent_passes_max_pending_files_to_children(monkeypatch: pytest.MonkeyP
         "rename_current_flow_run_task": ignore,
         "inject_bd_credentials_task": ignore,
         "ensure_exclusive_task": ignore,
+        "check_dfen_extraction_task": ignore,
         "drop_leftover_chunk_tasks_task": ignore,
         "take_snapshot_task": lambda infisical_secret_path: SNAPSHOT,
         "plan_table_task": fake_plan,

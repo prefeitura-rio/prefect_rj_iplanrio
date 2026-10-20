@@ -825,6 +825,7 @@ def stop_parent_at_child_launch(monkeypatch: pytest.MonkeyPatch) -> dict[str, ob
         "rename_current_flow_run_task": ignore,
         "inject_bd_credentials_task": ignore,
         "ensure_exclusive_task": ignore,
+        "check_dfen_extraction_task": ignore,
         "drop_leftover_chunk_tasks_task": ignore,
         "take_snapshot_task": lambda infisical_secret_path: Snapshot(scn=1, taken_at=NOW),
         "plan_table_task": lambda **_: Plan(),

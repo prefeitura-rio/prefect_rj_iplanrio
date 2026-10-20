@@ -4,11 +4,15 @@ import time
 
 from prefect import task
 from prefect.cache_policies import NO_CACHE
-from prefect.runtime import deployment, flow_run
+from prefect.runtime import deployment, flow_run, task_run
 from prefect.settings import PREFECT_UI_URL
 
 from iplanrio.pipelines_utils.logging import log
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import GCS_PREFIX
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import (
+    GCS_PREFIX,
+    LAUNCH_RETRIES,
+    LAUNCH_RETRY_DELAYS_SECONDS,
+)
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils import (
     chunks,
     extract,
@@ -191,18 +195,27 @@ def stamp_validated_task(  # noqa: PLR0913
     log(f"{table_plan.table_id}: tabela temporária marcada como validada (execução {run_id}, SCN {snapshot.scn})")
 
 
-@task(cache_policy=NO_CACHE)
+@task(cache_policy=NO_CACHE, retries=LAUNCH_RETRIES, retry_delay_seconds=list(LAUNCH_RETRY_DELAYS_SECONDS))
 def launch_children_task(
     table_ids: list[str], snapshot: oracle.Snapshot, passthrough: dict[str, object]
 ) -> dict[str, str]:
-    """Lança um flow run filho por tabela neste mesmo deployment, em paralelo, cada um no seu pod."""
+    """Lança um flow run filho por tabela neste mesmo deployment, em paralelo, cada um no seu pod.
+
+    Repete se a API do Prefect falhar: a chave de idempotência de cada filho faz a nova tentativa reaproveitar os já
+    criados, e só a última tentativa que falha os cancela.
+    """
     if deployment.name is None or flow_run.flow_name is None:
         raise parallel.ParallelRunError("parallel_tables exige execução por um deployment; use parallel_tables=False.")
     run_id = str(flow_run.id)
     parameters = {
         table_id: parallel.build_child_parameters(table_id, snapshot, run_id, passthrough) for table_id in table_ids
     }
-    children = runs.launch_children(f"{flow_run.flow_name}/{deployment.name}", parameters)
+    request = runs.ChildLaunch(
+        f"{flow_run.flow_name}/{deployment.name}", parallel.launch_key(run_id, snapshot), parameters
+    )
+    children = runs.launch_children(
+        request, parallel.is_final_attempt(task_run.run_count, LAUNCH_RETRIES), lambda message: log(message, "warning")
+    )
     ui_url = PREFECT_UI_URL.value()
     for table_id, child_id in children.items():
         link = f" {ui_url}/runs/flow-run/{child_id}" if ui_url else ""
