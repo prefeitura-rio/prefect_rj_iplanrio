@@ -317,6 +317,7 @@ def parse_daf607_file(
                         "valor_multa": linha[123:140].strip() or "0",
                         "valor_juros": linha[140:157].strip() or "0",
                         "valor_autenticacao": linha[204:221].strip() or "0",
+                        "numero_autenticacao_banco": linha[221:244].strip(),
                         "banco_arrecadador": linha[244:247],
                         "agencia_arrecadadora": linha[247:251],
                         "codigo_siafi": linha[455:461],
@@ -331,7 +332,7 @@ def parse_daf607_file(
                     {
                         "codigo_registro": linha[0:1],
                         "sequencial": linha[1:9],
-                        "total_registros": int(linha[9:15] or 0),
+                        "total_registros": linha[9:15].strip(),
                         "valor_total_recebido": linha[15:32].strip() or "0",
                         "arquivo_origem": blob_name,
                         "loaded_at": loaded_at,

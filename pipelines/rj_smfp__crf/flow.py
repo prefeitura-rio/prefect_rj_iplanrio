@@ -139,11 +139,3 @@ def rj_smfp__crf(
         source_format="parquet",
         table_id=table_id,
     )
-
-rj_smfp__crf(
-    table_id="daf607",
-    project_id="rj-iplanrio",
-    dataset_id="brutos_crf",
-    data_inicio="2020-01-01",
-    data_fim="2020-02-29",
-)
