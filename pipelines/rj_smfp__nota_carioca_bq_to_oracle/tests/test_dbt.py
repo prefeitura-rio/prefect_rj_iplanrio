@@ -255,6 +255,7 @@ class FlowCalls:
             "refresh_synonyms_task",
             "wait_inmemory_task",
             "swap_synonyms_task",
+            "release_inmemory_task",
         )
         for name in names:
             monkeypatch.setattr(flow_module, name, self.recorder(name))
