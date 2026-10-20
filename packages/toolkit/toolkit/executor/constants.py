@@ -60,6 +60,3 @@ COUCHDB_DESIGN_PREFIXES: Final = ("_design/", "_local/")
 
 COUCHDB_PLAIN_PORT: Final = 5984
 """The plain port of CouchDB. It serves TLS on 6984 and on the ports of a proxy."""
-
-COUCHDB_TIMEOUT_SECONDS: Final = 60
-"""The limit of one page of a CouchDB read."""

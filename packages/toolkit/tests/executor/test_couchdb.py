@@ -1,3 +1,4 @@
+from datetime import date
 from json import loads
 from typing import cast
 
@@ -11,7 +12,7 @@ from pyarrow.parquet import read_table
 from pydantic import JsonValue
 
 import toolkit.executor.sources.backends.couchdb as couchdb_module
-from toolkit.batches import Rows, Window
+from toolkit.batches import NULL_WINDOW, Rows, Window
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.engines.protocol import Engine
 from toolkit.executor.sources.backends.couchdb import (
@@ -514,4 +515,87 @@ async def test_a_changes_read_refuses_what_it_cannot_combine(
     with pytest.raises(ValueError, match=message):
         await source.stage(
             CLIENT, {"type": "couchdb", **values}, Rows(window=window), tmp_path
+        )
+
+
+async def test_regression_the_last_window_reaches_the_top_of_the_ids(couchdb, tmp_path):
+    """Regression: a window that ended at 10^width had an end key before its start."""
+    store, conn = couchdb
+    store.docs["50000000000"] = {"_id": "50000000000", "_rev": "1-a"}
+    store.docs["99999999999"] = {"_id": "99999999999", "_rev": "1-b"}
+    source = CouchDBSource(conn, page_size=3000, secure=False)
+
+    await source.stage(
+        CLIENT, {"type": "couchdb"}, Rows(window=Window("x", 0, 10**11)), tmp_path
+    )
+    ids = read_table(tmp_path / "_stage" / "couchdb.parquet")["id"].to_pylist()
+
+    assert (len(ids), ids[-2:]) == (2502, ["50000000000", "99999999999"])
+
+
+async def test_the_windows_and_the_null_window_read_every_document_once(
+    couchdb, tmp_path
+):
+    """Read the numeric ranges and the null window, and get each document one time."""
+    store, conn = couchdb
+    extra = [
+        "50000000000",
+        "99999999999",
+        "CPF-20261020011517",
+        "SUCESSAO-1",
+        "-legacy",
+    ]
+    store.docs.update({key: {"_id": key, "_rev": "1-a"} for key in extra})
+    store.docs[DESIGN] = {"_id": DESIGN, "_rev": "1-design"}
+    source = CouchDBSource(conn, page_size=3000, secure=False)
+    read: list[str] = []
+
+    for number, window in enumerate(
+        [Window("a", 0, 5 * 10**10), Window("b", 5 * 10**10, 10**11), NULL_WINDOW]
+    ):
+        folder = tmp_path / str(number)
+        folder.mkdir()
+        await source.stage(CLIENT, {"type": "couchdb"}, Rows(window=window), folder)
+        ids = read_table(folder / "_stage" / "couchdb.parquet")["id"].to_pylist()
+        read += [str(key) for key in ids]
+
+    assert sorted(read) == sorted(key for key in store.docs if key != DESIGN)
+
+
+async def test_a_key_width_cuts_ids_of_mixed_length_by_their_first_digits(
+    couchdb, tmp_path
+):
+    """Cut ids of 8 and 14 digits by their first three digits, with no width probe."""
+    store, conn = couchdb
+    keys = [
+        "00000000",
+        "00000000123456",
+        "12345678",
+        "12345678901234",
+        "55555555",
+        "99017782000139",
+    ]
+    store.docs = {key: {"_id": key, "_rev": "1-a"} for key in keys}
+    source = CouchDBSource(conn, key_width=3, page_size=3000, secure=False)
+    halves: list[list[str]] = []
+
+    for number, window in enumerate([Window("a", 0, 500), Window("b", 500, 1000)]):
+        folder = tmp_path / str(number)
+        folder.mkdir()
+        await source.stage(CLIENT, {"type": "couchdb"}, Rows(window=window), folder)
+        ids = read_table(folder / "_stage" / "couchdb.parquet")["id"].to_pylist()
+        halves.append([str(key) for key in ids])
+
+    assert halves == [keys[:4], keys[4:]]
+    assert "1" not in [seen.get("limit") for _, seen, _ in store.requests]
+
+
+async def test_a_window_of_dates_is_an_error(couchdb, tmp_path):
+    """Raise for a window of dates, because a CouchDB read cuts ids."""
+    _, conn = couchdb
+    window = Window("2024-01-01", date(2024, 1, 1), date(2024, 1, 2))
+
+    with pytest.raises(ValueError, match="needs numbers"):
+        await CouchDBSource(conn, secure=False).stage(
+            CLIENT, {"type": "couchdb"}, Rows(window=window), tmp_path
         )

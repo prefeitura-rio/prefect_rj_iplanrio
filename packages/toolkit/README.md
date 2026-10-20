@@ -97,9 +97,9 @@ Conferido em Postgres, MySQL, SQL Server e Oracle de verdade.
 
 - O `CouchDBSource` lê `conn.database` pela API HTTP e grava `Parquet`, como o Oracle. Há três leituras: `_all_docs` (padrão), `_find` (`query`, um seletor Mango em JSON) e `_changes` (`since`: `0`, `now` ou o `last_seq` anterior).
 - As colunas vêm de um `Shape` (`columns` e `row(item)`). O padrão grava `id` e `doc`, que o `DuckDB` lê como `JSON`: `doc->>'$.campo'`. O `BigQuery` lê `doc` como `STRING`: use `PARSE_JSON`.
-- Uma janela corta ids numéricos de uma largura só. Ids com letra, `_design/` e larguras mistas ficam fora: leia a base inteira ou use `query`.
+- Uma janela corta os ids numéricos com `startkey` e `endkey`. Com `key_width=N`, o corte usa os N primeiros dígitos e serve a ids de larguras mistas. A janela `null` lê o resto, como os ids com letra. Os `_design/` nunca entram.
 - Sem `filters`. `query` e `since` não vão juntos, e cada um é uma janela só.
-- `page_size`, `verify_tls`, `secure` e `path_prefix` vêm do construtor ou das variáveis `COUCHDB_*` da tabela abaixo. `_all_docs` rendeu cerca de 30 000 documentos por segundo, e `_changes` 13 000: use `_changes` só para cargas incrementais.
+- `page_size`, `verify_tls`, `secure`, `path_prefix` e `timeout` vêm do construtor ou das variáveis `COUCHDB_*` da tabela abaixo. `key_width` só vem do construtor. `_all_docs` rendeu cerca de 30 000 documentos por segundo, e `_changes` 13 000: use `_changes` só para cargas incrementais.
 
 ## Configuração
 
@@ -116,6 +116,7 @@ A autenticação do Google é por workload identity (ADC), sem arquivo de servic
 | `COUCHDB_PAGE_SIZE`                                 | `10000`                  | Documentos por página de uma leitura do CouchDB.                                                               |
 | `COUCHDB_PATH_PREFIX`                               | vazio                    | Prefixo do caminho de um CouchDB atrás de um proxy, como `/couchdb`.                                           |
 | `COUCHDB_SECURE`                                    | vazio                    | `true` usa HTTPS e `false` usa HTTP. Vazio usa HTTP só na porta 5984.                                          |
+| `COUCHDB_TIMEOUT_SECONDS`                           | `300`                    | Segundos que uma página de uma leitura do CouchDB pode levar.                                                  |
 | `COUCHDB_VERIFY_TLS`                                | `true`                   | Verifica o certificado do CouchDB. `false` aceita um certificado que não casa com o endereço.                  |
 | `DB_QUERY_TIMEOUT_SECONDS`                          | `3600`                   | Limite de uma consulta no SQL Server (o padrão da extensão é 30 s).                                            |
 | `ORACLE_CLIENT_LIB_DIR`                             | vazio                    | Pasta do `Instant Client` do Oracle. Vazio usa o `ldconfig`, e sem o cliente o `oracledb` roda em modo `thin`. |

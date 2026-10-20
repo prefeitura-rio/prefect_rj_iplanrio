@@ -14,7 +14,7 @@ from pyarrow import Schema, Table, json_, schema, string
 from pyarrow.parquet import ParquetWriter
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
-from ....batches import Rows, Window
+from ....batches import NULL_WINDOW, Rows, Window
 from ....settings import settings
 from ....types import TemplateValue
 from ...constants import (
@@ -22,7 +22,6 @@ from ...constants import (
     COUCHDB_ALL_WINDOW,
     COUCHDB_DESIGN_PREFIXES,
     COUCHDB_PLAIN_PORT,
-    COUCHDB_TIMEOUT_SECONDS,
     SECRET,
 )
 from ...engines.duckdb import Extension
@@ -41,6 +40,18 @@ from ..protocols import DBConn, SourceContext
 def json_text(value: JsonValue) -> str:
     """Return a value as compact JSON text."""
     return dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def number_key(number: int, width: int) -> str:
+    """Return the key of a number of ids: padded to `width`, `0` below, `:` above.
+
+    `:` sorts after every digit, so a number past the ids of the width ends the range
+    before the ids that start with a letter. `0` sorts before every padded number.
+    """
+    if number >= 10**width:
+        return ":"
+
+    return f"{number:0{width}d}" if number > 0 else "0"
 
 
 def item_of(doc: dict[str, JsonValue]) -> CouchDBItem:
@@ -90,7 +101,9 @@ class CouchDBSource(SourceBase):
     """A source that reads the documents of `conn.database` in pages, over HTTP.
 
     A `query` in the values is a Mango selector, and a `since` is the sequence from
-    which `_changes` reads. A window sends `startkey` and `endkey` over the ids.
+    which `_changes` reads. A window sends `startkey` and `endkey` over the ids, cut by
+    the first `key_width` digits, or by the whole id when `key_width` is `None`. The
+    null window reads the ids that do not start with a digit.
     """
 
     extensions: ClassVar[tuple[Extension, ...]] = ()
@@ -101,6 +114,8 @@ class CouchDBSource(SourceBase):
     verify_tls: bool = field(default_factory=lambda: settings.COUCHDB_VERIFY_TLS)
     secure: bool | None = field(default_factory=lambda: settings.COUCHDB_SECURE)
     path_prefix: str = field(default_factory=lambda: settings.COUCHDB_PATH_PREFIX)
+    timeout: int = field(default_factory=lambda: settings.COUCHDB_TIMEOUT_SECONDS)
+    key_width: int | None = None
     width: int | None = field(default=None, init=False, repr=False)
 
     @override
@@ -131,7 +146,7 @@ class CouchDBSource(SourceBase):
             base_url=self.base_url,
             auth=(self.conn.user, self.conn.password),
             verify=self.verify_tls,
-            timeout=Timeout(COUCHDB_TIMEOUT_SECONDS),
+            timeout=Timeout(self.timeout),
         )
 
     async def stage(
@@ -192,11 +207,22 @@ class CouchDBSource(SourceBase):
         window: Window | None,
         writer: ParquetWriter,
     ) -> None:
-        """Copy every page of the database in the range of the window.
+        """Copy every page of the database in the key ranges of the window."""
+        for start, stop in await self.key_ranges(http, database, window):
+            await self.copy_range(http, database, start, stop, writer)
+
+    async def copy_range(
+        self,
+        http: AsyncClient,
+        database: str,
+        start: str | None,
+        stop: str | None,
+        writer: ParquetWriter,
+    ) -> None:
+        """Copy every page of the database between two keys.
 
         Raise `ValueError` if the server repeats a key, because the read cannot advance.
         """
-        start, stop = await self.key_range(http, database, window)
         update_seq = None
         cursor = start
         skip = 0
@@ -328,28 +354,40 @@ class CouchDBSource(SourceBase):
 
         return params
 
-    async def key_range(
+    async def key_ranges(
         self, http: AsyncClient, database: str, window: Window | None
-    ) -> tuple[str | None, str | None]:
-        """Return the two keys of the window, or no key for the whole database."""
+    ) -> list[tuple[str | None, str | None]]:
+        """Return the key ranges of a window: one for ids, two for the null window.
+
+        No window reads every key. The null window reads the keys below `0` and from
+        `:`. Raise `ValueError` for a window of dates, because the ranges cut ids.
+        """
         if window is None or window.key == COUCHDB_ALL_WINDOW:
-            return None, None
+            return [(None, None)]
+        if window == NULL_WINDOW:
+            return [(None, "0"), (":", None)]
 
-        width = await self.id_width(http, database)
+        match window.start, window.stop:
+            case int() as start, int() as stop:
+                width = self.key_width or await self.id_width(http, database)
 
-        return f"{window.start:0{width}d}", f"{window.stop:0{width}d}"
+                return [(number_key(start, width), number_key(stop, width))]
+            case _:
+                raise ValueError(
+                    "A CouchDB window cuts ids, so it needs numbers, not dates"
+                )
 
     async def id_width(self, http: AsyncClient, database: str) -> int:
         """Return the width of the ids, and keep it for the next window.
 
-        Raise `ValueError` if the ids are not numbers padded to one width. The last id
-        is read below the key `:`, which sorts after every digit, so the design
-        documents and the ids that start with a letter stay out.
+        Raise `ValueError` if the ids are not numbers padded to one width. The first id
+        is read from the key `0` and the last below the key `:`, so the ids that start
+        with a letter or a symbol, and the design documents, stay out.
         """
         if self.width is not None:
             return self.width
 
-        first = await self.first_key(http, database, {})
+        first = await self.first_key(http, database, {"startkey": json_text("0")})
         last = await self.first_key(
             http, database, {"descending": "true", "startkey": json_text(":")}
         )
