@@ -4,10 +4,8 @@ A tabela física nasce ``NO INMEMORY``. Depois da carga, só as partições da j
 anteriores, mais as futuras) recebem ``LOADED_TABLE_INMEMORY`` e são populadas antes da troca; o resto do histórico fica
 só em disco. Depois da troca, a tabela que saiu de uso volta inteira para ``NO INMEMORY`` e libera a memória.
 
-O usuário da carga não tem ``ALTER ANY TABLE``: os ``ALTER`` rodam na procedure ``<schema>.PRC_BQLOAD_INMEMORY``, do
-dono das tabelas (``dba/PRC_BQLOAD_INMEMORY.sql``). Seguem o padrão do job de In-Memory da DBA
-(``DFEN.PRC_ROLL_IMCS_NACIONAL``): ``DDL_LOCK_TIMEOUT`` curto por tentativa e nova tentativa com espera em caso de
-``ORA-00054``, sem nunca matar sessão.
+Os ``ALTER`` seguem o padrão do job de In-Memory da DBA (``DFEN.PRC_ROLL_IMCS_NACIONAL``): ``DDL_LOCK_TIMEOUT`` curto
+por tentativa e nova tentativa com espera em caso de ``ORA-00054``, sem nunca matar sessão.
 """
 
 import re
@@ -26,9 +24,10 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     fetch_rows,
     to_int,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import LOADED_TABLE_INMEMORY
 from prefect_rj_iplanrio.sql import load_query
 
-PROCEDURE_NAME = "PRC_BQLOAD_INMEMORY"
+DDL_LOCK_TIMEOUT_SECONDS = 8
 DDL_ATTEMPTS = 26
 DDL_RETRY_SECONDS = 30.0
 RESOURCE_BUSY = 54
@@ -217,74 +216,43 @@ def in_window(high_value: str, start: date) -> bool:
     return bound is None or bound > start
 
 
-def procedure_call(schema: str) -> str:
-    """Chamada da procedure que liga ou desliga o In-Memory de uma tabela da carga, no schema das tabelas.
-
-    O usuário da carga não tem ``ALTER ANY TABLE``; o ``ALTER`` roda dentro da procedure, com os direitos do dono das
-    tabelas, que só aceita tabelas ``BQLOAD_*_A/_B`` criadas por esta pipeline (``dba/PRC_BQLOAD_INMEMORY.sql``).
-
-    :param schema: Schema das tabelas e da procedure.
-    :returns: Bloco PL/SQL com os binds ``tabela``, ``particao`` e ``ativar``.
-    """
-    return load_query(QUERIES_ANCHOR, "call_inmemory_procedure", schema=schema)
-
-
-def procedure_binds(table: str, partition: str | None, enabled: bool) -> dict[str, object]:
-    """Binds da chamada da procedure.
-
-    :param table: Tabela física.
-    :param partition: Partição, ou ``None`` para a tabela inteira (padrão e todas as partições).
-    :param enabled: ``True`` para ``LOADED_TABLE_INMEMORY``, ``False`` para ``NO INMEMORY``.
-    :returns: Binds de :func:`procedure_call`.
-    """
-    return {"tabela": table, "particao": partition, "ativar": 1 if enabled else 0}
-
-
-def call_with_retry(
-    cursor: oracledb.Cursor, statement: str, binds: dict[str, object], report: Callable[[str], None]
+def execute_ddl(
+    cursor: oracledb.Cursor,
+    statement: str,
+    report: Callable[[str], None],
+    *,
+    attempts: int = DDL_ATTEMPTS,
+    retry_seconds: float = DDL_RETRY_SECONDS,
 ) -> None:
-    """Executa a chamada, tentando de novo enquanto o objeto estiver ocupado (``ORA-00054``).
+    """Executa um DDL, tentando de novo enquanto o objeto estiver ocupado (``ORA-00054``).
 
-    A procedure espera a trava só pelo ``DDL_LOCK_TIMEOUT`` curto; entre as tentativas (``DDL_ATTEMPTS``, a cada
-    ``DDL_RETRY_SECONDS``) a fila é liberada e a aplicação segue normalmente. Qualquer outro erro, ou o fim das
-    tentativas, é repassado.
+    Cada tentativa espera a trava só pelo ``DDL_LOCK_TIMEOUT`` da sessão; entre as tentativas a fila é liberada e a
+    aplicação segue normalmente. Qualquer outro erro, ou o fim das tentativas, é repassado.
 
-    :param cursor: Cursor de uma conexão aberta.
-    :param statement: Bloco a executar.
-    :param binds: Binds do bloco.
+    :param cursor: Cursor de uma conexão com ``DDL_LOCK_TIMEOUT`` já definido.
+    :param statement: DDL a executar.
     :param report: Função que recebe as mensagens de nova tentativa.
-    :raises oracledb.DatabaseError: Se a chamada falhar por outro motivo ou o objeto continuar ocupado.
+    :param attempts: Número máximo de tentativas.
+    :param retry_seconds: Espera entre as tentativas.
+    :raises oracledb.DatabaseError: Se o DDL falhar por outro motivo ou o objeto continuar ocupado.
     """
-    attempts = DDL_ATTEMPTS
     for attempt in range(1, attempts + 1):
         try:
-            cursor.execute(statement, binds)
+            cursor.execute(statement)
             return
         except oracledb.DatabaseError as error:
             (detail,) = error.args
             if getattr(detail, "code", None) != RESOURCE_BUSY or attempt == attempts:
                 raise
             report(
-                f"Objeto ocupado (ORA-00054), tentativa {attempt}/{attempts}; "
-                f"nova tentativa em {DDL_RETRY_SECONDS:.0f}s"
+                f"Objeto ocupado (ORA-00054), tentativa {attempt}/{attempts}; nova tentativa em {retry_seconds:.0f}s"
             )
-            time.sleep(DDL_RETRY_SECONDS)
+            time.sleep(retry_seconds)
 
 
-def ensure_procedure(config: OracleConfig) -> None:
-    """Confirma, antes de mexer em qualquer tabela, que a sessão pode executar a procedure do In-Memory.
-
-    :param config: Configuração da conexão.
-    :raises PermissionError: Se a procedure não existir no schema das tabelas ou a sessão não tiver ``EXECUTE``.
-    """
-    with connect(config) as connection, connection.cursor() as cursor:
-        rows = fetch_rows(cursor, "get_inmemory_procedure", {"owner": config.schema, "name": PROCEDURE_NAME})
-    if not to_int(rows[0]["executable"]):
-        raise PermissionError(
-            f"Procedure {config.schema}.{PROCEDURE_NAME} ausente ou sem EXECUTE para o usuário da carga: peça à DBA o "
-            "script pipelines/rj_smfp__nota_carioca_bq_to_oracle/dba/PRC_BQLOAD_INMEMORY.sql. Nenhuma tabela foi "
-            "alterada."
-        )
+def _prepare_ddl(cursor: oracledb.Cursor, schema: str, table: str) -> None:
+    assert_managed_existing_table(cursor, schema, table)
+    cursor.execute(load_query(QUERIES_ANCHOR, "set_ddl_lock_timeout", seconds=str(DDL_LOCK_TIMEOUT_SECONDS)))
 
 
 def disable(config: OracleConfig, table: str, report: Callable[[str], None]) -> None:
@@ -294,11 +262,14 @@ def disable(config: OracleConfig, table: str, report: Callable[[str], None]) -> 
     :param table: Tabela física.
     :param report: Função que recebe as mensagens de nova tentativa.
     :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
-    :raises oracledb.DatabaseError: Se a procedure falhar.
+    :raises oracledb.DatabaseError: Se o ``ALTER`` falhar.
     """
     with connect(config) as connection, connection.cursor() as cursor:
-        assert_managed_existing_table(cursor, config.schema, table)
-        call_with_retry(cursor, procedure_call(config.schema), procedure_binds(table, None, enabled=False), report)
+        _prepare_ddl(cursor, config.schema, table)
+        statement = load_query(
+            QUERIES_ANCHOR, "alter_table_inmemory", schema=config.schema, table=table, clause="NO INMEMORY"
+        )
+        execute_ddl(cursor, statement, report)
 
 
 def select_window(partitions: Sequence[dict[str, object]], start: date) -> list[str]:
@@ -311,8 +282,10 @@ def select_window(partitions: Sequence[dict[str, object]], start: date) -> list[
     return [str(row["partition_name"]) for row in partitions if in_window(str(row["high_value"]), start)]
 
 
-def enable_window(config: OracleConfig, table: str, start: date, report: Callable[[str], None]) -> list[str]:
-    """Coloca no In-Memory (``LOADED_TABLE_INMEMORY``) só as partições da janela; as demais continuam ``NO INMEMORY``.
+def enable_window(
+    config: OracleConfig, table: str, start: date, report: Callable[[str], None], clause: str = LOADED_TABLE_INMEMORY
+) -> list[str]:
+    """Coloca no In-Memory só as partições da janela; as demais continuam ``NO INMEMORY``.
 
     Tabela não particionada entra inteira.
 
@@ -320,19 +293,31 @@ def enable_window(config: OracleConfig, table: str, start: date, report: Callabl
     :param table: Tabela física, recém-carregada e ainda fora de uso.
     :param start: Primeiro dia da janela.
     :param report: Função que recebe as mensagens de nova tentativa.
+    :param clause: Cláusula ``INMEMORY`` das partições da janela.
     :returns: Partições colocadas no In-Memory (ou a própria tabela, se não for particionada).
     :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
-    :raises oracledb.DatabaseError: Se a procedure falhar.
+    :raises oracledb.DatabaseError: Se algum ``ALTER`` falhar.
     """
     binds = {"owner": config.schema, "table_name": table}
-    call = procedure_call(config.schema)
     with connect(config) as connection, connection.cursor() as cursor:
-        assert_managed_existing_table(cursor, config.schema, table)
+        _prepare_ddl(cursor, config.schema, table)
         partitions = fetch_rows(cursor, "get_table_partitions", binds)
         if not partitions:
-            call_with_retry(cursor, call, procedure_binds(table, None, enabled=True), report)
+            execute_ddl(
+                cursor,
+                load_query(QUERIES_ANCHOR, "alter_table_inmemory", schema=config.schema, table=table, clause=clause),
+                report,
+            )
             return [table]
         chosen = select_window(partitions, start)
         for partition in chosen:
-            call_with_retry(cursor, call, procedure_binds(table, partition, enabled=True), report)
+            statement = load_query(
+                QUERIES_ANCHOR,
+                "alter_partition_inmemory",
+                schema=config.schema,
+                table=table,
+                partition=partition,
+                clause=clause,
+            )
+            execute_ddl(cursor, statement, report)
         return chosen

@@ -408,7 +408,6 @@ def run_flow_with_fakes(
     plain = {
         "rename_current_flow_run_task": None,
         "inject_bd_credentials_task": None,
-        "check_inmemory_procedure_task": None,
         "refresh_synonyms_task": None,
         "plan_load_task": "plan",
         "plan_structure_task": "structure",

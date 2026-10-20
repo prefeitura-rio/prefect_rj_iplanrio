@@ -319,14 +319,6 @@ def record_load_task(
 
 
 @task(cache_policy=NO_CACHE)
-def check_inmemory_procedure_task(infisical_secret_path: str) -> None:
-    """Confirma, antes de qualquer trabalho, que a carga pode executar a procedure do In-Memory das tabelas A/B."""
-    config = oracle.read_oracle_config(infisical_secret_path)
-    inmemory.ensure_procedure(config)
-    log(f"Procedure {config.schema}.{inmemory.PROCEDURE_NAME} disponível para o In-Memory das tabelas A/B")
-
-
-@task(cache_policy=NO_CACHE)
 def disable_inmemory_task(infisical_secret_path: str, table: str) -> str:
     """Tira a tabela que vai receber a carga do In-Memory antes de esvaziá-la; retorna a tabela."""
     inmemory.disable(config=oracle.read_oracle_config(infisical_secret_path), table=table, report=log)

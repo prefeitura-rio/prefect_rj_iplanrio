@@ -252,7 +252,6 @@ class FlowCalls:
         names = (
             "rename_current_flow_run_task",
             "inject_bd_credentials_task",
-            "check_inmemory_procedure_task",
             "refresh_synonyms_task",
             "wait_inmemory_task",
             "swap_synonyms_task",
@@ -305,14 +304,13 @@ def test_flow_does_not_run_dbt_in_synonyms_only_mode(monkeypatch):
 def test_flow_runs_dbt_first_after_credentials_and_hands_its_end_to_the_export(monkeypatch):
     flow = FlowCalls(monkeypatch)
     run_flow(run_dbt=True, dbt_timeout_minutes=7)
-    assert flow.calls[:5] == [
+    assert flow.calls[:4] == [
         "rename_current_flow_run_task",
         "inject_bd_credentials_task",
-        "check_inmemory_procedure_task",
         "run_dbt_task",
         "list_tables_task",
     ]
-    assert flow.calls[5] == "export_snapshot_task"
+    assert flow.calls[4] == "export_snapshot_task"
     assert flow.dbt_arguments == {
         "deployment": DBT_DEPLOYMENT,
         "parameters": default_dbt_parameters(),
