@@ -36,6 +36,10 @@ CHECKSUM_COLUMNS = {
     "PESSOAS_NACIONAIS": ("TELEFONE", "CAEPF"),
 }
 
+# Esperas (s) antes de cada nova tentativa do lançamento dos filhos: ~9 min cobrem uma queda curta da API do Prefect.
+# O número de tentativas extras é o de esperas; a task e a decisão de cancelar os filhos leem esta mesma constante.
+LAUNCH_RETRY_DELAYS_SECONDS = (60, 180, 300)
+LAUNCH_RETRIES = len(LAUNCH_RETRY_DELAYS_SECONDS)
 # Tag dos flow runs filhos (um por tabela); o pai a usa para distingui-los dos pais na exclusão mútua.
 CHILD_TAG = "o2bq-table"
 # Labels da tabela temporária validada pelo filho; o pai só publica se baterem com o seu run id, o SCN e a contagem.
