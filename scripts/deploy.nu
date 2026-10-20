@@ -37,9 +37,14 @@ def find-deployments [pipeline: string, environment: string]: nothing -> list<st
     | where ($it | str ends-with $'--($environment)')
 }
 
-# List the files that changed between two commits, except Markdown files. Without a `before` commit, use the parent of `after`.
+# List the files that changed between two commits, except Markdown files.
+# Without a `before` commit, use the parent of `after`. For a new branch (zero `before`), use its merge base with `origin/master`.
 def list-changed-files [before: oneof<string, nothing>, after: string]: nothing -> list<string> {
-    let base = if ($before == null) or ($before == '') or ($before == $ZERO_SHA) { $'($after)^' } else { $before }
+    let base = match $before {
+        null | '' => $'($after)^'
+        $ZERO_SHA => (git merge-base origin/master $after | str trim)
+        _ => $before
+    }
 
     git diff --name-only $base $after | lines | where not ($it | str ends-with '.md')
 }
@@ -119,7 +124,7 @@ def 'main plan' [
     write-output matrix ({pipeline: $chosen} | to json --raw)
 }
 
-# Register the deployment of one pipeline in Prefect, and try again after a network error.
+# Register every deployment of one pipeline in Prefect, and try again after a network error.
 def 'main run' [
     pipeline: string # the pipeline folder name
     --environment: string # `staging` or `prod`
@@ -127,8 +132,8 @@ def 'main run' [
     --delay: duration = 30sec # the wait before the first new try, doubled each time
     --dry-run # print the command and stop
 ]: nothing -> nothing {
-    let deployment = find-deployments $pipeline $environment | get --optional 0
-    if $deployment == null {
+    let deployments = find-deployments $pipeline $environment
+    if ($deployments | is-empty) {
         fail $'The pipeline ($pipeline) has no ($environment) deployment' {command: run, span: (metadata $pipeline).span}
     }
 
@@ -142,8 +147,7 @@ def 'main run' [
         prefect
         --no-prompt
         deploy
-        --name
-        $deployment
+        ...($deployments | each {|name| [--name $name] } | flatten)
         --prefect-file
         $file
     ]
@@ -155,18 +159,18 @@ def 'main run' [
 
     mut wait = $delay
     for attempt in 0..$retries {
-        log info $'Deploying ($deployment), attempt ($attempt + 1)'
+        log info $'Deploying ($deployments | str join ", "), attempt ($attempt + 1)'
         let result = run-external ...$command | complete
 
         if ($result.stdout | is-not-empty) { print $result.stdout }
         if $result.exit_code == 0 {
-            log info $'Deployed ($deployment)'
+            log info $'Deployed ($deployments | str join ", ")'
             return
         }
 
         let retryable = $RETRYABLE_ERRORS | any {|word| $result.stderr | str lowercase | str contains $word }
         if (not $retryable) or $attempt == $retries {
-            fail $'Could not deploy ($deployment): ($result.stderr)' {command: run, span: (metadata $pipeline).span}
+            fail $'Could not deploy ($deployments | str join ", "): ($result.stderr)' {command: run, span: (metadata $pipeline).span}
         }
 
         log warning $'Network error, trying again in ($wait): ($result.stderr)'
