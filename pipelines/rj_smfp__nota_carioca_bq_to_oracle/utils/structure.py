@@ -28,8 +28,8 @@ INMEMORY_COMPRESSIONS = (
 )
 INMEMORY_DISTRIBUTES = ("AUTO", "BY ROWID RANGE", "BY PARTITION", "BY SUBPARTITION")
 INMEMORY_DUPLICATES = ("NO DUPLICATE", "DUPLICATE", "DUPLICATE ALL")
-# Toda tabela carregada vai para o In-Memory, com as opções das MVT_ originais. A cláusula tem todas as opções,
-# como o dicionário as devolve; sem DISTRIBUTE e DUPLICATE, a tabela criada seria vista como divergente e recriada.
+# A tabela carregada nasce NO INMEMORY; depois da carga, só as partições da janela recebem esta cláusula, com as
+# opções das MVT_ originais (utils/inmemory.py). Sai do In-Memory inteira quando deixa de ser a tabela em uso.
 LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
 
 
@@ -353,8 +353,9 @@ def index_from_dictionary(row: dict[str, object], columns: list[str]) -> IndexDe
 def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefix: str) -> StructurePlan:
     """Define a estrutura da tabela carregada a partir da tabela original.
 
-    Tablespace e particionamento são copiados, e a tabela vai sempre para o
-    In-Memory (``LOADED_TABLE_INMEMORY``). Os índices são copiados com o
+    Tablespace e particionamento são copiados. A tabela nasce ``NO INMEMORY``: as
+    partições da janela entram no In-Memory só depois da carga (``LOADED_TABLE_INMEMORY``,
+    ``utils/inmemory.py``). Os índices são copiados com o
     nome ``<prefixo><nome original>``, exceto os ``I_SNAP$`` de views
     materializadas.
 
@@ -403,7 +404,7 @@ def plan_structure(template: TableLayout, loaded_columns: list[str], index_prefi
         tablespace=template.tablespace,
         partitioning=partitioning,
         indexes=tuple(indexes),
-        inmemory=LOADED_TABLE_INMEMORY,
+        inmemory=None,
     )
     return StructurePlan(layout=layout, skipped_indexes=tuple(skipped))
 
