@@ -606,7 +606,7 @@ def test_plan_structure_renames_indexes_and_skips_materialized_view_snapshot_ind
         "DFEN_BIG_DATA",
         RANGE_BY_MONTH,
         (index("BQLOAD_IX_MVT_NNEX_DET_CPFR_DCM_NN", ["CPF_CNPJ_RESPONSAVEL", "DATA_COMPETENCIA_MUNICIPIO"]),),
-        inmemory=INMEMORY_HIGH,
+        inmemory=None,
     )
 
 
@@ -703,9 +703,9 @@ def test_inmemory_from_dictionary_rejects_unknown_values(row):
         pytest.param("INMEMORY PRIORITY LOW MEMCOMPRESS FOR DML", id="original_with_other_options"),
     ],
 )
-def test_plan_structure_puts_every_loaded_table_in_memory(original_inmemory):
+def test_plan_structure_creates_every_loaded_table_out_of_memory(original_inmemory):
     template = TableLayout("DFEN_BIG_DATA", RANGE_BY_MONTH, inmemory=original_inmemory)
-    assert plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO"], "BQLOAD_").layout.inmemory == INMEMORY_HIGH
+    assert plan_structure(template, ["DATA_COMPETENCIA_MUNICIPIO"], "BQLOAD_").layout.inmemory is None
 
 
 def test_storage_clause_uses_inmemory_of_original():
