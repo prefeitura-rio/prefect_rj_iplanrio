@@ -64,14 +64,6 @@ def fake_engine() -> type[FakeEngine]:
     return FakeEngine
 
 
-class FakeCode:
-    """The error of an Oracle call, with the number that `oracledb` reports."""
-
-    def __init__(self, code: int) -> None:
-        """Keep the number of the error."""
-        self.code = code
-
-
 class FakeOracle:
     """A fake Oracle connection with canned columns and batches."""
 

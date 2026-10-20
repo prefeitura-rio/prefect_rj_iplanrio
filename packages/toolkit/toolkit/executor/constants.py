@@ -52,11 +52,8 @@ SCALAR_TYPES: Final[Mapping[type, DataType | type[DataType]]] = {
 DEFAULT_BATCH_SIZE: Final = 50_000
 """Rows per batch when a query does not say."""
 
-COUCHDB_ALL_WINDOW: Final = "all"
-"""The key of the window of a CouchDB read that covers the whole database."""
-
-COUCHDB_DESIGN_PREFIXES: Final = ("_design/", "_local/")
-"""The prefixes of the documents of a CouchDB design, which are never rows."""
+COUCHDB_DESIGN_PREFIX: Final = "_design/"
+"""The start of the id of a CouchDB design document, which is never a row."""
 
 COUCHDB_PLAIN_PORT: Final = 5984
 """The plain port of CouchDB. It serves TLS on 6984 and on the ports of a proxy."""

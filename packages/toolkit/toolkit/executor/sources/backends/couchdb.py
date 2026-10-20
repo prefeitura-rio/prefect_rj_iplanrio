@@ -20,8 +20,7 @@ from ....settings import settings
 from ....types import TemplateValue
 from ...constants import (
     ALIAS,
-    COUCHDB_ALL_WINDOW,
-    COUCHDB_DESIGN_PREFIXES,
+    COUCHDB_DESIGN_PREFIX,
     COUCHDB_PLAIN_PORT,
     SECRET,
 )
@@ -276,7 +275,7 @@ class CouchDBSource(SourceBase):
             items = [
                 item
                 for item in page.rows
-                if not item.id.startswith(COUCHDB_DESIGN_PREFIXES)
+                if not item.id.startswith(COUCHDB_DESIGN_PREFIX)
             ]
 
             if items:
@@ -365,7 +364,7 @@ class CouchDBSource(SourceBase):
             items = [
                 change_item(change)
                 for change in page.results
-                if not change.id.startswith(COUCHDB_DESIGN_PREFIXES)
+                if not change.id.startswith(COUCHDB_DESIGN_PREFIX)
             ]
 
             if items:
@@ -399,7 +398,7 @@ class CouchDBSource(SourceBase):
         No window reads every key. The null window reads the keys below `0` and from
         `:`. Raise `ValueError` for a window of dates, because the ranges cut ids.
         """
-        if window is None or window.key == COUCHDB_ALL_WINDOW:
+        if window is None:
             return [(None, None)]
         if window == NULL_WINDOW:
             return [(None, "0"), (":", None)]

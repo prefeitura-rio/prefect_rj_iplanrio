@@ -135,15 +135,3 @@ class DuckDBEngine:
 
         while (batch := await to_thread(next_batch, batches)) is not None:
             yield batch
-
-    @asynccontextmanager
-    async def transaction(self) -> AsyncGenerator[None]:
-        """Commit on success and roll back on exception."""
-        await self.execute("BEGIN")
-        try:
-            yield
-        except Exception:
-            await self.execute("ROLLBACK")
-            raise
-        else:
-            await self.execute("COMMIT")

@@ -62,4 +62,3 @@ class CouchDBChanges(BaseModel):
 
     results: list[CouchDBChange]
     last_seq: str
-    pending: int | None = None

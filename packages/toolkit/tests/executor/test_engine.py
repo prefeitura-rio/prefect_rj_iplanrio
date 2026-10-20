@@ -1,4 +1,3 @@
-from contextlib import nullcontext
 from os import environ
 from subprocess import run as run_process
 from sys import executable
@@ -60,29 +59,6 @@ async def test_stopping_early_leaves_the_connection_usable(duckdb_memory):
     [frame] = await collect(duckdb_memory, "SELECT 1 AS one")
 
     assert frame.to_dicts() == [{"one": 1}]
-
-
-@pytest.mark.parametrize(
-    ("fails", "count"),
-    [
-        pytest.param(False, 1, id="commits_on_success"),
-        pytest.param(True, 0, id="rolls_back_on_error"),
-    ],
-)
-async def test_a_transaction_keeps_its_writes_only_on_success(
-    duckdb_memory, fails, count
-):
-    """Keep the writes of a transaction only if it succeeds."""
-    await duckdb_memory.execute("CREATE TABLE t (a INTEGER)")
-
-    with pytest.raises(RuntimeError) if fails else nullcontext():
-        async with duckdb_memory.transaction():
-            await duckdb_memory.execute("INSERT INTO t VALUES (1)")
-            if fails:
-                raise RuntimeError("boom")
-
-    [frame] = await collect(duckdb_memory, "SELECT count(*) AS n FROM t")
-    assert frame["n"].to_list() == [count]
 
 
 async def test_the_memory_limit_and_the_temp_directory_come_from_the_settings(
