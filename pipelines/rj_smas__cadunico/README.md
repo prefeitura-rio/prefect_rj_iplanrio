@@ -205,7 +205,7 @@ GITHUB_TOKEN=ghp_xxxxxxxxxxxxx  # Token com permissões repo, contents:write
 def rj_smas__cadunico(
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/registro_familia",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",  # bucket GCS dos dados de staging
     dataset_id: str = "brutos_cadunico",
     max_concurrent: int = 3,
     force_create_models: bool = False,

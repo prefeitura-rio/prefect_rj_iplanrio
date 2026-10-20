@@ -12,7 +12,7 @@ import basedosdados as bd
 import numpy as np
 import pandas as pd
 import ruamel.yaml as ryaml
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs, get_project_id
 from iplanrio.pipelines_utils.gcs import (
     list_blobs_with_prefix,
 )
@@ -314,8 +314,9 @@ def download_files_from_storage_raw(
 
 
 def get_layout_table_from_staging(
-    project_id, dataset_id, registo_familia_table_id, layout_table_id
+    staging_bucket, dataset_id, registo_familia_table_id, layout_table_id
 ):
+    project_id = get_project_id(mode="staging")
     query = f"""
     WITH layout_unique_columns AS (
         SELECT
@@ -377,7 +378,7 @@ def get_layout_table_from_staging(
     dataframe = bd.read_sql(query=query, billing_project_id=project_id, from_file=True)
 
     versions = get_existing_partitions(
-        bucket_name=project_id,
+        bucket_name=staging_bucket,
         dataset_id=dataset_id,
         table_id=registo_familia_table_id,
         prefix=f"staging/{dataset_id}/{registo_familia_table_id}",
@@ -878,7 +879,7 @@ def create_cadunico_dbt_consolidated_models(
 
 
 def create_layout_column_cross_version_control_bq_table(
-    dataframe, dataset_id, table_id
+    dataframe, dataset_id, table_id, staging_bucket
 ):
     new_dataframe = parse_columns_version_control(dataframe=dataframe)
 
@@ -899,6 +900,7 @@ def create_layout_column_cross_version_control_bq_table(
         dump_mode="overwrite",
         biglake_table=True,
         only_staging_dataset=True,
+        bucket_name=staging_bucket,
     )
     log(f"Table {dataset_id}.{table_id} created in STAGING")
 
@@ -911,7 +913,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
     registo_familia_table_id: str = "registro_familia",
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/layout",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
 ):
@@ -958,6 +960,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
             dataset_id=dataset_id,
             table_id=layout_table_id,
             only_staging_dataset=True,
+            bucket_name=staging_bucket,
         )
         output_path = str(output_path_result)
         logger.complete_phase(True, {"layouts_processados": files_to_process})
@@ -975,7 +978,7 @@ def update_layout_from_storage_and_create_versions_dbt_models(
 
         logger.log_progress("CARREGANDO LAYOUT CONSOLIDADO DO STAGING")
         dataframe = get_layout_table_from_staging(
-            project_id=staging_bucket,
+            staging_bucket=staging_bucket,
             dataset_id=dataset_id,
             layout_table_id=layout_table_id,
             registo_familia_table_id=registo_familia_table_id,
@@ -983,12 +986,15 @@ def update_layout_from_storage_and_create_versions_dbt_models(
 
         logger.log_progress("CRIANDO CONTROLE DE VERSÕES CROSS-LAYOUT")
         df_final = create_layout_column_cross_version_control_bq_table(
-            dataframe=dataframe, dataset_id=dataset_id, table_id=layout_table_id
+            dataframe=dataframe,
+            dataset_id=dataset_id,
+            table_id=layout_table_id,
+            staging_bucket=staging_bucket,
         )
 
         logger.log_progress("GERANDO MODELOS DBT CONSOLIDADOS")
         create_cadunico_dbt_consolidated_models(
-            project_id=staging_bucket,
+            project_id=get_project_id(mode="staging"),
             dbt_repository_path=repository_path,
             dataframe=df_final,
             model_dataset_id=dataset_id,
@@ -1013,7 +1019,7 @@ def update_local_layout(
     registo_familia_table_id: str = "registro_familia",
     raw_bucket: str = "rj-smas",
     raw_prefix_area: str = "raw/protecao_social_cadunico/layout",
-    staging_bucket: str = "rj-iplanrio",
+    staging_bucket: str = "rj-smas-cadunico",
     force_create_models: bool = True,
     repository_path: str = "/tmp/dbt_repository/",
 ):
