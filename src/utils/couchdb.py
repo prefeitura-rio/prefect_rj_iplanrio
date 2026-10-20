@@ -1,4 +1,9 @@
-"""The CouchDB databases of bcadastro, in the shape of `brutos_bcadastro_staging`."""
+"""The CouchDB databases of bcadastro, in the shape of `brutos_bcadastro_staging`.
+
+Load a database once from `_all_docs` with `lookback: 0`, so a retry skips the windows
+already loaded. Then read `_changes` with `since` set to the `last_seq` of the first
+window, which is the earliest one.
+"""
 
 from pyarrow import json_, schema, string
 from pydantic import JsonValue
