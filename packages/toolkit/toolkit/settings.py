@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     }
 
     BIGQUERY_PROJECT: str = ""
+    COUCHDB_PAGE_SIZE: int = 10_000
+    COUCHDB_PATH_PREFIX: str = ""
+    COUCHDB_SECURE: bool | None = None
+    COUCHDB_VERIFY_TLS: bool = True
     DB_QUERY_TIMEOUT_SECONDS: int = 3600
     DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")
     DUCKDB_MEMORY_LIMIT: str = ""
