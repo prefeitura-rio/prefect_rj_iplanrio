@@ -8,7 +8,7 @@ from prefect import flow
 from pydantic import JsonValue
 from toolkit.dbt import DbtRun
 from toolkit.settings import read_secret
-from toolkit.telemetry import configure_telemetry
+from toolkit.telemetry import configure_telemetry, logger
 
 from .hooks import notify_failure
 from .tasks import (
@@ -168,7 +168,7 @@ async def ingest_api(
     records = extract_records(data, records_key)
 
     if not records:
-        print(f"No record in the response of {url}")
+        logger.warning("API response has no record: url=%s", url)
         return
 
     chosen: DumpOptions = {**(options or {})}
