@@ -3,12 +3,13 @@ Camada de repositório e persistência transacional para o banco de triagem.
 """
 
 import json
+import numpy as np
 import logging
 from typing import Any, Dict, List, Optional
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 
-from ..constants import (
+from constants import (
     TABELA_FILA,
     TABELA_PREDICOES,
     TABELA_PROCESSOS,
@@ -16,6 +17,69 @@ from ..constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+def _val_ou_none(v: Any) -> Optional[float]:
+  """Converte np.nan ou None para None (SQL NULL), senão float."""
+  if v is None:
+    return None
+  try:
+    val = float(v)
+    return None if np.isnan(val) else val
+  except (ValueError, TypeError):
+    return None
+
+def buscar_configuracao_calibracao_ativa(db_url: str) -> Dict[str, Any]:
+    """Recupera a configuração ativa de calibração persistida no PostgreSQL.
+
+    :param db_url: URL de conexão do PostgreSQL (local ou Cloud SQL).
+    :return: Dicionário com parâmetros puros, quantis e o modelo textual do LightGBM.
+    :raises RuntimeError: Caso nenhuma configuração ativa seja encontrada.
+    """
+    query = """
+        SELECT 
+            calibracao_id,
+            versao_modelo,
+            total_amostras_treino,
+            brier_score_treino,
+            log_loss_treino,
+            medianas_imputacao,
+            medias_scaler,
+            desvios_scaler,
+            quantis_conformais_cccp,
+            quantil_pool_fallback,
+            limiar_crc_grounding,
+            alpha_conformal,
+            estatisticas_classes,
+            lightgbm_model_text
+        FROM configuracoes_calibracao
+        WHERE ativo = TRUE
+        LIMIT 1;
+    """
+    conn = psycopg2.connect(db_url)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+            cursor.execute(query)
+            row = cursor.fetchone()
+            if not row:
+                raise RuntimeError(
+                    "Nenhuma configuração de calibração ativa (ativo = TRUE) encontrada no banco. "
+                    "Execute o script 'seed_goldenset_db.py' para inicializar os parâmetros."
+                )
+            
+            res = dict(row)
+            # Garante desserialização segura caso o driver retorne string JSON
+            for campo_json in [
+                "medianas_imputacao",
+                "medias_scaler",
+                "desvios_scaler",
+                "quantis_conformais_cccp",
+                "estatisticas_classes",
+            ]:
+                if isinstance(res.get(campo_json), str):
+                    res[campo_json] = json.loads(res[campo_json])
+            return res
+    finally:
+        conn.close()
 
 
 def buscar_processos_para_triagem(

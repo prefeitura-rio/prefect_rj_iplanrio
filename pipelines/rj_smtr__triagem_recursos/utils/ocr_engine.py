@@ -19,7 +19,7 @@ def extrair_ocr_pagina_especifica(
   Retorna sempre uma tupla (texto, confianca), nunca None.
   """
   try:
-    import fitz  # PyMuPDF
+    import pymupdf as fitz
     import pytesseract
     from PIL import Image
     import io

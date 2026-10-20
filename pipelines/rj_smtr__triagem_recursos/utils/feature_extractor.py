@@ -14,7 +14,7 @@ Incorpora:
 from dataclasses import asdict, dataclass
 from difflib import SequenceMatcher
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from scipy.spatial.distance import mahalanobis
 from sklearn.neighbors import NearestNeighbors
@@ -239,20 +239,28 @@ def calcular_similaridade_centroides(
 def calcular_distancia_mahalanobis(
     emb_cot: np.ndarray,
     classe_predita: str,
-    estatisticas: Optional[EstatisticasSemanticasClasses] = None
+    estatisticas: Optional[Union[EstatisticasSemanticasClasses, Dict[str, Any]]] = None
 ) -> float:
     """Calcula a distância de Mahalanobis condicional entre o embedding e a distribuição da classe."""
-    if (estatisticas is None or 
-        classe_predita not in estatisticas.centroides or 
-        classe_predita not in estatisticas.cov_inv or 
-        np.all(emb_cot == 0)):
+    if estatisticas is None or np.all(emb_cot == 0):
         return np.nan
 
-    mu = estatisticas.centroides[classe_predita]
-    inv_cov = estatisticas.cov_inv[classe_predita]
+    # Suporte transparente para dict (PostgreSQL JSONB) ou Dataclass
+    if isinstance(estatisticas, dict):
+        centroides = estatisticas.get("centroides") or {}
+        cov_inv = estatisticas.get("cov_inv") or estatisticas.get("matrizes_covariancia") or {}
+    else:
+        centroides = getattr(estatisticas, "centroides", {}) or {}
+        cov_inv = getattr(estatisticas, "cov_inv", {}) or {}
+
+    if classe_predita not in centroides or classe_predita not in cov_inv:
+        return np.nan
+
+    mu = np.asarray(centroides[classe_predita], dtype=np.float64)
+    inv_c = np.asarray(cov_inv[classe_predita], dtype=np.float64)
 
     try:
-        dist = mahalanobis(emb_cot, mu, inv_cov)
+        dist = mahalanobis(emb_cot, mu, inv_c)
         return round(float(dist), 4)
     except Exception:
         return np.nan
@@ -324,7 +332,14 @@ def extrair_sinais_epistemicos(
     adv_density = calcular_densidade_adversativa(cot)
     emb_cot = gerar_embedding_texto(cot)
     
-    centroides_dict = estatisticas_classes.centroides if estatisticas_classes else None
+    # Extração segura de centróides
+    if isinstance(estatisticas_classes, dict):
+        centroides_dict = estatisticas_classes.get("centroides") or {}
+    elif estatisticas_classes is not None:
+        centroides_dict = getattr(estatisticas_classes, "centroides", {}) or {}
+    else:
+        centroides_dict = None
+
     sim_pred = calcular_similaridade_centroides(
         emb_cot=emb_cot,
         classe_predita=hipotese,

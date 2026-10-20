@@ -1,10 +1,6 @@
-"""Tarefas atômicas (Tasks) da pipeline SMTR no Prefect 3.
-
-Suporta execução local e nuvem com instrumentação completa de logs.
-"""
+"""Tarefas atômicas (Tasks) da pipeline SMTR no Prefect 3.0."""
 
 from datetime import datetime
-from pathlib import Path
 import time
 from typing import Any, Dict, List, Optional
 import pandas as pd
@@ -17,23 +13,23 @@ from .constants import (
     LIMIAR_ALTA,
     LIMIAR_BAIXA,
     LIMIAR_DISPERSAO_COT_MAX,
-    LOCAL_ARTIFACTS_DIR,
     MAX_PAGINAS_PDF,
     PROMPTS_DIR,
     RotaExecucao,
     VERTEX_LLM_MODEL,
     resolver_banco_url,
 )
-from .utils.conformal import carregar_artefatos_conforme
+from .utils.conformal import criar_artefatos_conforme_do_banco
 from .utils.cost_analyzer import calcular_custo_chamada
 from .utils.db_repository import (
+    buscar_configuracao_calibracao_ativa,
     buscar_processos_para_triagem,
     persistir_lote_resultados_ia,
 )
 from .utils.feature_extractor import extrair_sinais_epistemicos
 from .utils.guardrails import aplicar_guardrail_epistemico
 from .utils.meta_calibrator import (
-    carregar_calibrador,
+    criar_calibrador_dos_parametros_banco,
     predizer_probabilidade_calibrada,
 )
 from .utils.ocr_engine import extrair_ocr_pagina_especifica
@@ -51,30 +47,41 @@ from .utils.windowing import extrair_smart_window_pdf
 def task_carregar_artefatos_referencia(
     is_local: bool = True, arquivo_prompt: str = "v3_baseline.txt"
 ) -> Dict[str, Any]:
-  logger = get_run_logger()
-  caminho_calibrador = (
-      LOCAL_ARTIFACTS_DIR / "meta_calibrator_vertex_gemini_3.7_flash.joblib"
-  )
-  caminho_conformal = (
-      LOCAL_ARTIFACTS_DIR / "conformal_artifacts_vertex_gemini_3.7_flash.joblib"
-  )
-  caminho_prompt = PROMPTS_DIR / arquivo_prompt
+    """Carrega parâmetros de calibração do PostgreSQL e o prompt da baseline.
 
-  logger.info(
-      "Carregando artefatos de calibração | Local=%s | Calibrador: %s",
-      is_local,
-      caminho_calibrador.name,
-  )
+    :param is_local: Booleano que define se a conexão é local ou Cloud SQL.
+    :param arquivo_prompt: Nome do arquivo de prompt a carregar de prompts/.
+    :returns: Dicionário contendo o calibrador, artefatos conformais e prompt.
+    :raises FileNotFoundError: Se o arquivo de prompt não for localizado.
+    :raises RuntimeError: Se não houver configuração ativa no banco.
+    """
+    logger = get_run_logger()
+    db_url = resolver_banco_url(is_local)
 
-  calibrador = carregar_calibrador(caminho_calibrador)
-  conformal = carregar_artefatos_conforme(caminho_conformal)
-  prompt_sistema = caminho_prompt.read_text(encoding="utf-8")
+    logger.info("Recuperando configuração de calibração ativa no PostgreSQL...")
+    config_db = buscar_configuracao_calibracao_ativa(db_url)
 
-  return {
-      "calibrador": calibrador,
-      "conformal": conformal,
-      "prompt_sistema": prompt_sistema,
-  }
+    calibrador = criar_calibrador_dos_parametros_banco(config_db)
+    conformal = criar_artefatos_conforme_do_banco(config_db)
+
+    caminho_prompt = PROMPTS_DIR / arquivo_prompt
+    if not caminho_prompt.exists():
+        raise FileNotFoundError(f"Prompt não localizado em {caminho_prompt}")
+
+    prompt_sistema = caminho_prompt.read_text(encoding="utf-8")
+
+    logger.info(
+        "Parâmetros ativos carregados com sucesso | Versão: %s | Amostras: %d | Brier: %.4f",
+        config_db.get("versao_modelo"),
+        config_db.get("total_amostras_treino", 0),
+        config_db.get("brier_score_treino", 0.0),
+    )
+
+    return {
+        "calibrador": calibrador,
+        "conformal": conformal,
+        "prompt_sistema": prompt_sistema,
+    }
 
 
 @task(name="buscar_processos_pendentes", retries=2, retry_delay_seconds=5)
@@ -85,23 +92,32 @@ def task_buscar_processos_pendentes(
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-  logger = get_run_logger()
-  db_url = resolver_banco_url(is_local)
-  logger.info(
-      "Buscando processos na fila do banco | Modo: %s | Limite: %s",
-      modo,
-      limite,
-  )
+    """Consulta os processos elegíveis na fila de trabalho com status PENDENTE_IA.
 
-  processos = buscar_processos_para_triagem(
-      db_url=db_url,
-      modo=modo,
-      limite=limite,
-      data_inicio=data_inicio,
-      data_fim=data_fim,
-  )
-  logger.info("%d processo(s) elegível(is) encontrado(s).", len(processos))
-  return processos
+    :param is_local: Flag para resolução de banco local ou em nuvem.
+    :param modo: Modo de carga (INCREMENTAL para mensal ou PASSIVO).
+    :param limite: Quantidade máxima de processos a selecionar.
+    :param data_inicio: Data mínima de autuação (opcional).
+    :param data_fim: Data máxima de autuação (opcional).
+    :returns: Lista de dicionários representando cada processo pendente.
+    """
+    logger = get_run_logger()
+    db_url = resolver_banco_url(is_local)
+    logger.info(
+        "Buscando processos na fila do banco | Modo: %s | Limite: %d",
+        modo,
+        limite,
+    )
+
+    processos = buscar_processos_para_triagem(
+        db_url=db_url,
+        modo=modo,
+        limite=limite,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    logger.info("%d processo(s) elegível(is) encontrado(s).", len(processos))
+    return processos
 
 
 @task(
@@ -120,291 +136,270 @@ def task_triar_processo_individual(
     max_paginas: int = MAX_PAGINAS_PDF,
     modelo_llm: str = VERTEX_LLM_MODEL,
 ) -> Dict[str, Any]:
-  logger = get_run_logger()
-  nome_arquivo = processo["nome_arquivo_origem"]
-  processo_id = str(processo["processo_id"])
-  numero_sei = str(processo["numero_processo_sei"])
+    """Executa a triagem individual com inferência determinística e calibração tabular.
 
-  t_inicio = time.time()
-  logger.info("Iniciando triagem do processo SEI: %s (%s)", numero_sei, nome_arquivo)
+    :param processo: Registro do processo com metadados e nome do arquivo PDF.
+    :param artefatos: Estrutura com modelo calibrador e quantis conformais.
+    :param is_local: Flag indicando se a leitura do PDF ocorre em disco ou no GCS.
+    :param limiar_alta: Ponto de corte para aprovação na Faixa Verde.
+    :param limiar_baixa: Ponto de corte inferior para envio direto ao HITL.
+    :param limiar_dispersao_max: Limite máximo tolerável de dispersão textual de CoT.
+    :param max_paginas: Quantidade máxima de páginas a enviar para o LLM.
+    :param modelo_llm: Identificador do modelo na Vertex AI / Gateway.
+    :returns: Dicionário detalhado contendo a predição e o vetor epistêmico.
+    """
+    logger = get_run_logger()
+    nome_arquivo = processo["nome_arquivo_origem"]
+    processo_id = str(processo["processo_id"])
+    numero_sei = str(processo["numero_processo_sei"])
 
-  calibrador = artefatos["calibrador"]
-  conformal = artefatos["conformal"]
-  prompt_sistema = artefatos["prompt_sistema"]
-  stats_classes = getattr(calibrador, "estatisticas_classes", None)
+    t_inicio = time.time()
+    logger.info("Iniciando triagem do processo SEI: %s (%s)", numero_sei, nome_arquivo)
 
-  cliente_llm = OpenAILLMClient(default_model=modelo_llm)
+    calibrador = artefatos["calibrador"]
+    conformal = artefatos["conformal"]
+    prompt_sistema = artefatos["prompt_sistema"]
+    stats_classes = getattr(calibrador, "estatisticas_classes", None)
 
-  # 1. Carregamento e fatiamento do PDF
-  logger.info("[1/7] Lendo bytes do PDF '%s' (is_local=%s)...", nome_arquivo, is_local)
-  pdf_bytes = carregar_bytes_pdf(nome_arquivo, is_local=is_local)
-  logger.info("PDF lido com sucesso (%d bytes). Aplicando janela de até %d páginas...", len(pdf_bytes), max_paginas)
+    cliente_llm = OpenAILLMClient(default_model=modelo_llm)
 
-  pdf_window_bytes = extrair_smart_window_pdf(pdf_bytes, max_paginas=max_paginas)
-  logger.info("Janela gerada (%d bytes). Enviando para inferência N=1...", len(pdf_window_bytes))
+    pdf_bytes = carregar_bytes_pdf(nome_arquivo, is_local=is_local)
+    pdf_window_bytes = extrair_smart_window_pdf(pdf_bytes, max_paginas=max_paginas)
 
-  # 2. Chamada N=1 (T=0.0)
-  logger.info("[2/7] Chamando LLM (N=1, T=0.0, modelo=%s)...", modelo_llm)
-  decisao_1 = cliente_llm.classificar(
-      pdf_bytes=pdf_window_bytes,
-      prompt_sistema=prompt_sistema,
-      modelo=modelo_llm,
-      temperature=0.0,
-  )
-  if decisao_1 is None:
-    raise ValueError(f"A LLM retornou decisão nula para o processo {numero_sei}")
-
-  decisao_1 = aplicar_guardrail_epistemico(decisao_1)
-  hipotese_1_str = str(
-      decisao_1.hipotese_legal.value
-      if hasattr(decisao_1.hipotese_legal, "value")
-      else decisao_1.hipotese_legal
-  )
-  logger.info(
-      "N=1 concluído: Hipótese=%s | Lauda=%s | Encaminhamento=%s",
-      hipotese_1_str,
-      decisao_1.pagina_evidencia,
-      decisao_1.encaminhamento,
-  )
-
-  # 3. Lazy OCR na lauda de prova
-  texto_ocr, ocr_conf = "", 0.0
-  if decisao_1.pagina_evidencia and decisao_1.pagina_evidencia > 0:
-    logger.info("[3/7] Executando OCR na lauda %s...", decisao_1.pagina_evidencia)
-    resultado_ocr = extrair_ocr_pagina_especifica(
-        pdf_origem=pdf_bytes,
-        num_pagina=decisao_1.pagina_evidencia,
-        dpi=150,
-        idioma="por",
-    )
-    if resultado_ocr and isinstance(resultado_ocr, tuple) and len(resultado_ocr) == 2:
-      texto_ocr, ocr_conf = resultado_ocr
-    else:
-      logger.warning("Retorno inválido do OCR (%s). Assumindo fallback vazio.", type(resultado_ocr))
-      texto_ocr, ocr_conf = "", 0.0
-    logger.info("OCR concluído (confiança=%.2f, caracteres=%d)", ocr_conf, len(texto_ocr))
-  else:
-    logger.info("[3/7] Sem lauda de evidência apontada. Pulando OCR.")
-
-  # 4. Extração das 8 features ativas
-  logger.info("[4/7] Extraindo as 8 features epistêmicas...")
-  sinais_1 = extrair_sinais_epistemicos(
-      decisao=decisao_1,
-      texto_ocr_pagina=texto_ocr,
-      tesseract_mean_conf=ocr_conf,
-      estatisticas_classes=stats_classes,
-  )
-  logger.info("Features extraídas: %s", sinais_1.to_dict())
-
-  # 5. Meta-calibração tabular via LightGBM
-  logger.info("[5/7] Calculando probabilidade calibrada via LightGBM...")
-  p_cal_1 = predizer_probabilidade_calibrada(sinais_1, calibrador)
-  set_conformal = construir_prediction_set_aps(
-      decisao=decisao_1,
-      p_cal=p_cal_1,
-      estatisticas_classes=stats_classes,
-      alpha=conformal.alpha,
-  )
-  logger.info("Resultado N=1: p_cal_1=%.4f | Conjunto Conformal=%s", p_cal_1, set_conformal)
-
-  # 6. Avaliação do Chaveamento Adaptativo
-  if p_cal_1 >= limiar_alta and len(set_conformal) <= 1:
-    rota_inicial = RotaExecucao.N1_DIRETO.value
-  elif p_cal_1 < limiar_baixa or len(set_conformal) == 0:
-    rota_inicial = RotaExecucao.HITL_BAIXA_CONFIANCA.value
-  else:
-    rota_inicial = RotaExecucao.N2_CONSENSO.value
-
-  logger.info("[6/7] Rota inicial determinada: %s", rota_inicial)
-
-  total_chamadas = 1
-  estagio2_executado = False
-  delta_cot = None
-  log_odds_atualizado = None
-  p_final = p_cal_1
-  rota_final = rota_inicial
-  decisao_2 = None
-
-  # 7. Estágio N=2 Condicional (T=0.7)
-  if rota_inicial not in [
-      RotaExecucao.N1_DIRETO.value,
-      RotaExecucao.HITL_BAIXA_CONFIANCA.value,
-  ]:
-    logger.info(
-        "[7/7] Incerteza operacional (p1=%.3f). Disparando N=2 (T=0.7)...",
-        p_cal_1,
-    )
-    decisao_2 = cliente_llm.classificar(
+    # 1. Inferência Primária N=1 (T=0.0)
+    decisao_1 = cliente_llm.classificar(
         pdf_bytes=pdf_window_bytes,
         prompt_sistema=prompt_sistema,
         modelo=modelo_llm,
-        temperature=0.7,
+        temperature=0.0,
     )
-    decisao_2 = aplicar_guardrail_epistemico(decisao_2)
-    total_chamadas = 2
-    estagio2_executado = True
+    if decisao_1 is None:
+        raise ValueError(f"A LLM retornou decisão nula para o processo {numero_sei}")
 
-    hip_1 = hipotese_1_str
-    hip_2 = str(
-        decisao_2.hipotese_legal.value
-        if hasattr(decisao_2.hipotese_legal, "value")
-        else decisao_2.hipotese_legal
-    )
-
-    delta_cot = calcular_dispersao_cot(
-        decisao_1.justificativa_analise_previa,
-        decisao_2.justificativa_analise_previa,
+    decisao_1 = aplicar_guardrail_epistemico(decisao_1)
+    hipotese_1_str = str(
+        decisao_1.hipotese_legal.value
+        if hasattr(decisao_1.hipotese_legal, "value")
+        else decisao_1.hipotese_legal
     )
 
-    resultado_bayes = atualizar_probabilidade_bayesiana_log_odds(
-        p_1=p_cal_1,
-        hip_1=hip_1,
-        hip_2=hip_2,
-        delta_cot=delta_cot,
-        beta_consenso=BETA_CONSENSO,
-        beta_divergencia=BETA_DIVERGENCIA,
+    # 2. Lazy OCR restrito à lauda probatória
+    texto_ocr, ocr_conf = "", 0.0
+    if decisao_1.pagina_evidencia and decisao_1.pagina_evidencia > 0:
+        resultado_ocr = extrair_ocr_pagina_especifica(
+            pdf_origem=pdf_bytes,
+            num_pagina=decisao_1.pagina_evidencia,
+            dpi=150,
+            idioma="por",
+        )
+        if resultado_ocr and isinstance(resultado_ocr, tuple) and len(resultado_ocr) == 2:
+            texto_ocr, ocr_conf = resultado_ocr
+
+    # 3. Extração das 8 features ativas
+    sinais_1 = extrair_sinais_epistemicos(
+        decisao=decisao_1,
+        texto_ocr_pagina=texto_ocr,
+        tesseract_mean_conf=ocr_conf,
+        estatisticas_classes=stats_classes,
     )
-    if resultado_bayes and isinstance(resultado_bayes, tuple) and len(resultado_bayes) == 2:
-      p_final, rota_final = resultado_bayes
+
+    # 4. Meta-calibração tabular via parâmetros do PostgreSQL
+    p_cal_1 = predizer_probabilidade_calibrada(sinais_1, calibrador)
+    set_conformal = construir_prediction_set_aps(
+        decisao=decisao_1,
+        p_cal=p_cal_1,
+        estatisticas_classes=stats_classes,
+        alpha=conformal.alpha,
+    )
+
+    # 5. Avaliação do roteamento adaptativo
+    if p_cal_1 >= limiar_alta and len(set_conformal) <= 1:
+        rota_inicial = RotaExecucao.N1_DIRETO.value
+    elif p_cal_1 < limiar_baixa or len(set_conformal) == 0:
+        rota_inicial = RotaExecucao.HITL_BAIXA_CONFIANCA.value
     else:
-      logger.warning("Retorno inesperado da atualização bayesiana: %s", resultado_bayes)
-      p_final = p_cal_1
+        rota_inicial = RotaExecucao.N2_CONSENSO.value
 
-    log_odds_atualizado = p_final
-    if rota_final == RotaExecucao.HITL_DIVERGENCIA_DUPLA.value:
-      set_conformal = {hip_1, hip_2}
+    total_chamadas = 1
+    estagio2_executado = False
+    delta_cot = None
+    log_odds_atualizado = None
+    p_final = p_cal_1
+    rota_final = rota_inicial
+    decisao_2 = None
 
-    logger.info("N=2 concluído: Hip2=%s | DeltaCoT=%.3f | p_final=%.4f | Rota=%s", hip_2, delta_cot, p_final, rota_final)
-  else:
-    logger.info("[7/7] N=2 dispensado. Prosseguindo com probabilidade de N=1.")
+    # 6. Estágio N=2 Condicional (T=0.7)
+    if rota_inicial not in [
+        RotaExecucao.N1_DIRETO.value,
+        RotaExecucao.HITL_BAIXA_CONFIANCA.value,
+    ]:
+        logger.info(
+            "Incerteza operacional em %s (p1=%.3f). Disparando N=2 (T=0.7)...",
+            numero_sei,
+            p_cal_1,
+        )
+        decisao_2 = cliente_llm.classificar(
+            pdf_bytes=pdf_window_bytes,
+            prompt_sistema=prompt_sistema,
+            modelo=modelo_llm,
+            temperature=0.7,
+        )
+        decisao_2 = aplicar_guardrail_epistemico(decisao_2)
+        total_chamadas = 2
+        estagio2_executado = True
 
-  # 8. Faixa Operacional
-  if p_final >= limiar_alta:
-    faixa = FaixaOperacional.VERDE.value
-  elif p_final >= 0.50:
-    faixa = FaixaOperacional.AMARELA.value
-  else:
-    faixa = FaixaOperacional.VERMELHA.value
+        hip_1 = hipotese_1_str
+        hip_2 = str(
+            decisao_2.hipotese_legal.value
+            if hasattr(decisao_2.hipotese_legal, "value")
+            else decisao_2.hipotese_legal
+        )
 
-  tempo_total = round(time.time() - t_inicio, 2)
-  info_custo = calcular_custo_chamada(
-      modelo=modelo_llm,
-      prompt_tokens=3500 * total_chamadas,
-      completion_tokens=150 * total_chamadas,
-      aplicar_cache_estatico=True,
-  )
+        delta_cot = calcular_dispersao_cot(
+            decisao_1.justificativa_analise_previa,
+            decisao_2.justificativa_analise_previa,
+        )
 
-  logger.info(
-      "Triagem de %s finalizada em %.2fs | Faixa: %s | p_final: %.4f",
-      numero_sei,
-      tempo_total,
-      faixa,
-      p_final,
-  )
+        resultado_bayes = atualizar_probabilidade_bayesiana_log_odds(
+            p_1=p_cal_1,
+            hip_1=hip_1,
+            hip_2=hip_2,
+            delta_cot=delta_cot,
+            beta_consenso=BETA_CONSENSO,
+            beta_divergencia=BETA_DIVERGENCIA,
+        )
+        if resultado_bayes and isinstance(resultado_bayes, tuple) and len(resultado_bayes) == 2:
+            p_final, rota_final = resultado_bayes
+        else:
+            p_final = p_cal_1
 
-  return {
-      "processo_id": processo_id,
-      "numero_processo_sei": numero_sei,
-      "n1_classe_predita": hipotese_1_str,
-      "n1_encaminhamento": str(
-          decisao_1.encaminhamento.value
-          if hasattr(decisao_1.encaminhamento, "value")
-          else decisao_1.encaminhamento
-      ),
-      "n1_cot_justificativa": decisao_1.justificativa_analise_previa,
-      "n1_lauda_evidencia": decisao_1.pagina_evidencia,
-      "n1_frase_citada": decisao_1.frase_justificativa,
-      "n1_tipo_citacao": str(
-          decisao_1.tipo_citacao.value
-          if hasattr(decisao_1.tipo_citacao, "value")
-          else decisao_1.tipo_citacao
-      ),
-      "sinais_epistemicos": sinais_1.to_dict(),
-      "probabilidade_calibrada": p_cal_1,
-      "conjunto_conformal": list(set_conformal),
-      "tamanho_conjunto_conformal": len(set_conformal),
-      "estagio2_executado": estagio2_executado,
-      "n2_classe_predita": (
-          str(
-              decisao_2.hipotese_legal.value
-              if hasattr(decisao_2.hipotese_legal, "value")
-              else decisao_2.hipotese_legal
-          )
-          if decisao_2
-          else None
-      ),
-      "n2_cot_justificativa": (
-          decisao_2.justificativa_analise_previa if decisao_2 else None
-      ),
-      "n2_delta_cot_dispersao": delta_cot,
-      "n2_log_odds_atualizado": log_odds_atualizado,
-      "probabilidade_final": p_final,
-      "rota_execucao": rota_final,
-      "faixa_operacional": faixa,
-      "custo_estimado_usd": info_custo["custo_total_usd"],
-      "tempo_execucao_s": tempo_total,
-  }
+        log_odds_atualizado = p_final
+        if rota_final == RotaExecucao.HITL_DIVERGENCIA_DUPLA.value:
+            set_conformal = {hip_1, hip_2}
+
+    # 7. Faixa Operacional
+    if p_final >= limiar_alta:
+        faixa = FaixaOperacional.VERDE.value
+    elif p_final >= 0.50:
+        faixa = FaixaOperacional.AMARELA.value
+    else:
+        faixa = FaixaOperacional.VERMELHA.value
+
+    tempo_total = round(time.time() - t_inicio, 2)
+    info_custo = calcular_custo_chamada(
+        modelo=modelo_llm,
+        prompt_tokens=3500 * total_chamadas,
+        completion_tokens=150 * total_chamadas,
+        aplicar_cache_estatico=True,
+    )
+
+    logger.info(
+        "Triagem de %s concluída em %.2fs | Faixa: %s | p_final: %.4f | Rota: %s",
+        numero_sei,
+        tempo_total,
+        faixa,
+        p_final,
+        rota_final,
+    )
+
+    return {
+        "processo_id": processo_id,
+        "numero_processo_sei": numero_sei,
+        "n1_classe_predita": hipotese_1_str,
+        "n1_encaminhamento": str(
+            decisao_1.encaminhamento.value
+            if hasattr(decisao_1.encaminhamento, "value")
+            else decisao_1.encaminhamento
+        ),
+        "n1_cot_justificativa": decisao_1.justificativa_analise_previa,
+        "n1_lauda_evidencia": decisao_1.pagina_evidencia,
+        "n1_frase_citada": decisao_1.frase_justificativa,
+        "n1_tipo_citacao": str(
+            decisao_1.tipo_citacao.value
+            if hasattr(decisao_1.tipo_citacao, "value")
+            else decisao_1.tipo_citacao
+        ),
+        "sinais_epistemicos": sinais_1.to_dict(),
+        "probabilidade_calibrada": p_cal_1,
+        "conjunto_conformal": list(set_conformal),
+        "tamanho_conjunto_conformal": len(set_conformal),
+        "estagio2_executado": estagio2_executado,
+        "n2_classe_predita": (
+            str(
+                decisao_2.hipotese_legal.value
+                if hasattr(decisao_2.hipotese_legal, "value")
+                else decisao_2.hipotese_legal
+            )
+            if decisao_2
+            else None
+        ),
+        "n2_cot_justificativa": (
+            decisao_2.justificativa_analise_previa if decisao_2 else None
+        ),
+        "n2_delta_cot_dispersao": delta_cot,
+        "n2_log_odds_atualizado": log_odds_atualizado,
+        "probabilidade_final": p_final,
+        "rota_execucao": rota_final,
+        "faixa_operacional": faixa,
+        "custo_estimado_usd": info_custo["custo_total_usd"],
+        "tempo_execucao_s": tempo_total,
+    }
 
 
 @task(name="persistir_lote_resultados", retries=2, retry_delay_seconds=5)
 def task_persistir_lote_resultados(
     resultados: List[Dict[str, Any]], is_local: bool = True
 ) -> None:
-  logger = get_run_logger()
-  db_url = resolver_banco_url(is_local)
-  logger.info(
-      "Gravando %d resultado(s) no banco de dados...",
-      len(resultados),
-  )
-  persistir_lote_resultados_ia(db_url, resultados)
-  logger.info("Persistência concluída com sucesso.")
+    """Persiste as predições e auditorias na base e atualiza a fila de trabalho.
+
+    :param resultados: Lista de resultados retornados pelas tarefas de triagem.
+    :param is_local: Flag para resolução de conexão local ou nuvem.
+    """
+    logger = get_run_logger()
+    db_url = resolver_banco_url(is_local)
+    logger.info("Gravando %d resultado(s) no banco de dados...", len(resultados))
+    persistir_lote_resultados_ia(db_url, resultados)
+    logger.info("Resultados persistidos com sucesso.")
 
 
 @task(name="gerar_sumario_lote")
 def task_gerar_sumario_lote(resultados: List[Dict[str, Any]]) -> Dict[str, Any]:
-  logger = get_run_logger()
-  total = len(resultados)
-  if total == 0:
-    return {}
+    """Consolida as métricas operacionais e financeiras da execução do lote.
 
-  df = pd.DataFrame(resultados)
-  qtd_verde = int(
-      (df["faixa_operacional"] == FaixaOperacional.VERDE.value).sum()
-  )
-  qtd_amarela = int(
-      (df["faixa_operacional"] == FaixaOperacional.AMARELA.value).sum()
-  )
-  qtd_vermelha = int(
-      (df["faixa_operacional"] == FaixaOperacional.VERMELHA.value).sum()
-  )
+    :param resultados: Lista de dicionários com os resultados dos processos triados.
+    :returns: Dicionário com volumetria por faixa, multiplicador de chamadas e custo.
+    """
+    logger = get_run_logger()
+    total = len(resultados)
+    if total == 0:
+        return {}
 
-  total_chamadas = int(df["estagio2_executado"].sum()) + total
-  mult_chamadas = round(total_chamadas / total, 2)
-  custo_total = round(float(df["custo_estimado_usd"].sum()), 4)
+    df = pd.DataFrame(resultados)
+    qtd_verde = int((df["faixa_operacional"] == FaixaOperacional.VERDE.value).sum())
+    qtd_amarela = int((df["faixa_operacional"] == FaixaOperacional.AMARELA.value).sum())
+    qtd_vermelha = int((df["faixa_operacional"] == FaixaOperacional.VERMELHA.value).sum())
 
-  sumario = {
-      "timestamp": datetime.now().isoformat(),
-      "total": total,
-      "faixa_verde": qtd_verde,
-      "faixa_amarela": qtd_amarela,
-      "faixa_vermelha": qtd_vermelha,
-      "multiplicador_chamadas": mult_chamadas,
-      "custo_usd": custo_total,
-  }
+    total_chamadas = int(df["estagio2_executado"].sum()) + total
+    mult_chamadas = round(total_chamadas / total, 2)
+    custo_total = round(float(df["custo_estimado_usd"].sum()), 4)
 
-  logger.info("=" * 70)
-  logger.info("SUMÁRIO DA RODADA:")
-  logger.info(
-      "Total: %d | Verde: %d | Amarela: %d | Vermelha: %d",
-      total,
-      qtd_verde,
-      qtd_amarela,
-      qtd_vermelha,
-  )
-  logger.info(
-      "Multiplicador: %.2fx | Custo Total: $%.4f USD",
-      mult_chamadas,
-      custo_total,
-  )
-  logger.info("=" * 70)
-  return sumario
+    sumario = {
+        "timestamp": datetime.now().isoformat(),
+        "total": total,
+        "faixa_verde": qtd_verde,
+        "faixa_amarela": qtd_amarela,
+        "faixa_vermelha": qtd_vermelha,
+        "multiplicador_chamadas": mult_chamadas,
+        "custo_usd": custo_total,
+    }
+
+    logger.info(
+        "SUMÁRIO: Total: %d | Verde: %d | Amarela: %d | Vermelha: %d | Chamadas: %.2fx | Custo: $%.4f USD",
+        total,
+        qtd_verde,
+        qtd_amarela,
+        qtd_vermelha,
+        mult_chamadas,
+        custo_total,
+    )
+    return sumario

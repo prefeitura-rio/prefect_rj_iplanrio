@@ -107,12 +107,28 @@ def construir_prediction_set_aps(
     if p_top >= 0.90:
         return {classe_predita}
 
-    # 2. Extração dos centróides
+    # 2. Extração segura dos centróides
     centroides: Dict[str, np.ndarray] = {}
-    if isinstance(estatisticas_classes, EstatisticasSemanticasClasses):
-        centroides = estatisticas_classes.centroides
-    elif isinstance(estatisticas_classes, dict):
-        centroides = estatisticas_classes.get("centroides", estatisticas_classes)
+    if isinstance(estatisticas_classes, dict):
+        raw_c = estatisticas_classes.get("centroides")
+        if isinstance(raw_c, dict):
+            centroides = raw_c
+    elif estatisticas_classes is not None:
+        centroides = getattr(estatisticas_classes, "centroides", {}) or {}
+
+    emb_cot = gerar_embedding_texto(decisao.justificativa_analise_previa)
+    norm_e = float(np.linalg.norm(emb_cot))
+    similaridades: Dict[str, float] = {}
+
+    for hip in TODAS_HIPOTESES_LEGAIS:
+        c_vec = centroides.get(hip)
+        if c_vec is not None and norm_e > 0:
+            arr_c = np.asarray(c_vec, dtype=np.float64)
+            norm_c = float(np.linalg.norm(arr_c))
+            cos_sim = float(np.dot(emb_cot, arr_c)) / (norm_c * norm_e) if norm_c > 0 else 0.0
+            similaridades[hip] = max(0.0, min(1.0, cos_sim))
+        else:
+            similaridades[hip] = 0.0
 
     emb_cot = gerar_embedding_texto(decisao.justificativa_analise_previa)
     norm_e = float(np.linalg.norm(emb_cot))
