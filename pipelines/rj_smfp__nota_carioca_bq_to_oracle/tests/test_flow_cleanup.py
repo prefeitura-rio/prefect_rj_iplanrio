@@ -50,6 +50,7 @@ class FakeFlowRun:
             "resolve_slots_task": record("slots", lambda kwargs: SlotPlan(kwargs["table_id"], None, f"{kwargs['table_id']}_A")),
             "ensure_oracle_table_task": record("ensure", lambda kwargs: kwargs["table"]),
             "drop_oracle_indexes_task": record("drop_indexes", lambda kwargs: kwargs["table"]),
+            "disable_inmemory_task": record("disable_inmemory", lambda kwargs: kwargs["table"]),
             "truncate_oracle_table_task": record("truncate", lambda kwargs: kwargs["table"]),
             "load_into_oracle_task": record("load", 1),
             "validate_row_count_task": self.validate,
@@ -57,9 +58,11 @@ class FakeFlowRun:
             "gather_oracle_stats_task": record("stats", lambda kwargs: kwargs["table"]),
             "grant_access_task": record("grant", lambda kwargs: kwargs["table"]),
             "record_load_task": record("record", lambda kwargs: kwargs["plan"]),
+            "enable_inmemory_window_task": record("enable_window", []),
             "start_inmemory_population_task": record("inmemory"),
             "wait_inmemory_task": record("wait_inmemory", lambda kwargs: kwargs["plans"]),
             "swap_synonyms_task": self.swap,
+            "release_inmemory_task": record("release_inmemory", []),
         }
         for name, fake in fakes.items():
             monkeypatch.setattr(flow_module, name, fake)
@@ -130,3 +133,25 @@ def test_raw_text_encoding_reaches_the_load_plan(monkeypatch):
     monkeypatch.setattr(flow_module, "plan_load_task", lambda **kwargs: seen.append(kwargs["raw_text_encoding"]) or original(**kwargs))
     flow_module.rj_smfp__nota_carioca_bq_to_oracle.fn(table_ids=TABLES, raw_text_encoding="hex", discord_notifications=False)
     assert seen == ["hex", "hex"]
+
+
+def test_inmemory_is_off_while_loading_on_only_for_the_window_and_released_after_the_swap(monkeypatch):
+    fake = FakeFlowRun(monkeypatch)
+    fake.run()
+    events = fake.events
+    for _ in TABLES:
+        assert events.index("disable_inmemory") < events.index("truncate")
+    first_window = events.index("enable_window")
+    assert events.index("record") < first_window < events.index("inmemory")
+    assert events.count("enable_window") == len(TABLES)
+    assert events.index("swap") < events.index("release_inmemory")
+    assert events.count("release_inmemory") == 1
+
+
+def test_a_negative_inmemory_window_is_refused_before_any_work(monkeypatch):
+    fake = FakeFlowRun(monkeypatch)
+    with pytest.raises(ValueError, match="inmemory_window_months"):
+        flow_module.rj_smfp__nota_carioca_bq_to_oracle.fn(
+            table_ids=TABLES, discord_notifications=False, inmemory_window_months=-1
+        )
+    assert "export" not in fake.events
