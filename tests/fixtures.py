@@ -1,15 +1,16 @@
 """The fake services that the tests use, each one with its fixture.
 
 They are the fakes of GCS, BigQuery (one that detects the schema of a Delta table and one that
-records calls), an HTTP API, a database, Oracle and an object store. They run in the process, with
-no network and no container. `conftest.py` registers this module as a plugin, so a test asks for a
-fixture by name.
+records calls), an HTTP API, a database, Oracle and an object store, and the pages that the
+bcadastro CouchDB sends. They run in the process, with no network and no container.
+`conftest.py` registers this module as a plugin, so a test asks for a fixture by name.
 """
 
 from collections import deque
-from collections.abc import AsyncGenerator, Callable, Iterator, Sequence
+from collections.abc import AsyncGenerator, Callable, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from hashlib import md5
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from json import dumps, loads
 from multiprocessing import get_context
@@ -28,7 +29,7 @@ from pyarrow import Schema, Table
 from pyarrow import array as arrow_array
 from pyarrow import int64 as arrow_int64
 from pyarrow import table as arrow_table
-from pydantic import SecretStr
+from pydantic import JsonValue, SecretStr
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.engines.protocol import Engine
 from toolkit.executor.sources.protocols import DBConn
@@ -430,3 +431,156 @@ def fake_oracle(monkeypatch: pytest.MonkeyPatch) -> Callable[[FakeOracle], FakeO
         return connection
 
     return install
+
+
+UPDATE_SEQ = "616823122-g1AAAAKTeJzLYWBgEMhgTmHgzcvPy09JdcjLz8gvLskBCjPlsQBJhgdA6v___--zkph8Eo_iUJpkACST7IHqQMr"
+"""An `update_seq` in the form of the real instance: a number, a dash and opaque text."""
+
+PEOPLE = {
+    272: ("JOSÉ AUGUSTO DE SÁ", "MARIA DA CONCEIÇÃO DE SÁ"),
+    353: ("ANA BEATRIZ LIMA", "LÚCIA HELENA LIMA"),
+    8001: ("CARLOS EDUARDO NUNES", "ROSA MARIA NUNES"),
+}
+"""Made-up people and their mothers, with accents like the real names have."""
+
+
+def revision(key: str) -> str:
+    """Return a revision as CouchDB writes it: a number, a dash and 32 hexadecimal digits."""
+    return f"1-{md5(key.encode(), usedforsecurity=False).hexdigest()}"
+
+
+def cpf_document(number: int) -> dict[str, JsonValue]:
+    """Return a person of `chcpf_bcadastros`, with the fields of the real documents."""
+    key = f"{number:011d}"
+    name, mother = PEOPLE[number]
+
+    return {
+        "_id": key,
+        "_rev": revision(key),
+        "anoExerc": "2007",
+        "bairro": "AURORA OESTE",
+        "cep": "74000000",
+        "codMunDomic": "9373",
+        "codNatOcup": "011",
+        "codOcup": "000",
+        "codSexo": "1",
+        "codSitCad": "8",
+        "codUA": "0120100",
+        "cpfId": key,
+        "dtInscricao": "20070322",
+        "dtNasc": "19660331",
+        "dtUltAtualiz": "20230801",
+        "indEstrangeiro": "N",
+        "indResExt": "N",
+        "logradouro": "NATIVIDADE",
+        "nomeContribuinte": name,
+        "nomeMae": mother,
+        "nroLogradouro": "109",
+        "tipoLogradouro": "RUA",
+        "ufMunDomic": "GO",
+        "~version": "CgYDBgsdAQ4=",
+    }
+
+
+def cnpj_document(number: int) -> dict[str, JsonValue]:
+    """Return a company of `chcnpj_bcadastros` with two partners, as the real ones are."""
+    key = f"{number:08d}"
+
+    return {
+        "_id": key,
+        "_rev": revision(key),
+        "capitalSocial": "00000020000000",
+        "cpfResponsavel": "12831060869",
+        "dataInclusaoResponsavel": "20210324",
+        "enteFederativo": "",
+        "naturezaJuridica": "2062",
+        "nomeEmpresarial": "CONFEITARIA SÃO JOÃO LTDA",
+        "porteEmpresa": "01",
+        "qualificacaoResponsavel": "49",
+        "socios": [
+            {
+                "codigoPais": "",
+                "cpfCnpj": "00012831060869",
+                "cpfRepresentanteLegal": "",
+                "dataEntrada": "20210324",
+                "nomeSocioEstrangeiro": "",
+                "qualificacaoRepresentanteLegal": "00",
+                "qualificacaoSocio": "49",
+                "tipo": "2",
+            },
+            {
+                "codigoPais": "",
+                "cpfCnpj": "00045678901234",
+                "cpfRepresentanteLegal": "",
+                "dataEntrada": "20220110",
+                "nomeSocioEstrangeiro": "",
+                "qualificacaoRepresentanteLegal": "00",
+                "qualificacaoSocio": "22",
+                "tipo": "2",
+            },
+        ],
+        "~version": "CgYDBHFNAQg=",
+    }
+
+
+def all_docs_page(documents: Sequence[Mapping[str, JsonValue]], total_rows: int) -> bytes:
+    """Return a page of `_all_docs` with documents, as CouchDB writes it.
+
+    The head holds `total_rows`, `offset` and `update_seq`, and each row sits on its own line.
+    """
+    rows = ",\n".join(
+        dumps(
+            {"id": document["_id"], "key": document["_id"], "value": {"rev": document["_rev"]}, "doc": document},
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        for document in documents
+    )
+    head = dumps({"total_rows": total_rows, "offset": 0, "update_seq": UPDATE_SEQ}, separators=(",", ":"))
+
+    return f'{head[:-1]},"rows":[\n{rows}\n]}}\n'.encode()
+
+
+@pytest.fixture
+def cpf_page() -> bytes:
+    """Return a page of `_all_docs` of `chcpf_bcadastros`, with three people."""
+    return all_docs_page([cpf_document(number) for number in PEOPLE], 279_833_107)
+
+
+@pytest.fixture
+def cnpj_page() -> bytes:
+    """Return a page of `_all_docs` of `chcnpj_bcadastros`, with one company."""
+    return all_docs_page([cnpj_document(27329521)], 144_691_433)
+
+
+def changes_page(changes: Sequence[tuple[int, Mapping[str, JsonValue]]], pending: int) -> bytes:
+    """Return a page of `_changes` with documents, as CouchDB writes it.
+
+    A document with `_deleted` is a deletion: the change has `deleted` and the document is a tombstone.
+    """
+    results = []
+
+    for number, document in changes:
+        result: dict[str, JsonValue] = {
+            "seq": f"{number}-g1AAAAKTeJzLYWBg",
+            "id": document["_id"],
+            "changes": [{"rev": document["_rev"]}],
+        }
+
+        if document.get("_deleted"):
+            result["deleted"] = True
+
+        results.append(dumps({**result, "doc": document}, ensure_ascii=False, separators=(",", ":")))
+
+    last_seq = f"{changes[-1][0]}-g1AAAAKTeJzLYWBg"
+    tail = dumps({"last_seq": last_seq, "pending": pending}, separators=(",", ":"))
+
+    return f'{{"results":[\n{",\n".join(results)}\n],\n{tail[1:]}\n'.encode()
+
+
+@pytest.fixture
+def cpf_changes_page() -> bytes:
+    """Return a page of `_changes` of `chcpf_bcadastros`: two updates and one deletion."""
+    erased = {"_id": "00000008001", "_rev": f"2-{revision('00000008001')[2:]}", "_deleted": True}
+
+    return changes_page([(2, cpf_document(272)), (4, cpf_document(353)), (12, erased)], pending=0)
