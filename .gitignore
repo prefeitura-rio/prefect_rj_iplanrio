@@ -3,6 +3,7 @@
 /data/
 test.py
 prefect_rj_iplanrio.egg-info/
+.vscode
 # Cursor files
 # .cursor/
 
@@ -60,3 +61,11 @@ local_run_output*.ndjson
 # The tests/ allowlist above re-includes everything under tests/, __pycache__
 # included — re-ignore it specifically.
 pipelines/rj_iplanrio__nf_agent/tests/__pycache__/
+
+
+# SMTR
+pipelines/rj_smtr__triagem_recursos/pdfs/
+pipelines/rj_smtr__triagem_recursos/artifacts/
+pipelines/rj_smtr__triagem_recursos/prompts/
+pipelines/rj_smtr__triagem_recursos/docs/
+pipelines/rj_iplanrio__nf_agent/__pypackages__/

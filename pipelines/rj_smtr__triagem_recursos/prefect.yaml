@@ -1,0 +1,36 @@
+name: rj_smtr__triagem_recursos
+prefect-version: 3.0.0
+
+deployments:
+  - name: rj-smtr--triagem-recursos--staging
+    entrypoint: pipelines/rj_smtr__triagem_recursos/flow.py:rj_smtr__triagem_recursos
+    work_pool:
+      name: default-pool
+      job_variables:
+        secretName: prefect-jobs-secrets-staging
+    parameters:
+      modo_execucao: "incremental"
+      limite_lote: 50
+      limiar_alta: 0.85
+      limiar_baixa: 0.50
+      limiar_dispersao: 0.50
+      infisical_secret_path: "/smtr-triagem-ia"
+
+  - name: rj-smtr--triagem-recursos--prod
+    entrypoint: pipelines/rj_smtr__triagem_recursos/flow.py:rj_smtr__triagem_recursos
+    work_pool:
+      name: default-pool
+      job_variables:
+        secretName: prefect-jobs-secrets
+    schedules:
+      - interval: 86400
+        anchor_date: "2026-01-01T03:00:00"
+        timezone: America/Sao_Paulo
+        slug: triagem_recursos_smtr_diario
+        parameters:
+          modo_execucao: "incremental"
+          limite_lote: 300
+          limiar_alta: 0.85
+          limiar_baixa: 0.50
+          limiar_dispersao: 0.50
+          infisical_secret_path: "/smtr-triagem-ia"
