@@ -1,5 +1,7 @@
+import sys
 from datetime import date
 from json import loads
+from types import ModuleType
 from typing import cast
 
 import pytest
@@ -599,3 +601,82 @@ async def test_a_window_of_dates_is_an_error(couchdb, tmp_path):
         await CouchDBSource(conn, secure=False).stage(
             CLIENT, {"type": "couchdb"}, Rows(window=window), tmp_path
         )
+
+
+async def test_the_table_value_names_the_database(couchdb, tmp_path):
+    """Read the database that `table` names, or the one of the connection."""
+    store, conn = couchdb
+    source = CouchDBSource(conn, page_size=3000, secure=False)
+
+    await stage(source, tmp_path, {"type": "couchdb", "table": "archive"})
+    await stage(source, tmp_path)
+
+    assert [path for path, _, _ in store.requests] == [
+        "/archive/_all_docs",
+        "/people/_all_docs",
+    ]
+
+
+@pytest.fixture
+def shapes(monkeypatch) -> Shape:
+    """Offer a module of shapes that a context can name, and return the shape in it."""
+    shape = Shape(arrow_schema([("id", arrow_string())]), shout_row)
+    module = ModuleType("shapes_of_the_test")
+    module.__dict__.update(SHOUT=shape, NOT_A_SHAPE="text")
+    monkeypatch.setitem(sys.modules, "shapes_of_the_test", module)
+
+    return shape
+
+
+def test_the_options_of_a_context_choose_the_shape_and_the_key_width(shapes):
+    """Take the shape from its `module:name` path, and the key width as it comes."""
+    conn = DBConn("db.example", 6984, "people", USER, PASSWORD)
+    context = SourceContext(conn, {"shape": "shapes_of_the_test:SHOUT", "key_width": 3})
+
+    source = CouchDBSource.from_context(context)
+
+    assert (source.shape, source.key_width) == (shapes, 3)
+
+
+def test_a_context_without_options_builds_the_default_source():
+    """Keep the default shape and detect the width of the ids."""
+    source = CouchDBSource.from_context(
+        SourceContext(DBConn("db.example", 6984, "people", USER, PASSWORD))
+    )
+
+    assert (source.shape.columns.names, source.key_width) == (["id", "doc"], None)
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        pytest.param({"shape": "no_colon"}, "module:name", id="path_without_a_colon"),
+        pytest.param(
+            {"shape": "missing_module_of_the_test:X"},
+            "cannot be imported",
+            id="module_that_does_not_exist",
+        ),
+        pytest.param(
+            {"shape": "shapes_of_the_test:MISSING"},
+            "is not a Shape",
+            id="name_that_does_not_exist",
+        ),
+        pytest.param(
+            {"shape": "shapes_of_the_test:NOT_A_SHAPE"},
+            "is not a Shape",
+            id="name_of_another_type",
+        ),
+        pytest.param(
+            {"key_width": "three"}, "key_width", id="key_width_that_is_not_a_number"
+        ),
+        pytest.param({"width": 3}, "width", id="option_that_does_not_exist"),
+    ],
+)
+def test_options_that_do_not_fit_are_an_error(shapes, options, message):
+    """Raise for a shape path that leads to no shape, and for an unknown option."""
+    context = SourceContext(
+        DBConn("db.example", 6984, "people", USER, PASSWORD), options
+    )
+
+    with pytest.raises(ValueError, match=message):
+        CouchDBSource.from_context(context)

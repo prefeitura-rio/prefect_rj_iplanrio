@@ -33,6 +33,7 @@ class OracleSource(SourceBase):
     """A source that reads Oracle through the `Oracle` engine."""
 
     extensions: ClassVar[tuple[Extension, ...]] = ()
+    text_windows: ClassVar[bool] = False
 
     conn: DBConn
     scn: int | None = field(default=None, init=False)

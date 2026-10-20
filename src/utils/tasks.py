@@ -129,7 +129,7 @@ async def dump_db_to_gcs(
         credentials.password,
     )
     await load_to_delta(
-        get_source(database["type"]).from_context(SourceContext(conn)),
+        get_source(database["type"]).from_context(SourceContext(conn, database.get("options", {}))),
         read_values(database["type"], read, "batches" in chosen),
         Destination(bucket, table["dataset_id"], table["table_id"]),
         dump_mode,

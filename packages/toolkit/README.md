@@ -95,11 +95,11 @@ Conferido em Postgres, MySQL, SQL Server e Oracle de verdade.
 
 **CouchDB**
 
-- O `CouchDBSource` lê `conn.database` pela API HTTP e grava `Parquet`, como o Oracle. Há três leituras: `_all_docs` (padrão), `_find` (`query`, um seletor Mango em JSON) e `_changes` (`since`: `0`, `now` ou o `last_seq` anterior).
+- O `CouchDBSource` lê uma base pela API HTTP e grava `Parquet`, como o Oracle. A base é `read.table` (ou `conn.database`, sem ele). Há três leituras: `_all_docs` (padrão), `_find` (`query`, um seletor Mango em JSON) e `_changes` (`since`: `0`, `now` ou o `last_seq` anterior). `read` aceita `table` com `query` ou com `since`, mas não `query` com `since`.
 - As colunas vêm de um `Shape` (`columns` e `row(item)`). O padrão grava `id` e `doc`, que o `DuckDB` lê como `JSON`: `doc->>'$.campo'`. O `BigQuery` lê `doc` como `STRING`: use `PARSE_JSON`.
 - Uma janela corta os ids numéricos com `startkey` e `endkey`. Com `key_width=N`, o corte usa os N primeiros dígitos e serve a ids de larguras mistas. A janela `null` lê o resto, como os ids com letra. Os `_design/` nunca entram.
 - Sem `filters`. `query` e `since` não vão juntos, e cada um é uma janela só.
-- `page_size`, `verify_tls`, `secure`, `path_prefix` e `timeout` vêm do construtor ou das variáveis `COUCHDB_*` da tabela abaixo. `key_width` só vem do construtor. `_all_docs` rendeu cerca de 30 000 documentos por segundo, e `_changes` 13 000: use `_changes` só para cargas incrementais.
+- `page_size`, `verify_tls`, `secure`, `path_prefix` e `timeout` vêm do construtor ou das variáveis `COUCHDB_*` da tabela abaixo. `key_width` só vem do construtor ou de `options`. Pelo `get_source`, a fonte recebe `options` do `database` do `prefect.yaml`: `shape` (um caminho `módulo:nome`, como `utils.couchdb:BCADASTRO`) e `key_width`. Qualquer outra chave é um erro. `_all_docs` rendeu cerca de 30 000 documentos por segundo, e `_changes` 13 000: use `_changes` só para cargas incrementais.
 
 ## Configuração
 

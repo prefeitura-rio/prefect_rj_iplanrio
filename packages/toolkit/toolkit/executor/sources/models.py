@@ -1,6 +1,21 @@
 """The Pydantic models of the answers that a source reads from an HTTP API."""
 
-from pydantic import BaseModel, JsonValue
+from typing import ClassVar
+
+from pydantic import BaseModel, ConfigDict, JsonValue
+
+
+class CouchDBOptions(BaseModel):
+    """The options that a deployment gives to a CouchDB source.
+
+    `shape` is the path `module:name` of a `Shape`, and `key_width` the digits that cut
+    the windows. Any other key is an error.
+    """
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(extra="forbid")
+
+    shape: str | None = None
+    key_width: int | None = None
 
 
 class CouchDBItem(BaseModel):

@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Protocol, runtime_checkable
 
+from pydantic import JsonValue
+
 from ...batches import Rows
 from ...types import TemplateValue
 from ..engines.protocol import Engine
@@ -26,10 +28,12 @@ class DBConn:
 class SourceContext:
     """Everything a source may need when it is built.
 
-    Each source reads what it uses.
+    Each source reads what it uses. `options` are the settings that a deployment gives
+    to the source, such as the shape of a CouchDB read.
     """
 
     conn: DBConn | None
+    options: Mapping[str, JsonValue] = field(default_factory=dict[str, JsonValue])
 
     def require_conn(self, name: str) -> DBConn:
         """Return the connection data of the context.
@@ -65,7 +69,13 @@ class Source(Protocol):
 
 @runtime_checkable
 class Stager(Protocol):
-    """A source whose client is not DuckDB: it stages rows as Parquet for DuckDB."""
+    """A source whose client is not DuckDB: it stages rows as Parquet for DuckDB.
+
+    `text_windows` tells that it cuts the windows itself over a text column, such as the
+    ids of CouchDB, so a dump does not ask for a number column.
+    """
+
+    text_windows: ClassVar[bool]
 
     async def stage(
         self,

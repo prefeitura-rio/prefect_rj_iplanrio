@@ -270,7 +270,7 @@ async def dump_to_delta(
         reserved = {BATCH_COLUMN, *([EXTRACTED_AT_COLUMN] if columns.get("add_timestamp") else [])}
         if reserved & set(described) or (batches and batches["column"] not in described):
             raise ValueError(f"The columns {sorted(reserved)} are reserved, and the batch column must exist")
-        if batches:
+        if batches and not (stager and stager.text_windows):
             check_batch_column(batches, described)
 
         base = select_columns(
@@ -325,6 +325,30 @@ async def dump_to_delta(
     logger.info("Delta dump finished: uri=%s windows=%d written=%d skipped=%d", uri, len(cut), written, skipped)
 
 
+def couchdb_values(read: Read) -> dict[str, TemplateValue]:
+    """Return the template values of a CouchDB read, as the source takes them.
+
+    `table` is the database, `query` a Mango selector and `since` the sequence from which
+    `_changes` reads. Raise `ValueError` for a `query` with a `since`, or for none of the
+    three.
+    """
+    values: dict[str, TemplateValue] = {"type": "couchdb"}
+
+    if (table := read.get("table")) is not None:
+        values["table"] = table
+    if (query := read.get("query")) is not None:
+        values["query"] = query
+    if (since := read.get("since")) is not None:
+        values["since"] = since
+
+    if "query" in values and "since" in values:
+        raise ValueError("Give one of query and since, not both")
+    if len(values) == 1:
+        raise ValueError("Give a table, a query or a since")
+
+    return values
+
+
 def read_values(db_type: str, read: Read, batched: bool) -> dict[str, TemplateValue]:
     """Return the template values that read a table or a native query of a database.
 
@@ -334,6 +358,9 @@ def read_values(db_type: str, read: Read, batched: bool) -> dict[str, TemplateVa
     query. Raise `ValueError` unless `read` has exactly one of `table` and `query`, or for
     windows over a query.
     """
+    if db_type == "couchdb":
+        return couchdb_values(read)
+
     match read.get("table"), read.get("query"):
         case str() as table, None:
             if db_type == "oracle":

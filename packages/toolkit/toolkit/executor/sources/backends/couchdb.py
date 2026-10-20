@@ -2,7 +2,8 @@
 
 from asyncio import to_thread
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from importlib import import_module
 from json import dumps
 from pathlib import Path
 from typing import ClassVar, Self, override
@@ -33,6 +34,7 @@ from ..models import (
     CouchDBChanges,
     CouchDBFind,
     CouchDBItem,
+    CouchDBOptions,
 )
 from ..protocols import DBConn, SourceContext
 
@@ -96,9 +98,30 @@ class Shape:
     row: Callable[[CouchDBItem], dict[str, JsonValue]]
 
 
+def load_shape(path: str) -> Shape:
+    """Return the shape that a path `module:name` names, or raise `ValueError`."""
+    module, _, name = path.partition(":")
+
+    if not module or not name:
+        raise ValueError(f"The shape {path!r} is not a path of the form module:name")
+
+    try:
+        found: object = getattr(import_module(module), name, None)
+    except ImportError as error:
+        raise ValueError(f"The shape {path!r} cannot be imported: {error}") from error
+
+    match found:
+        case Shape():
+            return found
+        case _:
+            raise ValueError(f"The shape {path!r} is not a Shape")
+
+
 @dataclass(slots=True)
 class CouchDBSource(SourceBase):
-    """A source that reads the documents of `conn.database` in pages, over HTTP.
+    """A source that reads the documents of a database in pages, over HTTP.
+
+    The database is the `table` value, or `conn.database` without it.
 
     A `query` in the values is a Mango selector, and a `since` is the sequence from
     which `_changes` reads. A window sends `startkey` and `endkey` over the ids, cut by
@@ -107,6 +130,7 @@ class CouchDBSource(SourceBase):
     """
 
     extensions: ClassVar[tuple[Extension, ...]] = ()
+    text_windows: ClassVar[bool] = True
 
     conn: DBConn
     shape: Shape = Shape(schema([("id", string()), ("doc", json_())]), document_row)
@@ -121,8 +145,20 @@ class CouchDBSource(SourceBase):
     @override
     @classmethod
     def from_context(cls, context: SourceContext) -> Self:
-        """Build the source from the connection data, or raise `ValueError`."""
-        return cls(context.require_conn(cls.name))
+        """Build the source from the connection data and the options.
+
+        Raise `ValueError` for a context with no connection, or with options that do not
+        fit.
+        """
+        conn = context.require_conn(cls.name)
+        options = CouchDBOptions.model_validate(context.options)
+        source = cls(conn, key_width=options.key_width)
+
+        return (
+            replace(source, shape=load_shape(options.shape))
+            if options.shape
+            else source
+        )
 
     @property
     def base_url(self) -> str:
@@ -169,7 +205,8 @@ class CouchDBSource(SourceBase):
                 "A CouchDB read takes no filters: write a Mango selector as the query"
             )
 
-        database = self.conn.database
+        table = values.get("table")
+        database = table if isinstance(table, str) else self.conn.database
         selector = values.get("query")
         since = values.get("since")
 

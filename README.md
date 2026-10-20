@@ -74,13 +74,13 @@ Os flows ficam em `src/utils/flows.py`. Todos gravam em uma tabela do BigQuery e
 
 Os parâmetros são grupos com tipo (`src/utils/types.py`). O `Prefect` recusa uma chave que falta ou um tipo errado antes de rodar.
 
-| Grupo      | O que tem                                                                          | Onde fica no `prefect.yaml` |
-| ---------- | ---------------------------------------------------------------------------------- | --------------------------- |
-| `database` | `type`, `host`, `port`, `database` e `secret_path` (o segredo com usuário e senha) | `deployment`                |
-| `cloud`    | `bucket`, `project` e `connection` (a conexão `BigLake`)                           | `deployment`                |
-| `table`    | `dataset_id` e `table_id`, a tabela no BigQuery                                    | `schedule`                  |
-| `read`     | `table` (`esquema.tabela`) ou `query` (no dialeto do banco)                        | `schedule`                  |
-| `options`  | `batches`, `filters`, `select` e `columns`                                         | `schedule`                  |
+| Grupo      | O que tem                                                                                                                                                 | Onde fica no `prefect.yaml` |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| `database` | `type`, `host`, `port`, `database`, `secret_path` (o segredo com usuário e senha) e `options` (opcional, da fonte)                                        | `deployment`                |
+| `cloud`    | `bucket`, `project` e `connection` (a conexão `BigLake`)                                                                                                  | `deployment`                |
+| `table`    | `dataset_id` e `table_id`, a tabela no BigQuery                                                                                                           | `schedule`                  |
+| `read`     | `table` (`esquema.tabela`) ou `query` (no dialeto do banco). No CouchDB, `table` é a base, `query` um seletor Mango e `since` uma sequência de `_changes` | `schedule`                  |
+| `options`  | `batches`, `filters`, `select` e `columns`                                                                                                                | `schedule`                  |
 
 Cada `schedule` repete o grupo inteiro. O `Prefect` troca o grupo todo, e não só uma chave.
 
@@ -98,7 +98,7 @@ deployments:
     entrypoint: pipelines/rj_secretaria__pipeline/flow.py:rj_secretaria__pipeline
     parameters:
       database:
-        type: postgres # postgres, mysql, mssql ou oracle
+        type: postgres # postgres, mysql, mssql, oracle ou couchdb
         host: 10.0.0.1
         port: 5432
         database: app

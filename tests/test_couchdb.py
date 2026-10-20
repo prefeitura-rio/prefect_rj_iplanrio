@@ -1,14 +1,22 @@
 from json import loads
 from pathlib import Path
 
-from fixtures import PEOPLE, UPDATE_SEQ, cpf_document, revision
+import pytest
+from deltalake import DeltaTable
+from fixtures import PEOPLE, UPDATE_SEQ, all_docs_page, cpf_document, revision
 from pyarrow.parquet import ParquetWriter, read_table
+from pydantic import JsonValue
 from toolkit.executor.engines.duckdb import DuckDBEngine
 from toolkit.executor.sources.backends.couchdb import CouchDBSource, change_item
 from toolkit.executor.sources.models import CouchDBAllDocs, CouchDBChanges
 from toolkit.executor.sources.protocols import DBConn
+from toolkit.settings import DatabaseCredentials
+from toolkit.types import Batches
 
+from utils import tasks
 from utils.couchdb import BCADASTRO
+from utils.types import Database, Read
+from utils.utils import dump_to_delta, read_values
 
 CPF_IDS = ["00000000272", "00000000353", "00000008001"]
 
@@ -101,3 +109,106 @@ async def test_a_page_of_changes_keeps_the_sequence_and_the_deletions(cpf_change
     ]
     assert {row[2] for row in rows} == {"12-g1AAAAKTeJzLYWBg"}
     assert rows[2][4] == f"2-{revision('00000008001')[2:]}"
+
+
+@pytest.mark.parametrize(
+    ("read", "expected"),
+    [
+        pytest.param({"table": "chcpf_bcadastros"}, {"type": "couchdb", "table": "chcpf_bcadastros"}, id="database"),
+        pytest.param({"query": '{"a": 1}'}, {"type": "couchdb", "query": '{"a": 1}'}, id="selector"),
+        pytest.param(
+            {"table": "db", "query": "{}"},
+            {"type": "couchdb", "table": "db", "query": "{}"},
+            id="database_and_selector",
+        ),
+        pytest.param({"since": "0"}, {"type": "couchdb", "since": "0"}, id="changes"),
+        pytest.param(
+            {"table": "db", "since": "7-g1"},
+            {"type": "couchdb", "table": "db", "since": "7-g1"},
+            id="database_and_changes",
+        ),
+    ],
+)
+def test_a_couchdb_read_keeps_the_database_the_selector_and_the_sequence(read, expected):
+    """Pass the three parts of a CouchDB read to the source as they are, even with windows."""
+    assert read_values("couchdb", read, batched=True) == expected
+
+
+@pytest.mark.parametrize(
+    ("read", "message"),
+    [
+        pytest.param({"query": "{}", "since": "0"}, "one of query and since", id="selector_and_changes"),
+        pytest.param({}, "Give a table, a query or a since", id="nothing"),
+    ],
+)
+def test_a_couchdb_read_that_does_not_fit_is_an_error(read, message):
+    """Raise for a read with a selector and a sequence, or with nothing to read."""
+    with pytest.raises(ValueError, match=message):
+        read_values("couchdb", read, batched=False)
+
+
+async def test_a_couchdb_database_is_dumped_in_windows_over_its_text_ids(fake_api, tmp_path):
+    """Cut the text ids by number, read what is outside them last, and keep each document."""
+    event: dict[str, JsonValue] = {
+        "_id": "CPF-20261020011517",
+        "_rev": revision("CPF-20261020011517"),
+        "tipo": "evento",
+    }
+    people = [cpf_document(number) for number in PEOPLE]
+    pages: list[list[dict[str, JsonValue]]] = [[people[0], people[1]], [people[2]], [], [event]]
+    fake_api.replies.extend((200, loads(all_docs_page(documents, 4))) for documents in pages)
+    conn = DBConn("127.0.0.1", fake_api.server.server_port, "ignored", "user", "password")
+    source = CouchDBSource(conn, secure=False, key_width=11)
+    batches: Batches = {"column": "id", "width": 5_000, "begin": 0, "end": 9_999}
+    read: Read = {"table": "chcpf_bcadastros"}
+
+    await dump_to_delta(source, read_values("couchdb", read, True), str(tmp_path / "t"), "append", {"batches": batches})
+    rows = DeltaTable(str(tmp_path / "t")).to_pyarrow_table().to_pylist()
+
+    assert {row["id"]: row["batch"] for row in rows} == {
+        "00000000272": "000000000000",
+        "00000000353": "000000000000",
+        "00000008001": "000000005000",
+        "CPF-20261020011517": "null",
+    }
+    assert loads(next(row["doc"] for row in rows if row["id"] == "00000000272")) == people[0]
+    assert [(r.path, r.query.get("startkey"), r.query.get("endkey")) for r in fake_api.requests] == [
+        ("/chcpf_bcadastros/_all_docs", ['"0"'], ['"00000005000"']),
+        ("/chcpf_bcadastros/_all_docs", ['"00000005000"'], ['"00000010000"']),
+        ("/chcpf_bcadastros/_all_docs", None, ['"0"']),
+        ("/chcpf_bcadastros/_all_docs", ['":"'], None),
+    ]
+
+
+async def test_the_options_of_the_database_choose_the_bcadastro_shape(monkeypatch):
+    """Build the source from the shape and the key width that the `prefect.yaml` names."""
+    seen = {}
+
+    async def load(source, values, destination, dump_mode, options):
+        """Keep what the dump would read and where it would write."""
+        seen.update(source=source, values=values, mode=dump_mode, options=options, destination=destination)
+
+    def credentials(path):
+        """Keep the secret that was asked for, and give a user and a password."""
+        seen["secret_path"] = path
+
+        return DatabaseCredentials("user", "password")
+
+    monkeypatch.setattr(tasks, "load_to_delta", load)
+    monkeypatch.setattr(tasks, "read_database_credentials", credentials)
+    database: Database = {
+        "type": "couchdb",
+        "host": "10.2.231.241",
+        "port": 6984,
+        "database": "unused",
+        "secret_path": "/db-bcadastro",
+        "options": {"shape": "utils.couchdb:BCADASTRO", "key_width": 3},
+    }
+
+    await tasks.dump_db_to_gcs.fn(
+        database, {"dataset_id": "brutos_bcadastro", "table_id": "chcpf"}, {"table": "chcpf_bcadastros"}, bucket="b"
+    )
+
+    source = seen["source"]
+    assert (source.shape, source.key_width, source.conn.hostname) == (BCADASTRO, 3, "10.2.231.241")
+    assert (seen["secret_path"], seen["values"]) == ("/db-bcadastro", {"type": "couchdb", "table": "chcpf_bcadastros"})
