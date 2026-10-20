@@ -189,6 +189,7 @@ def patch_flow(monkeypatch: pytest.MonkeyPatch, **replacements: Callable[..., ob
         "rename_current_flow_run_task": _ignore,
         "inject_bd_credentials_task": _ignore,
         "ensure_exclusive_task": _ignore,
+        "check_dfen_extraction_task": _ignore,
         "drop_leftover_chunk_tasks_task": _ignore,
         "take_snapshot_task": lambda infisical_secret_path: SNAPSHOT,
         "plan_table_task": lambda **kwargs: FakePlan(str(kwargs["table_id"])),
