@@ -10,6 +10,7 @@ from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.constants import DBT_DEPLOYMENT
 from pipelines.rj_smfp__nota_carioca_bq_to_oracle.tasks import (
+    check_inmemory_procedure_task,
     create_oracle_indexes_task,
     delete_gcs_files_task,
     disable_inmemory_task,
@@ -84,6 +85,8 @@ def rj_smfp__nota_carioca_bq_to_oracle(  # noqa: PLR0913
         if inmemory_window_months < 0:
             raise ValueError(f"inmemory_window_months não pode ser negativo: {inmemory_window_months}")
         notifier.begin()
+        if mode == "full":
+            check_inmemory_procedure_task(infisical_secret_path=infisical_secret_path)
         dbt_finished_at = None
         if dbt_enabled:
             dbt_started = time.monotonic()

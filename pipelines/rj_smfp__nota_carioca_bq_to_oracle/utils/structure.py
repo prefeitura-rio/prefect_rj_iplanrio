@@ -29,7 +29,8 @@ INMEMORY_COMPRESSIONS = (
 INMEMORY_DISTRIBUTES = ("AUTO", "BY ROWID RANGE", "BY PARTITION", "BY SUBPARTITION")
 INMEMORY_DUPLICATES = ("NO DUPLICATE", "DUPLICATE", "DUPLICATE ALL")
 # A tabela carregada nasce NO INMEMORY; depois da carga, só as partições da janela recebem esta cláusula, com as
-# opções das MVT_ originais (utils/inmemory.py). Sai do In-Memory inteira quando deixa de ser a tabela em uso.
+# opções das MVT_ originais (utils/inmemory.py). Sai do In-Memory inteira quando deixa de ser a tabela em uso. Quem
+# aplica é a procedure dba/PRC_BQLOAD_INMEMORY.sql, que repete este texto (um teste confere).
 LOADED_TABLE_INMEMORY = "INMEMORY PRIORITY HIGH MEMCOMPRESS FOR QUERY HIGH DISTRIBUTE AUTO NO DUPLICATE"
 
 
