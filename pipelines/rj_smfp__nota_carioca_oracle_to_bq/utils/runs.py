@@ -3,7 +3,8 @@
 Único módulo de ``utils/`` que importa o Prefect; toda a decisão fica em ``parallel.py`` e ``supervise.py``.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
@@ -21,7 +22,7 @@ from prefect.deployments import run_deployment
 from prefect.states import Cancelling
 
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import CHILD_TAG
-from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import ACTIVE_STATES, RunInfo
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.parallel import ACTIVE_STATES, RunInfo, will_retry
 
 
 def to_run_info(run: FlowRun) -> RunInfo:
@@ -80,26 +81,73 @@ def cancel_runs(run_ids: Sequence[str]) -> None:
             client.set_flow_run_state(run_id, state=Cancelling(), force=True)
 
 
-def launch_children(deployment_name: str, parameters_by_table: Mapping[str, Mapping[str, object]]) -> dict[str, str]:
-    """Cria um flow run filho por tabela, sem esperar, ligado ao pai como subflow.
+@dataclass(frozen=True)
+class ChildLaunch:
+    """O que o pai pede ao Prefect para lançar os filhos.
 
     :param deployment_name: ``<flow>/<deployment>`` do deployment atual.
+    :param key_prefix: Prefixo das chaves de idempotência (:func:`parallel.launch_key`); a de cada filho é
+        ``<prefixo>:<tabela>``, igual em todas as tentativas.
     :param parameters_by_table: Parâmetros do filho de cada tabela.
-    :returns: Id do flow run de cada filho, por tabela.
-    :raises BaseException: Se algum lançamento falhar, cancela os já lançados e repropaga.
     """
-    launched: dict[str, str] = {}
+
+    deployment_name: str
+    key_prefix: str
+    parameters_by_table: Mapping[str, Mapping[str, object]]
+
+
+# Filhos criados pelas tentativas anteriores da task, por prefixo de chave. As tentativas rodam no mesmo processo; o
+# registro permite cancelar na última também os filhos que ela não chegou a pedir de volta ao Prefect.
+_created_children: dict[str, dict[str, str]] = {}
+
+
+def cancel_best_effort(run_ids: Sequence[str], report: Callable[[str], None]) -> None:
+    """Pede o cancelamento de cada flow run; a falha de um é registrada e não impede os outros nem sobe.
+
+    :param run_ids: Ids dos flow runs.
+    :param report: Publica uma linha de log.
+    """
+    for run_id in run_ids:
+        try:
+            cancel_runs([run_id])
+        except Exception as error:
+            report(f"Não foi possível cancelar o filho {run_id}: {type(error).__name__}: {error}")
+
+
+def launch_children(request: ChildLaunch, final_attempt: bool, report: Callable[[str], None]) -> dict[str, str]:
+    """Cria um flow run filho por tabela, sem esperar, ligado ao pai como subflow; seguro para repetir.
+
+    Cada filho leva a chave de idempotência ``<prefixo>:<tabela>``: o Prefect devolve o filho já criado para a mesma
+    chave, em qualquer estado, em vez de criar outro. Por isso, numa tentativa que será repetida os filhos criados ficam
+    como estão e a nova tentativa os reaproveita; só quando nada mais vai repeti-la (última tentativa ou interrupção)
+    eles são cancelados, inclusive os criados por tentativas anteriores.
+
+    :param request: Deployment, chaves e parâmetros dos filhos.
+    :param final_attempt: Se esta é a última tentativa da task (:func:`parallel.is_final_attempt`).
+    :param report: Publica uma linha de log (falhas ao cancelar).
+    :returns: Id do flow run de cada filho, por tabela.
+    :raises BaseException: A falha do lançamento, repropagada depois de cancelar os filhos se não houver nova tentativa.
+    """
+    created = _created_children.setdefault(request.key_prefix, {})
     try:
-        for table_id, parameters in parameters_by_table.items():
+        for table_id, parameters in request.parameters_by_table.items():
             # Em contexto síncrono ``run_deployment`` devolve o FlowRun; a anotação do Prefect só enxerga a corrotina.
             run = cast(
                 FlowRun,
                 run_deployment(
-                    name=deployment_name, parameters=dict(parameters), timeout=0, as_subflow=True, tags=[CHILD_TAG]
+                    name=request.deployment_name,
+                    parameters=dict(parameters),
+                    timeout=0,
+                    as_subflow=True,
+                    tags=[CHILD_TAG],
+                    idempotency_key=f"{request.key_prefix}:{table_id}",
                 ),
             )
-            launched[table_id] = str(run.id)
-    except BaseException:
-        cancel_runs(list(launched.values()))
+            created[table_id] = str(run.id)
+    except BaseException as error:
+        if not will_retry(error, final_attempt):
+            del _created_children[request.key_prefix]
+            cancel_best_effort(list(created.values()), report)
         raise
-    return launched
+    del _created_children[request.key_prefix]
+    return {table_id: created[table_id] for table_id in request.parameters_by_table}

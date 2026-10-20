@@ -3,7 +3,8 @@
 Dois modos no mesmo deployment. O pai (``table_id`` nulo) tira a foto, planeja, confere a memória e, com
 ``parallel_tables``, lança um filho por tabela, cada um no seu pod, e só publica depois que todos validaram.
 O filho (``table_id`` preenchido) extrai, carrega e valida uma tabela e nunca toca nas finais. Com
-``parallel_tables=False`` o pai faz tudo em sequência no próprio pod.
+``parallel_tables=False`` o pai faz tudo em sequência no próprio pod. Antes da foto o pai recusa a carga se a aplicação
+Nota Carioca estiver extraindo notas nacionais para o schema DFEN (``check_dfen_extraction``); o filho nunca confere.
 
 Os padrões de memória (``workers=2``, ``worker_memory_mb=640``, ``pod_memory_mb=1792``) são só os do código:
 ``pod_memory_mb`` é o orçamento do pod, que deve ficar abaixo do ``memory_request`` do deployment (``job_variables``)
@@ -25,6 +26,7 @@ from prefect.runtime import flow_run
 from iplanrio.pipelines_utils.env import inject_bd_credentials_task
 from iplanrio.pipelines_utils.prefect import rename_current_flow_run_task
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.constants import DEFAULT_TABLES
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.dfen_task import check_dfen_extraction_task
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.table_run import process_table, run_child
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     check_memory_budget_task,
@@ -37,6 +39,7 @@ from pipelines.rj_smfp__nota_carioca_oracle_to_bq.tasks import (
     take_snapshot_task,
     wait_children_task,
 )
+from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.dfen import DEFAULT_STALE_HOURS
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.discord import current_environment
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.extract import ExtractOptions
 from pipelines.rj_smfp__nota_carioca_oracle_to_bq.utils.notify import NotifierConfig, ParentNotifier
@@ -59,6 +62,8 @@ class ParentRun:
     :param source_schema: Dono das tabelas no Oracle, ou ``None`` para o do segredo.
     :param table_ids: Tabelas a carregar.
     :param parallel_tables: Um filho por tabela (``True``) ou tudo em sequência neste pod.
+    :param check_dfen_extraction: Recusa a carga se a aplicação estiver extraindo notas nacionais para o DFEN.
+    :param dfen_extraction_stale_hours: Horas em execução a partir das quais uma extração é tratada como travada.
     :param passthrough: Parâmetros repassados sem mudança aos filhos.
     """
 
@@ -71,6 +76,8 @@ class ParentRun:
     source_schema: str | None
     table_ids: tuple[str, ...]
     parallel_tables: bool
+    check_dfen_extraction: bool
+    dfen_extraction_stale_hours: int
     passthrough: dict[str, object]
 
 
@@ -93,6 +100,11 @@ def _run_parent(run: ParentRun, notifier: ParentNotifier) -> None:
     with notifier.guard():
         notifier.begin()
         ensure_exclusive_task()
+        check_dfen_extraction_task(
+            infisical_secret_path=run.infisical_secret_path,
+            enabled=run.check_dfen_extraction,
+            stale_hours=run.dfen_extraction_stale_hours,
+        )
         drop_leftover_chunk_tasks_task(infisical_secret_path=run.infisical_secret_path)
         snapshot = take_snapshot_task(infisical_secret_path=run.infisical_secret_path)
         notifier.set_snapshot(snapshot)
@@ -154,6 +166,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
     memory_pause_ratio: float = 0.85,
     parallel_tables: bool = True,
     discord_notifications: bool = True,
+    check_dfen_extraction: bool = True,
+    dfen_extraction_stale_hours: int = DEFAULT_STALE_HOURS,
     table_id: str | None = None,
     scn: int | None = None,
     snapshot_taken_at: str | None = None,
@@ -226,6 +240,8 @@ def rj_smfp__nota_carioca_oracle_to_bq(  # noqa: PLR0913
             source_schema,
             names,
             parallel_tables,
+            check_dfen_extraction,
+            dfen_extraction_stale_hours,
             passthrough,
         ),
         notifier,
