@@ -48,7 +48,6 @@ class Source(Protocol):
     """
 
     name: ClassVar[str]
-    """The source name."""
 
     def open(self, engine: Engine) -> AbstractAsyncContextManager[Engine]:
         """Open the client that runs statements in this system.

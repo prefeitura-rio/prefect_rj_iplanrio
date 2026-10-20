@@ -52,9 +52,7 @@ class Result[Schema]:
 
     schema: type[Schema]
     columns: dict[str, Column] | None
-    """The columns to check each frame against, or `None` to check nothing."""
     template: str
-    """The template that made the query. It labels the metrics and the log."""
     frames: AsyncIterator[DataFrame]
 
     async def __aiter__(self) -> AsyncGenerator[Dataset[Schema]]:

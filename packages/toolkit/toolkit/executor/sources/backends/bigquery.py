@@ -25,7 +25,6 @@ class BigQuerySource(SourceBase):
     )
 
     project: str = field(default_factory=lambda: settings.BIGQUERY_PROJECT)
-    """The project to attach. It defaults to the `BIGQUERY_PROJECT` setting."""
 
     @override
     async def setup(self, client: Engine) -> None:

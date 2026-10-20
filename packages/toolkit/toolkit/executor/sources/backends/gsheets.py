@@ -81,7 +81,6 @@ class GSheetsSource(SourceBase):
     )
 
     token: Callable[[], str] = field(default=sheets_token)
-    """Returns the access token. It runs in a worker thread."""
 
     @override
     async def setup(self, client: Engine) -> None:
