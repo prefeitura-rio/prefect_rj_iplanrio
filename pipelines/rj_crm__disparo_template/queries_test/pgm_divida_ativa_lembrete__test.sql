@@ -144,8 +144,8 @@ INSERT INTO `rj-crm-registry.brutos_salesforce.status_disparo`
 (
     id_jornada, nome_jornada, chave_atividade, nome_atividade, id_ativo,
     nome_hsm, id_hsm, id_waba, categoria_hsm, canal, texto_hsm, rodape_hsm,
-    contato_telefone, cpf, envioo_datahora, entrega_datahora, leitura_datahora,
-    falha_datahora, descricao_falha, indicador_falha, indicador_quarentena,
+    contato_telefone, cpf, processado_datahora, envio_meta_datahora, entrega_meta_datahora, leitura_meta_datahora,
+    falha_meta_datahora, descricao_falha, indicador_falha, indicador_quarentena,
     status_disparo, id_status_disparo, data_particao
 )
 VALUES
@@ -164,6 +164,7 @@ VALUES
     'Parar de receber mensagem? Digite PARAR',
     '5521989190512',
     '12pgmlembr1',
+    DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 10 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 10 DAY),
     DATETIME_SUB(CURRENT_DATETIME('America/Sao_Paulo'), INTERVAL 10 DAY),
     NULL,
