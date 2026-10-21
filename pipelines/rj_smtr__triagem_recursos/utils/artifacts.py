@@ -1,24 +1,32 @@
 """
 Módulo de carregamento e caching dos artefatos estáticos de calibração.
-Garante o uso da baseline congelada (LightGBM, Conformal CCCP e Centróides).
+Garante o uso da baseline congelada (LightGBM, Conformal CCCP e Centróides do Goldenset).
 """
 
 from dataclasses import dataclass
-import io
-import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+import sys
+import types
+from typing import Optional
 import joblib
 
-from ..constants import (
-    GCS_ARTIFACTS_PREFIX,
-    GCS_BUCKET_NAME,
-    LOCAL_ARTIFACTS_DIR,
-    STORAGE_BACKEND,
-)
+from ..constants import LOCAL_ARTIFACTS_DIR, PROMPTS_DIR, VERSAO_PROMPT_PADRAO
 from .conformal import ArtefatosConforme
 from .meta_calibrator import ModeloCalibrador
-from .storage import _obter_cliente_gcs
+
+
+def _registrar_aliases_legados() -> None:
+    """Registra aliases em sys.modules para desserialização transparente de joblib."""
+    from . import conformal, feature_extractor, meta_calibrator
+
+    if "src" not in sys.modules:
+        sys.modules["src"] = types.ModuleType("src")
+    if "src.core" not in sys.modules:
+        sys.modules["src.core"] = types.ModuleType("src.core")
+
+    sys.modules["src.core.meta_calibrator"] = meta_calibrator
+    sys.modules["src.core.feature_extractor"] = feature_extractor
+    sys.modules["src.core.conformal"] = conformal
 
 
 @dataclass
@@ -32,58 +40,73 @@ class BaselineReferencia:
 _BASELINE_CACHE: Optional[BaselineReferencia] = None
 
 
-def carregar_prompt_sistema(caminho_prompt: Optional[Path] = None) -> str:
-    """Carrega o texto das instruções operacionais da v3."""
-    if caminho_prompt and caminho_prompt.exists():
-        with open(caminho_prompt, "r", encoding="utf-8") as f:
-            return f.read()
+def carregar_prompt_sistema(
+    caminho_prompt: Optional[Path] = None,
+    gcs_uri: Optional[str] = None
+) -> str:
+    """Carrega o texto das instruções operacionais do GCS ou do disco local."""
+    from ..constants import GCS_PROMPT_URI
+    uri_alvo = gcs_uri or GCS_PROMPT_URI
+    if uri_alvo and str(uri_alvo).startswith("gs://"):
+        try:
+            import shutil, subprocess
+            cmd = shutil.which("gcloud")
+            if cmd:
+                res = subprocess.run(
+                    [cmd, "storage", "cat", str(uri_alvo)],
+                    capture_output=True,
+                    encoding="utf-8",
+                    check=True
+                )
+                if res.stdout and len(res.stdout.strip()) > 100:
+                    return res.stdout
+        except Exception:
+            pass
 
-    padrao = Path(__file__).resolve().parent.parent / "prompts" / "v3_baseline.txt"
-    with open(padrao, "r", encoding="utf-8") as f:
-        return f.read()
+    if caminho_prompt and caminho_prompt.exists():
+        return caminho_prompt.read_text(encoding="utf-8")
+
+    padrao = PROMPTS_DIR / f"{VERSAO_PROMPT_PADRAO}.txt"
+    if padrao.exists():
+        return padrao.read_text(encoding="utf-8")
+
+    arquivos = sorted(PROMPTS_DIR.glob("*.txt"))
+    if arquivos:
+        return arquivos[0].read_text(encoding="utf-8")
+
+    raise FileNotFoundError("Nenhum arquivo de prompt localizado em prompts/.")
 
 
 def carregar_baseline_referencia(
     forcar_recarga: bool = False,
-    usar_local: Optional[bool] = None
+    diretorio_artefatos: Optional[Path] = None,
 ) -> BaselineReferencia:
-    """
-    Carrega o Meta-Calibrador e os quantis conformais em memória uma única vez.
-    """
+    """Carrega o Meta-Calibrador e os quantis conformais em memória uma única vez."""
     global _BASELINE_CACHE
     if _BASELINE_CACHE is not None and not forcar_recarga:
         return _BASELINE_CACHE
 
-    is_local = (STORAGE_BACKEND == "local") if usar_local is None else usar_local
+    _registrar_aliases_legados()
+    pasta = diretorio_artefatos or LOCAL_ARTIFACTS_DIR
 
-    if is_local:
-        arquivo_calibrador = sorted(
-            LOCAL_ARTIFACTS_DIR.glob("meta_calibrator_*.joblib"),
-            key=lambda x: x.stat().st_mtime,
-            reverse=True,
-        )[0]
-        arquivo_conformal = sorted(
-            LOCAL_ARTIFACTS_DIR.glob("conformal_artifacts_*.joblib"),
-            key=lambda x: x.stat().st_mtime,
-            reverse=True,
-        )[0]
+    arquivos_calibrador = sorted(
+        pasta.glob("meta_calibrator_*.joblib"),
+        key=lambda x: x.stat().st_mtime,
+        reverse=True,
+    )
+    arquivos_conformal = sorted(
+        pasta.glob("conformal_artifacts_*.joblib"),
+        key=lambda x: x.stat().st_mtime,
+        reverse=True,
+    )
 
-        calibrador = joblib.load(arquivo_calibrador)
-        conformal = joblib.load(arquivo_conformal)
-    else:
-        # Download direto dos bytes a partir do Google Cloud Storage
-        client = _obter_cliente_gcs()
-        bucket = client.bucket(GCS_BUCKET_NAME)
+    if not arquivos_calibrador or not arquivos_conformal:
+        raise FileNotFoundError(
+            f"Artefatos .joblib de calibração não localizados em {pasta}."
+        )
 
-        blob_calibrador = bucket.blob(f"{GCS_ARTIFACTS_PREFIX}meta_calibrator_vertex_gemini_3.7_flash.joblib")
-        blob_conformal = bucket.blob(f"{GCS_ARTIFACTS_PREFIX}conformal_artifacts_vertex_gemini_3.7_flash.joblib")
-
-        buffer_cal = io.BytesIO(blob_calibrador.download_as_bytes())
-        buffer_conf = io.BytesIO(blob_conformal.download_as_bytes())
-
-        calibrador = joblib.load(buffer_cal)
-        conformal = joblib.load(buffer_conf)
-
+    calibrador = joblib.load(arquivos_calibrador[0])
+    conformal = joblib.load(arquivos_conformal[0])
     prompt_texto = carregar_prompt_sistema()
 
     _BASELINE_CACHE = BaselineReferencia(

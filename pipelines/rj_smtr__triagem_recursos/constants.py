@@ -1,5 +1,5 @@
 """
-Constantes centrais e resolução de ambiente (Local vs Cloud).
+Constantes centrais e resolução de ambiente (Local vs Cloud / SEI).
 """
 
 from enum import Enum
@@ -22,6 +22,7 @@ TABELA_PROCESSOS = "processos_administrativos"
 TABELA_PREDICOES = "predicoes_pipeline"
 TABELA_FILA = "fila_trabalho"
 TABELA_AUDITORIA = "trilha_auditoria_juridica"
+TABELA_CALIBRACAO = "configuracoes_calibracao"
 
 # ==============================================================================
 # STORAGE E CAMINHOS
@@ -32,27 +33,20 @@ LOCAL_PDFS_DIR = PIPELINE_DIR / "pdfs"
 LOCAL_ARTIFACTS_DIR = PIPELINE_DIR / "artifacts"
 PROMPTS_DIR = PIPELINE_DIR / "prompts"
 
-GCS_BUCKET_NAME = os.getenv(
-    "GCS_BUCKET_NAME", "rj-smtr-triagem-recursos-dados"
-)
-GCS_PDFS_PREFIX = (
-    os.getenv("GCS_PDFS_PREFIX", "processos_originais/").rstrip("/") + "/"
-)
-GCS_ARTIFACTS_PREFIX = (
-    os.getenv("GCS_ARTIFACTS_PREFIX", "artefatos/v3/").rstrip("/") + "/"
-)
-
 # ==============================================================================
 # MODELO E GATEWAY
 # ==============================================================================
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai").lower()
 VERTEX_LLM_MODEL = os.getenv("LLM_MODEL", "vertex/gemini-3.7-flash")
+VERSAO_PROMPT_PADRAO = os.getenv("VERSAO_PROMPT", "v4_baseline")
+GCS_PROMPT_URI = os.getenv("GCS_PROMPT_URI", "gs://rj-agent-smtr-triagem-recurso/prompts/v4_baseline.txt")
 
 # ==============================================================================
 # PARÂMETROS DE CORTE
 # ==============================================================================
 LIMIAR_ALTA: float = float(os.getenv("LIMIAR_ALTA_CONFIANCA", "0.85"))
 LIMIAR_BAIXA: float = float(os.getenv("LIMIAR_BAIXA_CONFIANCA", "0.50"))
+LIMIAR_FAIXA_AMARELA_PISO: float = 0.50
 LIMIAR_DISPERSAO_COT_MAX: float = float(
     os.getenv("LIMIAR_DISPERSAO_COT_MAX", "0.50")
 )
@@ -96,10 +90,8 @@ class RotaExecucao(str, Enum):
 
 class StatusProcessamento(str, Enum):
     PENDENTE_IA = "PENDENTE_IA"
+    PROCESSANDO_IA = "PROCESSANDO_IA"
     CONCLUIDO_IA = "CONCLUIDO_IA"
-    EM_ANALISE_HUMANA = "EM_ANALISE_HUMANA"
-    REVISADO = "REVISADO"
-    HOMOLOGADO = "HOMOLOGADO"
     ERRO_PROCESSAMENTO = "ERRO_PROCESSAMENTO"
 
 
