@@ -1,4 +1,4 @@
-"""Flow para extrair ocorrências criminais do ISP-GEO (ISP/RJ) e enviar para BigQuery."""
+"""Flow para extrair ocorrências criminais do ISP-GEO (ISP/RJ) e enviar para BigQuery.."""
 
 from typing import Literal
 

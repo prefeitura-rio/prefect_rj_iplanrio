@@ -21,7 +21,14 @@ from constants import (
     SP_TZ,
     FASE_LABEL
 )
-from utils import build_dataframe, build_where, decode_row, resolve_crime_codes, _ultimo_trimestre, resolve_dates as _resolve_dates
+from utils import (
+    build_dataframe,
+    build_where,
+    decode_row,
+    resolve_crime_codes,
+    _ultimo_trimestre,
+    resolve_dates as _resolve_dates,
+)
 
 
 @task(retry_delay_seconds=5, retries=3)
@@ -141,7 +148,7 @@ def upload_ocorrencias_task(
     df = dataframe.astype("string")
     df['update_at'] = datetime.now(tz=SP_TZ).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
     df, _ = parse_date_columns(
-        dataframe=df, partition_date_column="data_fato"
+        dataframe=df, partition_date_column="data_registro"
     )
 
     savepath = f"{TMP_BASE}/{table_id}"
