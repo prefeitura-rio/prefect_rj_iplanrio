@@ -15,7 +15,7 @@ GATILHO — Google Form "Solicitação de Relatório de Engajamento"
 ----------------------------------------------------------------
 As respostas do Form caem no Sheet de solicitações (config.SOLICITACOES_SHEET_ID), que
 o flow lê e onde grava o status de cada pedido. Campos do Form: Campanha (lista
-sincronizada com nome_campanha_limpo da disparos_ativos — bate com hsm.nome_campanha
+sincronizada com nome_campanha da disparos_ativos — bate com hsm.nome_campanha
 na rmi_conversas.chatbot), Tipo de solicitação, Data de início e de fim dos disparos,
 Data de geração.
 
