@@ -10,6 +10,7 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import (
     IndexDefinition,
     Partitioning,
     TablePartition,
+    storage_matches,
 )
 
 NUMERIC_KINDS = {"nao_nulos", "soma", "minimo_num", "maximo_num", "comprimento_total", "comprimento_maximo"}
@@ -84,13 +85,13 @@ def metric_specs(
                 MetricSpec(
                     field["name"],
                     "minimo",
-                    f"FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MIN({bq_date}))",
+                    f"FORMAT_DATETIME('%E4Y-%m-%d %H:%M:%S', MIN({bq_date}))",
                     f"TO_CHAR(MIN({ora}), 'YYYY-MM-DD HH24:MI:SS')",
                 ),
                 MetricSpec(
                     field["name"],
                     "maximo",
-                    f"FORMAT_DATETIME('%Y-%m-%d %H:%M:%S', MAX({bq_date}))",
+                    f"FORMAT_DATETIME('%E4Y-%m-%d %H:%M:%S', MAX({bq_date}))",
                     f"TO_CHAR(MAX({ora}), 'YYYY-MM-DD HH24:MI:SS')",
                 ),
             ]
@@ -119,7 +120,7 @@ def metric_specs(
                 ),
             ]
         elif field["type"] == "TIMESTAMP":
-            bq_format = "FORMAT_TIMESTAMP('%Y-%m-%d %H:%M:%E6S', {}({}), 'UTC')"
+            bq_format = "FORMAT_TIMESTAMP('%E4Y-%m-%d %H:%M:%E6S', {}({}), 'UTC')"
             ora_format = "TO_CHAR({}({}) AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI:SS.FF6')"
             specs += [
                 MetricSpec(field["name"], "nao_nulos", f"COUNT({bq})", f"COUNT({ora})"),
@@ -224,15 +225,32 @@ def short_bound(high_value: str) -> str:
     return f"< {match.group(1)}" if match else high_value
 
 
-def describe_partition(partition: TablePartition | None) -> str:
-    """Descreve limite e tablespace de uma partição.
+def describe_partition(partition: TablePartition | None, with_storage: bool = False) -> str:
+    """Descreve limite e tablespace de uma partição e, se pedido, o segmento e o ``STORAGE``.
 
     :param partition: Partição, ou ``None`` se ausente.
+    :param with_storage: Acrescenta ``SEGMENT CREATION`` e ``STORAGE``, quando lidos.
     :returns: Por exemplo ``< 2026-02-01 00:00:00 em DFEN_BIG_DATA``, ou ``(ausente)``.
     """
     if partition is None:
         return "(ausente)"
-    return short_bound(partition.high_value) + (f" em {partition.tablespace}" if partition.tablespace else "")
+    text = short_bound(partition.high_value) + (f" em {partition.tablespace}" if partition.tablespace else "")
+    return text + (f" · {partition.storage.clause}" if with_storage and partition.storage else "")
+
+
+def same_partition(expected: TablePartition, loaded: TablePartition | None) -> tuple[bool, bool]:
+    """Compara uma partição da original com a da carregada, com a mesma regra que a carga usa para recriar a tabela.
+
+    :param expected: Partição da original.
+    :param loaded: Partição da carregada, ou ``None`` se ausente.
+    :returns: Se as duas batem e se a diferença, havendo, está só no segmento ou no ``STORAGE``.
+    """
+    if loaded is None:
+        return False, False
+    if (loaded.high_value, loaded.tablespace) != (expected.high_value, expected.tablespace):
+        return False, False
+    matches = storage_matches(loaded.storage, expected.storage)
+    return matches, not matches
 
 
 def compare_partitions(expected: Partitioning | None, actual: Partitioning | None) -> list[list[str]]:
@@ -254,8 +272,16 @@ def compare_partitions(expected: Partitioning | None, actual: Partitioning | Non
     found = {partition.name: partition for partition in actual.partitions} if actual else {}
     for position, partition in enumerate(wanted, start=1):
         loaded = found.pop(partition.name, None)
-        status = STATUS_OK if loaded == partition else STATUS_DIVERGE
-        rows.append([str(position), partition.name, describe_partition(partition), describe_partition(loaded), status])
+        matches, storage_only = same_partition(partition, loaded)
+        rows.append(
+            [
+                str(position),
+                partition.name,
+                describe_partition(partition, storage_only),
+                describe_partition(loaded, storage_only),
+                STATUS_OK if matches else STATUS_DIVERGE,
+            ]
+        )
     rows += [
         ["+", name, "(ausente)", describe_partition(partition), STATUS_DIVERGE] for name, partition in found.items()
     ]

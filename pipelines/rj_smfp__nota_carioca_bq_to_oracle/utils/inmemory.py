@@ -1,8 +1,18 @@
-"""População do In-Memory da tabela recém-carregada, para a troca acontecer com os dados já em memória."""
+"""In-Memory das tabelas carregadas: janela de meses na tabela em uso e liberação da tabela que saiu de uso.
 
+A tabela física nasce ``NO INMEMORY``. Depois da carga, só as partições da janela (o mês corrente e os ``months``
+anteriores, mais as futuras) recebem ``LOADED_TABLE_INMEMORY`` e são populadas antes da troca; o resto do histórico fica
+só em disco. Depois da troca, a tabela que saiu de uso volta inteira para ``NO INMEMORY`` e libera a memória.
+
+Os ``ALTER`` seguem o padrão do job de In-Memory da DBA (``DFEN.PRC_ROLL_IMCS_NACIONAL``): ``DDL_LOCK_TIMEOUT`` curto
+por tentativa e nova tentativa com espera em caso de ``ORA-00054``, sem nunca matar sessão.
+"""
+
+import re
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import date
 
 import oracledb
 
@@ -14,7 +24,15 @@ from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.oracle import (
     fetch_rows,
     to_int,
 )
+from pipelines.rj_smfp__nota_carioca_bq_to_oracle.utils.structure import LOADED_TABLE_INMEMORY
 from prefect_rj_iplanrio.sql import load_query
+
+DDL_LOCK_TIMEOUT_SECONDS = 8
+DDL_ATTEMPTS = 26
+DDL_RETRY_SECONDS = 30.0
+RESOURCE_BUSY = 54
+# Limite superior de partição RANGE por data, como o dicionário grava: TO_DATE(' 2026-08-01 00:00:00', ...).
+UPPER_BOUND_PATTERN = re.compile(r"TO_DATE\(\s*'\s*(\d{4})-(\d{2})-(\d{2})")
 
 
 def oracle_message(error: oracledb.DatabaseError) -> str:
@@ -158,3 +176,148 @@ def wait_for_population(
                 )
                 return False
             time.sleep(poll_seconds)
+
+
+def window_start(today: date, months: int) -> date:
+    """Primeiro dia da janela de In-Memory: o mês de ``today`` recuado ``months`` meses.
+
+    :param today: Data de referência (hoje, no fuso de Brasília).
+    :param months: Meses anteriores ao corrente que ficam no In-Memory; ``0`` deixa só o mês corrente.
+    :returns: O dia 1 do primeiro mês da janela.
+    :raises ValueError: Se ``months`` for negativo.
+    """
+    if months < 0:
+        raise ValueError(f"A janela de In-Memory não pode ser negativa: {months}")
+    index = today.year * 12 + today.month - 1 - months
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def partition_upper_bound(high_value: str) -> date | None:
+    """Lê a data do limite superior de uma partição RANGE.
+
+    :param high_value: ``HIGH_VALUE`` do dicionário.
+    :returns: A data do limite, ou ``None`` para ``MAXVALUE`` ou um limite que não seja data.
+    """
+    match = UPPER_BOUND_PATTERN.search(high_value)
+    return date(int(match[1]), int(match[2]), int(match[3])) if match else None
+
+
+def in_window(high_value: str, start: date) -> bool:
+    """Diz se a partição tem dados a partir de ``start``, e por isso entra no In-Memory.
+
+    Uma partição cujo limite não é uma data (``MAXVALUE``, chave não temporal) entra, para não deixar fora do
+    In-Memory dados que podem ser recentes.
+
+    :param high_value: ``HIGH_VALUE`` do dicionário.
+    :param start: Primeiro dia da janela.
+    :returns: ``True`` se a partição fica no In-Memory.
+    """
+    bound = partition_upper_bound(high_value)
+    return bound is None or bound > start
+
+
+def execute_ddl(
+    cursor: oracledb.Cursor,
+    statement: str,
+    report: Callable[[str], None],
+    *,
+    attempts: int = DDL_ATTEMPTS,
+    retry_seconds: float = DDL_RETRY_SECONDS,
+) -> None:
+    """Executa um DDL, tentando de novo enquanto o objeto estiver ocupado (``ORA-00054``).
+
+    Cada tentativa espera a trava só pelo ``DDL_LOCK_TIMEOUT`` da sessão; entre as tentativas a fila é liberada e a
+    aplicação segue normalmente. Qualquer outro erro, ou o fim das tentativas, é repassado.
+
+    :param cursor: Cursor de uma conexão com ``DDL_LOCK_TIMEOUT`` já definido.
+    :param statement: DDL a executar.
+    :param report: Função que recebe as mensagens de nova tentativa.
+    :param attempts: Número máximo de tentativas.
+    :param retry_seconds: Espera entre as tentativas.
+    :raises oracledb.DatabaseError: Se o DDL falhar por outro motivo ou o objeto continuar ocupado.
+    """
+    for attempt in range(1, attempts + 1):
+        try:
+            cursor.execute(statement)
+            return
+        except oracledb.DatabaseError as error:
+            (detail,) = error.args
+            if getattr(detail, "code", None) != RESOURCE_BUSY or attempt == attempts:
+                raise
+            report(
+                f"Objeto ocupado (ORA-00054), tentativa {attempt}/{attempts}; nova tentativa em {retry_seconds:.0f}s"
+            )
+            time.sleep(retry_seconds)
+
+
+def _prepare_ddl(cursor: oracledb.Cursor, schema: str, table: str) -> None:
+    assert_managed_existing_table(cursor, schema, table)
+    cursor.execute(load_query(QUERIES_ANCHOR, "set_ddl_lock_timeout", seconds=str(DDL_LOCK_TIMEOUT_SECONDS)))
+
+
+def disable(config: OracleConfig, table: str, report: Callable[[str], None]) -> None:
+    """Tira a tabela inteira do In-Memory (tabela e todas as partições), liberando a memória que ela ocupa.
+
+    :param config: Configuração da conexão.
+    :param table: Tabela física.
+    :param report: Função que recebe as mensagens de nova tentativa.
+    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
+    :raises oracledb.DatabaseError: Se o ``ALTER`` falhar.
+    """
+    with connect(config) as connection, connection.cursor() as cursor:
+        _prepare_ddl(cursor, config.schema, table)
+        statement = load_query(
+            QUERIES_ANCHOR, "alter_table_inmemory", schema=config.schema, table=table, clause="NO INMEMORY"
+        )
+        execute_ddl(cursor, statement, report)
+
+
+def select_window(partitions: Sequence[dict[str, object]], start: date) -> list[str]:
+    """Escolhe, entre as partições da tabela, as que ficam no In-Memory.
+
+    :param partitions: Linhas de ``all_tab_partitions`` com ``partition_name`` e ``high_value``.
+    :param start: Primeiro dia da janela.
+    :returns: Nomes das partições da janela, na ordem recebida.
+    """
+    return [str(row["partition_name"]) for row in partitions if in_window(str(row["high_value"]), start)]
+
+
+def enable_window(
+    config: OracleConfig, table: str, start: date, report: Callable[[str], None], clause: str = LOADED_TABLE_INMEMORY
+) -> list[str]:
+    """Coloca no In-Memory só as partições da janela; as demais continuam ``NO INMEMORY``.
+
+    Tabela não particionada entra inteira.
+
+    :param config: Configuração da conexão.
+    :param table: Tabela física, recém-carregada e ainda fora de uso.
+    :param start: Primeiro dia da janela.
+    :param report: Função que recebe as mensagens de nova tentativa.
+    :param clause: Cláusula ``INMEMORY`` das partições da janela.
+    :returns: Partições colocadas no In-Memory (ou a própria tabela, se não for particionada).
+    :raises PermissionError: Se a tabela não existir ou não pertencer à pipeline.
+    :raises oracledb.DatabaseError: Se algum ``ALTER`` falhar.
+    """
+    binds = {"owner": config.schema, "table_name": table}
+    with connect(config) as connection, connection.cursor() as cursor:
+        _prepare_ddl(cursor, config.schema, table)
+        partitions = fetch_rows(cursor, "get_table_partitions", binds)
+        if not partitions:
+            execute_ddl(
+                cursor,
+                load_query(QUERIES_ANCHOR, "alter_table_inmemory", schema=config.schema, table=table, clause=clause),
+                report,
+            )
+            return [table]
+        chosen = select_window(partitions, start)
+        for partition in chosen:
+            statement = load_query(
+                QUERIES_ANCHOR,
+                "alter_partition_inmemory",
+                schema=config.schema,
+                table=table,
+                partition=partition,
+                clause=clause,
+            )
+            execute_ddl(cursor, statement, report)
+        return chosen
