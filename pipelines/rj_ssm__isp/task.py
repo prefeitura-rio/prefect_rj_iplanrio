@@ -2,31 +2,32 @@
 
 import shutil
 import uuid
-from pathlib import Path
-from typing import Optional, Literal
 from datetime import datetime, timedelta, timezone
-import pandas as pd
-from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
-from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
-from prefect import task
-from iplanrio.pipelines_utils.logging import log
-from tenacity import retry
+from pathlib import Path
+from typing import Literal, Optional
 
+import pandas as pd
 from client import IspGeoClient
 from constants import (
     DEFAULT_CRIME_TITLES,
+    FASE_LABEL,
     MAX_CONCURRENT_REQUESTS,
     MUNICIPIO_RIO_DE_JANEIRO,
-    TMP_BASE,
     SP_TZ,
-    FASE_LABEL
+    TMP_BASE,
 )
+from iplanrio.pipelines_utils.bd import create_table_and_upload_to_gcs
+from iplanrio.pipelines_utils.logging import log
+from iplanrio.pipelines_utils.pandas import parse_date_columns, to_partitions
+from prefect import task
 from utils import (
+    _ultimo_trimestre,
     build_dataframe,
     build_where,
     decode_row,
     resolve_crime_codes,
-    _ultimo_trimestre,
+)
+from utils import (
     resolve_dates as _resolve_dates,
 )
 
@@ -148,7 +149,7 @@ def upload_ocorrencias_task(
     df = dataframe.astype("string")
     df['update_at'] = datetime.now(tz=SP_TZ).replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
     df, _ = parse_date_columns(
-        dataframe=df, partition_date_column="data_registro"
+        dataframe=df, partition_date_column="data_fato"
     )
 
     savepath = f"{TMP_BASE}/{table_id}"

@@ -1,4 +1,4 @@
-"""Flow para extrair ocorrências criminais do ISP-GEO (ISP/RJ) e enviar para BigQuery.."""
+"""Flow para extrair ocorrências criminais do ISP-GEO (ISP/RJ) e enviar para BigQuery."""
 
 from typing import Literal
 
@@ -60,4 +60,3 @@ def rj_ssm__isp(
         table_id=table_id,
         dump_mode=dump_mode,
     )
-
