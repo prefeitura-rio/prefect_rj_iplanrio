@@ -1,16 +1,17 @@
 """
 Cliente LLM para OpenAI e Gateways Compatíveis (Bifrost).
 Suporta chamadas multimodais para OpenAI, Claude e Gemini via endpoint OpenAI-compatible.
+Extrai o consumo exato de tokens da resposta (response.usage).
 """
 
 import base64
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from openai import OpenAI
 import pymupdf as fitz
 
 from ...constants import VERTEX_LLM_MODEL
-from utils.schemas import EsquemaDecisao
+from ..schemas import EsquemaDecisao
 from .base import BaseLLMClient
 
 
@@ -23,11 +24,15 @@ class OpenAILLMClient(BaseLLMClient):
         modelo_padrao = default_model or os.getenv("LLM_MODEL") or VERTEX_LLM_MODEL
 
         if not api_key:
-            raise ValueError("Chave de API ausente (defina BIFROST_VIRTUAL_KEY ou OPENAI_API_KEY no .env).")
+            raise ValueError(
+                "Chave de API ausente (defina BIFROST_VIRTUAL_KEY ou OPENAI_API_KEY no .env)."
+            )
 
-        super().__init__(api_key=api_key, base_url=base_url, default_model=modelo_padrao)
+        super().__init__(
+            api_key=api_key, base_url=base_url, default_model=modelo_padrao
+        )
 
-        # Configuração com timeout estendido para PDFs de 20 páginas
+        # Configuração com timeout estendido para sub-PDFs
         self.client = OpenAI(
             api_key=self.api_key, 
             base_url=self.base_url,
@@ -35,7 +40,9 @@ class OpenAILLMClient(BaseLLMClient):
             max_retries=2
         )
 
-    def _converter_pdf_para_imagens_base64(self, pdf_bytes: bytes, dpi: int = 150) -> List[str]:
+    def _converter_pdf_para_imagens_base64(
+        self, pdf_bytes: bytes, dpi: int = 150
+    ) -> List[str]:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         imagens_b64 = []
         zoom = dpi / 72.0
@@ -55,34 +62,58 @@ class OpenAILLMClient(BaseLLMClient):
         prompt_sistema: str,
         modelo: Optional[str] = None,
         temperature: float = 0.0
-    ) -> EsquemaDecisao:
+    ) -> Tuple[EsquemaDecisao, Dict[str, int]]:
         mod = modelo or self.default_model
-        imagens_b64 = self._converter_pdf_para_imagens_base64(pdf_bytes)
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
 
         conteudo_usuario: List[Dict[str, Any]] = [
-            {"type": "text", "text": "Analise o processo administrativo e emita a decisão estruturada:"}
-        ]
-
-        for img_b64 in imagens_b64:
-            conteudo_usuario.append({
+            {
+                "type": "text",
+                "text": "Analise o processo administrativo e emita a decisão estruturada:",
+            },
+            {
                 "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{img_b64}", "detail": "high"}
-            })
+                "image_url": {
+                    "url": f"data:application/pdf;base64,{pdf_b64}",
+                },
+            },
+        ]
 
         mensagens = [
             {"role": "system", "content": prompt_sistema},
-            {"role": "user", "content": conteudo_usuario}
+            {"role": "user", "content": conteudo_usuario},
         ]
 
-        completion = self.client.beta.chat.completions.parse(
-            model=mod,
-            messages=mensagens,
-            response_format=EsquemaDecisao,
-            temperature=temperature
-        )
-        
+        kwargs: Dict[str, Any] = {
+            "model": mod,
+            "messages": mensagens,
+            "response_format": EsquemaDecisao,
+            "temperature": temperature,
+        }
+        if any(r in mod.lower() for r in ["3.7", "o1", "o3"]):
+            kwargs["reasoning_effort"] = "medium"
+
+        completion = self.client.beta.chat.completions.parse(**kwargs)
+
         decisao = completion.choices[0].message.parsed
         if decisao is None:
             raise ValueError(f"Falha na validação do schema no modelo {mod}.")
 
-        return decisao
+        usage = getattr(completion, "usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", 3500) if usage else 3500
+        completion_tokens = (
+            getattr(usage, "completion_tokens", 150) if usage else 150
+        )
+        cached_tokens = 0
+        if usage and hasattr(usage, "prompt_tokens_details"):
+            cached_tokens = getattr(
+                usage.prompt_tokens_details, "cached_tokens", 0
+            )
+
+        usage_dict = {
+            "prompt_tokens": int(prompt_tokens),
+            "completion_tokens": int(completion_tokens),
+            "cached_tokens": int(cached_tokens),
+        }
+
+        return decisao, usage_dict

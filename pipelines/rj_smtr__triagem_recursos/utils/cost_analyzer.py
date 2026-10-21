@@ -51,10 +51,10 @@ def calcular_custo_chamada(
     aplicar_cache_estatico: bool = True
 ) -> Dict[str, float]:
     """Calcula o custo exato em USD para uma única inferência."""
-    tabela = TABELA_PRECOS_PADRAO.get(modelo.lower())
+    mod_clean = modelo.lower().replace('vertex/', '').replace('google/', '')
+    tabela = TABELA_PRECOS_PADRAO.get(mod_clean)
     if not tabela:
-        # Fallback genérico se o nome não for mapeado exatamente
-        tabela = TabelaPrecoModelo(nome_modelo=modelo, preco_in_1m=0.50, preco_out_1m=2.00)
+        tabela = TabelaPrecoModelo(nome_modelo=modelo, preco_in_1m=0.75, preco_out_1m=3.75)
 
     # Se aplicar cache estático no prompt do sistema (~1.5k tokens)
     if aplicar_cache_estatico and cached_tokens == 0 and prompt_tokens > 1500:
