@@ -13,7 +13,6 @@ def main():
     conn = psycopg2.connect(DB_URL)
     cursor = conn.cursor()
 
-    # 1. Executa o DDL de criação de tabelas
     print(f"Executando DDL: {SQL_FILE}")
     if not SQL_FILE.exists():
         raise FileNotFoundError(f"Arquivo DDL nao encontrado em {SQL_FILE}")
@@ -22,10 +21,9 @@ def main():
     cursor.execute(ddl_sql)
     conn.commit()
     print("✅ Tabelas criadas com sucesso.")
-
-    # 2. Insere um caso de teste na tabela de processos e na fila
-    nome_pdf = "Citran Multas 05.pdf"
-    numero_sei = "SEI-002500/2026/05"
+    
+    nome_pdf = "CLONE (2).pdf"
+    numero_sei = "SEI-0025007/2026/05"
 
     print(f"Inserindo processo de teste: {nome_pdf}")
     cursor.execute(

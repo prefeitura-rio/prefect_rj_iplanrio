@@ -12,11 +12,10 @@ CREATE TABLE IF NOT EXISTS processos_administrativos (
     processo_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     numero_processo_sei     VARCHAR(32) NOT NULL UNIQUE,
     id_procedimento_sei     VARCHAR(32),
+    id_documento_sei        VARCHAR(64),
     numero_auto_infracao    VARCHAR(20),
-    placa_veiculo           VARCHAR(10),
-    cpf_cnpj_requerente     VARCHAR(18),
     data_autuacao           DATE,
-    origem_lote             VARCHAR(20) NOT NULL CHECK (origem_lote IN ('GOLDENSET', 'PASSIVO', 'MENSAL')),
+    origem_lote             VARCHAR(20) NOT NULL CHECK (origem_lote IN ('GOLDENSET', 'PASSIVO', 'MENSAL', 'SEI_JARI')),
     nome_arquivo_origem     VARCHAR(255),
     hash_sha256_documento   CHAR(64),
     criado_em               TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -28,11 +27,18 @@ ON processos_administrativos (data_autuacao);
 CREATE INDEX IF NOT EXISTS idx_proc_origem 
 ON processos_administrativos (origem_lote);
 
+CREATE INDEX IF NOT EXISTS idx_proc_doc_sei 
+ON processos_administrativos (id_documento_sei);
+
 -- TABELA
 -- Predições da Pipeline de IA e Calibração Conformal
 CREATE TABLE IF NOT EXISTS predicoes_pipeline (
     predicao_id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     processo_id                 UUID NOT NULL REFERENCES processos_administrativos(processo_id) ON DELETE RESTRICT,
+    calibracao_id               UUID,
+    modelo_llm                  VARCHAR(64) DEFAULT 'vertex/gemini-3.7-flash' NOT NULL,
+    versao_prompt               VARCHAR(64) DEFAULT 'v3_baseline' NOT NULL,
+    id_documento_sei            VARCHAR(64),
     n1_classe_predita           VARCHAR(32) NOT NULL,
     n1_encaminhamento           VARCHAR(64) NOT NULL,
     n1_cot_justificativa        TEXT NOT NULL,
@@ -73,7 +79,13 @@ CREATE TABLE IF NOT EXISTS predicoes_pipeline (
     rota_execucao               VARCHAR(32) NOT NULL,
     faixa_operacional           VARCHAR(16) NOT NULL CHECK (faixa_operacional IN ('VERDE', 'AMARELA', 'VERMELHA')),
     
-    -- Custos e Telemetria
+    -- Custos e Telemetria de Tokens (Auditoria de Context Caching)
+    tokens_prompt_total         INTEGER DEFAULT 0 NOT NULL,
+    tokens_completion           INTEGER DEFAULT 0 NOT NULL,
+    tokens_cached               INTEGER DEFAULT 0 NOT NULL,
+    custo_real_usd              NUMERIC(8, 6) DEFAULT 0.0 NOT NULL,
+    custo_sem_cache_usd         NUMERIC(8, 6) DEFAULT 0.0 NOT NULL,
+    economia_cache_usd          NUMERIC(8, 6) DEFAULT 0.0 NOT NULL,
     custo_estimado_usd          NUMERIC(8, 6) DEFAULT 0.0 NOT NULL,
     tempo_execucao_s            NUMERIC(6, 2) DEFAULT 0.0 NOT NULL,
     executado_em                TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -88,33 +100,31 @@ ON predicoes_pipeline (faixa_operacional);
 CREATE INDEX IF NOT EXISTS idx_predicoes_pfinal 
 ON predicoes_pipeline (probabilidade_final DESC);
 
+CREATE INDEX IF NOT EXISTS idx_predicoes_calibracao 
+ON predicoes_pipeline (calibracao_id);
+
 -- TABELA
--- Fila de Distribuição Operacional
+-- Fila de Controle de Lote e Idempotência da IA
 CREATE TABLE IF NOT EXISTS fila_trabalho (
     fila_id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     processo_id             UUID NOT NULL REFERENCES processos_administrativos(processo_id) ON DELETE RESTRICT,
-    usuario_atribuido_id    VARCHAR(64),
-    perfil_requerido        VARCHAR(32) DEFAULT 'JARISTA' NOT NULL,
     status                  VARCHAR(32) DEFAULT 'PENDENTE_IA' NOT NULL 
                             CHECK (status IN (
                                 'PENDENTE_IA', 
+                                'PROCESSANDO_IA',
                                 'CONCLUIDO_IA', 
-                                'EM_ANALISE_HUMANA', 
-                                'REVISADO', 
-                                'HOMOLOGADO', 
                                 'ERRO_PROCESSAMENTO'
                             )),
-    prioridade_ordenacao    NUMERIC(5, 4) DEFAULT 0.0 NOT NULL,
-    id_bloco_sei            VARCHAR(32),
-    data_distribuicao       TIMESTAMPTZ,
+    tentativas              INTEGER DEFAULT 0 NOT NULL,
+    ultima_mensagem_erro    TEXT,
     atualizado_em           TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_fila_atribuicao_status 
-ON fila_trabalho (usuario_atribuido_id, status);
+CREATE INDEX IF NOT EXISTS idx_fila_processo_status 
+ON fila_trabalho (processo_id, status);
 
-CREATE INDEX IF NOT EXISTS idx_fila_status_prioridade 
-ON fila_trabalho (status, prioridade_ordenacao DESC);
+CREATE INDEX IF NOT EXISTS idx_fila_status 
+ON fila_trabalho (status);
 
 -- TABELA
 -- Trilha de Auditoria Jurídica (Append-Only)
@@ -146,4 +156,3 @@ DROP TRIGGER IF EXISTS trg_bloquear_mutacao_auditoria ON trilha_auditoria_juridi
 CREATE TRIGGER trg_bloquear_mutacao_auditoria
 BEFORE UPDATE OR DELETE ON trilha_auditoria_juridica
 FOR EACH ROW EXECUTE FUNCTION proteger_trilha_auditoria();
-
