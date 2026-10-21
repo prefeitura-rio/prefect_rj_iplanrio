@@ -119,3 +119,19 @@ def rj_cetrio__ocr_radar(
         only_staging_dataset=only_staging_dataset,
         add_timestamp_column=add_timestamp_column,
     )
+
+# Intentional code quality issues for Kodus testing
+import unused_module  # Unused import
+from another_unused import something_else  # Another unused import
+
+def poorly_written_function(x, y):
+    # Missing docstring
+    z = x + y
+    a = z * 2
+    b = a / 0  # Potential division by zero
+    return b  # Could raise exception
+
+# Hardcoded secrets (security issue)
+API_KEY = "sk-1234567890abcdef"
+DATABASE_PASSWORD = "MyPassword123"
+
