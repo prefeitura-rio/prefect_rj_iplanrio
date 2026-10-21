@@ -1029,7 +1029,7 @@ def check_campaign_success(
     Verifica se já existe webhook de envio ou falha para pelo menos 20% dos registros
     disparados (total_dispatched) no dia do disparo (dispatch_date) para a campanha.
 
-    Usa envio_datahora ou falha_datahora >= dispatch_date para garantir que o evento
+    Usa envio_meta_datahora ou falha_meta_datahora >= dispatch_date para garantir que o evento
     ocorreu hoje — e não um webhook tardio de delivered/read de campanha anterior
     chegando nos dias seguintes.
 
@@ -1042,8 +1042,9 @@ def check_campaign_success(
         WHERE LOWER(nome_hsm) = LOWER('{campaign_name}')
           AND data_particao = DATE('{dispatch_date}')
           AND (
-              envio_datahora >= '{dispatch_date}'
-              OR falha_datahora >= '{dispatch_date}'
+              envio_meta_datahora >= '{dispatch_date}'
+              OR falha_meta_datahora >= '{dispatch_date}'
+              OR falha_plataforma_datahora >= '{dispatch_date}'
           )
     """
     try:
@@ -1053,7 +1054,7 @@ def check_campaign_success(
         total = int(df.iloc[0]["total_sucesso"]) if not df.empty else 0
         threshold = total_dispatched * 0.2
         log(
-            f"check_campaign_success: {total} disparo(s) com envio_datahora ou falha_datahora "
+            f"check_campaign_success: {total} disparo(s) com envio_meta_datahora ou falha_meta_datahora "
             f"preenchidos hoje para '{campaign_name}' (dispatch_date={dispatch_date}). "
             f"Threshold 20%: {threshold:.0f} de {total_dispatched} disparados."
         )
@@ -1077,8 +1078,8 @@ def monitor_dispatch_status(
     """
     Aguarda initial_wait_minutes, depois materializa int_crm_status_disparo e checa se há
     sucesso confirmado para a campanha a cada check_interval_minutes, até max_wait_minutes.
-    Considera sucesso quando pelo menos 20% de total_dispatched tiverem envio_datahora ou
-    falha_datahora preenchidos. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
+    Considera sucesso quando pelo menos 20% de total_dispatched tiverem envio_meta_datahora ou
+    falha_meta_datahora preenchidos. Alerta no Discord (DISCORD_WEBHOOK_URL_ERRORS) se nenhum
     sucesso for confirmado dentro do prazo.
 
     Returns:
