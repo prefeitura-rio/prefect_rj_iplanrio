@@ -36,6 +36,11 @@ deployments:
         bucket: rj-iplanrio
         project: rj-iplanrio
         connection: rj-iplanrio.us.biglake
+      dbt:
+        repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-iplanrio.git
+        branch: cadunico
+        target: prod
+        select: raw.smas.protecao_social_cadunico
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -56,6 +61,11 @@ deployments:
         bucket: rj-iplanrio
         project: rj-iplanrio
         connection: rj-iplanrio.us.biglake
+      dbt:
+        repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-iplanrio.git
+        branch: cadunico
+        target: prod
+        select: raw.smas.protecao_social_cadunico
     work_pool:
       name: default-pool
       work_queue_name: default

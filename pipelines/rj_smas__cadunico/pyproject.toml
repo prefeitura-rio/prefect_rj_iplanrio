@@ -6,7 +6,8 @@ dependencies = [
     "prefect_rj_iplanrio",
     "openpyxl",
     "xlrd>=2.0.2",
-    "setuptools>=82.0.1",
+    "unidecode",
+    "ruamel.yaml",
     "google-cloud-bigquery",
     "google-cloud-storage",
 ]

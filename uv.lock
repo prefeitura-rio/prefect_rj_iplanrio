@@ -5402,7 +5402,8 @@ dependencies = [
     { name = "google-cloud-storage" },
     { name = "openpyxl" },
     { name = "prefect-rj-iplanrio" },
-    { name = "setuptools" },
+    { name = "ruamel-yaml" },
+    { name = "unidecode" },
     { name = "xlrd" },
 ]
 
@@ -5412,7 +5413,8 @@ requires-dist = [
     { name = "google-cloud-storage" },
     { name = "openpyxl" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "setuptools", specifier = ">=82.0.1" },
+    { name = "ruamel-yaml" },
+    { name = "unidecode" },
     { name = "xlrd", specifier = ">=2.0.2" },
 ]
 

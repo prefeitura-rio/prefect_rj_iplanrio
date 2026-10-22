@@ -1,99 +1,57 @@
-# ruff: noqa: PLR0913
-"""
-Dump CADUNICO TO BQ..
-"""
+"""Flow for rj_smas__cadunico."""
 
 from prefect import flow
+from toolkit.dbt import DbtRun
 
+from pipelines.rj_smas__cadunico.constants import DEFAULT_RAW, DEFAULT_TABLES
 from pipelines.rj_smas__cadunico.tasks import (
-    download_repository_task,
-    execute_dbt_task,
-    get_existing_partitions_task,
-    get_files_to_ingest_task,
-    ingest_files_task,
-    need_to_ingest_task,
-    push_models_to_branch_task,
-    update_layout_from_storage_and_create_versions_dbt_models_task,
+    control_versions_task,
+    ingest_archives_task,
+    list_new_archives_task,
+    push_models_task,
+    read_layout_task,
+    sync_layouts_task,
 )
+from pipelines.rj_smas__cadunico.types import RawFolders, Tables
+from utils.hooks import notify_failure
+from utils.tasks import run_dbt
 from utils.types import Cloud
 
 
-@flow(log_prints=True)
-def rj_smas__cadunico(
+@flow(log_prints=True, flow_run_name="cadunico-{tables[dataset_id]}", on_failure=[notify_failure])
+async def rj_smas__cadunico(
     *,
     cloud: Cloud,
-    raw_bucket: str = "rj-smas",
-    raw_prefix_area: str = "raw/protecao_social_cadunico/registro_familia",
-    staging_bucket: str = "rj-iplanrio",
-    table_id: str = "registro_familia",
-    layout_table_id: str = "layout",
-    dataset_id: str = "brutos_cadunico",
-    max_concurrent: int = 3,
+    dbt: DbtRun,
+    raw: RawFolders = DEFAULT_RAW,
+    tables: Tables = DEFAULT_TABLES,
     force_create_models: bool = False,
-    git_repository_path="https://github.com/prefeitura-rio/queries-rj-iplanrio",
-    branch="cadunico",
-    dbt_target: str = "prod",
-    dbt_select: str = "--select  raw.smas.protecao_social_cadunico",
-):
+) -> None:
+    """Load the records of CadÚnico, and build their dbt models and tables.
+
+    1. Each ZIP in `raw` whose date is not in the staging table becomes one day of it.
+    2. With a new ZIP, or with `force_create_models`, the layout spreadsheets load to the
+       layout table if the bucket has a new version.
+    3. With a new layout, or with `force_create_models`, the flow reads the layout with the
+       dictionary of its columns, writes one dbt model for each type of record and pushes the
+       models to the branch of `dbt`.
+    4. The flow runs the dbt command of `dbt` on that branch. A run with no new ZIP and
+       no `force_create_models` ends after step 1.
+
+    `dbt` is a `DbtRun`: the repository of the queries, the branch that has the models, the
+    target and the selection of the models.
     """
-    Pipeline otimizada do CadÚnico:
-    1. Verifica partições existentes em staging
-    2. Compara com arquivos em raw
-    3. Processa, cria tabela e faz upload de cada arquivo individualmente
-    """
-    staging_prefix_area = f"staging/{dataset_id}/{table_id}"
+    new = await list_new_archives_task(raw, tables, cloud)
 
+    if new:
+        await ingest_archives_task(new, raw, tables, cloud)
 
-    # Verificar o que já existe em staging
-    existing_partitions = get_existing_partitions_task(
-        prefix=staging_prefix_area,
-        bucket_name=staging_bucket,
-        dataset_id=dataset_id,
-        table_id=table_id,
-    )
+    if not (new or force_create_models):
+        return
 
-    # Identificar arquivos novos para ingerir
-    files_to_ingest = get_files_to_ingest_task(
-        prefix=raw_prefix_area, partitions=existing_partitions, bucket_name=raw_bucket
-    )
-    need_to_ingest = need_to_ingest_task(files_to_ingest=files_to_ingest)
-    # Verificar se há arquivos para ingerir
-    if need_to_ingest:
-        # Processar arquivos de forma assíncrona com upload imediato
-        injected_files = ingest_files_task(
-            files_to_ingest=files_to_ingest,
-            bucket_name=raw_bucket,
-            dataset_id=dataset_id,
-            table_id=table_id,
-            cloud=cloud,
-            max_concurrent=max_concurrent,
-            wait_for=[need_to_ingest],
-        )
-    injected_files = False
-    if need_to_ingest or force_create_models:
-        repository_path = download_repository_task(
-            git_repository_path=git_repository_path,
-            branch=branch,
-            wait=injected_files,
-        )
+    if await sync_layouts_task(raw, tables, cloud) or force_create_models:
+        layout = await read_layout_task(tables, cloud)
+        controlled = await control_versions_task(layout, tables, cloud)
+        await push_models_task(controlled, tables, cloud, dbt)
 
-        models_updated = update_layout_from_storage_and_create_versions_dbt_models_task(
-            dataset_id=dataset_id,
-            layout_table_id=layout_table_id,
-            registo_familia_table_id=table_id,
-            raw_bucket=raw_bucket,
-            raw_prefix_area=raw_prefix_area,
-            staging_bucket=staging_bucket,
-            force_create_models=force_create_models,
-            repository_path=repository_path,
-            cloud=cloud,
-        )
-
-        push_sucess = push_models_to_branch_task(
-            repository_path=repository_path,
-            commit_message=f"feat: update CadUnico models - {dataset_id}",
-            author_name="CadUnico Pipeline",
-            author_email="pipeline@prefeitura.rio",
-            wait_for=[models_updated],
-        )
-        execute_dbt_task(target=dbt_target, select=dbt_select, wait_for=[push_sucess])
+    await run_dbt(dbt)
