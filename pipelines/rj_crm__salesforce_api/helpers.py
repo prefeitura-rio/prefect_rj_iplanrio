@@ -1,44 +1,43 @@
 """Helpers of rj_crm__salesforce_api."""
 
-import os
-import uuid
-from datetime import datetime
-from typing import Literal
+from collections.abc import Mapping, Sequence
+from datetime import date
+from json import dumps
 
-import pandas as pd
-from prefect.logging import get_logger
+from pydantic import JsonValue
 
-logger = get_logger("toolkit")
+from pipelines.rj_crm__salesforce_api.types import SfmcRequest
 
 
-def create_date_partitions(
-    dataframe,
-    partition_column: str | None = None,
-    file_format: Literal["csv", "parquet"] = "csv",
-    root_folder="./data/",
-):
-    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
-    if partition_column is None:
-        partition_column = "data_particao"
-        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
-    else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
-        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
-        if dataframe["data_particao"].isnull().any():
-            raise ValueError("Some dates in the partition column could not be parsed.")
+def build_url(base_url: str, request: SfmcRequest) -> str:
+    """Return the URL of the route, with its `{key}` placeholders filled and one slash at the join."""
+    route = request["route"].format(**request.get("route_params", {}))
 
-    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
-    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
-    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
-    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
+    return f"{base_url.rstrip('/')}/{route.lstrip('/')}"
 
-    os.makedirs(root_folder, exist_ok=True)
-    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
 
-    if file_format == "csv":
-        dataframe.to_csv(file_path, index=False)
-    else:
-        dataframe.to_parquet(file_path, index=False)
+def build_page_request(request: SfmcRequest, page: int) -> tuple[dict[str, str] | None, dict[str, JsonValue] | None]:
+    """Return the query string and the body of one page: the query string of a GET, the body of a POST."""
+    size = request.get("page_size", 200)
 
-    logger.info("Files saved on %s", root_folder)
-    return root_folder
+    if request.get("http_method", "get") == "get":
+        return {**request.get("query_params", {}), "$page": str(page), "$pageSize": str(size)}, None
+
+    return None, {**request.get("body_json", {}), "page": {"page": page, "pageSize": size}}
+
+
+def read_page(data: JsonValue) -> tuple[list[dict[str, JsonValue]], int | None]:
+    """Return the records of a page and the total that the API says it has, if it says."""
+    if not isinstance(data, dict):
+        return [], None
+
+    items = data.get("items")
+    records = [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+    total = data.get("count")
+
+    return records, total if isinstance(total, int) else None
+
+
+def build_rows(records: Sequence[Mapping[str, JsonValue]], today: date) -> list[dict[str, str]]:
+    """Return one row for each record: the record as JSON text in `data` and the day in `data_particao`."""
+    return [{"data": dumps(record, ensure_ascii=False), "data_particao": today.isoformat()} for record in records]

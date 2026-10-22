@@ -1,10 +1,9 @@
 [project]
 name = "rj_crm__salesforce_api"
 version = "0.1.0"
-description = "Pipeline genérica de ingestão de rotas GET da Salesforce Marketing Cloud REST API"
+description = "Pipeline genérica para ingestão de rotas da API REST do Salesforce Marketing Cloud"
 dependencies = [
     "prefect_rj_iplanrio",
-    "requests",
 ]
 
 [tool.uv.sources]
