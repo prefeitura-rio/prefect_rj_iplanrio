@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks migradas do Prefect 1.4 para 3.0 - CRM API Wetalkie
 
@@ -13,11 +12,11 @@ from typing import Any, Dict, List, Union
 
 import pandas as pd
 import requests
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 from pytz import timezone
 
-from pipelines.rj_crm__api_wetalkie.utils.tasks import (
+from pipelines.rj_crm__api_wetalkie.helpers.tasks import (
     AudioDownloadError,
     AudioProcessingError,
     AudioTranscriptionError,
@@ -28,34 +27,36 @@ from pipelines.rj_crm__api_wetalkie.utils.tasks import (
     transcribe_audio,
 )
 
+logger = get_logger("toolkit")
+
 
 @task
 def get_attendances(api: object) -> pd.DataFrame:
     """
     Get all attendances from the Wetalkie API
     """
-    log("Getting all attendances from the Wetalkie API")
+    logger.info("Getting all attendances from the Wetalkie API")
     all_attendances = api.get(path="/callcenter/attendances/pull")
     data = []
 
-    log(f"all_attendances content: {all_attendances}")
-    log(f"all_attendances type: {type(all_attendances)}")
+    logger.info(f"all_attendances content: {all_attendances}")
+    logger.info(f"all_attendances type: {type(all_attendances)}")
 
     if hasattr(all_attendances, "json"):
         response_data = all_attendances.json()
-        log(f"response_data after json(): {response_data}")
+        logger.info(f"response_data after json(): {response_data}")
     else:
         response_data = all_attendances
-        log(f"response_data (no json method): {response_data}")
+        logger.info(f"response_data (no json method): {response_data}")
 
     # Check if API returned a "message" response (indicates no data available)
     if "message" in response_data and "data" not in response_data:
-        log(f"WeTalkie API returned message response (no data available): {response_data.get('message')}")
+        logger.info(f"WeTalkie API returned message response (no data available): {response_data.get('message')}")
         return pd.DataFrame()  # Return empty DataFrame - no data to process
 
     all_attendances = response_data["data"]["items"]
     if not all_attendances:
-        log("No attendances found in the Wetalkie API", level="warning")
+        logger.warning("No attendances found in the Wetalkie API")
         return pd.DataFrame()  # Return empty DataFrame instead of raising ENDRUN
 
     for item in all_attendances:
@@ -79,7 +80,7 @@ def get_attendances(api: object) -> pd.DataFrame:
                 "json_data": item,
             }
         )
-    log("End getting all attendances from the Wetalkie API")
+    logger.info("End getting all attendances from the Wetalkie API")
 
     dfr = pd.DataFrame(data)
     dfr = dfr[
@@ -136,8 +137,8 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int = 1000
     destinations = dispatch_payload["destinations"]
     total_destinations = len(destinations)
 
-    log(f"Total destinations to dispatch: {total_destinations}")
-    log(f"Chunk size: {chunk}")
+    logger.info(f"Total destinations to dispatch: {total_destinations}")
+    logger.info(f"Chunk size: {chunk}")
 
     # Process in chunks
     for i in range(0, total_destinations, chunk):
@@ -148,17 +149,17 @@ def dispatch(api: object, id_hsm: int, dispatch_payload: dict, chunk: int = 1000
             "destinations": chunk_destinations,
         }
 
-        log(f"Dispatching chunk {i // chunk + 1} with {len(chunk_destinations)} destinations")
+        logger.info(f"Dispatching chunk {i // chunk + 1} with {len(chunk_destinations)} destinations")
 
         response = api.post(path=f"/callcenter/hsm/send/{id_hsm}", json=chunk_payload)
 
         if response.status_code != 201:
             error_msg = f"Falha no disparo do chunk {i // chunk + 1}: {response.text}"
-            log(error_msg, level="error")
+            logger.error(error_msg)
             response.raise_for_status()
             raise Exception(error_msg)
 
-    log("Disparo realizado com sucesso!")
+    logger.info("Disparo realizado com sucesso!")
     return dispatch_date
 
 
@@ -198,7 +199,7 @@ def create_dispatch_dfr(
             "vars",
         ]
     ]
-    log(f"dfr content: {dfr}")
+    logger.info(f"dfr content: {dfr}")
     return dfr
 
 
@@ -208,13 +209,13 @@ def check_api_status(api: object) -> bool:
     try:
         response = api.get("/")
         if response.status_code == 200:
-            log("API está funcionando corretamente.")
+            logger.info("API está funcionando corretamente.")
             return True
 
-        log(f"API retornou status {response.status_code}.", level="warning")
+        logger.warning(f"API retornou status {response.status_code}.")
         return False
     except requests.exceptions.RequestException as error:
-        log(f"Erro ao acessar a API: {error}", level="error")
+        logger.error(f"Erro ao acessar a API: {error}")
         return False
 
 
@@ -224,16 +225,16 @@ def check_has_query(query: str) -> bool:
     Verifica se a query foi passada
     """
     if query:
-        log("Query was found")
+        logger.info("Query was found")
         return True
-    log("No query was found")
+    logger.info("No query was found")
     return False
 
 
 @task
 def printar(text):
     """exibe o texto passado como parâmetro"""
-    log(f"Printando {text}")
+    logger.info(f"Printando {text}")
 
 
 @task
@@ -242,16 +243,16 @@ def get_destinations(destinations: Union[None, List[str]], query: str) -> List:
     Get destinations from the query or from the parameter
     """
     if query:
-        log("Query was found")
+        logger.info("Query was found")
         destinations_df = download_data_from_bigquery(
             query=query,
             billing_project_id="rj-crm-registry",
             bucket_name="rj-crm-registry",
         )
-        log(f"response from query {destinations_df.head()}")
+        logger.info(f"response from query {destinations_df.head()}")
         destinations = destinations_df.iloc[:, 0].tolist()
         destinations = [json.loads(item.replace("to_", "to")) for item in destinations]
-        log(f"destinations inside get destinations {destinations}")
+        logger.info(f"destinations inside get destinations {destinations}")
     elif isinstance(destinations, str):
         destinations = json.loads(destinations)
     return destinations or []
@@ -278,7 +279,7 @@ def remove_duplicate_phones(destinations: List) -> List:
             seen_phones.add(phone)
             unique_destinations.append(dest)
 
-    log(f"Removed {len(destinations) - len(unique_destinations)} duplicate phone numbers")
+    logger.info(f"Removed {len(destinations) - len(unique_destinations)} duplicate phone numbers")
     return unique_destinations
 
 
@@ -307,9 +308,8 @@ def processar_json_e_transcrever_audios(
         id_reply = registro.get("id_reply", "ID_Not_Found")
 
         if not data or not isinstance(data, dict):
-            log(
+            logger.warning(
                 f"Registro {id_reply} sem 'json_data' válido ou não é um dicionário. Pulando.",
-                level="warning",
             )
             dados_processados.append(registro)
             continue
@@ -338,7 +338,7 @@ def processar_json_e_transcrever_audios(
                         )
                     ):
                         audio_encontrado = True
-                        log(f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}")
+                        logger.info(f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}")
                         audio_path_temp = None
                         try:
                             audio_path_temp = download_audio(url_audio)
@@ -346,7 +346,7 @@ def processar_json_e_transcrever_audios(
                             check_audio_duration(audio_path_temp, max_duration_seconds)
                             transcricao = transcribe_audio(audio_path_temp)
                             msg_copy["text"] = transcricao
-                            log(
+                            logger.info(
                                 f"Transcrição concluída para sessão {id_reply}, msg {msg_copy.get('id')}: Status {'sucesso' if transcricao != 'Áudio sem conteúdo reconhecível' else 'sem_conteudo'}"
                             )
 
@@ -356,16 +356,14 @@ def processar_json_e_transcrever_audios(
                             AudioTranscriptionError,
                         ) as e:
                             erro_msg = f"ERRO_TRANSCRICAO: {type(e).__name__}: {e!s}"
-                            log(
+                            logger.error(
                                 f"Erro ao transcrever áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}",
-                                level="error",
                             )
                             msg_copy["text"] = None
                         except Exception as e:
                             erro_msg = f"ERRO_INESPERADO_TRANSCRICAO: {type(e).__name__}: {e!s}"
-                            log(
+                            logger.error(
                                 f"Erro inesperado ao processar áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}",
-                                level="error",
                             )
                             msg_copy["text"] = None
                         finally:
@@ -373,9 +371,8 @@ def processar_json_e_transcrever_audios(
                                 try:
                                     os.unlink(audio_path_temp)
                                 except Exception as e_unlink:
-                                    log(
+                                    logger.warning(
                                         f"Erro ao remover arquivo temporário {audio_path_temp}: {e_unlink}",
-                                        level="warning",
                                     )
 
                 mensagens_atualizadas.append(msg_copy)
@@ -388,13 +385,12 @@ def processar_json_e_transcrever_audios(
                 dados_processados.append(registro)
 
         except Exception as e:
-            log(
+            logger.error(
                 f"Erro inesperado ao processar registro {id_reply} (dict json_data): {e}",
-                level="error",
             )
             dados_processados.append(registro)
 
-    log(f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros.")
+    logger.info(f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros.")
     return dados_processados
 
 

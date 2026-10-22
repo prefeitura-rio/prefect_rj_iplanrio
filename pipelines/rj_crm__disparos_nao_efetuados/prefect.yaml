@@ -22,8 +22,17 @@ pull:
 deployments:
 
   - name: rj-crm--disparos-nao-efetuados--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparos_nao_efetuados/flow.py:rj_crm__disparos_nao_efetuados
+    parameters:
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default
@@ -40,8 +49,17 @@ deployments:
         flow_run_name: disparos-nao-efetuados-daily
 
   - name: rj-crm--disparos-nao-efetuados--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparos_nao_efetuados/flow.py:rj_crm__disparos_nao_efetuados
+    parameters:
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default

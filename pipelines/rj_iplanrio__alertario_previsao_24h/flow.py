@@ -1,21 +1,15 @@
-# -*- coding: utf-8 -*-
 """
 Flow para extrair previsões meteorológicas do AlertaRio e carregar no BigQuery
 """
 
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
-from prefect import flow
 import pandas as pd
+from prefect import flow
+from prefect.logging import get_logger
 
-from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
-    AlertaRioConstants,
-)
 from pipelines.rj_iplanrio__alertario_previsao_24h.alerting import (
     build_alert_log_rows,
     check_alert_deduplication,
@@ -23,6 +17,12 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.alerting import (
     extract_precipitation_alerts,
     format_precipitation_alert_message,
     send_discord_webhook_message,
+)
+from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
+    AlertaRioConstants,
+)
+from pipelines.rj_iplanrio__alertario_previsao_24h.helpers.tasks import (
+    create_date_partitions,
 )
 from pipelines.rj_iplanrio__alertario_previsao_24h.tasks import (
     create_dim_mares_df,
@@ -32,13 +32,17 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.tasks import (
     fetch_xml_from_url,
     parse_xml_to_dict,
 )
-from pipelines.rj_iplanrio__alertario_previsao_24h.utils.tasks import (
-    create_date_partitions,
-)
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+logger = get_logger("toolkit")
 
 
-@flow(log_prints=True)
-def rj_iplanrio__alertario_previsao_24h(
+@flow(log_prints=True, flow_run_name="alertario_previsao_24h_{dataset_id}")
+async def rj_iplanrio__alertario_previsao_24h(
+    *,
+    cloud: Cloud,
     dataset_id: str | None = None,
     dump_mode: str | None = None,
     materialize_after_dump: bool | None = None,
@@ -100,10 +104,8 @@ def rj_iplanrio__alertario_previsao_24h(
     alert_log_rows_to_save = []
 
     # Renomear flow run para melhor identificação
-    rename_current_flow_run_task(new_name=f"alertario_previsao_24h_{dataset_id}")
 
     # Injetar credenciais do BD
-    inject_bd_credentials_task(environment="prod")
 
     # Buscar XML do AlertaRio
     xml_content = fetch_xml_from_url()
@@ -129,30 +131,27 @@ def rj_iplanrio__alertario_previsao_24h(
                 synoptic_reference_date=parsed_data.get("create_date"),
             )
             message_hash = compute_message_hash(discord_message)
-            log(
+            logger.info(
                 (
                     f"[Alert Debug] {len(precipitation_alerts)} combos relevantes. "
                     f"hash={message_hash} tamanho={len(discord_message)} caracteres."
                 ),
-                level="info",
             )
         except Exception as error:  # pylint: disable=broad-except
-            log(f"Erro ao montar mensagem de alerta: {error}", level="error")
+            logger.error(f"Erro ao montar mensagem de alerta: {error}")
             discord_message = None
             message_hash = None
 
     if not send_discord_alerts:
-        log(
+        logger.warning(
             "Envio automático de alertas no Discord está desativado para depuração.",
-            level="warning",
         )
 
     if send_discord_alerts and precipitation_alerts and discord_message:
         webhook_url = os.getenv(discord_webhook_env_var or "")
         if not webhook_url:
-            log(
+            logger.warning(
                 f"Variável {discord_webhook_env_var} não configurada. Alerta não será enviado.",
-                level="warning",
             )
         else:
             try:
@@ -167,14 +166,14 @@ def rj_iplanrio__alertario_previsao_24h(
                         max_daily_alerts=max_daily_alerts,
                         min_alert_interval_hours=min_alert_interval_hours,
                     )
-                    log(f"[Deduplication] {reason}", level="info")
+                    logger.info(f"[Deduplication] {reason}")
 
                     if not should_send:
-                        log("Alerta pulado devido a regras de deduplicação.", level="warning")
+                        logger.warning("Alerta pulado devido a regras de deduplicação.")
                         # Não envia, não salva log (pula para próxima seção)
                 except Exception as dedup_error:
-                    log(f"Erro ao verificar deduplicação: {dedup_error}", level="error")
-                    log("Pulando envio de alerta por segurança (query falhou).", level="error")
+                    logger.error(f"Erro ao verificar deduplicação: {dedup_error}")
+                    logger.error("Pulando envio de alerta por segurança (query falhou).")
                     # Não envia se query falhar (comportamento conservador)
                 else:
                     # Só envia se should_send == True
@@ -197,21 +196,20 @@ def rj_iplanrio__alertario_previsao_24h(
                             severity_level="info",
                         )
                         alert_log_rows_to_save.extend(log_rows)
-                        log(
+                        logger.info(
                             "Alerta de precipitação enviado ao Discord. Log será salvo junto com as outras tabelas."
                         )
             except Exception as error:  # pylint: disable=broad-except
-                log(f"Erro ao processar alerta do Discord: {error}", level="error")
+                logger.error(f"Erro ao processar alerta do Discord: {error}")
     elif send_discord_alerts:
-        log("Sem alertas de precipitação para enviar ao Discord.")
+        logger.info("Sem alertas de precipitação para enviar ao Discord.")
     elif precipitation_alerts and discord_message and message_hash:
         preview = discord_message.splitlines()[0:5]
-        log(
+        logger.info(
             (
                 "Envio de alerta desativado. Mensagem não enviada "
                 f"(hash={message_hash}). Prévia:\n" + "\n".join(preview)
             ),
-            level="info",
         )
 
     # Upload tabela 1: dim_quadro_sinotico
@@ -222,13 +220,16 @@ def rj_iplanrio__alertario_previsao_24h(
         file_format=file_format,
         root_folder=root_folder_1,
     )
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path_1,
-        dataset_id=dataset_id,
-        table_id=AlertaRioConstants.TABLE_DIM_QUADRO_SINOTICO.value,
+    table = Table(dataset_id=dataset_id, table_id=AlertaRioConstants.TABLE_DIM_QUADRO_SINOTICO.value)
+    await upload_files_to_gcs(
+        Path(partitions_path_1),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     # Upload tabela 2: dim_previsao_periodo
     root_folder_2 = AlertaRioConstants.ROOT_FOLDER.value + "dim_previsao_periodo/"
@@ -238,13 +239,16 @@ def rj_iplanrio__alertario_previsao_24h(
         file_format=file_format,
         root_folder=root_folder_2,
     )
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path_2,
-        dataset_id=dataset_id,
-        table_id=AlertaRioConstants.TABLE_DIM_PREVISAO_PERIODO.value,
+    table = Table(dataset_id=dataset_id, table_id=AlertaRioConstants.TABLE_DIM_PREVISAO_PERIODO.value)
+    await upload_files_to_gcs(
+        Path(partitions_path_2),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     # Upload tabela 3: dim_temperatura_zona
     root_folder_3 = AlertaRioConstants.ROOT_FOLDER.value + "dim_temperatura_zona/"
@@ -254,13 +258,16 @@ def rj_iplanrio__alertario_previsao_24h(
         file_format=file_format,
         root_folder=root_folder_3,
     )
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path_3,
-        dataset_id=dataset_id,
-        table_id=AlertaRioConstants.TABLE_DIM_TEMPERATURA_ZONA.value,
+    table = Table(dataset_id=dataset_id, table_id=AlertaRioConstants.TABLE_DIM_TEMPERATURA_ZONA.value)
+    await upload_files_to_gcs(
+        Path(partitions_path_3),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     root_folder_4 = AlertaRioConstants.ROOT_FOLDER.value + "dim_mares/"
     partitions_path_4 = create_date_partitions(
@@ -269,13 +276,16 @@ def rj_iplanrio__alertario_previsao_24h(
         file_format=file_format,
         root_folder=root_folder_4,
     )
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path_4,
-        dataset_id=dataset_id,
-        table_id=AlertaRioConstants.TABLE_DIM_MARES.value,
+    table = Table(dataset_id=dataset_id, table_id=AlertaRioConstants.TABLE_DIM_MARES.value)
+    await upload_files_to_gcs(
+        Path(partitions_path_4),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     # Upload tabela 5: alertario_precipitacao_alerts_log (se houver alertas enviados)
     if alert_log_rows_to_save:
@@ -289,14 +299,17 @@ def rj_iplanrio__alertario_previsao_24h(
             file_format=file_format,
             root_folder=root_folder_5,
         )
-        create_table_and_upload_to_gcs_task(
-            data_path=partitions_path_5,
-            dataset_id=dataset_id,
-            table_id=alert_log_table_id,
+        table = Table(dataset_id=dataset_id, table_id=alert_log_table_id)
+        await upload_files_to_gcs(
+            Path(partitions_path_5),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=dump_mode,
-            biglake_table=biglake_table,
+            source_format="csv",
+            options=capture_options(dump_mode),
         )
+        await publish_table_in_bq(table, cloud)
     else:
-        log(
+        logger.info(
             "Nenhum alerta foi enviado nesta execução. Tabela de alerts não será atualizada."
         )

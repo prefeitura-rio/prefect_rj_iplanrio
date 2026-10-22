@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para pipeline CRM Call Center Attendances Weekly
 Código consolidado e independente
@@ -14,16 +13,18 @@ from urllib.request import urlretrieve
 
 import pandas as pd
 import requests
-from basedosdados import Base
 from google.cloud import bigquery, speech
-from toolkit.pipelines_utils.env import getenv_or_action
-from toolkit.pipelines_utils.logging import log
 from mutagen.mp3 import MP3
 from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
 from prefect import task
+from prefect.logging import get_logger
 from pytz import timezone
+
+from utils.utils import read_env
+
+logger = get_logger("toolkit")
 
 audio_extensions = ["mp3", "wav", "ogg", "oga", "opus"]
 
@@ -80,7 +81,7 @@ class ApiHandler:
             response.raise_for_status()
 
             response_data = response.json()
-            log(f"Login successful to {login_url}")
+            logger.info(f"Login successful to {login_url}")
 
             # Try to extract token from various common response patterns
             token = None
@@ -100,19 +101,19 @@ class ApiHandler:
             if token:
                 self.token = token
                 self.headers["Authorization"] = f"{self.token_type} {token}"
-                log("Authentication token obtained successfully")
+                logger.info("Authentication token obtained successfully")
             else:
-                log("Warning: No token found in login response")
-                log(f"Response keys: {list(response_data.keys())}")
+                logger.info("Warning: No token found in login response")
+                logger.info(f"Response keys: {list(response_data.keys())}")
 
         except requests.RequestException as e:
-            log(f"Login failed: {e}")
+            logger.info(f"Login failed: {e}")
             raise Exception(f"Failed to authenticate with API: {e}")
 
     def _refresh_token_if_needed(self, response):
         """Check if token needs refresh based on response status"""
         if response.status_code == 401:
-            log("Token expired, refreshing...")
+            logger.info("Token expired, refreshing...")
             self._login()
             return True
         return False
@@ -161,14 +162,14 @@ def download_audio(url: str) -> str:
         temp_file.close()
 
         urlretrieve(url, temp_path)
-        log(f"Download concluído com sucesso para {temp_path}", level="debug")
+        logger.debug(f"Download concluído com sucesso para {temp_path}")
         return temp_path
     except ValueError as ve:
         raise ve
     except Exception as e:
         if "temp_path" in locals() and os.path.exists(temp_path):
             os.unlink(temp_path)
-        log(f"Falha ao baixar áudio de {url}: {e}", level="error")
+        logger.error(f"Falha ao baixar áudio de {url}: {e}")
         raise AudioDownloadError(f"Falha ao baixar áudio de {url}: {e}") from e
 
 
@@ -180,7 +181,7 @@ def check_audio_file(audio_path: str) -> bool:
     if os.path.getsize(audio_path) == 0:
         raise AudioProcessingError(f"Arquivo de áudio está vazio: {audio_path}")
 
-    log(f"Verificação do arquivo de áudio concluída para: {audio_path}", level="debug")
+    logger.debug(f"Verificação do arquivo de áudio concluída para: {audio_path}")
     return True
 
 
@@ -192,10 +193,10 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
     audio_format = audio_path.lower().split(".")[-1]
     duration = None
 
-    log(f"Iniciando verificação de duração: {audio_path} (formato: {audio_format})", level="debug")
+    logger.debug(f"Iniciando verificação de duração: {audio_path} (formato: {audio_format})")
 
     try:
-        log(f"Tentando verificar duração com mutagen para formato {audio_format}", level="debug")
+        logger.debug(f"Tentando verificar duração com mutagen para formato {audio_format}")
 
         if audio_format == "mp3":
             audio = MP3(audio_path)
@@ -208,53 +209,43 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
             try:
                 audio = OggOpus(audio_path)
                 duration = audio.info.length
-                log(f"Detected Opus codec for {audio_path}", level="debug")
+                logger.debug(f"Detected Opus codec for {audio_path}")
             except Exception:
                 try:
                     audio = OggVorbis(audio_path)
                     duration = audio.info.length
-                    log(f"Detected Vorbis codec for {audio_path}", level="debug")
+                    logger.debug(f"Detected Vorbis codec for {audio_path}")
                 except Exception as e:
-                    log(f"Could not detect OGG codec: {e}", level="warning")
+                    logger.warning(f"Could not detect OGG codec: {e}")
                     duration = None
         else:
-            log(f"Formato de áudio não reconhecido: {audio_format}", level="warning")
+            logger.warning(f"Formato de áudio não reconhecido: {audio_format}")
             duration = None
 
         if duration is not None:
-            log(
-                f"✓ Duração verificada com mutagen: {duration:.2f}s para {audio_path}",
-                level="info"
-            )
+            logger.info(
+                f"✓ Duração verificada com mutagen: {duration:.2f}s para {audio_path}")
     except Exception as mutagen_error:
-        log(
+        logger.warning(
             f"⚠ Não foi possível verificar duração com mutagen para {audio_path} "
             f"({audio_format}): {mutagen_error}. "
-            f"Continuando sem validação de duração - Google API validará.",
-            level="warning"
-        )
+            f"Continuando sem validação de duração - Google API validará.")
         duration = None
 
     # Se conseguiu determinar duração, valida o limite
     if duration is not None:
         if duration > max_duration_seconds:
-            log(
-                f"✗ Áudio {audio_path} excede limite de duração: {duration:.2f}s > {max_duration_seconds}s",
-                level="error"
-            )
+            logger.error(
+                f"✗ Áudio {audio_path} excede limite de duração: {duration:.2f}s > {max_duration_seconds}s")
             raise AudioProcessingError(
                 f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s"
             )
 
-        log(
-            f"✓ Verificação de duração completa: {audio_path} ({duration:.2f}s <= {max_duration_seconds}s)",
-            level="debug"
-        )
+        logger.debug(
+            f"✓ Verificação de duração completa: {audio_path} ({duration:.2f}s <= {max_duration_seconds}s)")
     else:
-        log(
-            f"⚠ Pulando validação de duração para {audio_path} - será validado pela Google API",
-            level="info"
-        )
+        logger.info(
+            f"⚠ Pulando validação de duração para {audio_path} - será validado pela Google API")
 
 
 def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
@@ -280,10 +271,10 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
                 opus_info = OggOpus(audio_path)
                 encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
                 sample_rate = opus_info.info.sample_rate  # Read from file metadata
-                log(f"Using OGG_OPUS encoding with {sample_rate}Hz for {audio_path}", level="info")
+                logger.info(f"Using OGG_OPUS encoding with {sample_rate}Hz for {audio_path}")
             except Exception:
                 # Not Opus, let Google auto-detect
-                log(f"Not Opus, using ENCODING_UNSPECIFIED for {audio_path}", level="debug")
+                logger.debug(f"Not Opus, using ENCODING_UNSPECIFIED for {audio_path}")
 
         config = speech.RecognitionConfig(
             encoding=encoding,
@@ -295,7 +286,7 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
         response = client.recognize(config=config, audio=audio)
 
         if not response.results:
-            log("Nenhum resultado de transcrição encontrado", level="warning")
+            logger.warning("Nenhum resultado de transcrição encontrado")
             return "Áudio sem conteúdo reconhecível"
 
         transcript = ""
@@ -303,14 +294,13 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
             transcript += result.alternatives[0].transcript + " "
 
         transcript = transcript.strip()
-        log(
+        logger.debug(
             f"Transcrição concluída com sucesso: {len(transcript)} caracteres",
-            level="debug",
         )
         return transcript
 
     except Exception as e:
-        log(f"Erro durante a transcrição de áudio {audio_path}: {e}", level="error")
+        logger.error(f"Erro durante a transcrição de áudio {audio_path}: {e}")
         raise AudioTranscriptionError(f"Falha na transcrição de áudio: {e}") from e
 
 
@@ -325,9 +315,9 @@ def access_api(
     """
     Access API and return authenticated handler to be used in other requests.
     """
-    url = getenv_or_action(infisical_url)
-    username = getenv_or_action(infisical_username)
-    password = getenv_or_action(infisical_password)
+    url = read_env(infisical_url)
+    username = read_env(infisical_username)
+    password = read_env(infisical_password)
 
     api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
     return api
@@ -336,11 +326,11 @@ def access_api(
 @task
 def create_date_partitions(
     dataframe,
-    partition_column: str = None,
+    partition_column: str | None = None,
     file_format: Literal["csv", "parquet"] = "csv",
     root_folder="./data/",
 ):
-    """Create date partitions for a DataFrame and save them to disk."""
+    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
     if partition_column is None:
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
@@ -350,30 +340,20 @@ def create_date_partitions(
         if dataframe["data_particao"].isnull().any():
             raise ValueError("Some dates in the partition column could not be parsed.")
 
-    dates = dataframe["data_particao"].unique()
-    dataframes = [
-        (
-            date,
-            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
-        )
-        for date in dates
-    ]
+    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
+    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
+    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
+    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
 
-    for _date, _dataframe in dataframes:
-        partition_folder = os.path.join(
-            root_folder,
-            f"ano_particao={_date[:4]}/mes_particao={_date[5:7]}/data_particao={_date}",
-        )
-        os.makedirs(partition_folder, exist_ok=True)
+    os.makedirs(root_folder, exist_ok=True)
+    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
 
-        file_folder = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
+    if file_format == "csv":
+        dataframe.to_csv(file_path, index=False)
+    else:
+        dataframe.to_parquet(file_path, index=False)
 
-        if file_format == "csv":
-            _dataframe.to_csv(file_folder, index=False)
-        elif file_format == "parquet":
-            _dataframe.to_parquet(file_folder, index=False)
-
-    log(f"Files saved on {root_folder}")
+    logger.info("Files saved on %s", root_folder)
     return root_folder
 
 
@@ -406,11 +386,11 @@ def calculate_date_range(
             "end_date": calculated_end_date.strftime("%Y-%m-%d"),
         }
 
-        log(f"Calculated date range: {result['start_date']} to {result['end_date']}")
+        logger.info(f"Calculated date range: {result['start_date']} to {result['end_date']}")
     else:
         result = {"start_date": start_date, "end_date": end_date}
 
-        log(f"Using provided date range: {result['start_date']} to {result['end_date']}")
+        logger.info(f"Using provided date range: {result['start_date']} to {result['end_date']}")
 
     return result
 
@@ -428,13 +408,13 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
     Returns:
         DataFrame with attendances data
     """
-    log(f"Getting attendances from {start_date} to {end_date}")
+    logger.info(f"Getting attendances from {start_date} to {end_date}")
     all_attendances = []
     page_number = 0
     page_size = 100  # api só aceita no máximo 100
 
     while True:
-        log(f"🔍 Buscando página {page_number} (acumulados: {len(all_attendances)} atendimentos)", level="debug")
+        logger.debug(f"🔍 Buscando página {page_number} (acumulados: {len(all_attendances)} atendimentos)")
 
         # Build path with matrix variables and query parameters
         path = f"/callcenter/attendances;beginDate={start_date};endDate={end_date}"
@@ -445,30 +425,28 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         response = api.get(path=path, params=params)
 
         if response.status_code != 200:
-            log(
+            logger.error(
                 f"API request failed with status {response.status_code}: {response.text}",
-                level="error",
             )
             response.raise_for_status()
 
         try:
             response_data = response.json()
         except Exception as e:
-            log(
+            logger.error(
                 f"Failed to parse JSON response on page {page_number}: {e}",
-                level="error",
             )
             raise
 
         # ===== LOGGING DETALHADO DA RESPOSTA =====
-        log(f"📥 Resposta da API para página {page_number}:", level="debug")
-        log(f"  - Chaves raiz: {list(response_data.keys())}", level="debug")
+        logger.debug(f"📥 Resposta da API para página {page_number}:")
+        logger.debug(f"  - Chaves raiz: {list(response_data.keys())}")
 
         if "data" in response_data:
-            log(f"  - Chaves em 'data': {list(response_data['data'].keys())}", level="debug")
+            logger.debug(f"  - Chaves em 'data': {list(response_data['data'].keys())}")
             if "item" in response_data["data"]:
                 item_data = response_data["data"]["item"]
-                log(f"  - Chaves em 'item': {list(item_data.keys())}", level="debug")
+                logger.debug(f"  - Chaves em 'item': {list(item_data.keys())}")
 
                 # Log específico de hasNextPage
                 has_next = item_data.get("hasNextPage", "KEY_NOT_FOUND")
@@ -477,17 +455,17 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
                 # Log de elements
                 if "elements" in item_data:
                     elements = item_data["elements"]
-                    log(f"  - elements: {len(elements) if elements else 0} itens", level="debug")
+                    logger.debug(f"  - elements: {len(elements) if elements else 0} itens")
                 else:
-                    log(f"  - elements: KEY_NOT_FOUND", level="warning")
+                    logger.warning(f"  - elements: KEY_NOT_FOUND")
             else:
-                log(f"  - 'item' não encontrado em 'data'", level="warning")
+                logger.warning(f"  - 'item' não encontrado em 'data'")
         else:
-            log(f"  - 'data' não encontrado na resposta", level="warning")
+            logger.warning(f"  - 'data' não encontrado na resposta")
 
         # Se houver 'message' na resposta
         if not "message" in response_data:
-            log(f"  - No message key in response data: {list(response_data.keys())}", level="warning")
+            logger.warning(f"  - No message key in response data: {list(response_data.keys())}")
         # =========================================
 
         page_attendances = []
@@ -503,34 +481,30 @@ def get_weekly_attendances(api: object, start_date: str, end_date: str) -> pd.Da
         if page_attendances:
             first_id = page_attendances[0].get("id", "N/A")
             last_id = page_attendances[-1].get("id", "N/A") if len(page_attendances) > 1 else first_id
-            log(
+            logger.info(
                 f"📄 Página {page_number}: {len(page_attendances)} atendimentos "
-                f"(primeiro ID: {first_id}, último ID: {last_id}). Found {len(page_attendances)} attendances.",
-                level="info"
-            )
+                f"(primeiro ID: {first_id}, último ID: {last_id}). Found {len(page_attendances)} attendances.")
 
         all_attendances.extend(page_attendances)
 
         # Log de decisão
-        log(
+        logger.info(
             f"🔄 Decisão de paginação após página {page_number}: "
-            f"has_next_page={has_next_page}, total acumulado={len(all_attendances)}",
-            level="info"
-        )
+            f"has_next_page={has_next_page}, total acumulado={len(all_attendances)}")
 
         if not has_next_page:
-            log(f"✓ Paginação finalizada: hasNextPage=False", level="info")
+            logger.info(f"✓ Paginação finalizada: hasNextPage=False")
             break
 
-        log(f"➡️ Continuando para página {page_number + 1}", level="debug")
+        logger.debug(f"➡️ Continuando para página {page_number + 1}")
         page_number += 1
 
     if not all_attendances:
-        log("No attendances found")
+        logger.info("No attendances found")
         return pd.DataFrame()
 
-    log(f"✓ Total de atendimentos obtidos: {len(all_attendances)}")
-    log(f"Total attendances collected: {len(all_attendances)}")
+    logger.info(f"✓ Total de atendimentos obtidos: {len(all_attendances)}")
+    logger.info(f"Total attendances collected: {len(all_attendances)}")
 
     data = []
     for item in all_attendances:
@@ -599,9 +573,8 @@ def processar_json_e_transcrever_audios(
         id_reply = registro.get("id_reply", "ID_Not_Found")
 
         if not data or not isinstance(data, dict):
-            log(
+            logger.warning(
                 f"Registro {id_reply} sem 'json_data' válido ou não é um dicionário. Pulando.",
-                level="warning",
             )
             dados_processados.append(registro)
             continue
@@ -630,7 +603,7 @@ def processar_json_e_transcrever_audios(
                         )
                     ):
                         audio_encontrado = True
-                        log(f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}")
+                        logger.info(f"Áudio encontrado para transcrição na sessão {id_reply}, mensagem ID {msg_copy.get('id')}")
                         audio_path_temp = None
                         try:
                             audio_path_temp = download_audio(url_audio)
@@ -639,7 +612,7 @@ def processar_json_e_transcrever_audios(
                             transcricao = transcribe_audio(audio_path_temp)
                             msg_copy["text"] = transcricao
                             msg_copy["transcription_failed"] = 0
-                            log(
+                            logger.info(
                                 f"Transcrição concluída para sessão {id_reply}, msg {msg_copy.get('id')}: Status {'sucesso' if transcricao != 'Áudio sem conteúdo reconhecível' else 'sem_conteudo'}"
                             )
 
@@ -649,17 +622,15 @@ def processar_json_e_transcrever_audios(
                             AudioTranscriptionError,
                         ) as e:
                             erro_msg = f"ERRO_TRANSCRICAO: {type(e).__name__}: {e!s}"
-                            log(
+                            logger.error(
                                 f"Erro ao transcrever áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}. Audio url: {url_audio}",
-                                level="error",
                             )
                             msg_copy["text"] = erro_msg
                             msg_copy["transcription_failed"] = 1
                         except Exception as e:
                             erro_msg = f"ERRO_INESPERADO_TRANSCRICAO: {type(e).__name__}: {e!s}"
-                            log(
+                            logger.error(
                                 f"Erro inesperado ao processar áudio sessão {id_reply}, msg {msg_copy.get('id')}: {erro_msg}",
-                                level="error",
                             )
                             msg_copy["text"] = erro_msg
                             msg_copy["transcription_failed"] = 1
@@ -668,9 +639,8 @@ def processar_json_e_transcrever_audios(
                                 try:
                                     os.unlink(audio_path_temp)
                                 except Exception as e_unlink:
-                                    log(
+                                    logger.warning(
                                         f"Erro ao remover arquivo temporário {audio_path_temp}: {e_unlink}",
-                                        level="warning",
                                     )
 
                 mensagens_atualizadas.append(msg_copy)
@@ -683,13 +653,12 @@ def processar_json_e_transcrever_audios(
                 dados_processados.append(registro)
 
         except Exception as e:
-            log(
+            logger.error(
                 f"Erro inesperado ao processar registro {id_reply} (dict json_data): {e}",
-                level="error",
             )
             dados_processados.append(registro)
 
-    log(f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros.")
+    logger.info(f"Processamento JSON e transcrição concluídos para {len(dados_entrada)} registros.")
     return dados_processados
 
 
@@ -729,20 +698,19 @@ def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name
     """
     from time import sleep
 
-    log("Querying data from BigQuery")
+    logger.info("Querying data from BigQuery")
     query = str(query)
     bq_client = bigquery.Client(
-        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
         project=billing_project_id,
     )
     job = bq_client.query(query)
     while not job.done():
         sleep(1)
-    log("Getting result from query")
+    logger.info("Getting result from query")
     results = job.result()
-    log("Converting result to pandas dataframe")
+    logger.info("Converting result to pandas dataframe")
     dfr = results.to_dataframe()
-    log("End download data from bigquery")
+    logger.info("End download data from bigquery")
     return dfr
 
 
@@ -781,7 +749,7 @@ def get_existing_attendance_keys(
         WHERE DATE(end_date) BETWEEN '{start_date}' AND '{end_date}'
     """
 
-    log(f"Checking existing attendance keys for period {start_date} to {end_date}")
+    logger.info(f"Checking existing attendance keys for period {start_date} to {end_date}")
 
     dfr = download_data_from_bigquery(
         query=query,
@@ -790,11 +758,11 @@ def get_existing_attendance_keys(
     )
 
     if dfr.empty:
-        log("No existing attendance data found for the specified period")
+        logger.info("No existing attendance data found for the specified period")
         return []
 
     existing_keys = dfr["composite_key"].tolist()
-    log(f"Found {len(existing_keys)} existing attendance records")
+    logger.info(f"Found {len(existing_keys)} existing attendance records")
     return existing_keys
 
 
@@ -816,11 +784,11 @@ def filter_new_attendances(
         DataFrame with only new attendances
     """
     if raw_attendances.empty:
-        log("Raw attendances DataFrame is empty, nothing to filter")
+        logger.info("Raw attendances DataFrame is empty, nothing to filter")
         return raw_attendances
 
     if not existing_keys:
-        log("No existing keys found, keeping all attendances")
+        logger.info("No existing keys found, keeping all attendances")
         return raw_attendances
 
     # Create composite key for each raw attendance
@@ -846,9 +814,9 @@ def filter_new_attendances(
     total_new = len(new_attendances)
     total_filtered = total_raw - total_new
 
-    log("Attendance filtering summary:")
-    log(f"  - Total raw attendances: {total_raw}")
-    log(f"  - Already processed: {total_filtered}")
-    log(f"  - New to process: {total_new}")
+    logger.info("Attendance filtering summary:")
+    logger.info(f"  - Total raw attendances: {total_raw}")
+    logger.info(f"  - Already processed: {total_filtered}")
+    logger.info(f"  - New to process: {total_new}")
 
     return new_attendances

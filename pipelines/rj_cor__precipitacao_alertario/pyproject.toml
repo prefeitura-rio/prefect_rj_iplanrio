@@ -7,7 +7,8 @@ dependencies = [
     "pendulum",
     "beautifulsoup4",
     "bs4==0.0.2",
-    "lxml==6.1.1"
+    "lxml==6.1.1",
+    "requests",
 ]
 
 [tool.uv.sources]

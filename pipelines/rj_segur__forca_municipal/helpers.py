@@ -6,10 +6,14 @@ import json
 from datetime import date, datetime, timedelta
 from typing import Generator, Iterator, Optional
 
+import pandas as pd
 from fastkml import Placemark
-from toolkit.pipelines_utils.logging import log
+from prefect.logging import get_logger
+from pydantic_settings import BaseSettings
 
 from pipelines.rj_segur__forca_municipal.constants import SP_TZ
+
+logger = get_logger("toolkit")
 
 
 def _add_id_hash(data: list[dict]) -> list[dict]:
@@ -54,7 +58,7 @@ def _parse_date_range(data_inicio: str, data_fim: str) -> tuple[str, str]:
 
     today = datetime.now(tz=SP_TZ).date()
     if d_fim > today:
-        log(
+        logger.info(
             f"data_fim ({data_fim}) está no futuro — a API provavelmente retornará vazio.",
             level="warning",
         )
@@ -102,3 +106,29 @@ def _cycle_prefix(cycle_num: Optional[int], total_cycles: Optional[int]) -> str:
         return f"[Ciclo {cycle_num}]"
     pct = round(cycle_num / total_cycles * 100)
     return f"[Ciclo {cycle_num}/{total_cycles} ({pct}%)]"
+
+
+class ForcaMunicipalSettings(BaseSettings):
+    """The login, the password and the address of the API, from the environment."""
+
+    API_FORCA_MUNICIPAL__API_LOGIN: str | None = None
+    API_FORCA_MUNICIPAL__API_PASSWORD: str | None = None
+    API_FORCA_MUNICIPAL__API_URL: str | None = None
+    API_FORCA_MUNICIPAL__USE_PROXY_URL: bool = False
+    API_FORCA_MUNICIPAL__PROXY_URL: str | None = None
+
+
+def add_date_columns(dataframe: pd.DataFrame, column: str) -> pd.DataFrame:
+    """Add `ano_particao`, `mes_particao` and `data_particao`, taken from a date column.
+
+    Raise `ValueError` if the dataframe already has one of them.
+    """
+    names = ["ano_particao", "mes_particao", "data_particao"]
+    if any(name in dataframe.columns for name in names):
+        raise ValueError("The dataframe already has a column of the date partition")
+
+    dates = pd.to_datetime(dataframe[column].astype(str), errors="coerce")
+    dataframe["ano_particao"] = dates.dt.year.astype("Int64").astype(str).replace("<NA>", pd.NA)
+    dataframe["mes_particao"] = dates.dt.month.astype("Int64").astype(str).replace("<NA>", pd.NA)
+    dataframe["data_particao"] = dates.dt.date
+    return dataframe

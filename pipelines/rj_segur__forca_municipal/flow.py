@@ -6,9 +6,6 @@ Sistema: HxGN OnCall - Gestão de Ocorrências e Unidades da Guarda Municipal RJ
 
 from typing import Optional
 
-import basedosdados as bd
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_segur__forca_municipal.constants import (
@@ -24,12 +21,16 @@ from pipelines.rj_segur__forca_municipal.task import (
     run_standard_endpoint_task,
     run_unit_positions_task,
 )
+from utils.tasks import publish_table_in_bq
+from utils.types import Cloud, Table
 
 ALL_TABLE_IDS = set(TABLE_CONFIG)
 
 
-@flow(log_prints=True)
-def rj_segur__forca_municipal(
+@flow(log_prints=True, flow_run_name="{dataset_id}.{table_id}")
+async def rj_segur__forca_municipal(
+    *,
+    cloud: Cloud,
     table_id: str = "table_id",
     dataset_id: str = "brutos_forca_municipal",
     dump_mode: str = "append",
@@ -59,9 +60,8 @@ def rj_segur__forca_municipal(
         data_inicio: Data de início para unit_positions (YYYY-MM-DD). Default: D-1.
         data_fim: Data de fim para unit_positions (YYYY-MM-DD). Default: data_inicio.
     """
-    rename_current_flow_run_task(new_name=f"{dataset_id}.{table_id}")
-    inject_bd_credentials_task(environment="prod")
-    project_id = bd.Base()._get_project_id("prod")
+    project_id = cloud["project"]
+    bucket = cloud["bucket"]
 
     if table_id not in ALL_TABLE_IDS:
         raise ValueError(
@@ -75,6 +75,7 @@ def rj_segur__forca_municipal(
             project_id=project_id,
             dataset_id=dataset_id,
             dump_mode=dump_mode,
+            bucket=bucket,
             page_size=page_size,
             concurrency=concurrency,
             unit_id_concurrency=unit_id_concurrency,
@@ -88,6 +89,7 @@ def rj_segur__forca_municipal(
             project_id=project_id,
             dataset_id=dataset_id,
             dump_mode=dump_mode,
+            bucket=bucket,
             concurrency=concurrency,
             id_concurrency=qmd_id_concurrency,
         )
@@ -98,6 +100,7 @@ def rj_segur__forca_municipal(
             project_id=project_id,
             dataset_id=dataset_id,
             dump_mode=dump_mode,
+            bucket=bucket,
             concurrency=concurrency,
             id_concurrency=qmd_id_concurrency,
         )
@@ -108,6 +111,9 @@ def rj_segur__forca_municipal(
             project_id=project_id,
             dataset_id=dataset_id,
             dump_mode=dump_mode,
+            bucket=bucket,
             page_size=page_size,
             concurrency=concurrency,
         )
+
+    await publish_table_in_bq(Table(dataset_id=dataset_id, table_id=table_id), cloud)

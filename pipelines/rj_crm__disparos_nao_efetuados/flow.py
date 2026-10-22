@@ -1,7 +1,3 @@
-# -*- coding: utf-8 -*-
-# flake8: noqa:E501
-# pylint: disable='line-too-long'
-
 """
 Flow que verifica campanhas ativas sem disparo no dia corrente,
 salva o resultado no BigQuery e notifica via Discord no canal de falhas.
@@ -10,30 +6,24 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.env import inject_bd_credentials_task  # pylint: disable=E0611, E0401
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task  # pylint: disable=E0611, E0401
-from prefect import flow  # pylint: disable=E0611, E0401
-from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
+from prefect import flow
+from prefect.client.schemas.objects import Flow, FlowRun, State
 from pytz import timezone
 
-from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.utils.discord import (  # pylint: disable=E0611, E0401
-    send_discord_notification,
-)
-from pipelines.rj_crm__disparo_template.utils.tasks import (  # pylint: disable=E0611, E0401
-    create_date_partitions,
-    task_download_data_from_bigquery,
-)
+from pipelines.rj_crm__disparos_nao_efetuados.helpers import create_date_partitions
+from utils.tasks import notify_discord, publish_table_in_bq, read_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 QUERIES_DIR = Path(__file__).parent / "queries"
 
+BILLING_PROJECT_ID = "rj-crm-registry"
 DATASET_ID = "brutos_salesforce"
 TABLE_ID = "campanhas_sem_disparo"
 DUMP_MODE = "append"
 
 
-def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
+async def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
     """
     Sends a Discord notification when a flow run fails.
     """
@@ -49,11 +39,13 @@ def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: S
         f"Flow Run: {flow_run.name}\n"
         f"State: {state.name}"
     )
-    send_discord_notification(webhook_url, message)
+    await notify_discord.fn(message, webhook=webhook_url)
 
 
-@flow(log_prints=True, on_failure=[send_discord_notification_on_failure])
-def rj_crm__disparos_nao_efetuados(
+@flow(log_prints=True, flow_run_name="{dataset_id}__{table_id}", on_failure=[send_discord_notification_on_failure])
+async def rj_crm__disparos_nao_efetuados(
+    *,
+    cloud: Cloud,
     dataset_id: str = DATASET_ID,
     table_id: str = TABLE_ID,
     dump_mode: str = DUMP_MODE,
@@ -64,28 +56,20 @@ def rj_crm__disparos_nao_efetuados(
     - Envia alerta no canal de falhas do Discord quando há campanhas sem disparo.
     """
 
-    billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
-
-    rename_current_flow_run_task(new_name=f"{dataset_id}__{table_id}")
-    inject_bd_credentials_task(environment="prod")
-
     query = (QUERIES_DIR / "campanhas_sem_disparo.sql").read_text(encoding="utf-8")
 
-    df = task_download_data_from_bigquery(
-        query=query,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
+    df = (await read_bq(query, project=BILLING_PROJECT_ID)).to_pandas()
 
     hoje = datetime.now(timezone("America/Sao_Paulo")).strftime("%d/%m/%Y")
 
     if df is None or df.empty:
         print("Todas as campanhas ativas tiveram disparo hoje.")
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL_DISPAROS")
-        send_discord_notification(
-            webhook_url,
-            f"<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n✅ **Todas as campanhas ativas tiveram disparo hoje ({hoje}).**",
-        )
+        if webhook_url:
+            await notify_discord(
+                f"<@821121576455634955> <@1458456241683824744> <@302518123066556426> <@1524151359765479475>\n✅ **Todas as campanhas ativas tiveram disparo hoje ({hoje}).**",
+                webhook=webhook_url,
+            )
         return
 
     # Notifica no canal de falhas
@@ -100,7 +84,8 @@ def rj_crm__disparos_nao_efetuados(
         f"Total: **{len(df)}** campanha(s) sem disparo."
     )
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL_ERRORS")
-    send_discord_notification(webhook_url, message)
+    if webhook_url:
+        await notify_discord(message, webhook=webhook_url)
 
     # Salva resultado particionado no BigQuery para histórico
     partitions_path = create_date_partitions(
@@ -122,10 +107,13 @@ def rj_crm__disparos_nao_efetuados(
         files_in_path.extend([os.path.join(root, f) for f in files])
     print(f"Files in partitions path: {files_in_path}")
 
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(partitions_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=False,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)

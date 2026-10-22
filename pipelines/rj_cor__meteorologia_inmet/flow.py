@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para coleta de dados meteorológicos do INMET - COR.
 
@@ -11,11 +10,9 @@ precipitação e radiação solar, coletados a cada hora.
 Migrado de Prefect 1.4 para Prefect 3.0..
 """
 
+from pathlib import Path
 from typing import Optional
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_cor__meteorologia_inmet.tasks import (
@@ -24,10 +21,15 @@ from pipelines.rj_cor__meteorologia_inmet.tasks import (
     save_data_to_partitions_task,
     transform_meteorological_data_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_cor__meteorologia_inmet(
+@flow(log_prints=True, flow_run_name="{dataset_id}_{table_id}")
+async def rj_cor__meteorologia_inmet(
+    *,
+    cloud: Cloud,
     dataset_id: str = "clima_estacao_meteorologica",
     table_id: str = "meteorologia_inmet",
     dump_mode: str = "append",
@@ -79,10 +81,8 @@ def rj_cor__meteorologia_inmet(
         - A materialização dbt é opcional e executada apenas se solicitada
     """
     # Renomear o flow run para facilitar identificação
-    rename_current_flow_run_task(new_name=f"{dataset_id}_{table_id}")
 
     # Injetar credenciais do BigQuery
-    inject_bd_credentials_task(environment="prod")
 
     # Determinar datas de coleta
     data_inicio_, data_fim_, backfill = get_dates_task(data_inicio, data_fim)
@@ -97,10 +97,13 @@ def rj_cor__meteorologia_inmet(
     path = save_data_to_partitions_task(dados=dados)
 
     # Criar tabela e fazer upload para GCS e BigQuery
-    create_table_and_upload_to_gcs_task(
-        data_path=path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=False,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)

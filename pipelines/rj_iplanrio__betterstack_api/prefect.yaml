@@ -25,6 +25,10 @@ pull:
 
 deployments:
   - name: rj-iplanrio--betterstack-api--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__betterstack_api/flow.py:rj_iplanrio__betterstack_api
     work_pool:
@@ -36,12 +40,20 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
-      from_date: null
-      to_date: null
+      from_date:
+      to_date:
       dataset_id: brutos_betterstack
       billing_project_id: rj-iplanrio
 
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
   - name: rj-iplanrio--betterstack-api--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__betterstack_api/flow.py:rj_iplanrio__betterstack_api
     work_pool:
@@ -53,10 +65,14 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
-      from_date: null
-      to_date: null
+      from_date:
+      to_date:
       dataset_id: brutos_betterstack
       billing_project_id: rj-iplanrio
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
       - cron: "0 3 * * *"
         timezone: America/Sao_Paulo

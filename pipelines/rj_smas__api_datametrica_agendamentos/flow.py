@@ -1,15 +1,15 @@
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.dbt import execute_dbt_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 from prefect.deployments import run_deployment
 
 from pipelines.rj_smas__api_datametrica_agendamentos.constants import (
     DatametricaConstants,
+)
+from pipelines.rj_smas__api_datametrica_agendamentos.helpers.tasks import (
+    create_date_partitions,
 )
 from pipelines.rj_smas__api_datametrica_agendamentos.tasks import (
     calculate_target_date,
@@ -19,13 +19,16 @@ from pipelines.rj_smas__api_datametrica_agendamentos.tasks import (
     get_datametrica_credentials,
     transform_agendamentos_data,
 )
-from pipelines.rj_smas__api_datametrica_agendamentos.utils.tasks import (
-    create_date_partitions,
-)
+from toolkit.dbt import DbtRun
+from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_smas__api_datametrica_agendamentos(
+@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}")
+async def rj_smas__api_datametrica_agendamentos(
+    *,
+    cloud: Cloud,
     dataset_id: str | None = None,
     table_id: str | None = None,
     dump_mode: str | None = None,
@@ -69,10 +72,8 @@ def rj_smas__api_datametrica_agendamentos(
     biglake_table = DatametricaConstants.BIGLAKE_TABLE.value
 
     # Renomear flow run para melhor identificação
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
 
     # Injetar credenciais do BD
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Obter credenciais da API Datametrica
     credentials = get_datametrica_credentials(infisical_secret_path=infisical_secret_path)
@@ -109,17 +110,20 @@ def rj_smas__api_datametrica_agendamentos(
         root_folder=root_folder,
     )
 
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(partitions_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     if materialize_after_dump:
         dbt_select = "raw_cadunico_agendamentos"
-        execute_dbt_task(select=dbt_select, target="prod")
+        await run_dbt(DbtRun(repository="https://github.com/prefeitura-rio/queries-rj-iplanrio", command="run", target="prod", select=dbt_select))
     print("\n\n******* Triggering cadunico dispatch flow... *******")
 
     cadunico_params = {

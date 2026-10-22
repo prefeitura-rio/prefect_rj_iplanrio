@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Utility tasks for CRM API Wetalkie pipeline
 Migrated and adapted from pipelines_rj_crm_registry
@@ -14,17 +13,18 @@ from typing import Dict, List, Literal, Union
 from urllib.request import urlretrieve
 
 import pandas as pd
-from basedosdados import Base
 from google.cloud import bigquery, speech
-from toolkit.pipelines_utils.env import getenv_or_action
-from toolkit.pipelines_utils.logging import log
 from mutagen.mp3 import MP3
 from mutagen.oggopus import OggOpus
 from mutagen.oggvorbis import OggVorbis
 from mutagen.wave import WAVE
 from prefect import task
+from prefect.logging import get_logger
 
-from pipelines.rj_crm__api_wetalkie.utils.api_handler import ApiHandler
+from pipelines.rj_crm__api_wetalkie.helpers.api_handler import ApiHandler
+from utils.utils import read_env
+
+logger = get_logger("toolkit")
 
 
 # Audio processing exceptions
@@ -57,9 +57,9 @@ def access_api(
     """
     Access API and return authenticated handler to be used in other requests.
     """
-    url = getenv_or_action(infisical_url)
-    username = getenv_or_action(infisical_username)
-    password = getenv_or_action(infisical_password)
+    url = read_env(infisical_url)
+    username = read_env(infisical_username)
+    password = read_env(infisical_password)
 
     api = ApiHandler(base_url=url, username=username, password=password, login_route=login_route)
     return api
@@ -68,11 +68,11 @@ def access_api(
 @task
 def create_date_partitions(
     dataframe,
-    partition_column: str = None,
+    partition_column: str | None = None,
     file_format: Literal["csv", "parquet"] = "csv",
     root_folder="./data/",
 ):
-    """Create date partitions for a DataFrame and save them to disk."""
+    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
     if partition_column is None:
         partition_column = "data_particao"
         dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
@@ -82,30 +82,20 @@ def create_date_partitions(
         if dataframe["data_particao"].isnull().any():
             raise ValueError("Some dates in the partition column could not be parsed.")
 
-    dates = dataframe["data_particao"].unique()
-    dataframes = [
-        (
-            date,
-            dataframe[dataframe["data_particao"] == date].drop(columns=["data_particao"]),
-        )
-        for date in dates
-    ]
+    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
+    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
+    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
+    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
 
-    for _date, _dataframe in dataframes:
-        partition_folder = os.path.join(
-            root_folder,
-            f"ano_particao={_date[:4]}/mes_particao={_date[5:7]}/data_particao={_date}",
-        )
-        os.makedirs(partition_folder, exist_ok=True)
+    os.makedirs(root_folder, exist_ok=True)
+    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
 
-        file_folder = os.path.join(partition_folder, f"{uuid.uuid4()}.{file_format}")
+    if file_format == "csv":
+        dataframe.to_csv(file_path, index=False)
+    else:
+        dataframe.to_parquet(file_path, index=False)
 
-        if file_format == "csv":
-            _dataframe.to_csv(file_folder, index=False)
-        elif file_format == "parquet":
-            _dataframe.to_parquet(file_folder, index=False)
-
-    log(f"Files saved on {root_folder}")
+    logger.info("Files saved on %s", root_folder)
     return root_folder
 
 
@@ -120,27 +110,26 @@ def skip_flow_if_empty(
         return  # flow termina aqui, nada downstream é agendado'
     """
     if len(data) == 0:
-        log(message)
+        logger.info(message)
         return None
     return data
 
 
 def download_data_from_bigquery(query: str, billing_project_id: str, bucket_name: str) -> pd.DataFrame:
     """Execute a BigQuery SQL query and return results as a pandas DataFrame."""
-    log("Querying data from BigQuery")
+    logger.info("Querying data from BigQuery")
     query = str(query)
     bq_client = bigquery.Client(
-        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
         project=billing_project_id,
     )
     job = bq_client.query(query)
     while not job.done():
         sleep(1)
-    log("Getting result from query")
+    logger.info("Getting result from query")
     results = job.result()
-    log("Converting result to pandas dataframe")
+    logger.info("Converting result to pandas dataframe")
     dfr = results.to_dataframe()
-    log("End download data from bigquery")
+    logger.info("End download data from bigquery")
     return dfr
 
 
@@ -157,14 +146,14 @@ def download_audio(url: str) -> str:
         temp_file.close()
 
         urlretrieve(url, temp_path)
-        log(f"Download concluído com sucesso para {temp_path}", level="debug")
+        logger.debug(f"Download concluído com sucesso para {temp_path}")
         return temp_path
     except ValueError as ve:
         raise ve
     except Exception as e:
         if "temp_path" in locals() and os.path.exists(temp_path):
             os.unlink(temp_path)
-        log(f"Falha ao baixar áudio de {url}: {e}", level="error")
+        logger.error(f"Falha ao baixar áudio de {url}: {e}")
         raise AudioDownloadError(f"Falha ao baixar áudio de {url}: {e}") from e
 
 
@@ -176,7 +165,7 @@ def check_audio_file(audio_path: str) -> bool:
     if os.path.getsize(audio_path) == 0:
         raise AudioProcessingError(f"Arquivo de áudio está vazio: {audio_path}")
 
-    log(f"Verificação do arquivo de áudio concluída para: {audio_path}", level="debug")
+    logger.debug(f"Verificação do arquivo de áudio concluída para: {audio_path}")
     return True
 
 
@@ -188,10 +177,10 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
     audio_format = audio_path.lower().split(".")[-1]
     duration = None
 
-    log(f"Iniciando verificação de duração: {audio_path} (formato: {audio_format})", level="debug")
+    logger.debug(f"Iniciando verificação de duração: {audio_path} (formato: {audio_format})")
 
     try:
-        log(f"Tentando verificar duração com mutagen para formato {audio_format}", level="debug")
+        logger.debug(f"Tentando verificar duração com mutagen para formato {audio_format}")
 
         if audio_format == "mp3":
             audio = MP3(audio_path)
@@ -204,53 +193,43 @@ def check_audio_duration(audio_path: str, max_duration_seconds: int) -> None:
             try:
                 audio = OggOpus(audio_path)
                 duration = audio.info.length
-                log(f"Detected Opus codec for {audio_path}", level="debug")
+                logger.debug(f"Detected Opus codec for {audio_path}")
             except Exception:
                 try:
                     audio = OggVorbis(audio_path)
                     duration = audio.info.length
-                    log(f"Detected Vorbis codec for {audio_path}", level="debug")
+                    logger.debug(f"Detected Vorbis codec for {audio_path}")
                 except Exception as e:
-                    log(f"Could not detect OGG codec: {e}", level="warning")
+                    logger.warning(f"Could not detect OGG codec: {e}")
                     duration = None
         else:
-            log(f"Formato de áudio não reconhecido: {audio_format}", level="warning")
+            logger.warning(f"Formato de áudio não reconhecido: {audio_format}")
             duration = None
 
         if duration is not None:
-            log(
-                f"✓ Duração verificada com mutagen: {duration:.2f}s para {audio_path}",
-                level="info"
-            )
+            logger.info(
+                f"✓ Duração verificada com mutagen: {duration:.2f}s para {audio_path}")
     except Exception as mutagen_error:
-        log(
+        logger.warning(
             f"⚠ Não foi possível verificar duração com mutagen para {audio_path} "
             f"({audio_format}): {mutagen_error}. "
-            f"Continuando sem validação de duração - Google API validará.",
-            level="warning"
-        )
+            f"Continuando sem validação de duração - Google API validará.")
         duration = None
 
     # Se conseguiu determinar duração, valida o limite
     if duration is not None:
         if duration > max_duration_seconds:
-            log(
-                f"✗ Áudio {audio_path} excede limite de duração: {duration:.2f}s > {max_duration_seconds}s",
-                level="error"
-            )
+            logger.error(
+                f"✗ Áudio {audio_path} excede limite de duração: {duration:.2f}s > {max_duration_seconds}s")
             raise AudioProcessingError(
                 f"Duração do áudio ({duration:.2f}s) excede o limite de {max_duration_seconds}s"
             )
 
-        log(
-            f"✓ Verificação de duração completa: {audio_path} ({duration:.2f}s <= {max_duration_seconds}s)",
-            level="debug"
-        )
+        logger.debug(
+            f"✓ Verificação de duração completa: {audio_path} ({duration:.2f}s <= {max_duration_seconds}s)")
     else:
-        log(
-            f"⚠ Pulando validação de duração para {audio_path} - será validado pela Google API",
-            level="info"
-        )
+        logger.info(
+            f"⚠ Pulando validação de duração para {audio_path} - será validado pela Google API")
 
 
 def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
@@ -276,10 +255,10 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
                 opus_info = OggOpus(audio_path)
                 encoding = speech.RecognitionConfig.AudioEncoding.OGG_OPUS
                 sample_rate = opus_info.info.sample_rate  # Read from file metadata
-                log(f"Using OGG_OPUS encoding with {sample_rate}Hz for {audio_path}", level="info")
+                logger.info(f"Using OGG_OPUS encoding with {sample_rate}Hz for {audio_path}")
             except Exception:
                 # Not Opus, let Google auto-detect
-                log(f"Not Opus, using ENCODING_UNSPECIFIED for {audio_path}", level="debug")
+                logger.debug(f"Not Opus, using ENCODING_UNSPECIFIED for {audio_path}")
 
         config = speech.RecognitionConfig(
             encoding=encoding,
@@ -291,7 +270,7 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
         response = client.recognize(config=config, audio=audio)
 
         if not response.results:
-            log("Nenhum resultado de transcrição encontrado", level="warning")
+            logger.warning("Nenhum resultado de transcrição encontrado")
             return "Áudio sem conteúdo reconhecível"
 
         transcript = ""
@@ -299,12 +278,11 @@ def transcribe_audio(audio_path: str, language_code: str = "pt-BR") -> str:
             transcript += result.alternatives[0].transcript + " "
 
         transcript = transcript.strip()
-        log(
+        logger.debug(
             f"Transcrição concluída com sucesso: {len(transcript)} caracteres",
-            level="debug",
         )
         return transcript
 
     except Exception as e:
-        log(f"Erro durante a transcrição de áudio {audio_path}: {e}", level="error")
+        logger.error(f"Erro durante a transcrição de áudio {audio_path}: {e}")
         raise AudioTranscriptionError(f"Falha na transcrição de áudio: {e}") from e

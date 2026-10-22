@@ -6,10 +6,6 @@ Migrado de Prefect 1.4 para Prefect 3.0.
 
 from pathlib import Path
 
-from toolkit.pipelines_utils.bd import (
-    create_table_and_upload_to_gcs_task,
-)
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
 from prefect import flow
 
 from pipelines.rj_cor__precipitacao_inea.tasks import (
@@ -18,10 +14,15 @@ from pipelines.rj_cor__precipitacao_inea.tasks import (
     save_data_to_partitions_task,
     transform_inea_data_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
 @flow(log_prints=True)
-def rj_cor__precipitacao_inea(
+async def rj_cor__precipitacao_inea(
+    *,
+    cloud: Cloud,
     dataset_id_pluviometric: str = "clima_pluviometro",
     table_id_pluviometric: str = "taxa_precipitacao_inea",
     dataset_id_fluviometric: str = "clima_fluviometro",
@@ -101,22 +102,29 @@ def rj_cor__precipitacao_inea(
 
     # Step 5a: Injetar credenciais e fazer upload de dados pluviométricos
     print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id_pluviometric}.{table_id_pluviometric})...")
-    inject_bd_credentials_task()
-    create_table_and_upload_to_gcs_task(
-        data_path=str(prepath_pluviometric),
-        dataset_id=dataset_id_pluviometric,
-        table_id=table_id_pluviometric,
+    table = Table(dataset_id=dataset_id_pluviometric, table_id=table_id_pluviometric)
+    await upload_files_to_gcs(
+        Path(str(prepath_pluviometric)),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     # Step 5b: Fazer upload de dados fluviométricos
     print(f"☁️  Fazendo upload dos dados fluviométricos para BigQuery ({dataset_id_fluviometric}.{table_id_fluviometric})...")
-    create_table_and_upload_to_gcs_task(
-        data_path=str(prepath_fluviometric),
-        dataset_id=dataset_id_fluviometric,
-        table_id=table_id_fluviometric,
+    table = Table(dataset_id=dataset_id_fluviometric, table_id=table_id_fluviometric)
+    await upload_files_to_gcs(
+        Path(str(prepath_fluviometric)),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     print("✅ Flow concluído com sucesso!")
     print(f"   - Dados pluviométricos salvos em: {dataset_id_pluviometric}.{table_id_pluviometric}")

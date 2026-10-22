@@ -4,12 +4,6 @@ version = "0.1.0"
 description = "Pipeline run_dbt da secretaria iplanrio"
 dependencies = [
     "prefect_rj_iplanrio",
-    "pip",
-    "gitpython",
-    "prefect-dbt",
-    "aiohttp",
-    "discord-py",
-    "dbt-bigquery",
 ]
 
 [tool.uv.sources]

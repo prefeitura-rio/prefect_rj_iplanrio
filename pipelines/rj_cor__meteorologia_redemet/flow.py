@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para coleta de dados meteorológicos do REDEMET - COR.
 
@@ -8,11 +7,9 @@ das estações do REDEMET localizadas no município do Rio de Janeiro.
 Migrado de Prefect 1.4 para Prefect 3.0.
 """
 
+from pathlib import Path
 from typing import Optional
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_cor__meteorologia_redemet.tasks import (
@@ -21,10 +18,15 @@ from pipelines.rj_cor__meteorologia_redemet.tasks import (
     save_data_to_partitions_task,
     transform_meteorological_data_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_cor__meteorologia_redemet(
+@flow(log_prints=True, flow_run_name="{dataset_id}_{table_id}")
+async def rj_cor__meteorologia_redemet(
+    *,
+    cloud: Cloud,
     dataset_id: str = "clima_estacao_meteorologica",
     table_id: str = "meteorologia_redemet",
     first_date: Optional[str] = None,
@@ -71,10 +73,8 @@ def rj_cor__meteorologia_redemet(
         - Estações monitoradas: SBAF, SBGL, SBJR, SBRJ, SBSC
     """
     # Renomear o flow run para facilitar identificação
-    rename_current_flow_run_task(new_name=f"{dataset_id}_{table_id}")
 
     # Injetar credenciais do BigQuery
-    inject_bd_credentials_task(environment="prod")
 
     # Determinar datas de coleta
     first_date_, last_date_, backfill = get_dates_task(first_date, last_date)
@@ -90,10 +90,14 @@ def rj_cor__meteorologia_redemet(
 
     print(f"✅ Pipeline executada com sucesso! Dados salvos para {dataset_id}.{table_id}")
 
-    create_table_and_upload_to_gcs_task(
-        dataset_id=dataset_id,
-        table_id=table_id,
-        data_path=path,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode="append",
+        source_format="csv",
+        options=capture_options("append"),
     )
+    await publish_table_in_bq(table, cloud)
 

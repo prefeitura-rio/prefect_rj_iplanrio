@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para coleta de dados de precipitação do WebSirene - COR.
 
@@ -11,11 +10,9 @@ Os dados incluem informações sobre acumulados de chuva em diferentes períodos
 Migrado de Prefect 1.4 para Prefect 3.0.
 """
 
-from typing import Optional
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from pathlib import Path
+
 from prefect import flow
 
 from pipelines.rj_cor__precipitacao_websirene.tasks import (
@@ -23,10 +20,15 @@ from pipelines.rj_cor__precipitacao_websirene.tasks import (
     salvar_dados_task,
     tratar_dados_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_cor__precipitacao_websirene(
+@flow(log_prints=True, flow_run_name="{dataset_id}_{table_id}")
+async def rj_cor__precipitacao_websirene(
+    *,
+    cloud: Cloud,
     dataset_id: str = "clima_pluviometro",
     table_id: str = "taxa_precipitacao_websirene",
     dump_mode: str = "append",
@@ -67,10 +69,8 @@ def rj_cor__precipitacao_websirene(
         - Se não houver dados novos (empty_data=True), o flow pula o upload
     """
     # Renomear o flow run para facilitar identificação
-    rename_current_flow_run_task(new_name=f"{dataset_id}_{table_id}")
 
     # Injetar credenciais do BigQuery
-    inject_bd_credentials_task(environment="prod")
 
     # Download dos dados da API do WebSirene
     dataframe = download_dados_task()
@@ -84,13 +84,16 @@ def rj_cor__precipitacao_websirene(
         path = salvar_dados_task(dfr=dataframe)
 
         # Criar tabela e fazer upload para GCS e BigQuery
-        create_table_and_upload_to_gcs_task(
-            data_path=path,
-            dataset_id=dataset_id,
-            table_id=table_id,
+        table = Table(dataset_id=dataset_id, table_id=table_id)
+        await upload_files_to_gcs(
+            Path(path),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=dump_mode,
-            biglake_table=False,
+            source_format="csv",
+            options=capture_options(dump_mode),
         )
+        await publish_table_in_bq(table, cloud)
 
     else:
         print("Não há dados novos para processar. Flow finalizado sem upload.")

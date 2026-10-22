@@ -1,19 +1,20 @@
-# -*- coding: utf-8 -*-
 """
 Tasks for rj_iplanrio__betterstack_api pipeline
 """
 
 import json
+from datetime import datetime, timedelta
+from typing import Any, Dict, List
+
 import pandas as pd
 import requests
-from datetime import datetime, timedelta
-from typing import Dict, List, Any, Optional
-
 from prefect import task
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.env import getenv_or_action
+from prefect.logging import get_logger
 
 from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstants
+from utils.utils import read_env
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -21,12 +22,12 @@ def get_betterstack_credentials() -> str:
     """
     Recupera as credenciais da API BetterStack do Infisical.
     """
-    log("Recuperando credenciais do BetterStack")
+    logger.info("Recuperando credenciais do BetterStack")
 
     # Try with BETTERSTACK_TOKEN first, then legacy betterstack_token
-    token = getenv_or_action("BETTERSTACK_TOKEN", action="ignore")
+    token = read_env("BETTERSTACK_TOKEN")
     if not token:
-        token = getenv_or_action("betterstack_token", action="ignore")
+        token = read_env("betterstack_token")
 
     if not token:
         raise ValueError("BetterStack token not found in environment")
@@ -39,8 +40,8 @@ def get_betterstack_monitor_id() -> str:
     """
     Recupera o ID do monitor da BetterStack do Infisical.
     """
-    log("Recuperando MONITOR_ID do BetterStack")
-    monitor_id = getenv_or_action("MONITOR_ID")
+    logger.info("Recuperando MONITOR_ID do BetterStack")
+    monitor_id = read_env("MONITOR_ID")
     return monitor_id
 
 
@@ -86,7 +87,7 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
     }
 
 
-    log(f"Fetching incidents from {url} with params {params}")
+    logger.info(f"Fetching incidents from {url} with params {params}")
 
     all_incidents = []
 
@@ -101,16 +102,16 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
             response.raise_for_status()
             data = response.json()
         except requests.exceptions.Timeout as e:
-            log(f"Timeout ao buscar incidents: {e}")
+            logger.info(f"Timeout ao buscar incidents: {e}")
             raise
         except requests.exceptions.RequestException as e:
-            log(f"Erro de requisição ao buscar incidents: {e}")
+            logger.info(f"Erro de requisição ao buscar incidents: {e}")
             if hasattr(e, "response") and e.response is not None:
-                log(f"Response status: {e.response.status_code}")
-                log(f"Response text: {e.response.text[:500]}")
+                logger.info(f"Response status: {e.response.status_code}")
+                logger.info(f"Response text: {e.response.text[:500]}")
             raise
         except json.JSONDecodeError as e:
-            log(f"Error decoding incidents JSON: {e}")
+            logger.info(f"Error decoding incidents JSON: {e}")
             raise
 
         # Structure: data (list), pagination (dict)
@@ -128,7 +129,7 @@ def fetch_incidents(token: str, monitor_id: str, date_range: Dict[str, str]) -> 
             else:
                 url = None
         except KeyError as e:
-            log(f"Error parsing incidents structure: {e}")
+            logger.info(f"Error parsing incidents structure: {e}")
             url = None # Stop loop if structure is broken
 
     return all_incidents

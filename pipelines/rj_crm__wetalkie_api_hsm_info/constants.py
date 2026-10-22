@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Constants for request rj_crm__wetalkie_api_hsm_info pipeline
 """

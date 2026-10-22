@@ -1,4 +1,3 @@
-
 name: rj_crm__salesforce_api
 prefect-version: 3.4.3
 build:
@@ -23,6 +22,10 @@ pull:
 deployments:
 
   - name: rj-crm--salesforce-api--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__salesforce_api/flow.py:rj_crm__salesforce_api
     work_pool:
@@ -35,6 +38,10 @@ deployments:
         image_pull_policy: Always
     parameters:
       infisical_secret_path: /api-sfmc
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
 
       - cron: "0 9,11,13,15,17 * * 1-5"
@@ -85,6 +92,10 @@ deployments:
           infisical_secret_path: /api-sfmc
 
   - name: rj-crm--salesforce-api--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__salesforce_api/flow.py:rj_crm__salesforce_api
     work_pool:
@@ -97,6 +108,10 @@ deployments:
         image_pull_policy: Always
     parameters:
       infisical_secret_path: /api-sfmc
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
 
       - cron: "0 9,11,13,15,17 * * 1-5"

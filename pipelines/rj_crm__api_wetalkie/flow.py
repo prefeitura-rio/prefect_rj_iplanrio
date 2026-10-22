@@ -1,25 +1,30 @@
-# -*- coding: utf-8 -*-
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from pathlib import Path
+
 from prefect import flow
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__api_wetalkie.constants import WetalkieConstants
+from pipelines.rj_crm__api_wetalkie.helpers.tasks import (
+    access_api,
+    create_date_partitions,
+)
 from pipelines.rj_crm__api_wetalkie.tasks import (
     criar_dataframe_de_lista,
     get_attendances,
     processar_json_e_transcrever_audios,
 )
-from pipelines.rj_crm__api_wetalkie.utils.tasks import (
-    access_api,
-    create_date_partitions,
-)
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+logger = get_logger("toolkit")
 
 
-@flow(log_prints=True)
-def rj_crm__api_wetalkie(
+@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}")
+async def rj_crm__api_wetalkie(
+    *,
+    cloud: Cloud,
     # Parâmetros opcionais para override manual na UI
     dataset_id: str | None = None,
     table_id: str | None = None,
@@ -57,10 +62,8 @@ def rj_crm__api_wetalkie(
     biglake_table = WetalkieConstants.BIGLAKE_TABLE.value
 
     # Renomear flow run para melhor identificação
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
 
     # Injetar credenciais do BD
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     api = access_api(
         infisical_secret_path,
@@ -74,7 +77,7 @@ def rj_crm__api_wetalkie(
 
     # Check if there's data to process - return early if empty
     if raw_attendances.empty:
-        log(
+        logger.info(
             "No attendances found from API. Flow completed successfully with no data to process."
         )
         return
@@ -93,10 +96,13 @@ def rj_crm__api_wetalkie(
     )
 
     # Upload para GCS e BigQuery
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(partitions_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)

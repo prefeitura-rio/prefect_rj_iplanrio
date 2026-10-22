@@ -1,18 +1,16 @@
+from csv import writer
+from pathlib import Path
+from tempfile import mkdtemp
 from typing import TypedDict
 
 import gspread
-from google.oauth2.service_account import Credentials
+from google.auth import default
+from google.auth.credentials import Credentials
 from googleapiclient.discovery import build
-from toolkit.pipelines_templates.dump_url.flows import dump_url_flow
-from toolkit.pipelines_utils.env import (
-    get_credentials_from_env,
-    inject_bd_credentials_task,
-)
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow, task
+from prefect.logging import get_logger
 
-from .utils import (
+from pipelines.rj_setur__turismo_fluxo_visitantes.helpers import (
     build_drive_query,
     build_spreadsheet_url,
     extract_year_from_filename,
@@ -21,6 +19,10 @@ from .utils import (
     get_worksheet_ranges_config,
     normalize_to_bigquery_table_name,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+
+logger = get_logger("toolkit")
 
 
 class ExtractionJob(TypedDict):
@@ -35,13 +37,13 @@ class ExtractionJob(TypedDict):
     table_suffix: str | None
     dataset_id: str
     dump_mode: str
-    biglake_table: bool
 
 
 @task
 def get_google_credentials() -> Credentials:
     """Get Google API credentials for Drive and Sheets access."""
-    return get_credentials_from_env(scopes=get_google_api_scopes())
+    credentials, _ = default(scopes=get_google_api_scopes())
+    return credentials
 
 
 @task
@@ -67,10 +69,10 @@ def list_spreadsheets_in_folder(
         if name_pattern in file["name"]
     ]
 
-    log(f"Found {len(spreadsheets)} spreadsheets matching pattern '{name_pattern}'")
+    logger.info(f"Found {len(spreadsheets)} spreadsheets matching pattern '{name_pattern}'")
 
     for sheet in spreadsheets:
-        log(f"  - {sheet['name']} (Year: {sheet['year']})")
+        logger.info(f"  - {sheet['name']} (Year: {sheet['year']})")
 
     return spreadsheets
 
@@ -82,10 +84,10 @@ def get_worksheet_info(spreadsheet_url: str, credentials) -> list[dict[str, str 
     sheet = gspread_client.open_by_url(spreadsheet_url)
     worksheets = [{"title": worksheet.title, "index": idx} for idx, worksheet in enumerate(sheet.worksheets())]
 
-    log(f"Found {len(worksheets)} worksheets in spreadsheet")
+    logger.info(f"Found {len(worksheets)} worksheets in spreadsheet")
 
     for ws in worksheets:
-        log(f"  - {ws['title']} (index: {ws['index']})")
+        logger.info(f"  - {ws['title']} (index: {ws['index']})")
 
     return worksheets
 
@@ -95,51 +97,46 @@ def normalize_table_name(worksheet_title: str, suffix: str | None = None) -> str
     """Normalize worksheet title to a valid BigQuery table name using pyjanitor."""
     base_name = get_base_table_name(worksheet_title, suffix)
     normalized_name = normalize_to_bigquery_table_name(base_name)
-    log(f"Normalized '{base_name}' to '{normalized_name}'")
+    logger.info(f"Normalized '{base_name}' to '{normalized_name}'")
     return normalized_name
 
 
 @task
-def extract_range_to_bigquery(job: ExtractionJob) -> None:
-    """Extract a specific range from a spreadsheet worksheet and upload to BigQuery."""
+def extract_range_to_csv(job: ExtractionJob, credentials: Credentials) -> tuple[Path, str]:
+    """Read a range of a worksheet into a CSV file, and return its folder and the table id."""
     table_id = normalize_table_name(job["worksheet_title"], job["table_suffix"])
     table_id_with_year = f"{table_id}_{job['spreadsheet_year']}"
 
-    log(f"Processing: {job['spreadsheet_name']} → {job['worksheet_title']} → {job['cell_range']}")
-    log(f"  Uploading to {job['dataset_id']}.{table_id_with_year}")
+    logger.info(f"Processing: {job['spreadsheet_name']} → {job['worksheet_title']} → {job['cell_range']}")
 
-    dump_url_flow(
-        url=job["spreadsheet_url"],
-        url_type="google_sheet",
-        gsheets_sheet_order=job["worksheet_index"],
-        gsheets_sheet_name=job["worksheet_title"],
-        gsheets_sheet_range=job["cell_range"],
-        dataset_id=job["dataset_id"],
-        table_id=table_id_with_year,
-        dump_mode=job["dump_mode"],
-        partition_columns="",
-        biglake_table=job["biglake_table"],
-    )
+    sheet = gspread.authorize(credentials).open_by_url(job["spreadsheet_url"])
+    rows = sheet.get_worksheet(job["worksheet_index"]).get(job["cell_range"])
+    header, *body = rows
+    folder = Path(mkdtemp(prefix="setur_"))
 
-    log(f"  ✓ Completed {job['dataset_id']}.{table_id_with_year}")
+    with (folder / "data.csv").open("w", newline="", encoding="utf-8") as file:
+        output = writer(file)
+        output.writerow(header)
+        output.writerows([*row, *[""] * (len(header) - len(row))] for row in body)
+
+    return folder, table_id_with_year
 
 
-@flow(log_prints=True)
-def rj_setur__turismo_fluxo_visitantes(
+@flow(log_prints=True, flow_run_name="{dataset_id}_geodata_batch")
+async def rj_setur__turismo_fluxo_visitantes(
+    *,
+    cloud: Cloud,
     folder_id: str = "1d_SxiMsXQd2JH1Ttik3OQDRJy7wLtX6S",
     dataset_id: str = "brutos_turismo_fluxo_visitante",
     dump_mode: str = "overwrite",
 ):
     """Read tourism visitor flow data from multiple Google Sheets and upload to BigQuery."""
-    rename_current_flow_run_task(new_name=f"{dataset_id}_geodata_batch")
-    inject_bd_credentials_task(environment="prod")
-
     credentials = get_google_credentials()
     worksheet_ranges_config = get_worksheet_ranges_config()
     spreadsheets = list_spreadsheets_in_folder(folder_id=folder_id, credentials=credentials)
 
     if not spreadsheets:
-        log("No spreadsheets found in folder")
+        logger.info("No spreadsheets found in folder")
         return
 
     extraction_jobs: list[ExtractionJob] = []
@@ -170,16 +167,20 @@ def rj_setur__turismo_fluxo_visitantes(
                     "table_suffix": table_suffix,
                     "dataset_id": dataset_id,
                     "dump_mode": dump_mode,
-                    "biglake_table": False,
                 }
                 table_name = f"{worksheet_title}{'_' + table_suffix if table_suffix else ''}_{spreadsheet_year}"
-                log(f"  Queued: {table_name} from {cell_range}")
+                logger.info(f"  Queued: {table_name} from {cell_range}")
                 extraction_jobs.append(job)
 
-    log(f"\nPrepared {len(extraction_jobs)} extraction tasks")
-    log("Starting sequential extraction...\n")
+    logger.info(f"\nPrepared {len(extraction_jobs)} extraction tasks")
+    logger.info("Starting sequential extraction...\n")
 
     for job in extraction_jobs:
-        extract_range_to_bigquery(job)
+        folder, table_id = extract_range_to_csv(job, credentials)
+        table = Table(dataset_id=job["dataset_id"], table_id=table_id)
+        await upload_files_to_gcs(
+            folder, table, bucket=cloud["bucket"], dump_mode=job["dump_mode"], source_format="csv"
+        )
+        await publish_table_in_bq(table, cloud)
 
-    log(f"\n✓ All {len(extraction_jobs)} extractions completed successfully")
+    logger.info(f"\n✓ All {len(extraction_jobs)} extractions completed successfully")

@@ -1,13 +1,15 @@
-# -*- coding: utf-8 -*-
 """
 API Handler for managing authenticated API requests with automatic token management
-Migrated from pipelines_rj_crm_registry for prefect_rj_iplanrio
+Reutilizado do pipeline rj_crm__api_wetalkie
 """
+
+from prefect.logging import get_logger
 
 from typing import Any, Dict, Optional
 
 import requests
-from toolkit.pipelines_utils.logging import log
+
+logger = get_logger("toolkit")
 
 
 class ApiHandler:
@@ -44,7 +46,7 @@ class ApiHandler:
             response.raise_for_status()
 
             response_data = response.json()
-            log(f"Login successful to {login_url}")
+            logger.info(f"Login successful to {login_url}")
 
             # Try to extract token from various common response patterns
             token = None
@@ -64,19 +66,19 @@ class ApiHandler:
             if token:
                 self.token = token
                 self.headers["Authorization"] = f"{self.token_type} {token}"
-                log("Authentication token obtained successfully")
+                logger.info("Authentication token obtained successfully")
             else:
-                log("Warning: No token found in login response")
-                log(f"Response keys: {list(response_data.keys())}")
+                logger.info("Warning: No token found in login response")
+                logger.info(f"Response keys: {list(response_data.keys())}")
 
         except requests.RequestException as e:
-            log(f"Login failed: {e}")
+            logger.info(f"Login failed: {e}")
             raise Exception(f"Failed to authenticate with API: {e}")
 
     def _refresh_token_if_needed(self, response):
         """Check if token needs refresh based on response status"""
         if response.status_code == 401:
-            log("Token expired, refreshing...")
+            logger.info("Token expired, refreshing...")
             self._login()
             return True
         return False
@@ -108,24 +110,6 @@ class ApiHandler:
         if self._refresh_token_if_needed(response):
             # Retry with new token
             response = requests.post(url, headers=self.headers, json=json, data=data, **kwargs)
-
-        return response
-
-    def put(
-        self,
-        path: str,
-        json: Optional[Dict] = None,
-        data: Optional[Any] = None,
-        **kwargs,
-    ) -> requests.Response:
-        """Perform PUT request with automatic token refresh"""
-        url = f"{self.base_url}/{path.lstrip('/')}"
-
-        response = requests.put(url, headers=self.headers, json=json, data=data, **kwargs)
-
-        if self._refresh_token_if_needed(response):
-            # Retry with new token
-            response = requests.put(url, headers=self.headers, json=json, data=data, **kwargs)
 
         return response
 

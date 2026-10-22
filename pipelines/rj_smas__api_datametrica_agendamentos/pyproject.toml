@@ -4,25 +4,7 @@ version = "0.1.0"
 description = "Pipeline API Datametrica agendamentos da secretaria smas"
 dependencies = [
     "prefect_rj_iplanrio",
-    "dbt-bigquery",
-    "google-cloud-storage",
-    "prefeitura-rio[actions]",
-    "geopy",
-    "opencage",
-    "python-dotenv",
-    "unidecode",
-    "pendulum",
-    "simplejson",
-    "openlocationcode",
-    "dbt-core",
-    "mutagen",
-    "google-cloud-speech",
-    "marshmallow",
-    "gitpython",
-    "discord-py",
-    "pandas",
     "requests",
-    "urllib3>=1.26.0",
 ]
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }

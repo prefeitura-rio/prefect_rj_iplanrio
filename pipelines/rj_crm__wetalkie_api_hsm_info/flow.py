@@ -1,27 +1,31 @@
-# -*- coding: utf-8 -*-
 """
 Flow for rj_crm__wetalkie_api_hsm_info pipeline
 """
 
+from pathlib import Path
 from typing import Optional
 
 from prefect import flow
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
-from toolkit.pipelines_utils.logging import log
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__wetalkie_api_hsm_info.constants import Constants
+from pipelines.rj_crm__wetalkie_api_hsm_info.helpers.tasks import create_date_partitions
 from pipelines.rj_crm__wetalkie_api_hsm_info.tasks import (
-    get_wetalkie_token,
     fetch_hsm_templates,
+    get_wetalkie_token,
     transform_hsm_templates,
 )
-from pipelines.rj_crm__wetalkie_api_hsm_info.utils.tasks import create_date_partitions
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+logger = get_logger("toolkit")
 
 
 @flow(log_prints=True)
-def rj_crm__wetalkie_api_hsm_info(
+async def rj_crm__wetalkie_api_hsm_info(
+    *,
+    cloud: Cloud,
     dataset_id: Optional[str] = None,
     table_id: Optional[str] = None,
     dump_mode: Optional[str] = None,
@@ -37,30 +41,28 @@ def rj_crm__wetalkie_api_hsm_info(
 
     # Rename flow run
     flow_run_name = overwrite_flow_run_name or f"hsm_templates_info_{dataset_id}_{table_id}"
-    rename_current_flow_run_task(new_name=flow_run_name)
 
     # 1. Inject BD Credentials
-    inject_bd_credentials_task(environment="prod")
 
     # 2. Extract
-    log("Starting extraction...")
+    logger.info("Starting extraction...")
     token = get_wetalkie_token(infisical_secret_path=Constants.INFISICAL_SECRET_PATH.value)
     raw_data = fetch_hsm_templates(token=token)
 
     if not raw_data:
-        log("No data found from API. Finishing flow.")
+        logger.info("No data found from API. Finishing flow.")
         return
 
     # 3. Transform
-    log("Starting transformation...")
+    logger.info("Starting transformation...")
     df_transformed = transform_hsm_templates(data=raw_data)
 
     if df_transformed.empty:
-        log("Transformed DataFrame is empty. Finishing flow.")
+        logger.info("Transformed DataFrame is empty. Finishing flow.")
         return
 
     # 4. Partition
-    log("Partitioning data...")
+    logger.info("Partitioning data...")
     data_path = create_date_partitions(
         dataframe=df_transformed,
         partition_column=Constants.PARTITION_COLUMN.value,
@@ -69,14 +71,16 @@ def rj_crm__wetalkie_api_hsm_info(
     )
 
     # 5. Load to BigQuery
-    log(f"Loading data to BigQuery table {dataset_id}.{table_id}...")
-    create_table_and_upload_to_gcs_task(
-        data_path=data_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    logger.info(f"Loading data to BigQuery table {dataset_id}.{table_id}...")
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(data_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=Constants.BIGLAKE_TABLE.value,
-        source_format=Constants.FILE_FORMAT.value,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
     
-    log("Flow finished successfully.")
+    logger.info("Flow finished successfully.")

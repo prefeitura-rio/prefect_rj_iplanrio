@@ -5,9 +5,7 @@ description = "Pipeline para extração de dados da BetterStack API"
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "prefect_rj_iplanrio",
-    "pandas",
     "requests",
-    "prefeitura-rio[actions]",
 ]
 
 [tool.uv.sources]

@@ -4,12 +4,7 @@ version = "0.1.0"
 description = "Pipeline genérica de ingestão de rotas GET da Salesforce Marketing Cloud REST API"
 dependencies = [
     "prefect_rj_iplanrio",
-    "google-cloud-storage",
-    "python-dotenv",
-    "pendulum",
     "requests",
-    "pandas",
-    "pydantic",
 ]
 
 [tool.uv.sources]

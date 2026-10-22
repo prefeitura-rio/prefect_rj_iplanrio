@@ -1,11 +1,13 @@
 """Tasks for rj_rmi__run_dbt."""
 
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
 from prefect_dbt import PrefectDbtRunner
 
 from pipelines.rj_rmi__run_dbt import utils
 from pipelines.rj_rmi__run_dbt.constants import REPOSITORY
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -34,7 +36,7 @@ def clone_repository_task() -> str:
     """
     token = utils.read_secret("GITHUB_TOKEN")
     path, commit = utils.clone_repository(token)
-    log(f"{REPOSITORY} clonado no commit {commit}")
+    logger.info("Repositório clonado: repository=%s commit=%s", REPOSITORY, commit)
     return path
 
 

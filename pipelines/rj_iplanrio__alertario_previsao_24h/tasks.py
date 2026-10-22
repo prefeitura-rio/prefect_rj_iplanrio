@@ -1,23 +1,22 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para pipeline AlertaRio Previsão 24h
 """
 
-import hashlib
 import uuid
-from defusedxml import ElementTree as ET
 from datetime import datetime, timezone
 from typing import Any, Dict
 
 import pandas as pd
 import requests
+from defusedxml import ElementTree as ET
 from prefect import task
-
-from toolkit.pipelines_utils.logging import log
+from prefect.logging import get_logger
 
 from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (
     AlertaRioConstants,
 )
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -31,17 +30,17 @@ def fetch_xml_from_url(url: str = AlertaRioConstants.XML_URL.value) -> str:
     Returns:
         String com o conteúdo XML
     """
-    log(f"Buscando XML de previsão do AlertaRio: {url}")
+    logger.info(f"Buscando XML de previsão do AlertaRio: {url}")
 
     try:
         response = requests.get(url, timeout=30)
         response.raise_for_status()
 
-        log("XML baixado com sucesso")
+        logger.info("XML baixado com sucesso")
         return response.text
 
     except requests.exceptions.RequestException as e:
-        log(f"Erro ao buscar XML: {e}")
+        logger.info(f"Erro ao buscar XML: {e}")
         raise
 
 
@@ -56,7 +55,7 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
     Returns:
         Dict com os dados estruturados do XML
     """
-    log("Fazendo parsing do XML")
+    logger.info("Fazendo parsing do XML")
 
     try:
         root = ET.fromstring(xml_content)
@@ -67,10 +66,10 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
             try:
                 create_date = datetime.fromisoformat(create_date_str)
             except (ValueError, TypeError) as e:
-                log(f"AVISO: Createdate inválido '{create_date_str}': {e}. Usando datetime.now(timezone.utc) como fallback.")
+                logger.info(f"AVISO: Createdate inválido '{create_date_str}': {e}. Usando datetime.now(timezone.utc) como fallback.")
                 create_date = datetime.now(timezone.utc)
         else:
-            log(f"AVISO: Createdate ausente no XML. Usando datetime.now(timezone.utc) como fallback.")
+            logger.info(f"AVISO: Createdate ausente no XML. Usando datetime.now(timezone.utc) como fallback.")
             create_date = datetime.now(timezone.utc)
 
         # Extrair previsões meteorológicas
@@ -135,14 +134,14 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
             "mares": mares,
         }
 
-        log(f"Parsing concluído: {len(previsoes)} previsões, {len(temperaturas)} zonas, {len(mares)} marés")
+        logger.info(f"Parsing concluído: {len(previsoes)} previsões, {len(temperaturas)} zonas, {len(mares)} marés")
         return parsed_data
 
     except ET.ParseError as e:
-        log(f"Erro ao fazer parsing do XML: {e}")
+        logger.info(f"Erro ao fazer parsing do XML: {e}")
         raise
     except Exception as e:
-        log(f"Erro inesperado ao processar XML: {e}")
+        logger.info(f"Erro inesperado ao processar XML: {e}")
         raise
 
 
@@ -158,7 +157,7 @@ def create_dim_quadro_sinotico_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     Returns:
         DataFrame com dados da tabela dim_quadro_sinotico
     """
-    log("Criando DataFrame dim_quadro_sinotico")
+    logger.info("Criando DataFrame dim_quadro_sinotico")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -178,7 +177,7 @@ def create_dim_quadro_sinotico_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     }
 
     df = pd.DataFrame([registro])
-    log(f"DataFrame dim_quadro_sinotico criado com {len(df)} registro")
+    logger.info(f"DataFrame dim_quadro_sinotico criado com {len(df)} registro")
 
     return df
 
@@ -195,7 +194,7 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     Returns:
         DataFrame com dados da tabela dim_previsao_periodo
     """
-    log("Criando DataFrame dim_previsao_periodo")
+    logger.info("Criando DataFrame dim_previsao_periodo")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -223,7 +222,7 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_previsao_periodo criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_previsao_periodo criado com {len(df)} registros")
 
     return df
 
@@ -240,7 +239,7 @@ def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     Returns:
         DataFrame com dados da tabela dim_temperatura_zona
     """
-    log("Criando DataFrame dim_temperatura_zona")
+    logger.info("Criando DataFrame dim_temperatura_zona")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -265,7 +264,7 @@ def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_temperatura_zona criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_temperatura_zona criado com {len(df)} registros")
 
     return df
 
@@ -282,7 +281,7 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     Returns:
         DataFrame com dados da tabela dim_mares
     """
-    log("Criando DataFrame dim_mares")
+    logger.info("Criando DataFrame dim_mares")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -309,7 +308,7 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
                         # Fallback para formato brasileiro (DD/MM/YYYY HH:MM:SS)
                         data_hora = datetime.strptime(horario_str, "%d/%m/%Y %H:%M:%S")
                     except ValueError:
-                        log(f"Formato de horário não reconhecido: {horario_str}")
+                        logger.info(f"Formato de horário não reconhecido: {horario_str}")
                         data_hora = None
         else:
             data_hora = None
@@ -326,6 +325,6 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_mares criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_mares criado com {len(df)} registros")
 
     return df

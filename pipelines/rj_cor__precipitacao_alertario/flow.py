@@ -3,13 +3,9 @@ Flow para coleta e processamento de dados de precipitação do AlertaRio - COR.
 
 Migrado de Prefect 1.4 para Prefect 3.0..
 """
+from pathlib import Path
 from typing import Optional
 
-from toolkit.pipelines_utils.bd import (
-    create_table_and_upload_to_gcs_task,
-)
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_cor__precipitacao_alertario.tasks import (
@@ -18,10 +14,15 @@ from pipelines.rj_cor__precipitacao_alertario.tasks import (
     transform_meteorological_data_task,
     transform_pluviometric_data_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_cor__precipitacao_alertario(
+@flow(log_prints=True, flow_run_name="{dataset_id_pluviometric}.{table_id_pluviometric}")
+async def rj_cor__precipitacao_alertario(
+    *,
+    cloud: Cloud,
     dataset_id_pluviometric: Optional[str],
     table_id_pluviometric: Optional[str],
     dataset_id_meteorological: Optional[str] = None,
@@ -70,7 +71,6 @@ def rj_cor__precipitacao_alertario(
         - Dados pluviométricos incluem acumulados de chuva em diversos intervalos
         - Dados meteorológicos incluem temperatura, umidade, pressão e vento
     """
-    inject_bd_credentials_task(environment="prod")
     print("🌧️  Iniciando coleta de dados do AlertaRio...")
 
     # Step 1: Download dos dados do AlertaRio (retorna 2 DataFrames)
@@ -78,7 +78,6 @@ def rj_cor__precipitacao_alertario(
     dfr_pluviometric, dfr_meteorological = download_alertario_data_task()
 
     if dataset_id_pluviometric is not None:
-        rename_current_flow_run_task(new_name=f"{dataset_id_pluviometric}.{table_id_pluviometric}")
         print("🔄 Transformando dados pluviométricos...")
         dfr_pluviometric_transformed = transform_pluviometric_data_task(dfr_pluviometric)
         print("💾 Salvando dados pluviométricos em partições...")
@@ -89,19 +88,22 @@ def rj_cor__precipitacao_alertario(
         )
 
         print(f"☁️  Fazendo upload dos dados pluviométricos para BigQuery ({dataset_id_pluviometric}.{table_id_pluviometric})")
-        create_table_and_upload_to_gcs_task(
-            data_path=str(prepath_pluviometric),
-            dataset_id=dataset_id_pluviometric,
-            table_id=table_id_pluviometric,
+        table = Table(dataset_id=dataset_id_pluviometric, table_id=table_id_pluviometric)
+        await upload_files_to_gcs(
+            Path(str(prepath_pluviometric)),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=dump_mode_pluviometric,
+            source_format="csv",
+            options=capture_options(dump_mode_pluviometric),
         )
+        await publish_table_in_bq(table, cloud)
         print(f"   - Dados pluviométricos salvos em: {dataset_id_pluviometric}.{table_id_pluviometric}")
     else:
         print("⚠️  dataset_id_pluviometric não fornecido. Pulando upload dos dados pluviométricos para BigQuery.")
 
 
     if dataset_id_meteorological is not None:
-        rename_current_flow_run_task(new_name=f"{dataset_id_pluviometric}.{table_id_pluviometric}")
         print("🔄 Transformando dados meteorológicos...")
         dfr_meteorological_transformed = transform_meteorological_data_task(dfr_meteorological)
         print("💾 Salvando dados meteorológicos em partições...")
@@ -113,12 +115,16 @@ def rj_cor__precipitacao_alertario(
 
         # Step 4b: Fazer upload para BigQuery (dados meteorológicos)
         print(f"☁️  Fazendo upload dos dados meteorológicos para BigQuery ({dataset_id_meteorological}.{table_id_meteorological})...")
-        create_table_and_upload_to_gcs_task(
-            data_path=str(prepath_meteorological),
-            dataset_id=dataset_id_meteorological,
-            table_id=table_id_meteorological,
+        table = Table(dataset_id=dataset_id_meteorological, table_id=table_id_meteorological)
+        await upload_files_to_gcs(
+            Path(str(prepath_meteorological)),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=dump_mode_meteorological,
+            source_format="csv",
+            options=capture_options(dump_mode_meteorological),
         )
+        await publish_table_in_bq(table, cloud)
 
         print(f"  - Dados meteorológicos salvos em: {dataset_id_meteorological}.{table_id_meteorological}")
     else:

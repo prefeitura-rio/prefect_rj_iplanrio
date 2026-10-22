@@ -1,24 +1,20 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para coleta e processamento de dados meteorológicos do REDEMET.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Tuple
 
 import pandas as pd
 import pendulum
 import requests
-from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
-from unidecode import unidecode
 
-from pipelines.rj_cor__meteorologia_redemet.utils import (
+from pipelines.rj_cor__meteorologia_redemet.helpers import (
     parse_date_columns,
-    to_partitions,
 )
+from utils.utils import read_env
 
 
 @task
@@ -93,7 +89,7 @@ def download_meteorological_data_task(first_date: str, last_date: str) -> pd.Dat
         "SBSC",  # Santa Cruz
     ]
 
-    redemet_token = getenv_or_action("REDEMET_TOKEN")
+    redemet_token = read_env("REDEMET_TOKEN")
     # Constante para HTTP status code de sucesso
     http_ok = 200
 
@@ -268,12 +264,7 @@ def save_data_to_partitions_task(
     dataframe, partitions = parse_date_columns(dataframe, partition_column)
 
     # Cria partições a partir da data
-    to_partitions(
-        data=dataframe,
-        partition_columns=partitions,
-        savepath=prepath,
-        data_type="csv",
-    )
+    dataframe.to_csv(prepath / "dados.csv", index=False)
 
     print(f"Arquivos salvos em: {prepath}")
     return prepath

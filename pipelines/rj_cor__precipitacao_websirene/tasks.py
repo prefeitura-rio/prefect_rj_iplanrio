@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para coleta e processamento de dados de precipitação do WebSirene - COR.
 
@@ -13,9 +12,8 @@ import pandas_read_xml as pdx
 import pendulum
 from prefect import task
 
-from pipelines.rj_cor__precipitacao_websirene.utils import (
+from pipelines.rj_cor__precipitacao_websirene.helpers import (
     parse_date_columns,
-    to_partitions,
 )
 
 
@@ -178,13 +176,7 @@ def salvar_dados_task(dfr: pd.DataFrame) -> Union[str, Path]:
     current_time = pendulum.now("America/Sao_Paulo").strftime("%Y%m%d%H%M")
 
     # Criar partições
-    to_partitions(
-        data=dataframe,
-        partition_columns=partitions,
-        savepath=prepath,
-        data_type="csv",
-        suffix=current_time,
-    )
+    dataframe.to_csv(prepath / f"dados_{current_time}.csv", index=False)
 
     print(f"Arquivos salvos em: {prepath}")
 

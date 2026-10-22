@@ -1,7 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 Utilidades para geração e envio de alertas de precipitação no Discord.
 """
+
+from prefect.logging import get_logger
 
 import hashlib
 from collections import OrderedDict
@@ -12,10 +13,10 @@ from typing import Optional, Sequence
 
 import pandas as pd
 import requests
-from basedosdados import Base
 from google.cloud import bigquery
 
-from toolkit.pipelines_utils.logging import log
+logger = get_logger("toolkit")
+
 
 INTENSE_PRECIPITATION_KEYWORDS = (
     "chuva moderada a forte",
@@ -173,20 +174,19 @@ def download_data_from_bigquery(
     Raises:
         Exception: If BigQuery job fails or credentials cannot be loaded
     """
-    log("Querying data from BigQuery")
+    logger.info("Querying data from BigQuery")
     query = str(query)
     bq_client = bigquery.Client(
-        credentials=Base(bucket_name=bucket_name)._load_credentials(mode="prod"),
         project=billing_project_id,
     )
     job = bq_client.query(query)
     while not job.done():
         sleep(1)
-    log("Getting result from query")
+    logger.info("Getting result from query")
     results = job.result()
-    log("Converting result to pandas dataframe")
+    logger.info("Converting result to pandas dataframe")
     dfr = results.to_dataframe(create_bqstorage_client=False)
-    log("End download data from bigquery")
+    logger.info("End download data from bigquery")
     return dfr
 
 
@@ -323,7 +323,7 @@ def check_alert_deduplication(
         # Tabela não existe (primeira execução)
         error_msg = str(e).lower()
         if "not found" in error_msg:
-            log(f"Alert log table not found (first run): {e}", level="warning")
+            logger.warning(f"Alert log table not found (first run): {e}")
             return (True, "First run, proceeding with send.")
         # Qualquer outro erro → não envia
         raise

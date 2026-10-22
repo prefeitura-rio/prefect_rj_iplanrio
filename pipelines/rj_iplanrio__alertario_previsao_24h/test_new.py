@@ -1,5 +1,5 @@
+from prefect.logging import get_logger
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Teste das 4 tabelas com UUID
 """
@@ -11,6 +11,8 @@ from datetime import datetime
 from defusedxml import ElementTree as ET
 from pathlib import Path
 import pandas as pd
+
+logger = get_logger("toolkit")
 
 def log(msg):
     print(f"  {msg}")
@@ -83,7 +85,7 @@ def parse_xml_to_dict(xml_content: str):
     }
 
 def create_dim_quadro_sinotico_df(parsed_data):
-    log("Criando DataFrame dim_quadro_sinotico")
+    logger.info("Criando DataFrame dim_quadro_sinotico")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -103,12 +105,12 @@ def create_dim_quadro_sinotico_df(parsed_data):
     }
 
     df = pd.DataFrame([registro])
-    log(f"DataFrame dim_quadro_sinotico criado com {len(df)} registro")
+    logger.info(f"DataFrame dim_quadro_sinotico criado com {len(df)} registro")
 
     return df
 
 def create_dim_previsao_periodo_df(parsed_data):
-    log("Criando DataFrame dim_previsao_periodo")
+    logger.info("Criando DataFrame dim_previsao_periodo")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -136,12 +138,12 @@ def create_dim_previsao_periodo_df(parsed_data):
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_previsao_periodo criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_previsao_periodo criado com {len(df)} registros")
 
     return df
 
 def create_dim_temperatura_zona_df(parsed_data):
-    log("Criando DataFrame dim_temperatura_zona")
+    logger.info("Criando DataFrame dim_temperatura_zona")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -166,12 +168,12 @@ def create_dim_temperatura_zona_df(parsed_data):
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_temperatura_zona criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_temperatura_zona criado com {len(df)} registros")
 
     return df
 
 def create_dim_mares_df(parsed_data):
-    log("Criando DataFrame dim_mares")
+    logger.info("Criando DataFrame dim_mares")
 
     id_execucao = parsed_data["id_execucao"]
     create_date = parsed_data["create_date"]
@@ -201,7 +203,7 @@ def create_dim_mares_df(parsed_data):
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_mares criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_mares criado com {len(df)} registros")
 
     return df
 

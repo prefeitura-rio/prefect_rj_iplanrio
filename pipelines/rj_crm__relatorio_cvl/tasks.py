@@ -3,8 +3,8 @@
 Tasks para o pipeline de relatorio CVL
 """
 
-import pendulum
 import pandas as pd
+import pendulum
 from prefect import task
 
 

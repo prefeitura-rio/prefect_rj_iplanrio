@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks específicas para a pipeline SICI.
 """
@@ -6,8 +5,8 @@ from prefect import task
 from prefect.logging import get_run_logger
 from zeep import Client
 
-from toolkit.pipelines_utils.env import getenv_or_action
-from pipelines.rj_iplanrio__sici.utils import xml_to_dataframe
+from pipelines.rj_iplanrio__sici.helpers import xml_to_dataframe
+from utils.utils import read_env
 
 
 @task
@@ -21,17 +20,13 @@ def get_sici_api_credentials() -> dict:
     logger = get_run_logger()
 
     try:
-        consumidor = getenv_or_action(
-            key="CONSUMIDOR",
-        )
+        consumidor = read_env("CONSUMIDOR")
     except Exception as e:
         logger.error(f"Erro ao buscar credencial CONSUMIDOR do Infisical: {e}")
         raise
 
     try:
-        chave_acesso = getenv_or_action(
-            key="CHAVE_ACESSO",
-        )
+        chave_acesso = read_env("CHAVE_ACESSO")
     except Exception as e:
         logger.error(f"Erro ao buscar credencial CHAVE_ACESSO do Infisical: {e}")
         raise

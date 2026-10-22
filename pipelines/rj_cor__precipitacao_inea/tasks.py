@@ -1,22 +1,20 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para coleta e processamento de dados de precipitação e fluviometria do INEA.
 """
 
 from io import BytesIO
 from pathlib import Path
-from typing import List, Tuple
+from typing import Tuple
 
 import pandas as pd
 import pendulum
 import requests
-from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
 
-from pipelines.rj_cor__precipitacao_inea.utils import (
+from pipelines.rj_cor__precipitacao_inea.helpers import (
     parse_date_columns,
-    to_partitions,
 )
+from utils.utils import read_env
 
 
 @task(retries=3, retry_delay_seconds=10)
@@ -72,7 +70,7 @@ def download_inea_data_task() -> pd.DataFrame:
     print("📥 Iniciando download dos dados do INEA...")
     print(f"   Total de estações: {len(stations)}")
 
-    url_base = getenv_or_action("URL-ALERTA-CHEIAS")
+    url_base = read_env("URL-ALERTA-CHEIAS")
     for key, value in stations.items():
         url = f"{url_base}/{value}.xlsx"
         print(f"   Baixando estação {key} - {value}...")
@@ -285,13 +283,7 @@ def save_data_to_partitions_task(
 
     # Salva em partições
     suffix = pendulum.now("America/Sao_Paulo").strftime("%Y%m%d%H%M")
-    to_partitions(
-        data=dataframe,
-        partition_columns=partitions,
-        savepath=prepath,
-        data_type="csv",
-        suffix=suffix,
-    )
+    dataframe.to_csv(prepath / f"dados_{suffix}.csv", index=False)
 
     print(f"✅ Arquivos salvos em: {prepath}")
 

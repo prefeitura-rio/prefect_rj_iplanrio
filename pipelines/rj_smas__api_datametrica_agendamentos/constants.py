@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Constantes específicas para pipeline API Datametrica Agendamentos SMAS
 """

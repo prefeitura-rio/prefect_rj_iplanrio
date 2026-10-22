@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Constantes para a pipeline de ingestão de dados via Salesforce Marketing Cloud REST API.
 """

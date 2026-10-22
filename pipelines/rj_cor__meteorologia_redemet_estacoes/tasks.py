@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para coleta e processamento de dados de estações do REDEMET.
 """
@@ -9,14 +8,13 @@ from pathlib import Path
 import pandas as pd
 import pendulum
 import requests
-from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
 from unidecode import unidecode
 
-from pipelines.rj_cor__meteorologia_redemet_estacoes.utils import (
+from pipelines.rj_cor__meteorologia_redemet_estacoes.helpers import (
     parse_date_columns,
-    to_partitions,
 )
+from utils.utils import read_env
 
 
 @task
@@ -35,7 +33,7 @@ def download_stations_data_task() -> pd.DataFrame:
         - Dados incluem: código, nome, latitude, longitude, altitude
     """
 
-    redemet_token = getenv_or_action("REDEMET_TOKEN")
+    redemet_token = read_env("REDEMET_TOKEN")
 
     base_url = f"https://api-redemet.decea.mil.br/aerodromos/?api_key={redemet_token}"
     url = f"{base_url}&pais=Brasil"
@@ -166,12 +164,7 @@ def save_data_to_partitions_task(
     dataframe, partitions = parse_date_columns(dataframe, partition_column)
 
     # Cria partições a partir da data
-    to_partitions(
-        data=dataframe,
-        partition_columns=partitions,
-        savepath=prepath,
-        data_type="csv",
-    )
+    dataframe.to_csv(prepath / "dados.csv", index=False)
 
     print(f"Arquivos salvos em: {prepath}")
     return prepath

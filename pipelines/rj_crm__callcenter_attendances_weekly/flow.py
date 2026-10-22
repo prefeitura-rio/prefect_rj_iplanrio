@@ -1,8 +1,6 @@
-# -*- coding: utf-8 -*-
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from pathlib import Path
+
 from prefect import flow
 
 from pipelines.rj_crm__callcenter_attendances_weekly.constants import (
@@ -18,10 +16,15 @@ from pipelines.rj_crm__callcenter_attendances_weekly.tasks import (
     get_weekly_attendances,
     processar_json_e_transcrever_audios,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_crm__callcenter_attendances_weekly(
+@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}_weekly")
+async def rj_crm__callcenter_attendances_weekly(
+    *,
+    cloud: Cloud,
     # Parâmetros opcionais para override manual na UI
     dataset_id: str | None = None,
     table_id: str | None = None,
@@ -65,11 +68,7 @@ def rj_crm__callcenter_attendances_weekly(
     billing_project_id = CallCenterAttendancesConstants.BILLING_PROJECT_ID.value
     date_interval = date_interval or CallCenterAttendancesConstants.DATE_INTERVAL.value
 
-    rename_flow_run = rename_current_flow_run_task(
-        new_name=f"{table_id}_{dataset_id}_weekly"
-    )
 
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     date_range = calculate_date_range(
         start_date=start_date, end_date=end_date, interval=date_interval
@@ -132,13 +131,16 @@ def rj_crm__callcenter_attendances_weekly(
         root_folder=root_folder,
     )
     print("Force deploy")
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(partitions_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
     print(
         f"Weekly attendances pipeline completed successfully for {date_range['start_date']} to {date_range['end_date']}"
     )

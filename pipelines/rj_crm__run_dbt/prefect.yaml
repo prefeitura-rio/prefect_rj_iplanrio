@@ -25,18 +25,26 @@ pull:
 
 deployments:
   - name: rj-crm--run_dbt--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__run_dbt/flow.py:rj_crm__run_dbt
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_crm__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets-staging
         image_pull_policy: Always
   - name: rj-crm--run_dbt--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__run_dbt/flow.py:rj_crm__run_dbt
     concurrency_limit:
       limit: 1
@@ -45,78 +53,63 @@ deployments:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_crm__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-crm-registry-secrets
         image_pull_policy: Always
     schedules:
       - interval: 86400
-        anchor_date: "2023-01-01T09:00:00"
+        anchor_date: '2023-01-01T09:00:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_freshness
         parameters:
-          command: "source freshness"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm-registry"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-crm-registry_dbt"
-            dev: "rj-crm-registry-dev_dbt"
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
+            command: source freshness
+            target: prod
+          report: true
       - interval: 86400
-        anchor_date: "2023-01-01T10:15:00"
+        anchor_date: '2023-01-01T10:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_build
         parameters:
-          command: "build"
-          select: "+tag:daily"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm-registry"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-crm-registry_dbt"
-            dev: "rj-crm-registry-dev_dbt"
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
+            command: build
+            target: prod
+            select: +tag:daily
+          report: true
       - interval: 604800
-        anchor_date: "2024-03-17T09:15:00"
+        anchor_date: '2024-03-17T09:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_weekly_build
         parameters:
-          command: "build"
-          select: "+tag:weekly"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm-registry"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-crm-registry_dbt"
-            dev: "rj-crm-registry-dev_dbt"
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
+            command: build
+            target: prod
+            select: +tag:weekly
+          report: true
       - interval: 43200
-        anchor_date: "2024-03-17T09:15:00"
+        anchor_date: '2024-03-17T09:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_12h_build
         parameters:
-          command: "build"
-          select: "tag:quarter_hourly"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm-registry"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-crm-registry_dbt"
-            dev: "rj-crm-registry-dev_dbt"
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
+            command: build
+            target: prod
+            select: tag:quarter_hourly
+          report: true
       - interval: 900
-        anchor_date: "2024-03-17T09:15:00"
+        anchor_date: '2024-03-17T09:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_quarter_hourly_build
         parameters:
-          command: "build"
-          select: >-
-            tag:quarter_hourly --vars '{passe: quente}'
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-          bigquery_project: "rj-crm-registry"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-crm-registry_dbt"
-            dev: "rj-crm-registry-dev_dbt"
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git
+            command: build
+            target: prod
+            select: tag:quarter_hourly
+            flag: "--vars '{passe: quente}'"
+          report: true

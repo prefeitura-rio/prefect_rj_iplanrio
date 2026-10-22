@@ -5,7 +5,6 @@ description = "Pipeline para dump de dados da API SOAP do SICI para BigQuery"
 dependencies = [
     "prefect_rj_iplanrio",
     "zeep",
-    "pandas",
     "pytz",
 ]
 

@@ -5,6 +5,7 @@ description = "Pipeline para atualização de estações meteorológicas do REDE
 dependencies = [
     "prefect_rj_iplanrio",
     "pendulum",
+    "requests",
 ]
 
 [tool.uv.sources]

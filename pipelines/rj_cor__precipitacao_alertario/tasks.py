@@ -2,23 +2,20 @@
 Tasks para coleta e processamento de dados de precipitação do AlertaRio.
 """
 
-import os
 from io import StringIO
 from pathlib import Path
 from typing import Tuple
 
-import lxml
 import pandas as pd
 import pendulum
 import requests
 from bs4 import BeautifulSoup
-from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
 
-from pipelines.rj_cor__precipitacao_alertario.utils import (
+from pipelines.rj_cor__precipitacao_alertario.helpers import (
     parse_date_columns,
-    to_partitions,
 )
+from utils.utils import read_env
 
 
 @task(retries=3, retry_delay_seconds=10)
@@ -42,7 +39,7 @@ def download_alertario_data_task() -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     # Obter URL da API do AlertaRio via variável de ambiente
     # Em produção, usar: get_infisical_secret_task(secret_path="/", secret_name="ALERTARIO_API")["ALERTARIO_API"]
-    url = getenv_or_action("ALERTARIO_API")
+    url = read_env("ALERTARIO_API")
 
     http_ok = 200
 
@@ -256,13 +253,7 @@ def save_data_to_partitions_task(
 
     # Salva em partições
     suffix = pendulum.now("America/Sao_Paulo").strftime("%Y%m%d%H%M")
-    to_partitions(
-        data=dataframe,
-        partition_columns=partitions,
-        savepath=prepath,
-        data_type="csv",
-        suffix=suffix,
-    )
+    dataframe.to_csv(prepath / f"dados_{suffix}.csv", index=False)
 
     print(f"Arquivos salvos em: {prepath}")
 

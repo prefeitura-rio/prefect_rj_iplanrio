@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Funções utilitárias para a pipeline SICI.
 """

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script local para testar o pipeline AlertaRio sem fazer upload para BigQuery.
 Testa: XML parsing, DataFrame creation, CSV generation.
@@ -28,7 +27,7 @@ from pipelines.rj_iplanrio__alertario_previsao_24h.tasks import (
     create_dim_temperatura_zona_df,
     create_dim_mares_df,
 )
-from pipelines.rj_iplanrio__alertario_previsao_24h.utils.tasks import (
+from pipelines.rj_iplanrio__alertario_previsao_24h.helpers.tasks import (
     create_date_partitions,
 )
 from pipelines.rj_iplanrio__alertario_previsao_24h.constants import (

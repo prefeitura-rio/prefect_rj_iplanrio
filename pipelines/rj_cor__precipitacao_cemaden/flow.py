@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para coleta e processamento de dados de precipitação do CEMADEN - COR.
 
@@ -7,10 +6,6 @@ Migrado de Prefect 1.4 para Prefect 3.0.
 
 from pathlib import Path
 
-from toolkit.pipelines_utils.bd import (
-    create_table_and_upload_to_gcs_task,
-)
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
 from prefect import flow
 
 from pipelines.rj_cor__precipitacao_cemaden.tasks import (
@@ -19,10 +14,15 @@ from pipelines.rj_cor__precipitacao_cemaden.tasks import (
     save_data_to_partitions_task,
     transform_cemaden_data_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
 @flow(log_prints=True)
-def rj_cor__precipitacao_cemaden(
+async def rj_cor__precipitacao_cemaden(
+    *,
+    cloud: Cloud,
     dataset_id: str = "clima_pluviometro",
     table_id: str = "taxa_precipitacao_cemaden",
     dump_mode: str = "append",
@@ -89,14 +89,16 @@ def rj_cor__precipitacao_cemaden(
 
     # Step 5: Injetar credenciais e fazer upload para BigQuery
     print(f"☁️  Fazendo upload para BigQuery ({dataset_id}.{table_id})...")
-    inject_bd_credentials_task()
-    create_table_and_upload_to_gcs_task(
-        data_path=str(prepath),
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(str(prepath)),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        wait=prepath,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     print("✅ Flow concluído com sucesso!")
     print(f"   Dados salvos em: {dataset_id}.{table_id}")

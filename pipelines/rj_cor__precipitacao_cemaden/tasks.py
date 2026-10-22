@@ -1,19 +1,16 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para coleta e processamento de dados de precipitação do CEMADEN.
 """
 
 from pathlib import Path
-from typing import List
 
 import pandas as pd
 import pendulum
 import requests
 from prefect import task
 
-from pipelines.rj_cor__precipitacao_cemaden.utils import (
+from pipelines.rj_cor__precipitacao_cemaden.helpers import (
     parse_date_columns,
-    to_partitions,
 )
 
 
@@ -250,13 +247,7 @@ def save_data_to_partitions_task(
 
     # Salva em partições
     suffix = pendulum.now("America/Sao_Paulo").strftime("%Y%m%d%H%M")
-    to_partitions(
-        data=dataframe,
-        partition_columns=partitions,
-        savepath=prepath,
-        data_type="csv",
-        suffix=suffix,
-    )
+    dataframe.to_csv(prepath / f"dados_{suffix}.csv", index=False)
 
     print(f"✅ Arquivos salvos em: {prepath}")
 

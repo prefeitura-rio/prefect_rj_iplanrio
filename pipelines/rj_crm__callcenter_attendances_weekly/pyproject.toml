@@ -4,18 +4,11 @@ version = "0.1.0"
 description = "Pipeline CRM Call Center Attendances Weekly para coleta semanal de dados de atendimentos"
 dependencies = [
     "prefect_rj_iplanrio",
-    "dbt-bigquery",
-    "google-cloud-storage",
-    "prefeitura-rio[actions]",
-    "python-dotenv",
-    "pendulum",
-    "simplejson",
-    "dbt-core",
     "mutagen",
     "google-cloud-speech",
-    "marshmallow",
-    "gitpython",
     "pytz",
+    "google-cloud-bigquery",
+    "requests",
 ]
 [tool.uv.sources]
 prefect_rj_iplanrio = { workspace = true }

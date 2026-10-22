@@ -4,6 +4,8 @@ version = "0.1.0"
 description = "Pipeline turismo fluxo visitantes da secretaria setur"
 dependencies = [
     "prefect_rj_iplanrio",
+    "google-api-python-client",
+    "gspread",
 ]
 
 [tool.uv.sources]

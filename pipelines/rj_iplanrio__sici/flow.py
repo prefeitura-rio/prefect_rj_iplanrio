@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para extração de dados da API SOAP do SICI e upload para BigQuery.
 
@@ -6,20 +5,26 @@ Este flow busca dados de unidades administrativas do SICI via API SOAP,
 converte os dados de XML para CSV, e faz upload para o BigQuery.
 """
 
+from pathlib import Path
+
 from prefect import flow
-from prefect.logging import get_run_logger
+from prefect.logging import get_logger, get_run_logger
 
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
 from pipelines.rj_iplanrio__sici.tasks import (
-    get_sici_api_credentials,
     get_data_from_api_soap_sici,
+    get_sici_api_credentials,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
+
+logger = get_logger("toolkit")
 
 
-@flow(log_prints=True)
-def rj_iplanrio__sici(
+@flow(log_prints=True, flow_run_name="Dump SICI API: {dataset_id}.{table_id}")
+async def rj_iplanrio__sici(
+    *,
+    cloud: Cloud,
     dataset_id: str,
     table_id: str,
     wsdl: str,
@@ -46,10 +51,8 @@ def rj_iplanrio__sici(
     logger = get_run_logger()
 
     # Renomear flow run para facilitar identificação
-    rename_current_flow_run_task(new_name=f"Dump SICI API: {dataset_id}.{table_id}")
 
     # Injetar credenciais do BigQuery
-    inject_bd_credentials_task(environment="prod")
 
     # Buscar credenciais da API SICI
     logger.info("Buscando credenciais da API SICI...")
@@ -64,12 +67,15 @@ def rj_iplanrio__sici(
 
     # Criar tabela no BigQuery e fazer upload
     logger.info(f"Criando tabela {dataset_id}.{table_id} e fazendo upload...")
-    create_table_and_upload_to_gcs_task(
-        data_path=data_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(data_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=biglake_table,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     logger.info("Flow concluído com sucesso!")

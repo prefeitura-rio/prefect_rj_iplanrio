@@ -6,8 +6,6 @@ dependencies = [
     "prefect_rj_iplanrio",
     "defusedxml",
     "google-cloud-bigquery",
-    "basedosdados",
-    "pandas",
     "requests",
 ]
 

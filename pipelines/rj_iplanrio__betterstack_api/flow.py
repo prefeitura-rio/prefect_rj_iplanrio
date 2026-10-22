@@ -1,26 +1,25 @@
-# -*- coding: utf-8 -*-
-import os
+from pathlib import Path
+
 from prefect import flow
-from toolkit.pipelines_utils.bd import (
-    create_table_and_upload_to_gcs_task,
-)
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 
 from pipelines.rj_iplanrio__betterstack_api.constants import BetterStackConstants
+from pipelines.rj_iplanrio__betterstack_api.helpers.tasks import create_date_partitions
 from pipelines.rj_iplanrio__betterstack_api.tasks import (
-    get_betterstack_credentials,
-    get_betterstack_monitor_id,
     calculate_date_range,
     fetch_incidents,
+    get_betterstack_credentials,
+    get_betterstack_monitor_id,
     transform_incidents,
 )
-
-from pipelines.rj_iplanrio__betterstack_api.utils.tasks import create_date_partitions
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
 @flow(log_prints=True)
-def rj_iplanrio__betterstack_api(
+async def rj_iplanrio__betterstack_api(
+    *,
+    cloud: Cloud,
     from_date: str | None = None,
     to_date: str | None = None,
     dataset_id: str | None = None,
@@ -34,10 +33,8 @@ def rj_iplanrio__betterstack_api(
     # 0. Setup
     billing_project_id = billing_project_id or BetterStackConstants.BILLING_PROJECT_ID.value
     dataset_id = dataset_id or BetterStackConstants.DATASET_ID.value
-    rename_current_flow_run_task(new_name=f"BetterStack_Incidents_{from_date or 'D-1'}")
 
     # 0.1 Inject BD Credentials
-    inject_bd_credentials_task(environment="prod")
 
     # 1. Credentials
     token = get_betterstack_credentials()
@@ -62,11 +59,13 @@ def rj_iplanrio__betterstack_api(
             root_folder=f"{BetterStackConstants.ROOT_FOLDER.value}/{BetterStackConstants.TABLE_ID_INCIDENTS.value}"
         )
 
-        create_table_and_upload_to_gcs_task(
-            data_path=path_incidents,
-            dataset_id=dataset_id,
-            table_id=BetterStackConstants.TABLE_ID_INCIDENTS.value,
+        table = Table(dataset_id=dataset_id, table_id=BetterStackConstants.TABLE_ID_INCIDENTS.value)
+        await upload_files_to_gcs(
+            Path(path_incidents),
+            table,
+            bucket=cloud["bucket"],
             dump_mode=BetterStackConstants.DUMP_MODE.value,
-            biglake_table=BetterStackConstants.BIGLAKE_TABLE.value,
-            source_format=BetterStackConstants.FILE_FORMAT.value,
+            source_format="parquet",
+            options=capture_options(BetterStackConstants.DUMP_MODE.value),
         )
+        await publish_table_in_bq(table, cloud)

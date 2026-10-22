@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow para atualização de estações meteorológicas do REDEMET - COR.
 
@@ -8,9 +7,8 @@ do REDEMET localizadas no município do Rio de Janeiro.
 Migrado de Prefect 1.4 para Prefect 3.0.
 """
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from pathlib import Path
+
 from prefect import flow
 
 from pipelines.rj_cor__meteorologia_redemet_estacoes.tasks import (
@@ -19,10 +17,15 @@ from pipelines.rj_cor__meteorologia_redemet_estacoes.tasks import (
     save_data_to_partitions_task,
     transform_stations_data_task,
 )
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_cor__meteorologia_redemet_estacoes(
+@flow(log_prints=True, flow_run_name="{dataset_id}_{table_id}")
+async def rj_cor__meteorologia_redemet_estacoes(
+    *,
+    cloud: Cloud,
     dataset_id: str = "clima_estacao_meteorologica",
     table_id: str = "estacoes_redemet",
 ):
@@ -56,10 +59,8 @@ def rj_cor__meteorologia_redemet_estacoes(
         - Particiona por data_atualizacao
     """
     # Renomear o flow run para facilitar identificação
-    rename_current_flow_run_task(new_name=f"{dataset_id}_{table_id}")
 
     # Injetar credenciais do BigQuery
-    inject_bd_credentials_task(environment="prod")
 
     # Download dos dados de estações
     dataframe = download_stations_data_task()
@@ -75,12 +76,16 @@ def rj_cor__meteorologia_redemet_estacoes(
 
     print(f"✅ Atualização de estações concluída! Dados salvos para {dataset_id}.{table_id}")
 
-    create_table_and_upload_to_gcs_task(
-        dataset_id=dataset_id,
-        table_id=table_id,
-        data_path=path,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode="append",
+        source_format="csv",
+        options=capture_options("append"),
     )
+    await publish_table_in_bq(table, cloud)
 
 
 if __name__ == "__main__":

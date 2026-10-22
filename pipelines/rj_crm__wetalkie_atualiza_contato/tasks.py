@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks migradas do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 
@@ -13,8 +12,10 @@ Tasks migradas do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 import json
 
 import pandas as pd
-from toolkit.pipelines_utils.logging import log
 from prefect import task
+from prefect.logging import get_logger
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -30,10 +31,10 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
         DataFrame with updated contact phone and name data
     """
     if dfr.empty:
-        log("No contacts missing phone - returning empty DataFrame")
+        logger.info("No contacts missing phone - returning empty DataFrame")
         return pd.DataFrame()  # Return empty DataFrame instead of raising ENDRUN
 
-    log(f"Getting {dfr.shape[0]} missing contacts from the Wetalkie API")
+    logger.info(f"Getting {dfr.shape[0]} missing contacts from the Wetalkie API")
 
     # Create a copy to avoid modifying the original DataFrame
     result_dfr = dfr.copy()
@@ -44,7 +45,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
 
     for contact_id in result_dfr["id_contato"].unique():
         try:
-            log(f"Getting contact {contact_id} from the Wetalkie API")
+            logger.info(f"Getting contact {contact_id} from the Wetalkie API")
             response = api.get(path=f"/callcenter/contacts/{contact_id!s}")
 
             # Handle API response structure
@@ -54,7 +55,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
                 response_data = response
 
             if not response_data.get("data"):
-                log(f"No data found for contact {contact_id}")
+                logger.info(f"No data found for contact {contact_id}")
                 failed_count += 1
                 continue
 
@@ -62,7 +63,7 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
 
             # Check if the expected structure exists
             if "item" not in data or not data["item"]:
-                log(f"No item data found for contact {contact_id}")
+                logger.info(f"No item data found for contact {contact_id}")
                 failed_count += 1
                 continue
 
@@ -74,17 +75,17 @@ def get_contacts(api: object, dfr: pd.DataFrame) -> pd.DataFrame:
             updated_count += 1
 
         except Exception as error:
-            log(f"Error processing contact {contact_id}: {error}", level="error")
+            logger.error(f"Error processing contact {contact_id}: {error}")
             failed_count += 1
             continue
 
-    log(f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}")
+    logger.info(f"Contact processing completed. Updated: {updated_count}, Failed: {failed_count}")
 
     # Filter out contacts that weren't updated successfully
     successful_contacts = result_dfr[result_dfr["json_data"].notna()]
     successful_contacts["id_contato"] = successful_contacts["id_contato"].astype(str)
 
-    log(f"Returning {len(successful_contacts)} successfully updated contacts")
+    logger.info(f"Returning {len(successful_contacts)} successfully updated contacts")
     return successful_contacts
 
 
@@ -101,13 +102,13 @@ def download_missing_contacts(query: str, billing_project_id: str, bucket_name: 
     Returns:
         DataFrame with contact IDs that need phone data
     """
-    from pipelines.rj_crm__wetalkie_atualiza_contato.utils.tasks import (
+    from pipelines.rj_crm__wetalkie_atualiza_contato.helpers.tasks import (
         download_data_from_bigquery,
     )
 
-    log("Downloading missing contacts from BigQuery")
+    logger.info("Downloading missing contacts from BigQuery")
     dfr = download_data_from_bigquery(query, billing_project_id, bucket_name)
-    log(f"Found {len(dfr)} contacts with missing phone data")
+    logger.info(f"Found {len(dfr)} contacts with missing phone data")
     return dfr
 
 
@@ -135,6 +136,6 @@ def safe_export_df_to_parquet(dfr: pd.DataFrame, output_path: str = "./data_cont
 
     # Export to parquet
     dfr.to_parquet(parquet_path, index=False)
-    log(f"DataFrame exported to parquet: {parquet_path}")
+    logger.info(f"DataFrame exported to parquet: {parquet_path}")
 
     return output_path  # Return the directory path as expected by BigQuery upload

@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para coleta e processamento de dados meteorológicos do INMET.
 """
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple
@@ -12,13 +10,12 @@ from typing import Tuple
 import pandas as pd
 import pendulum
 import requests
-from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
 
-from pipelines.rj_cor__meteorologia_inmet.utils import (
+from pipelines.rj_cor__meteorologia_inmet.helpers import (
     parse_date_columns,
-    to_partitions,
 )
+from utils.utils import read_env
 
 
 @task
@@ -101,7 +98,7 @@ def download_meteorological_data_task(data_inicio: str, data_fim: str) -> pd.Dat
         "A656",
     ]
 
-    token = getenv_or_action("INMET_API")
+    token = read_env("INMET_API")
 
     # Constante para HTTP status code de sucesso
     http_ok = 200
@@ -327,12 +324,7 @@ def save_data_to_partitions_task(dados: pd.DataFrame) -> Path:
     dataframe, partitions = parse_date_columns(dados, partition_column)
 
     # Cria partições a partir da data
-    to_partitions(
-        data=dataframe,
-        partition_columns=partitions,
-        savepath=prepath,
-        data_type="csv",
-    )
+    dataframe.to_csv(prepath / "dados.csv", index=False)
 
     print(f"Arquivos salvos em: {prepath}")
     return prepath

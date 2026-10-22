@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Tasks do pipeline rj_segur__forca_municipal."""
 
 import asyncio
@@ -16,15 +15,10 @@ from typing import Optional
 import httpx
 import pandas as pd
 from fastkml import KML
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.pandas import parse_date_columns, to_partitions
 from prefect import task
+from prefect.logging import get_logger
 
-from pipelines.rj_segur__forca_municipal.bq import (
-    delete_gcs_partition,
-    query_distinct_ids,
-)
+from pipelines.rj_segur__forca_municipal.bq import query_distinct_ids
 from pipelines.rj_segur__forca_municipal.client import FMApi
 from pipelines.rj_segur__forca_municipal.constants import (
     DEFAULT_CONCURRENCY,
@@ -39,21 +33,28 @@ from pipelines.rj_segur__forca_municipal.constants import (
     TMP_BASE,
     UNIT_IDS_LOOKBACK_PARTITIONS,
 )
-from pipelines.rj_segur__forca_municipal.utils import (
+from pipelines.rj_segur__forca_municipal.helpers import (
     _add_id_hash,
     _cycle_prefix,
     _date_range,
     _iter_placemarks,
     _parse_date_range,
+    add_date_columns,
 )
+from utils.tasks import upload_files_to_gcs
+from utils.types import Table
+from utils.utils import capture_time
+
+logger = get_logger("toolkit")
 
 # ---------------------------------------------------------------------------
 # Helpers privados
 # ---------------------------------------------------------------------------
 
 
-def _process_cycle(
+async def _process_cycle(
     data: list[dict],
+    bucket: str,
     table_id: str,
     dataset_id: str,
     dump_mode: str,
@@ -87,59 +88,33 @@ def _process_cycle(
     # updated_at: mesmo timestamp para todos os ciclos do run
     df["updated_at"] = updated_at
 
-    df, partition_cols = parse_date_columns(
-        dataframe=df, partition_date_column=partition_col
-    )
+    df = add_date_columns(dataframe=df, column=partition_col)
     df = df.astype(str)
 
-    savepath = f"{TMP_BASE}/{table_id}/{uuid.uuid4()}"
-    Path(savepath).mkdir(parents=True, exist_ok=True)
-
-    # No primeiro ciclo de tabelas snapshot, deleta a partição GCS depois de ter
-    # dados locais prontos e antes de subir — evita delete sem dados e garante
-    # que ciclos subsequentes não apaguem o que o ciclo anterior já subiu.
-    suffix = (
-        f"{updated_at.strftime('%H%M%S')}_{cycle_num:04d}"
-        if table_id in SERIES_TABLE_IDS
-        else f"{cycle_num:04d}"
-    )
-
-    to_partitions(
-        data=df,
-        partition_columns=partition_cols,
-        savepath=savepath,
-        data_type="parquet",
-        suffix=suffix,
-    )
-
-    if cycle_num == 1 and table_id not in SERIES_TABLE_IDS:
-        delete_gcs_partition(
-            dataset_id=dataset_id,
-            table_id=table_id,
-            partition_cols=partition_cols,
-            unique_partitions=pd.DataFrame(df[partition_cols]).drop_duplicates(),
-        )
+    savepath = Path(f"{TMP_BASE}/{table_id}/{uuid.uuid4()}")
+    savepath.mkdir(parents=True, exist_ok=True)
+    df.to_parquet(savepath / f"{cycle_num:04d}.parquet", index=False)
 
     prefix = _cycle_prefix(cycle_num=cycle_num, total_cycles=total_cycles)
-    log(f"{prefix} {row_count} linhas, {col_count} colunas → enviando...")
+    logger.info(f"{prefix} {row_count} linhas, {col_count} colunas → enviando...")
 
-    create_table_and_upload_to_gcs(
-        data_path=savepath,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    await upload_files_to_gcs.fn(
+        savepath,
+        Table(dataset_id=dataset_id, table_id=table_id),
+        bucket=bucket,
         dump_mode=dump_mode,
-        biglake_table=True,
         source_format="parquet",
-        only_staging_dataset=True,
+        options={"capture": capture_time() + timedelta(seconds=cycle_num)} if dump_mode == "append" else {},
     )
 
     shutil.rmtree(savepath, ignore_errors=True)
-    log(f"{prefix} {row_count} linhas enviadas — concluído.")
+    logger.info(f"{prefix} {row_count} linhas enviadas — concluído.")
     return True
 
 
 async def _flush_buffer(
     batches: AsyncGenerator[list[dict], None],
+    bucket: str,
     table_id: str,
     dataset_id: str,
     dump_mode: str,
@@ -168,8 +143,9 @@ async def _flush_buffer(
             cycle_num += 1
             chunk = buffer[:MAX_ROWS_PER_CYCLE]
             buffer = buffer[MAX_ROWS_PER_CYCLE:]
-            _process_cycle(
+            await _process_cycle(
                 data=chunk,
+                bucket=bucket,
                 table_id=table_id,
                 dataset_id=dataset_id,
                 dump_mode=dump_mode,
@@ -181,8 +157,9 @@ async def _flush_buffer(
 
     if buffer:
         cycle_num += 1
-        _process_cycle(
+        await _process_cycle(
             data=buffer,
+            bucket=bucket,
             table_id=table_id,
             dataset_id=dataset_id,
             dump_mode=dump_mode,
@@ -207,6 +184,7 @@ def run_standard_endpoint_task(
     dataset_id: str,
     project_id: str,
     dump_mode: str,
+    bucket: str,
     page_size: int = DEFAULT_PAGE_SIZE,
     concurrency: int = DEFAULT_CONCURRENCY,
 ) -> None:
@@ -220,7 +198,7 @@ def run_standard_endpoint_task(
     now = datetime.now(tz=SP_TZ).replace(tzinfo=None)
 
     if is_series:
-        log(
+        logger.info(
             f"Modo série — suffix base: {now.strftime('%H%M%S')} (sem pre-delete de partição)."
         )
 
@@ -232,19 +210,18 @@ def run_standard_endpoint_task(
             )
 
             if not first_items and total_pages <= 1:
-                log(f"Nenhum dado retornado de {endpoint}", level="warning")
+                logger.warning(f"Nenhum dado retornado de {endpoint}")
                 return
 
             if total_pages > 1 and table_id in SINGLE_PAGE_ENDPOINTS:
-                log(
+                logger.warning(
                     f"{endpoint}: {total_pages} página(s) retornadas"
                     f" — paginação não documentada para '{table_id}', validar comportamento.",
-                    level="warning",
                 )
 
             pages_per_cycle = math.ceil(MAX_ROWS_PER_CYCLE / page_size)
             total_cycles = math.ceil(total_pages / pages_per_cycle)
-            log(f"{total_pages} página(s) → {total_cycles} ciclo(s)")
+            logger.info(f"{total_pages} página(s) → {total_cycles} ciclo(s)")
 
             async def _batches() -> AsyncGenerator[list[dict], None]:
                 yield first_items
@@ -260,6 +237,7 @@ def run_standard_endpoint_task(
 
             await _flush_buffer(
                 batches=_batches(),
+                bucket=bucket,
                 table_id=table_id,
                 dataset_id=dataset_id,
                 dump_mode=dump_mode,
@@ -277,6 +255,7 @@ def run_unit_positions_task(
     project_id: str,
     dataset_id: str,
     dump_mode: str,
+    bucket: str,
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
     page_size: int = DEFAULT_PAGE_SIZE,
@@ -306,7 +285,7 @@ def run_unit_positions_task(
         data_inicio=data_inicio,
         data_fim=data_fim,
     )
-    log(f"Período: {data_inicio} → {data_fim}")
+    logger.info(f"Período: {data_inicio} → {data_fim}")
 
     now = datetime.now(tz=SP_TZ).replace(tzinfo=None)
 
@@ -324,13 +303,13 @@ def run_unit_positions_task(
             ORDER BY UnitId
         """,
     )
-    log(
+    logger.info(
         f"{len(unit_ids)} unidades encontradas nas últimas"
         f" {UNIT_IDS_LOOKBACK_PARTITIONS} partições do histórico BQ"
     )
 
     if not unit_ids:
-        log("Nenhuma unidade no histórico BQ.", level="warning")
+        logger.warning("Nenhuma unidade no histórico BQ.")
         return
 
     n_units = len(unit_ids)
@@ -380,7 +359,7 @@ def run_unit_positions_task(
             ):
                 d_pct = round(day_num / n_days * 100)
                 n_batches = math.ceil(n_units / unit_id_concurrency)
-                log(
+                logger.info(
                     f"[Dia {day_num}/{n_days} ({d_pct}%)] {day}"
                     f" — {n_units} unidades em {n_batches} lote(s) de {unit_id_concurrency}..."
                 )
@@ -399,9 +378,8 @@ def run_unit_positions_task(
                         for uid, outcome in zip(batch_ids, outcomes):
                             if isinstance(outcome, BaseException):
                                 errors += 1
-                                log(
+                                logger.warning(
                                     f"  unit {uid} {day}: {type(outcome).__name__} — ignorado",
-                                    level="warning",
                                 )
                             else:
                                 batch.extend(outcome)
@@ -410,6 +388,7 @@ def run_unit_positions_task(
 
                 total_collected = await _flush_buffer(
                     batches=_day_batches(day=day),
+                    bucket=bucket,
                     table_id=table_id,
                     dataset_id=dataset_id,
                     dump_mode=dump_mode,
@@ -418,9 +397,9 @@ def run_unit_positions_task(
                 )
 
                 if not total_collected:
-                    log(f"  Nenhuma posição para {day} — pulando.", level="warning")
+                    logger.warning(f"  Nenhuma posição para {day} — pulando.")
                 else:
-                    log(f"  {total_collected} posições coletadas.")
+                    logger.info(f"  {total_collected} posições coletadas.")
 
         if errors and errors / total_unit_days > MAX_ITEM_ERROR_RATE:
             raise RuntimeError(
@@ -438,6 +417,7 @@ def run_qmd_details_task(
     project_id: str,
     dataset_id: str,
     dump_mode: str,
+    bucket: str,
     concurrency: int = DEFAULT_CONCURRENCY,
     id_concurrency: int = DEFAULT_QMD_ID_CONCURRENCY,
 ) -> None:
@@ -461,10 +441,10 @@ def run_qmd_details_task(
             ORDER BY Id
         """,
     )
-    log(f"{len(qmd_ids)} QMDs encontrados na última partição do catálogo BQ")
+    logger.info(f"{len(qmd_ids)} QMDs encontrados na última partição do catálogo BQ")
 
     if not qmd_ids:
-        log("Nenhum QMD no catálogo BQ.", level="warning")
+        logger.warning("Nenhum QMD no catálogo BQ.")
         return
 
     total = len(qmd_ids)
@@ -481,23 +461,20 @@ def run_qmd_details_task(
                         body = await api.get_json(path=endpoint.format(id=qmd_id))
                     except httpx.HTTPStatusError as exc:
                         if exc.response.status_code in (404, 410):
-                            log(
+                            logger.warning(
                                 f"  QMD {qmd_id}: HTTP {exc.response.status_code}"
                                 f" — não encontrado, ignorado",
-                                level="warning",
                             )
                             return None
                         errors += 1
-                        log(
+                        logger.warning(
                             f"  QMD {qmd_id}: HTTP {exc.response.status_code} — erro",
-                            level="warning",
                         )
                         return None
                     except Exception as exc:
                         errors += 1
-                        log(
+                        logger.warning(
                             f"  QMD {qmd_id}: {type(exc).__name__} — erro",
-                            level="warning",
                         )
                         return None
                     return {
@@ -518,7 +495,7 @@ def run_qmd_details_task(
                         await asyncio.gather(*[_fetch_one(qid) for qid in batch])
                     )
                     rows = [r for r in results if r is not None]
-                    log(
+                    logger.info(
                         f"  IDs {batch_start + 1}-{done}/{total} ({pct}%)"
                         f" — {len(rows)} detalhes"
                     )
@@ -527,6 +504,7 @@ def run_qmd_details_task(
 
             await _flush_buffer(
                 batches=_batches(),
+                bucket=bucket,
                 table_id=table_id,
                 dataset_id=dataset_id,
                 dump_mode=dump_mode,
@@ -549,6 +527,7 @@ def run_qmd_kml_task(
     project_id: str,
     dataset_id: str,
     dump_mode: str,
+    bucket: str,
     concurrency: int = DEFAULT_CONCURRENCY,
     id_concurrency: int = DEFAULT_QMD_ID_CONCURRENCY,
 ) -> None:
@@ -572,10 +551,10 @@ def run_qmd_kml_task(
             ORDER BY Id
         """,
     )
-    log(f"{len(qmd_ids)} QMDs encontrados na última partição do catálogo BQ")
+    logger.info(f"{len(qmd_ids)} QMDs encontrados na última partição do catálogo BQ")
 
     if not qmd_ids:
-        log("Nenhum QMD no catálogo BQ.", level="warning")
+        logger.warning("Nenhum QMD no catálogo BQ.")
         return
 
     total = len(qmd_ids)
@@ -596,10 +575,9 @@ def run_qmd_kml_task(
                     try:
                         kml_text = await api.get_text(path=endpoint.format(id=qmd_id))
                     except Exception as exc:
-                        log(
+                        logger.warning(
                             f"  KML {attempted}/{total} ({pct}%) — {qmd_id}:"
                             f" não disponível ({exc})",
-                            level="warning",
                         )
                         return []
 
@@ -608,18 +586,16 @@ def run_qmd_kml_task(
                             warnings.simplefilter("ignore")
                             k = KML.parse(io.StringIO(kml_text), strict=False)
                     except Exception as exc:
-                        log(
+                        logger.warning(
                             f"  KML {attempted}/{total} ({pct}%) — {qmd_id}:"
                             f" erro ao parsear ({exc})",
-                            level="warning",
                         )
                         return []
 
                     doc = next(iter(k.features), None)
                     if not doc:
-                        log(
+                        logger.warning(
                             f"  KML {attempted}/{total} ({pct}%) — {qmd_id}: sem Document.",
-                            level="warning",
                         )
                         return []
 
@@ -650,7 +626,7 @@ def run_qmd_kml_task(
                         )
 
                     completed += 1
-                    log(
+                    logger.info(
                         f"  KML {attempted}/{total} ({pct}%) — {qmd_id}:"
                         f" {len(rows)} placemark(s) [ok: {completed}]"
                     )
@@ -663,7 +639,7 @@ def run_qmd_kml_task(
                     pct = round(done / total * 100)
                     results = await asyncio.gather(*[_fetch_kml(qid) for qid in batch])
                     rows = [r for sub in results for r in sub]
-                    log(
+                    logger.info(
                         f"  IDs {batch_start + 1}-{done}/{total} ({pct}%)"
                         f" — {len(rows)} placemark(s)"
                     )
@@ -672,6 +648,7 @@ def run_qmd_kml_task(
 
             await _flush_buffer(
                 batches=_batches(),
+                bucket=bucket,
                 table_id=table_id,
                 dataset_id=dataset_id,
                 dump_mode=dump_mode,

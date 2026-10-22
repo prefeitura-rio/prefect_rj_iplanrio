@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Tasks para ingestão de dados via Salesforce Marketing Cloud REST API.
 
@@ -20,9 +19,9 @@ from typing import Any, Literal
 
 import pandas as pd
 import requests
-from toolkit.pipelines_utils.env import getenv_or_action
 from prefect import task
 
+from utils.utils import read_env
 
 # ---------------------------------------------------------------------------
 # Credenciais e autenticação
@@ -40,10 +39,10 @@ def _get_sfmc_credentials() -> dict[str, str]:
         dict com as chaves: client_id, client_secret, auth_url, rest_base_url
     """
     return {
-        "client_id": getenv_or_action("API_SFMC_CLIENT_ID"),
-        "client_secret": getenv_or_action("API_SFMC_CLIENT_SECRET"),
-        "auth_url": getenv_or_action("API_SFMC_AUTH_URL").rstrip("/"),
-        "rest_base_url": getenv_or_action("API_SFMC_REST_BASE_URL").rstrip("/"),
+        "client_id": read_env("API_SFMC_CLIENT_ID"),
+        "client_secret": read_env("API_SFMC_CLIENT_SECRET"),
+        "auth_url": read_env("API_SFMC_AUTH_URL").rstrip("/"),
+        "rest_base_url": read_env("API_SFMC_REST_BASE_URL").rstrip("/"),
     }
 
 

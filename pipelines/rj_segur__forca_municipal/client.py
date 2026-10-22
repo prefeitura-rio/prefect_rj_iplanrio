@@ -12,7 +12,7 @@ import asyncio
 from typing import Optional
 
 import httpx
-from toolkit.pipelines_utils.logging import log
+from prefect.logging import get_logger
 from tenacity import (
     RetryCallState,
     retry,
@@ -21,7 +21,6 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
-from pipelines.rj_segur__forca_municipal import env
 from pipelines.rj_segur__forca_municipal.constants import (
     API_CONNECT_TIMEOUT,
     API_TIMEOUT,
@@ -31,6 +30,9 @@ from pipelines.rj_segur__forca_municipal.constants import (
     RETRY_MAX_WAIT,
     RETRY_MIN_WAIT,
 )
+from pipelines.rj_segur__forca_municipal.helpers import ForcaMunicipalSettings
+
+logger = get_logger("toolkit")
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -50,10 +52,9 @@ def _log_retry(retry_state: RetryCallState) -> None:
     base_url = getattr(self_, "_base_url", "?")
     params_str = f" params={params}" if params else ""
     n = retry_state.attempt_number
-    log(
+    logger.warning(
         f"↺ [{n}/{MAX_RETRIES}] {method} {base_url}{path}{params_str}"
         f" — {type(exc).__name__}: {exc}",
-        level="warning",
     )
 
 
@@ -71,14 +72,15 @@ class FMApi:
     )
 
     def __init__(self) -> None:
-        self._base_url: str = (env.API_FORCA_MUNICIPAL__API_URL or "").rstrip("/")
+        settings = ForcaMunicipalSettings()
+        self._base_url: str = (settings.API_FORCA_MUNICIPAL__API_URL or "").rstrip("/")
         self._proxy_url: Optional[str] = (
-            env.API_FORCA_MUNICIPAL__PROXY_URL
-            if env.API_FORCA_MUNICIPAL__USE_PROXY_URL
+            settings.API_FORCA_MUNICIPAL__PROXY_URL
+            if settings.API_FORCA_MUNICIPAL__USE_PROXY_URL
             else None
         )
-        self._username: Optional[str] = env.API_FORCA_MUNICIPAL__API_LOGIN
-        self._password: Optional[str] = env.API_FORCA_MUNICIPAL__API_PASSWORD
+        self._username: Optional[str] = settings.API_FORCA_MUNICIPAL__API_LOGIN
+        self._password: Optional[str] = settings.API_FORCA_MUNICIPAL__API_PASSWORD
         self._token: Optional[str] = None
         self._lock: asyncio.Lock = asyncio.Lock()
         self._client: Optional[httpx.AsyncClient] = None
@@ -89,7 +91,7 @@ class FMApi:
             proxy=self._proxy_url,
             timeout=httpx.Timeout(API_TIMEOUT, connect=API_CONNECT_TIMEOUT),
         )
-        log(f"Conectando à API: {self._base_url}")
+        logger.info(f"Conectando à API: {self._base_url}")
         await self._authenticate()
         return self
 
@@ -105,7 +107,7 @@ class FMApi:
         )
         resp.raise_for_status()
         self._token = resp.json()["accessToken"]
-        log(f"Autenticado em {self._base_url}")
+        logger.info(f"Autenticado em {self._base_url}")
 
     def _headers(self) -> dict:
         if not self._token:
@@ -120,7 +122,7 @@ class FMApi:
         """
         async with self._lock:
             if self._token == stale_token:
-                log("Token expirado (401) — re-autenticando...", level="warning")
+                logger.warning("Token expirado (401) — re-autenticando...")
                 await self._authenticate()
 
     @retry(
@@ -178,7 +180,7 @@ class FMApi:
         total_pages: int = first.get("totalPages", 1)
         extra_log = f", {extra_str}" if extra_str else ""
         pct = round(1 / total_pages * 100) if total_pages else 100
-        log(
+        logger.info(
             f"GET {full_url}"
             f" [página 1/{total_pages} ({pct}%), pageSize={page_size}{extra_log}]"
             f" → {len(items)} itens"
@@ -223,7 +225,7 @@ class FMApi:
                 body = await self.get_json(path=path, params=p)
             page_items: list[dict] = body.get("data", [])
             pct = round((page - page_start + 1) / total_in_range * 100)
-            log(
+            logger.info(
                 f"GET {full_url}"
                 f" [página {page}/{page_end} ({pct}%), pageSize={page_size}{extra_log}]"
                 f" → {len(page_items)} itens"
@@ -237,10 +239,9 @@ class FMApi:
             if not pending:
                 break
             if attempt > 0:
-                log(
+                logger.warning(
                     f"↺ Round {attempt}/{max_page_retries} — {len(pending)} página(s)"
                     f" pendentes: {sorted(pending)}",
-                    level="warning",
                 )
             outcomes = await asyncio.gather(
                 *[_fetch(p) for p in sorted(pending)],
@@ -280,7 +281,7 @@ class FMApi:
         if total_pages <= 1:
             return first_items
         full_url = f"{self._base_url}{path}"
-        log(f"GET {full_url} — {total_pages} páginas, buscando em paralelo...")
+        logger.info(f"GET {full_url} — {total_pages} páginas, buscando em paralelo...")
         rest = await self.get_pages_range(
             path=path,
             page_start=2,
@@ -290,7 +291,7 @@ class FMApi:
             sem=sem,
             max_page_retries=max_page_retries,
         )
-        log(
+        logger.info(
             f"GET {full_url} — total: {len(first_items) + len(rest)} itens"
             f" em {total_pages} página(s)"
         )

@@ -25,18 +25,26 @@ pull:
 
 deployments:
   - name: rj-ssm--run_dbt--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_ssm__run_dbt/flow.py:rj_ssm__run_dbt
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_ssm__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-ssm-secrets
         image_pull_policy: Always
   - name: rj-ssm--run_dbt--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_ssm__run_dbt/flow.py:rj_ssm__run_dbt
     concurrency_limit:
       limit: 1
@@ -45,50 +53,39 @@ deployments:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_ssm__run_dbt -- prefect flow-run execute
         secretName: prefect-jobs-ssm-secrets
         image_pull_policy: Always
     schedules:
       - interval: 86400
-        anchor_date: "2023-01-01T09:00:00"
+        anchor_date: '2023-01-01T09:00:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_freshness
         parameters:
-          command: "source freshness"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
-          bigquery_project: "rj-ssm"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-ssm"
-            dev: "rj-ssm-dev"
-
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git
+            command: source freshness
+            target: prod
+          report: true
       - interval: 86400
-        anchor_date: "2023-01-01T10:15:00"
+        anchor_date: '2023-01-01T10:15:00'
         timezone: America/Sao_Paulo
         slug: dbt_daily_build
         parameters:
-          command: "build"
-          select: "+tag:daily"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
-          bigquery_project: "rj-ssm"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-ssm"
-            dev: "rj-ssm-dev"
-
-      - cron: "0 9,12,15,18 * * *"
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git
+            command: build
+            target: prod
+            select: +tag:daily
+          report: true
+      - cron: 0 9,12,15,18 * * *
         timezone: America/Sao_Paulo
         slug: dbt_fatores_build
         parameters:
-          command: "build"
-          select: "tag:fatores"
-          send_discord_report: true
-          github_repo: "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git"
-          bigquery_project: "rj-ssm"
-          target: "prod"
-          gcs_buckets:
-            prod: "rj-ssm"
-            dev: "rj-ssm-dev"
+          request:
+            repository: https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-ssm.git
+            command: build
+            target: prod
+            select: tag:fatores
+          report: true

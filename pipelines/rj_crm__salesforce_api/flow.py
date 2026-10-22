@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Flow genérico para ingestão de dados via Salesforce Marketing Cloud REST API.
 
@@ -18,20 +17,23 @@ Credenciais necessárias no Infisical (path: /salesforce_marketing_cloud):
 """
 
 import os
+from pathlib import Path
 from typing import Literal
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
 from prefect import flow
 
 from pipelines.rj_crm__salesforce_api.constants import APIConstants
+from pipelines.rj_crm__salesforce_api.helpers import create_date_partitions
 from pipelines.rj_crm__salesforce_api.tasks import build_dataframe, fetch_sfmc_route
-from pipelines.rj_crm__disparo_template.utils.tasks import create_date_partitions
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_crm__salesforce_api(
+@flow(log_prints=True, flow_run_name="sfmc_api__{http_method}__{table_id}")
+async def rj_crm__salesforce_api(
+    *,
+    cloud: Cloud,
     route: str,
     table_id: str,
     http_method: Literal["get", "post"] = "get",
@@ -79,8 +81,6 @@ def rj_crm__salesforce_api(
     file_format = APIConstants.FILE_FORMAT.value
     partition_column = APIConstants.PARTITION_COLUMN.value
 
-    rename_current_flow_run_task(new_name=f"sfmc_api__{http_method}__{table_id}")
-    inject_bd_credentials_task(environment="prod")
 
     # 1. Chamar a rota da SFMC REST API (GET ou POST, com paginação automática)
     records = fetch_sfmc_route(
@@ -111,10 +111,13 @@ def rj_crm__salesforce_api(
         print(f"[SFMC] Arquivos gerados: {files_in_path}")
 
     # 4. Upload para GCS / BigQuery
-    create_table_and_upload_to_gcs_task(
-        data_path=partitions_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(partitions_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        biglake_table=False,
+        source_format="csv",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)

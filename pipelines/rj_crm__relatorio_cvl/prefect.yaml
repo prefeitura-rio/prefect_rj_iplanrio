@@ -21,6 +21,10 @@ pull:
       directory: /opt/prefect/prefect_rj_iplanrio
 deployments:
   - name: rj_crm__relatorio_cvl--staging
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__relatorio_cvl/flow.py:rj_crm__relatorio_cvl
     work_pool:
@@ -36,7 +40,15 @@ deployments:
       table_id: receptivo_sessoes_24h
       dump_mode: append
 
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
   - name: rj_crm__relatorio_cvl--prod
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
     version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_crm__relatorio_cvl/flow.py:rj_crm__relatorio_cvl
     work_pool:
@@ -51,6 +63,10 @@ deployments:
       dataset_id: brutos_wetalkie
       table_id: receptivo_sessoes_24h
       dump_mode: append
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     schedules:
       - cron: "0 9 1 * *"
         anchor_date: "2024-01-01T09:00:00"

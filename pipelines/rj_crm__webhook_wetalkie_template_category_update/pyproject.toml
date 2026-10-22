@@ -4,11 +4,6 @@ version = "0.1.0"
 description = "..."
 dependencies = [
     "prefect_rj_iplanrio",
-    "defusedxml",
-    "google-cloud-bigquery",
-    "basedosdados",
-    "pandas",
-    "requests",
 ]
 
 [tool.uv.sources]

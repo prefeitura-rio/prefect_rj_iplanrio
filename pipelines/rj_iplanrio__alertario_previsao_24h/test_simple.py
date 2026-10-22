@@ -1,5 +1,5 @@
+from prefect.logging import get_logger
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Script super simples para testar o pipeline AlertaRio.
 Copia a lógica das tasks diretamente sem usar o sistema de @task do Prefect.
@@ -17,6 +17,8 @@ from datetime import datetime
 from defusedxml import ElementTree as ET
 from typing import Dict, Any
 
+logger = get_logger("toolkit")
+
 def log(msg):
     """Log simples"""
     print(f"  {msg}")
@@ -28,7 +30,7 @@ def load_xml_file(filepath):
 
 def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
     """Parse do XML - cópia da função em tasks.py"""
-    log("Fazendo parsing do XML...")
+    logger.info("Fazendo parsing do XML...")
 
     root = ET.fromstring(xml_content)
 
@@ -38,10 +40,10 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
         try:
             create_date = datetime.fromisoformat(create_date_str)
         except (ValueError, TypeError) as e:
-            log(f"AVISO: Createdate inválido '{create_date_str}': {e}. Usando datetime.now()")
+            logger.info(f"AVISO: Createdate inválido '{create_date_str}': {e}. Usando datetime.now()")
             create_date = datetime.now()
     else:
-        log(f"AVISO: Createdate ausente no XML. Usando datetime.now()")
+        logger.info(f"AVISO: Createdate ausente no XML. Usando datetime.now()")
         create_date = datetime.now()
 
     # Extrair previsões
@@ -74,7 +76,7 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
     if temperatura_elem is not None:
         # HARDCODE: usar data do create_date, ignorar data do XML
         data_temp = create_date.date().isoformat()
-        log(f"DEBUG: Bloco Temperatura encontrado, usando data do create_date={data_temp}")
+        logger.info(f"DEBUG: Bloco Temperatura encontrado, usando data do create_date={data_temp}")
         for zona in temperatura_elem.findall("Zona"):
             temperaturas.append({
                 "zona": zona.get("zona"),
@@ -83,7 +85,7 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
                 "data": data_temp,
             })
     else:
-        log("DEBUG: Nenhum bloco Temperatura encontrado no XML")
+        logger.info("DEBUG: Nenhum bloco Temperatura encontrado no XML")
 
     # Extrair tábua de marés
     mares = []
@@ -104,12 +106,12 @@ def parse_xml_to_dict(xml_content: str) -> Dict[str, Any]:
         "mares": mares,
     }
 
-    log(f"Parsing concluído: {len(previsoes)} previsões, {len(temperaturas)} zonas, {len(mares)} marés")
+    logger.info(f"Parsing concluído: {len(previsoes)} previsões, {len(temperaturas)} zonas, {len(mares)} marés")
     return parsed_data
 
 def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """Cria DataFrame da tabela previsao_diaria"""
-    log("Criando DataFrame previsao_diaria...")
+    logger.info("Criando DataFrame previsao_diaria...")
 
     create_date = parsed_data["create_date"]
     previsoes = parsed_data["previsoes"]
@@ -147,7 +149,7 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
 
         data_referencia_date = datetime.strptime(data_referencia, "%Y-%m-%d").date()
 
-        log(f"DEBUG: Usando TODAS as temperaturas para data_referencia='{data_referencia}'")
+        logger.info(f"DEBUG: Usando TODAS as temperaturas para data_referencia='{data_referencia}'")
 
         registros.append({
             "id_previsao": id_previsao,
@@ -161,12 +163,12 @@ def create_previsao_diaria_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame previsao_diaria criado com {len(df)} registros")
+    logger.info(f"DataFrame previsao_diaria criado com {len(df)} registros")
     return df
 
 def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """Cria DataFrame da dimensão dim_previsao_periodo"""
-    log("Criando DataFrame dim_previsao_periodo...")
+    logger.info("Criando DataFrame dim_previsao_periodo...")
 
     create_date = parsed_data["create_date"]
     previsoes = parsed_data["previsoes"]
@@ -191,12 +193,12 @@ def create_dim_previsao_periodo_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_previsao_periodo criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_previsao_periodo criado com {len(df)} registros")
     return df
 
 def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """Cria DataFrame da dimensão dim_temperatura_zona"""
-    log("Criando DataFrame dim_temperatura_zona...")
+    logger.info("Criando DataFrame dim_temperatura_zona...")
 
     create_date = parsed_data["create_date"]
     temperaturas = parsed_data["temperaturas"]
@@ -225,12 +227,12 @@ def create_dim_temperatura_zona_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_temperatura_zona criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_temperatura_zona criado com {len(df)} registros")
     return df
 
 def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
     """Cria DataFrame da dimensão dim_mares"""
-    log("Criando DataFrame dim_mares...")
+    logger.info("Criando DataFrame dim_mares...")
 
     create_date = parsed_data["create_date"]
     mares = parsed_data["mares"]
@@ -251,7 +253,7 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
                     try:
                         data_hora = datetime.strptime(horario_str, "%d/%m/%Y %H:%M:%S")
                     except ValueError:
-                        log(f"Formato de horário não reconhecido: {horario_str}")
+                        logger.info(f"Formato de horário não reconhecido: {horario_str}")
                         data_hora = None
         else:
             data_hora = None
@@ -266,7 +268,7 @@ def create_dim_mares_df(parsed_data: Dict[str, Any]) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(registros)
-    log(f"DataFrame dim_mares criado com {len(df)} registros")
+    logger.info(f"DataFrame dim_mares criado com {len(df)} registros")
     return df
 
 def save_to_csv(df, output_path):

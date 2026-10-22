@@ -1,30 +1,33 @@
-# -*- coding: utf-8 -*-
 """
 Flow migrado do Prefect 1.4 para 3.0 - CRM Wetalkie Atualiza Contato
 """
 
-from toolkit.pipelines_utils.bd import create_table_and_upload_to_gcs_task
-from toolkit.pipelines_utils.dbt import execute_dbt_task
-from toolkit.pipelines_utils.env import inject_bd_credentials_task
-from toolkit.pipelines_utils.prefect import rename_current_flow_run_task
+from pathlib import Path
+
 from prefect import flow
 
 from pipelines.rj_crm__wetalkie_atualiza_contato.constants import (
     WetalkieAtualizaContatoConstants,
+)
+from pipelines.rj_crm__wetalkie_atualiza_contato.helpers.tasks import (
+    access_api,
+    skip_flow_if_empty,
 )
 from pipelines.rj_crm__wetalkie_atualiza_contato.tasks import (
     download_missing_contacts,
     get_contacts,
     safe_export_df_to_parquet,
 )
-from pipelines.rj_crm__wetalkie_atualiza_contato.utils.tasks import (
-    access_api,
-    skip_flow_if_empty,
-)
+from toolkit.dbt import DbtRun
+from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
+from utils.types import Cloud, Table
+from utils.utils import capture_options
 
 
-@flow(log_prints=True)
-def rj_crm__wetalkie_atualiza_contato(
+@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}")
+async def rj_crm__wetalkie_atualiza_contato(
+    *,
+    cloud: Cloud,
     # Parâmetros opcionais para override manual na UI
     dataset_id: str | None = None,
     table_id: str | None = None,
@@ -63,10 +66,8 @@ def rj_crm__wetalkie_atualiza_contato(
     bucket_name = WetalkieAtualizaContatoConstants.BUCKET_NAME.value
 
     # Renomear flow run para melhor identificação
-    rename_flow_run = rename_current_flow_run_task(new_name=f"{table_id}_{dataset_id}")
 
     # Injetar credenciais do BD
-    crd = inject_bd_credentials_task(environment="prod")  # noqa
 
     # Buscar contatos com dados faltantes do BigQuery
     df_contacts = download_missing_contacts(query=query, billing_project_id=billing_project_id, bucket_name=bucket_name)
@@ -106,14 +107,17 @@ def rj_crm__wetalkie_atualiza_contato(
     )
 
     # Upload para GCS e BigQuery
-    create_table_and_upload_to_gcs_task(
-        data_path=exported_path,
-        dataset_id=dataset_id,
-        table_id=table_id,
+    table = Table(dataset_id=dataset_id, table_id=table_id)
+    await upload_files_to_gcs(
+        Path(exported_path),
+        table,
+        bucket=cloud["bucket"],
         dump_mode=dump_mode,
-        source_format=file_format,
+        source_format="parquet",
+        options=capture_options(dump_mode),
     )
+    await publish_table_in_bq(table, cloud)
 
     # Materializar com DBT se necessário
     if materialize_after_dump:
-        execute_dbt_task(dataset_id=dataset_id, table_id=table_id, target="prod")
+        await run_dbt(DbtRun(repository="https://github.com/prefeitura-rio/queries-rj-iplanrio", command="run", target="prod", select=table_id))

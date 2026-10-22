@@ -1,18 +1,19 @@
-# -*- coding: utf-8 -*-
 """
 Tasks for rj_crm__wetalkie_api_hsm_info pipeline
 """
 
+from datetime import datetime
+from typing import Any, Dict, List
+
 import pandas as pd
 import requests
-from typing import List, Dict, Any
-from datetime import datetime
-
 from prefect import task
-from toolkit.pipelines_utils.logging import log
-from toolkit.pipelines_utils.env import getenv_or_action
+from prefect.logging import get_logger
 
 from pipelines.rj_crm__wetalkie_api_hsm_info.constants import Constants
+from utils.utils import read_env
+
+logger = get_logger("toolkit")
 
 
 @task
@@ -21,14 +22,14 @@ def get_wetalkie_token(infisical_secret_path: str = None) -> str:
     Retrieves the WeTalkie API token using credentials from Infisical (or env vars).
     """
     # Keys used in rj_crm__api_wetalkie
-    username = getenv_or_action("wetalkie_user", action="ignore")
-    password = getenv_or_action("wetalkie_pass", action="ignore")
+    username = read_env("wetalkie_user")
+    password = read_env("wetalkie_pass")
     
     # Also check specific keys if the generic ones fail or just to be safe
     if not username:
-         username = getenv_or_action("WETALKIE_USERNAME", action="ignore")
+         username = read_env("WETALKIE_USERNAME")
     if not password:
-         password = getenv_or_action("WETALKIE_PASSWORD", action="ignore")
+         password = read_env("WETALKIE_PASSWORD")
 
     if not username or not password:
         raise ValueError("WeTalkie credentials not found.")
@@ -37,7 +38,7 @@ def get_wetalkie_token(infisical_secret_path: str = None) -> str:
     payload = {"username": username, "password": password}
 
     try:
-        log(f"Authenticating to {url}")
+        logger.info(f"Authenticating to {url}")
         response = requests.post(url, json=payload, timeout=Constants.TIMEOUT.value)
         response.raise_for_status()
         data = response.json()
@@ -60,7 +61,7 @@ def get_wetalkie_token(infisical_secret_path: str = None) -> str:
 
         return token
     except Exception as e:
-        log(f"Authentication failed: {e}", level="error")
+        logger.error(f"Authentication failed: {e}")
         raise
 
 
@@ -84,7 +85,7 @@ def fetch_hsm_templates(token: str) -> List[Dict[str, Any]]:
         page = 0
         has_next = True
         
-        log(f"Fetching {status_str} templates from {url}")
+        logger.info(f"Fetching {status_str} templates from {url}")
 
         while has_next:
             params = {
@@ -110,9 +111,9 @@ def fetch_hsm_templates(token: str) -> List[Dict[str, Any]]:
 
                 if items:
                     all_items.extend(items)
-                    log(f"  Page {page}: {len(items)} items")
+                    logger.info(f"  Page {page}: {len(items)} items")
                 else:
-                    log(f"  Page {page}: No items")
+                    logger.info(f"  Page {page}: No items")
 
                 # Pagination check
                 if "data" in data and "item" in data["data"] and "hasNextPage" in data["data"]["item"]:
@@ -124,14 +125,14 @@ def fetch_hsm_templates(token: str) -> List[Dict[str, Any]]:
                 
                 # Safety break avoids infinite loops
                 if page > 100:
-                    log("  Page limit reached (safety break)", level="warning")
+                    logger.warning("  Page limit reached (safety break)")
                     break
 
             except Exception as e:
-                log(f"Error fetching {status_str} templates page {page}: {e}", level="error")
+                logger.error(f"Error fetching {status_str} templates page {page}: {e}")
                 raise
 
-    log(f"Total templates fetched: {len(all_items)}")
+    logger.info(f"Total templates fetched: {len(all_items)}")
     return all_items
 
 
