@@ -9,6 +9,8 @@ pipelines/          uma pasta por pipeline: rj_<secretaria>__<pipeline>/
 src/utils/          flows e tasks prontos, usados por várias pipelines
 packages/toolkit/   biblioteca com o código de uso comum (DuckDB, GCS, BigQuery, dbt)
 templates/          modelo para criar uma pipeline nova
+scripts/            scripts Nushell: verificações, deploy e a lista de pipelines legadas
+tests/              testes de `src/utils` e testes de paridade
 Dockerfile          imagem base de todas as pipelines
 pyproject.toml      dependências do repositório
 ```
@@ -62,15 +64,17 @@ Se nenhum `tipo` serve, escreva um `flow.py` que chama as [tasks prontas](#tasks
 
 Os flows ficam em `src/utils/flows.py`. Todos gravam em uma tabela do BigQuery e avisam no Discord quando falham (se existir `DISCORD_WEBHOOK_URL`).
 
-| Flow             | O que faz                                                                                 |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| `dump_database`  | Copia um banco para o BigQuery sem repetir dado. Com `dbt`, roda um comando `dbt` no fim. |
-| `ingest_api`     | Faz uma requisição a uma API e carrega os registros.                                      |
-| `dump_arcgis`    | Copia uma camada do `ArcGIS`. `crs` (como `EPSG:31983`) escolhe o sistema de coordenadas. |
-| `dump_gsheet`    | Copia uma planilha. A primeira linha é o cabeçalho.                                       |
-| `load_files`     | Carrega arquivos locais (`Parquet`, CSV ou JSON). Use em um flow que criou os arquivos.   |
-| `compact_tables` | Junta os arquivos pequenos de tabelas que recebem dados a cada poucos minutos.            |
-| `dbt_run`        | Clona o repositório de consultas e roda um comando `dbt`.                                 |
+| Flow             | O que faz                                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `dump_database`  | Copia um banco para o BigQuery sem repetir dado. Com `dbt`, roda um comando `dbt` no fim.    |
+| `ingest_api`     | Faz uma requisição a uma API e carrega os registros.                                         |
+| `dump_arcgis`    | Copia uma camada do `ArcGIS`. `crs` (como `EPSG:31983`) escolhe o sistema de coordenadas.    |
+| `dump_gsheet`    | Copia uma planilha. A primeira linha é o cabeçalho.                                          |
+| `load_files`     | Carrega arquivos locais (`Parquet`, CSV ou JSON). Use em um flow que criou os arquivos.      |
+| `maintain_delta` | Junta os arquivos pequenos, grava o `checkpoint`, limpa e atualiza todas as tabelas `Delta`. |
+| `dbt_run`        | Clona o repositório de consultas e roda um comando `dbt`. `report` avisa o Discord.          |
+
+No `dbt_run`, `request` é o grupo `DbtRun`: `repository`, `command`, `target`, `select`, `exclude`, `flag` e `full_refresh`. Um repositório privado leva `GITHUB_TOKEN` no lugar do token na URL, como em `https://GITHUB_TOKEN@github.com/org/queries.git`, e a variável de ambiente `GITHUB_TOKEN` o preenche. `flag` são os demais argumentos do `dbt`, separados como no shell. Com `report: true`, o flow posta o resultado no Discord (nós que falharam ou avisaram), se `DISCORD_WEBHOOK_URL` existe.
 
 Os parâmetros são grupos com tipo (`src/utils/types.py`). O `Prefect` recusa uma chave que falta ou um tipo errado antes de rodar.
 
@@ -149,7 +153,7 @@ deployments:
 
 Os nomes das colunas são os da fonte, como em `select`. No CouchDB, `chunks.column` precisa ser `id`, e os filtros não vão com `read.query` nem com `read.since`.
 
-Uma chave de `options` que não existe é um erro, para um nome errado nunca virar o padrão. A chave `batches` agora é `chunks`, e o `Prefect` recusa a antiga. A configuração muda de `hash`, então cada tabela carrega os seus chunks de novo uma vez.
+Uma chave de `options` que não existe é um erro, para um nome errado nunca virar o padrão.
 
 `batch_size` é o número de linhas de cada leitura. Vale para o Oracle (padrão 50 000), para o CouchDB (documentos por página, padrão `COUCHDB_PAGE_SIZE`) e para o MongoDB (documentos por página, padrão 50 000). Os outros bancos passam pelo `DuckDB`, que lê em fluxo, e um `batch_size` neles é um erro. O `batch_size` não muda o conteúdo de um chunk, então não conta para recarregar os chunks.
 
@@ -242,7 +246,7 @@ schedules:
 - Em `append` (o padrão), cada execução soma os registros dela à tabela. Se a mesma execução roda de novo, ela não soma de novo, mesmo que a API devolva outros dados. Uma execução nova, mesmo manual, soma de novo.
 - Em `overwrite`, os registros trocam a tabela.
 - O flow faz uma requisição só. Para uma API com páginas, escreva um flow que pede cada página com `request_json` e carrega tudo com `load_files`.
-- Cada execução cria arquivos pequenos. Agende `compact_tables` (por exemplo, à noite) para as tabelas que recebem dados a cada poucos minutos.
+- Cada execução cria arquivos pequenos. A pipeline `rj_iplanrio__maintain_delta` junta os arquivos de todas as tabelas toda semana. Veja [Manutenção das tabelas](#manutenção-das-tabelas).
 
 ## Tasks prontas
 
@@ -262,8 +266,9 @@ As tasks ficam em `src/utils/tasks.py`. Use-as para montar um flow próprio.
 | `run_bq_sql(sql, project=...)`              | Roda uma instrução do BigQuery, como um `MERGE`, e devolve quantas linhas ela mudou. Escreva o SQL na pipeline.    |
 | `write_sheet(data_path, spreadsheet_id)`    | Escreve arquivos locais em uma planilha.                                                                           |
 | `notify_discord(message)`                   | Posta uma mensagem no Discord.                                                                                     |
-| `compact_delta_table(table, bucket=...)`    | Junta os arquivos pequenos de uma tabela `Delta`.                                                                  |
-| `run_dbt(request)`                          | Roda um comando `dbt`.                                                                                             |
+| `list_delta_tables(bucket)`                 | Lista as tabelas `Delta` da pasta `staging/` do bucket.                                                            |
+| `maintain_delta_table(table, bucket=...)`   | Junta os arquivos pequenos de uma tabela `Delta`, grava o `checkpoint` e limpa os arquivos sem uso.                |
+| `run_dbt(request)`                          | Clona o repositório e roda um comando `dbt`. Com `report`, posta o resultado no Discord.                           |
 
 ## Como o dump não repete dado
 
@@ -273,12 +278,30 @@ Tudo que vai de uma fonte para o bucket usa uma tabela `Delta`, que o BigQuery l
 2. Para cada chunk, o `DuckDB` lê a fonte com os `filters`, aplica `select` e `columns` e grava um `Parquet` local. Uma **impressão digital** do arquivo (a contagem de linhas e duas somas de `md5`) fica no registro da tabela `Delta`.
 3. Se a impressão digital é igual à do registro, nada é gravado. Se mudou, o chunk é trocado em um só `commit`. Um chunk que ficou vazio na fonte perde as linhas.
 4. Um chunk novo sempre é lido. `lookback: 2` lê de novo só os dois últimos chunks já carregados.
-5. Se `filters`, `select`, `columns` ou `chunks` mudam, todos os chunks são carregados de novo. O intervalo (`begin` e `end`), o `lookback`, o `batch_size` e o `concurrency` não contam.
+5. Se `read`, `filters`, `select`, `columns` ou `chunks` (a coluna ou a largura) mudam, todos os chunks são carregados de novo. O intervalo (`begin` e `end`), o `lookback`, o `batch_size` e o `concurrency` não contam.
 6. `append` falha com `SchemaMismatchError` se as colunas mudarem. `overwrite` grava todos os chunks, apaga os que saíram do intervalo e aceita colunas novas.
 7. Com `add_timestamp`, cada linha ganha a coluna `_prefect_extracted_at`: a hora em que o chunk foi gravado (`TIMESTAMP` em UTC). Um chunk que não mudou guarda a hora antiga.
 
+## Manutenção das tabelas
+
+O flow `maintain_delta` roda na pipeline `rj_iplanrio__maintain_delta`, todo domingo às 03:00. Ele nunca muda as linhas.
+
+1. Procura toda pasta `staging/<dataset>/<tabela>` que tem um `_delta_log`.
+2. Em cada tabela, junta os arquivos pequenos, grava o `checkpoint`, apaga os arquivos que nenhuma versão lê (depois de 168 horas) e atualiza a tabela do BigQuery.
+3. Posta no Discord, se `DISCORD_WEBHOOK_URL` existe, as tabelas que falharam, as tabelas com chunks de dois layouts e quantos arquivos a execução juntou.
+4. Uma tabela que falha não para as outras. A execução falha no fim, com a lista.
+
+O flow não corrige estes casos. Ele só avisa do segundo.
+
+- Um chunk antigo que mudou na fonte e está fora do `lookback`. Faça uma execução com `overwrite` ou aumente o `lookback`.
+- Linhas repetidas depois de mudar a largura ou a coluna de `chunks` em `append`. O aviso é `all next to chunk keys` ou `dates next to numbers`. Rode uma vez com `overwrite`.
+- Duas capturas de `capture` que rodam ao mesmo tempo.
+
+`exclude` pula tabelas, no formato `dataset_id.table_id`. Os ambientes `staging` e `prod` usam o mesmo bucket, então só `prod` tem horário.
+
 ## Limites e cuidados
 
+- Mudar a coluna ou a largura de `chunks` em `append` cria chunks com outros nomes e deixa os antigos na tabela, então as linhas ficam repetidas. Rode uma vez com `overwrite`. O flow `maintain_delta` avisa quando vê os dois layouts.
 - Um chunk que não mudou ainda é lido na fonte, porque a impressão digital precisa das linhas. Use `lookback` e faça uma carga completa às vezes.
 - Uma consulta nativa (`read.query`) é um chunk só e roda duas vezes: uma para descrever as colunas e outra para ler. O Oracle é a exceção: ele aplica filtros e chunks, em tabela ou consulta.
 - O `deltalake` lê a tabela pelo esquema `gcs://` (OpenDAL), que é o de `Destination.uri`. Esse esquema lê todo tipo de ADC: servidor de metadados do GKE, `service account`, credencial de usuário e `external_account` (federação). O esquema `gs://` não lê o `external_account`.
@@ -295,7 +318,7 @@ O ambiente usa [`devenv`](https://devenv.sh) (Python 3.14, `uv`, `nushell`, `duc
 devenv --profile checks tasks run lint:all test:all   # o mesmo que o CI roda
 ```
 
-`nu scripts/checks.nu lint imports` lista os imports de módulos que saíram (`toolkit.pipelines_utils`, `prefect_rj_iplanrio` e outros) nas pipelines. Ele falha enquanto uma pipeline os usa, e o `lint:all` ainda não o roda. O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência e os workflows. O `test:all` roda os testes da raiz e do toolkit. O `devenv` roda em paralelo o que não depende um do outro e pula o que não mudou desde a última execução. As tasks chamam os scripts `Nushell` de `scripts/`.
+`nu scripts/checks.nu lint imports` lista os imports de módulos que saíram (`toolkit.pipelines_utils`, `prefect_rj_iplanrio` e outros) nas pipelines. As pipelines de `scripts/legacy.nu` ficam de fora dele e do deploy: elas ainda usam esses módulos e mantêm a implantação atual, com a imagem antiga. Ele falha enquanto outra pipeline os usa. O `lint:all` roda os linters, os tipos, o SQL, as versões de dependência, os imports e os workflows. O `test:all` roda os testes da raiz e do toolkit. O `devenv` roda em paralelo o que não depende um do outro e pula o que não mudou desde a última execução. As tasks chamam os scripts `Nushell` de `scripts/`.
 
 ## Testes
 
@@ -304,7 +327,7 @@ pytest              # sem rede nem contêiner
 pytest -n 4         # em quatro processos, como o `test:root`
 ```
 
-Os testes não usam a nuvem de verdade. O GCS é um servidor falso com a API XML, o BigQuery lê a tabela `Delta` com as regras que o serviço real mostrou, e o banco é um `DuckDB` em memória. O `deltalake`, o `DuckDB` e o `Polars` são os de verdade. Por isso um teste não pega uma mudança do serviço real: confira com uma execução em um ambiente de staging.
+Os testes não usam a nuvem de verdade. Eles não precisam de credencial do Google. Uma credencial local que o Google recusa (`GOOGLE_APPLICATION_CREDENTIALS` com um arquivo inválido ou vencido) faz `tests/test_cloud.py` falhar com `invalid_grant`: apague a variável ou renove a credencial. O GCS é um servidor falso com a API XML, o BigQuery lê a tabela `Delta` com as regras que o serviço real mostrou, e o banco é um `DuckDB` em memória. O `deltalake`, o `DuckDB` e o `Polars` são os de verdade. Por isso um teste não pega uma mudança do serviço real: confira com uma execução em um ambiente de staging.
 
 O `pytest-xdist` roda os testes da raiz em quatro processos, e cada processo sobe o próprio servidor GCS falso (as portas são livres, então não há conflito). Com mais de quatro o ganho some, porque cada processo importa o código de novo. Os testes do `toolkit` rodam em um processo só: o ganho lá é de 2 s.
 
@@ -322,6 +345,10 @@ Os testes de paridade (`tests/parity/`) rodam os seis motores de verdade: `Postg
 - Os nomes usam só letras minúsculas, números e `_`:
   - pasta: `rj_<secretaria>__<pipeline>`
   - `deployment`: `rj-<secretaria>--<pipeline>--<ambiente>`, como `rj-segovi--dump-db-1746--staging`
+- As pipelines de `scripts/legacy.nu` ainda usam os módulos que saíram e não cabem nos flows prontos. O `deploy.nu plan` e o `lint imports` as pulam, e os `deployments` delas seguem com a imagem antiga. Quando uma pipeline migra, tire o nome dela da lista.
+- `DB_USERNAME` e `DB_PASSWORD` vêm do `Secret` do `deployment`. Bancos com logins diferentes precisam de `secretName` diferentes.
+- O `staging` e a `prod` usam o mesmo `bucket` e o mesmo projeto. Um `overwrite` manual no `staging` troca a tabela da `prod`.
+- O `staging` não tem `schedule`. Para rodar à mão, copie os `parameters` de um `schedule` da `prod`.
 - Work pools:
   - `default-pool`: trabalho geral.
   - `onprem-pool`: bancos e sistemas internos da `IplanRio`, que exigem VPN.
@@ -341,7 +368,7 @@ O `deploy.yaml` só roda quando a variável do repositório `DEPLOY_ENABLED` val
 
 Como o `deploy.yaml` funciona:
 
-- **`plan`:** escolhe as pipelines que têm um `deployment` do ambiente, isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML.
+- **`plan`:** escolhe as pipelines que têm um `deployment` do ambiente, isto é, um `name` que termina em `--prod` ou `--staging`. O `plan` lê o `prefect.yaml` como YAML e nunca escolhe uma pipeline de `scripts/legacy.nu`.
   - Se mudou um arquivo de `pipelines/<nome>/`, só essa pipeline entra.
   - Se mudou `src/`, `packages/`, `pyproject.toml` ou `uv.lock`, todas as pipelines entram, porque cada imagem tem esse código dentro. Arquivos `.md` não contam.
   - Em `staging/*`, só segue se a branch tem um `pull request` aberto para a `master`.

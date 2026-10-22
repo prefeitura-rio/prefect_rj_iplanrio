@@ -20,8 +20,8 @@ Vai criar uma pipeline nova? Siga estes cinco passos. Cada passo aponta para a s
 
 Existem dois pontos de partida:
 
-- **Pipeline de um tipo pronto:** o `flow.py` importa o fluxo de `utils.flows` e o `prefect.yaml` tem os parâmetros (veja o [README](README.md#fluxos-prontos)).
-- **Pipeline própria:** o `flow.py` chama as tarefas de `utils.tasks` ou as suas, em `tasks.py`, com a lógica em `helpers.py`.
+- **Pipeline de um tipo pronto:** o `flow.py` importa o flow de `utils.flows` e o `prefect.yaml` tem os parâmetros (veja o [README](README.md#flows-prontos)).
+- **Pipeline própria:** o `flow.py` chama as tasks de `utils.tasks` ou as suas, em `tasks.py`, com a lógica em `helpers.py`.
 
 ### Exemplo mínimo completo
 
@@ -215,6 +215,10 @@ O seguinte nunca deve ser commitado em um diretório de pipeline:
 | `.python-version`                                                      | A versão do Python é fixada na raiz do workspace no `pyproject.toml`.                                                                                       |
 | `.DS_Store`                                                            | Metadados do macOS. Coberto pelo `.gitignore` — se aparecer, o gitignore falhou.                                                                            |
 | Arquivos de dados avulsos (`.json`, `.xml`, `.sql` fora de `queries/`) | Fixtures pertencem a `tests/fixtures/`; scripts DDL pertencem a um repositório de migrations.                                                               |
+
+### 3.4 Pipelines legadas
+
+As pipelines listadas em `scripts/legacy.nu` ainda usam os módulos que saíram (`toolkit.pipelines_utils` e outros) e não cabem nos flows prontos. Elas mantêm o layout antigo e ficam fora das regras das Seções 3.3, 5.8 e 7 até migrarem. O `deploy.nu plan` e o `lint imports` as pulam, e os `deployments` delas seguem com a imagem antiga. Não copie o código delas para uma pipeline nova. Quando uma pipeline migra, tire o nome dela da lista.
 
 ## 4. Responsabilidades dos módulos
 
@@ -613,7 +617,7 @@ GROUP BY station_id
 
 Uma pipeline nunca importa `duckdb`: o SQL que roda no DuckDB passa pelo `Executor` do toolkit (Seção 7.2).
 
-Para extrair de uma API, use o fluxo `ingest_api` ou, se a API tem páginas, escreva um fluxo próprio: peça cada página com `request_json`, grave os registros com `write_records` e carregue tudo com `upload_files_to_gcs` e `publish_table_in_bq`. O Prefect cuida da ordem, das repetições e do estado, e o `Executor` cuida do SQL.
+Para extrair de uma API, use o flow `ingest_api` ou, se a API tem páginas, escreva um flow próprio: peça cada página com `request_json`, grave os registros com `write_records` e carregue tudo com `upload_files_to_gcs` e `publish_table_in_bq`. O Prefect cuida da ordem, das repetições e do estado, e o `Executor` cuida do SQL.
 
 ```python
 # ❌ errado — pandas e CSV intermediário
@@ -698,7 +702,7 @@ def rj_secretaria__pipeline(param: str = "default") -> None:
     ...
 ```
 
-- `log_prints=True` é sempre definido como proteção contra chamadas `print()` acidentais. Todo logging intencional deve usar o módulo `logging` (veja [§5.5](#55-logging)).
+- `log_prints=True` é sempre definido como proteção contra chamadas `print()` acidentais. Todo logging intencional deve usar `get_logger` (veja [§5.5](#55-logging)).
 - O nome da função deve corresponder **exatamente** ao nome do diretório da pipeline. É isso que o Prefect usa para identificar o flow nos deployments.
 - O tipo de retorno é quase sempre `None` — flows produzem efeitos colaterais por natureza.
 - Dê nome à run com `flow_run_name="{table_id}"` no `@flow`: o Prefect preenche o texto com os parâmetros do flow. Não renomeie a run com uma task.
@@ -770,7 +774,7 @@ Nenhuma string SQL em arquivos Python ou em arquivos YAML. Todo SQL vive em arqu
 - `str.format()` colide com a sintaxe do BigQuery: `STRUCT<field STRING>` e `UNNEST([{}])` contêm o caractere `{`.
 - SQL embutido como parâmetro de schedule no `prefect.yaml` produz arquivos com centenas de linhas de SQL escapado em YAML, ilegíveis para revisão.
 
-**Exceção:** o parâmetro `read.query` do fluxo `dump_database` é a consulta nativa de um banco externo, escrita no dialeto dele, e vai no `prefect.yaml` da pipeline.
+**Exceção:** o parâmetro `read.query` do flow `dump_database` é a consulta nativa de um banco externo, escrita no dialeto dele, e vai no `prefect.yaml` da pipeline.
 
 ### 7.2 Modelos Jinja e o Executor
 
@@ -891,7 +895,7 @@ secretName: prefect-jobs-secrets # prod
 
 ### 9.3 Staging vs. prod
 
-Staging não tem a chave `schedules:`. Prod tem agendamentos. Staging usa `secretName: prefect-jobs-secrets-staging`. Prod usa `secretName: prefect-jobs-secrets`.
+Staging não tem a chave `schedules:`. Prod tem agendamentos, e um agendamento desligado leva `active: false`. Em um flow pronto como o `dump_database`, a tabela e a leitura ficam no `schedule`, então uma execução manual no staging copia os `parameters` de um `schedule` da prod. Staging usa `secretName: prefect-jobs-secrets-staging`. Prod usa `secretName: prefect-jobs-secrets`.
 
 ### 9.4 Sem comentários
 
@@ -954,8 +958,8 @@ Promoção especulativa ("isso pode ser útil em outro lugar") não é motivo. C
 
 | Módulo        | Símbolo                                                                                                                                                                                                                                                   | Propósito                                                                                                            |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `utils.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `request_json`, `write_records`, `read_bq`, `run_bq_sql`, `notify_discord`, `compact_delta_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                                            |
-| `utils.flows` | `dump_database`, `dump_arcgis`, `dump_gsheet`, `load_files`, `ingest_api`, `compact_tables`, `dbt_run`                                                                                                                                                    | Fluxos: o dump de uma fonte para uma tabela `Delta` sem repetir dado, a captura de uma API, a compactação e o `dbt`. |
+| `utils.tasks` | `dump_db_to_gcs`, `publish_table_in_bq`, `upload_files_to_gcs`, `dump_bq_to_gcs`, `dump_arcgis_to_gcs`, `dump_gsheet_to_gcs`, `write_sheet`, `request_json`, `write_records`, `read_bq`, `run_bq_sql`, `notify_discord`, `list_delta_tables`, `maintain_delta_table`, `run_dbt` | Tasks compartilhadas sobre o toolkit. Veja o `README.md`.                                                            |
+| `utils.flows` | `dump_database`, `dump_arcgis`, `dump_gsheet`, `load_files`, `ingest_api`, `maintain_delta`, `dbt_run`                                                                                                                                                    | Fluxos: o dump de uma fonte para uma tabela `Delta` sem repetir dado, a captura de uma API, a manutenção das tabelas `Delta` e o `dbt`. |
 
 ### 11.3 O nome `utils`
 
@@ -1005,7 +1009,7 @@ Na dúvida, pergunte: "Um novo membro do time lendo este arquivo entenderia por 
 ### 12.3 Commits
 
 - Use Conventional Commits: `tipo(escopo): resumo no imperativo`, em minúsculas e sem ponto final. O escopo é opcional.
-- Use os tipos `feat`, `fix`, `refactor`, `test`, `docs` e `chore` (CI, ferramentas, dependências e manutenção).
+- Use os tipos `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `data` (dados em produção) e `chore` (CI, ferramentas, dependências e manutenção).
 - Faça uma mudança lógica por commit. Junte os commits de correção (squash) antes do merge.
 - Nunca faça commit nem push sem aprovação explícita. Prepare, resuma e espere.
 
@@ -1165,6 +1169,7 @@ Rode as verificações com `devenv --profile checks tasks run lint:all test:all`
 | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | Estrutura de arquivos, estilo, SQL, tags                                                                                                 | Revisão do PR (ainda não há verificação automática) |
 | Formatação, lint e tipos (`ruff`, `basedpyright`), SQL do toolkit (`sqlfluff`), versões só na raiz e workflows (`actionlint`) | `lint:all`                                          |
+| Imports de módulos que saíram                                                                                                            | `lint imports` (fora do `lint:all` até zerar)       |
 | Testes unitários                                                                                                                         | `test:all`                                          |
 | Build, deploy dos flows, análise SAST                                                                                                    | CI do GitHub (`.github/workflows/`)                 |
 
