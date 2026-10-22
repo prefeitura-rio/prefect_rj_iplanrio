@@ -11,9 +11,8 @@ from pipelines.rj_sms__sisreg_disparo_lembretes.constants import (
     COST_CENTER_ID,
     HSM_ID,
 )
+from utils.hsm import Hsm
 
-type Destination = dict[str, JsonValue]
-"""A phone to message: `to` and the `vars` of the template."""
 type Row = dict[str, JsonValue]
 
 
@@ -21,7 +20,7 @@ type Row = dict[str, JsonValue]
 class Dispatch:
     """How the reminders go out.
 
-    The destinations come from BigQuery, with `billing_project_id` as the project of the query. The flow
+    The recipients come from BigQuery, with `billing_project_id` as the project of the query. The flow
     sends them to the HSM `id_hsm` in batches of `chunk_size`, and each batch is a campaign named
     `<campaign_name>-<date>-lote<number>` of the cost center `cost_center_id`.
     """
@@ -32,10 +31,14 @@ class Dispatch:
     cost_center_id: int = COST_CENTER_ID
     chunk_size: int = CHUNK_SIZE
 
+    def as_hsm(self) -> Hsm:
+        """Return the HSM that the shared sender takes."""
+        return Hsm(self.id_hsm, self.campaign_name, self.cost_center_id, self.chunk_size)
+
 
 @dataclass(frozen=True)
-class Sent:
-    """What went out. `error` is the reason that a batch failed, with the batches before it in `rows`."""
+class Outcome:
+    """What went out: the rows of the batches that the API took, and the reason that a batch failed, if one did."""
 
     rows: list[Row] = field(default_factory=list)
     error: str | None = None
