@@ -1,47 +1,39 @@
-"""Constantes compartilhadas pelos módulos da pipeline de qualidade de telefone."""
+"""Constants of rj_crm__modelo_qualidade_telefone."""
 
-PROJECT_ID = "rj-crm-registry"
-DATASET_ID = "crm_whatsapp"
-TABLE_ID_SCORE = "telefone_prob_high_delivery"
-# Formato longo: data_execucao, versao, origem[treino_holdout|shap|simulacao|gate],
-# algoritmo, metrica, valor, detalhe — ver tasks/retreino/publicar.py.
-TABLE_ID_AVALIACAO = "telefone_qualidade_modelo_avaliacao"
+from typing import Final
 
-# Raiz das versões do modelo no GCS — layout e convenções em utils/modelo_store.py.
-# Bootstrap já publicado lá (versão 2026-09-21), validado no passo 3 do TODO.
-RAIZ_MODELOS = "gs://rj-crm-registry/modelos/qualidade_telefone"
+QUERIES_ANCHOR: Final = __file__
+"""A file of the pipeline folder, from which `render_query` finds `queries/`."""
+PROJECT_ID: Final = "rj-crm-registry"
+DATASET_ID: Final = "crm_whatsapp"
+SCORE_TABLE_ID: Final = "telefone_prob_high_delivery"
+EVALUATION_TABLE_ID: Final = "telefone_qualidade_modelo_avaliacao"
+"""The long table of the retrain: `data_execucao`, `versao`, `origem`, `algoritmo`, `metrica`, `valor`, `detalhe`."""
+MODELS_ROOT: Final = "gs://rj-crm-registry/modelos/qualidade_telefone"
+DRIVE_ROOT_ID: Final = "1h4wlF6mq9I7NmVCmR2yn6vycShDKoEpy"
+"""The folder `Relatórios de retreino` of the Drive. It needs Editor access for the service account."""
+DEFAULT_BATCH_SIZE: Final = 300_000
+"""The phones that the scoring holds in memory at one time."""
+DEFAULT_TRIALS: Final = 30
+DEFAULT_RECENT_DAYS: Final = 30
 
-# Pasta "Relatórios de retreino" no Drive (ID dado pelo usuário, 2026-09-23) — precisa
-# estar compartilhada (Editor) com a service account de BASEDOSDADOS_CREDENTIALS_<PROD|STAGING>.
-# https://drive.google.com/drive/folders/1h4wlF6mq9I7NmVCmR2yn6vycShDKoEpy
-DRIVE_PASTA_RAIZ_ID = "1h4wlF6mq9I7NmVCmR2yn6vycShDKoEpy"
-
-# Parâmetros do rótulo HighDelivery e do sorteio de data_corte no treino
-# (mesmos valores de qualidade_telefone_modelo/src/qualidade_telefone_modelo/config.py).
-RANDOM_STATE = 42
-JANELA_FUTURO_DIAS = 30
-LIMIAR_HIGH_DELIVERY = 0.90
-
-SISTEMAS = ["agendamento_cadunico", "bcadastro", "cadunico", "ergon", "sms"]
-
-# Parâmetros da heurística de simulação (avaliar_simulacao.py) — mesmos valores de
-# qualidade_telefone_modelo/src/qualidade_telefone_modelo/config.py.
-LIMIAR_TAXA_ENTREGA = 0.50
-
-# P(telefone HighDelivery | sistema) — de qualidade_telefone_modelo/deliverables/
-# ranking_confiabilidade.csv (agregado por sistema, sem CPF/telefone individual). Virou
-# constante aqui em vez de CSV versionado: são só 5 números, e um CSV avulso é proibido
-# num diretório de pipeline (ver STYLEGUIDE §3.3). Usado no fallback de
-# avaliar_simulacao.rankear_heuristica — revisitar se o ranking de confiabilidade mudar.
-RANKING_CONFIABILIDADE = {
+RANDOM_STATE: Final = 42
+FUTURE_WINDOW_DAYS: Final = 30
+"""The days after the cut date that make the label of a phone."""
+HIGH_DELIVERY_THRESHOLD: Final = 0.90
+SYSTEMS: Final = ("agendamento_cadunico", "bcadastro", "cadunico", "ergon", "sms")
+DELIVERY_RATE_THRESHOLD: Final = 0.50
+"""The past success rate above which the heuristic picks a phone."""
+RELIABILITY_RANKING: Final = {
     "cadunico": 0.928,
     "ergon": 0.920,
     "bcadastro": 0.900,
     "agendamento_cadunico": 0.894,
     "sms": 0.853,
 }
+"""P(phone is HighDelivery | system). It is the fallback of the heuristic."""
 
-FEATURES_NUMERICAS = [
+NUMERIC_FEATURES: Final = (
     "qtd_disparo_anterior",
     "taxa_sucesso_anterior",
     "dias_desde_ultimo_disparo",
@@ -49,8 +41,8 @@ FEATURES_NUMERICAS = [
     "dias_desde_ultima_resposta",
     "n_sistemas_registrado",
     "telefone_associado_cnpj",
-    *[f"qtd_aparicoes_{s}" for s in SISTEMAS],
-    *[f"dias_desde_atualizacao_{s}" for s in SISTEMAS],
+    *(f"qtd_aparicoes_{system}" for system in SYSTEMS),
+    *(f"dias_desde_atualizacao_{system}" for system in SYSTEMS),
     "dias_desde_primeiro_registro",
     "qtd_cpfs_associados",
     "qtd_telefones_cpf_recente",
@@ -58,37 +50,88 @@ FEATURES_NUMERICAS = [
     "qtd_familias_associadas",
     "concentracao_familiar",
     "pct_cpfs_menor_idade",
-]
-
-# Dummies calculadas em queries/features_telefone.sql (as categorias fixas moram lá).
-# Agrupadas por origem (não só a lista achatada) — usado pelo relatório de cobertura
-# (tasks/retreino/relatorio.py::gera_csv_cobertura): "telefone tem DDD preenchido" é 1
-# pergunta sobre as 6 colunas ddd_*, não 6 perguntas separadas.
-GRUPOS_DUMMIES = {
-    "ddd_categoria": [f"ddd_{d}" for d in ["11", "21", "22", "24", "83", "outros"]],
-    "telefone_qualidade": [f"qualidade_{q}" for q in ["INVALIDO", "SUSPEITO", "VALIDO"]],
+)
+DUMMY_GROUPS: Final = {
+    "ddd_categoria": tuple(f"ddd_{code}" for code in ("11", "21", "22", "24", "83", "outros")),
+    "telefone_qualidade": tuple(f"qualidade_{quality}" for quality in ("INVALIDO", "SUSPEITO", "VALIDO")),
 }
-FEATURES_DUMMIES = [coluna for colunas in GRUPOS_DUMMIES.values() for coluna in colunas]
-
-# Features fracionárias (FLOAT64 na query); todas as outras são contagens/dias/dummies (INT64).
-FEATURES_FLOAT = ["taxa_sucesso_anterior", "concentracao_familiar", "pct_cpfs_menor_idade"]
-
-# Sentinela -1 ("sem dado") usada por essas features numéricas (ver COALESCE(..., -1) em
-# queries/features_telefone.sql) — as demais features numéricas usam 0 como valor REAL de
-# cold start, não sentinela de dado faltante. Mesma lista de
-# qualidade_telefone_modelo/src/qualidade_telefone_modelo/config.py, conferida contra o SQL.
-FEATURES_COM_SENTINELA = [
+"""The dummies that `features_telefone.sql` makes, by the column they come from."""
+DUMMY_FEATURES: Final = tuple(column for columns in DUMMY_GROUPS.values() for column in columns)
+FLOAT_FEATURES: Final = ("taxa_sucesso_anterior", "concentracao_familiar", "pct_cpfs_menor_idade")
+"""The features that are fractions. Every other one is a count, a number of days or a dummy."""
+SENTINEL_FEATURES: Final = (
     "taxa_sucesso_anterior",
     "dias_desde_ultimo_disparo",
     "dias_desde_ultimo_disparo_sucesso",
     "dias_desde_ultima_resposta",
-    *[f"dias_desde_atualizacao_{s}" for s in SISTEMAS],
+    *(f"dias_desde_atualizacao_{system}" for system in SYSTEMS),
     "dias_desde_primeiro_registro",
     "qtd_telefones_cpf_recente",
     "concentracao_familiar",
     "pct_cpfs_menor_idade",
-]
+)
+"""The features whose `-1` means no data. For the others, `0` is a real value."""
+FEATURES: Final = (*NUMERIC_FEATURES, *DUMMY_FEATURES)
+"""The order that the model expects. The model predicts by position."""
+COVERAGE_FEATURES: Final = (*NUMERIC_FEATURES, *DUMMY_GROUPS)
+"""The names in the coverage report: each numeric feature, and each group of dummies as one."""
 
-# Ordem que o modelo espera: o LightGBM em formato nativo prediz por posição, então o
-# código sempre seleciona `df[FEATURES]` antes de prever, nunca confia na ordem do SQL.
-FEATURES = FEATURES_NUMERICAS + FEATURES_DUMMIES
+MIN_TRAINING_ROWS: Final = 10_000
+MIN_MINORITY_EXAMPLES: Final = 200
+MIN_EVENTS: Final = 1_000
+MAX_ROW_CHANGE: Final = 0.3
+"""How much the rows of a scoring can differ from the last one before the run refuses to publish."""
+MAX_P_VALUE: Final = 0.05
+MIN_SCORE_DEVIATION: Final = 0.01
+"""The least deviation of the raw score, in log-odds. A model with less has collapsed."""
+
+TRAINING_FOLDS: Final = 5
+TEST_SIZE: Final = 0.2
+BETA: Final = 0.5
+SHAP_SAMPLE_SIZE: Final = 2000
+SEARCH_KEYS: Final = (
+    "num_leaves",
+    "max_depth",
+    "learning_rate",
+    "n_estimators",
+    "min_child_samples",
+    "subsample",
+    "colsample_bytree",
+    "reg_alpha",
+    "reg_lambda",
+)
+"""The hyperparameters that the search defines."""
+FIXED_PARAMETERS: Final = {"is_unbalance": True, "random_state": RANDOM_STATE, "n_jobs": 1, "verbose": -1}
+"""The LightGBM arguments outside the search. `is_unbalance` leaves the probability uncalibrated on purpose."""
+PROBABILITY_QUANTILES: Final = (0.01, 0.25, 0.50, 0.75, 0.99)
+
+NEW_MODEL: Final = "modelo_novo"
+PRODUCTION_MODEL: Final = "modelo_producao"
+HEURISTIC: Final = "heuristica_limiar"
+RANDOM_RANKING: Final = "ranking_aleatorio"
+SUMMARY_COLUMNS: Final = {
+    "pct_evaluated": "% telefone real avaliado",
+    "pct_change_failed": "% mudaria | disparo falhou",
+    "pct_keep_failed": "% manteria | disparo falhou",
+    "pct_change_success": "% mudaria | disparo sucesso",
+    "pct_keep_success": "% manteria | disparo sucesso",
+    "gap": "gap",
+}
+"""The header of the summary in the report, by field of `Summary`."""
+SUMMARY_METRICS: Final = {
+    "pct_evaluated": "pct_avaliado",
+    "pct_change_failed": "pct_mudaria_falhou",
+    "pct_keep_failed": "pct_manteria_falhou",
+    "pct_change_success": "pct_mudaria_sucesso",
+    "pct_keep_success": "pct_manteria_sucesso",
+    "gap": "gap",
+}
+"""The name of each field of `Summary` as a metric of the evaluation table."""
+BAR_COLOR: Final = "#2a78d6"
+
+MODEL_FILE: Final = "modelo.txt"
+METADATA_FILE: Final = "metadata.json"
+CHAMPION_FILE: Final = "champion.json"
+PREVIOUS_CHAMPION_FILE: Final = "champion_anterior.json"
+GCS_PREFIX: Final = "gs://"
+TIMEZONE: Final = "America/Sao_Paulo"

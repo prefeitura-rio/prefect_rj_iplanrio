@@ -1634,11 +1634,6 @@ wheels = [
 ]
 
 [package.optional-dependencies]
-bqstorage = [
-    { name = "google-cloud-bigquery-storage" },
-    { name = "grpcio" },
-    { name = "pyarrow" },
-]
 pandas = [
     { name = "db-dtypes" },
     { name = "grpcio" },
@@ -4885,15 +4880,14 @@ name = "rj-crm-modelo-qualidade-telefone"
 version = "1.0.0"
 source = { virtual = "pipelines/rj_crm__modelo_qualidade_telefone" }
 dependencies = [
-    { name = "db-dtypes" },
     { name = "google-api-python-client" },
-    { name = "google-cloud-bigquery", extra = ["bqstorage"] },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-bigquery-storage" },
     { name = "google-cloud-storage" },
     { name = "lightgbm" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "optuna" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio" },
     { name = "pyarrow" },
     { name = "scikit-learn" },
@@ -4904,15 +4898,14 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "db-dtypes", specifier = ">=1.3.0" },
     { name = "google-api-python-client" },
-    { name = "google-cloud-bigquery", extras = ["bqstorage"] },
+    { name = "google-cloud-bigquery" },
+    { name = "google-cloud-bigquery-storage" },
     { name = "google-cloud-storage" },
     { name = "lightgbm", specifier = ">=4.5.0" },
     { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "numpy" },
     { name = "optuna", specifier = ">=3.6.0" },
-    { name = "pandas" },
     { name = "prefect-rj-iplanrio", editable = "." },
     { name = "pyarrow" },
     { name = "scikit-learn", specifier = ">=1.5.0" },

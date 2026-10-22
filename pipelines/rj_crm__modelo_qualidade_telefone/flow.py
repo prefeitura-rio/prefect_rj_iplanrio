@@ -1,145 +1,94 @@
-"""Flow for rj_crm__modelo_qualidade_telefone.
-
-Estima a probabilidade de cada telefone ser HighDelivery no WhatsApp (LightGBM) e, uma vez
-por mês, retreina o modelo. Um único flow, dois modos — ``score`` roda a cada 3 dias e só
-executa o modelo já treinado; ``retreino`` roda uma vez por mês e treina, avalia contra o
-modelo em produção/heurística/aleatório e (se passar no gate) promove uma versão nova.
-Ver TODO do projeto pra detalhe de cada parte.
-"""
+"""Flow for rj_crm__modelo_qualidade_telefone."""
 
 from datetime import datetime
-from typing import Literal, get_args
 from zoneinfo import ZoneInfo
 
 from prefect import flow
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__modelo_qualidade_telefone import constants
-from pipelines.rj_crm__modelo_qualidade_telefone.helpers.logging_fix import garante_logging_visivel
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.carrega_modelo import (
-    carrega_champion_opcional_task,
-    carrega_champion_task,
+from pipelines.rj_crm__modelo_qualidade_telefone.constants import (
+    DATASET_ID,
+    DEFAULT_BATCH_SIZE,
+    DEFAULT_RECENT_DAYS,
+    DEFAULT_TRIALS,
+    DRIVE_ROOT_ID,
+    EVALUATION_TABLE_ID,
+    MODELS_ROOT,
+    SCORE_TABLE_ID,
+    TIMEZONE,
 )
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino import extrair, treinar
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.avaliar_simulacao import avalia_simulacao_task
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.promover import (
-    avalia_gate_task,
-    promove_se_aprovado_task,
+from pipelines.rj_crm__modelo_qualidade_telefone.tasks import (
+    decide_task,
+    extract_events_task,
+    extract_training_task,
+    load_champion_task,
+    publish_evaluation_task,
+    publish_model_task,
+    publish_report_task,
+    publish_scores_task,
+    score_task,
+    simulate_task,
+    train_task,
 )
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.publicar import (
-    monta_tabela_avaliacao_task,
-    publica_avaliacao_bq_task,
-)
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.retreino.relatorio import publica_relatorio_task
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.pontua_telefones import pontua_telefones_task
-from pipelines.rj_crm__modelo_qualidade_telefone.tasks.score.publica_tabela import publica_scores_task
+from pipelines.rj_crm__modelo_qualidade_telefone.types import Judgement, Mode, Release, RetrainOptions, Tables
+from utils.hooks import notify_failure
 
-logger = get_logger("toolkit")
-
-# Literal (não str solto): o Prefect gera o formulário da UI a partir do schema do tipo —
-# com Literal, "modo" vira um dropdown de 2 opções em vez de campo de texto livre.
-Modo = Literal["score", "retreino"]
-MODOS_VALIDOS = get_args(Modo)
+DEFAULT_TABLES = Tables(dataset_id=DATASET_ID, score=SCORE_TABLE_ID, evaluation=EVALUATION_TABLE_ID)
 
 
-@flow(log_prints=True)
-def rj_crm__modelo_qualidade_telefone(
-    modo: Modo = "score",
-    environment: str = "prod",
-    dataset_id: str = constants.DATASET_ID,
-    table_id_score: str = constants.TABLE_ID_SCORE,
-    table_id_avaliacao: str = constants.TABLE_ID_AVALIACAO,
-    raiz_modelos: str = constants.RAIZ_MODELOS,
-    tamanho_lote: int = 300_000,
-    n_trials: int = treinar.N_TRIALS_PADRAO,
-    janela_recente_dias: int = extrair.JANELA_RECENTE_DIAS,
-    exigir_gate: bool = True,
-    promocao_automatica: bool = True,
-    drive_pasta_raiz_id: str = constants.DRIVE_PASTA_RAIZ_ID,
+@flow(log_prints=True, flow_run_name="modelo-qualidade-telefone-{mode}", on_failure=[notify_failure])
+async def rj_crm__modelo_qualidade_telefone(
+    *,
+    mode: Mode = "score",
+    tables: Tables = DEFAULT_TABLES,
+    models_root: str = MODELS_ROOT,
+    batch_size: int = DEFAULT_BATCH_SIZE,
+    retrain: RetrainOptions | None = None,
 ) -> None:
-    """Roda o modo ``score`` (a cada 3 dias) ou ``retreino`` (mensal) da pipeline.
+    """Estimate the probability that a phone is HighDelivery on WhatsApp (LightGBM), and retrain the model each month.
 
-    ``score``: carrega o champion do GCS, calcula a probabilidade de HighDelivery de todo
-    telefone elegível associado a um CPF vivo (~6,75M telefones, ~9,4M pares — ver
-    ``queries/amostra_agora.sql``) e publica a tabela do dia com truncate atômico. Se a
-    rodada falhar a validação (sem linha, probabilidade inválida, volume fora do esperado),
-    a tabela de ontem fica intacta.
+    `score` runs every three days with the model that is trained. It loads the champion from GCS, scores
+    every eligible phone linked to a living CPF (about 6.75 million phones and 9.4 million pairs, see
+    `queries/amostra_agora.sql`) in batches of `batch_size` phones, and replaces the table of the day with one atomic
+    load job. If the check fails (no row, an invalid probability, a volume far from the last run), the table of
+    yesterday stays.
 
-    ``retreino``: treina um LightGBM novo (Optuna semeado pelos hiperparâmetros do champion,
-    se houver), simula a escolha de telefone em disparos recentes comparando modelo novo x
-    modelo em produção x heurística x aleatório, decide promoção pelo gate (ver
-    ``tasks/retreino/promover.py``), publica a versão no GCS (sempre — aprovada ou não) e
-    promove o champion só se aprovada. Publica os números na tabela de avaliação do BigQuery
-    e um relatório legível (CSVs + gráficos de SHAP) numa subpasta do Drive nomeada pela
-    versão (data e hora do treino, BRT — não só a data: versão publicada é imutável, então
-    precisa ser única mesmo numa retentativa no mesmo dia).
+    `retrain` runs each month. It trains a new LightGBM (an Optuna search seeded with the hyperparameters of the
+    champion), simulates the choice of a phone on recent sends for the new model, the model in production, a
+    heuristic and a random choice, and decides the promotion with the gate (see `helpers/gate.py`). It publishes the
+    version to GCS always, and promotes the champion only if the gate passes. It writes the numbers to the
+    evaluation table, and a report (CSV files and SHAP plots) to a subfolder of the Drive named by the version.
+    The version is the date and time of the training in São Paulo, because a published version is immutable and
+    a retry on the same day needs another name.
 
-    :param modo: ``"score"`` ou ``"retreino"``.
-    :param environment: ``"prod"`` ou ``"staging"`` — decide o secret de credenciais.
-    :param dataset_id: Dataset de destino das 2 tabelas.
-    :param table_id_score: Nome da tabela do dia (modo ``score``).
-    :param table_id_avaliacao: Nome da tabela de avaliação (modo ``retreino``).
-    :param raiz_modelos: Raiz das versões do modelo no GCS.
-    :param tamanho_lote: Telefones por lote pontuado no scoring (memória do container).
-    :param n_trials: Trials do Optuna na busca de hiperparâmetros (modo ``retreino``).
-    :param janela_recente_dias: Dias de disparos recentes que entram na simulação (modo
-        ``retreino``).
-    :param exigir_gate: Se ``False``, promove o modelo novo mesmo reprovando os critérios
-        do gate (os motivos continuam registrados, só não bloqueiam) — modo ``retreino``.
-    :param promocao_automatica: Se ``False``, publica a versão no GCS mas não troca o
-        champion mesmo aprovada — fica pra alguém promover manualmente depois (modo
-        ``retreino``).
-    :param drive_pasta_raiz_id: ID da pasta raiz no Drive onde o relatório é publicado
-        (modo ``retreino``) — precisa estar compartilhada (Editor) com a service account.
-    :raises ValueError: Se ``modo`` não for ``"score"`` nem ``"retreino"``.
+    `retrain` takes `n_trials` (30), `recent_days` of sends for the simulation (30), `require_gate` (true: with
+    false, the model is promoted although it fails the gate, and the reasons stay in the record),
+    `auto_promote` (true: with false, the version is published and a person promotes it) and `drive_folder_id`,
+    the root folder of the reports, which must be shared (Editor) with the service account.
     """
-    garante_logging_visivel()  # ver utils/logging_fix.py — LightGBM/Optuna/SHAP abafam o INFO
-    if modo not in MODOS_VALIDOS:
-        raise ValueError(f"modo inválido: {modo!r} (esperado um de {MODOS_VALIDOS})")
+    if mode == "score":
+        champion = await load_champion_task(models_root, required=True)
 
-    if modo == "score":
-        champion = carrega_champion_task(environment=environment, raiz=raiz_modelos)
-        caminho_parquet, stats = pontua_telefones_task(champion, environment=environment, tamanho_lote=tamanho_lote)
-        publica_scores_task(
-            caminho_parquet, stats, environment=environment, dataset_id=dataset_id, table_id=table_id_score
-        )
-        logger.info("Scoring publicado: versão %s, %d linhas.", champion.versao, stats.n_linhas)
+        if champion is None:
+            raise RuntimeError("The champion is required in the score mode")
+
+        path, stats = await score_task(champion, batch_size)
+        await publish_scores_task(path, stats, tables)
+        logger.info("Scoring published: version=%s rows=%d", champion.version, stats.n_rows)
         return
 
-    # modo == "retreino"
-    agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
-    # data+hora, não só a data: uma versão publicada é imutável (ver utils/modelo_store.py)
-    # — só a data colidiria em qualquer retentativa no mesmo dia (ex.: falha no upload do
-    # Drive depois que o GCS já foi publicado, retreino rodado de novo manualmente).
-    versao = agora.strftime("%Y-%m-%d-%H%M%S")
-    champion = carrega_champion_opcional_task(environment=environment, raiz=raiz_modelos)
-    hiperparametros_champion = champion.metadata.get("hiperparametros") if champion else None
-    booster_producao = champion.booster if champion else None
-
-    df_treino = extrair.extrai_treino_task(environment=environment)
-    resultado_treino = treinar.treina_task(
-        df_treino, n_trials=n_trials, hiperparametros_champion=hiperparametros_champion
-    )
-
-    df_eventos = extrair.extrai_eventos_task(environment=environment, janela_recente_dias=janela_recente_dias)
-    resultado_simulacao = avalia_simulacao_task(
-        df_eventos, resultado_treino.telefones_treino, resultado_treino.booster, booster_producao
-    )
-
-    decisao = avalia_gate_task(resultado_treino, resultado_simulacao, exigir_gate=exigir_gate)
-    promove_se_aprovado_task(
-        resultado_treino, decisao, raiz_modelos, versao, environment=environment,
-        promocao_automatica=promocao_automatica,
-    )
-
-    tabela_avaliacao = monta_tabela_avaliacao_task(
-        resultado_treino, resultado_simulacao, decisao, versao, agora.date().isoformat()
-    )
-    publica_avaliacao_bq_task(
-        tabela_avaliacao, environment=environment, dataset_id=dataset_id, table_id=table_id_avaliacao
-    )
-    publica_relatorio_task(
-        resultado_treino, versao, drive_pasta_raiz_id, environment, resultado_simulacao, decisao, df_treino
-    )
-
-    logger.info("Retreino %s concluído: promovido=%s (motivos: %s).", versao, decisao.promovido, decisao.motivos)
+    options = retrain or {}
+    now = datetime.now(ZoneInfo(TIMEZONE))
+    version = now.strftime("%Y-%m-%d-%H%M%S")
+    champion = await load_champion_task(models_root, required=False)
+    frame = await extract_training_task()
+    training = await train_task(frame, options.get("n_trials", DEFAULT_TRIALS), champion)
+    events = await extract_events_task(options.get("recent_days", DEFAULT_RECENT_DAYS))
+    simulation = await simulate_task(events, training, champion)
+    gate = await decide_task(training, simulation, require_gate=options.get("require_gate", True))
+    release = Release(version, now.date().isoformat())
+    judgement = Judgement(simulation, gate)
+    await publish_model_task(training, gate, models_root, release, auto_promote=options.get("auto_promote", True))
+    await publish_evaluation_task(training, judgement, release, tables)
+    await publish_report_task(training, judgement, release, options.get("drive_folder_id", DRIVE_ROOT_ID), frame)
+    logger.info("Retrain %s done: promoted=%s reasons=%s", version, gate.promoted, gate.reasons)

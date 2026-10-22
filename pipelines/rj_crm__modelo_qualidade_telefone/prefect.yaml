@@ -32,8 +32,7 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
     parameters:
-      modo: score
-      environment: staging
+      mode: score
     work_pool:
       name: onprem-pool
       work_queue_name: default
@@ -51,8 +50,7 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_crm__modelo_qualidade_telefone/flow.py:rj_crm__modelo_qualidade_telefone
     parameters:
-      modo: score
-      environment: prod
+      mode: score
     work_pool:
       name: onprem-pool
       work_queue_name: default
