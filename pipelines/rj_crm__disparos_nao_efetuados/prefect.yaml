@@ -29,6 +29,9 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparos_nao_efetuados/flow.py:rj_crm__disparos_nao_efetuados
     parameters:
+      table:
+        dataset_id: brutos_salesforce
+        table_id: campanhas_sem_disparo
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -56,6 +59,9 @@ deployments:
     version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_crm__disparos_nao_efetuados/flow.py:rj_crm__disparos_nao_efetuados
     parameters:
+      table:
+        dataset_id: brutos_salesforce
+        table_id: campanhas_sem_disparo
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

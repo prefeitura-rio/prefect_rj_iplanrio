@@ -1,44 +1,45 @@
 """Helpers of rj_crm__disparos_nao_efetuados."""
 
-import os
-import uuid
+from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Literal
 
-import pandas as pd
-from prefect.logging import get_logger
-
-logger = get_logger("toolkit")
+from pipelines.rj_crm__disparos_nao_efetuados.constants import FAILURE_MENTIONS, NOTICE_MENTIONS, SP_TZ
+from utils.utils import render_query
 
 
-def create_date_partitions(
-    dataframe,
-    partition_column: str | None = None,
-    file_format: Literal["csv", "parquet"] = "csv",
-    root_folder="./data/",
-):
-    """Save a DataFrame in one file, with the columns `ano_particao`, `mes_particao` and `data_particao`."""
-    if partition_column is None:
-        partition_column = "data_particao"
-        dataframe[partition_column] = datetime.now().strftime("%Y-%m-%d")
-    else:
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column], errors="coerce")
-        dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
-        if dataframe["data_particao"].isnull().any():
-            raise ValueError("Some dates in the partition column could not be parsed.")
+def build_query() -> str:
+    """Return the query of the active campaigns that sent nothing today."""
+    return render_query(__file__, "campanhas_sem_disparo")
 
-    dataframe["ano_particao"] = dataframe["data_particao"].str[:4]
-    dataframe["mes_particao"] = dataframe["data_particao"].str[5:7]
-    columns = [c for c in dataframe.columns if c not in ("ano_particao", "mes_particao", "data_particao")]
-    dataframe = dataframe[[*columns, "ano_particao", "mes_particao", "data_particao"]]
 
-    os.makedirs(root_folder, exist_ok=True)
-    file_path = os.path.join(root_folder, f"{uuid.uuid4()}.{file_format}")
+def format_today() -> str:
+    """Return today in São Paulo as `DD/MM/YYYY`."""
+    return datetime.now(SP_TZ).strftime("%d/%m/%Y")
 
-    if file_format == "csv":
-        dataframe.to_csv(file_path, index=False)
-    else:
-        dataframe.to_parquet(file_path, index=False)
 
-    logger.info("Files saved on %s", root_folder)
-    return root_folder
+def build_missing_message(campaigns: Sequence[Mapping[str, object]], today: str) -> str:
+    """Return the notice that lists the active campaigns with no dispatch today."""
+    lines = "\n".join(f"• `{campaign['nome_campanha']} - {campaign['nome_hsm']}`" for campaign in campaigns)
+
+    return (
+        f"{NOTICE_MENTIONS}\n"
+        f"⚠️ **Campanhas ativas SEM disparo hoje ({today}):**\n\n"
+        f"{lines}\n\n"
+        f"Total: **{len(campaigns)}** campanha(s) sem disparo."
+    )
+
+
+def build_complete_message(today: str) -> str:
+    """Return the notice that every active campaign sent something today."""
+    return f"{NOTICE_MENTIONS}\n✅ **Todas as campanhas ativas tiveram disparo hoje ({today}).**"
+
+
+def build_failure_message(flow_name: str, flow_run_name: str, state_name: str) -> str:
+    """Return the notice of a failed run."""
+    return (
+        f"{FAILURE_MENTIONS}\n"
+        "Prefect flow de verificação de disparos não efetuados falhou! 🚨\n"
+        f"Flow: {flow_name}\n"
+        f"Flow Run: {flow_run_name}\n"
+        f"State: {state_name}"
+    )

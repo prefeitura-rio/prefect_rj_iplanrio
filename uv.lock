@@ -4989,14 +4989,10 @@ version = "0.1.0"
 source = { virtual = "pipelines/rj_crm__disparos_nao_efetuados" }
 dependencies = [
     { name = "prefect-rj-iplanrio" },
-    { name = "pytz" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pytz" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-crm-geolocalizacao-residencia"
