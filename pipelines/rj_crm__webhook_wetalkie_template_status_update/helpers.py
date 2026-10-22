@@ -12,7 +12,7 @@ def build_message(row: Mapping[str, object]) -> str | None:
 
     message = f"⚠️ Atenção:\n- O template **`{name}`** teve seu status alterado para **`{event}`**"
 
-    lines = []
+    lines: list[str] = []
     if reason and not (event == "APPROVED" and reason == "NONE"):
         lines.append(f"  - Reason: **`{reason}`**")
     if description:

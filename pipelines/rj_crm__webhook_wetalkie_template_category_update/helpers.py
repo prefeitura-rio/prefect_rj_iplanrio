@@ -9,7 +9,4 @@ def build_message(row: Mapping[str, object]) -> str | None:
     previous = row["content_previous_category"]
     new = row["content_new_category"]
 
-    return (
-        f"⚠️ Atenção:\nO template **`{name}`** teve a sua categoria atualizada "
-        f"de **`{previous}`** para **`{new}`**"
-    )
+    return f"⚠️ Atenção:\nO template **`{name}`** teve a sua categoria atualizada de **`{previous}`** para **`{new}`**"
