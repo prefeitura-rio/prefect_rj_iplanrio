@@ -25,319 +25,432 @@ pull:
 
 deployments:
   - name: rj-cgm--osinfo_rh--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_cgm__osinfo_rh/flow.py:rj_cgm__osinfo_rh
+    parameters:
+      database:
+        type: mysql
+        host: 10.70.4.188
+        port: 3306
+        database: rh
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-
   - name: rj-cgm--osinfo_rh--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_cgm__osinfo_rh/flow.py:rj_cgm__osinfo_rh
+    parameters:
+      database:
+        type: mysql
+        host: 10.70.4.188
+        port: 3306
+        database: rh
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cgm__osinfo_rh -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-
     schedules:
-    - interval: 86400
-      anchor_date: "2022-01-01T07:00:00"
-      timezone: America/Sao_Paulo
-      slug: dc_conselho
-      parameters:
-        table_id: dc_conselho
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `CONS_SG_CONSELHO`,
-            `CONS_DS_CONSELHO`
-          FROM `rh`.`dc_conselho`;
-    - interval: 86400
-      anchor_date: "2022-01-01T07:05:00"
-      timezone: America/Sao_Paulo
-      slug: dc_grau_instrucao
-      parameters:
-        table_id: dc_grau_instrucao
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `GINS_CD_GRAU_INSTRUCAO`,
-            `GINS_DS_GRAU_INSTRUCAO`,
-            `GINS_ORDEM`
-          FROM `rh`.`dc_grau_instrucao`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T07:10:00"
-      timezone: America/Sao_Paulo
-      slug: dc_raca_cor
-      parameters:
-        table_id: dc_raca_cor
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `RACO_CD_RACA_COR`,
-            `RACO_DS_DESCRICAO`
-          FROM `rh`.`dc_raca_cor`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T07:15:00"
-      timezone: America/Sao_Paulo
-      slug: dc_sexo
-      parameters:
-        table_id: dc_sexo
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `SEX_CD_SEXO`,
-            `SEX_DS_DESCRICAO`
-          FROM `rh`.`dc_sexo`;
-    - interval: 86400
-      anchor_date: "2022-01-01T07:20:00"
-      timezone: America/Sao_Paulo
-      slug: dc_tipo_vinculacao
-      parameters:
-        table_id: dc_tipo_vinculacao
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `TPVC_CD_TIPO_VINCULACAO`,
-            `TPVC_DS_DESCRICAO`
-          FROM `rh`.`dc_tipo_vinculacao`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T07:25:00"
-      timezone: America/Sao_Paulo
-      slug: tb_cbo
-      parameters:
-        table_id: tb_cbo
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `CBO_CD_CBO`,
-            `CBO_DS_CBO`,
-            `CBO_IN_ATIVIDADE_FIM`
-          FROM `rh`.`tb_cbo`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T07:30:00"
-      timezone: America/Sao_Paulo
-      slug: tb_cbo_bkp
-      parameters:
-        table_id: tb_cbo_bkp
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `CBO_CD_CBO`,
-            `CBO_DS_CBO`,
-            `CBO_IN_ATIVIDADE_FIM`
-          FROM `rh`.`tb_cbo_bkp`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T07:40:00"
-      timezone: America/Sao_Paulo
-      slug: tb_colunas_valores
-      parameters:
-        table_id: tb_colunas_valores
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `RHCO_COD_COLUNA`,
-            `RHCO_NM_COLUNA`,
-            `RHGR_CD_CODIGO`,
-            `RHGR_TP_TIPO`,
-            `RHCO_PERC_PERCENTUAL`,
-            `RHCO_NR_MES_VIGENCIA_INICIO`,
-            `RHCO_NR_MES_VIGENCIA_FIM`,
-            `RHCO_NR_ANO_VIGENCIA_INICIO`,
-            `RHCO_NR_ANO_VIGENCIA_FIM`,
-            `RHCO_NR_ORDEM`,
-            `RHCO_I18N_LABEL`,
-            `RHCO_CAMPO_OBRIGATORIO`
-          FROM `rh`.`tb_colunas_valores`;
-    - interval: 86400
-      anchor_date: "2022-01-01T07:45:00"
-      timezone: America/Sao_Paulo
-      slug: tb_folha_pagamento
-      parameters:
-        table_id: tb_folha_pagamento
-        dump_mode: overwrite
-        execute_query: |
-         SELECT
-          `FPTO_CD_FOLHA`,
-          `VINC_CD_VINCULO`,
-          `FPTO_NR_MES_REFERENCIA`,
-          `FPTO_NR_ANO_REFERENCIA`,
-          `FPTO_NR_MES_COMPETENCIA`,
-          `FPTO_NR_ANO_COMPETENCIA`,
-          `ID_CONTRATO`,
-          `COD_UNIDADE`,
-          `FPTO_VL_CARGA_HORARIA_EFETIVA`,
-          `FPTO_PERC_RATEIO`,
-          `FPTO_DT_LICENCA_INICIO`,
-          `FPTO_DT_LICENCA_FIM`,
-          `FPTO_OBSERVACAO`
-          FROM `rh`.`tb_folha_pagamento`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T07:50:00"
-      timezone: America/Sao_Paulo
-      slug: tb_funcionario
-      parameters:
-        table_id: tb_funcionario
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            FUNC_CD_CPF,
-            FUNC_DS_NOME,
-            FUNC_DS_NOME_SOCIAL,
-            FUNC_DT_NASCIMENTO,
-            FUNC_DS_NOME_MAE,
-            FUNC_DS_NOME_PAI,
-            FUNC_CD_NACIONALIDADE,
-            FUNC_DS_NACIONALIDADE,
-            SEX_CD_SEXO,
-            GINS_CD_GRAU_INSTRUCAO,
-            MUNI_CD_IBGE_NASCIMENTO,
-            RACO_CD_RACA_COR,
-            FUNC_NR_RG,
-            FUNC_DS_ORGAO_EXPEDIDOR_RG,
-            FUNC_DT_EMISSAO,
-            COD_OS
-          FROM tb_funcionario;
-
-
-    - interval: 86400
-      anchor_date: "2022-01-01T07:55:00"
-      timezone: America/Sao_Paulo
-      slug: tb_grupo
-      parameters:
-        table_id: tb_grupo
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `RHGR_TP_TIPO`,
-            `RHGR_CD_CODIGO`,
-            `RHGR_NM_NOME`,
-            `RHGR_IN_TOTALIZAR`
-          FROM `rh`.`tb_grupo`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T08:00:00"
-      timezone: America/Sao_Paulo
-      slug: tb_provisionamento
-      parameters:
-        table_id: tb_provisionamento
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `PROV_CD_PROVISIONAMENTO`,
-            `VINC_CD_VINCULO`,
-            `PROV_NR_MES_REFERENCIA`,
-            `PROV_NR_ANO_REFERENCIA`,
-            `PROV_NR_MES_COMPETENCIA`,
-            `PROV_NR_ANO_COMPETENCIA`,
-            `ID_CONTRATO`,
-            `COD_UNIDADE`,
-            `PROV_OBSERVACAO`
-          FROM `rh`.`tb_provisionamento`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T08:10:00"
-      timezone: America/Sao_Paulo
-      slug: tb_valores_provisionamento
-      parameters:
-        table_id: tb_valores_provisionamento
-        dump_mode: overwrite
-        execute_query: |
-         SELECT
-            `PROV_CD_PROVISIONAMENTO`,
-            `RHCO_COD_COLUNA`,
-            `VLPR_VL_VALOR`
-          FROM `rh`.`tb_valores_provisionamento`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T08:15:00"
-      timezone: America/Sao_Paulo
-      slug: tb_vinculo_trabalho
-      parameters:
-        table_id: tb_vinculo_trabalho
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `VINC_CD_VINCULO`,
-            `FUNC_CD_CPF`,
-            `VINC_IN_ATIVO`,
-            `COD_OS`,
-            `VINC_NR_CNPJ_OS`,
-            `CBO_CD_CBO`,
-            `VINC_NR_REGISTRO_PROFISSIONAL`,
-            `CONS_SG_CONSELHO`,
-            `UF_CD_IBGE_CONSELHO`,
-            `IDCATEGORIA`,
-            `VINC_SETOR`,
-            `CD_TIPO_VINCULACAO`,
-            `VINC_VL_CARGA_HORARIA`,
-            `VINC_DT_INICIO`,
-            `VINC_DT_ENCERRAMENTO`,
-            `ENDE_CD_ENDERECO`,
-            `VINC_DS_EMAIL`,
-            `VINC_CD_CNES`,
-            `VINC_DS_CARGO`,
-            `VINC_NR_TELEFONE`
-          FROM `rh`.`tb_vinculo_trabalho`;
-
-
-    - interval: 86400
-      anchor_date: "2022-01-01T08:20:00"
-      timezone: America/Sao_Paulo
-      slug: dc_unidade_federacao
-      parameters:
-        table_id: dc_unidade_federacao
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `UF_CD_IBGE`,
-            `UF_SG_SIGLA`,
-            `UF_DS_DESCRICAO`
-          FROM `common`.`dc_unidade_federacao`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T08:25:00"
-      timezone: America/Sao_Paulo
-      slug: dc_municipio
-      parameters:
-        table_id: dc_municipio
-        dump_mode: overwrite
-        execute_query: |
-          SELECT
-            `MUNI_CD_IBGE`,
-            `UF_CD_IBGE`,
-            `MUNI_DS_NOME`
-          FROM `common`.`dc_municipio`;
-
-    - interval: 86400
-      anchor_date: "2022-01-01T08:30:00"
-      timezone: America/Sao_Paulo
-      slug: categoria
-      parameters:
-        table_id: categoria
-        dump_mode: overwrite
-        execute_query: |
-            SELECT
-              `IDCATEGORIA`,
-              `COD_CATEGORIA`,
-              `DS_CATEGORIA`,
-              `DT_CADASTRO`,
-              `DT_ULTIMA_ATUALIZ`,
-              `FLG_ATIVO`,
-              `CNES_OBRIGATORIO`
-            FROM `osinfo`.`categoria`;
+      - interval: 86400
+        anchor_date: '2022-01-01T07:00:00'
+        timezone: America/Sao_Paulo
+        slug: dc_conselho
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: dc_conselho
+          read:
+            query: |
+              SELECT
+                `CONS_SG_CONSELHO`,
+                `CONS_DS_CONSELHO`
+              FROM `rh`.`dc_conselho`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:05:00'
+        timezone: America/Sao_Paulo
+        slug: dc_grau_instrucao
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: dc_grau_instrucao
+          read:
+            query: |
+              SELECT
+                `GINS_CD_GRAU_INSTRUCAO`,
+                `GINS_DS_GRAU_INSTRUCAO`,
+                `GINS_ORDEM`
+              FROM `rh`.`dc_grau_instrucao`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:10:00'
+        timezone: America/Sao_Paulo
+        slug: dc_raca_cor
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: dc_raca_cor
+          read:
+            query: |
+              SELECT
+                `RACO_CD_RACA_COR`,
+                `RACO_DS_DESCRICAO`
+              FROM `rh`.`dc_raca_cor`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:15:00'
+        timezone: America/Sao_Paulo
+        slug: dc_sexo
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: dc_sexo
+          read:
+            query: |
+              SELECT
+                `SEX_CD_SEXO`,
+                `SEX_DS_DESCRICAO`
+              FROM `rh`.`dc_sexo`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:20:00'
+        timezone: America/Sao_Paulo
+        slug: dc_tipo_vinculacao
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: dc_tipo_vinculacao
+          read:
+            query: |
+              SELECT
+                `TPVC_CD_TIPO_VINCULACAO`,
+                `TPVC_DS_DESCRICAO`
+              FROM `rh`.`dc_tipo_vinculacao`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:25:00'
+        timezone: America/Sao_Paulo
+        slug: tb_cbo
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_cbo
+          read:
+            query: |
+              SELECT
+                `CBO_CD_CBO`,
+                `CBO_DS_CBO`,
+                `CBO_IN_ATIVIDADE_FIM`
+              FROM `rh`.`tb_cbo`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:30:00'
+        timezone: America/Sao_Paulo
+        slug: tb_cbo_bkp
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_cbo_bkp
+          read:
+            query: |
+              SELECT
+                `CBO_CD_CBO`,
+                `CBO_DS_CBO`,
+                `CBO_IN_ATIVIDADE_FIM`
+              FROM `rh`.`tb_cbo_bkp`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:40:00'
+        timezone: America/Sao_Paulo
+        slug: tb_colunas_valores
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_colunas_valores
+          read:
+            query: |
+              SELECT
+                `RHCO_COD_COLUNA`,
+                `RHCO_NM_COLUNA`,
+                `RHGR_CD_CODIGO`,
+                `RHGR_TP_TIPO`,
+                `RHCO_PERC_PERCENTUAL`,
+                `RHCO_NR_MES_VIGENCIA_INICIO`,
+                `RHCO_NR_MES_VIGENCIA_FIM`,
+                `RHCO_NR_ANO_VIGENCIA_INICIO`,
+                `RHCO_NR_ANO_VIGENCIA_FIM`,
+                `RHCO_NR_ORDEM`,
+                `RHCO_I18N_LABEL`,
+                `RHCO_CAMPO_OBRIGATORIO`
+              FROM `rh`.`tb_colunas_valores`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:45:00'
+        timezone: America/Sao_Paulo
+        slug: tb_folha_pagamento
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_folha_pagamento
+          read:
+            query: |
+              SELECT
+               `FPTO_CD_FOLHA`,
+               `VINC_CD_VINCULO`,
+               `FPTO_NR_MES_REFERENCIA`,
+               `FPTO_NR_ANO_REFERENCIA`,
+               `FPTO_NR_MES_COMPETENCIA`,
+               `FPTO_NR_ANO_COMPETENCIA`,
+               `ID_CONTRATO`,
+               `COD_UNIDADE`,
+               `FPTO_VL_CARGA_HORARIA_EFETIVA`,
+               `FPTO_PERC_RATEIO`,
+               `FPTO_DT_LICENCA_INICIO`,
+               `FPTO_DT_LICENCA_FIM`,
+               `FPTO_OBSERVACAO`
+               FROM `rh`.`tb_folha_pagamento`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:50:00'
+        timezone: America/Sao_Paulo
+        slug: tb_funcionario
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_funcionario
+          read:
+            query: |
+              SELECT
+                FUNC_CD_CPF,
+                FUNC_DS_NOME,
+                FUNC_DS_NOME_SOCIAL,
+                FUNC_DT_NASCIMENTO,
+                FUNC_DS_NOME_MAE,
+                FUNC_DS_NOME_PAI,
+                FUNC_CD_NACIONALIDADE,
+                FUNC_DS_NACIONALIDADE,
+                SEX_CD_SEXO,
+                GINS_CD_GRAU_INSTRUCAO,
+                MUNI_CD_IBGE_NASCIMENTO,
+                RACO_CD_RACA_COR,
+                FUNC_NR_RG,
+                FUNC_DS_ORGAO_EXPEDIDOR_RG,
+                FUNC_DT_EMISSAO,
+                COD_OS
+              FROM tb_funcionario;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T07:55:00'
+        timezone: America/Sao_Paulo
+        slug: tb_grupo
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_grupo
+          read:
+            query: |
+              SELECT
+                `RHGR_TP_TIPO`,
+                `RHGR_CD_CODIGO`,
+                `RHGR_NM_NOME`,
+                `RHGR_IN_TOTALIZAR`
+              FROM `rh`.`tb_grupo`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T08:00:00'
+        timezone: America/Sao_Paulo
+        slug: tb_provisionamento
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_provisionamento
+          read:
+            query: |
+              SELECT
+                `PROV_CD_PROVISIONAMENTO`,
+                `VINC_CD_VINCULO`,
+                `PROV_NR_MES_REFERENCIA`,
+                `PROV_NR_ANO_REFERENCIA`,
+                `PROV_NR_MES_COMPETENCIA`,
+                `PROV_NR_ANO_COMPETENCIA`,
+                `ID_CONTRATO`,
+                `COD_UNIDADE`,
+                `PROV_OBSERVACAO`
+              FROM `rh`.`tb_provisionamento`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T08:10:00'
+        timezone: America/Sao_Paulo
+        slug: tb_valores_provisionamento
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_valores_provisionamento
+          read:
+            query: |
+              SELECT
+                 `PROV_CD_PROVISIONAMENTO`,
+                 `RHCO_COD_COLUNA`,
+                 `VLPR_VL_VALOR`
+               FROM `rh`.`tb_valores_provisionamento`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T08:15:00'
+        timezone: America/Sao_Paulo
+        slug: tb_vinculo_trabalho
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: tb_vinculo_trabalho
+          read:
+            query: |
+              SELECT
+                `VINC_CD_VINCULO`,
+                `FUNC_CD_CPF`,
+                `VINC_IN_ATIVO`,
+                `COD_OS`,
+                `VINC_NR_CNPJ_OS`,
+                `CBO_CD_CBO`,
+                `VINC_NR_REGISTRO_PROFISSIONAL`,
+                `CONS_SG_CONSELHO`,
+                `UF_CD_IBGE_CONSELHO`,
+                `IDCATEGORIA`,
+                `VINC_SETOR`,
+                `CD_TIPO_VINCULACAO`,
+                `VINC_VL_CARGA_HORARIA`,
+                `VINC_DT_INICIO`,
+                `VINC_DT_ENCERRAMENTO`,
+                `ENDE_CD_ENDERECO`,
+                `VINC_DS_EMAIL`,
+                `VINC_CD_CNES`,
+                `VINC_DS_CARGO`,
+                `VINC_NR_TELEFONE`
+              FROM `rh`.`tb_vinculo_trabalho`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T08:20:00'
+        timezone: America/Sao_Paulo
+        slug: dc_unidade_federacao
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: dc_unidade_federacao
+          read:
+            query: |
+              SELECT
+                `UF_CD_IBGE`,
+                `UF_SG_SIGLA`,
+                `UF_DS_DESCRICAO`
+              FROM `common`.`dc_unidade_federacao`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T08:25:00'
+        timezone: America/Sao_Paulo
+        slug: dc_municipio
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: dc_municipio
+          read:
+            query: |
+              SELECT
+                `MUNI_CD_IBGE`,
+                `UF_CD_IBGE`,
+                `MUNI_DS_NOME`
+              FROM `common`.`dc_municipio`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2022-01-01T08:30:00'
+        timezone: America/Sao_Paulo
+        slug: categoria
+        parameters:
+          table:
+            dataset_id: brutos_osinfo_rh
+            table_id: categoria
+          read:
+            query: |
+              SELECT
+                `IDCATEGORIA`,
+                `COD_CATEGORIA`,
+                `DS_CATEGORIA`,
+                `DT_CADASTRO`,
+                `DT_ULTIMA_ATUALIZ`,
+                `FLG_ATIVO`,
+                `CNES_OBRIGATORIO`
+              FROM `osinfo`.`categoria`;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true

@@ -25,34 +25,93 @@ pull:
 
 deployments:
   - name: rj-smfp--adm-instrumentos-firmados--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_smfp__adm_instrumentos_firmados/flow.py:rj_smfp__adm_instrumentos_firmados
+    parameters:
+      database:
+        type: mssql
+        host: 10.2.221.17
+        port: 1433
+        database: DW_IGAA
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__adm_instrumentos_firmados -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-
   - name: rj-smfp--adm-instrumentos-firmados--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_smfp__adm_instrumentos_firmados/flow.py:rj_smfp__adm_instrumentos_firmados
+    parameters:
+      database:
+        type: mssql
+        host: 10.2.221.17
+        port: 1433
+        database: DW_IGAA
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__adm_instrumentos_firmados -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-
     schedules:
-
-    - interval: 86400
-      anchor_date: "2022-03-21T23:00:00"
-      timezone: America/Sao_Paulo
-      slug: instrumento-firmado-daily
-      parameters:
-        table_id: instrumento_firmado
+      - interval: 86400
+        anchor_date: '2022-03-21T23:00:00'
+        timezone: America/Sao_Paulo
+        slug: instrumento-firmado-daily
+        parameters:
+          table:
+            dataset_id: adm_instrumentos_firmados
+            table_id: instrumento_firmado
+          read:
+            query: |
+              SELECT
+                              Exercicio,
+                              Numero,
+                              Orgao_Executor,
+                              Descricao_Orgao_Executor,
+                              Objeto,
+                              Especie,
+                              Situacao,
+                              Cnpj,
+                              Favorecido,
+                              Processo,
+                              Data_Inicio_Prev,
+                              Data_Fim_Prev,
+                              Valor_Atualizado,
+                              Valor_Pago,
+                              Pt,
+                              Natureza,
+                              Fonte,
+                              Modalidade_Licitacao,
+                              Embasamento_Legal,
+                              Saldo_Exec,
+                              Valor_Empenhado,
+                              Valor_Liquidado,
+                              Data_Assinatura,
+                              Tipo_Favorecido
+                          FROM DW_IGAA.dbo.VINSTRUMENTOS_JURIDICOS_ESCRITORIO_GBP
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true

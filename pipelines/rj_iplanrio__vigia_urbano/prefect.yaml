@@ -25,133 +25,263 @@ pull:
 
 deployments:
   - name: rj-iplanrio--vigia_urbano--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
+    parameters:
+      database:
+        type: mysql
+        host: srv000140.infra.rio.gov.br
+        port: 3306
+        database: vigiaurbano
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_iplanrio__vigia_urbano -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-
   - name: rj-iplanrio--vigia_urbano--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_iplanrio__vigia_urbano/flow.py:rj_iplanrio__vigia_urbano
+    parameters:
+      database:
+        type: mysql
+        host: srv000140.infra.rio.gov.br
+        port: 3306
+        database: vigiaurbano
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_iplanrio__vigia_urbano -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
-
     schedules:
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: vw_RespostaOcorrencia
-      parameters:
-        dbt_model_name: raw_vigia_urbano__vw_resposta_ocorrencia
-        table_id: vw_RespostaOcorrencia
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.vw_RespostaOcorrencia
-
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: vw_Auditoria
-      parameters:
-        dbt_model_name: raw_vigia_urbano__vw_auditoria
-        table_id: vw_Auditoria
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.vw_Auditoria
-
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: PerfilUsuario
-      parameters:
-        dbt_model_name: raw_vigia_urbano__perfil_usuario
-        table_id: PerfilUsuario
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.PerfilUsuario
-
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: Usuario
-      parameters:
-        dbt_model_name: raw_vigia_urbano__usuario
-        table_id: Usuario
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.Usuario
-
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: OrgaoUsuario
-      parameters:
-        dbt_model_name: raw_vigia_urbano__orgao_usuario
-        table_id: OrgaoUsuario
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.OrgaoUsuario
-
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: Orgao
-      parameters:
-        table_id: Orgao
-        dbt_model_name: raw_vigia_urbano__orgao
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.Orgao
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: TratamentoFator
-      parameters:
-        table_id: TratamentoFator
-        dbt_model_name: raw_vigia_urbano__tratamento_fator
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.TratamentoFator
-
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: Chamado
-      parameters:
-        table_id: Chamado
-        dbt_model_name: raw_vigia_urbano__chamado
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.Chamado
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: EncaminhamentoOrgao
-      parameters:
-        table_id: EncaminhamentoOrgao
-        dbt_model_name: raw_vigia_urbano__encaminhamento_orgao
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.EncaminhamentoOrgao
-    - interval: 3600
-      anchor_date: "2022-01-01T01:00:00"
-      timezone: America/Sao_Paulo
-      slug: ArquivoEncaminhamento
-      parameters:
-        table_id: ArquivoEncaminhamento
-        dbt_model_name: raw_vigia_urbano__arquivo_encaminhamento
-        execute_query: |
-          SELECT *
-          FROM vigiaurbano.ArquivoEncaminhamento
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: vw_RespostaOcorrencia
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: vw_RespostaOcorrencia
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.vw_RespostaOcorrencia
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__vw_resposta_ocorrencia
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: vw_Auditoria
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: vw_Auditoria
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.vw_Auditoria
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__vw_auditoria
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: PerfilUsuario
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: PerfilUsuario
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.PerfilUsuario
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__perfil_usuario
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: Usuario
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: Usuario
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.Usuario
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__usuario
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: OrgaoUsuario
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: OrgaoUsuario
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.OrgaoUsuario
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__orgao_usuario
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: Orgao
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: Orgao
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.Orgao
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__orgao
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: TratamentoFator
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: TratamentoFator
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.TratamentoFator
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__tratamento_fator
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: Chamado
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: Chamado
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.Chamado
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__chamado
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: EncaminhamentoOrgao
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: EncaminhamentoOrgao
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.EncaminhamentoOrgao
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__encaminhamento_orgao
+      - interval: 3600
+        anchor_date: '2022-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: ArquivoEncaminhamento
+        parameters:
+          table:
+            dataset_id: brutos_formulario_ocorrencia
+            table_id: ArquivoEncaminhamento
+          read:
+            query: |
+              SELECT *
+              FROM vigiaurbano.ArquivoEncaminhamento
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+          dbt:
+            repository: https://github.com/prefeitura-rio/queries-rj-iplanrio
+            command: run
+            target: prod
+            select: raw_vigia_urbano__arquivo_encaminhamento

@@ -25,13 +25,45 @@ pull:
 
 deployments:
   - name: rj-smfp--iptu-inadimplentes--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_smfp__iptu_inadimplentes/flow.py:rj_smfp__iptu_inadimplentes
+    parameters:
+      database:
+        type: mssql
+        host: 10.3.23.158
+        port: 1433
+        database: DBINAD
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__iptu_inadimplentes -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
+    schedules:
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: perfil_inadimplente_v2
+        active: false
+        parameters:
+          table:
+            dataset_id: iptu_inadimplentes
+            table_id: perfil_inadimplente_v2
+          read:
+            query: |
+              SELECT *
+                          FROM DBINAD.IPTU.IPTU;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true

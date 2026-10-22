@@ -25,58 +25,77 @@ pull:
 
 deployments:
   - name: rj-iplanrio--equipamentos-arcgis--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_iplanrio__equipamentos_arcgis/flow.py:rj_iplanrio__equipamentos_arcgis
+    parameters:
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: default-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_iplanrio__equipamentos_arcgis -- prefect flow-run execute
         image_pull_policy: Always
     schedules:
       - interval: 86400
-        anchor_date: "2025-07-15T00:00:00"
+        anchor_date: '2025-07-15T00:00:00'
         timezone: America/Sao_Paulo
         slug: unidades_saude_arcgis
         parameters:
+          table:
+            dataset_id: brutos_equipamentos
+            table_id: unidades_saude_arcgis
           url: https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/0
           crs: EPSG:3857
-          dataset_id: brutos_equipamentos
-          table_id: unidades_saude_arcgis
+          dump_mode: overwrite
       - interval: 86400
-        anchor_date: "2025-07-15T00:10:00"
+        anchor_date: '2025-07-15T00:10:00'
         timezone: America/Sao_Paulo
         slug: unidades_saude_poligonos_arcgis
         parameters:
+          table:
+            dataset_id: brutos_equipamentos
+            table_id: unidades_saude_poligonos_arcgis
           url: https://services1.arcgis.com/OlP4dGNtIcnD3RYf/ArcGIS/rest/services/OSA2/FeatureServer/1
           crs: EPSG:3857
-          dataset_id: brutos_equipamentos
-          table_id: unidades_saude_poligonos_arcgis
+          dump_mode: overwrite
       - interval: 86400
-        anchor_date: "2025-07-15T00:20:00"
+        anchor_date: '2025-07-15T00:20:00'
         timezone: America/Sao_Paulo
         slug: escolas_datario
         parameters:
+          table:
+            dataset_id: brutos_equipamentos
+            table_id: escolas_datario
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Educacao/SME/MapServer/1
           crs: EPSG:31983
-          dataset_id: brutos_equipamentos
-          table_id: escolas_datario
+          dump_mode: overwrite
       - interval: 86400
-        anchor_date: "2025-07-15T00:40:00"
+        anchor_date: '2025-07-15T00:40:00'
         timezone: America/Sao_Paulo
         slug: unidades_saude_datario
         parameters:
+          table:
+            dataset_id: brutos_equipamentos
+            table_id: unidades_saude_datario
           url: https://services1.arcgis.com/OlP4dGNtIcnD3RYf/arcgis/rest/services/OSA2/FeatureServer/0
           crs: EPSG:3857
-          dataset_id: brutos_equipamentos
-          table_id: unidades_saude_datario
+          dump_mode: overwrite
       - interval: 86400
-        anchor_date: "2025-07-15T00:50:00"
+        anchor_date: '2025-07-15T00:50:00'
         timezone: America/Sao_Paulo
         slug: culturais_datario
         parameters:
+          table:
+            dataset_id: brutos_equipamentos
+            table_id: culturais_datario
           url: https://pgeo3.rio.rj.gov.br/arcgis/rest/services/Cultura/Equipamentos_SMC/MapServer/0
           crs: EPSG:31983
-          dataset_id: brutos_equipamentos
-          table_id: culturais_datario
+          dump_mode: overwrite

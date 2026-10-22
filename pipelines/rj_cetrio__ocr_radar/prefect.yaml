@@ -25,13 +25,27 @@ pull:
 
 deployments:
   - name: rj-cetrio--ocr_radar--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_cetrio__ocr_radar/flow.py:rj_cetrio__ocr_radar
+    parameters:
+      database:
+        type: mssql
+        host: 10.39.64.50
+        port: 1433
+        database: DWOCR_Staging
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cetrio__ocr_radar -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always

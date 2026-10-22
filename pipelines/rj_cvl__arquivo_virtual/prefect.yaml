@@ -25,553 +25,643 @@ pull:
 
 deployments:
   - name: rj_cvl__arquivo_virtual--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_cvl__arquivo_virtual/flow.py:rj_cvl__arquivo_virtual
+    parameters:
+      database:
+        type: mysql
+        host: 10.2.211.17
+        port: 3306
+        database: arquivovirtualprd
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
         image_pull_policy: Always
   - name: rj_cvl__arquivo_virtual--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_cvl__arquivo_virtual/flow.py:rj_cvl__arquivo_virtual
+    parameters:
+      database:
+        type: mysql
+        host: 10.2.211.17
+        port: 3306
+        database: arquivovirtualprd
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_cvl__arquivo_virtual -- prefect flow-run execute
         image_pull_policy: Always
     schedules:
-
       - interval: 86400
-        anchor_date: "2022-01-01T23:30:00"
+        anchor_date: '2022-01-01T23:30:00'
         timezone: America/Sao_Paulo
         slug: conjunto_arquivo
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: conjunto_arquivo
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: conjunto_arquivo
+          read:
+            query: |
+              SELECT
+                `id_nivel`,
+                `id_conjuntoArquivo`,
+                `id_conjuntoArquivo_pai`,
+                `st_conjuntoArquivo`,
+                `st_conjuntoArquivo_pai`
+              FROM `CONJUNTO_ARQUIVO`;
           dump_mode: overwrite
-          execute_query: |
-            SELECT
-              `id_nivel`,
-              `id_conjuntoArquivo`,
-              `id_conjuntoArquivo_pai`,
-              `st_conjuntoArquivo`,
-              `st_conjuntoArquivo_pai`
-            FROM `CONJUNTO_ARQUIVO`;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:35:00"
+        anchor_date: '2022-01-01T23:35:00'
         timezone: America/Sao_Paulo
         slug: a1_identificacao
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: a1_identificacao
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: a1_identificacao
+          read:
+            query: |
+              SELECT
+                cd_referencia,
+                dt_fim,
+                dt_iniModalidade,
+                dt_pesquisa,
+                ds_titulo,
+                id_modalidade,
+                id_conjuntoArquivo,
+                id_setor
+              FROM A1_IDENTIFICACAO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-              cd_referencia,
-              dt_fim,
-              dt_iniModalidade,
-              dt_pesquisa,
-              ds_titulo,
-              id_modalidade,
-              id_conjuntoArquivo,
-              id_setor
-            FROM A1_IDENTIFICACAO;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:40:00"
+        anchor_date: '2022-01-01T23:40:00'
         timezone: America/Sao_Paulo
         slug: a2_contextualizacao
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: a2_contextualizacao
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: a2_contextualizacao
+          read:
+            query: |
+              SELECT
+                ds_historiaAdm,
+                ds_historiaArq,
+                id_NaturezaJuridica,
+                id_conjuntoArquivo
+              FROM A2_CONTEXTUALIZACAO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-              ds_historiaAdm,
-              ds_historiaArq,
-              id_NaturezaJuridica,
-              id_conjuntoArquivo
-            FROM A2_CONTEXTUALIZACAO;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:45:00"
+        anchor_date: '2022-01-01T23:45:00'
         timezone: America/Sao_Paulo
         slug: a3_conteudo_estrutura
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: a3_conteudo_estrutura
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: a3_conteudo_estrutura
+          read:
+            query: |
+              SELECT
+                ds_incorporacoes,
+                ds_avalEliminaTemp,
+                ds_ambitoConteudo,
+                id_conjuntoArquivo,
+                ds_organizacao,
+                id_estagioTratamento
+              FROM A3_CONTEUDO_ESTRUTURA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-              ds_incorporacoes,
-              ds_avalEliminaTemp,
-              ds_ambitoConteudo,
-              id_conjuntoArquivo,
-              ds_organizacao,
-              id_estagioTratamento
-            FROM A3_CONTEUDO_ESTRUTURA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:35:00"
+        anchor_date: '2022-01-01T23:35:00'
         timezone: America/Sao_Paulo
         slug: a4_condicoes_acesso
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: a4_condicoes_acesso
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: a4_condicoes_acesso
+          read:
+            query: |
+              SELECT
+                ds_condicoesReproducao,
+                id_conjuntoArquivo,
+                obs,
+                id_restricao,
+                id_tipoRestricao
+              FROM A4_CONDICOES_ACESSO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-              ds_condicoesReproducao,
-              id_conjuntoArquivo,
-              obs,
-              id_restricao,
-              id_tipoRestricao
-            FROM A4_CONDICOES_ACESSO;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:40:00"
+        anchor_date: '2022-01-01T23:40:00'
         timezone: America/Sao_Paulo
         slug: a5_fontes_relacionada
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: a5_fontes_relacionada
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: a5_fontes_relacionada
+          read:
+            query: |
+              SELECT
+                  ds_existLocalOriginais,
+                  ds_notasPublicacao,
+                  ds_unidDescRelacionadas,
+                  ds_outrosDetentores,
+                  ds_copiasNaInstituicao,
+                  id_conjuntoArquivo
+              FROM A5_FONTES_RELACIONADA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                ds_existLocalOriginais,
-                ds_notasPublicacao,
-                ds_unidDescRelacionadas,
-                ds_outrosDetentores,
-                ds_copiasNaInstituicao,
-                id_conjuntoArquivo
-            FROM A5_FONTES_RELACIONADA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:45:00"
+        anchor_date: '2022-01-01T23:45:00'
         timezone: America/Sao_Paulo
         slug: a6_notas
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: a6_notas
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: a6_notas
+          read:
+            query: |
+              SELECT
+                  ds_notaConservacao,
+                  id_estadoAcervo,
+                  ds_notasGerais,
+                  id_conjuntoArquivo
+              FROM A6_NOTAS;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                ds_notaConservacao,
-                id_estadoAcervo,
-                ds_notasGerais,
-                id_conjuntoArquivo
-            FROM A6_NOTAS;
-
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:50:00"
+        anchor_date: '2022-01-01T23:50:00'
         timezone: America/Sao_Paulo
         slug: a7_controle
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: a7_controle
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: a7_controle
+          read:
+            query: |
+              SELECT
+                  ds_datasDesc,
+                  ds_regrasConvencoes,
+                  ds_notaArquivistica,
+                  ds_unidadeCustodiadora,
+                  st_arquivoDigital,
+                  ds_responsavelDesc,
+                  id_conjuntoArquivo
+              FROM A7_CONTROLE;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                ds_datasDesc,
-                ds_regrasConvencoes,
-                ds_notaArquivistica,
-                ds_unidadeCustodiadora,
-                st_arquivoDigital,
-                ds_responsavelDesc,
-                id_conjuntoArquivo
-            FROM A7_CONTROLE;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T23:55:00"
+        anchor_date: '2022-01-01T23:55:00'
         timezone: America/Sao_Paulo
         slug: condic_idioma
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: condic_idioma
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: condic_idioma
+          read:
+            query: |
+              SELECT
+                  id_idioma,
+                  id_conjuntoArquivo
+              FROM CONDIC_IDIOMA
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_idioma,
-                id_conjuntoArquivo
-            FROM CONDIC_IDIOMA
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:00:00"
+        anchor_date: '2022-01-01T00:00:00'
         timezone: America/Sao_Paulo
         slug: condic_inst
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: condic_inst
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: condic_inst
+          read:
+            query: |
+              SELECT
+                  id_condicInst,
+                  id_conjuntoArquivo,
+                  id_instPesquisa,
+                  ds_condicInst
+              FROM CONDIC_INST;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_condicInst,
-                id_conjuntoArquivo,
-                id_instPesquisa,
-                ds_condicInst
-            FROM CONDIC_INST;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:05:00"
+        anchor_date: '2022-01-01T00:05:00'
         timezone: America/Sao_Paulo
         slug: context_produtor
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: context_produtor
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: context_produtor
+          read:
+            query: |
+              SELECT
+                  id_produtor,
+                  nm_produtor,
+                  dt_morteExtincao,
+                  dt_nascimentoCriacao,
+                  id_tipoProdutor,
+                  id_conjuntoArquivo
+              FROM CONTEXT_PRODUTOR;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_produtor,
-                nm_produtor,
-                dt_morteExtincao,
-                dt_nascimentoCriacao,
-                id_tipoProdutor,
-                id_conjuntoArquivo
-            FROM CONTEXT_PRODUTOR;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:10:00"
+        anchor_date: '2022-01-01T00:10:00'
         timezone: America/Sao_Paulo
         slug: dimensao_suporte
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: dimensao_suporte
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: dimensao_suporte
+          read:
+            query: |
+              SELECT
+                  id_conjuntoArquivo,
+                  id_genero,
+                  id_especie,
+                  id_capacidade,
+                  id_tipoEscala,
+                  id_formato,
+                  qt_unidade,
+                  ds_escala,
+                  obs,
+                  id_unidade,
+                  qt_capacidade
+              FROM DIMENSAO_SUPORTE;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_conjuntoArquivo,
-                id_genero,
-                id_especie,
-                id_capacidade,
-                id_tipoEscala,
-                id_formato,
-                qt_unidade,
-                ds_escala,
-                obs,
-                id_unidade,
-                qt_capacidade
-            FROM DIMENSAO_SUPORTE;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:15:00"
+        anchor_date: '2022-01-01T00:15:00'
         timezone: America/Sao_Paulo
         slug: procedencia
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: procedencia
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: procedencia
+          read:
+            query: |
+              SELECT
+                  id_procedencia,
+                  nr_geralEntradaProc,
+                  nr_anoProc,
+                  nm_procedencia,
+                  id_formaEntrada,
+                  id_conjuntoArquivo
+              FROM PROCEDENCIA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_procedencia,
-                nr_geralEntradaProc,
-                nr_anoProc,
-                nm_procedencia,
-                id_formaEntrada,
-                id_conjuntoArquivo
-            FROM PROCEDENCIA;
-
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:20:00"
+        anchor_date: '2022-01-01T00:20:00'
         timezone: America/Sao_Paulo
         slug: capacidade_armazena
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: capacidade_armazena
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: capacidade_armazena
+          read:
+            query: |
+              SELECT
+                  Id_capacidade,
+                  ds_capacidade
+              FROM CAPACIDADE_ARMAZENA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                Id_capacidade,
-                ds_capacidade
-            FROM CAPACIDADE_ARMAZENA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:25:00"
+        anchor_date: '2022-01-01T00:25:00'
         timezone: America/Sao_Paulo
         slug: especie
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: especie
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: especie
+          read:
+            query: |
+              SELECT
+                  id_especie,
+                  id_genero,
+                  nm_especie
+              FROM ESPECIE;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_especie,
-                id_genero,
-                nm_especie
-            FROM ESPECIE;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:30:00"
+        anchor_date: '2022-01-01T00:30:00'
         timezone: America/Sao_Paulo
         slug: estado_acervo
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: estado_acervo
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: estado_acervo
+          read:
+            query: |
+              SELECT
+                  id_estadoAcervo,
+                  nm_estado
+              FROM ESTADO_ACERVO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_estadoAcervo,
-                nm_estado
-            FROM ESTADO_ACERVO;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:35:00"
+        anchor_date: '2022-01-01T00:35:00'
         timezone: America/Sao_Paulo
         slug: estagio_tratamento
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: estagio_tratamento
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: estagio_tratamento
+          read:
+            query: |
+              SELECT
+                  id_estagioTratamento,
+                  ds_estagioTratamento
+              FROM ESTAGIO_TRATAMENTO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_estagioTratamento,
-                ds_estagioTratamento
-            FROM ESTAGIO_TRATAMENTO;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:40:00"
+        anchor_date: '2022-01-01T00:40:00'
         timezone: America/Sao_Paulo
         slug: forma_entrada
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: forma_entrada
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: forma_entrada
+          read:
+            query: |
+              SELECT
+                  id_formaEntrada,
+                  ds_formaEntrada
+              FROM FORMA_ENTRADA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_formaEntrada,
-                ds_formaEntrada
-            FROM FORMA_ENTRADA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:45:00"
+        anchor_date: '2022-01-01T00:45:00'
         timezone: America/Sao_Paulo
         slug: formato
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: formato
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: formato
+          read:
+            query: |
+              SELECT
+                  id_formato,
+                  id_genero,
+                  ds_formato
+              FROM FORMATO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_formato,
-                id_genero,
-                ds_formato
-            FROM FORMATO;
-
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:50:00"
+        anchor_date: '2022-01-01T00:50:00'
         timezone: America/Sao_Paulo
         slug: genero
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: genero
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: genero
+          read:
+            query: |
+              SELECT
+                  id_genero,
+                  nm_genero,
+                  nr_genero
+              FROM GENERO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_genero,
-                nm_genero,
-                nr_genero
-            FROM GENERO;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T00:55:00"
+        anchor_date: '2022-01-01T00:55:00'
         timezone: America/Sao_Paulo
         slug: idioma
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: idioma
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: idioma
+          read:
+            query: |
+              SELECT
+                nm_idioma,
+                id_idioma
+              FROM IDIOMA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-              nm_idioma,
-              id_idioma
-            FROM IDIOMA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:00:00"
+        anchor_date: '2022-01-01T01:00:00'
         timezone: America/Sao_Paulo
         slug: instrumento_pesquisa
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: instrumento_pesquisa
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: instrumento_pesquisa
+          read:
+            query: |
+              SELECT
+                id_instPesquisa,
+                ds_instrumento
+              FROM INSTRUMENTO_PESQUISA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-              id_instPesquisa,
-              ds_instrumento
-            FROM INSTRUMENTO_PESQUISA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:05:00"
+        anchor_date: '2022-01-01T01:05:00'
         timezone: America/Sao_Paulo
         slug: modalidade
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: modalidade
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: modalidade
+          read:
+            query: |
+              SELECT
+                  id_modalidade,
+                  ds_modalidade
+              FROM MODALIDADE;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_modalidade,
-                ds_modalidade
-            FROM MODALIDADE;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:10:00"
+        anchor_date: '2022-01-01T01:10:00'
         timezone: America/Sao_Paulo
         slug: natureza_juridica
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: natureza_juridica
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: natureza_juridica
+          read:
+            query: |
+              SELECT
+                ds_natureza,
+                id_NaturezaJuridica
+              FROM NATUREZA_JURIDICA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-              ds_natureza,
-              id_NaturezaJuridica
-            FROM NATUREZA_JURIDICA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:15:00"
+        anchor_date: '2022-01-01T01:15:00'
         timezone: America/Sao_Paulo
         slug: nivel
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: nivel
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: nivel
+          read:
+            query: |
+              SELECT
+                  id_nivel,
+                  ds_nivel,
+                  nr_nivel
+              FROM NIVEL;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_nivel,
-                ds_nivel,
-                nr_nivel
-            FROM NIVEL;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:20:00"
+        anchor_date: '2022-01-01T01:20:00'
         timezone: America/Sao_Paulo
         slug: restricao
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: restricao
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: restricao
+          read:
+            query: |
+              SELECT
+                  id_restricao,
+                  ds_restricaobasica
+              FROM RESTRICAO;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_restricao,
-                ds_restricaobasica
-            FROM RESTRICAO;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:25:00"
+        anchor_date: '2022-01-01T01:25:00'
         timezone: America/Sao_Paulo
         slug: tipo_escala
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: tipo_escala
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: tipo_escala
+          read:
+            query: |
+              SELECT
+                  id_tipoEscala,
+                  ds_tipoEscala
+              FROM TIPO_ESCALA;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_tipoEscala,
-                ds_tipoEscala
-            FROM TIPO_ESCALA;
-
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:30:00"
+        anchor_date: '2022-01-01T01:30:00'
         timezone: America/Sao_Paulo
         slug: tipo_produtor
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: tipo_produtor
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: tipo_produtor
+          read:
+            query: |
+              SELECT
+                  id_tipoProdutor,
+                  ds_tipoProdutor
+              FROM TIPO_PRODUTOR;
           dump_mode: overwrite
-
-          execute_query: |
-            SELECT
-                id_tipoProdutor,
-                ds_tipoProdutor
-            FROM TIPO_PRODUTOR;
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:35:00"
+        anchor_date: '2022-01-01T01:35:00'
         timezone: America/Sao_Paulo
         slug: tipo_restricao
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: tipo_restricao
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: tipo_restricao
+          read:
+            query: |
+              SELECT
+                  id_tipoRestricao,
+                  ds_restricao
+              FROM TIPO_RESTRICAO;
           dump_mode: overwrite
-          execute_query: |
-            SELECT
-                id_tipoRestricao,
-                ds_restricao
-            FROM TIPO_RESTRICAO;
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
-        anchor_date: "2022-01-01T01:40:00"
+        anchor_date: '2022-01-01T01:40:00'
         timezone: America/Sao_Paulo
         slug: unidade_medida
         parameters:
-          biglake_table: true
-          batch_size: 50000
-          table_id: unidade_medida
+          table:
+            dataset_id: brutos_arquivo_virtual
+            table_id: unidade_medida
+          read:
+            query: |
+              SELECT
+                  id_unidade,
+                  nm_unidade
+              FROM UNIDADE_MEDIDA;
           dump_mode: overwrite
-          execute_query: |
-            SELECT
-                id_unidade,
-                nm_unidade
-            FROM UNIDADE_MEDIDA;
+          options:
+            columns:
+              add_timestamp: true

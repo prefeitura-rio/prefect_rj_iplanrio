@@ -25,13 +25,27 @@ pull:
 
 deployments:
   - name: rj-smi--siscob--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_smi__siscob/flow.py:rj_smi__siscob
+    parameters:
+      database:
+        type: mssql
+        host: 10.70.1.34
+        port: 1433
+        database: SISCOB200
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smi__siscob -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
@@ -41,110 +55,166 @@ deployments:
         timezone: America/Sao_Paulo
         slug: obra
         parameters:
-          table_id: obra
+          table:
+            dataset_id: brutos_siscob
+            table_id: obra
+          read:
+            query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO, ORGAO_CONTRATANTE, ORGAO_EXECUTOR, NR_PROCESSO, OBJETO, NM_FAVORECIDO, CNPJ, NR_LICITACAO, MODALIDADE, DT_ASS_CONTRATO, DT_INICIO_OBRA, DT_TERMINO_PREVISTO, DT_TERMINO_ATUAL, NR_CONTRATO, AA_EXERCICIO, SITUACAO, VL_ORCADO_C_BDI, VL_CONTRATADO, VL_VIGENTE, PC_MEDIDO, PRAZO_INICIAL FROM dbo.fuSEGOVI_Dados_da_Obra()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO, ORGAO_CONTRATANTE,
-            ORGAO_EXECUTOR, NR_PROCESSO, OBJETO, NM_FAVORECIDO, CNPJ, NR_LICITACAO, MODALIDADE, DT_ASS_CONTRATO, DT_INICIO_OBRA,
-            DT_TERMINO_PREVISTO, DT_TERMINO_ATUAL, NR_CONTRATO, AA_EXERCICIO, SITUACAO, VL_ORCADO_C_BDI, VL_CONTRATADO, VL_VIGENTE,
-            PC_MEDIDO, PRAZO_INICIAL FROM dbo.fuSEGOVI_Dados_da_Obra()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:10:00'
         timezone: America/Sao_Paulo
         slug: medicao
         parameters:
-          table_id: medicao
+          table:
+            dataset_id: brutos_siscob
+            table_id: medicao
+          read:
+            query: SELECT DISTINCT CD_OBRA, NR_MEDICAO, CD_ETAPA, TP_MEDICAO_D, DT_INI_MEDICAO, DT_FIM_MEDICAO, VL_FINAL FROM dbo.fuSEGOVI_Medicoes()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, NR_MEDICAO, CD_ETAPA, TP_MEDICAO_D, DT_INI_MEDICAO, DT_FIM_MEDICAO, VL_FINAL FROM
-            dbo.fuSEGOVI_Medicoes()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:15:00'
         timezone: America/Sao_Paulo
         slug: termo_aditivo
         parameters:
-          table_id: termo_aditivo
+          table:
+            dataset_id: brutos_siscob
+            table_id: termo_aditivo
+          read:
+            query: SELECT DISTINCT CD_OBRA, NR_DO_TERMO, TP_ACERTO, DT_DO, DT_AUTORIZACAO, VL_ACERTO FROM dbo.fuSEGOVI_Termos_Aditivos()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, NR_DO_TERMO, TP_ACERTO, DT_DO, DT_AUTORIZACAO, VL_ACERTO FROM dbo.fuSEGOVI_Termos_Aditivos()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:20:00'
         timezone: America/Sao_Paulo
         slug: cronograma_financeiro
         parameters:
-          table_id: cronograma_financeiro
+          table:
+            dataset_id: brutos_siscob
+            table_id: cronograma_financeiro
+          read:
+            query: SELECT DISTINCT CD_OBRA, ETAPA, DT_INICIO_ETAPA, DT_FIM_ETAPA, PC_PERCENTUAL, VL_ESTIMADO FROM dbo.fuSEGOVI_Cronograma_Financeiro()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, ETAPA, DT_INICIO_ETAPA, DT_FIM_ETAPA, PC_PERCENTUAL, VL_ESTIMADO FROM dbo.fuSEGOVI_Cronograma_Financeiro()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:25:00'
         timezone: America/Sao_Paulo
         slug: cronograma_alteracao
         parameters:
-          table_id: cronograma_alteracao
+          table:
+            dataset_id: brutos_siscob
+            table_id: cronograma_alteracao
+          read:
+            query: SELECT DISTINCT CD_OBRA, NR_PROCESSO, TP_ALTERACAO, DT_PUBL_DO, CD_ETAPA, NR_PRAZO, DT_VALIDADE, REPLACE(REPLACE(DS_OBSERVACAO, CHAR(13), ''), CHAR(10), '') AS DS_OBSERVACAO FROM dbo.fuSEGOVI_Alteração_de_Cronograma()
           dump_mode: overwrite
-          execute_query: "SELECT DISTINCT CD_OBRA, NR_PROCESSO, TP_ALTERACAO, DT_PUBL_DO, CD_ETAPA, NR_PRAZO, DT_VALIDADE, REPLACE(REPLACE(DS_OBSERVACAO,\
-            \ CHAR(13), ''), CHAR(10), '') AS DS_OBSERVACAO FROM dbo.fuSEGOVI_Altera\xE7\xE3o_de_Cronograma()"
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:30:00'
         timezone: America/Sao_Paulo
         slug: obras_suspensas
         parameters:
-          table_id: obras_suspensas
+          table:
+            dataset_id: brutos_siscob
+            table_id: obras_suspensas
+          read:
+            query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO_OBJETO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO_OBJETO, DT_SUSPENSAO, REPLACE(REPLACE(DS_MOTIVO, CHAR(13), ''), CHAR(10), '') AS DS_MOTIVO, REPLACE(REPLACE(DS_PREVISAO, CHAR(13), ''), CHAR(10), '') AS DS_PREVISAO, REPLACE(REPLACE(DS_JUSTIFICATIVA, CHAR(13), ''), CHAR(10), '') AS DS_JUSTIFICATIVA, NM_RESPONSAVEL FROM dbo.fuSEGOVI_Obras_Suspensas()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO_OBJETO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO_OBJETO,
-            DT_SUSPENSAO, REPLACE(REPLACE(DS_MOTIVO, CHAR(13), ''), CHAR(10), '') AS DS_MOTIVO, REPLACE(REPLACE(DS_PREVISAO, CHAR(13),
-            ''), CHAR(10), '') AS DS_PREVISAO, REPLACE(REPLACE(DS_JUSTIFICATIVA, CHAR(13), ''), CHAR(10), '') AS DS_JUSTIFICATIVA,
-            NM_RESPONSAVEL FROM dbo.fuSEGOVI_Obras_Suspensas()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:35:00'
         timezone: America/Sao_Paulo
         slug: itens_medicao
         parameters:
-          table_id: itens_medicao
+          table:
+            dataset_id: brutos_siscob
+            table_id: itens_medicao
+          read:
+            query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO_OBJETO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO_OBJETO, DS_ESTADO, NR_MEDICAO, DT_INI_MEDICAO, DT_FIM_MEDICAO, CD_ETAPA, NM_SISTEMA, NM_SUB_SISTEMA, NM_PLANILHA, NR_ITEM, CD_CHAVE_EXTERNA, REPLACE(REPLACE(DS_ITEM_SERVICO, CHAR(13), ''), CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, VL_ITEM_SERVICO, QT_MEDIDA, QT_ACUMULADA, VL_MEDIDO FROM dbo.fuSEGOVI_Itens_Medicao()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO_OBJETO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO_OBJETO,
-            DS_ESTADO, NR_MEDICAO, DT_INI_MEDICAO, DT_FIM_MEDICAO, CD_ETAPA, NM_SISTEMA, NM_SUB_SISTEMA, NM_PLANILHA, NR_ITEM, CD_CHAVE_EXTERNA,
-            REPLACE(REPLACE(DS_ITEM_SERVICO, CHAR(13), ''), CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, VL_ITEM_SERVICO,
-            QT_MEDIDA, QT_ACUMULADA, VL_MEDIDO FROM dbo.fuSEGOVI_Itens_Medicao()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:40:00'
         timezone: America/Sao_Paulo
         slug: orcamento_licitado
         parameters:
-          table_id: orcamento_licitado
+          table:
+            dataset_id: brutos_siscob
+            table_id: orcamento_licitado
+          read:
+            query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO_OBJETO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO_OBJETO, NM_SISTEMA, NM_SUB_SISTEMA, NM_PLANILHA, NR_ITEM, CD_CHAVE_EXTERNA, REPLACE(REPLACE(DS_ITEM_SERVICO, CHAR(13), ''), CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, QT_CONTRATADO, VL_UNITARIO, VL_TOTAL FROM dbo.fuSEGOVI_Orcamento_Licitado()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, REPLACE(REPLACE(DS_TITULO_OBJETO, CHAR(13), ''), CHAR(10), '') AS DS_TITULO_OBJETO,
-            NM_SISTEMA, NM_SUB_SISTEMA, NM_PLANILHA, NR_ITEM, CD_CHAVE_EXTERNA, REPLACE(REPLACE(DS_ITEM_SERVICO, CHAR(13), ''),
-            CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, QT_CONTRATADO, VL_UNITARIO, VL_TOTAL FROM dbo.fuSEGOVI_Orcamento_Licitado()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:45:00'
         timezone: America/Sao_Paulo
         slug: itens_medidos_finalizados
         parameters:
-          table_id: itens_medidos_finalizados
+          table:
+            dataset_id: brutos_siscob
+            table_id: itens_medidos_finalizados
+          read:
+            query: SELECT DISTINCT CD_OBRA, NM_SISTEMA, NM_SUB_SISTEMA, NM_PLANILHA, NR_ITEM, CD_CHAVE_EXTERNA, REPLACE(REPLACE(DS_ITEM_SERVICO, CHAR(13), ''), CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, QT_CONTRATADA, VL_UNITARIO_LICITACAO, QT_ACUMULADA, VL_ACUMULADO_MEDIDO, DT_FIM_OBRA FROM dbo.fuSEGOVI_Itens_Medidos_Finalizados()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, NM_SISTEMA, NM_SUB_SISTEMA, NM_PLANILHA, NR_ITEM, CD_CHAVE_EXTERNA, REPLACE(REPLACE(DS_ITEM_SERVICO,
-            CHAR(13), ''), CHAR(10), '') AS DS_ITEM_SERVICO, TX_UNIDADE_MEDIDA, QT_CONTRATADA, VL_UNITARIO_LICITACAO, QT_ACUMULADA,
-            VL_ACUMULADO_MEDIDO, DT_FIM_OBRA FROM dbo.fuSEGOVI_Itens_Medidos_Finalizados()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:50:00'
         timezone: America/Sao_Paulo
         slug: localizacao_obra
         parameters:
-          table_id: localizacao_obra
+          table:
+            dataset_id: brutos_siscob
+            table_id: localizacao_obra
+          read:
+            query: SELECT DISTINCT CD_OBRA, ENDERECO, NM_BAIRRO, NM_RA, NM_AP FROM dbo.fuSEGOVI_Localizacoes_obra()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, ENDERECO, NM_BAIRRO, NM_RA, NM_AP FROM dbo.fuSEGOVI_Localizacoes_obra()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T21:55:00'
         timezone: America/Sao_Paulo
         slug: programa_fonte
         parameters:
-          table_id: programa_fonte
+          table:
+            dataset_id: brutos_siscob
+            table_id: programa_fonte
+          read:
+            query: SELECT DISTINCT CD_OBRA, CD_PRG_TRAB, PROGRAMA_TRABALHO, CD_FONTE_RECURSO, FONTE_RECURSO, CD_NATUREZA_DSP, NATUREZA_DESPESA FROM dbo.fuSEGOVI_Programa_Fonte()
           dump_mode: overwrite
-          execute_query: SELECT DISTINCT CD_OBRA, CD_PRG_TRAB, PROGRAMA_TRABALHO, CD_FONTE_RECURSO, FONTE_RECURSO, CD_NATUREZA_DSP,
-            NATUREZA_DESPESA FROM dbo.fuSEGOVI_Programa_Fonte()
+          options:
+            columns:
+              add_timestamp: true
       - interval: 86400
         anchor_date: '2025-07-15T22:00:00'
         timezone: America/Sao_Paulo
         slug: fiscal
         parameters:
-          table_id: fiscal
+          table:
+            dataset_id: brutos_siscob
+            table_id: fiscal
+          read:
+            query: SELECT CD_OBRA, DT_INICIO_VIG, DT_FIM_VIG, MATRICULA, NOME, EMAIL FROM dbo.fuSEGOVI_Fiscais()
           dump_mode: overwrite
-          execute_query: SELECT CD_OBRA, DT_INICIO_VIG, DT_FIM_VIG, MATRICULA, NOME, EMAIL FROM dbo.fuSEGOVI_Fiscais()
+          options:
+            columns:
+              add_timestamp: true

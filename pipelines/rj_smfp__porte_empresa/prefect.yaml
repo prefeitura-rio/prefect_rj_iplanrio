@@ -25,13 +25,52 @@ pull:
 
 deployments:
   - name: rj-smfp--porte-empresa--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_smfp__porte_empresa/flow.py:rj_smfp__porte_empresa
+    parameters:
+      database:
+        type: mssql
+        host: 10.70.1.34
+        port: 1433
+        database: SDI
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__porte_empresa -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
+    schedules:
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: situacao_cadastral
+        active: false
+        parameters:
+          table:
+            dataset_id: porte_empresa
+            table_id: situacao_cadastral
+          read:
+            query: |
+              SELECT
+                              CNPJ_basico,
+                              CNPJ_ordem,
+                              CNPJ_dv,
+                              RazaoSocial,
+                              cd_PorteEmpresa,
+                              cd_SituacaoCadastral,
+                              dt_SituacaoCadastral
+                          FROM SDI.ReceitaFederal.Vw_PorteEmpresa_Sigma
+          dump_mode: append
+          options:
+            columns:
+              add_timestamp: true

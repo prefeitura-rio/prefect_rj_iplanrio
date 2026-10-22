@@ -25,25 +25,288 @@ pull:
 
 deployments:
   - name: rj-smfp--atividade-economica--staging
-    version: "{{ build-image.tag }}"
+    tags:
+      - environment:staging
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ build-image.tag }}'
     entrypoint: pipelines/rj_smfp__atividade_economica/flow.py:rj_smfp__atividade_economica
+    parameters:
+      database:
+        type: mssql
+        host: 10.70.15.11
+        port: 1433
+        database: DW_BI_ALVARAS
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__atividade_economica -- prefect flow-run execute
-        secretName: prefect-jobs-secrets
+        secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
-
   - name: rj-smfp--atividade-economica--prod
-    version: "{{ get-commit-hash.stdout }}"
+    tags:
+      - environment:prod
+      - severity:medium
+      - code_owner:unassigned
+    version: '{{ get-commit-hash.stdout }}'
     entrypoint: pipelines/rj_smfp__atividade_economica/flow.py:rj_smfp__atividade_economica
+    parameters:
+      database:
+        type: mssql
+        host: 10.70.15.11
+        port: 1433
+        database: DW_BI_ALVARAS
+      cloud:
+        bucket: rj-iplanrio
+        project: rj-iplanrio
+        connection: rj-iplanrio.us.biglake
     work_pool:
       name: onprem-pool
       work_queue_name: default
       job_variables:
-        image: "{{ build-image.image_name }}:{{ build-image.tag }}"
+        image: '{{ build-image.image_name }}:{{ build-image.tag }}'
         command: uv run --package rj_smfp__atividade_economica -- prefect flow-run execute
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
+    schedules:
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: fact_fatoalvaras
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: fact_fatoalvaras
+          read:
+            query: |
+              SELECT
+                              ID_Alvara,
+                              Quantidade,
+                              ID_AtvProcesso,
+                              ID_CAE,
+                              ID_CNAE,
+                              ID_DiaDeferimento,
+                              ID_DiaSolicitacao,
+                              ID_DiaTaxaPagamen,
+                              ID_Direcionamento,
+                              ID_TipoContribuint,
+                              ID_TipoSolicitacao
+                          FROM DW_BI_ALVARAS.dbo.FACT_FatoAlvaras;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: fact_fatocp
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: fact_fatocp
+          read:
+            query: |
+              SELECT
+                              ID_AtvProcesso,
+                              Quantidade_cp,
+                              ID_CAE,
+                              ID_CNAE,
+                              ID_Consulta,
+                              ID_DiaInicial,
+                              ID_Direcionamento,
+                              ID_TipoContribuint,
+                              ID_TipoSolicitacao
+                          FROM DW_BI_ALVARAS.dbo.FACT_FatoCP;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_alvara
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_alvara
+          read:
+            query: |
+              SELECT
+                              ID_Alvara,
+                              DSC_Alvara,
+                              DSC_Endereco,
+                              DSC_Bairro,
+                              DSC_Zoneamento,
+                              DSC_IRLF,
+                              DSC_TipoAnalise,
+                              DSC_TempoRespDia,
+                              DSC_StatusIntermediario,
+                              DSC_StatusCPL,
+                              DSC_TempoRespMinuto,
+                              DSC_TipoAlvara,
+                              DSC_TaxaOriginal,
+                              DSC_TaxaMulta,
+                              DSC_TaxaMora,
+                              DSC_TaxaTotal,
+                              DSC_IsentoTaxa,
+                              DSC_Numero,
+                              DSC_AlvaraLiberado
+                          FROM DW_BI_ALVARAS.dbo.TAB_ALVARA;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_atvprocesso
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_atvprocesso
+          read:
+            query: |
+              SELECT
+                              ID_AtvProcesso,
+                              DSC_AtvProcesso,
+                              DSC_RespAtividade,
+                              DSC_RefAtividade
+                          FROM DW_BI_ALVARAS.dbo.TAB_AtvProcesso;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_cae
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_cae
+          read:
+            query: |
+              SELECT
+                              ID_CAE,
+                              DSC_CAE,
+                              ID_TipoAtividade,
+                              DSC_TipoAtividade
+                          FROM DW_BI_ALVARAS.dbo.TAB_CAE;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_cnae
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_cnae
+          read:
+            query: |
+              SELECT
+                              ID_CNAE,
+                              DSC_CNAE
+                          FROM DW_BI_ALVARAS.dbo.TAB_CNAE;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_consulta
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_consulta
+          read:
+            query: |
+              SELECT
+                              ID_Consulta,
+                              DSC_Consulta,
+                              DSC_Endereco_cp,
+                              DSC_Bairro_cp,
+                              DSC_Zoneamento_cp,
+                              DSC_CodeConsulta,
+                              DSC_IRLF_cp,
+                              DSC_StatusCPL_cp,
+                              DSC_TipoAnalise_cp,
+                              DSC_Status_cp
+                          FROM DW_BI_ALVARAS.dbo.TAB_Consulta;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_direcionamento
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_direcionamento
+          read:
+            query: |
+              SELECT
+                              ID_Direcionamento,
+                              DSC_Direcionamento
+                          FROM DW_BI_ALVARAS.dbo.TAB_Direcionamento;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_tipocontribuinte_tipocontribuint
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_tipocontribuinte_tipocontribuint
+          read:
+            query: |
+              SELECT
+                              ID_TipoContribuint,
+                              DSC_TipoContribuint
+                          FROM DW_BI_ALVARAS.dbo.TAB_TipoContribuinte_TipoContribuint;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
+      - interval: 86400
+        anchor_date: '2026-01-01T01:00:00'
+        timezone: America/Sao_Paulo
+        slug: tab_tiposolicitacao
+        active: false
+        parameters:
+          table:
+            dataset_id: atividade_economica
+            table_id: tab_tiposolicitacao
+          read:
+            query: |
+              SELECT
+                              ID_TipoSolicitacao,
+                              DSC_TipoSolicitacao
+                          FROM DW_BI_ALVARAS.dbo.TAB_TipoSolicitacao;
+          dump_mode: overwrite
+          options:
+            columns:
+              add_timestamp: true
