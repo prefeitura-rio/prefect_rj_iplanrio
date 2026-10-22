@@ -1,10 +1,10 @@
 """Settings of the pipeline."""
 
-from pydantic import Field, SecretStr
-from toolkit.settings import ToolkitSettings
+from pydantic import SecretStr
+from toolkit.settings import ToolkitSettings, required_secret
 
 
 class Settings(ToolkitSettings):
     """The token of the Redemet API."""
 
-    REDEMET_TOKEN: SecretStr = Field(min_length=1)
+    REDEMET_TOKEN: SecretStr = required_secret()

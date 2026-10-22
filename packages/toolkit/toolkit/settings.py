@@ -6,6 +6,20 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def required_text() -> str:
+    """Return the field of a variable that must be set, with a text that is not empty.
+
+    A missing or empty variable is a `ValidationError` that names it. The default is
+    empty, only so that a type checker lets `Settings()` take no argument.
+    """
+    return Field(default="", min_length=1, validate_default=True)  # pyright: ignore[reportAny]  # the type is the annotation
+
+
+def required_secret() -> SecretStr:
+    """Return the field of a secret that must be set, as `required_text` does."""
+    return Field(default=SecretStr(""), min_length=1, validate_default=True)  # pyright: ignore[reportAny]  # the type is the annotation
+
+
 class ToolkitSettings(BaseSettings):
     """The settings that every part of the toolkit shares: the log level and telemetry.
 
@@ -45,10 +59,8 @@ class DatabaseSettings(ToolkitSettings):
     names it.
     """
 
-    DB_USERNAME: str = Field(default="", min_length=1, validate_default=True)
-    DB_PASSWORD: SecretStr = Field(
-        default=SecretStr(""), min_length=1, validate_default=True
-    )
+    DB_USERNAME: str = required_text()
+    DB_PASSWORD: SecretStr = required_secret()
 
 
 class DiscordSettings(ToolkitSettings):

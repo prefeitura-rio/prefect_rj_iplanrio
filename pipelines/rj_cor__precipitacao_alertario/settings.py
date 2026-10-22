@@ -1,10 +1,9 @@
 """Settings of the pipeline."""
 
-from pydantic import Field
-from toolkit.settings import ToolkitSettings
+from toolkit.settings import ToolkitSettings, required_text
 
 
 class Settings(ToolkitSettings):
     """The address of the AlertaRio API."""
 
-    ALERTARIO_URL: str = Field(min_length=1)
+    ALERTARIO_URL: str = required_text()

@@ -1,15 +1,16 @@
 """Settings of the pipeline."""
 
-from pydantic import Field
+from toolkit.settings import required_text
+
 from utils.settings import DataRelaySettings
 
 
 class Settings(DataRelaySettings):
     """The table of the recipients, the sender of the mail and the pace of the sending."""
 
-    BIGQUERY_PROJECT_ID: str = Field(min_length=1)
-    BIGQUERY_DATASET_ID: str = Field(min_length=1)
-    BIGQUERY_TABLE_ID: str = Field(min_length=1)
+    BIGQUERY_PROJECT_ID: str = required_text()
+    BIGQUERY_DATASET_ID: str = required_text()
+    BIGQUERY_TABLE_ID: str = required_text()
     DATA_RELAY_FROM_ADDRESS: str = ""
     DATA_RELAY_USE_GMAIL_API: bool = True
     DATA_RELAY_IS_HTML_BODY: bool = True

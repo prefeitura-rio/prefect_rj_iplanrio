@@ -1,37 +1,37 @@
 """Settings of the pipelines that more than one of them reads."""
 
-from pydantic import Field, SecretStr
-from toolkit.settings import ToolkitSettings
+from pydantic import SecretStr
+from toolkit.settings import ToolkitSettings, required_secret, required_text
 
 
 class WetalkieSettings(ToolkitSettings):
     """The login of the Wetalkie API."""
 
-    WETALKIE_URL: str = Field(min_length=1)
-    WETALKIE_USERNAME: str = Field(min_length=1)
-    WETALKIE_PASSWORD: SecretStr = Field(min_length=1)
+    WETALKIE_URL: str = required_text()
+    WETALKIE_USERNAME: str = required_text()
+    WETALKIE_PASSWORD: SecretStr = required_secret()
 
 
 class SfmcSettings(ToolkitSettings):
     """The login of the Salesforce Marketing Cloud API."""
 
-    SFMC_AUTH_URL: str = Field(min_length=1)
-    SFMC_CLIENT_ID: str = Field(min_length=1)
-    SFMC_CLIENT_SECRET: SecretStr = Field(min_length=1)
-    SFMC_REST_BASE_URL: str = Field(min_length=1)
+    SFMC_AUTH_URL: str = required_text()
+    SFMC_CLIENT_ID: str = required_text()
+    SFMC_CLIENT_SECRET: SecretStr = required_secret()
+    SFMC_REST_BASE_URL: str = required_text()
 
 
 class DataRelaySettings(ToolkitSettings):
     """The address and the key of the Data Relay mail API."""
 
-    DATA_RELAY_URL: str = Field(min_length=1)
-    DATA_RELAY_API_KEY: SecretStr = Field(min_length=1)
+    DATA_RELAY_URL: str = required_text()
+    DATA_RELAY_API_KEY: SecretStr = required_secret()
 
 
 class BifrostSettings(ToolkitSettings):
     """The key of the Bifrost AI gateway."""
 
-    BIFROST_API_KEY: SecretStr = Field(min_length=1)
+    BIFROST_API_KEY: SecretStr = required_secret()
 
 
 class NoticeSettings(ToolkitSettings):

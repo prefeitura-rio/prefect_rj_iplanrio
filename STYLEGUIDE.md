@@ -691,19 +691,19 @@ Não faça isto:
 
 ### 5.11 Variáveis de ambiente
 
-Uma pipeline lê uma variável de ambiente só por uma classe `Settings` (`pydantic-settings`) em `settings.py`. Não chame `getenv`, `environ.get` nem `environ[...]` no código da pipeline: `nu scripts/checks.nu lint env` recusa a leitura à mão. A classe estende `ToolkitSettings`, e o código a cria quando precisa dela, dentro da task ou da função, e não na importação do módulo. Um campo sem valor padrão e com `Field(min_length=1)` é obrigatório: faltando ou vazio, o `ValidationError` nomeia a variável.
+Uma pipeline lê uma variável de ambiente só por uma classe `Settings` (`pydantic-settings`) em `settings.py`. Não chame `getenv`, `environ.get` nem `environ[...]` no código da pipeline: `nu scripts/checks.nu lint env` recusa a leitura à mão. A classe estende `ToolkitSettings`, e o código a cria quando precisa dela, dentro da task ou da função, e não na importação do módulo. Um campo obrigatório usa `required_text()` ou `required_secret()` (`toolkit.settings`): faltando ou vazio, o `ValidationError` nomeia a variável, e o `basedpyright` deixa chamar `Settings()` sem argumento.
 
 ```python
-from pydantic import Field, SecretStr
-from toolkit.settings import ToolkitSettings
+from pydantic import SecretStr
+from toolkit.settings import ToolkitSettings, required_secret, required_text
 
 
 class Settings(ToolkitSettings):
     """The login of the Wetalkie API."""
 
-    WETALKIE_URL: str = Field(min_length=1)
-    WETALKIE_USERNAME: str = Field(min_length=1)
-    WETALKIE_PASSWORD: SecretStr = Field(min_length=1)
+    WETALKIE_URL: str = required_text()
+    WETALKIE_USERNAME: str = required_text()
+    WETALKIE_PASSWORD: SecretStr = required_secret()
 ```
 
 O nome de um campo segue estas regras, e o `lint env` confere as duas primeiras:
