@@ -51,3 +51,19 @@ AUDIO_EXTENSIONS: Final = ("mp3", "wav", "ogg", "oga", "opus")
 
 NO_SPEECH: Final = "Áudio sem conteúdo reconhecível"
 """The text of an audio that the transcription found no speech in."""
+
+BIFROST_BASE_URL: Final = "https://bifrost.iplan.dados.rio"
+"""The address of the Bifrost AI gateway."""
+
+BIFROST_MODEL: Final = "vertex/gemini-3.6-flash"
+"""The model that a pipeline asks the gateway for, unless it picks another."""
+
+BIFROST_ATTEMPTS: Final = 3
+"""How many times a question to the gateway runs before it fails."""
+
+BIFROST_FIRST_WAIT_SECONDS: Final = 2.0
+"""How long the gateway waits before the second try. Each next wait doubles it."""
+
+BIFROST_CALIBRATED_BATCH: Final = 50
+BIFROST_CALIBRATED_TOKENS: Final = 8192
+"""The batch size for which 8192 output tokens were enough, so the limit scales with the batch."""
