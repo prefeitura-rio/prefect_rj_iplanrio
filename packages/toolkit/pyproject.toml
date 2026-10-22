@@ -145,10 +145,6 @@ reportUnusedCallResult = false # side-effect calls return handles that nobody ne
 reportUnusedParameter = false  # an engine may ignore the `params` or the `batch_size` that the `Engine` protocol passes it
 
 [[tool.basedpyright.executionEnvironments]]
-root = "toolkit/dbt.py"
-reportMissingTypeStubs = false # prefect_dbt ships no stubs
-
-[[tool.basedpyright.executionEnvironments]]
 root = "toolkit/functions/registry.py"
 reportUnknownMemberType = false        # the stubs of duckdb type create_function with a pyarrow Array that has no type argument
 

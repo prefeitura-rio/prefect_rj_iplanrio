@@ -49,19 +49,19 @@ async for lote in executor.read(expect=Schema({"id": Int64, "nome": String})):
 
 ## Módulos
 
-| Módulo              | O que faz                                                                                                                                               |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `toolkit.executor`  | `Executor`, `Engine`, as fontes e os modelos SQL. `query` devolve um `Dataset` tipado.                                                                  |
-| `toolkit.functions` | As funções do `DuckDB`, que toda conexão tem. Veja a lista abaixo.                                                                                      |
-| `toolkit.chunks`    | Os chunks de um `dump` e o `hash` da configuração.                                                                                                     |
-| `toolkit.delta`     | A tabela `Delta` de um `dump`: `write_chunk` (troca um chunk, soma linhas com `append` ou grava a hora com `extracted_at`), `compact` e `maintain`.  |
-| `toolkit.gcs`       | `create_store`, `list_keys`, `upload` e `delete_keys`, com `obstore` e chaves `HMAC`.                                                                   |
-| `toolkit.bigquery`  | `BigQuery`: `has_table`, `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake). |
-| `toolkit.oracle`    | `Oracle`, o cliente `SQL` da conexão com `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                 |
-| `toolkit.dbt`       | Clona o repositório de consultas e roda um comando `dbt`.                                                                                               |
-| `toolkit.settings`  | `ToolkitSettings` (o log e a telemetria) e um grupo por parte, como `GcsSettings`. Cada parte cria o seu grupo quando precisa dele.                     |
-| `toolkit.utils`     | As colunas e os filtros de um `dump`: `normalize_column`, `build_column_aliases`, `select_columns` e `filter_conditions`.                                     |
-| `toolkit.telemetry` | O `logger` do pacote e `configure_telemetry()`.                                                                                                         |
+| Módulo              | O que faz                                                                                                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolkit.executor`  | `Executor`, `Engine`, as fontes e os modelos SQL. `query` devolve um `Dataset` tipado.                                                                                                       |
+| `toolkit.functions` | As funções do `DuckDB`, que toda conexão tem. Veja a lista abaixo.                                                                                                                           |
+| `toolkit.chunks`    | Os chunks de um `dump` e o `hash` da configuração.                                                                                                                                           |
+| `toolkit.delta`     | A tabela `Delta` de um `dump`: `write_chunk` (troca um chunk, soma linhas com `append` ou grava a hora com `extracted_at`), `compact`, `maintain`, `inspect_table` e `find_layout_problems`. |
+| `toolkit.gcs`       | `create_store`, `list_keys`, `list_prefixes`, `upload` e `delete_keys`, com `obstore` e chaves `HMAC`.                                                                                       |
+| `toolkit.bigquery`  | `BigQuery`: `has_table`, `create_dataset`, `execute` (uma instrução, como um `MERGE`) e `sync_delta_table` (tabela `Delta` por uma conexão BigLake).                                         |
+| `toolkit.oracle`    | `Oracle`, o cliente `SQL` da conexão com `connect`, `execute` e `query`. A consulta volta em `Polars`, nos tipos que o `Delta` guarda.                                                       |
+| `toolkit.dbt`       | `DbtRun` (um comando `dbt`) e o clone do repositório de consultas, com `GITHUB_TOKEN` no lugar do token da URL.                                                                              |
+| `toolkit.settings`  | `ToolkitSettings` (o log e a telemetria) e um grupo por parte, como `GcsSettings`. Cada parte cria o seu grupo quando precisa dele.                                                          |
+| `toolkit.utils`     | As colunas e os filtros de um `dump`: `normalize_column`, `build_column_aliases`, `select_columns` e `filter_conditions`.                                                                    |
+| `toolkit.telemetry` | O `logger` do pacote e `configure_telemetry()`.                                                                                                                                              |
 
 **Funções do `DuckDB`** (em SQL, sem importar nada):
 
@@ -70,7 +70,7 @@ async for lote in executor.read(expect=Schema({"id": Int64, "nome": String})):
 - Documentos: `is_cpf`, `normalize_cpf`, `is_cnpj` (aceita as letras do CNPJ novo), `normalize_cnpj` e `is_phone` (telefone fixo ou celular do Brasil, com ou sem `55`).
 - Nomes de colunas: `Executor.normalize_columns(tabela, colunas, separador, minúsculas)`.
 
-**Fontes** (`toolkit.executor.sources.backends`): `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource`, `CouchDBSource`, `MongoDBSource`, `BigQuerySource`, `GSheetsSource` e `ArcGISSource`. `load_sources()["postgres"]` acha a classe pelo nome.
+**Fontes** (`toolkit.executor.sources.backends`): `PostgresSource`, `MySQLSource`, `MSSQLSource`, `OracleSource`, `CouchDBSource`, `MongoDBSource`, `BigQuerySource`, `FilesSource`, `GSheetsSource` e `ArcGISSource`. `load_sources()["postgres"]` acha a classe pelo nome.
 
 Uma **fonte** é só configuração: a conexão, as opções e a origem do que ler. Um **motor** (`Engine`) nasce de uma fonte e faz tudo com o sistema: abre a conexão, lê, executa e grava. O `Executor` recebe o motor e orquestra: abre o motor, roda os modelos `SQL` e lê os chunks de um `dump`.
 
@@ -100,8 +100,8 @@ Uma fonte é uma `dataclass` do `Pydantic`, e as chaves de `options` são os cam
 | Membro                                | O que faz                                                                                                                         |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | `execute(sql)`                        | Roda uma instrução `SQL` que não devolve linhas.                                                                                  |
-| `query(sql, batch_size)`              | Roda uma consulta `SQL`, em quadros `Polars` de até `batch_size` linhas.                                                          |
-| `read(batch_size)`                    | Lê a origem da fonte inteira, em quadros `Polars`.                                                                                |
+| `query(sql, batch_size)`              | Roda uma consulta `SQL`, em `DataFrame`s do `Polars` de até `batch_size` linhas.                                                          |
+| `read(batch_size)`                    | Lê a origem da fonte inteira, em `DataFrame`s do `Polars`.                                                                                |
 | `describe()`                          | Devolve o nome e o tipo `DuckDB` de cada coluna da origem.                                                                        |
 | `materialize(destino, linhas, colunas)` | Grava um chunk da origem como `Parquet`. Sem `colunas`, grava todas.                                                          |
 | `check_chunks(chunks, colunas)`       | Levanta `ValueError` se a coluna de `chunks` não serve aos chunks. O padrão pede inteiro ou data. O CouchDB pede só o `id`.      |
@@ -169,6 +169,8 @@ A autenticação do Google é por workload identity (ADC), sem arquivo de servic
 | `GCS_REGION`                  | `auto`                   | Região enviada ao `store` S3.                                                                                  |
 | `GCS_USE_SSL`                 | `true`                   | Usa HTTPS.                                                                                                     |
 | `BIGQUERY_PROJECT`            | vazio                    | Projeto das tabelas externas e da fonte `bigquery`.                                                            |
+| `DISCORD_WEBHOOK_URL`         | vazio                    | Webhook do Discord de `notify_discord` e do aviso de falha dos flows. Segredo. Vazio desliga o aviso.          |
+| `GITHUB_TOKEN`                | vazio                    | Token de GitHub que preenche `GITHUB_TOKEN` na URL de um repositório privado do `dbt`. Segredo.                |
 | `COUCHDB_PAGE_SIZE`           | `10000`                  | Documentos por página de uma leitura do CouchDB.                                                               |
 | `COUCHDB_PATH_PREFIX`         | vazio                    | Prefixo do caminho de um CouchDB atrás de um proxy, como `/couchdb`.                                           |
 | `COUCHDB_SECURE`              | vazio                    | `true` usa HTTPS e `false` usa HTTP. Vazio usa HTTP só na porta 5984.                                          |
@@ -226,7 +228,7 @@ Ou, no diretório `packages/toolkit/`, uma ferramenta de cada vez:
 uv run ruff check . && uv run ruff format --check .
 uv run basedpyright
 uv run sqlfluff lint toolkit/executor/templates
-uv run vulture toolkit
+uv run vulture toolkit tests
 uv run pytest
 ```
 

@@ -14,20 +14,20 @@ Promova uma função para cá só no segundo uso confirmado, e só se ela for ge
 
 ## 2. Layout e código
 
-| Módulo                               | Responsabilidade                                                                                                                                    |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `toolkit.executor`                   | `Executor`, `Engine`, fontes e modelos SQL.                                                                                                         |
-| `toolkit.settings`                   | `ToolkitSettings` (a base) e um grupo por parte, como `GcsSettings`.                                                                                |
-| `toolkit.functions`                  | As funções do `DuckDB`: `native.py` (uma vez por linha), `arrow.py` e `documents.py` (uma vez por lote) e `registry.py`, com o registro automático. |
-| `toolkit.utils`                      | As colunas e os filtros de um `dump`: `normalize_column`, `build_column_aliases`, `select_columns`, `filter_conditions` e `filter_selectors`.                                 |
-| `toolkit.telemetry`                  | O `logger` do pacote e o `OpenTelemetry`.                                                                                                           |
-| `toolkit.constants`, `toolkit.types` | Constantes e apelidos de tipo compartilhados.                                                                                                       |
-| `toolkit.chunks`                     | Os chunks de um `dump` e o `hash` da `config`. Funções puras.                                                                                      |
-| `toolkit.delta`                      | A tabela `Delta` de um `dump`: o `ledger`, a troca de um chunk, a soma de linhas, a compactação e a manutenção.                                   |
-| `toolkit.gcs`                        | `GCS` com `obstore`. Único lugar que importa `obstore`.                                                                                             |
-| `toolkit.bigquery`                   | Cliente do BigQuery: instruções e tabelas externas.                                                                                                 |
-| `toolkit.oracle`                     | `Oracle`, o cliente `SQL` do `oracledb`: `connect`, `execute` e `query`.                                                                            |
-| `toolkit.dbt`                        | Execução de `dbt`.                                                                                                                                  |
+| Módulo                               | Responsabilidade                                                                                                                                                                |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `toolkit.executor`                   | `Executor`, `Engine`, fontes e modelos SQL.                                                                                                                                     |
+| `toolkit.settings`                   | `ToolkitSettings` (a base) e um grupo por parte, como `GcsSettings`.                                                                                                            |
+| `toolkit.functions`                  | As funções do `DuckDB`: `native.py` (uma vez por linha), `arrow.py` e `documents.py` (uma vez por lote) e `registry.py`, com o registro automático.                             |
+| `toolkit.utils`                      | As colunas e os filtros de um `dump`: `normalize_column`, `build_column_aliases`, `select_columns`, `filter_conditions` e `filter_selectors`.                                   |
+| `toolkit.telemetry`                  | O `logger` do pacote e o `OpenTelemetry`.                                                                                                                                       |
+| `toolkit.constants`, `toolkit.types` | Constantes e apelidos de tipo compartilhados.                                                                                                                                   |
+| `toolkit.chunks`                     | Os chunks de um `dump` e o `hash` da `config`. Funções puras.                                                                                                                   |
+| `toolkit.delta`                      | A tabela `Delta` de um `dump`: o `ledger`, a troca de um chunk, a soma de linhas, a compactação, a manutenção e a leitura do estado (`inspect_table` e `find_layout_problems`). |
+| `toolkit.gcs`                        | `GCS` com `obstore`. Único lugar que importa `obstore`.                                                                                                                         |
+| `toolkit.bigquery`                   | Cliente do BigQuery: instruções e tabelas externas.                                                                                                                             |
+| `toolkit.oracle`                     | `Oracle`, o cliente `SQL` do `oracledb`: `connect`, `execute` e `query`.                                                                                                        |
+| `toolkit.dbt`                        | O comando `dbt` de uma pipeline (`DbtRun`) e o clone do repositório. O `dbt` roda em `src/utils/tasks.py`.                                                                      |
 
 - `__init__.py` fica vazio. O pacote é plano, e um módulo leva o nome do domínio, nunca o de uma biblioteca (`logging.py`, `polars.py`).
 - Sem prefixo `_` em nomes. Uma função não recebe um parâmetro que não usa.
@@ -116,7 +116,7 @@ Rode em `packages/toolkit/`:
 uv run ruff check . && uv run ruff format --check .
 uv run basedpyright
 uv run sqlfluff lint toolkit/executor/templates
-uv run vulture toolkit
+uv run vulture toolkit tests
 uv run pytest
 ```
 

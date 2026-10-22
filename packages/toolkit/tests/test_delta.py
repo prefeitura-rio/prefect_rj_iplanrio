@@ -15,7 +15,9 @@ from toolkit.constants import EXTRACTED_AT_COLUMN
 from toolkit.delta import (
     compact,
     compute_fingerprint,
+    find_layout_problems,
     hash_summary,
+    inspect_table,
     maintain,
     read_known_fingerprints,
     sweep,
@@ -138,6 +140,59 @@ def test_maintain_writes_a_checkpoint_for_the_readers_of_the_log(uri, tmp_path):
 
     log = Path(uri, "_delta_log")
     assert any("checkpoint" in name.name for name in log.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("keys", "expected"),
+    [
+        pytest.param(
+            ["2024-03-01", "2024-03-02", "null"], [], id="dates_and_null_are_one_layout"
+        ),
+        pytest.param(["000000000000", "000000000001"], [], id="numbers_are_one_layout"),
+        pytest.param(["all"], [], id="all_alone_is_one_layout"),
+        pytest.param(
+            ["all", "2024-03-01"], ["all next to chunk keys"], id="all_next_to_dates"
+        ),
+        pytest.param(
+            ["all", "null"], ["all next to chunk keys"], id="all_next_to_null"
+        ),
+        pytest.param(
+            ["2024-03-01", "000000000001"],
+            ["dates next to numbers"],
+            id="dates_next_to_numbers",
+        ),
+    ],
+)
+def test_the_layout_problems_follow_the_chunk_keys(keys, expected):
+    """Flag the keys that show two cuts of the same table, which leave rows twice."""
+    assert find_layout_problems(keys) == expected
+
+
+def test_inspect_reports_the_version_the_files_and_the_chunk_keys(uri, tmp_path):
+    """Read the state of the table from its log."""
+    write_chunk(uri, chunk_files(tmp_path / "a", "w1", [1, 2]), "w1", "c:w1", 1)
+    write_chunk(uri, chunk_files(tmp_path / "b", "w2", [3]), "w2", "c:w2", 2)
+
+    report = inspect_table(uri)
+
+    assert (report["version"], report["files"], report["keys"]) == (1, 2, ["w1", "w2"])
+    assert report["bytes"] > 0
+    assert report["last_commit"].tzinfo is UTC
+
+
+def test_compact_lowers_the_files_that_inspect_counts_and_keeps_the_rows(
+    uri, tmp_path, read_rows
+):
+    """Merge the small files of a chunk into one, with the same rows."""
+    for number in range(3):
+        directory = chunk_files(tmp_path / f"a{number}", "w1", [number])
+        write_chunk(uri, directory, "w1", f"c:{number}", number, append=True)
+    before = inspect_table(uri)["files"]
+
+    compact(uri)
+
+    assert (before, inspect_table(uri)["files"]) == (3, 1)
+    assert read_rows(uri) == {"w1": [0, 1, 2]}
 
 
 def test_the_fingerprint_as_a_number_is_stable():

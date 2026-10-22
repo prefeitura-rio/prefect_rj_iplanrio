@@ -80,6 +80,16 @@ class Chunks(TypedDict):
     lookback: NotRequired[int]
 
 
+class TableReport(TypedDict):
+    """The state of a Delta table: version, files, bytes, last commit and chunk keys."""
+
+    version: int
+    files: int
+    bytes: int
+    last_commit: datetime
+    keys: list[str]
+
+
 class Fingerprint(TypedDict):
     """The content summary of a chunk: its rows and two order independent sums."""
 

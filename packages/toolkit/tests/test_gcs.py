@@ -120,3 +120,21 @@ async def test_the_store_built_from_the_settings_works_over_the_s3_protocol(
     put(f"http://{s3_endpoint}/bucket").raise_for_status()
 
     await upload_list_and_delete(gcs.create_store("bucket"), tmp_path)
+
+
+async def test_prefixes_list_the_folders_of_one_level_only():
+    """Give the child folders of a prefix, and not the objects below them."""
+    store = MemoryStore()
+    for key in (
+        "staging/a/t1/x.parquet",
+        "staging/a/t2/y.parquet",
+        "staging/b/t3/z.parquet",
+        "staging/loose.txt",
+    ):
+        await store.put_async(key, b"1")
+
+    assert await gcs.list_prefixes(store, "staging") == ["staging/a", "staging/b"]
+    assert await gcs.list_prefixes(store, "staging/a") == [
+        "staging/a/t1",
+        "staging/a/t2",
+    ]

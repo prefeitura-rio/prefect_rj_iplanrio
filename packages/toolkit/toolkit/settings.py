@@ -74,6 +74,12 @@ class GcsSettings(ToolkitSettings):
     GCS_USE_SSL: bool = True
 
 
+class GithubSettings(ToolkitSettings):
+    """The settings of GitHub, for a private repository of dbt queries."""
+
+    GITHUB_TOKEN: SecretStr = SecretStr("")
+
+
 class MSSQLSettings(ToolkitSettings):
     """The settings of the SQL Server source."""
 

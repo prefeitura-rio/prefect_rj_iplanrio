@@ -6,9 +6,10 @@ commit. The table lives in a bucket and is read through ADC, or on a local path.
 """
 
 from collections.abc import Collection, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from hashlib import md5
 from pathlib import Path
+from re import fullmatch
 from time import sleep
 from typing import cast
 
@@ -18,17 +19,21 @@ from psycopg.sql import Literal
 from pyarrow import RecordBatchReader, repeat, timestamp
 from pyarrow import scalar as arrow_scalar
 from pyarrow import schema as arrow_schema
+from pyarrow import table as arrow_table
 from pyarrow.dataset import dataset
 
 from .constants import (
+    ALL_KEY,
     BATCH_COLUMN,
     COMMIT_ATTEMPTS,
+    DATE_KEY,
     EXTRACTED_AT_COLUMN,
+    NUMBER_KEY,
     VACUUM_RETENTION_HOURS,
 )
 from .executor.executor import Executor
 from .telemetry import logger
-from .types import Fingerprint
+from .types import Fingerprint, TableReport
 
 
 def hash_summary(rows: int, low: str, high: str) -> int:
@@ -172,3 +177,48 @@ def maintain(uri: str) -> None:
     table = DeltaTable(uri)
     table.create_checkpoint()
     table.vacuum(retention_hours=VACUUM_RETENTION_HOURS, dry_run=False)
+
+
+def inspect_table(uri: str) -> TableReport:
+    """Read the version, the files, the bytes, the last commit and the chunk keys.
+
+    Raise `TableNotFoundError` if no Delta table lives at `uri`.
+    """
+    table = DeltaTable(uri)
+    sizes = cast(
+        "list[int]", arrow_table(table.get_add_actions())["size_bytes"].to_pylist()
+    )
+    stamp = cast("int", table.history(1)[0]["timestamp"])
+
+    return TableReport(
+        version=table.version(),
+        files=len(sizes),
+        bytes=sum(sizes),
+        last_commit=datetime.fromtimestamp(stamp / 1000, UTC),
+        keys=sorted(partition[BATCH_COLUMN] for partition in table.partitions()),
+    )
+
+
+def find_layout_problems(keys: Collection[str]) -> list[str]:
+    """Name what the chunk keys of a table say about duplicated rows.
+
+    A run in `append` replaces only the chunks that it cuts. If the cut changes, the
+    rows of the old chunks stay next to the new ones. The `all` chunk next to other
+    chunks, and dates next to numbers, mark that.
+
+    ```python
+    find_layout_problems(["all", "2024-03-01"])  # ["all next to chunk keys"]
+    find_layout_problems(["2024-03-01", "null"])  # []
+    ```
+    """
+    problems: list[str] = []
+
+    if ALL_KEY in keys and len(keys) > 1:
+        problems.append("all next to chunk keys")
+
+    has_dates = any(fullmatch(DATE_KEY, key) for key in keys)
+    has_numbers = any(fullmatch(NUMBER_KEY, key) for key in keys)
+    if has_dates and has_numbers:
+        problems.append("dates next to numbers")
+
+    return problems

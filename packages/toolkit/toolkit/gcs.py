@@ -4,7 +4,7 @@ from asyncio import Semaphore, gather
 from collections.abc import Coroutine, Iterable
 from pathlib import Path
 
-from obstore import delete_async, put_async
+from obstore import delete_async, list_with_delimiter_async, put_async
 from obstore import list as list_objects
 from obstore.store import ObjectStore, S3Store
 
@@ -33,6 +33,19 @@ async def list_keys(store: ObjectStore, prefix: str) -> list[str]:
     return [
         item["path"] async for batch in list_objects(store, prefix) for item in batch
     ]
+
+
+async def list_prefixes(store: ObjectStore, prefix: str) -> list[str]:
+    """List the child folders of one prefix, with no trailing slash.
+
+    It reads one level, so it does not list the objects below the folders.
+
+    ```python
+    await list_prefixes(store, "staging")  # ["staging/ds_a", "staging/ds_b"]
+    ```
+    """
+    listing = await list_with_delimiter_async(store, prefix)
+    return sorted(folder.rstrip("/") for folder in listing["common_prefixes"])
 
 
 def list_files(path: Path) -> dict[str, Path]:

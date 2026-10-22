@@ -1,10 +1,8 @@
-from os import environ
-
 import pytest
 from pydantic import ValidationError
 
 from toolkit import dbt
-from toolkit.dbt import DbtRun
+from toolkit.dbt import DbtRun, fill_token
 
 REPOSITORY = "https://example.invalid/queries.git"
 
@@ -31,6 +29,14 @@ REPOSITORY = "https://example.invalid/queries.git"
             {"command": "source freshness"},
             ["source", "freshness", "--target", "dev"],
             id="source_freshness_is_two_words",
+        ),
+        pytest.param(
+            {"select": "a", "flag": "--exclude x --vars '{a: 1}'"},
+            [
+                *("run", "--target", "dev", "--select", "a"),
+                *("--exclude", "x", "--vars", "{a: 1}"),
+            ],
+            id="a_flag_is_split_like_a_shell_line",
         ),
         pytest.param(
             {"command": "deps", "select": "a", "target": "prod"},
@@ -63,41 +69,6 @@ def test_a_request_with_a_bad_field_is_rejected_when_built(values, field):
         DbtRun.model_validate({"repository": REPOSITORY, **values})
 
 
-def test_dbt_runs_deps_then_the_command_in_the_cloned_project(fake_runner, tmp_path):
-    """Regression: the clone was ignored, so dbt ran in the working directory."""
-    dbt.execute_dbt(DbtRun(repository=REPOSITORY, select="vendas"))
-
-    [runner] = fake_runner.instances
-    assert runner.settings.project_dir == tmp_path / "queries"
-    assert runner.invoked == [
-        ["deps"],
-        ["run", "--target", "dev", "--select", "vendas"],
-    ]
-
-
-@pytest.mark.parametrize("has_profile", [True, False])
-def test_regression_the_profile_of_the_repository_is_used_when_it_has_one(
-    fake_runner, tmp_path, has_profile
-):
-    """Regression: dbt ignored the `profiles.yml` of the repository."""
-    if has_profile:
-        (tmp_path / "queries" / "profiles.yml").write_text("p: {}\n")
-
-    dbt.execute_dbt(DbtRun(repository=REPOSITORY))
-
-    [runner] = fake_runner.instances
-    assert (runner.settings.profiles_dir == tmp_path / "queries") is has_profile
-    assert "DBT_PROFILES_DIR" not in environ
-
-
-def test_a_failed_dbt_command_raises(fake_runner):
-    """Raise if a dbt command fails."""
-    fake_runner.error = ValueError("dbt failed")
-
-    with pytest.raises(ValueError, match="dbt failed"):
-        dbt.execute_dbt(DbtRun(repository=REPOSITORY))
-
-
 @pytest.mark.parametrize(
     ("queries", "expected"),
     [
@@ -120,3 +91,48 @@ def test_a_failed_clone_is_reported(tmp_path):
     """Report a failed clone."""
     with pytest.raises(RuntimeError, match="clone failed"):
         dbt.clone_repository(str(tmp_path / "missing"), tmp_path / "clone")
+
+
+@pytest.mark.parametrize(
+    ("repository", "token", "expected"),
+    [
+        pytest.param(
+            "https://GITHUB_TOKEN@github.com/org/repo.git",
+            "abc",
+            "https://abc@github.com/org/repo.git",
+            id="the_placeholder_is_replaced",
+        ),
+        pytest.param(
+            "https://github.com/org/repo.git",
+            "",
+            "https://github.com/org/repo.git",
+            id="a_public_url_needs_no_token",
+        ),
+    ],
+)
+def test_the_token_replaces_the_placeholder_of_the_url(
+    monkeypatch, repository, token, expected
+):
+    """Put the token in a private URL, and leave a public URL as it is."""
+    monkeypatch.setenv("GITHUB_TOKEN", token)
+
+    assert fill_token(repository) == expected
+
+
+def test_a_private_url_without_a_token_is_refused(monkeypatch):
+    """Raise before the clone if the URL needs a token that is not set."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="GITHUB_TOKEN"):
+        fill_token("https://GITHUB_TOKEN@github.com/org/repo.git")
+
+
+def test_regression_the_error_of_a_failed_clone_leaves_out_the_token(tmp_path):
+    """Regression: the git message, with the URL and its token, reached the logs."""
+    with pytest.raises(RuntimeError, match="clone failed") as error:
+        dbt.clone_repository(
+            f"https://secret-token@{tmp_path}/missing.git", tmp_path / "clone"
+        )
+
+    assert error.value.__cause__ is None
+    assert error.value.__suppress_context__

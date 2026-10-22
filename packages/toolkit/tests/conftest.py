@@ -23,7 +23,6 @@ from pyarrow import string as arrow_string
 from pyarrow import table as arrow_table
 from pyarrow import timestamp as arrow_timestamp
 
-from toolkit import dbt
 from toolkit.chunks import Rows
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
 from toolkit.executor.engines.base import Engine
@@ -329,45 +328,6 @@ class FakeBigQueryClient:
 def fake_bigquery_client() -> Callable[[int | None], FakeBigQueryClient]:
     """Return a function that builds a fake BigQuery client."""
     return FakeBigQueryClient
-
-
-class FakeRunner:
-    """A `PrefectDbtRunner` that records the settings and the arguments."""
-
-    instances: ClassVar[list[FakeRunner]] = []
-    error: ClassVar[Exception | None] = None
-
-    def __init__(self, **kwargs: object) -> None:
-        """Record the keyword arguments and register the instance."""
-        self.kwargs = kwargs
-        self.invoked: list[list[str]] = []
-        FakeRunner.instances.append(self)
-
-    @property
-    def settings(self):
-        """Return the settings that the runner got."""
-        return self.kwargs["settings"]
-
-    def invoke(self, arguments: list[str]) -> SimpleNamespace:
-        """Record the arguments, and fail if an error is set."""
-        self.invoked.append(arguments)
-        if FakeRunner.error is not None:
-            raise FakeRunner.error
-        return SimpleNamespace(success=True)
-
-
-@pytest.fixture
-def fake_runner(monkeypatch, tmp_path):
-    """Replace the dbt runner, and clone into a folder of the test."""
-    project = tmp_path / "queries"
-    project.mkdir()
-    FakeRunner.instances = []
-    FakeRunner.error = None
-    monkeypatch.setattr(dbt, "PrefectDbtRunner", FakeRunner)
-    monkeypatch.setattr(
-        dbt, "clone_repository", lambda repository, destination: project
-    )
-    return FakeRunner
 
 
 @pytest.fixture

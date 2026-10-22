@@ -1,18 +1,18 @@
-"""Run dbt commands from a cloned queries repository."""
+"""Describe a dbt command, and clone the repository that it runs in."""
 
 from collections.abc import Generator
 from contextlib import contextmanager
 from os import environ
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from shlex import split
 from typing import ClassVar
 from unittest.mock import patch
 
 from git import GitCommandError, Repo
-from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
 from pydantic import BaseModel, ConfigDict
 
-from .constants import COMMAND_WORDS, SELECTABLE
+from .constants import COMMAND_WORDS, GITHUB_TOKEN_PLACEHOLDER, SELECTABLE
+from .settings import GithubSettings
 from .telemetry import logger
 from .types import DbtCommand, NonEmptyString
 
@@ -28,6 +28,7 @@ class DbtRun(BaseModel):
     select: str = ""
     exclude: str = ""
     state: str = ""
+    flag: str = ""
     full_refresh: bool = False
 
     def build_arguments(self) -> list[str]:
@@ -60,18 +61,42 @@ class DbtRun(BaseModel):
         if self.full_refresh:
             arguments.append("--full-refresh")
 
+        arguments += split(self.flag)
+
         return arguments
+
+
+def fill_token(repository: str) -> str:
+    """Return the repository URL with `GITHUB_TOKEN` in it replaced by the token.
+
+    A URL without the placeholder is public, and it comes back as it is. Raise
+    `ValueError` if the URL has the placeholder and the `GITHUB_TOKEN` setting is empty.
+
+    ```python
+    fill_token("https://GITHUB_TOKEN@github.com/org/repo.git")
+    # "https://<token>@github.com/org/repo.git"
+    ```
+    """
+    if GITHUB_TOKEN_PLACEHOLDER not in repository:
+        return repository
+
+    token = GithubSettings().GITHUB_TOKEN.get_secret_value()
+    if not token:
+        raise ValueError("The repository needs GITHUB_TOKEN, and it is not set")
+
+    return repository.replace(GITHUB_TOKEN_PLACEHOLDER, token)
 
 
 def clone_repository(repository: str, destination: Path) -> Path:
     """Clone the repository into `destination` and return its path.
 
-    The destination must not exist. Raise `RuntimeError` if the clone fails.
+    The destination must not exist. Raise `RuntimeError` if the clone fails. The error
+    has no cause, because the message of git can hold the token of the URL.
     """
     try:
         Repo.clone_from(repository, destination)
-    except GitCommandError as error:
-        raise RuntimeError("Repository clone failed") from error
+    except GitCommandError:
+        raise RuntimeError("Repository clone failed") from None
 
     logger.info("Repository cloned: path=%s", destination)
     return destination
@@ -94,26 +119,3 @@ def use_profiles(project_dir: Path) -> Generator[None]:
             yield
     else:
         yield
-
-
-def execute_dbt(request: DbtRun) -> None:
-    """Clone the repository and run one dbt command in it.
-
-    The clone is temporary, and dbt runs `deps` before the command. A `profiles.yml` in
-    the project wins over the one in `~/.dbt`. Raise `RuntimeError` if the clone fails,
-    and `ValueError` if dbt fails.
-    """
-    with TemporaryDirectory(prefix="dbt_repository_") as directory:
-        project_dir = find_project_dir(
-            clone_repository(request.repository, Path(directory) / "repository")
-        )
-
-        with use_profiles(project_dir):
-            runner = PrefectDbtRunner(
-                settings=PrefectDbtSettings(project_dir=project_dir)
-            )
-            runner.invoke(["deps"])
-            runner.invoke(request.build_arguments())
-        logger.info(
-            "dbt command finished: command=%s project=%s", request.command, project_dir
-        )

@@ -35,6 +35,9 @@ COMMAND_WORDS: Final[Mapping[str, tuple[str, ...]]] = {
 }
 """The commands whose name is more than one word."""
 
+GITHUB_TOKEN_PLACEHOLDER: Final = "GITHUB_TOKEN"  # noqa: S105  # the text of a placeholder, not a token
+"""The text of a repository URL that the token of GitHub replaces."""
+
 SELECTABLE: Final = frozenset(
     {"build", "run", "test", "source freshness", "seed", "snapshot"}
 )
@@ -152,6 +155,15 @@ BATCH_COLUMN: Final = "batch"
 
 EXTRACTED_AT_COLUMN: Final = "_prefect_extracted_at"
 """The column that holds when the chunk of a row was written, if a dump asks for it."""
+
+ALL_KEY: Final = "all"
+"""The key of the one chunk of a table that a dump does not cut."""
+
+DATE_KEY: Final = r"\d{4}-\d{2}-\d{2}"
+"""The pattern of the key of a chunk that a date column cuts."""
+
+NUMBER_KEY: Final = r"\d+"
+"""The pattern of the key of a chunk that a number column cuts."""
 
 COMMIT_ATTEMPTS: Final = 5
 """How many times a Delta write tries again after a commit conflict."""
