@@ -4,15 +4,6 @@ from pydantic import SecretStr
 from toolkit.settings import ToolkitSettings, required_secret, required_text
 
 
-class WhitelistSettings(ToolkitSettings):
-    """The client and the address of the whitelist API."""
-
-    WHITELIST_API_BASE_URL: str = required_text()
-    WHITELIST_ISSUER: str = required_text()
-    WHITELIST_CLIENT_ID: str = required_text()
-    WHITELIST_CLIENT_SECRET: SecretStr = required_secret()
-
-
 class SftpSettings(ToolkitSettings):
     """The SFTP server that gets the Data Extension file and its pinned host key."""
 

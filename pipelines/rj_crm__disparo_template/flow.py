@@ -1,611 +1,88 @@
-# flake8: noqa:E501
-# pylint: disable='line-too-long'
+"""Flow for rj_crm__disparo_template."""
 
-"""
-Flow to dispatch templated messages via Salesforce SFTP
-"""
-import os
-import time
-from datetime import datetime
 from pathlib import Path
 
-import pandas as pd
-from prefect import flow  # pylint: disable=E0611, E0401
-from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
-from toolkit.dbt import DbtRun
+from prefect import flow
+from toolkit.telemetry import logger
 
-from pipelines.rj_crm__disparo_template.constants import TemplateConstants  # pylint: disable=E0611, E0401
-
-# pylint: disable=E0611, E0401
-from utils.settings import NoticeSettings
-from pipelines.rj_crm__disparo_template.helpers.discord import (
-    send_discord_notification,
-    send_dispatch_no_destinations_found,
-    send_dispatch_success_notification,
+from pipelines.rj_crm__disparo_template.constants import DEFAULT_TABLE
+from pipelines.rj_crm__disparo_template.helpers.clock import today
+from pipelines.rj_crm__disparo_template.helpers.queries import build_query
+from pipelines.rj_crm__disparo_template.tasks import (
+    check_campaign_task,
+    deliver_task,
+    notify_task,
+    prepare_task,
+    read_switch_task,
+    record_task,
+    select_task,
+    watch_task,
 )
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.dispatch import (
-    add_contacts_to_whitelist,
-    apply_df_enricher,
-    check_flow_status,
-    create_log_df,
-    filter_already_dispatched_phones_or_cpfs,
-    filter_duplicated,
-    format_query,
-    get_already_dispatched_data,
-    get_failed_cpfs,
-    get_failed_phones,
-    monitor_dispatch_status,
-    remove_contacts_from_whitelist,
-    save_csv_for_sftp,
-    send_to_sftp,
-)
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.tasks import (
-    create_date_partitions,
-    task_download_data_from_bigquery,
-)
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.validators import (  # pylint: disable=E0611, E0401
-    validate_campaign_name,
-    validate_sf_dataframe,
-)
-from utils.tasks import publish_table_in_bq, run_dbt, upload_files_to_gcs
+from pipelines.rj_crm__disparo_template.types import Audience, Campaign, Delivery
+from utils.hooks import notify_failure
 from utils.types import Cloud, Table
-from utils.utils import capture_options
+
+DEFAULT_CAMPAIGN = Campaign()
+DEFAULT_AUDIENCE = Audience()
+DEFAULT_DELIVERY = Delivery()
+PIPELINE_FOLDER = Path(__file__).parent
 
 
-def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
-    """
-    Sends a Discord notification when a flow run fails.
-    """
-    # Only send notification if flow_environment is production
-    flow_environment = flow_run.parameters.get("flow_environment", "staging")
-    if flow_environment != "production":
-        print(f"Flow failed in {flow_environment} environment. Skipping Discord notification.")
-        return
-
-    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
-    if not webhook_url:
-        print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
-        return
-
-    campaign_name = flow_run.parameters.get("campaign_name", "N/A")
-
-    message = f"""
-    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
-    Prefect flow run failed in PRODUCTION! 🚨
-    📋 **Campanha:** {campaign_name}
-    ⚠️ **Mensagem:** {state.message}
-    """
-    send_discord_notification(webhook_url, message)
-
-# force deploy
-@flow(
-    log_prints=True,
-    flow_run_name="crm_disparo_{campaign_name}_{flow_environment}",
-    on_failure=[send_discord_notification_on_failure],
-)
-async def rj_crm__disparo_template_sf(
+@flow(log_prints=True, flow_run_name="crm_disparo_{campaign.name}_{campaign.environment}", on_failure=[notify_failure])
+async def rj_crm__disparo_template(
     *,
     cloud: Cloud,
-    # Parâmetros opcionais para override manual na UI.
-    campaign_name: str | None = None,
-    dataset_id: str | None = None,
-    table_id: str | None = None,
-    dump_mode: str  = "append",
-    test_mode: bool | None = False,
-    query: str | None = None,
-    query_file: str | None = None,
-    query_processor_name: str | None = None,
-    query_replacements: dict | None = None,
-    filter_dispatched_phones_or_cpfs: str | None = "cpf",
-    filter_duplicated_phones: bool = False,
-    filter_duplicated_cpfs: bool = True,
-    filter_failed_phones: bool = False,
-    enrich_with_api_name: str | None = None,
-    enrich_with_api_params: dict | None = None,
-    dispatch_interval_days: int = 0,
-    sleep_minutes: int | None = 5,
-    materialization_sleep_minutes: int | None = 20,
-    max_dispatch_retries: int = 0,
-    data_extension_filename: str | None = None,
-    de_columns: list[str] | None = None,
-    csv_separator: str = ";",
-    whitelist_percentage: int = 0,
-    flow_environment: str = "staging",
-    force_add_on_whitelist_group: bool = False,
-    whitelist_replace_contacts: bool = False,
-    materialize_after_sftp: bool = True,
-    monitor_after_sftp: bool = True,
-    monitor_check_interval_minutes: int = 5,
-    monitor_max_wait_minutes: int = 40,
-    sftp_remote_path: str = "/Import/",
-    batch_size: int | None = None,
-    batch_sleep_minutes: int = 5,
-    debug: bool = True,
-):
+    table: Table = DEFAULT_TABLE,
+    campaign: Campaign = DEFAULT_CAMPAIGN,
+    audience: Audience = DEFAULT_AUDIENCE,
+    delivery: Delivery = DEFAULT_DELIVERY,
+) -> None:
+    """Send a templated WhatsApp message, through the Data Extension of Salesforce, to the people of a query.
+
+    The run stops, with a notice, if the control sheet has the campaign off or past its limit date. The query of
+    `audience` gives the frame: `cpf`, `telefone`, an optional list `others` of other phones, and the fields of
+    the message. The frame loses the duplicate CPFs, the phones that failed before and who already got a message
+    (see `Audience`). Each batch becomes a CSV file in the SFTP of Salesforce, and a share of the phones goes to
+    the whitelist. After the files, the flow watches for the status of the dispatch (see `Delivery`). With
+    `audience.max_retries` it then tries again, for the CPFs that failed, with their next phone. Unless
+    `campaign.test_mode` is on, each try is recorded in `table`, with the CPF as `SubscriberKey` and the other
+    columns as JSON in `data`. The SFTP login and its pinned host key come from the settings.
     """
-    Orchestrates the dispatch of templated messages via Salesforce SFTP.
+    switch = await read_switch_task(campaign)
 
-    Fetches destinations from BigQuery, applies filters, generates a CSV with
-    a 'telefone' plus all query fields, saves it to
-    disk, and uploads it to the configured SFTP server.
-    Dispatch results are also logged to BigQuery.
+    if not switch.active:
+        logger.info("The campaign is off, so the run ends: campaign=%s", campaign.name)
 
-    SFTP credentials (SFTP_HOST, SFTP_USERNAME, SFTP_PASSWORD, SFTP_HOST_KEY)
-    must be available as environment variables injected from Infisical.
-    SFTP_HOST_KEY is the server's public host key
-    (format "ssh-rsa AAAA...", same as a known_hosts line) used to pin the SFTP
-    server's identity and reject man-in-the-middle connections — it must be
-    confirmed with Salesforce through a channel separate from the SSH connection
-    itself before being stored.
+        if switch.notice:
+            await notify_task(switch.notice, errors=True)
 
-    Args:
-        campaign_name (str, optional): The name of the dispatch campaign.
-        chunk_size (int, optional): Kept for interface compatibility; not used for SFTP batching.
-        dataset_id (str, optional): BigQuery dataset ID for dispatch logs.
-        table_id (str, optional): BigQuery table ID for dispatch logs.
-        dump_mode (str, optional): BigQuery dump mode (e.g., "append").
-        test_mode (bool, optional): If True, runs in test mode. Defaults to False.
-        query (str, optional): SQL query to retrieve destinations.
-        query_file (str, optional): Path (relative to this file) to a .sql file to use as the
-            query instead of passing the raw SQL in `query`. Takes precedence over `query`.
-        query_processor_name (str, optional): Name of the query processor.
-        query_replacements (dict, optional): Replacements for query placeholders.
-        filter_dispatched_phones_or_cpfs (str, optional): None, "cpf" or "telefone". Defaults to "cpf".
-        filter_duplicated_phones (bool, optional): Remove duplicate phones. Defaults to True.
-        filter_duplicated_cpfs (bool, optional): Remove duplicate CPFs. Defaults to True.
-        filter_failed_phones (bool, optional): Remove phones that failed in last dispatch. Defaults to False.
-        enrich_with_api_name (str, optional): Nome de uma função registrada em
-            utils/enrichers.py (DF_ENRICHERS) usada pra enriquecer o DataFrame com
-            dados de uma API externa antes dos filtros/CSV. Ex.: "consulta_debitos".
-            Enrichers podem remover linhas sem dado correspondente na API.
-        enrich_with_api_params (dict, optional): Parâmetros livres repassados pra
-            função de enriquecimento selecionada (ex.: {"api_url": "..."}).
-        sleep_minutes (int, optional): Minutes to sleep before dispatch. Defaults to 5.
-        max_dispatch_retries (int): Maximum retry attempts with alternative phones. Defaults to 0.
-        de_columns (list[str], optional): Lista de campos (além de telefone/SubscriberKey) que a
-            Data Extension espera. Quando informada, o CSV enviado ao SFTP é restrito a essas
-            colunas — qualquer coluna de controle interno da query (ex.: 'others', 'cpf')
-            é descartada antes do envio.
-        csv_separator (str, optional): Delimitador do CSV enviado ao SFTP. Defaults to ";".
-        sftp_remote_path (str, optional): Remote directory on the SFTP server. Defaults to "/".
-        whitelist_percentage (int, optional): Percentage of contacts to whitelist. Defaults to 0.
-        flow_environment (str, optional): Flow environment ("staging" or "production"). Defaults to "staging".
-        force_add_on_whitelist_group (bool, optional): Force add to whitelist group. Defaults to False.
-        whitelist_replace_contacts (bool, optional): Remove contacts before adding to whitelist. Defaults to False.
-        materialize_after_sftp (bool, optional): Faz uma única materialização de int_crm_status_disparo
-            após materialization_sleep_minutes, sem monitoramento/alerta. Ignorado se monitor_after_sftp=True.
-        monitor_after_sftp (bool, optional): Após materialization_sleep_minutes, materializa
-            int_crm_status_disparo e checa sucesso do disparo a cada monitor_check_interval_minutes,
-            até monitor_max_wait_minutes. Alerta no Discord se nenhum sucesso for encontrado nesse prazo.
-        monitor_check_interval_minutes (int, optional): Intervalo entre checagens do monitoramento. Defaults to 5.
-        monitor_max_wait_minutes (int, optional): Tempo máximo de monitoramento antes de alertar. Defaults to 40.
-        sftp_remote_path (str, optional): Diretório remoto no servidor SFTP onde o CSV será depositado. Defaults to "/Import/".
-        batch_size (int, optional): Número de linhas por batch de disparo. None = sem batching (envia tudo de uma vez). Defaults to None.
-        batch_sleep_minutes (int, optional): Minutos de sleep entre batches (não aplicado após o último). Defaults to 5.
-    """
-
-    # force deploy
-    dataset_id = dataset_id or TemplateConstants.DATASET_ID.value
-    table_id = table_id or TemplateConstants.TABLE_ID.value
-    dump_mode = dump_mode or TemplateConstants.DUMP_MODE.value
-    campaign_name = campaign_name or TemplateConstants.CAMPAIGN_NAME.value
-    query = (Path(__file__).parent / query_file).read_text() if query_file else query or TemplateConstants.QUERY.value
-    query_processor_name = query_processor_name or TemplateConstants.QUERY_PROCESSOR_NAME.value
-    billing_project_id = TemplateConstants.BILLING_PROJECT_ID.value
-
-    run_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    flow_status = check_flow_status(
-        flow_environment=flow_environment,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-        campaign_name=campaign_name,
-    )
-    if flow_status is None:
-        print("Ending flow due to inactive status.")
         return
 
-    validated_campaign = validate_campaign_name(
-        campaign_name=campaign_name,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
-    if validated_campaign is None and max_dispatch_retries > 0:
-        # Se o flow não encerra, o loop de retry roda normalmente. CPFs que "falharam" (por não aparecerem em status_disparo, já que o nome era inválido) serão reprocessados nas tentativas seguintes — potencialmente disparando para as mesmas pessoas 2~3 vezes no mesmo dia.
-        print(f"Ending flow due to invalid campaign name: {campaign_name} does not exist in table rj-crm-registry.brutos_salesforce.jornada")
+    if not await check_campaign_task(campaign.name) and audience.max_retries > 0:
+        logger.info("The campaign is not in the table of the journeys, so the run ends: campaign=%s", campaign.name)
+
         return
 
-    if test_mode:
-        print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
+    query = build_query(audience, PIPELINE_FOLDER, today())
 
-    if query_replacements:
-        query_complete = format_query(
-            raw_query=query,
-            replacements=query_replacements,
-            query_processor_name=query_processor_name,
-        )
-    else:
-        query_complete = query
+    if query is None:
+        logger.info("The processor of the query gave nothing, so the run ends")
 
-    if query_complete is None:
-        print("Query retornou None (ex: processador de fim de semana). Encerrando flow.")
         return
 
-    print(f"\n⚠️  Query dispatch:\n{query_complete}")
+    frame = await prepare_task(campaign, audience, query)
+    attempts = audience.max_retries + 1
 
-    # O disparo SF trabalha com o DataFrame plano retornado pela query.
-    # A query deve retornar as colunas: telefone, others (lista), e demais campos do disparo.
-    df = task_download_data_from_bigquery(
-        query=query_complete,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
+    for attempt in range(attempts):
+        current = await select_task(frame, campaign, audience, attempt)
 
-    if df is None or df.empty:
-        send_dispatch_no_destinations_found(campaign_name, test_mode)
-        return
+        if current.is_empty():
+            logger.info("Nobody is left, so the run ends: attempt=%d", attempt)
 
-    if "LOCALE" not in df.columns:
-        df["LOCALE"] = "BR"
-
-    print(f"[DEBUG] Colunas antes do rename: {list(df.columns)}")
-
-    # Padroniza a coluna de CPF para 'cpf' caso as queries antigas ainda retornem 'SubscriberKey'
-    if "SubscriberKey" in df.columns and "cpf" not in df.columns:
-        df = df.rename(columns={"SubscriberKey": "cpf"})
-        print("RENAME APLICADO: SubscriberKey → cpf") 
-
-    print(f"[DEBUG] Colunas antes da validação: {list(df.columns)}")
-
-    # Valida colunas obrigatórias para o log SF: cpf e telefone.
-    # Lança ValueError imediatamente se alguma estiver ausente ou com dados inválidos.
-    validate_sf_dataframe(df, campaign_name)
-
-    print(f"Query retornou {len(df)} linhas. Colunas: {list(df.columns)}")
-    print(f"[DEBUG] Sample data:\n{df.head(10).to_dict('records')}")
-
-    # Dedup por CPF — base para o loop de retentativas
-    df = filter_duplicated(
-        df=df,
-        column="cpf",
-        filter_indicator=filter_duplicated_cpfs,
-        label="CPFs",
-    )
-    print(f"[DEBUG] Após filtrar cpfs duplicados:\n{df.head(10).to_dict('records')}") if debug else None
-    if df.empty:
-        send_dispatch_no_destinations_found(campaign_name, test_mode)
-        return
-
-    # Remove telefones cujo último disparo falhou e estão em quarentena
-    if filter_failed_phones:
-        print("Filtrando telefones em quarentena")
-        failed_phones = get_failed_phones(billing_project_id=billing_project_id)  # Considera falha em qq campanha
-        if failed_phones:
-            if max_dispatch_retries > 0:
-                # Marca como None para que o loop de retry use o próximo número de 'others'
-                df.loc[df["telefone"].isin(failed_phones), "telefone"] = None
-            else:
-                df = df[~df["telefone"].isin(failed_phones)]
-            print(f"[DEBUG] Após filtrar quarentena:\n{df.head(10).to_dict('records')}") if debug else None
-
-        if df.empty:
-            send_dispatch_no_destinations_found(campaign_name, test_mode)
             return
 
-    # Enriquece com dados de API externa (ex.: consulta_debitos), se configurado.
-    # Roda antes do retry loop pra que as colunas novas propaguem pra
-    # todas as tentativas sem precisar chamar a API de novo.
-    if enrich_with_api_name:
-        df = apply_df_enricher(
-            df=df,
-            enricher_name=enrich_with_api_name,
-            enricher_params=enrich_with_api_params,
-        )
-        if df.empty:
-            send_dispatch_no_destinations_found(campaign_name, test_mode)
-            return
+        delivered = await deliver_task(current, campaign, delivery)
+        await watch_task(current, delivered, campaign, delivery, (attempt + 1, attempts))
 
-    print(f"Total unique destinations to dispatch: {len(df)}")
-    base_df = df.copy()
-
-    # RETRY LOOP
-    # --------------------------------------------------------------------------------------
-    # no retry loop do rj_crm__disparo_template eu preciso que vc avalie se está correto considerando que:
-    #   - posso ter disparos sem retry em que eu quero que um mesmo CPF/telefone que já recebeu qualquer campanha hj seja filtrado do dataframe de disparo. Definido pelo campo filter_dispatched_phones_or_cpfs
-    #   - posso ter disparos com retry em que eu quero que um mesmo CPF/telefone que já recebeu qualquer campanha hj seja filtrado do dataframe de disparo. Definido pelo campo filter_dispatched_phones_or_cpfs
-    #   - posso ter disparos sem retry em que eu quero que um mesmo CPF/telefone que já recebeu essa mesma campanha nos últimos dispatch_interval_days seja filtrado do dataframe de disparo
-    #   - posso ter disparos com retry em que eu quero que um mesmo CPF/telefone que já recebeu essa mesma campanha nos últimos dispatch_interval_days seja filtrado do dataframe de disparo
-    #   - nos disparos de retry (i >0) um mesmo telefone que já recebeu essa campanha hj seja filtrado do dataframe de disparo
-    # --------------------------------------------------------------------------------------
-    for i in range(0, max_dispatch_retries + 1):
-
-        if i == 0:
-            current_df = base_df.copy()
-            # Para linhas com telefone None (marcadas por filter_failed_phones),
-            # tenta usar o primeiro número disponível em 'others' antes de descartar
-            if "others" in current_df.columns:
-                mask_none = current_df["telefone"].isna()
-                current_df.loc[mask_none, "telefone"] = current_df.loc[mask_none, "others"].apply(
-                    lambda x: x[0] if isinstance(x, list) and len(x) >= 1 else None
-                )
-            current_df = current_df.dropna(subset=["telefone"])
-            if current_df.shape[0] == 0:
-                print("✅ No destinations available for dispatch attempt 0. Ending.")
-                break
-        else:
-            if "others" in base_df.columns and not base_df["others"].apply(
-                lambda x: isinstance(x, list) and len(x) >= i
-            ).any():
-                print(f"✅ No others available for retry attempt {i}. Ending retry loop.")
-                break
-
-            print(f"⚠️  Sleep 3 minutes before retry dispatch.")
-            time.sleep(3 * 60)
-            print(f"\n⚠️  Starting retry attempt {i} for campaign_name={campaign_name}...")
-
-            failed_cpfs = get_failed_cpfs(billing_project_id=billing_project_id, campaign_name=campaign_name)
-
-            if not failed_cpfs:
-                print(f"✅ No failed CPFs found for retry attempt {i}. Ending retry loop.")
-                break
-
-            # Seleciona as linhas dos CPFs que falharam e aplica o próximo número de 'others'
-            retry_df = base_df[base_df["cpf"].isin(failed_cpfs)].copy()
-            if "others" not in retry_df.columns or retry_df.empty:
-                print(f"No others column or no rows for retry attempt {i}.")
-                break
-
-            retry_df["telefone"] = retry_df["others"].apply(
-                lambda x: x[i - 1] if isinstance(x, list) and len(x) >= i else None
-            )
-            current_df = retry_df.dropna(subset=["telefone"])
-
-            if current_df.empty:
-                print(f"✅ No retry phones available for attempt {i}. Ending retry loop.")
-                break
-
-            print(f"🚀 Found {len(current_df)} destinations for retry attempt {i}.")
-
-        # Buscamos o histórico de disparos realizados no intervalo de dias configurado
-        # Sempre usamos dispatch_interval_days para garantir que números secundários de retry
-        # também sejam validados contra todo o histórico do intervalo.
-        already_dispatched_df = get_already_dispatched_data(
-            billing_project_id=billing_project_id, 
-            dispatch_interval_days=dispatch_interval_days
-        )
-
-        # --------------------------------------------------------------------------------------
-        # PASSO 1: FILTRO DE SEGURANÇA DA MESMA CAMPANHA
-        # --------------------------------------------------------------------------------------
-        # Esse filtro impede que o mesmo CPF (i==0) ou telefone (i>0) receba a MESMA campanha mais de uma
-        # vez dentro da janela configurada (ex: 7 dias).
-        # No primeiro disparo (i == 0):
-        #   - Se for "cpf" ou None (padrão), filtramos por "cpf".
-        # No retry (i > 0):
-        #   - Filtramos por "telefone" para garantir que o número de retry não recebeu a campanha antes,
-        #     permitindo que o mesmo CPF tente um telefone alternativo.
-        # --------------------------------------------------------------------------------------
-        qnt_pessoas = current_df.shape[0]
-        if not already_dispatched_df.empty:  # Vale para qq tentativa, mas no retry só avalia o tefone
-            print(f"🔍 Aplicando filtro de mesma campanha ({campaign_name})...")
-            df_same_campaign = already_dispatched_df[already_dispatched_df["nome_campanha"] == campaign_name]
-            print(f"[DEBUG] Mesma campanha data:\n{df_same_campaign.head(10).to_dict('records')}") if debug else None
-
-            # Determina a coluna para o filtro da mesma campanha
-            same_campaign_filter = "cpf" if i == 0 else "telefone"
-
-            current_df = filter_already_dispatched_phones_or_cpfs(
-                df=current_df,
-                already_dispatched_df=df_same_campaign,
-                current_filter=same_campaign_filter,
-            )
-            print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam essa campanha nos último(s) {dispatch_interval_days} dia(s).")
-            print(f"[DEBUG] Após remoção de mesma campanha:\n{current_df.head(10).to_dict('records')}") if debug else None
-
-        # --------------------------------------------------------------------------------------
-        # PASSO 2: FILTRO DIÁRIO CRUZADO DE CANAL (Qualquer Campanha Hoje)
-        # --------------------------------------------------------------------------------------
-        # Esse filtro impede que o mesmo cidadão (CPF ou Telefone) receba QUALQUER outra campanha
-        # no dia de hoje para evitar fadiga de comunicação.
-        # Se filter_dispatched_phones_or_cpfs for:
-        #   - "None":
-        #       - No i == 0: não filtramos se o cpf/telefone recebeu algum disparo hj
-        #       - No i > 0:  não filtramos se o cpf/telefone recebeu algum disparo hj
-        #   - "cpf":
-        #       - No i == 0: Filtramos CPFs que receberam QUALQUER campanha hoje.
-        #       - No i > 0: não filtramos se o cpf/telefone recebeu algum disparo hj, o telefone pode já ter tido um disparo pra outra campanha
-        #   - "telefone":
-        #       - Filtramos telefones que receberam QUALQUER campanha hoje (tanto no i == 0 quanto no i > 0).
-        # --------------------------------------------------------------------------------------
-        filter_dispatched_phones_or_cpfs = None if i > 0 and filter_dispatched_phones_or_cpfs == "cpf" else filter_dispatched_phones_or_cpfs
-        if filter_dispatched_phones_or_cpfs and not already_dispatched_df.empty:
-            print(f"🔍 Aplicando filtro diário de quem já recebeu alguma campanha hoje '{filter_dispatched_phones_or_cpfs}'...")
-            
-            hoje = pd.Timestamp.now(tz='America/Sao_Paulo').date()
-            datas_disparadas = pd.to_datetime(already_dispatched_df["data_particao"]).dt.date
-            
-            # Filtra apenas os disparos de hoje
-            df_dispatched_today = already_dispatched_df[datas_disparadas == hoje]
-            
-            qnt_pessoas = current_df.shape[0]
-            
-            # Filtra CPF/telefone contra qualquer campanha enviada hoje
-            current_df = filter_already_dispatched_phones_or_cpfs(
-                df=current_df,
-                already_dispatched_df=df_dispatched_today,
-                current_filter=filter_dispatched_phones_or_cpfs,
-            )
-            
-            print(f"🔍 Foram removidas {qnt_pessoas - current_df.shape[0]} pessoas da lista de envio que já receberam alguma campanha hoje.")
-            print(f"[DEBUG] Já tiveram disparo hoje:\n{df_dispatched_today.head().to_dict('records')}") if debug else None
-
-        # Dedup por telefone (retries podem introduzir duplicatas)
-        current_df = filter_duplicated(
-            df=current_df,
-            column="telefone",
-            filter_indicator=filter_duplicated_phones,
-            label="phones",
-        )
-
-        if current_df.empty:
-            print("No destinations found. Exiting flow execution.")
-            return
-
-        print(f"Total destinations for attempt {i}: {len(current_df)}")
-
-        # Whitelist (funções esperam List[Dict] com chave 'to')
-        if whitelist_percentage > 0:
-            whitelist_group_name = f"citizen-hsm-{campaign_name}"
-            whitelist_dests = [{"telefone": phone} for phone in current_df["telefone"].tolist()]
-            if whitelist_replace_contacts:
-                remove_contacts_from_whitelist(destinations=whitelist_dests)
-            add_contacts_to_whitelist(
-                destinations=whitelist_dests,
-                percentage_to_insert=whitelist_percentage,
-                group_name=whitelist_group_name,
-                force_add_on_whitelist_group=force_add_on_whitelist_group,
-            )
-
-        print(f"\nStarting SF dispatch for campaign_name={campaign_name}, attempt={i}")
-        print(f"Sample data:\n{current_df.head(5).to_dict('records')}")
-
-        # ------------------------------------------------------------------
-        # BATCH LOOP
-        # Fatia current_df em batches de batch_size linhas (ou 1 batch se
-        # batch_size for None). sleep_minutes é aplicado antes de cada batch;
-        # batch_sleep_minutes é aplicado entre batches (não após o último).
-        # monitor/materialize e log BQ acontecem uma única vez no final.
-        # ------------------------------------------------------------------
-        if batch_size:
-            batches = [current_df.iloc[j:j + batch_size] for j in range(0, len(current_df), batch_size)]
-        else:
-            batches = [current_df]
-        n_batches = len(batches)
-        print(f"📦 Total de batches para attempt {i}: {n_batches} (batch_size={batch_size})")
-
-        all_log_dfs = []
-        last_dispatch_date = None
-
-        for b_idx, batch_df in enumerate(batches):
-            print(f"\n📦 Batch {b_idx + 1}/{n_batches} — {len(batch_df)} destinatários")
-            print(f"⚠️  Sleep {sleep_minutes} minuto(s) antes do batch. Verifique data e campaign_name!")
-            time.sleep(sleep_minutes * 60)
-
-            # Salva CSV (restrito a telefone/SubscriberKey/de_columns) e registra data do disparo
-            csv_path, dispatch_date = save_csv_for_sftp(
-                df=batch_df.rename(columns={"cpf": "SubscriberKey"}),
-                data_extension_filename=data_extension_filename or campaign_name,
-                de_columns=de_columns,
-                csv_separator=csv_separator,
-            )
-            last_dispatch_date = dispatch_date
-
-            send_to_sftp(
-                csv_path=csv_path,
-                sftp_remote_path=sftp_remote_path,
-            )
-
-            print(f"CSV enviado para SFTP: batch {b_idx + 1}/{n_batches} com {len(batch_df)} destinatários (attempt {i + 1}).")
-
-            if not test_mode and not batch_df.empty:
-                all_log_dfs.append(
-                    create_log_df(
-                        df=batch_df.rename(columns={"cpf": "SubscriberKey"}),
-                        dispatch_date=dispatch_date,
-                        campaign_name=campaign_name,
-                    )
-                )
-
-            # Sleep entre batches (não após o último)
-            if b_idx < n_batches - 1:
-                print(f"⏳ Sleep {batch_sleep_minutes} minuto(s) antes do próximo batch...")
-                time.sleep(batch_sleep_minutes * 60)
-
-        # ------------------------------------------------------------------
-        # PÓS-BATCHES: monitor / materialize (uma única vez por attempt)
-        # ------------------------------------------------------------------
-        dispatch_confirmed = False
-
-        if monitor_after_sftp:
-            git_repository_path = "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-
-            dispatch_confirmed = monitor_dispatch_status(
-                campaign_name=campaign_name,
-                billing_project_id=billing_project_id,
-                dispatch_date=last_dispatch_date,
-                git_repository_path=git_repository_path,
-                initial_wait_minutes=materialization_sleep_minutes if not test_mode else 2,
-                check_interval_minutes=monitor_check_interval_minutes if not test_mode else 2,
-                max_wait_minutes=monitor_max_wait_minutes if not test_mode else 8,
-                total_dispatched=sum(len(d) for d in all_log_dfs),
-            )
-            if dispatch_confirmed:
-                send_dispatch_success_notification(
-                    total_dispatches=len(current_df),
-                    dispatch_date=last_dispatch_date,
-                    campaign_name=campaign_name,
-                    total_batches=n_batches,
-                    sample_destination=(current_df.iloc[0].to_dict() if not current_df.empty else None),
-                    test_mode=test_mode,
-                    attempt_number=i + 1,
-                    total_attempt_number=max_dispatch_retries + 1,
-                )
-
-        elif materialize_after_sftp:
-            print(f"⏳ Aguardando {materialization_sleep_minutes if not test_mode else 5} minutos antes de materializar o modelo dbt int_crm_status_disparo...")
-            time.sleep(materialization_sleep_minutes * 60) if not test_mode else time.sleep(5 * 60)
-            git_repository_path = "https://GITHUB_TOKEN@github.com/prefeitura-rio/queries-rj-crm-registry.git"
-            await run_dbt(
-                DbtRun(
-                    repository=git_repository_path,
-                    command="run",
-                    target="prod",
-                    select="+int_crm_status_disparo",
-                )
-            )
-
-        # ------------------------------------------------------------------
-        # PÓS-BATCHES: notificação e log BQ consolidados
-        # ------------------------------------------------------------------
-        if not test_mode:
-            if all_log_dfs:
-                print(f"Sample dispatched destination: {current_df.iloc[:5].to_dict()}")
-                # Log para BQ: schema fixo com coluna `data` em JSON para camada bronze
-                log_df = pd.concat(all_log_dfs, ignore_index=True)
-
-                partitions_path = create_date_partitions(
-                    dataframe=log_df,
-                    partition_column="dispatch_date",
-                    file_format="csv",
-                    root_folder="./data_dispatch/",
-                )
-
-                if not partitions_path:
-                    raise ValueError("partitions_path is None - partition creation failed")
-
-                if not os.path.exists(partitions_path):
-                    raise ValueError(f"partitions_path does not exist: {partitions_path}")
-
-                print(f"Generated partitions_path: {partitions_path}")
-                if os.path.exists(partitions_path):
-                    files_in_path = []
-                    for root, dirs, files in os.walk(partitions_path):  # pylint: disable=unused-variable
-                        files_in_path.extend([os.path.join(root, f) for f in files])
-                    print(f"Files in partitions path: {files_in_path}")
-
-                table = Table(dataset_id=dataset_id, table_id=table_id)
-                await upload_files_to_gcs(
-                    Path(partitions_path),
-                    table,
-                    bucket=cloud["bucket"],
-                    dump_mode=dump_mode,
-                    source_format="csv",
-                    options=capture_options(dump_mode),
-                )
-                await publish_table_in_bq(table, cloud)
+        if delivered.rows:
+            await record_task(delivered.rows, table, cloud, attempt)
