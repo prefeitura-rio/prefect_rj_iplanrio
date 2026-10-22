@@ -1,272 +1,101 @@
-# flake8: noqa:E501
-# pylint: disable='line-too-long'
-"""
-Flow para o disparo do cartão pic
-"""
-import os
-import time
-from math import ceil
+"""Flow for rj_smas__disparo_pic."""
+
+from asyncio import sleep
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-import pendulum
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.discord import (
-    send_dispatch_result_notification,
-    send_dispatch_success_notification,
-)
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.dispatch import (
-    add_contacts_to_whitelist,
-    check_api_status,
-    check_flow_status,
-    check_if_dispatch_approved,
-    create_dispatch_dfr,
-    create_dispatch_payload,
-    dispatch,
-    format_query,
-    get_destinations,
-    remove_duplicate_cpfs,
-    remove_duplicate_phones,
-)
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.tasks import (
-    access_api,
-    create_date_partitions,
-    printar,
-    skip_flow_if_empty,
-    task_download_data_from_bigquery,
-)
 from prefect import flow
+from toolkit.telemetry import logger
 
-# pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_pic.constants import PicLembreteConstants
-from pipelines.rj_smas__disparo_pic.settings import Settings
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs
+from pipelines.rj_smas__disparo_pic.constants import DEFAULT_TABLE
+from pipelines.rj_smas__disparo_pic.helpers import build_query, today
+from pipelines.rj_smas__disparo_pic.tasks import read_event_date_task, read_recipients_task
+from pipelines.rj_smas__disparo_pic.types import Audience, Campaign, Waits
+from utils.dispatch import no_destinations_notice, post_notice
+from utils.hooks import notify_failure
+from utils.hsm import drop_repeats
+from utils.tasks import (
+    post_hsm_results,
+    publish_table_in_bq,
+    read_switch,
+    run_hsm,
+    upload_files_to_gcs,
+    write_records,
+)
 from utils.types import Cloud, Table
 from utils.utils import capture_options
+from utils.whitelist import Selection
+
+DEFAULT_CAMPAIGN = Campaign()
+DEFAULT_AUDIENCE = Audience()
+DEFAULT_WAITS = Waits()
+PIPELINE_FOLDER = Path(__file__).parent
 
 
-# forçando deploy do flow
-@flow(log_prints=True, flow_run_name="{table_id}_{dataset_id}")
+@flow(log_prints=True, flow_run_name="pic-{campaign.name}", on_failure=[notify_failure])
 async def rj_smas__disparo_pic(
     *,
     cloud: Cloud,
-    # Parâmetros opcionais para override manual na UI.
-    id_hsm: int | None = 184,
-    campaign_name: str | None = None,
-    cost_center_id: int | None = 71,
-    chunk_size: int | None = None,
-    dataset_id: str | None = None,
-    table_id: str | None = None,
-    dump_mode: str | None = None,
-    query: str | None = None,
-    query_dispatch_approved: str | None = None,
-    query_processor_name: str | None = None,
-    filter_dispatched_phones_or_cpfs: str | None = "cpf",
-    filter_duplicated_phones: bool = True,
-    filter_duplicated_cpfs: bool = True,
-    test_mode: bool | None = True,
-    sleep_minutes: int | None = 5,
-    dispatch_approved_col: str | None = "APROVACAO_DISPARO_AVISO",
-    dispatch_date_col: str | None = "DATA_DISPARO_AVISO",
-    event_date_col: str | None = "DATA_ENTREGA",
-    whitelist_percentage: int = 30,
-    flow_environment: str = "staging",
-):
-    dataset_id = dataset_id or PicLembreteConstants.PIC_DATASET_ID.value
-    table_id = table_id or PicLembreteConstants.PIC_TABLE_ID.value
-    dump_mode = dump_mode or PicLembreteConstants.PIC_DUMP_MODE.value
-    id_hsm = id_hsm or PicLembreteConstants.PIC_ID_HSM.value
-    campaign_name = campaign_name or PicLembreteConstants.PIC_CAMPAIGN_NAME.value
-    cost_center_id = cost_center_id or PicLembreteConstants.PIC_COST_CENTER_ID.value
-    chunk_size = chunk_size or PicLembreteConstants.PIC_CHUNK_SIZE.value
-    query = query or PicLembreteConstants.PIC_QUERY.value
-    query_dispatch_approved = query_dispatch_approved or PicLembreteConstants.PIC_QUERY_DISPATCH_APPROVED.value
-    query_processor_name = query_processor_name or PicLembreteConstants.PIC_QUERY_PROCESSOR_NAME.value
-    test_mode = test_mode if test_mode is not None else PicLembreteConstants.PIC_TEST_MODE.value
-    dispatch_approved_col = dispatch_approved_col or PicLembreteConstants.DISPATCH_APPROVED_COL.value
-    dispatch_date_col = dispatch_date_col or PicLembreteConstants.DISPATCH_DATE_COL.value
-    event_date_col = event_date_col or PicLembreteConstants.EVENT_DATE_COL.value
+    table: Table = DEFAULT_TABLE,
+    campaign: Campaign = DEFAULT_CAMPAIGN,
+    audience: Audience = DEFAULT_AUDIENCE,
+    waits: Waits = DEFAULT_WAITS,
+) -> None:
+    """Remind the families of the delivery date of the Cartão PIC, by an HSM message of the Wetalkie API.
 
-    billing_project_id = PicLembreteConstants.PIC_BILLING_PROJECT_ID.value
+    The run ends if the control sheet has the campaign off or past its limit date, if the table of approvals has no
+    approved dispatch for today, or if the query gives nobody. A phone and a CPF that come twice get one message each,
+    unless the audience says otherwise. A share of the phones, `audience.whitelist_percentage`, goes to the whitelist of
+    the day. The flow waits `waits.before_dispatch` minutes, so a person can check the date and the HSM, and sends the
+    batches. The ones that went out are recorded in `table`, even if a later one fails, and then the run raises. After
+    `waits.before_results` minutes, a notice has the status of the messages. A run with `campaign.test_mode` sends
+    only to the `DESTINATIONS` of the settings, asks for no approval and records nothing.
+    """
+    switch = await read_switch(campaign.name, campaign.environment)
 
-    # Se test_mode ativado, usar query mock ao invés da query real
-    if test_mode:
-        campaign_name = "teste-"+campaign_name
-        query = PicLembreteConstants.PIC_QUERY_MOCK.value
-        query_dispatch_approved = PicLembreteConstants.PIC_QUERY_MOCK_DISPATCH_APPROVED.value
-        query_create_mock_tables = PicLembreteConstants.CREATE_MOCK_TABLES.value
-        print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
-        task_download_data_from_bigquery(
-            query=query_create_mock_tables,
-            billing_project_id=billing_project_id,
-            bucket_name=billing_project_id,
-        )
-        print("Mock tables were created")
+    if not switch.active:
+        if switch.notice:
+            await post_notice(switch.notice, errors=True)
 
-    print(f"\nQuery citizen:\n{query}")
-    print(f"\nQuery dispatch approval:\n{query_dispatch_approved}")
+        return
 
-    destinations = Settings().DESTINATIONS
+    event_date = "" if campaign.test_mode else await read_event_date_task()
 
+    if event_date is None:
+        return
 
-    flow_status = check_flow_status(
-        flow_environment=flow_environment,
-        id_hsm=id_hsm,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
-    if flow_status is None:
-        print("Ending flow due to inactive status.")
-        return  # flow termina aqui, nada downstream é agendado
+    query = build_query(PIPELINE_FOLDER, campaign, event_date) if not campaign.test_mode else ""
+    recipients = await read_recipients_task(query, test_mode=campaign.test_mode)
+    recipients = drop_repeats(recipients) if audience.drop_duplicate_phones else recipients
+    recipients = drop_repeats(recipients, by_id=True) if audience.drop_duplicate_cpfs else recipients
 
-    df_dispatch_approved = task_download_data_from_bigquery(
-        query=query_dispatch_approved,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
+    if not recipients:
+        logger.info("The query gave nobody, so the run ends")
+        await post_notice(no_destinations_notice(campaign.name, test_mode=campaign.test_mode, today=today()))
 
-    event_date, dispatch_approved = check_if_dispatch_approved(
-        df_dispatch_approved, dispatch_approved_col, event_date_col
-    )
+        return
 
-    if dispatch_approved:
-        query_replacements = {"event_date_placeholder": event_date, "id_hsm_placeholder": id_hsm}
-        query_complete = format_query(raw_query=query, replacements=query_replacements)
-        print(f"\nQuery dispatch approval:\n{query_complete}")
-        print(f"Sleep {sleep_minutes} minutes to check")
-        time.sleep(sleep_minutes * 60)
+    hsm = campaign.as_hsm()
+    selection = Selection(audience.whitelist_percentage, f"citizen-hsm-{hsm.campaign_name}-{today()}")
+    run = await run_hsm(hsm, recipients, selection, waits.before_dispatch, test_mode=campaign.test_mode)
 
-        api = access_api(login_route="users/login",
-        )
-
-        api_status = check_api_status(api)
-
-        destinations_result = get_destinations(
-            destinations=destinations,
-            query=query_complete,
-            billing_project_id=billing_project_id,
-        )
-
-        validated_destinations = skip_flow_if_empty(
-            data=destinations_result,
-            message="No destinations found from query. Skipping flow execution.",
-        )
-        if validated_destinations is None:
-            return  # flow termina aqui, nada downstream é agendado
-
-        # Remove duplicate phone numbers and CPFs if flags are set
-        unique_phone_destinations = remove_duplicate_phones(validated_destinations) if filter_duplicated_phones else validated_destinations
-        unique_destinations = remove_duplicate_cpfs(unique_phone_destinations) if filter_duplicated_cpfs else unique_phone_destinations
-
-        # Log destination counts for tracking!!
-        print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
-
-        # Add contacts to whitelist if percentage is set
-        if whitelist_percentage > 0:
-            whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
-            add_contacts_to_whitelist(
-                destinations=unique_destinations,
-                percentage_to_insert=whitelist_percentage,
-                group_name=whitelist_group_name,
-            )
-            print(f"{whitelist_percentage}% ({len(unique_destinations)*whitelist_percentage/100}) \
-                of numbers where add to whitelist on group {whitelist_group_name}.")
-
-        if api_status:
-            dispatch_payload = create_dispatch_payload(
-                campaign_name=campaign_name,
-                cost_center_id=cost_center_id,
-                destinations=unique_destinations,
+    if run.rows and not campaign.test_mode:
+        with TemporaryDirectory() as directory:
+            folder = await write_records(run.rows, Path(directory))
+            await upload_files_to_gcs(
+                folder,
+                table,
+                bucket=cloud["bucket"],
+                dump_mode="append",
+                source_format="json",
+                options=capture_options("append"),
             )
 
-            printar(id_hsm)
-            print(
-                f"\nStarting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}\n"
-            )
-            # TODO: adicionar print da hsm
-            print(f"⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!")
-            time.sleep(sleep_minutes * 60)
+        await publish_table_in_bq(table, cloud)
 
-            dispatch_date = dispatch(
-                api=api,
-                id_hsm=id_hsm,
-                dispatch_payload=dispatch_payload,
-                chunk=chunk_size,
-            )
+    if run.error:
+        raise RuntimeError(run.error)
 
-            print(f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations")
-
-            total_batches = ceil(len(unique_destinations) / chunk_size)
-
-            # Send Discord notification
-            send_dispatch_success_notification(
-                total_dispatches=len(unique_destinations),
-                dispatch_date=dispatch_date,
-                id_hsm=id_hsm,
-                campaign_name=campaign_name,
-                cost_center_id=cost_center_id,
-                total_batches=total_batches,
-                sample_destination=(unique_destinations[0] if unique_destinations else None),
-                test_mode=test_mode,
-            )
-
-            dfr = create_dispatch_dfr(
-                id_hsm=id_hsm,
-                original_destinations=unique_destinations,
-                campaign_name=campaign_name,
-                cost_center_id=cost_center_id,
-                dispatch_date=dispatch_date,
-            )
-
-            print(f"DataFrame created with {len(dfr)} records for BigQuery upload")
-
-            if not test_mode:
-                partitions_path = create_date_partitions(
-                    dataframe=dfr,
-                    partition_column="dispatch_date",
-                    file_format="csv",
-                    root_folder="./data_dispatch/",
-                )
-
-                if not partitions_path:
-                    raise ValueError("partitions_path is None - partition creation failed")
-
-                if not os.path.exists(partitions_path):
-                    raise ValueError(f"partitions_path does not exist: {partitions_path}")
-
-                print(f"Generated partitions_path: {partitions_path}")
-                if os.path.exists(partitions_path):
-                    files_in_path = []
-                    for root, dirs, files in os.walk(partitions_path):
-                        files_in_path.extend([os.path.join(root, f) for f in files])
-                    print(f"Files in partitions path: {files_in_path}")
-
-                table = Table(dataset_id=dataset_id, table_id=table_id)
-                await upload_files_to_gcs(
-                    Path(partitions_path),
-                    table,
-                    bucket=cloud["bucket"],
-                    dump_mode=dump_mode,
-                    source_format="csv",
-                    options=capture_options(dump_mode),
-                )
-                await publish_table_in_bq(table, cloud)
-
-            # Wait 15 minutes before querying results
-            print("⚠️  Waiting 15 minutes before checking dispatch results...")
-            time.sleep(15 * 60)  # 15 minutes in seconds
-
-            # Send results notification with BigQuery data
-            send_dispatch_result_notification(
-                total_dispatches=len(unique_destinations),
-                dispatch_date=dispatch_date,
-                id_hsm=id_hsm,
-                campaign_name=campaign_name,
-                cost_center_id=cost_center_id,
-                total_batches=total_batches,
-                test_mode=test_mode,
-            )
+    logger.info("Waiting for the status of the messages: minutes=%d", waits.before_results)
+    await sleep(waits.before_results * 60)
+    await post_hsm_results(hsm, run.dispatch_date, len(recipients), test_mode=campaign.test_mode)

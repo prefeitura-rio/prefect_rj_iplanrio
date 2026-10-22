@@ -7,6 +7,9 @@ from typing import Final
 
 from toolkit.telemetry import logger
 
+from .settings import NoticeSettings
+from .utils import post_discord
+
 ENVIRONMENTS: Final = ("staging", "production")
 ACTIVE_VALUES: Final = frozenset({"1", "true", "yes", "sim", "ativo"})
 SATURDAY: Final = 5
@@ -142,3 +145,17 @@ def no_destinations_notice(campaign: str, *, test_mode: bool, today: date) -> st
 def failure_notice(campaign: str, reason: str | None) -> str:
     """Return the notice of a run that failed."""
     return f"{MENTIONS}\nPrefect flow run failed!\n📋 **Campanha:** {campaign}\n⚠️ **Mensagem:** {reason}\n"
+
+
+async def post_notice(message: str, *, errors: bool = False) -> None:
+    """Post a message to the channel of the dispatches, or to the one of the errors.
+
+    The channel is a setting. With no webhook, the notice is only logged.
+    """
+    settings = NoticeSettings()
+    webhook = (settings.DISCORD_ERRORS_WEBHOOK_URL if errors else settings.DISCORD_WEBHOOK_URL).get_secret_value()
+
+    if webhook:
+        await post_discord(webhook, message)
+    else:
+        logger.warning("There is no Discord webhook for the notice, so it is only logged: %s", message)

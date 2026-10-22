@@ -1,279 +1,97 @@
-# flake8: noqa:E501
-# pylint: disable='line-too-long'
-"""
-Dispatch Flow for agendamento cadunico
-"""
-import os
-import time
-from math import ceil
+"""Flow for rj_smas__disparo_cadunico."""
+
+from asyncio import sleep
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
-import pendulum
+from prefect import flow
+from toolkit.telemetry import logger
 
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.discord import (
-    send_discord_notification,
-    send_dispatch_no_destinations_found,
-    send_dispatch_result_notification,
-    send_dispatch_success_notification,
+from pipelines.rj_smas__disparo_cadunico.constants import DEFAULT_TABLE
+from pipelines.rj_smas__disparo_cadunico.helpers import build_query, today
+from pipelines.rj_smas__disparo_cadunico.tasks import read_recipients_task
+from pipelines.rj_smas__disparo_cadunico.types import Audience, Campaign, Waits
+from utils.dispatch import no_destinations_notice, post_notice
+from utils.hooks import notify_failure
+from utils.hsm import drop_repeats
+from utils.tasks import (
+    post_hsm_results,
+    publish_table_in_bq,
+    read_switch,
+    run_hsm,
+    upload_files_to_gcs,
+    write_records,
 )
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.dispatch import (
-    add_contacts_to_whitelist,
-    check_api_status,
-    check_flow_status,
-    create_dispatch_dfr,
-    create_dispatch_payload,
-    dispatch,
-    format_query,
-    get_destinations,
-    remove_duplicate_phones,
-)
-
-# pylint: disable=E0611, E0401
-from pipelines.rj_crm__disparo_template.helpers.tasks import (
-    access_api,
-    create_date_partitions,
-    skip_flow_if_empty,
-)
-from prefect import flow  # pylint: disable=E0611, E0401
-from prefect.client.schemas.objects import Flow, FlowRun, State  # pylint: disable=E0611, E0401
-
-from pipelines.rj_smas__disparo_cadunico.constants import CadunicoConstants  # pylint: disable=E0611, E0401
-from pipelines.rj_smas__disparo_cadunico.settings import Settings
-from utils.settings import NoticeSettings
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs
 from utils.types import Cloud, Table
 from utils.utils import capture_options
+from utils.whitelist import Selection
+
+DEFAULT_CAMPAIGN = Campaign()
+DEFAULT_AUDIENCE = Audience()
+DEFAULT_WAITS = Waits()
+PIPELINE_FOLDER = Path(__file__).parent
 
 
-def send_discord_notification_on_failure(flow: Flow, flow_run: FlowRun, state: State):
-    """
-    Sends a Discord notification when a flow run fails.
-    """
-    webhook_url = NoticeSettings().DISCORD_ERRORS_WEBHOOK_URL.get_secret_value()
-    if not webhook_url:
-        print("DISCORD_ERRORS_WEBHOOK_URL environment variable not set. Cannot send notification.")
-        return
-
-    campaign_name = flow_run.parameters.get("campaign_name", "N/A")
-    id_hsm = flow_run.parameters.get("id_hsm", "N/A")
-    cost_center_id = flow_run.parameters.get("cost_center_id", "N/A")
-
-    message = f"""
-    <@821121576455634955> <@1458456241683824744> <@302518123066556426>
-    Prefect flow run failed!
-    📋 **Campanha:** {campaign_name}
-    🆔 **Template ID:** {id_hsm}
-    💰 **Centro de Custo:** {cost_center_id}
-    ⚠️ **Mensagem:** {state.message}
-    """
-    send_discord_notification(webhook_url, message)
-
-
-@flow(log_prints=True, on_failure=[send_discord_notification_on_failure], flow_run_name="{table_id}_{dataset_id}")
+@flow(log_prints=True, flow_run_name="cadunico-{campaign.name}", on_failure=[notify_failure])
 async def rj_smas__disparo_cadunico(
     *,
     cloud: Cloud,
-    # Parâmetros opcionais para override manual na UI.
-    id_hsm: int | None = None,
-    campaign_name: str | None = None,
-    cost_center_id: int | None = 71,
-    chunk_size: int | None = None,
-    dataset_id: str | None = None,
-    table_id: str | None = None,
-    dump_mode: str | None = None,
-    test_mode: bool | None = True,
-    query: str | None = None,
-    query_processor_name: str | None = "skip_weekends",
-    sleep_minutes: int | None = 5,
-    days_ahead: str | None = 2,
-    whitelist_percentage: int = 30,
-    flow_environment: str = "staging",
-):
-    dataset_id = dataset_id or CadunicoConstants.CADUNICO_DATASET_ID.value
-    table_id = table_id or CadunicoConstants.CADUNICO_TABLE_ID.value
-    dump_mode = dump_mode or CadunicoConstants.CADUNICO_DUMP_MODE.value
-    id_hsm = id_hsm or CadunicoConstants.CADUNICO_ID_HSM.value
-    campaign_name = campaign_name or CadunicoConstants.CADUNICO_CAMPAIGN_NAME.value
-    cost_center_id = cost_center_id or CadunicoConstants.CADUNICO_COST_CENTER_ID.value
-    chunk_size = chunk_size or CadunicoConstants.CADUNICO_CHUNK_SIZE.value
-    days_ahead = days_ahead or CadunicoConstants.DAYS_AHEAD.value
-    query = query or CadunicoConstants.CADUNICO_QUERY.value
-    query_processor_name = (
-        query_processor_name or CadunicoConstants.CADUNICO_QUERY_PROCESSOR_NAME.value
-    )
-    billing_project_id = CadunicoConstants.CADUNICO_BILLING_PROJECT_ID.value
+    table: Table = DEFAULT_TABLE,
+    campaign: Campaign = DEFAULT_CAMPAIGN,
+    audience: Audience = DEFAULT_AUDIENCE,
+    waits: Waits = DEFAULT_WAITS,
+) -> None:
+    """Remind the families with an appointment of the CadÚnico, by an HSM message of the Wetalkie API.
 
-    destinations = Settings().DESTINATIONS
+    The run ends if the control sheet has the campaign off or past its limit date, if the processor of the query
+    says that today is a weekend, or if the query gives nobody. A phone that comes twice gets one message. A share
+    of the phones, `audience.whitelist_percentage`, goes to the whitelist of the day. The flow waits
+    `waits.before_dispatch` minutes, so a person can stop a wrong run, and sends the batches. The ones that went out
+    are recorded in `table`, even if a later one fails, and then the run raises. After `waits.before_results`
+    minutes, a notice has the status of the messages. A run with `campaign.test_mode` sends only to the
+    `DESTINATIONS` of the settings, and records nothing.
+    """
+    switch = await read_switch(campaign.name, campaign.environment)
 
+    if not switch.active:
+        if switch.notice:
+            await post_notice(switch.notice, errors=True)
 
-    if test_mode:
-        campaign_name = "teste-" + campaign_name
-        query = CadunicoConstants.QUERY_MOCK.value
-        print("⚠️  MODO DE TESTE ATIVADO - Disparos para números de teste apenas")
+        return
 
-    api = access_api(login_route="users/login",
-    )
+    query = build_query(PIPELINE_FOLDER, campaign, audience, today())
 
-    api_status = check_api_status(api)
+    if query is None:
+        return
 
-    flow_status = check_flow_status(
-        flow_environment=flow_environment,
-        id_hsm=id_hsm,
-        billing_project_id=billing_project_id,
-        bucket_name=billing_project_id,
-    )
-    if flow_status is None:
-        print("Ending flow due to inactive status.")
-        return  # flow termina aqui, nada downstream é agendado
+    recipients = drop_repeats(await read_recipients_task(query, test_mode=campaign.test_mode))
 
-    query_replacements = {
-        "id_hsm_placeholder": id_hsm,
-        "days_ahead_placeholder": days_ahead,
-    }
-    query_complete = format_query(
-        raw_query=query,
-        replacements=query_replacements,
-        query_processor_name=query_processor_name,
-    )
-    print(f"\n⚠️  Query dispatch:\n{query_complete}")
+    if not recipients:
+        await post_notice(no_destinations_notice(campaign.name, test_mode=campaign.test_mode, today=today()))
 
-    destinations_result = get_destinations(
-        destinations=destinations,
-        query=query_complete,
-        billing_project_id=billing_project_id,
-    )
+        return
 
-    validated_destinations = skip_flow_if_empty(
-        data=destinations_result,
-        message="No destinations found from query. Skipping flow execution.",
-    )
-    if validated_destinations is None:
-        send_dispatch_no_destinations_found(
-            id_hsm,
-            campaign_name,
-            cost_center_id,
-            test_mode
-        )
-        return  # flow termina aqui, nada downstream é agendado
+    hsm = campaign.as_hsm()
+    selection = Selection(audience.whitelist_percentage, f"citizen-hsm-{hsm.campaign_name}-{today()}")
+    run = await run_hsm(hsm, recipients, selection, waits.before_dispatch, test_mode=campaign.test_mode)
 
-    unique_destinations = remove_duplicate_phones(validated_destinations)
-
-    # Add contacts to whitelist if percentage is set
-    if whitelist_percentage > 0:
-        whitelist_group_name = f"citizen-hsm-{campaign_name}-{pendulum.now('America/Sao_Paulo').to_date_string()}"
-        add_contacts_to_whitelist(
-            destinations=unique_destinations,
-            percentage_to_insert=whitelist_percentage,
-            group_name=whitelist_group_name,
-        )
-        print(f"{whitelist_percentage}% ({int(len(unique_destinations)*whitelist_percentage/100)}) \
-             of numbers were added to whitelist on group {whitelist_group_name}.")
-
-    # Log destination counts for tracking
-    print(f"Total unique destinations to dispatch: {len(unique_destinations)}")
-
-    if api_status:
-        dispatch_payload = create_dispatch_payload(
-            campaign_name=campaign_name,
-            cost_center_id=cost_center_id,
-            destinations=unique_destinations,
-        )
-
-        print(
-            f"\n⚠️  Starting dispatch for id_hsm={id_hsm}, campaign_name={campaign_name}, example data {unique_destinations[:5]}\n"
-        )
-        # TODO: adicionar print da hsm
-        print(
-            f"\n⚠️  Sleep {sleep_minutes} minutes before dispatch. Check if event date and id_hsm is correct!!"
-        )
-        time.sleep(sleep_minutes * 60)
-
-        dispatch_date = dispatch(
-            api=api,
-            id_hsm=id_hsm,
-            dispatch_payload=dispatch_payload,
-            chunk=chunk_size,
-        )
-
-        print(
-            f"✅  Dispatch completed successfully for {len(unique_destinations)} destinations"
-        )
-
-        total_batches = ceil(len(unique_destinations) / chunk_size)
-
-        # Send Discord notification
-        send_dispatch_success_notification(
-            total_dispatches=len(unique_destinations),
-            dispatch_date=dispatch_date,
-            id_hsm=id_hsm,
-            campaign_name=campaign_name,
-            cost_center_id=cost_center_id,
-            total_batches=total_batches,
-            sample_destination=(
-                unique_destinations[0] if unique_destinations else None
-            ),
-            test_mode=test_mode,
-            whitelist_percentage=whitelist_percentage,
-        )
-
-        dfr = create_dispatch_dfr(
-            id_hsm=id_hsm,
-            original_destinations=unique_destinations,
-            campaign_name=campaign_name,
-            cost_center_id=cost_center_id,
-            dispatch_date=dispatch_date,
-        )
-
-        print(f"DataFrame created with {len(dfr)} records for BigQuery upload")
-
-        if not test_mode:
-            partitions_path = create_date_partitions(
-                dataframe=dfr,
-                partition_column="dispatch_date",
-                file_format="csv",
-                root_folder="./data_dispatch/",
-            )
-
-            if not partitions_path:
-                raise ValueError("partitions_path is None - partition creation failed")
-
-            if not os.path.exists(partitions_path):
-                raise ValueError(f"partitions_path does not exist: {partitions_path}")
-
-            print(f"Generated partitions_path: {partitions_path}")
-            if os.path.exists(partitions_path):
-                files_in_path = []
-                for root, dirs, files in os.walk(partitions_path):
-                    files_in_path.extend([os.path.join(root, f) for f in files])
-                print(f"Files in partitions path: {files_in_path}")
-
-            table = Table(dataset_id=dataset_id, table_id=table_id)
+    if run.rows and not campaign.test_mode:
+        with TemporaryDirectory() as directory:
+            folder = await write_records(run.rows, Path(directory))
             await upload_files_to_gcs(
-                Path(partitions_path),
+                folder,
                 table,
                 bucket=cloud["bucket"],
-                dump_mode=dump_mode,
-                source_format="csv",
-                options=capture_options(dump_mode),
+                dump_mode="append",
+                source_format="json",
+                options=capture_options("append"),
             )
-            await publish_table_in_bq(table, cloud)
 
-        # Wait 15 minutes before querying results
-        print("⚠️  Waiting 15 minutes before checking dispatch results...")
-        time.sleep(15 * 60)
-        print("force deploy")
-        # Send results notification with BigQuery data
-        send_dispatch_result_notification(
-            total_dispatches=len(unique_destinations),
-            dispatch_date=dispatch_date,
-            id_hsm=id_hsm,
-            campaign_name=campaign_name,
-            cost_center_id=cost_center_id,
-            total_batches=total_batches,
-            test_mode=test_mode,
-        )
+        await publish_table_in_bq(table, cloud)
 
-        print("force deploy")
+    if run.error:
+        raise RuntimeError(run.error)
+
+    logger.info("Waiting for the status of the messages: minutes=%d", waits.before_results)
+    await sleep(waits.before_results * 60)
+    await post_hsm_results(hsm, run.dispatch_date, len(recipients), test_mode=campaign.test_mode)

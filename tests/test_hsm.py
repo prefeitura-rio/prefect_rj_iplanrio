@@ -5,7 +5,20 @@ import pytest
 from httpx2 import AsyncClient, ConnectError, MockTransport, Request, Response
 from pydantic import JsonValue, TypeAdapter, ValidationError
 
-from utils.hsm import Hsm, Recipient, batch_name, build_payload, send_batches, split_batches
+from utils.hsm import (
+    Hsm,
+    Recipient,
+    SentBatch,
+    batch_name,
+    build_payload,
+    build_rows,
+    drop_repeats,
+    parse_recipients,
+    results_notice,
+    send_batches,
+    split_batches,
+    success_notice,
+)
 from utils.wetalkie import WetalkieApi
 
 SENT_AT = datetime(2026, 7, 17, 9, 30, 5, tzinfo=UTC)
@@ -155,3 +168,88 @@ async def test_an_api_that_does_not_answer_the_root_sends_nothing() -> None:
         await send_batches(fake.api, HSM, make_recipients(2), SENT_AT)
 
     assert fake.payloads == []
+
+
+def test_a_destination_of_the_query_is_read_as_a_recipient() -> None:
+    """Read the phone and the id by any of their names and in any case, and keep the vars."""
+    texts = [
+        '{"celular_disparo": "5521999", "externalId": "111", "vars": {"NOME": "Ana"}}',
+        '{"telefone": "5521888", "CPF": " 222 "}',
+        '{"to": "5521777"}',
+    ]
+
+    assert parse_recipients(texts) == [
+        Recipient(to="5521999", external_id="111", vars={"NOME": "Ana"}),
+        Recipient(to="5521888", external_id="222"),
+        Recipient(to="5521777"),
+    ]
+
+
+def test_a_destination_with_no_phone_is_left_out_and_with_require_id_so_is_one_with_no_id() -> None:
+    """Drop the invalid destinations, and keep the others."""
+    texts = [
+        '{"externalId": "1"}',
+        '{"to": "5521999", "externalId": "2"}',
+        '{"to": "5521888"}',
+        '{"to": "5521777", "externalId": " "}',
+    ]
+
+    assert [recipient.to for recipient in parse_recipients(texts)] == ["5521999", "5521888", "5521777"]
+    assert [recipient.to for recipient in parse_recipients(texts, require_id=True)] == ["5521999"]
+
+
+def test_a_query_with_no_valid_destination_is_refused_but_an_empty_one_is_not() -> None:
+    """Raise `ValueError` only when the query gave rows and none is valid."""
+    assert parse_recipients([]) == []
+
+    with pytest.raises(ValueError, match="No valid destination"):
+        parse_recipients(['{"externalId": "1"}'])
+
+
+def test_the_repeats_are_dropped_by_phone_or_by_id() -> None:
+    """Keep the first recipient of each phone, or of each id."""
+    recipients = [
+        Recipient(to="1", external_id="a"),
+        Recipient(to="1", external_id="b"),
+        Recipient(to="2", external_id="a"),
+        Recipient(to="3"),
+        Recipient(to="4"),
+    ]
+
+    assert [recipient.to for recipient in drop_repeats(recipients)] == ["1", "2", "3", "4"]
+    assert [recipient.to for recipient in drop_repeats(recipients, by_id=True)] == ["1", "1", "3", "4"]
+
+
+def test_the_rows_of_the_table_of_dispatches_have_the_phone_the_cpf_and_the_partition() -> None:
+    """Write a row for each recipient of each batch."""
+    batches = [SentBatch("C-2026-07-17-lote1", [Recipient(to="1", external_id="9", vars={"A": "ç"})])]
+
+    rows = build_rows(HSM, batches, SENT_AT)
+
+    assert rows == [
+        {
+            "id_hsm": 18,
+            "dispatch_date": "2026-07-17 09:30:05",
+            "campaignName": "C-2026-07-17-lote1",
+            "costCenterId": 71,
+            "telefone": "1",
+            "cpf": "9",
+            "vars": '{"A": "ç"}',
+            "ano_particao": "2026",
+            "mes_particao": "07",
+            "data_particao": "2026-07-17",
+        }
+    ]
+
+
+def test_the_notices_of_a_dispatch_say_what_was_sent_and_its_status() -> None:
+    """Write the numbers of the dispatch, and the share of each status."""
+    success = success_notice(HSM, "2026-07-17 09:30:05", 5, {"to": "1"}, test_mode=True)
+    results = results_notice(HSM, "2026-07-17 09:30:05", 5, [("READ", 3, 60.0)], test_mode=False)
+
+    assert "[TESTE]" in success
+    assert "5 disparos" in success
+    assert "3 lotes" in success
+    assert '"to": "1"' in success
+    assert "**READ**: 3 CPFs (60.0%)" in results
+    assert "Nenhum resultado" in results_notice(HSM, "d", 0, [], test_mode=False)

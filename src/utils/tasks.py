@@ -1,16 +1,22 @@
 """Prefect tasks that more than one pipeline uses, built on the toolkit."""
 
-from asyncio import to_thread
+from asyncio import sleep, to_thread
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
+from random import Random
 from tempfile import TemporaryDirectory
+from typing import cast
+from zoneinfo import ZoneInfo
 
 from httpx2 import AsyncClient
-from polars import DataFrame
+from polars import DataFrame, Float64, Int64, String
 from prefect import task
 from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
+from psycopg.sql import Literal
 from pydantic import JsonValue
 from toolkit.bigquery import BigQuery
+from toolkit.constants import TIMEZONE
 from toolkit.dbt import DbtRun, clone_repository, fill_token, find_project_dir, use_profiles
 from toolkit.delta import compact, find_layout_problems, inspect_table, maintain
 from toolkit.executor.constants import DEFAULT_BATCH_SIZE
@@ -26,7 +32,9 @@ from toolkit.settings import DatabaseSettings, DiscordSettings
 from toolkit.telemetry import logger
 
 from .constants import DBT_FAILED, RETRIES, RETRY_DELAY_SECONDS
+from .dispatch import Switch, decide_switch, post_notice
 from .hooks import retry_on_transient_error
+from .hsm import Hsm, HsmRun, Recipient, Sent, build_rows, results_notice, send_batches, success_notice
 from .types import (
     Cloud,
     Database,
@@ -54,10 +62,13 @@ from .utils import (
     read_json,
     read_nodes,
     read_request,
+    render_query,
     summarize_dbt,
     without_chunks,
     write_json_lines,
 )
+from .wetalkie import WetalkieApi
+from .whitelist import Selection, Whitelist, add_to_whitelist
 
 retrying = task(retries=RETRIES, retry_delay_seconds=RETRY_DELAY_SECONDS)
 
@@ -391,3 +402,69 @@ async def run_dbt(request: DbtRun, *, report: bool = False) -> None:
     if not outcome["success"]:
         failed = ", ".join(node["name"] for node in outcome["nodes"] if node["status"] in DBT_FAILED)
         raise RuntimeError(f"dbt {request.command} failed: {failed or 'see the log'}")
+
+
+@task
+async def send_hsm(hsm: Hsm, recipients: Sequence[Recipient]) -> tuple[Sent, datetime]:
+    """Send the recipients to the Wetalkie API as a campaign of an HSM, in batches, and return what went out.
+
+    The result has the batches that the API took and the reason that one failed, if one did, and the time of
+    the dispatch. Raise `RuntimeError` if the API does not answer.
+    """
+    sent_at = datetime.now(ZoneInfo(TIMEZONE))
+
+    async with WetalkieApi.connect("users/login") as api:
+        return await send_batches(api, hsm, recipients, sent_at), sent_at
+
+
+@task
+async def whitelist_phones(phones: Sequence[str], selection: Selection) -> int:
+    """Put a random share of the phones on a group of the whitelist, and return how many numbers were sent."""
+    async with Whitelist.connect() as whitelist:
+        return await add_to_whitelist(whitelist, phones, selection, Random())
+
+
+@task
+async def read_switch(campaign: str, environment: str, *, project: str = "rj-crm-registry") -> Switch:
+    """Read the row of a campaign in the control sheet of the dispatches and decide whether it may run today."""
+    query = render_query(__file__, "flow_status", campaign=Literal(campaign), environment=Literal(environment))
+    frame = await read_bq.fn(query, project=project)
+    row = frame.row(0, named=True) if frame.height else None
+
+    return decide_switch(row, campaign, environment, datetime.now(ZoneInfo(TIMEZONE)).date())
+
+
+@task
+async def run_hsm(
+    hsm: Hsm, recipients: Sequence[Recipient], selection: Selection | None, pause_minutes: float, *, test_mode: bool
+) -> HsmRun:
+    """Put a share of the phones on the whitelist, wait, send the HSM in batches and post the notice of the dispatch.
+
+    The wait is for a person to stop a wrong dispatch. The result has the rows of the batches that went out, even
+    when one fails later, so the caller can record them before it raises the reason.
+    """
+    if selection is not None and selection.percentage > 0:
+        await whitelist_phones.fn([recipient.to for recipient in recipients], selection)
+
+    logger.info("Waiting before the dispatch: minutes=%s", pause_minutes)
+    await sleep(pause_minutes * 60)
+    sent, sent_at = await send_hsm.fn(hsm, recipients)
+    rows = build_rows(hsm, sent.batches, sent_at)
+    dispatch_date = f"{sent_at:%Y-%m-%d %H:%M:%S}"
+
+    if sent.error is None and recipients:
+        sample = recipients[0].as_destination()
+        await post_notice(success_notice(hsm, dispatch_date, len(recipients), sample, test_mode=test_mode))
+
+    return HsmRun(rows, dispatch_date, sent.error)
+
+
+@task
+async def post_hsm_results(hsm: Hsm, dispatch_date: str, total: int, *, test_mode: bool) -> None:
+    """Read the status of the messages of the HSM from the last two hours and post it."""
+    frame = await read_bq.fn(render_query(__file__, "hsm_results", id_hsm=hsm.id_hsm), project="rj-crm-registry")
+    names = cast("list[str]", frame.get_column("status").cast(String).to_list())
+    counts = cast("list[int]", frame.get_column("quantidade_cpfs").cast(Int64).to_list())
+    shares = cast("list[float]", frame.get_column("percentual").cast(Float64).to_list())
+    statuses = list(zip(names, counts, shares, strict=True))
+    await post_notice(results_notice(hsm, dispatch_date, total, statuses, test_mode=test_mode))

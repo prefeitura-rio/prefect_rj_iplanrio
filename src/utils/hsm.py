@@ -1,12 +1,13 @@
 """Send HSM messages through the Wetalkie API, in batches."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from json import dumps
 from typing import Annotated, ClassVar
 
 from httpx2 import HTTPError
-from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints
+from pydantic import BaseModel, ConfigDict, JsonValue, StringConstraints, TypeAdapter, ValidationError
 from toolkit.telemetry import logger
 
 from .wetalkie import WetalkieApi
@@ -74,6 +75,15 @@ class Sent:
     error: str | None = None
 
 
+@dataclass(frozen=True)
+class HsmRun:
+    """What a dispatch of an HSM did: the rows of the batches that went out, the time, and the reason of a failure."""
+
+    rows: list[dict[str, JsonValue]] = field(default_factory=list)
+    dispatch_date: str = ""
+    error: str | None = None
+
+
 def split_batches[T](items: Sequence[T], size: int) -> list[list[T]]:
     """Cut the items in batches of `size`, the last one with what is left."""
     return [list(items[start : start + size]) for start in range(0, len(items), size)]
@@ -131,3 +141,140 @@ async def send_batches(api: WetalkieApi, hsm: Hsm, recipients: Sequence[Recipien
         sent.append(SentBatch(name, batch))
 
     return Sent(sent)
+
+
+ITEM: TypeAdapter[dict[str, JsonValue]] = TypeAdapter(dict[str, JsonValue])
+PHONE_KEYS = ("celular_disparo", "to", "telefone")
+ID_KEYS = ("externalid", "external_id", "cpf")
+
+
+def read_destination(text: str) -> Recipient:
+    """Read a destination of the query, a JSON object, as a recipient.
+
+    The phone is `celular_disparo`, `to` or `telefone`. The id is `externalId`, `external_id` or `cpf`, in
+    any case. Raise `ValidationError` if there is no phone or if the id is empty.
+    """
+    item = ITEM.validate_json(text)
+    lowered = {key.lower(): value for key, value in item.items()}
+    phone = next((lowered[key] for key in PHONE_KEYS if key in lowered), None)
+    external = next((lowered[key] for key in ID_KEYS if key in lowered), None)
+    variables = lowered.get("vars")
+
+    return Recipient.model_validate(
+        {
+            "to": phone,
+            "external_id": str(external).strip() if external is not None else None,
+            "vars": variables if isinstance(variables, dict) else None,
+        }
+    )
+
+
+def parse_recipients(texts: Sequence[str], *, require_id: bool = False) -> list[Recipient]:
+    """Read the destinations of a query, and leave out the invalid ones with a log.
+
+    With `require_id`, a destination with no id, or an empty one, is invalid. Raise `ValueError` if the
+    texts are not empty and none is valid.
+    """
+    recipients: list[Recipient] = []
+
+    for number, text in enumerate(texts, start=1):
+        try:
+            recipient = read_destination(text)
+        except ValidationError:
+            logger.info("Destination left out: number=%d", number)
+
+            continue
+
+        if require_id and not recipient.external_id:
+            logger.info("Destination left out, it has no id: number=%d", number)
+
+            continue
+
+        recipients.append(recipient)
+
+    if texts and not recipients:
+        raise ValueError("No valid destination in the query")
+
+    logger.info("Destinations read: valid=%d of %d", len(recipients), len(texts))
+
+    return recipients
+
+
+def drop_repeats(recipients: Sequence[Recipient], *, by_id: bool = False) -> list[Recipient]:
+    """Keep the first recipient of each phone, or of each id, in the order that they came."""
+    seen: set[str] = set()
+    kept: list[Recipient] = []
+
+    for recipient in recipients:
+        key = recipient.external_id if by_id else recipient.to
+
+        if key is None or key not in seen:
+            kept.append(recipient)
+
+            if key is not None:
+                seen.add(key)
+
+    logger.info("Recipients: total=%d kept=%d by_id=%s", len(recipients), len(kept), by_id)
+
+    return kept
+
+
+def build_rows(hsm: Hsm, batches: Sequence[SentBatch], sent_at: datetime) -> list[dict[str, JsonValue]]:
+    """Return one row of the table of the dispatches for each recipient that went out.
+
+    The columns are `id_hsm`, `dispatch_date`, `campaignName`, `costCenterId`, `telefone`, `cpf`, `vars` (JSON text)
+    and the partition: the year, the month and the day of `sent_at`.
+    """
+    day = f"{sent_at:%Y-%m-%d}"
+
+    return [
+        {
+            "id_hsm": hsm.id_hsm,
+            "dispatch_date": f"{sent_at:%Y-%m-%d %H:%M:%S}",
+            "campaignName": batch.campaign_name,
+            "costCenterId": hsm.cost_center_id,
+            "telefone": recipient.to,
+            "cpf": recipient.external_id,
+            "vars": dumps(recipient.vars, ensure_ascii=False) if recipient.vars is not None else None,
+            "ano_particao": day[:4],
+            "mes_particao": day[5:7],
+            "data_particao": day,
+        }
+        for batch in batches
+        for recipient in batch.recipients
+    ]
+
+
+def success_notice(
+    hsm: Hsm, dispatch_date: str, total: int, sample: Mapping[str, JsonValue] | None, *, test_mode: bool
+) -> str:
+    """Return the notice of a dispatch that went out, with an example of a destination."""
+    title = "✅ **[TESTE] Disparo Realizado com Sucesso**" if test_mode else "✅ **Disparo Realizado com Sucesso**"
+    batches = len(split_batches(range(total), hsm.chunk_size))
+    text = (
+        f"{title}\n📊 **Quantidade:** {total} disparos\n📦 **Lotes:** {batches} lotes\n🕐 **Hora:** {dispatch_date}\n"
+        f"🆔 **Template ID:** {hsm.id_hsm}\n📋 **Campanha:** {hsm.campaign_name}\n"
+        f"💰 **Centro de Custo:** {hsm.cost_center_id}\n"
+    )
+
+    if sample:
+        text += f"\n📱 **Exemplo de Disparo:**\n```json\n{dumps(sample, indent=2, ensure_ascii=False)}\n```\n"
+
+    return text
+
+
+def results_notice(
+    hsm: Hsm, dispatch_date: str, total: int, statuses: Sequence[tuple[str, int, float]], *, test_mode: bool
+) -> str:
+    """Return the notice of the status of a dispatch: how many CPFs and what share have each status."""
+    title = "📊 **[TESTE] Resultados do Disparo**" if test_mode else "📊 **Resultados do Disparo**"
+    text = (
+        f"{title}\n📋 **Campanha:** {hsm.campaign_name}\n🆔 **Template ID:** {hsm.id_hsm}\n"
+        f"🕐 **Disparo realizado em:** {dispatch_date}\n📦 **Total enviado:** {total} disparos\n"
+        "**Status dos Disparos:**\n"
+    )
+
+    if not statuses:
+        return text + "⚠️ Nenhum resultado processado até o momento."
+
+    return text + "".join(f"• **{status}**: {cpfs} CPFs ({share}%)\n" for status, cpfs, share in statuses)
