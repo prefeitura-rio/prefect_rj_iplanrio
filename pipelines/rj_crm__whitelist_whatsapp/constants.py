@@ -1,29 +1,14 @@
-"""
-Constants for the rj_crm__whitelist_whatsapp pipeline.
-"""
-from enum import Enum
+"""Constants of rj_crm__whitelist_whatsapp."""
 
+from typing import Final
+from zoneinfo import ZoneInfo
 
-class WhitelistConstants(Enum):
-    """
-    Constants used in the WhatsApp Whitelist pipeline.
-    """
-
-    # Dataset and Tables
-    DATASET_ID = "brutos_rmi_whitelist"
-    BILLING_PROJECT_ID = "rj-iplanrio"
-    TABLE_ID = "daily_rmi_whitelist"
-
-    # Execution Settings
-    DUMP_MODE = "append" # Full scrape daily, but we can treat as incremental if we use week_start for idempotency
-    MATERIALIZE_AFTER_DUMP = True
-
-    # Partitioning
-    PARTITION_COLUMN = "data_particao"
-    FILE_FORMAT = "parquet"
-    ROOT_FOLDER = "/tmp/whitelist_whatsapp"
-    BIGLAKE_TABLE = True
-
-    # API Settings
-    PER_PAGE = 100
-    TIMEOUT = (10, 60) # Connect, Read
+PER_PAGE: Final = 100
+PAGE_BATCH: Final = 20
+"""The pages that one round asks for."""
+CONCURRENCY: Final = 5
+"""The requests at the same time, low enough to avoid the 429 of the API."""
+MAX_ATTEMPTS: Final = 10
+BASE_WAIT_SECONDS: Final = 20
+TOO_MANY_REQUESTS: Final = 429
+SP_TZ: Final = ZoneInfo("America/Sao_Paulo")
