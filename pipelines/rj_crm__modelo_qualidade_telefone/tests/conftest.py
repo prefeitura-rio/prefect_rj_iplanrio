@@ -32,7 +32,7 @@ def make_booster() -> Callable[[int], Booster]:
         """Train 5 small trees on random data where the first feature decides the label."""
         rng = np.random.default_rng(seed)
         features = rng.random((300, len(FEATURES)))
-        labels = (features[:, 0] + 0.2 * rng.random(300) > 0.6).astype(int)  # noqa: PLR2004
+        labels = (features[:, 0] + 0.2 * rng.random(300) > 0.6).astype(int)
         model = LGBMClassifier(n_estimators=5, num_leaves=4, verbose=-1, random_state=seed)
         model.fit(features, labels, feature_name=list(FEATURES))
 
