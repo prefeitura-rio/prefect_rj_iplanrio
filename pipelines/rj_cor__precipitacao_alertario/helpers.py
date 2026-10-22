@@ -1,61 +1,58 @@
-# -*- coding: utf-8 -*-
-"""
-Funções auxiliares para particionamento de dados - AlertaRio.
-"""
+"""Helpers of rj_cor__precipitacao_alertario."""
 
-from typing import List, Tuple
+from collections.abc import Mapping, Sequence
+from datetime import datetime
 
-import pandas as pd
+from bs4 import BeautifulSoup, Tag
+
+from pipelines.rj_cor__precipitacao_alertario.constants import MISSING, TIME_FORMAT
 
 
-def parse_date_columns(
-    dataframe: pd.DataFrame,
-    partition_column: str,
-) -> Tuple[pd.DataFrame, List[str]]:
+def read_cells(row: Tag, name: str) -> list[str]:
+    """Return the text of the cells of a table row, without spaces around."""
+    return [cell.get_text(strip=True) for cell in row.find_all(name)]
+
+
+def read_table(table: Tag) -> list[dict[str, str]]:
+    """Return the rows of an HTML table, by the name of the last header row.
+
+    A header with two levels keeps the one nearest to the data. The numbers of the
+    page have a decimal comma, and the rows come as text with a decimal point.
     """
-    Cria colunas de particionamento a partir de uma coluna de data.
+    rows = table.find_all("tr")
+    headers = [read_cells(row, "th") for row in rows if row.find("th") and not row.find("td")]
+    names = headers[-1] if headers else []
 
-    Esta função adiciona três novas colunas ao DataFrame para particionamento:
-    - ano_particao: Ano no formato YYYY
-    - mes_particao: Mês no formato MM
-    - data_particao: Data completa no formato YYYY-MM-DD
+    return [
+        dict(zip(names, (cell.replace(",", ".") for cell in read_cells(row, "td")), strict=False))
+        for row in rows
+        if row.find("td")
+    ]
 
-    Args:
-        dataframe: DataFrame contendo a coluna de data
-        partition_column: Nome da coluna de data para criar as partições
 
-    Returns:
-        Tupla contendo:
-            - DataFrame com novas colunas de partição adicionadas
-            - Lista com nomes das colunas de partição criadas
+def read_tables(html: str) -> list[list[dict[str, str]]]:
+    """Return every table of the page as rows."""
+    return [read_table(table) for table in BeautifulSoup(html, "html.parser").find_all("table")]
 
-    Examples:
-        >>> df = pd.DataFrame({
-        ...     'data_medicao': ['2026-05-25 10:00:00', '2026-05-25 11:00:00'],
-        ...     'valor': [10, 20]
-        ... })
-        >>> df['data_medicao'] = pd.to_datetime(df['data_medicao'])
-        >>> df, partitions = parse_date_columns(df, 'data_medicao')
-        >>> print(partitions)
-        ['ano_particao', 'mes_particao', 'data_particao']
-        >>> print(df['ano_particao'].iloc[0])
-        '2026'
 
-    Notes:
-        - A coluna especificada deve estar em formato datetime
-        - As novas colunas são criadas como strings
-        - O particionamento segue o padrão ano=YYYY/mes=MM/data=YYYY-MM-DD
+def build_rows(rows: Sequence[Mapping[str, str]], columns: Mapping[str, str]) -> list[dict[str, str | None]]:
+    """Return the rows with the columns of the table, in order, and the time in text.
+
+    A repeated station and time keeps the first row. A column that the page lacks is
+    empty, and so is a reading of `ND` or `-`.
     """
-    # Garantir que a coluna está em formato datetime
-    if not pd.api.types.is_datetime64_any_dtype(dataframe[partition_column]):
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column])
+    built: dict[tuple[str, str], dict[str, str | None]] = {}
 
-    # Criar colunas de partição
-    dataframe["ano_particao"] = dataframe[partition_column].dt.strftime("%Y")
-    dataframe["mes_particao"] = dataframe[partition_column].dt.strftime("%m")
-    dataframe["data_particao"] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
+    for row in rows:
+        measured = datetime.strptime(row["Hora Leitura"], TIME_FORMAT)  # noqa: DTZ007  # the page has no time zone
+        key = (row["N°"], measured.isoformat())
 
-    partition_columns = ["ano_particao", "mes_particao", "data_particao"]
+        if key in built:
+            continue
 
-    return dataframe, partition_columns
+        values = {
+            name: (None if row.get(source) in (None, *MISSING) else row[source]) for source, name in columns.items()
+        }
+        built[key] = {**values, "data_medicao": measured.strftime("%Y-%m-%d %H:%M:%S")}
 
+    return list(built.values())
