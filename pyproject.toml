@@ -126,6 +126,14 @@ reportUnknownLambdaType = false # lambdas passed to fakes
 reportAny = false # values from untyped fakes
 
 [[tool.basedpyright.executionEnvironments]]
+root = "pipelines"
+extraPaths = ["src", "."]
+reportMissingTypeStubs = false # Google, gspread and other clients ship no types
+reportUnknownMemberType = false # members of those clients
+reportUnknownVariableType = false # values from those clients
+reportUnknownArgumentType = false # values from those clients
+
+[[tool.basedpyright.executionEnvironments]]
 root = "src/utils/utils.py"
 reportUnknownVariableType = false # google.auth types the request of `default` loosely
 
