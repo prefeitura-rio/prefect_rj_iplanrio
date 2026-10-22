@@ -39,3 +39,12 @@ class NoticeSettings(ToolkitSettings):
 
     DISCORD_WEBHOOK_URL: SecretStr = SecretStr("")
     DISCORD_ERRORS_WEBHOOK_URL: SecretStr = SecretStr("")
+
+
+class WhitelistSettings(ToolkitSettings):
+    """The client and the address of the whitelist API of the beta groups."""
+
+    WHITELIST_API_BASE_URL: str = required_text()
+    WHITELIST_ISSUER: str = required_text()
+    WHITELIST_CLIENT_ID: str = required_text()
+    WHITELIST_CLIENT_SECRET: SecretStr = required_secret()
