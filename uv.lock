@@ -5326,7 +5326,6 @@ name = "rj-iplanrio-eai-history"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__eai_history" }
 dependencies = [
-    { name = "google-cloud-bigquery" },
     { name = "langchain" },
     { name = "langchain-google-cloud-sql-pg" },
     { name = "langgraph" },
@@ -5335,7 +5334,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "google-cloud-bigquery" },
     { name = "langchain", specifier = ">=0.3.27" },
     { name = "langchain-google-cloud-sql-pg", specifier = ">=0.14.1" },
     { name = "langgraph", specifier = ">=1.0.1" },

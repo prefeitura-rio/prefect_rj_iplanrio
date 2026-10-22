@@ -32,6 +32,9 @@ deployments:
     version: "{{ build-image.tag }}"
     entrypoint: pipelines/rj_iplanrio__eai_history/flow.py:rj_iplanrio__eai_history
     parameters:
+      table:
+        dataset_id: brutos_eai_logs
+        table_id: history
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -59,6 +62,9 @@ deployments:
     version: "{{ get-commit-hash.stdout }}"
     entrypoint: pipelines/rj_iplanrio__eai_history/flow.py:rj_iplanrio__eai_history
     parameters:
+      table:
+        dataset_id: brutos_eai_logs
+        table_id: history
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

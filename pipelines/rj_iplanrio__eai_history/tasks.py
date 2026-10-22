@@ -1,116 +1,68 @@
-import asyncio
-from pathlib import Path
-from typing import Optional
+"""Tasks of rj_iplanrio__eai_history."""
 
-from google.cloud import bigquery
-from google.cloud.exceptions import NotFound
+from datetime import datetime
+
+import polars as pl
+from google.api_core.exceptions import NotFound
 from prefect import task
-from prefect.logging import get_logger
+from toolkit.telemetry import logger
 
-from pipelines.rj_iplanrio__eai_history.history import GoogleAgentEngineHistory
+from pipelines.rj_iplanrio__eai_history.constants import (
+    DEFAULT_LAST_UPDATE,
+    DEFAULT_SESSION_TIMEOUT_SECONDS,
+)
+from pipelines.rj_iplanrio__eai_history.helpers.history import build_rows, connect, load_threads
+from pipelines.rj_iplanrio__eai_history.types import Environment, Options, Row
+from utils.tasks import read_bq
+from utils.types import Table
+from utils.utils import render_query
 
-logger = get_logger("toolkit")
 
+@task(retries=2, retry_delay_seconds=10)
+async def read_last_update_task(project: str, table: Table, environment: Environment) -> str:
+    """Return the latest `last_update` of the environment in the table, or the start of time if there is none.
 
-# Epoch timestamp used as the default cursor when the BQ table is empty.
-_DEFAULT_LAST_UPDATE = "1970-01-01T00:00:00+00:00"
-
-
-# A anotação @task deve estar na função que o Prefect irá chamar diretamente.
-@task
-def get_last_update(
-    dataset_id: str,
-    table_id: str,
-    last_update: Optional[str] = None,
-    environment: str = "staging",
-) -> str:
+    The start of time also covers a table that does not exist yet, so the first run reads every thread.
     """
-    Busca o timestamp da última atualização da tabela no BigQuery.
-    Esta é uma operação síncrona e bloqueante (I/O de rede/disco).
-    """
-    if last_update:
-        logger.info(f"'last_update' fornecido via parametro: {last_update}")
-        return last_update
-
-    logger.info(f"Buscando último 'last_update' para {dataset_id}.{table_id}")
-    client = bigquery.Client(project="rj-iplanrio")
-    query = f"""
-        SELECT
-            max(last_update) AS last_update
-        FROM `rj-iplanrio.{dataset_id}_staging.{table_id}`
-        WHERE environment = '{environment}'
-        AND last_update IS NOT NULL
-        AND last_update != 'None'
-    """
-    logger.info(f"Runing query:\n{query}")
+    name = f"{project}.{table['dataset_id']}.{table['table_id']}"
 
     try:
-        client.get_table(f"rj-iplanrio.{dataset_id}_staging.{table_id}")
+        frame = await read_bq(
+            render_query(__file__, "last_update", table=name, environment=environment), project=project
+        )
     except NotFound:
-        logger.info(f"Tabela não existe `{project_id}.{dataset_id}.{table_id}`")
-        return _DEFAULT_LAST_UPDATE
+        logger.info("The table does not exist yet: table=%s", name)
+        return DEFAULT_LAST_UPDATE
 
-    result = list(client.query(query).result())
+    latest = frame["last_update"].cast(pl.String).drop_nulls().to_list()
+    logger.info("Latest last_update read: table=%s latest=%s", name, latest[0] if latest else None)
 
-    if not result:
-        logger.info("Nenhum 'last_update' encontrado.")
-        return _DEFAULT_LAST_UPDATE
-
-    last_update = result[0]["last_update"]
-    if last_update:
-        logger.info(f"Último 'last_update' encontrado: {last_update}")
-        return str(last_update)
-    else:
-        logger.info("Nenhum 'last_update' encontrado.")
-        return _DEFAULT_LAST_UPDATE
+    return latest[0] if latest else DEFAULT_LAST_UPDATE
 
 
-@task
-def fetch_history_data(
-    last_update: str,
-    session_timeout_seconds: Optional[int] = 3600,
-    use_whatsapp_format: bool = True,
-    max_user_save_limit: int = 100,
-    environment: str = "staging",
-    sql_limit: Optional[int] = None,
-) -> Optional[str]:
+@task(retries=2, retry_delay_seconds=30)
+async def fetch_history_task(last_update: str, environment: Environment, options: Options) -> list[Row]:
+    """Read the threads that changed after `last_update`, and return one row for each in the format of the gateway.
+
+    `last_update` must be an ISO time, and it is checked before it reaches the query.
+    Raise `ValueError` if it is not.
     """
-    Ponto de entrada SÍNCRONO que orquestra a execução da lógica assíncrona,
-    seguindo o padrão da `outra task`.
-    """
+    cursor = datetime.fromisoformat(last_update).isoformat()
+    sql = render_query(__file__, "threads", last_update=cursor, sql_limit=options.get("sql_limit", 0))
+    engine, saver = await connect()
+    threads = await load_threads(engine, sql)
 
-    # --- Início da lógica assíncrona interna ---
-    async def _main_async_runner() -> Optional[str]:
-        logger.info("Criando instância de GoogleAgentEngineHistory...")
-        history_instance = await GoogleAgentEngineHistory.create(
-            environment=environment
-        )
+    if not threads:
+        logger.info("No thread changed after %s", cursor)
+        return []
 
-        logger.info(f"Buscando histórico a partir de 'last_update': {last_update}.")
-        data_path = await history_instance.get_history_bulk_from_last_update(
-            last_update=last_update,
-            session_timeout_seconds=session_timeout_seconds,
-            use_whatsapp_format=use_whatsapp_format,
-            max_user_save_limit=max_user_save_limit,
-            sql_limit=sql_limit,
-        )
+    rows = build_rows(
+        saver.serde,
+        threads,
+        environment,
+        options.get("session_timeout_seconds", DEFAULT_SESSION_TIMEOUT_SECONDS),
+        whatsapp=options.get("use_whatsapp_format", False),
+    )
+    logger.info("History read: threads=%d rows=%d", len(threads), len(rows))
 
-        return data_path
-
-    final_data_path = asyncio.run(_main_async_runner())
-
-    # check it the path has files
-    if final_data_path:
-        final_path = Path(final_data_path)
-        files_fond = list(final_path.rglob("*"))
-        if not files_fond:
-            logger.warning(
-                f"Nenhum arquivo encontrado em {final_data_path}. Retornando None.",
-            )
-            return None
-        else:
-            logger.info(
-                f"Arquivos encontrados em {final_data_path}: {len(files_fond)}\n{files_fond[:10]}"
-            )
-
-    return final_data_path
+    return rows
