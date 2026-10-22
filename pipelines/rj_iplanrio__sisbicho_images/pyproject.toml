@@ -6,23 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "prefect_rj_iplanrio",
-    "dbt-bigquery",
     "google-cloud-storage",
-    "google-cloud-bigquery",
-    "geopy",
-    "opencage",
     "opencv-python-headless>=4.10.0",
-    "unidecode",
-    "pendulum",
-    "simplejson",
-    "openlocationcode",
-    "dbt-core",
-    "mutagen",
-    "google-cloud-speech",
-    "marshmallow",
-    "gitpython",
-    "discord-py",
-    "pydantic",
 ]
 
 [tool.uv.sources]

@@ -40,16 +40,16 @@ deployments:
         secretName: prefect-jobs-secrets-staging
         image_pull_policy: Always
     parameters:
-      source_dataset_id: brutos_sisbicho
-      source_table_id: animal
-      dataset_id: brutos_sisbicho
-      table_id: animal_imagem
-      dump_mode: append
-      materialize_after_dump: false
-      storage_bucket: portal-do-cidadao
-      storage_prefix: animal/fotos_staging
-      billing_project_id: rj-iplanrio
-      storage_project_id: rj-iplanrio-dia
+      source:
+        dataset_id: brutos_sisbicho
+        table_id: animal
+      table:
+        dataset_id: brutos_sisbicho
+        table_id: animal_imagem
+      storage:
+        bucket: portal-do-cidadao
+        prefix: animal/fotos_staging
+        project: rj-iplanrio-dia
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio
@@ -70,16 +70,16 @@ deployments:
         secretName: prefect-jobs-secrets
         image_pull_policy: Always
     parameters:
-      source_dataset_id: brutos_sisbicho
-      source_table_id: animal
-      dataset_id: brutos_sisbicho
-      table_id: animal_imagem
-      dump_mode: append
-      materialize_after_dump: false
-      storage_bucket: portal-do-cidadao
-      storage_prefix: animal/fotos
-      billing_project_id: rj-iplanrio
-      storage_project_id: rj-iplanrio-dia
+      source:
+        dataset_id: brutos_sisbicho
+        table_id: animal
+      table:
+        dataset_id: brutos_sisbicho
+        table_id: animal_imagem
+      storage:
+        bucket: portal-do-cidadao
+        prefix: animal/fotos
+        project: rj-iplanrio-dia
       cloud:
         bucket: rj-iplanrio
         project: rj-iplanrio

@@ -5410,46 +5410,16 @@ name = "rj-iplanrio-sisbicho-images"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_iplanrio__sisbicho_images" }
 dependencies = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "geopy" },
-    { name = "gitpython" },
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-speech" },
     { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "opencage" },
     { name = "opencv-python-headless" },
-    { name = "openlocationcode" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "pydantic" },
-    { name = "simplejson" },
-    { name = "unidecode" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "dbt-bigquery" },
-    { name = "dbt-core" },
-    { name = "discord-py" },
-    { name = "geopy" },
-    { name = "gitpython" },
-    { name = "google-cloud-bigquery" },
-    { name = "google-cloud-speech" },
     { name = "google-cloud-storage" },
-    { name = "marshmallow" },
-    { name = "mutagen" },
-    { name = "opencage" },
     { name = "opencv-python-headless", specifier = ">=4.10.0" },
-    { name = "openlocationcode" },
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "pydantic" },
-    { name = "simplejson" },
-    { name = "unidecode" },
 ]
 
 [[package]]
