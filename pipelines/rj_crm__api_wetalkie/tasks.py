@@ -7,9 +7,9 @@ from pydantic import JsonValue
 from toolkit.telemetry import logger
 
 from pipelines.rj_crm__api_wetalkie.constants import ATTENDANCES_PATH
-from pipelines.rj_crm__api_wetalkie.helpers import build_rows, read_items
+from pipelines.rj_crm__api_wetalkie.helpers import read_items
 from utils.audio import transcribe_attendance, transcribe_url
-from utils.wetalkie import WetalkieApi
+from utils.wetalkie import WetalkieApi, build_attendance_rows
 
 
 @task
@@ -33,4 +33,4 @@ async def build_rows_task(items: list[dict[str, JsonValue]], max_audio_seconds: 
 
     transcribed = [await to_thread(transcribe_attendance, item, transcribe) for item in items]
 
-    return build_rows(transcribed)
+    return build_attendance_rows(transcribed)
