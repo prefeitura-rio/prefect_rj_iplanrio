@@ -71,8 +71,9 @@ deployments:
         timezone: America/Sao_Paulo
         slug: meteorologia-inmet-hourly
         parameters:
-          dataset_id: clima_estacao_meteorologica
-          table_id: meteorologia_inmet
+          table:
+            dataset_id: clima_estacao_meteorologica
+            table_id: meteorologia_inmet
           dump_mode: append
           data_inicio: ""
           data_fim: ""

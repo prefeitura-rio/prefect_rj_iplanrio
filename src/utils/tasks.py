@@ -9,7 +9,7 @@ from httpx2 import AsyncClient
 from polars import DataFrame
 from prefect import task
 from prefect_dbt import PrefectDbtRunner, PrefectDbtSettings
-from pydantic import JsonValue, TypeAdapter
+from pydantic import JsonValue
 from toolkit.bigquery import BigQuery
 from toolkit.dbt import DbtRun, clone_repository, fill_token, find_project_dir, use_profiles
 from toolkit.delta import compact, find_layout_problems, inspect_table, maintain
@@ -51,6 +51,7 @@ from .utils import (
     post_discord,
     publish,
     read_dataframe,
+    read_json,
     read_nodes,
     read_request,
     summarize_dbt,
@@ -281,8 +282,7 @@ async def request_json(
         response = await client.request(method, url, params=params, headers=headers, json=body)
         response.raise_for_status()
 
-    adapter: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
-    return adapter.validate_python(response.json())
+    return read_json(response)
 
 
 @task

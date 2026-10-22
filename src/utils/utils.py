@@ -19,7 +19,7 @@ from zoneinfo import ZoneInfo
 from deltalake import DeltaTable
 from google.auth import default
 from google.auth.credentials import Credentials
-from httpx2 import AsyncClient, HTTPStatusError, TransportError
+from httpx2 import AsyncClient, HTTPStatusError, Response, TransportError
 from obstore.store import ObjectStore
 from polars import DataFrame, concat
 from prefect.runtime import flow_run
@@ -558,6 +558,16 @@ def epsg_code(crs: str) -> str:
         raise ValueError(f"Not an EPSG code such as EPSG:31983: {crs!r}")
 
     return code
+
+
+def read_json(response: Response) -> JsonValue:
+    """Return the JSON of a response with a type, so the code that reads it can check it.
+
+    Raise `ValidationError` if the body is not JSON.
+    """
+    adapter: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+
+    return adapter.validate_json(response.content)
 
 
 def extract_records(data: JsonValue, key: str | None) -> list[dict[str, JsonValue]]:

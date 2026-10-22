@@ -4798,17 +4798,11 @@ name = "rj-cor-meteorologia-inmet"
 version = "0.1.0"
 source = { virtual = "pipelines/rj_cor__meteorologia_inmet" }
 dependencies = [
-    { name = "pendulum" },
     { name = "prefect-rj-iplanrio" },
-    { name = "requests" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pendulum" },
-    { name = "prefect-rj-iplanrio", editable = "." },
-    { name = "requests" },
-]
+requires-dist = [{ name = "prefect-rj-iplanrio", editable = "." }]
 
 [[package]]
 name = "rj-cor-meteorologia-redemet"

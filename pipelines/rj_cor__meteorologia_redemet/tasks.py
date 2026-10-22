@@ -5,14 +5,13 @@ from datetime import date, datetime
 
 from httpx2 import AsyncClient, HTTPError
 from prefect import task
-from pydantic import JsonValue, TypeAdapter
+from pydantic import JsonValue
 from toolkit.telemetry import logger
 
 from pipelines.rj_cor__meteorologia_redemet.constants import CONCURRENCY, OBSERVATION_URL, SP_TZ, STATIONS
 from pipelines.rj_cor__meteorologia_redemet.helpers import build_rows, list_stamps, read_observation
 from pipelines.rj_cor__meteorologia_redemet.settings import Settings
-
-OBSERVATION_BODY: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+from utils.utils import read_json
 
 
 async def fetch_observation(
@@ -25,7 +24,7 @@ async def fetch_observation(
                 OBSERVATION_URL, params={"api_key": token, "localidade": station, "datahora": stamp}
             )
             response.raise_for_status()
-            body = OBSERVATION_BODY.validate_python(response.json())
+            body = read_json(response)
         except HTTPError as error:
             logger.warning("Observation failed: station=%s stamp=%s error=%s", station, stamp, type(error).__name__)
             return None

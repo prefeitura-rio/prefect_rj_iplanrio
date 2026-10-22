@@ -18,6 +18,7 @@ from pyarrow import array as arrow_array
 from pyarrow import table as arrow_table
 from pyarrow import timestamp as arrow_timestamp
 from pyarrow.parquet import write_table
+from pydantic import ValidationError
 from toolkit import gcs
 from toolkit.constants import BATCH_COLUMN
 from toolkit.dbt import DbtRun
@@ -49,6 +50,7 @@ from utils.utils import (
     load_to_delta,
     publish,
     read_dataframe,
+    read_json,
     read_nodes,
     read_request,
     summarize_dbt,
@@ -1276,3 +1278,11 @@ def test_the_stages_of_a_pipeline_change_the_hash_of_the_config():
 
     assert hash_config(first, {}) == hash_config(same, {})
     assert hash_config(first, {}) != hash_config(other, {})
+
+
+def test_the_json_of_a_response_is_read_with_a_type_and_text_that_is_not_json_is_refused():
+    """Read the body as JSON, and raise for a body that is not."""
+    assert read_json(Response(200, json={"data": [1, "a", None]})) == {"data": [1, "a", None]}
+
+    with pytest.raises(ValidationError):
+        read_json(Response(200, text="<html>"))

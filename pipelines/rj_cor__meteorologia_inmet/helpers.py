@@ -1,104 +1,64 @@
-# -*- coding: utf-8 -*-
-"""
-Funções utilitárias para processamento de dados meteorológicos.
-"""
+"""Helpers of pipeline rj_cor__meteorologia_inmet."""
 
-from pathlib import Path
-from typing import List, Tuple, Union
+from collections.abc import Mapping, Sequence
+from datetime import UTC, date, datetime, timedelta
 
-import pandas as pd
+from pydantic import JsonValue
+
+from pipelines.rj_cor__meteorologia_inmet.constants import MEASURES, SP_TZ
 
 
-def parse_date_columns(
-    dataframe: pd.DataFrame,
-    partition_column: str,
-) -> Tuple[pd.DataFrame, List[str]]:
+def read_dates(first_date: str | None, last_date: str | None) -> tuple[str, str, bool]:
+    """Return the first and the last date to fetch, in UTC, and whether it is a backfill.
+
+    Without a first date the range is yesterday to today, and it is not a backfill.
     """
-    Converte coluna de data em colunas separadas de particionamento.
+    if first_date:
+        return first_date, last_date or first_date, True
 
-    Extrai ano, mês e dia de uma coluna datetime e cria colunas de particionamento
-    no formato esperado pelo BigQuery (ano=YYYY, mes=MM, dia=DD, etc.).
+    today = datetime.now(UTC).date()
 
-    Args:
-        dataframe: DataFrame com os dados
-        partition_column: Nome da coluna de data para particionar
+    return (today - timedelta(days=1)).isoformat(), today.isoformat(), False
 
-    Returns:
-        Tupla contendo:
-            - DataFrame com coluna de data convertida para string
-            - Lista com nomes das colunas de particionamento
 
-    Examples:
-        >>> df = pd.DataFrame({'data': [pd.Timestamp('2026-05-25')]})
-        >>> df_result, partitions = parse_date_columns(df, 'data')
-        >>> partitions
-        ['data']
+def read_number(value: JsonValue) -> float | None:
+    """Return a measure as a number, or nothing if it is missing or empty."""
+    if value is None or value == "":
+        return None
+
+    return float(str(value))
+
+
+def build_rows(
+    measurements: Sequence[Mapping[str, JsonValue]], backfill: bool, today: date
+) -> list[dict[str, JsonValue]]:
+    """Return the measurements as rows, with the date and the time in São Paulo.
+
+    The API sends the time in UTC as `HHMM`. A row with no measure is dropped. Without a
+    backfill only the rows of `today` stay.
     """
-    # Garantir que a coluna está em formato datetime
-    if not pd.api.types.is_datetime64_any_dtype(dataframe[partition_column]):
-        dataframe[partition_column] = pd.to_datetime(dataframe[partition_column])
+    rows: list[dict[str, JsonValue]] = []
 
-    # Converter para string no formato YYYY-MM-DD para particionamento
-    dataframe[partition_column] = dataframe[partition_column].dt.strftime("%Y-%m-%d")
+    for measurement in measurements:
+        measured = datetime.strptime(
+            f"{measurement['DT_MEDICAO']} {measurement['HR_MEDICAO']} +0000", "%Y-%m-%d %H%M %z"
+        )
+        local = measured.astimezone(SP_TZ)
+        values = {name: read_number(measurement.get(code)) for code, name in MEASURES.items()}
 
-    partitions = [partition_column]
+        if all(value is None for value in values.values()):
+            continue
 
-    return dataframe, partitions
+        if not backfill and local.date() != today:
+            continue
 
-def to_json_dataframe(
-    dataframe: pd.DataFrame = None,
-    csv_path: Union[str, Path] = None,
-    key_column: str = None,
-    read_csv_kwargs: dict = None,
-    save_to: Union[str, Path] = None,
-) -> pd.DataFrame:
-    """
-    Manipulates a dataframe by keeping key_column and moving every other column
-    data to a "content" column in JSON format. Example:
+        rows.append(
+            {
+                "id_estacao": measurement["CD_ESTACAO"],
+                "data": local.strftime("%Y-%m-%d"),
+                "horario": local.strftime("%H:%M:%S"),
+                **values,
+            }
+        )
 
-    - Input dataframe: pd.DataFrame({"key": ["a", "b", "c"], "col1": [1, 2, 3], "col2": [4, 5, 6]})
-    - Output dataframe: pd.DataFrame({
-        "key": ["a", "b", "c"],
-        "content": [{"col1": 1, "col2": 4}, {"col1": 2, "col2": 5}, {"col1": 3, "col2": 6}]
-    })
-    """
-    if dataframe is None and not csv_path:
-        raise ValueError("dataframe or dataframe_path is required")
-    if csv_path:
-        dataframe = pd.read_csv(csv_path, **read_csv_kwargs)
-    if key_column:
-        dataframe["content"] = dataframe.drop(columns=[key_column]).to_dict(orient="records")
-        dataframe = dataframe[["key", "content"]]
-    else:
-        dataframe["content"] = dataframe.to_dict(orient="records")
-        dataframe = dataframe[["content"]]
-    if save_to:
-        dataframe.to_csv(save_to, index=False)
-    return dataframe
-
-def dataframe_to_parquet(
-    dataframe: pd.DataFrame,
-    path: Union[str, Path],
-    build_json_dataframe: bool = False,
-    dataframe_key_column: str = None,
-):
-    """
-    Writes a dataframe to Parquet file with Schema as STRING.
-    """
-    # Code adapted from
-    # https://stackoverflow.com/a/70817689/9944075
-
-    if build_json_dataframe:
-        dataframe = to_json_dataframe(dataframe, key_column=dataframe_key_column)
-
-    # If the file already exists, we:
-    # - Load it
-    # - Merge the new dataframe with the existing one
-    if Path(path).exists():
-        # Load it
-        original_df = pd.read_parquet(path)
-        # Merge the new dataframe with the existing one
-        dataframe = pd.concat([original_df, dataframe], sort=False)
-
-    # Write dataframe to Parquet
-    dataframe.to_parquet(path, engine="pyarrow")
+    return rows

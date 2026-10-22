@@ -1,109 +1,48 @@
-"""
-Flow para coleta de dados meteorológicos do INMET - COR.
-
-Este flow é responsável por coletar dados meteorológicos das estações do INMET
-localizadas no município do Rio de Janeiro e carregar no BigQuery.
-
-Os dados incluem informações sobre temperatura, pressão, umidade, velocidade do vento,
-precipitação e radiação solar, coletados a cada hora.
-
-Migrado de Prefect 1.4 para Prefect 3.0..
-"""
+"""Flow for rj_cor__meteorologia_inmet."""
 
 from pathlib import Path
-from typing import Optional
+from tempfile import TemporaryDirectory
 
 from prefect import flow
 
-from pipelines.rj_cor__meteorologia_inmet.tasks import (
-    download_meteorological_data_task,
-    get_dates_task,
-    save_data_to_partitions_task,
-    transform_meteorological_data_task,
-)
-from utils.tasks import publish_table_in_bq, upload_files_to_gcs
-from utils.types import Cloud, Table
+from pipelines.rj_cor__meteorologia_inmet.helpers import read_dates
+from pipelines.rj_cor__meteorologia_inmet.tasks import build_rows_task, fetch_measurements_task
+from utils.hooks import notify_failure
+from utils.tasks import publish_table_in_bq, upload_files_to_gcs, write_records
+from utils.types import Cloud, DumpMode, Table
 from utils.utils import capture_options
 
 
-@flow(log_prints=True, flow_run_name="{dataset_id}_{table_id}")
+@flow(log_prints=True, flow_run_name="{table[table_id]}", on_failure=[notify_failure])
 async def rj_cor__meteorologia_inmet(
     *,
     cloud: Cloud,
-    dataset_id: str = "clima_estacao_meteorologica",
-    table_id: str = "meteorologia_inmet",
-    dump_mode: str = "append",
-    data_inicio: Optional[str] = "",
-    data_fim: Optional[str] = "",
-):
+    table: Table,
+    dump_mode: DumpMode = "append",
+    data_inicio: str | None = None,
+    data_fim: str | None = None,
+) -> None:
+    """Add the hourly measurements of the INMET stations of Rio to a BigQuery table.
+
+    Without dates the run reads yesterday and today in UTC, and keeps the measurements of
+    today in São Paulo. With `data_inicio` it is a backfill and keeps every measurement.
     """
-    Flow principal para coleta e carga de dados meteorológicos do INMET no BigQuery.
+    first, last, backfill = read_dates(data_inicio, data_fim)
+    measurements = await fetch_measurements_task(first, last)
+    rows = build_rows_task(measurements, backfill)
 
-    Este flow orquestra o processo completo de:
-    1. Determinação do período de coleta (padrão: ontem até hoje)
-    2. Download dos dados da API do INMET
-    3. Transformação e limpeza dos dados
-    4. Particionamento por data
-    5. Upload para Google Cloud Storage
-    6. Criação/atualização da tabela no BigQuery
-    7. (Opcional) Materialização via dbt
+    if not rows:
+        return
 
-    Os dados são coletados de 9 estações meteorológicas do INMET localizadas
-    no município do Rio de Janeiro, com frequência horária.
+    with TemporaryDirectory() as directory:
+        folder = await write_records(rows, Path(directory))
+        await upload_files_to_gcs(
+            folder,
+            table,
+            bucket=cloud["bucket"],
+            dump_mode=dump_mode,
+            source_format="json",
+            options=capture_options(dump_mode),
+        )
 
-    Args:
-        dataset_id: ID do dataset no BigQuery (padrão: 'clima_estacao_meteorologica')
-        table_id: ID da tabela no BigQuery (padrão: 'meteorologia_inmet')
-        dump_mode: Modo de dump ('append' ou 'overwrite'). Padrão: 'append'
-        data_inicio: Data de início no formato 'YYYY-MM-DD'. Vazio usa ontem
-        data_fim: Data de fim no formato 'YYYY-MM-DD'. Vazio usa hoje
-        materialize_after_dump: Se True, executa materialização dbt após o dump
-
-    Returns:
-        None
-
-    Examples:
-        Execução padrão (coleta de ontem até hoje):
-        >>> rj_cor__clima_estacao_meteorologica()
-
-        Backfill de período específico:
-        >>> rj_cor__clima_estacao_meteorologica(
-        ...     data_inicio="2026-01-01",
-        ...     data_fim="2026-01-31"
-        ... )
-
-    Notes:
-        - O flow é executado automaticamente a cada hora via schedule
-        - Em modo padrão, coleta dados das últimas 24h para evitar perda
-          de dados devido à diferença de timezone (UTC vs America/Sao_Paulo)
-        - As credenciais do BigQuery e da API INMET são obtidas do Infisical
-        - Os dados são salvos particionados por data
-        - A materialização dbt é opcional e executada apenas se solicitada
-    """
-    # Renomear o flow run para facilitar identificação
-
-    # Injetar credenciais do BigQuery
-
-    # Determinar datas de coleta
-    data_inicio_, data_fim_, backfill = get_dates_task(data_inicio, data_fim)
-
-    # Download dos dados da API do INMET
-    dados = download_meteorological_data_task(data_inicio_, data_fim_)
-
-    # Transformar e limpar os dados
-    dados = transform_meteorological_data_task(dados, backfill)
-
-    # Salvar dados em partições
-    path = save_data_to_partitions_task(dados=dados)
-
-    # Criar tabela e fazer upload para GCS e BigQuery
-    table = Table(dataset_id=dataset_id, table_id=table_id)
-    await upload_files_to_gcs(
-        Path(path),
-        table,
-        bucket=cloud["bucket"],
-        dump_mode=dump_mode,
-        source_format="csv",
-        options=capture_options(dump_mode),
-    )
     await publish_table_in_bq(table, cloud)
