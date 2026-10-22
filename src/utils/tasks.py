@@ -315,8 +315,8 @@ async def run_bq_sql(sql: str, *, project: str) -> int:
 
 
 @task
-async def notify_discord(message: str, *, webhook: str | None = None) -> None:
-    """Post a message to Discord, to `webhook` or to the `DISCORD_WEBHOOK_URL` setting.
+async def notify_discord(message: str, *, webhook: str | None = None) -> str | None:
+    """Post a message to Discord, to `webhook` or to the `DISCORD_WEBHOOK_URL` setting, and return its id.
 
     Raise `ValueError` if there is no webhook.
     """
@@ -324,7 +324,7 @@ async def notify_discord(message: str, *, webhook: str | None = None) -> None:
     if not url:
         raise ValueError("No Discord webhook: pass it or set DISCORD_WEBHOOK_URL")
 
-    await post_discord(url, message)
+    return await post_discord(url, message)
 
 
 @task

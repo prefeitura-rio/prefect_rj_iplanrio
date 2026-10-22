@@ -711,11 +711,19 @@ def capture_time() -> datetime:
     return cast("datetime", flow_run.scheduled_start_time).astimezone(ZoneInfo(TIMEZONE))
 
 
-async def post_discord(webhook: str, content: str) -> None:
-    """Post a message to a Discord webhook, cut to the limit of Discord.
+async def post_discord(webhook: str, content: str) -> str | None:
+    """Post a message to a Discord webhook, cut to the limit of Discord, and return its id.
 
+    The id is nothing when Discord answers without the message.
     Raise `HTTPStatusError` if Discord refuses it.
     """
     async with AsyncClient() as client:
-        response = await client.post(webhook, json={"content": content[:DISCORD_LIMIT]})
+        response = await client.post(webhook, params={"wait": "true"}, json={"content": content[:DISCORD_LIMIT]})
         response.raise_for_status()
+
+    try:
+        identifier = dig(read_json(response), "id")
+    except ValidationError:
+        return None
+
+    return identifier if isinstance(identifier, str) else None
