@@ -72,7 +72,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -82,7 +82,7 @@ deployments:
             table_id: cities
           read:
             table: cities
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/cities.json
+            pipeline: cities
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-01T07:05:00'
@@ -91,7 +91,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -101,7 +101,7 @@ deployments:
             table_id: drivers
           read:
             table: drivers
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/drivers.json
+            pipeline: drivers
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-01T07:10:00'
@@ -110,7 +110,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -120,7 +120,7 @@ deployments:
             table_id: discounts
           read:
             table: discounts
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/discounts.json
+            pipeline: discounts
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-01T07:15:00'
@@ -129,7 +129,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -139,7 +139,7 @@ deployments:
             table_id: paymentmethods
           read:
             table: paymentmethods
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/paymentmethods.json
+            pipeline: payment-methods
           dump_mode: overwrite
       - interval: 604800
         anchor_date: '2024-09-02T07:20:00'
@@ -148,7 +148,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -158,7 +158,7 @@ deployments:
             table_id: users
           read:
             table: users
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/users.json
+            pipeline: users
           dump_mode: overwrite
       - interval: 86400
         anchor_date: '2025-04-28T07:25:00'
@@ -167,7 +167,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -177,7 +177,7 @@ deployments:
             table_id: races
           read:
             table: races
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/races.json
+            pipeline: races
           dump_mode: append
           options:
             chunks:
@@ -192,7 +192,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -202,7 +202,7 @@ deployments:
             table_id: passengers
           read:
             table: passengers
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/passengers.json
+            pipeline: passengers
           dump_mode: append
           options:
             chunks:
@@ -217,7 +217,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -227,7 +227,7 @@ deployments:
             table_id: rankingraces
           read:
             table: rankingraces
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/rankingraces.json
+            pipeline: ranking-races
           dump_mode: append
           options:
             chunks:
@@ -242,7 +242,7 @@ deployments:
         parameters:
           database:
             type: mongodb
-            host: TAXIRIO_MONGODB_HOST
+            host: ${TAXIRIO_MONGODB_HOST}
             port: 27017
             database: taxirio
             options:
@@ -252,7 +252,7 @@ deployments:
             table_id: metricsdriverunoccupieds
           read:
             table: metricsdriverunoccupieds
-            pipeline: pipelines/rj_iplanrio__taxirio/pipelines/metricsdriverunoccupieds.json
+            pipeline: metrics-driver-unoccupieds
           dump_mode: append
           options:
             chunks:

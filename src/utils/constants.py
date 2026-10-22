@@ -1,5 +1,7 @@
 """Constants of the shared Prefect code."""
 
+from pathlib import Path
+from re import compile as compile_pattern
 from typing import Final
 
 STAGING_PREFIX: Final = "staging"
@@ -28,3 +30,15 @@ DBT_FAILED: Final = ("error", "fail", "runtime error")
 
 DBT_WARNED: Final = ("warn",)
 """The statuses of a dbt node that mean a warning."""
+
+PIPELINES_FOLDER: Final = Path("pipelines")
+"""The folder of the repository that has one folder for each pipeline."""
+
+STAGES_FOLDER: Final = "pipelines"
+"""The folder of a pipeline with the JSON files of its MongoDB aggregations."""
+
+STAGES_NAME: Final = compile_pattern(r"[a-z0-9]+(-[a-z0-9]+)*")
+"""A name of an aggregation: lowercase words with dashes, so it never leaves its folder."""
+
+PLACEHOLDER_NAME: Final = r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)*"
+"""The name in a `${NAME}` placeholder: `UPPER_SNAKE_CASE`, as an environment variable."""

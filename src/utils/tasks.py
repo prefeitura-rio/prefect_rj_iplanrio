@@ -45,6 +45,7 @@ from .utils import (
     discover_tables,
     dump_in_batches,
     epsg_code,
+    expand_database,
     files_glob,
     load_to_delta,
     post_discord,
@@ -114,7 +115,8 @@ async def dump_db_to_gcs(
     DuckDB reads the source one chunk at a time, applies the filters, the columns and
     the normalization, and writes Parquet to a temp folder. A chunk whose content did
     not change is never written again, and a changed one is replaced in one commit.
-    The user and the password come from `DB_USERNAME` and `DB_PASSWORD`. `read` is a
+    The user and the password come from `DB_USERNAME` and `DB_PASSWORD`. The host and the
+    name of the database may be `${NAME}`, the environment variable `NAME`. `read` is a
     `table` (`schema.name`) or a native `query`. `options`:
 
     - `chunks` cuts the table into chunks over a column: `width` is `day`, `month`
@@ -142,11 +144,12 @@ async def dump_db_to_gcs(
         source_options["concurrency"] = chosen["concurrency"]
 
     credentials = DatabaseSettings()
+    expanded = expand_database(database)
 
     conn = DBConn(
-        database["host"],
-        database["port"],
-        database["database"],
+        expanded["host"],
+        expanded["port"],
+        expanded["database"],
         credentials.DB_USERNAME,
         credentials.DB_PASSWORD.get_secret_value(),
     )

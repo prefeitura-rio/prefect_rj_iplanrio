@@ -45,9 +45,9 @@ deployments:
     parameters:
       database:
         type: oracle
-        host: ORACLE_NOTA_FISCAL_HOST
+        host: ${ORACLE_NOTA_FISCAL_HOST}
         port: 1521
-        database: ORACLE_NOTA_FISCAL_SERVICE
+        database: ${ORACLE_NOTA_FISCAL_SERVICE}
       cloud:
         bucket: rj-iplanrio-dia-bq-to-oracle
         project: rj-iplanrio-dia
@@ -77,9 +77,9 @@ deployments:
     parameters:
       database:
         type: oracle
-        host: ORACLE_NOTA_FISCAL_HOST
+        host: ${ORACLE_NOTA_FISCAL_HOST}
         port: 1521
-        database: ORACLE_NOTA_FISCAL_SERVICE
+        database: ${ORACLE_NOTA_FISCAL_SERVICE}
       cloud:
         bucket: rj-iplanrio-dia-bq-to-oracle
         project: rj-iplanrio-dia

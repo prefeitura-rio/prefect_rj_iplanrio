@@ -28,7 +28,7 @@ from toolkit.types import Chunks
 
 from utils import utils
 from utils.constants import DISCORD_LIMIT
-from utils.types import DbtNode, DbtOutcome, DumpMode, DumpOptions, Maintenance
+from utils.types import Database, DbtNode, DbtOutcome, DumpMode, DumpOptions, Maintenance
 from utils.utils import (
     Destination,
     capture_time,
@@ -38,6 +38,8 @@ from utils.utils import (
     dump_in_batches,
     dump_to_delta,
     epsg_code,
+    expand_database,
+    expand_environment,
     extract_records,
     failure_message,
     files_glob,
@@ -625,15 +627,11 @@ def test_a_read_names_the_origin_that_the_database_reads(db_type, read, batched,
         pytest.param("couchdb", {}, False, "Give a table", id="a_database_with_nothing"),
         pytest.param("couchdb", {"query": "{}", "since": "0"}, False, "not both", id="query_and_since"),
         pytest.param("mongodb", {"table": "c", "since": "0"}, False, "only CouchDB", id="mongodb_has_no_changes"),
-        pytest.param(
-            "postgres", {"table": "a.b", "pipeline": "stages.json"}, False, "only MongoDB", id="a_pipeline_on_sql"
-        ),
-        pytest.param(
-            "mongodb", {"pipeline": "stages.json"}, False, "needs a table", id="a_pipeline_without_a_collection"
-        ),
+        pytest.param("postgres", {"table": "a.b", "pipeline": "stages"}, False, "only MongoDB", id="a_pipeline_on_sql"),
+        pytest.param("mongodb", {"pipeline": "stages"}, False, "needs a table", id="a_pipeline_without_a_collection"),
         pytest.param(
             "mongodb",
-            {"table": "c", "query": "{}", "pipeline": "stages.json"},
+            {"table": "c", "query": "{}", "pipeline": "stages"},
             False,
             "takes no query",
             id="pipeline_and_query",
@@ -646,12 +644,67 @@ def test_a_read_that_does_not_fit_is_refused(db_type, read, batched, message):
         read_request(db_type, read, batched)
 
 
-def test_a_mongodb_pipeline_is_read_from_a_json_file(tmp_path):
-    """Read the stages of a file, whatever its layout, as one compact text."""
-    stages = tmp_path / "stages.json"
-    stages.write_text('[\n  {"$project": {"a": 1}},\n  {"$limit": 5}\n]\n', encoding="utf-8")
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        pytest.param("10.0.0.1", "10.0.0.1", id="a_value_without_a_placeholder"),
+        pytest.param("${DB_HOST}", "db.test", id="the_whole_value"),
+        pytest.param("mongodb://${DB_HOST}:${DB_PORT}", "mongodb://db.test:27017", id="two_placeholders"),
+    ],
+)
+def test_a_placeholder_is_the_environment_variable_of_its_name(monkeypatch, value, expected):
+    """Replace each `${NAME}` with the variable of the environment."""
+    monkeypatch.setenv("DB_HOST", "db.test")
+    monkeypatch.setenv("DB_PORT", "27017")
 
-    origin = read_request("mongodb", {"table": "p", "pipeline": str(stages)}, True)
+    assert expand_environment(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "variables", "message"),
+    [
+        pytest.param("${DB_HOST}", {}, "DB_HOST is not set", id="a_variable_that_is_missing"),
+        pytest.param("${DB_HOST}", {"DB_HOST": ""}, "DB_HOST is not set", id="a_variable_that_is_empty"),
+        pytest.param("${db_host}", {"DB_HOST": "x"}, "Invalid placeholder", id="a_name_in_lowercase"),
+    ],
+)
+def test_a_placeholder_without_a_value_is_refused(monkeypatch, value, variables, message):
+    """Raise at once, and name the variable, so a typo never reaches the connection."""
+    monkeypatch.delenv("DB_HOST", raising=False)
+    for name, text in variables.items():
+        monkeypatch.setenv(name, text)
+
+    with pytest.raises(ValueError, match=message):
+        expand_environment(value)
+
+
+def test_a_database_expands_its_host_and_its_name_only(monkeypatch):
+    """Leave the type and the port as they are, and expand the host and the database."""
+    monkeypatch.setenv("DB_HOST", "db.test")
+    monkeypatch.setenv("DB_NAME", "taxi")
+    database: Database = {"type": "mongodb", "host": "${DB_HOST}", "port": 27017, "database": "${DB_NAME}"}
+
+    assert expand_database(database) == {"type": "mongodb", "host": "db.test", "port": 27017, "database": "taxi"}
+
+
+@pytest.fixture
+def pipeline_folder(tmp_path, monkeypatch):
+    """Return the folder of the JSON files of the running pipeline `taxi_pipe`."""
+    folder = tmp_path / "pipelines" / "taxi_pipe" / "pipelines"
+    folder.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(utils, "flow_run", SimpleNamespace(flow_name="taxi_pipe"))
+
+    return folder
+
+
+def test_a_mongodb_pipeline_is_read_by_name_from_the_folder_of_the_pipeline(pipeline_folder):
+    """Read the stages of `<name>.json`, whatever its layout, as one compact text."""
+    (pipeline_folder / "ranking-races.json").write_text(
+        '[\n  {"$project": {"a": 1}},\n  {"$limit": 5}\n]\n', encoding="utf-8"
+    )
+
+    origin = read_request("mongodb", {"table": "p", "pipeline": "ranking-races"}, True)
 
     assert origin == Aggregate('[{"$project":{"a":1}},{"$limit":5}]', "p")
 
@@ -664,13 +717,19 @@ def test_a_mongodb_pipeline_is_read_from_a_json_file(tmp_path):
         pytest.param("[{", id="text_that_is_not_json"),
     ],
 )
-def test_a_pipeline_file_that_is_not_a_list_of_stages_is_refused(tmp_path, content):
+def test_a_pipeline_file_that_is_not_a_list_of_stages_is_refused(pipeline_folder, content):
     """Raise before any connection when the file is not a JSON list of objects."""
-    stages = tmp_path / "stages.json"
-    stages.write_text(content, encoding="utf-8")
+    (pipeline_folder / "stages.json").write_text(content, encoding="utf-8")
 
     with pytest.raises(ValueError, match="JSON list of stages"):
-        read_request("mongodb", {"table": "c", "pipeline": str(stages)}, False)
+        read_request("mongodb", {"table": "c", "pipeline": "stages"}, False)
+
+
+@pytest.mark.parametrize("name", ["../secret", "Ranking", "ranking_races", "a/b", "-a", ""])
+def test_a_pipeline_name_is_words_with_dashes(name):
+    """Refuse a name that is not lowercase words with dashes, so it never leaves the folder."""
+    with pytest.raises(ValueError, match="words with dashes"):
+        read_request("mongodb", {"table": "c", "pipeline": name}, False)
 
 
 @pytest.fixture

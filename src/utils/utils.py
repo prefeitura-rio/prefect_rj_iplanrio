@@ -7,9 +7,12 @@ from datetime import UTC, date, datetime
 from http import HTTPStatus
 from importlib import import_module
 from json import dumps
+from os import environ
 from pathlib import Path
+from re import NOFLAG
+from string import Template
 from tempfile import TemporaryDirectory
-from typing import cast
+from typing import cast, final
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -55,8 +58,19 @@ from toolkit.telemetry import logger
 from toolkit.types import Columns, TemplateValue
 from toolkit.utils import select_columns
 
-from .constants import CREDENTIAL_SCOPES, DBT_FAILED, DBT_WARNED, DISCORD_LIMIT, DOCUMENT_STORES, STAGING_PREFIX
-from .types import DbtNode, DbtOutcome, DumpMode, DumpOptions, FileFormat, Maintenance, Read
+from .constants import (
+    CREDENTIAL_SCOPES,
+    DBT_FAILED,
+    DBT_WARNED,
+    DISCORD_LIMIT,
+    DOCUMENT_STORES,
+    PIPELINES_FOLDER,
+    PLACEHOLDER_NAME,
+    STAGES_FOLDER,
+    STAGES_NAME,
+    STAGING_PREFIX,
+)
+from .types import Database, DbtNode, DbtOutcome, DumpMode, DumpOptions, FileFormat, Maintenance, Read
 
 
 @dataclass(frozen=True, slots=True)
@@ -350,26 +364,74 @@ def bigquery_source(project: str, origin: Origin) -> Source:
     return BigQuerySource(project=project, origin=origin)
 
 
+@final
+class Placeholder(Template):
+    """A text with `${NAME}` placeholders, where a name is `UPPER_SNAKE_CASE`."""
+
+    idpattern = PLACEHOLDER_NAME
+    flags = NOFLAG
+
+
+def expand_environment(value: str) -> str:
+    """Return the value with each `${NAME}` replaced by the environment variable `NAME`.
+
+    Raise `ValueError` for a variable that is not set or is empty, and for a placeholder
+    with a name that is not `UPPER_SNAKE_CASE`.
+    """
+    variables = {name: text for name, text in environ.items() if text}
+    try:
+        return Placeholder(value).substitute(variables)
+    except KeyError as error:
+        raise ValueError(f"The environment variable {error.args[0]} is not set") from None
+
+
+def expand_database(database: Database) -> Database:
+    """Return the database with the placeholders of its host and its name replaced.
+
+    The `prefect.yaml` writes `host: ${TAXIRIO_MONGODB_HOST}`, and the environment of
+    the run, with the Secret of the pipeline, gives the value.
+    """
+    return {
+        **database,
+        "host": expand_environment(database["host"]),
+        "database": expand_environment(database["database"]),
+    }
+
+
+def locate_pipeline(name: str) -> Path:
+    """Return the JSON file `<name>.json` of the aggregations of the running pipeline.
+
+    The folder is `pipelines/<flow name>/pipelines`, and the flow has the name of its
+    pipeline. Raise `ValueError` for a name that is not lowercase words with dashes.
+    """
+    if not STAGES_NAME.fullmatch(name):
+        raise ValueError(f"The pipeline {name!r} is not lowercase words with dashes")
+
+    return PIPELINES_FOLDER / cast("str", flow_run.flow_name) / STAGES_FOLDER / f"{name}.json"
+
+
 def build_aggregate(db_type: str, read: Read) -> Aggregate:
     """Return the aggregation of a `read` that has a `pipeline`.
 
-    The `pipeline` is the path of a JSON file with the list of stages. The text of the
-    stages is compact, so the layout of the file does not change what a chunk hashes to.
+    The `pipeline` is the name of a JSON file with the list of stages, as
+    `locate_pipeline` finds it. The text of the stages is compact, so the layout of the
+    file does not change what a chunk hashes to.
 
     Raise `ValueError` for a database that is not MongoDB, for a read with no `table` or
     with a `query` or a `since`, and for a file that is not a JSON list of objects.
     """
     table = read.get("table")
-    path = read.get("pipeline", "")
+    name = read.get("pipeline", "")
 
     if db_type != "mongodb":
         raise ValueError(f"{db_type} has no pipeline: only MongoDB aggregates")
     if table is None or "query" in read or "since" in read:
         raise ValueError("A pipeline needs a table, and takes no query or since")
 
+    path = locate_pipeline(name)
     adapter = TypeAdapter(list[dict[str, JsonValue]])
     try:
-        stages = adapter.validate_json(Path(path).read_text(encoding="utf-8"))
+        stages = adapter.validate_json(path.read_text(encoding="utf-8"))
     except ValidationError:
         raise ValueError(f"{path} is not a JSON list of stages, each one an object") from None
 
